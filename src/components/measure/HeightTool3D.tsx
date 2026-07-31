@@ -32,19 +32,26 @@ interface Props {
   onClose: () => void;
 }
 
-type Pt = { lat: number; lng: number; elev: number | null; onBuilding: boolean; loading: boolean };
+type Pt = { lat: number; lng: number; elev: number | null; onBuilding: boolean; loading: boolean; from3d?: boolean };
 
 export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onComplete, onClose }: Props) {
   const { ok: mapsOk, key } = useGMaps3D();
 
   const mapDiv = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const map3dRef = useRef<any>(null); // gmp-map-3d element (mode 3D photoréaliste)
+  const overlays3d = useRef<HTMLElement[]>([]);
+  const lastClick3d = useRef<{ t: number; lat: number; lng: number } | null>(null);
   const gcRef = useRef<google.maps.Geocoder | null>(null);
   const markers = useRef<google.maps.Marker[]>([]);
   const aRef = useRef<Pt | null>(null);
   const bRef = useRef<Pt | null>(null);
 
   const [ready, setReady] = useState(false);
+  // Mode 3D photoréaliste : tenté par défaut, repli automatique sur la carte
+  // satellite 2D si l'élément <gmp-map-3d> ne s'initialise pas.
+  const [wants3d, setWants3d] = useState(true);
+  const [is3d, setIs3d] = useState(false);
   const [search, setSearch] = useState(quoteAddress || '');
   const [searching, setSearching] = useState(false);
   const [ptA, setPtA] = useState<Pt | null>(null);
@@ -75,7 +82,31 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     }
   }
 
+  /** Clic sur la carte 3D photoréaliste : l'altitude du point cliqué (tuiles 3D)
+   *  donne l'élévation directement — base au sol, sommet sur le bâtiment.
+   *  Sans altitude (cas bêta), on retombe sur la résolution Solar/terrain. */
+  function onMapClick3d(lat: number, lng: number, altitude: number | null) {
+    const which: 'A' | 'B' | null = !aRef.current ? 'A' : !bRef.current ? 'B' : null;
+    if (!which) return;
+    if (altitude != null && Number.isFinite(altitude)) {
+      const p: Pt = { lat, lng, elev: altitude, onBuilding: which === 'B', loading: false, from3d: true };
+      if (which === 'A') setA(p); else setB(p);
+    } else {
+      const p: Pt = { lat, lng, elev: null, onBuilding: false, loading: true };
+      if (which === 'A') setA(p); else setB(p);
+      resolve(which, lat, lng);
+    }
+  }
+
   function flyTo(lat: number, lng: number) {
+    if (map3dRef.current) {
+      try {
+        map3dRef.current.center = { lat, lng, altitude: 0 };
+        map3dRef.current.range = 250;
+        map3dRef.current.tilt = 65;
+        return;
+      } catch { /* retombe sur la carte 2D */ }
+    }
     const m = mapRef.current; if (!m) return;
     m.setCenter({ lat, lng }); m.setZoom(20);
   }
@@ -91,9 +122,73 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     );
   }
 
-  // ── Init the 2D satellite map ──
+  // ── Init : carte 3D photoréaliste (avec repli 2D après 4 s) ──
   useEffect(() => {
-    if (!mapsOk || !mapDiv.current || mapRef.current) return;
+    if (!mapsOk || !wants3d || !mapDiv.current || map3dRef.current || mapRef.current) return;
+    let disposed = false;
+    let map3d: any = null;
+    try {
+      map3d = document.createElement('gmp-map-3d') as any;
+      map3d.setAttribute('center', '45.5017,-73.5673,0');
+      map3d.setAttribute('tilt', '65');
+      map3d.setAttribute('heading', '0');
+      map3d.setAttribute('range', '400');
+      map3d.setAttribute('mode', 'hybrid');
+      map3d.style.width = '100%';
+      map3d.style.height = '100%';
+      mapDiv.current.appendChild(map3d);
+    } catch {
+      setWants3d(false);
+      return;
+    }
+
+    const elementReady = () =>
+      Boolean((window as any).customElements?.get('gmp-map-3d')) && map3d.center !== undefined;
+    let elapsed = 0;
+    const check = setInterval(() => {
+      if (disposed) { clearInterval(check); return; }
+      elapsed += 200;
+      if (elementReady()) {
+        clearInterval(check);
+        map3dRef.current = map3d;
+        setIs3d(true);
+        gcRef.current = new google.maps.Geocoder();
+        map3d.addEventListener('gmp-click', (e: any) => {
+          try {
+            const pos = e?.position;
+            if (!pos) return;
+            const lat = typeof pos.lat === 'function' ? pos.lat() : pos.lat;
+            const lng = typeof pos.lng === 'function' ? pos.lng() : pos.lng;
+            if (typeof lat !== 'number' || typeof lng !== 'number') return;
+            // La bêta émet parfois 2 clics pour un tap — on déduplique.
+            const now = Date.now();
+            const last = lastClick3d.current;
+            if (last && now - last.t < 400 && Math.abs(last.lat - lat) < 1e-7 && Math.abs(last.lng - lng) < 1e-7) return;
+            lastClick3d.current = { t: now, lat, lng };
+            const alt = typeof pos.altitude === 'number' && Number.isFinite(pos.altitude) ? pos.altitude : null;
+            onMapClick3d(lat, lng, alt);
+          } catch { /* clic 3D invalide — ignoré */ }
+        });
+        setReady(true);
+        if (quoteAddress) {
+          gcRef.current.geocode({ address: quoteAddress }, (r, s) => {
+            if (s === 'OK' && r?.[0]) { const loc = r[0].geometry.location; flyTo(loc.lat(), loc.lng()); }
+            else centerOnUser();
+          });
+        } else centerOnUser();
+      } else if (elapsed >= 4000) {
+        clearInterval(check);
+        try { map3d.remove(); } catch {}
+        setWants3d(false); // déclenche l'init 2D ci-dessous
+      }
+    }, 200);
+    return () => { disposed = true; clearInterval(check); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapsOk, wants3d]);
+
+  // ── Init the 2D satellite map (repli, ou choix manuel « 2D ») ──
+  useEffect(() => {
+    if (!mapsOk || wants3d || !mapDiv.current || mapRef.current) return;
     const map = new google.maps.Map(mapDiv.current, {
       center: { lat: 45.5017, lng: -73.5673 }, zoom: 19,
       mapTypeId: 'hybrid', tilt: 45, heading: 0,
@@ -116,10 +211,62 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       });
     } else centerOnUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapsOk]);
+  }, [mapsOk, wants3d]);
+
+  // ── Bascule manuelle 2D ↔ 3D (réinitialise les points et la carte) ──
+  function switchMode(to3d: boolean) {
+    if (to3d === (wants3d || is3d)) return;
+    reset();
+    overlays3d.current.forEach(o => { try { o.remove(); } catch {} });
+    overlays3d.current = [];
+    if (map3dRef.current) { try { map3dRef.current.remove(); } catch {} map3dRef.current = null; }
+    markers.current.forEach(m => m.setMap(null));
+    markers.current = [];
+    mapRef.current = null;
+    // Vide le conteneur dans tous les cas — un <gmp-map-3d> en cours d'init
+    // (pas encore dans map3dRef) resterait sinon par-dessus la nouvelle carte.
+    if (mapDiv.current) mapDiv.current.innerHTML = '';
+    setIs3d(false);
+    setReady(false);
+    setWants3d(to3d);
+  }
 
   // ── Markers for the two points ──
   useEffect(() => {
+    // Mode 3D : marqueurs et ligne verticale via les primitives 3D (best-effort —
+    // la carte fonctionne sans eux, la carte latérale montre l'état des points).
+    if (is3d && map3dRef.current) {
+      overlays3d.current.forEach(o => { try { o.remove(); } catch {} });
+      overlays3d.current = [];
+      const map3d = map3dRef.current;
+      const mk3d = (p: Pt, label: string) => {
+        try {
+          const m = document.createElement('gmp-marker-3d') as any;
+          m.position = { lat: p.lat, lng: p.lng, altitude: p.elev ?? 0 };
+          m.altitudeMode = p.elev != null ? 'absolute' : 'clamp-to-ground';
+          m.label = label;
+          map3d.appendChild(m);
+          overlays3d.current.push(m);
+        } catch { /* primitive 3D indisponible */ }
+      };
+      if (ptA) mk3d(ptA, '1');
+      if (ptB) mk3d(ptB, '2');
+      if (ptA && ptB) {
+        try {
+          const line = document.createElement('gmp-polyline-3d') as any;
+          line.coordinates = [
+            { lat: ptA.lat, lng: ptA.lng, altitude: ptA.elev ?? 0 },
+            { lat: ptB.lat, lng: ptB.lng, altitude: ptB.elev ?? 0 },
+          ];
+          line.altitudeMode = 'absolute';
+          line.strokeColor = '#FFCC00';
+          line.strokeWidth = 8;
+          map3d.appendChild(line);
+          overlays3d.current.push(line);
+        } catch { /* primitive 3D indisponible */ }
+      }
+      return;
+    }
     markers.current.forEach(m => m.setMap(null));
     markers.current = [];
     const map = mapRef.current; if (!map) return;
@@ -138,7 +285,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       });
       markers.current.push(line as any);
     }
-  }, [ptA, ptB]);
+  }, [ptA, ptB, is3d]);
 
   // ── Height = roof(point 2) − ground(point 1), or manual ──
   const bothDone = !!(ptA && ptB && !ptA.loading && !ptB.loading);
@@ -186,7 +333,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       metadata: {
         kind: 'height',
         heightMeters,
-        source: manualMeters > 0 ? 'manual' : 'solar',
+        source: manualMeters > 0 ? 'manual' : (ptA.from3d && ptB.from3d ? '3d' : 'solar'),
         elevA: ptA.elev, elevB: ptB.elev,
       },
     };
@@ -206,6 +353,16 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         <div className="flex items-center gap-2 min-w-0">
           <MoveVertical size={15} className="text-text-primary shrink-0" />
           <span className="text-[13px] font-bold text-text-primary truncate">{fr ? 'Hauteur du bâtiment' : 'Building height'}</span>
+        </div>
+        <div className="flex items-center rounded-lg border border-outline/30 overflow-hidden shrink-0">
+          <button onClick={() => switchMode(true)}
+            className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${(wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
+            3D
+          </button>
+          <button onClick={() => switchMode(false)}
+            className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${!(wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
+            2D
+          </button>
         </div>
         <form onSubmit={handleSearch} className="flex-1 max-w-md mx-4">
           <div className="relative">
@@ -230,8 +387,12 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         {step < 3 && ready && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-20 pointer-events-none backdrop-blur-sm font-medium">
             {step === 1
-              ? (fr ? '1. Cliquez le 1er point (ex: la base au sol)' : '1. Click point 1 (e.g. the base on the ground)')
-              : (fr ? '2. Cliquez le 2e point (ex: le sommet du toit)' : '2. Click point 2 (e.g. the top of the roof)')}
+              ? (is3d
+                ? (fr ? '1. Cliquez la base du bâtiment (au sol)' : '1. Click the base of the building (on the ground)')
+                : (fr ? '1. Cliquez le 1er point (ex: la base au sol)' : '1. Click point 1 (e.g. the base on the ground)'))
+              : (is3d
+                ? (fr ? '2. Cliquez le sommet du bâtiment en 3D' : '2. Click the top of the building in 3D')
+                : (fr ? '2. Cliquez le 2e point (ex: le sommet du toit)' : '2. Click point 2 (e.g. the top of the roof)'))}
           </div>
         )}
 

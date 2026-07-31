@@ -34,6 +34,7 @@ import { SNAP_PX } from '../lib/measurementTypes';
 import MeasureToolbar from '../components/measure/MeasureToolbar';
 import MeasureSidebar from '../components/measure/MeasureSidebar';
 import MeasureStatusBar from '../components/measure/MeasureStatusBar';
+import Viewer3D from '../components/measure/Viewer3D';
 import HeightTool3D from '../components/measure/HeightTool3D';
 import { useGMaps3D } from '../components/measure/useGMaps3D';
 import { toast } from 'sonner';
@@ -749,6 +750,21 @@ export default function QuoteMeasure() {
     }
   }
 
+  // ── Visionneuse photoréaliste 3D (bouton « 3D » de la barre d'état) ──
+  // Ouvre la vue Google Earth centrée où on est; si <gmp-map-3d> ne charge
+  // pas (clé/API), on retombe sur l'ancienne bascule d'inclinaison 45°.
+  const [viewer3d, setViewer3d] = useState<{ lat: number; lng: number } | null>(null);
+  function open3dViewer() {
+    const c = mapRef.current?.getCenter();
+    if (c) setViewer3d({ lat: c.lat(), lng: c.lng() });
+    else toggleTilt();
+  }
+  function on3dUnavailable() {
+    setViewer3d(null);
+    toast.error(fr ? 'Vue 3D indisponible ici — vue inclinée activée.' : '3D view unavailable here — tilted view enabled.');
+    if (!tilt3d) toggleTilt();
+  }
+
   function getCameraStateNow(): CameraState {
     if (is3dMode && map3dRef.current) {
       const el = map3dRef.current;
@@ -998,7 +1014,17 @@ export default function QuoteMeasure() {
 
       <MeasureStatusBar tool={tool} pointCount={pts.length} unitSystem={unitSystem}
         onUnitToggle={() => setUnitSystem(u => u === 'imperial' ? 'metric' : 'imperial')}
-        tilt3d={tilt3d} onTiltToggle={toggleTilt} fr={fr} />
+        tilt3d={tilt3d} onTiltToggle={open3dViewer} fr={fr} />
+
+      {viewer3d && (
+        <Viewer3D
+          lat={viewer3d.lat}
+          lng={viewer3d.lng}
+          fr={fr}
+          onClose={() => setViewer3d(null)}
+          onUnavailable={on3dUnavailable}
+        />
+      )}
 
       {heightOpen && (
         <HeightTool3D
