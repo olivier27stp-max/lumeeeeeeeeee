@@ -17,6 +17,7 @@ import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { getBaseUrl } from '../lib/config';
 import { sendSafeError } from '../lib/error-handler';
+import { logDataExport } from '../lib/data-export-log';
 
 const router = Router();
 
@@ -500,6 +501,17 @@ router.get('/campaigns/export/mailchimp.csv', async (req, res) => {
       csvEscape(c.notes),
     ].join(','));
   }
+
+  // N7.7 — cet export fait sortir courriel, telephone, adresse et notes de tous
+  // les clients vers un tiers (Mailchimp). Il doit laisser une trace.
+  await logDataExport({
+    orgId: auth.orgId,
+    userId: auth.user.id,
+    exportType: 'marketing_list',
+    entityType: 'client',
+    recordCount: rows.length,
+    req,
+  });
 
   const today = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');

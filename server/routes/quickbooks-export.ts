@@ -21,6 +21,7 @@ import { Router, type Response } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { csvEscape } from '../lib/payments';
 import { sendSafeError } from '../lib/error-handler';
+import { logDataExport } from '../lib/data-export-log';
 
 const router = Router();
 
@@ -74,7 +75,7 @@ function fmtDate(value: string | null | undefined): string {
   return String(value).slice(0, 10);
 }
 
-async function logExport(orgId: string, userId: string, kind: string, rows: number) {
+async function logExport(orgId: string, userId: string, kind: string, rows: number, req?: any) {
   try {
     const svc = getServiceClient();
     await svc.from('audit_events').insert({
@@ -87,6 +88,20 @@ async function logExport(orgId: string, userId: string, kind: string, rows: numb
     });
   } catch {
     // audit_events may be absent in some envs — swallow silently
+  }
+
+  // N7.7 — alimenter aussi data_export_log, qui est la table consultee par
+  // l'ecran de conformite (GET /api/security/export-log). audit_events seul
+  // laissait cet ecran vide alors que des exports avaient bien eu lieu.
+  if (req) {
+    await logDataExport({
+      orgId,
+      userId,
+      exportType: 'accounting',
+      entityType: kind,
+      recordCount: rows,
+      req,
+    });
   }
 }
 
@@ -157,7 +172,7 @@ router.get('/quickbooks-export/customers.csv', async (req, res) => {
       offset += pageSize;
     }
 
-    await logExport(auth.orgId, auth.user.id, 'customers', total);
+    await logExport(auth.orgId, auth.user.id, 'customers', total, req);
     return res.end();
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to export customers.', '[quickbooks-export/customers]');
@@ -261,7 +276,7 @@ router.get('/quickbooks-export/invoices.csv', async (req, res) => {
       offset += pageSize;
     }
 
-    await logExport(auth.orgId, auth.user.id, 'invoices', total);
+    await logExport(auth.orgId, auth.user.id, 'invoices', total, req);
     return res.end();
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to export invoices.', '[quickbooks-export/invoices]');
@@ -343,7 +358,7 @@ router.get('/quickbooks-export/payments.csv', async (req, res) => {
       offset += pageSize;
     }
 
-    await logExport(auth.orgId, auth.user.id, 'payments', total);
+    await logExport(auth.orgId, auth.user.id, 'payments', total, req);
     return res.end();
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to export payments.', '[quickbooks-export/payments]');
@@ -403,7 +418,7 @@ router.get('/quickbooks-export/items.csv', async (req, res) => {
       offset += pageSize;
     }
 
-    await logExport(auth.orgId, auth.user.id, 'items', total);
+    await logExport(auth.orgId, auth.user.id, 'items', total, req);
     return res.end();
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to export items.', '[quickbooks-export/items]');

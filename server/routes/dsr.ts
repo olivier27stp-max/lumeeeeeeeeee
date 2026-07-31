@@ -15,44 +15,9 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { logDataExport } from '../lib/data-export-log';
 
 const router = Router();
-
-/**
- * N7.7 — Journalise un export de données personnelles.
- *
- * « La RLS empêche l'accès, elle ne le journalise pas. Sans lecture journalisée,
- *   la réponse honnête après un incident est "je ne peux pas savoir qui a lu
- *   quoi" — la pire phrase possible dans une notification à la CAI. »
- *
- * `data_export_log` existait, l'écran de consultation aussi
- * (GET /api/security/export-log), mais RIEN ne l'alimentait : 0 ligne en prod.
- * Volontairement non bloquant — un échec de journalisation ne doit pas priver
- * la personne concernée de son droit à la portabilité.
- */
-async function logDataExport(params: {
-  orgId: string;
-  userId: string;
-  exportType: string;
-  entityType: string;
-  recordCount: number;
-  req: any;
-}): Promise<void> {
-  try {
-    await getServiceClient().from('data_export_log').insert({
-      org_id: params.orgId,
-      user_id: params.userId,
-      export_type: params.exportType,
-      entity_type: params.entityType,
-      record_count: params.recordCount,
-      ip_address: clientIp(params.req),
-      user_agent: String(params.req.headers?.['user-agent'] || '').slice(0, 500) || null,
-      watermark: `${params.userId}:${Date.now()}`,
-    });
-  } catch (err) {
-    console.error('[dsr] data_export_log insert failed:', err);
-  }
-}
 
 function clientIp(req: any): string | null {
   const fwd = req.headers['x-forwarded-for'];

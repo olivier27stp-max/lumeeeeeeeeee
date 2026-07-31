@@ -60,6 +60,7 @@ import {
 } from '../lib/stripe-connect';
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
+import { logDataExport } from '../lib/data-export-log';
 
 const router = Router();
 
@@ -998,6 +999,16 @@ router.post('/payments/payouts/email-csv', async (req, res) => {
       ].join(',')
     );
     const csv = [header.join(','), ...lines].join('\n');
+
+    // N7.7 — trace de l'export de donnees financieres.
+    await logDataExport({
+      orgId: requestedOrgId,
+      userId: auth.user.id,
+      exportType: 'payouts',
+      entityType: 'payment',
+      recordCount: lines.length,
+      req,
+    });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="payouts-${provider}-${new Date().toISOString().slice(0, 10)}.csv"`);

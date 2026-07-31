@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { logDataExport } from '../lib/data-export-log';
 import { getPayrollPreview } from '../lib/field-sales/commission-engine';
 import {
   DEFAULT_PAYROLL_SETTINGS,
@@ -429,6 +430,16 @@ router.get('/payroll/export', async (req, res) => {
       money(r.commission_cents), money(r.adjustments_cents), money(r.total_cents),
       r.payment ? 'Yes' : 'No',
     ].join(','));
+
+    // N7.7 — la paie est une donnee personnelle sensible : trace obligatoire.
+    await logDataExport({
+      orgId: auth.orgId,
+      userId: auth.user.id,
+      exportType: 'payroll',
+      entityType: 'team_member',
+      recordCount: lines.length,
+      req,
+    });
 
     // BOM so Excel/QuickBooks read UTF-8 accents correctly.
     const csv = '﻿' + [header, ...lines].join('\r\n');
