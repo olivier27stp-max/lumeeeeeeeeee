@@ -38,7 +38,26 @@ const router = Router();
  */
 const GMAIL_ROUTES_ENABLED = process.env.GMAIL_INBOX_ENABLED === 'true';
 
-router.use((req, res, next) => {
+/**
+ * PANNE MAJEURE CORRIGÉE ICI.
+ *
+ * Ce garde était monté en `router.use((req, res, next) => ...)` — SANS chemin.
+ * Un middleware sans chemin s'applique à TOUTES les requêtes qui traversent le
+ * routeur. Or ce routeur est monté sur `app.use('/api', emailAccountsRouter)`
+ * en amont de ~40 autres routeurs : devis, jobs, factures, paiements,
+ * automatisations, feuilles de temps, portail client, facturation…
+ *
+ * Résultat : toute requête `/api/*` arrivant après ce montage recevait
+ *   410 { code: 'feature_removed' }
+ * y compris `/api/billing/current`. Le hook usePlanFeature ne pouvait plus
+ * résoudre le plan, `currentPlan` restait null, et TOUTES les fonctionnalités
+ * derrière un PlanFeatureGate disparaissaient de l'interface — alors que
+ * l'abonnement, les permissions et les org_features étaient corrects en base.
+ *
+ * Le garde est désormais limité au préfixe `/email`, seul espace de chemins
+ * réellement servi par ce routeur.
+ */
+router.use('/email', (req, res, next) => {
   if (GMAIL_ROUTES_ENABLED) return next();
   res.status(410).json({
     error: 'The email inbox feature is no longer available.',
