@@ -69,8 +69,6 @@ select created_at::timestamp(0), event_type, severity, details
 
 **Zéro ligne = tout va bien.** Toute ligne est à traiter le jour même.
 
-Zéro ligne = tout va bien.
-
 ---
 
 ## 3. Contrôles périodiques
