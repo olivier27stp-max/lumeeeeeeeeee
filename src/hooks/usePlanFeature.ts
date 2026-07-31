@@ -64,11 +64,25 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
     (async () => {
       setLoading(true);
       try {
+        // On distingue « pas d'abonnement » (reponse valide, subscription null)
+        // de « appel echoue » (reseau, 500, 410...). Confondre les deux privait
+        // un client payant de ses fonctionnalites des le moindre hoquet API.
+        let billingFailed = false;
         const [plansData, billing] = await Promise.all([
           fetchPlans().catch(() => []),
-          fetchCurrentBilling().catch(() => ({ subscription: null, billing_profile: null })),
+          fetchCurrentBilling().catch(() => {
+            billingFailed = true;
+            return { subscription: null, billing_profile: null };
+          }),
         ]);
         if (cancelled) return;
+
+        if (billingFailed) {
+          // Aucune information exploitable : on ne met RIEN en cache, pour que
+          // le prochain montage retente au lieu de figer un etat degrade 30 s.
+          // (`loading` est remis a false par le finally.)
+          return;
+        }
 
         const sub = billing.subscription;
         const plan = sub
@@ -91,7 +105,20 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
     return () => { cancelled = true; };
   }, []);
 
-  const hasFeature = currentPlan ? Boolean((currentPlan as any)[flag]) : false;
+  // `currentPlan` null recouvre DEUX situations tres differentes :
+  //   a) l'org n'a reellement aucun abonnement  -> la feature doit etre bloquee
+  //   b) /api/billing/current a echoue          -> on ne sait rien
+  // Les confondre a un cout asymetrique : dans le cas (b), un client qui paie
+  // se retrouve prive de la moitie de son produit, sans message d'erreur, avec
+  // une invitation a « passer a un plan superieur » qu'il a deja.
+  //
+  // On refuse donc uniquement quand la reponse est arrivee ET ne contient pas
+  // de plan. Tant qu'on n'a pas de reponse exploitable, on laisse passer :
+  // l'API reverifie les droits a chaque appel, l'affichage n'est pas la
+  // frontiere de securite.
+  const hasFeature = currentPlan
+    ? Boolean((currentPlan as any)[flag])
+    : loading;
 
   // Find cheapest plan that grants this feature (for upsell CTA)
   const requiredPlan = plans

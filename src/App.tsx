@@ -709,8 +709,10 @@ function AuthenticatedApp({
     if (location.pathname === '/requests') markNavAsRead('requests');
     else if (location.pathname === '/pipeline') markNavAsRead('d2d-pipeline');
   }, [location.pathname, markNavAsRead]);
-  // Current plan — used to hide locked features from sidebar
-  const { currentPlan } = useCurrentPlan();
+  // Current plan — used to hide locked features from sidebar.
+  // `planLoading` est indispensable : sans lui, on ne peut pas distinguer
+  // « plan pas encore charge » de « plan sans cette feature ».
+  const { currentPlan, loading: planLoading } = useCurrentPlan();
   // Hide "Discover features" on the top plan (nothing left to unlock).
   // Mirrors the feature flags surfaced by ExploreFeaturesModal.
   const DISCOVER_FEATURE_FLAGS = ['includes_sms', 'includes_ai', 'includes_d2d', 'includes_courses', 'includes_api'] as const;
@@ -783,9 +785,19 @@ function AuthenticatedApp({
       if (!ok) return false;
     }
     // Plan flag check — hide entirely if the plan doesn't grant the feature.
-    // Until currentPlan is loaded, hide gated items to avoid flashing them in.
+    //
+    // `currentPlan` null ne veut PAS dire « pas de plan » : il vaut aussi null
+    // tant que /api/billing/current n'a pas repondu, et definitivement si cet
+    // appel echoue. Masquer dans ce cas faisait disparaitre TOUTES les entrees
+    // protegees d'un coup — l'utilisateur ne gardait que les modules non
+    // proteges (clients, jobs, finances, calendrier, taches...) alors que son
+    // abonnement etait bien actif.
+    //
+    // On distingue donc les deux cas : pendant le chargement on laisse passer
+    // (le PlanFeatureGate de la route reverifie de toute facon), et seul un
+    // plan REELLEMENT charge peut masquer une entree.
     if (item.requiredPlanFlag) {
-      if (!currentPlan) return false;
+      if (planLoading || !currentPlan) return true;
       return Boolean((currentPlan as any)[item.requiredPlanFlag]);
     }
     return true;

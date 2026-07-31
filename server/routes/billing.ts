@@ -44,6 +44,13 @@ const subscribeSchema = z.object({
 
 router.get('/billing/plans', async (_req, res) => {
   try {
+    // Sans directive explicite, le navigateur applique une heuristique de
+    // fraîcheur et peut resservir une ancienne réponse — y compris une
+    // erreur. C'est ce qui a fait persister un chargement infini côté
+    // client alors que l'API répondait 200 : le 410 d'une version
+    // précédente restait en cache. L'état de facturation ne doit jamais
+    // venir du cache.
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     const admin = getServiceClient();
     const { data: plans, error } = await admin
       .from('plans')
@@ -67,6 +74,11 @@ router.get('/billing/plans', async (_req, res) => {
 
 router.get('/billing/current', async (req, res) => {
   try {
+    // Même raison que /billing/plans : l'abonnement en cours est un état
+    // vivant. Le mettre en cache fait afficher un forfait périmé — ou une
+    // erreur périmée — après un changement de plan ou un correctif serveur.
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
@@ -76,11 +88,18 @@ router.get('/billing/current', async (req, res) => {
     // tout le company_group pour que les bureaux secondaires le voient.
     const orgIds = await companyOrgIds(admin, auth.orgId);
 
-    // Fetch subscription and billing_profile in parallel
+    // Fetch subscription and billing_profile in parallel.
+    // `plans:plan_id (*)` — le plan est joint a la souscription. Sans cette
+    // jointure, subscription.plans etait undefined et le front devait
+    // retrouver le plan via un SECOND appel (fetchPlans). Si cet appel
+    // echouait, currentPlan restait null et App.tsx masquait alors TOUTES les
+    // entrees de menu protegees par un requiredPlanFlag (`if (!currentPlan)
+    // return false`) : l'utilisateur ne voyait plus que les modules non
+    // proteges. Joindre ici rend la resolution du plan atomique.
     const [subRes, profileRes] = await Promise.all([
       admin
         .from('subscriptions')
-        .select('*')
+        .select('*, plans:plan_id (*)')
         .in('org_id', orgIds)
         // past_due included: the Settings billing tab has dedicated past-due UI
         // (fix-payment via the portal). Excluding it made a past_due org look
