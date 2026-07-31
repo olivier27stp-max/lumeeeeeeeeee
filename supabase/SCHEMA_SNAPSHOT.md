@@ -11,7 +11,7 @@
 > **Régénérer avec** `scripts/gen-schema-snapshot.mjs` après tout changement
 > structurel. Un référentiel périmé est pire qu'aucun référentiel.
 
-**Généré le 2026-07-31 14:15 UTC depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
+**Généré le 2026-07-31 14:33 UTC depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
 ## 1. Tables (218)
 
@@ -146,7 +146,7 @@
 | `notes_tags` | ✅ | ✅ | 3 | 0 |
 | `notifications` | ✅ | ✅ | 4 | 2 |
 | `org_billing_settings` | ✅ | ✅ | 3 | 0 |
-| `org_client_counters` | ✅ | ✅ | 1 | 20 |
+| `org_client_counters` | ✅ | ✅ | 1 | 21 |
 | `org_features` | ✅ | ✅ | 3 | 9 |
 | `org_invoice_sequences` | ✅ | ✅ | 1 | 12 |
 | `org_job_counters` | ✅ | ✅ | 1 | 2 |
@@ -5738,7 +5738,7 @@
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 
-## 4. Fonctions (327)
+## 4. Fonctions (319)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -5800,8 +5800,8 @@ l'audit. Lire le corps réel avec :
 | `check_invoice_numbering_invariant()` → TABLE(org_id uuid, invoice_number text, occurrences bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_invoice_totals_balance()` → TABLE(invoice_id uuid, org_id uuid, invoice_number text, stored_subtotal_cents integer, computed_subtotal_cents bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_password_strength(p_password text)` → jsonb | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_rate_limit(p_key text, p_max_tokens integer DEFAULT 60, p_refill_rate integer DEF)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_rls_coverage()` → TABLE(table_name text, rls_enabled boolean, rls_forced boolean, policy_count bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_subscription_active(p_org_id uuid)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_team_schedule_assignment()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -5814,23 +5814,17 @@ l'audit. Lire le corps réel avec :
 | `clients_before_insert_set_org()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `convert_currency(p_amount_cents integer, p_from_currency text, p_to_currency text, p_da)` → integer | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `convert_lead_to_client(p_lead_id uuid)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_client_and_deal(p_full_name text, p_email text DEFAULT NULL::text, p_phone text DEFAUL)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_client_with_duplicate_handling(p_org_id uuid, p_mode text, p_payload jsonb, p_merge_duplicates boolea)` → clients | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_deal_with_job(p_lead_id uuid, p_title text, p_value numeric, p_stage text, p_notes t)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_field_pin_for_client_row(c clients)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `create_incident(p_title text, p_type text, p_severity text, p_description text DEFAULT)` → uuid | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `create_invoice_from_milestone(p_org_id uuid, p_job_id uuid, p_milestone_id uuid, p_send_now boolean )` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_intent(p_intent_id uuid, p_lead_id uuid, p_title text, p_address text DEFAULT)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_title text DEFAULT NULL::text, p_addr)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_title text DEFAULT NULL::text, p_stat)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_lead_and_deal(p_full_name text, p_email text DEFAULT NULL::text, p_address text DEFA)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_lead_quick(p_full_name text, p_email text DEFAULT NULL::text, p_phone text DEFAUL)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `create_job_from_lead(p_org_id uuid, p_lead_id uuid, p_title text DEFAULT NULL::text, p_addr)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_lead_with_client(p_org_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_minimal_client_for_deal(p_org_id uuid, p_created_by uuid, p_contact_id uuid, p_full_name text,)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `create_minimal_job_for_deal(p_org_id uuid, p_created_by uuid, p_client_id uuid, p_title text)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `create_or_get_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_pipeline_deal(p_lead_id uuid, p_title text, p_value numeric, p_stage text DEFAULT 'n)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `crm_enforce_scope()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -5884,7 +5878,6 @@ l'audit. Lire le corps réel avec :
 | `get_invoice_next_number(p_org uuid)` → integer | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `get_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `get_job_kpis(p_org_id uuid, p_status text DEFAULT NULL::text, p_job_type text DEFAU)` → TABLE(ending_within_30 integer, late integer, requires_invoicing integer, action_required integer, unscheduled integer, recent_visits integer, recent_visits_prev integer, visits_scheduled integer, visits_scheduled_prev integer) | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `get_or_create_qualified_stage(p_org_id uuid)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `grant_object_permission(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_user_id uuid, p)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `handle_new_user()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `handle_org_created_seed_automations()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6065,7 +6058,6 @@ l'audit. Lire le corps réel avec :
 | `unaccent(text)` → text | non | search_path=extensions | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `update_comm_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
 | `update_conversation_on_message()` → trigger | non | search_path=public | service_role=X/postgres |
-| `update_lead_stage(p_org_id uuid, p_lead_id uuid, p_stage text)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `update_org_knowledge_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `update_specific_notes_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `upsert_job(p_org_id uuid, p_job_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
