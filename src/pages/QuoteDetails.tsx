@@ -276,7 +276,7 @@ export default function QuoteDetails() {
             {moreOpen && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 w-52 bg-surface border border-outline rounded-xl shadow-xl z-40 py-1 text-[13px]">
+                <div className="absolute right-0 top-full mt-1 w-52 max-h-[70vh] overflow-y-auto bg-surface border border-outline rounded-xl shadow-xl z-40 py-1 text-[13px]">
                   <button onClick={() => act(async () => { const { jobId } = await convertQuoteToJob(quote.id); toast.success(isFr ? 'Convertie' : 'Converted'); navigate(`/jobs/${jobId}`); })}
                     disabled={quote.status !== 'approved' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                     <Briefcase size={14} className="text-entity-job" /> {isFr ? 'Convertir en job' : 'Convert to Job'}</button>

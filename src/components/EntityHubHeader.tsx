@@ -53,7 +53,9 @@ export default function EntityHubHeader({
     : null;
 
   return (
-    <div className="section-card p-6">
+    // overflow visible (section-card clips by default): the actions render
+    // dropdown menus that must extend below the card edge.
+    <div className="section-card p-6" style={{ overflow: 'visible' }}>
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div className="min-w-0">
           {/* Logo + status */}
