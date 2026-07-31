@@ -1,0 +1,23 @@
+-- ═══════════════════════════════════════════════════════════════
+-- Répare la création de jobs : re-grant UPDATE sur les colonnes cents
+--
+-- SYMPTÔME (prod, 2026-07-31) : créer un job échoue avec
+-- « permission denied for table jobs » (42501).
+--
+-- CAUSE. Reproduit colonne par colonne avec un compte jetable :
+-- authenticated n'a plus UPDATE sur jobs.subtotal_cents ni
+-- jobs.tax_cents (total_cents, tax_lines et les colonnes legacy
+-- subtotal/total passent). Or le durcissement « money single source
+-- of truth » (20260751101100) dit l'inverse : le client écrit les
+-- CENTS, les colonnes numeric legacy suivent par trigger. Le revoke
+-- appliqué en prod a inversé l'intention — il a bloqué les colonnes
+-- que l'app doit écrire (jobsApi.ts « persist financials ») et
+-- laissé les legacy ouvertes.
+--
+-- Quotes et invoices vérifiées : leurs colonnes cents sont
+-- modifiables, seule jobs était touchée.
+--
+-- Idempotent.
+-- ═══════════════════════════════════════════════════════════════
+
+grant update (subtotal_cents, tax_cents) on public.jobs to authenticated;

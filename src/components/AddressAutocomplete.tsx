@@ -124,6 +124,10 @@ function AddressAutocompleteInner({
 }: AddressAutocompleteProps) {
   const { t, language } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
+  // Chrome keys its native autofill history on the field's name; a per-mount
+  // random name orphans that history so the browser popup never appears over
+  // our own dropdown.
+  const fieldNameRef = useRef(`addr-${Math.random().toString(36).slice(2, 10)}`);
   const cbRef = useRef({ onChange, onSelect });
   cbRef.current = { onChange, onSelect };
   const [focused, setFocused] = useState(false);
@@ -227,8 +231,8 @@ function AddressAutocompleteInner({
           onKeyDown={onKeyDown}
           className={cn('glass-input w-full pl-9', className)}
           placeholder={placeholder || t.address.placeholder}
-          autoComplete="new-password"
-          name="address-search-no-autofill"
+          autoComplete="off"
+          name={fieldNameRef.current}
           role="combobox"
           aria-expanded={open}
           aria-autocomplete="list"
