@@ -111,8 +111,20 @@ async function processRecurringJobs(supabase: SupabaseClient) {
           });
         }
 
-        // Calculate next occurrence
-        const nextRunAt = calculateNextRun(nextDate, rule.frequency, rule.interval_days || 7);
+        // Calculate next occurrence.
+        // N2.7 — le calcul se fait en heure LOCALE + fuseau du tenant, via la
+        // fonction SQL next_recurrence_at(). L'ancienne version faisait
+        // `setDate(+7)` sur un Date JS : cette arithmetique s'applique dans le
+        // fuseau du PROCESSUS (UTC en production), si bien qu'une visite du
+        // mardi 8 h passait a 7 h apres le changement d'heure — et le restait.
+        const nextRunAt = await calculateNextRunTz(
+          supabase,
+          nextDate,
+          rule.frequency,
+          rule.interval_days || 7,
+          rule.timezone,
+          rule.local_time,
+        );
 
         // Update rule
         await supabase
@@ -134,26 +146,48 @@ async function processRecurringJobs(supabase: SupabaseClient) {
   }
 }
 
-function calculateNextRun(from: Date, frequency: string, intervalDays: number): Date {
-  const next = new Date(from);
-  switch (frequency) {
-    case 'daily':
-      next.setDate(next.getDate() + 1);
-      break;
-    case 'weekly':
-      next.setDate(next.getDate() + 7);
-      break;
-    case 'biweekly':
-      next.setDate(next.getDate() + 14);
-      break;
-    case 'monthly':
-      next.setMonth(next.getMonth() + 1);
-      break;
-    case 'custom':
-      next.setDate(next.getDate() + intervalDays);
-      break;
-    default:
-      next.setDate(next.getDate() + 7);
+/**
+ * N2.7 — Prochaine occurrence, calculée en heure LOCALE + fuseau du tenant.
+ *
+ * Délègue à la fonction SQL `next_recurrence_at()` : elle avance la DATE locale
+ * puis recompose l'instant en appliquant le fuseau, si bien que Postgres pose
+ * le bon décalage horaire de part et d'autre du changement d'heure. Une visite
+ * du mardi 8 h reste à 8 h — ce qui n'était pas le cas avec l'arithmétique JS.
+ *
+ * `timezone` NULL hérite de company_settings.timezone côté SQL ; le repli
+ * 'America/Toronto' (identifiant IANA canonique de l'Est canadien) ne sert que
+ * si le tenant n'a rien configuré.
+ */
+async function calculateNextRunTz(
+  supabase: SupabaseClient,
+  from: Date,
+  frequency: string,
+  intervalDays: number,
+  timezone: string | null,
+  localTime: string | null,
+): Promise<Date> {
+  const { data, error } = await supabase.rpc('next_recurrence_at', {
+    p_from: from.toISOString(),
+    p_frequency: frequency,
+    p_interval: intervalDays,
+    p_timezone: timezone || 'America/Toronto',
+    p_local_time: localTime,
+  });
+
+  if (error || !data) {
+    // Repli volontairement conservateur : ne jamais bloquer la génération de la
+    // série. Le décalage DST reste possible sur cette occurrence, mais un job
+    // manquant serait plus grave qu'un job décalé d'une heure.
+    console.error('[recurring-jobs] next_recurrence_at failed, fallback UTC:', error?.message);
+    const next = new Date(from);
+    const days = frequency === 'daily' ? 1
+      : frequency === 'biweekly' ? 14
+      : frequency === 'custom' ? intervalDays
+      : 7;
+    if (frequency === 'monthly') next.setMonth(next.getMonth() + 1);
+    else next.setDate(next.getDate() + days);
+    return next;
   }
-  return next;
+
+  return new Date(data as string);
 }
