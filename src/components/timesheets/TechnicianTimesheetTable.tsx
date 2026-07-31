@@ -181,11 +181,11 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
         setJobs({});
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to load timesheets');
+      setError(err?.message || (fr ? 'Échec du chargement des feuilles de temps' : 'Failed to load timesheets'));
     } finally {
       setLoading(false);
     }
-  }, [rangeStart, rangeEnd, isManager, userId]);
+  }, [rangeStart, rangeEnd, isManager, userId, fr]);
 
   useEffect(() => { void load(); }, [load]);
 

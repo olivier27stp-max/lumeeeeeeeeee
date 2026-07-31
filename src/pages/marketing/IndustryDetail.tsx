@@ -1,119 +1,206 @@
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
+import { useTranslation } from '../../i18n';
+import type { Language } from '../../i18n';
 
-const INDUSTRY_DATA: Record<string, { name: string; img: string; description: string }> = {
+// Contenu bilingue local — les dictionnaires i18n globaux ne couvrent pas ces
+// entrées et ne doivent pas être modifiés d'ici.
+type Bi = Record<Language, string>;
+
+const INDUSTRY_DATA: Record<string, { name: Bi; img: string; description: Bi }> = {
   'hvac': {
-    name: 'HVAC',
+    name: { en: 'HVAC', fr: 'CVAC' },
     img: '/industries/hvac.png',
-    description: 'Manage your heating and cooling jobs from lead to invoice. Lume helps HVAC companies streamline scheduling, dispatch technicians, and keep customers coming back season after season.',
+    description: {
+      en: 'Manage your heating and cooling jobs from lead to invoice. Lume helps HVAC companies streamline scheduling, dispatch technicians, and keep customers coming back season after season.',
+      fr: 'Gérez vos jobs de chauffage et de climatisation, du lead à la facture. Lume aide les entreprises en CVAC à simplifier la planification, à répartir les techniciens et à fidéliser leur clientèle saison après saison.',
+    },
   },
   'window-cleaning': {
-    name: 'Window Cleaning',
+    name: { en: 'Window Cleaning', fr: 'Lavage de vitres' },
     img: '/industries/window.jpg',
-    description: 'Run your routes, manage recurring clients, and send quotes in seconds. Lume is built for window cleaners who want to spend less time on admin and more time on the job.',
+    description: {
+      en: 'Run your routes, manage recurring clients, and send quotes in seconds. Lume is built for window cleaners who want to spend less time on admin and more time on the job.',
+      fr: 'Gérez vos routes et vos clients récurrents, et envoyez des soumissions en quelques secondes. Lume est conçu pour les laveurs de vitres qui veulent passer moins de temps dans la paperasse et plus de temps sur le terrain.',
+    },
   },
   'roofing': {
-    name: 'Roofing',
+    name: { en: 'Roofing', fr: 'Toiture' },
     img: '/industries/roofing.png',
-    description: 'From inspection to final payment, manage every roofing project with clarity. Lume handles your long sales cycles, multi-crew coordination, and detailed estimates all in one place.',
+    description: {
+      en: 'From inspection to final payment, manage every roofing project with clarity. Lume handles your long sales cycles, multi-crew coordination, and detailed estimates all in one place.',
+      fr: 'De l\'inspection au paiement final, gérez chaque projet de toiture en toute clarté. Lume prend en charge vos longs cycles de vente, la coordination de plusieurs équipes et vos estimations détaillées, au même endroit.',
+    },
   },
   'paver': {
-    name: 'Paver',
+    name: { en: 'Paver', fr: 'Pavé uni' },
     img: '/industries/paver.png',
-    description: 'Structure your season and maximize every lead. Lume gives paving companies the tools to prioritize high-value jobs, dispatch crews by zone, and close more deals.',
+    description: {
+      en: 'Structure your season and maximize every lead. Lume gives paving companies the tools to prioritize high-value jobs, dispatch crews by zone, and close more deals.',
+      fr: 'Structurez votre saison et maximisez chaque lead. Lume donne aux entreprises de pavé uni les outils pour prioriser les jobs payantes, répartir les équipes par zone et conclure plus de ventes.',
+    },
   },
   'power-washing': {
-    name: 'Power Washing',
+    name: { en: 'Power Washing', fr: 'Lavage à pression' },
     img: '/industries/powerwash.jpg',
-    description: 'From first contact to five-star review — everything is covered. Lume helps pressure washing businesses manage residential and commercial leads, send fast quotes, and build a strong online reputation.',
+    description: {
+      en: 'From first contact to five-star review — everything is covered. Lume helps pressure washing businesses manage residential and commercial leads, send fast quotes, and build a strong online reputation.',
+      fr: 'Du premier contact à l\'avis 5 étoiles — tout est couvert. Lume aide les entreprises de lavage à pression à gérer leurs leads résidentiels et commerciaux, à envoyer des soumissions rapidement et à bâtir une solide réputation en ligne.',
+    },
   },
   'led-lighting': {
-    name: 'LED Lighting',
+    name: { en: 'LED Lighting', fr: 'Éclairage DEL' },
     img: '/industries/leds.png',
-    description: 'Light up your business operations. Lume helps LED lighting installers manage projects, track leads, and automate follow-ups so you can focus on delivering stunning results.',
+    description: {
+      en: 'Light up your business operations. Lume helps LED lighting installers manage projects, track leads, and automate follow-ups so you can focus on delivering stunning results.',
+      fr: 'Illuminez vos opérations. Lume aide les installateurs d\'éclairage DEL à gérer leurs projets, à suivre leurs leads et à automatiser les relances, pour que vous puissiez vous concentrer sur des résultats éclatants.',
+    },
   },
   'lawn-care': {
-    name: 'Lawn Care',
+    name: { en: 'Lawn Care', fr: 'Entretien de pelouse' },
     img: '/industries/lawncare.png',
-    description: 'Keep your routes tight and your clients happy. Lume helps lawn care businesses manage recurring schedules, optimize routes, and grow through automated review requests.',
+    description: {
+      en: 'Keep your routes tight and your clients happy. Lume helps lawn care businesses manage recurring schedules, optimize routes, and grow through automated review requests.',
+      fr: 'Des routes optimisées, des clients satisfaits. Lume aide les entreprises d\'entretien de pelouse à gérer leurs horaires récurrents, à optimiser leurs routes et à croître grâce aux demandes d\'avis automatisées.',
+    },
   },
   'landscaping': {
-    name: 'Landscaping',
+    name: { en: 'Landscaping', fr: 'Aménagement paysager' },
     img: '/industries/landscaping.png',
-    description: 'From design proposals to project completion, manage your landscaping business end to end. Lume handles quoting, scheduling, crew dispatch, and client communication seamlessly.',
+    description: {
+      en: 'From design proposals to project completion, manage your landscaping business end to end. Lume handles quoting, scheduling, crew dispatch, and client communication seamlessly.',
+      fr: 'De la proposition de design à la fin des travaux, gérez votre entreprise d\'aménagement paysager de bout en bout. Lume s\'occupe des soumissions, de la planification, de la répartition des équipes et des communications avec vos clients, sans friction.',
+    },
   },
   'painting': {
-    name: 'Painting',
+    name: { en: 'Painting', fr: 'Peinture' },
     img: '/industries/painting.png',
-    description: 'Estimate faster, schedule smarter, and get paid on time. Lume gives painting contractors the tools to manage jobs from quote to completion without the paperwork headache.',
+    description: {
+      en: 'Estimate faster, schedule smarter, and get paid on time. Lume gives painting contractors the tools to manage jobs from quote to completion without the paperwork headache.',
+      fr: 'Estimez plus vite, planifiez mieux et soyez payé à temps. Lume donne aux entrepreneurs en peinture les outils pour gérer chaque job, de la soumission à la fin des travaux, sans casse-tête de paperasse.',
+    },
   },
   'fencing': {
-    name: 'Fencing',
+    name: { en: 'Fencing', fr: 'Clôtures' },
     img: '/industries/fencing.png',
-    description: 'From door knocking to installation day — one continuous flow. Lume powers your field sales with D2D mapping, leaderboards, and a pipeline that tracks every deal to close.',
+    description: {
+      en: 'From door knocking to installation day — one continuous flow. Lume powers your field sales with D2D mapping, leaderboards, and a pipeline that tracks every deal to close.',
+      fr: 'Du porte-à-porte au jour de l\'installation — un seul flux continu. Lume propulse vos ventes terrain avec la carte D2D, les leaderboards et un pipeline qui suit chaque deal jusqu\'à la conclusion.',
+    },
   },
   'auto-detailing': {
-    name: 'Auto Detailing',
+    name: { en: 'Auto Detailing', fr: 'Esthétique automobile' },
     img: '/industries/detailing.png',
-    description: 'Manage appointments, packages, and client loyalty effortlessly. Lume helps auto detailing businesses book more jobs, send reminders, and build a five-star reputation.',
+    description: {
+      en: 'Manage appointments, packages, and client loyalty effortlessly. Lume helps auto detailing businesses book more jobs, send reminders, and build a five-star reputation.',
+      fr: 'Gérez vos rendez-vous, vos forfaits et la fidélité de vos clients sans effort. Lume aide les entreprises d\'esthétique automobile à décrocher plus de jobs, à envoyer des rappels et à bâtir une réputation 5 étoiles.',
+    },
   },
   'pest-control': {
-    name: 'Pest Control',
+    name: { en: 'Pest Control', fr: 'Extermination' },
     img: '/industries/pestcontrol.png',
-    description: 'Stay on top of recurring treatments and new leads. Lume helps pest control businesses manage seasonal demand, automate follow-ups, and keep customers on a regular service schedule.',
+    description: {
+      en: 'Stay on top of recurring treatments and new leads. Lume helps pest control businesses manage seasonal demand, automate follow-ups, and keep customers on a regular service schedule.',
+      fr: 'Gardez le contrôle sur vos traitements récurrents et vos nouveaux leads. Lume aide les entreprises d\'extermination à gérer la demande saisonnière, à automatiser les relances et à garder leurs clients sur un horaire de service régulier.',
+    },
   },
   'plumbing': {
-    name: 'Plumbing',
+    name: { en: 'Plumbing', fr: 'Plomberie' },
     img: '/industries/plumbing.png',
-    description: 'Dispatch the right plumber to the right job, every time. Lume helps plumbing companies manage emergency calls, scheduled maintenance, and invoicing from one platform.',
+    description: {
+      en: 'Dispatch the right plumber to the right job, every time. Lume helps plumbing companies manage emergency calls, scheduled maintenance, and invoicing from one platform.',
+      fr: 'Envoyez le bon plombier sur la bonne job, chaque fois. Lume aide les entreprises de plomberie à gérer les appels d\'urgence, l\'entretien planifié et la facturation à partir d\'une seule plateforme.',
+    },
   },
   'electrician': {
-    name: 'Electrician',
+    name: { en: 'Electrician', fr: 'Électricien' },
     img: '/industries/electrician.png',
-    description: 'Wire your business for growth. Lume helps electrical contractors manage leads, schedule jobs, track crew performance, and send professional quotes that win more work.',
+    description: {
+      en: 'Wire your business for growth. Lume helps electrical contractors manage leads, schedule jobs, track crew performance, and send professional quotes that win more work.',
+      fr: 'Branchez votre entreprise sur la croissance. Lume aide les entrepreneurs électriciens à gérer leurs leads, à planifier leurs jobs, à suivre la performance des équipes et à envoyer des soumissions professionnelles qui décrochent plus de contrats.',
+    },
   },
   'cleaning': {
-    name: 'Cleaning',
+    name: { en: 'Cleaning', fr: 'Entretien ménager' },
     img: '/industries/cleaning.png',
-    description: 'Keep your cleaning business spotless from the inside out. Lume manages your recurring clients, team schedules, and billing so you can scale without the chaos.',
+    description: {
+      en: 'Keep your cleaning business spotless from the inside out. Lume manages your recurring clients, team schedules, and billing so you can scale without the chaos.',
+      fr: 'Une entreprise d\'entretien impeccable, de l\'intérieur comme de l\'extérieur. Lume gère vos clients récurrents, les horaires de votre équipe et la facturation, pour que vous puissiez grandir sans chaos.',
+    },
   },
   'junk-removal': {
-    name: 'Junk Removal',
+    name: { en: 'Junk Removal', fr: 'Ramassage de débris' },
     img: '/industries/junkremoval.png',
-    description: 'Turn every pickup into a five-star experience. Lume helps junk removal companies manage bookings, optimize routes, and follow up with customers automatically.',
+    description: {
+      en: 'Turn every pickup into a five-star experience. Lume helps junk removal companies manage bookings, optimize routes, and follow up with customers automatically.',
+      fr: 'Transformez chaque collecte en expérience 5 étoiles. Lume aide les entreprises de ramassage de débris à gérer les réservations, à optimiser les routes et à relancer les clients automatiquement.',
+    },
   },
   'construction': {
-    name: 'Construction',
+    name: { en: 'Construction', fr: 'Construction' },
     img: '/industries/construction.png',
-    description: 'Manage crews, timelines, and budgets with confidence. Lume gives construction companies a clear pipeline from bid to completion with real-time visibility on every project.',
+    description: {
+      en: 'Manage crews, timelines, and budgets with confidence. Lume gives construction companies a clear pipeline from bid to completion with real-time visibility on every project.',
+      fr: 'Gérez vos équipes, vos échéanciers et vos budgets en toute confiance. Lume donne aux entreprises de construction un pipeline clair, de la soumission à la livraison, avec une visibilité en temps réel sur chaque projet.',
+    },
   },
   'renovation': {
-    name: 'Renovation',
+    name: { en: 'Renovation', fr: 'Rénovation' },
     img: '/industries/renovation.png',
-    description: 'From estimate to final walkthrough — manage every renovation with clarity. Lume handles multi-phase projects, client communication, and subcontractor coordination all in one place.',
+    description: {
+      en: 'From estimate to final walkthrough — manage every renovation with clarity. Lume handles multi-phase projects, client communication, and subcontractor coordination all in one place.',
+      fr: 'De l\'estimation à la visite finale — gérez chaque rénovation en toute clarté. Lume prend en charge les projets à phases multiples, les communications avec vos clients et la coordination des sous-traitants, au même endroit.',
+    },
   },
   'pool-maintenance': {
-    name: 'Pool Maintenance',
+    name: { en: 'Pool Maintenance', fr: 'Entretien de piscine' },
     img: '/industries/pool.png',
-    description: 'Keep pools clean and clients happy year-round. Lume helps pool maintenance companies manage recurring routes, seasonal demand, and automated service reminders.',
+    description: {
+      en: 'Keep pools clean and clients happy year-round. Lume helps pool maintenance companies manage recurring routes, seasonal demand, and automated service reminders.',
+      fr: 'Des piscines propres et des clients heureux à l\'année. Lume aide les entreprises d\'entretien de piscine à gérer leurs routes récurrentes, la demande saisonnière et les rappels de service automatisés.',
+    },
   },
   'excavation': {
-    name: 'Excavation',
+    name: { en: 'Excavation', fr: 'Excavation' },
     img: '/industries/excavation.png',
-    description: 'Dig into better operations. Lume helps excavation companies manage project pipelines, coordinate heavy equipment scheduling, and track leads from first call to job completion.',
+    description: {
+      en: 'Dig into better operations. Lume helps excavation companies manage project pipelines, coordinate heavy equipment scheduling, and track leads from first call to job completion.',
+      fr: 'Creusez vers de meilleures opérations. Lume aide les entreprises d\'excavation à gérer leur pipeline de projets, à coordonner la machinerie lourde et à suivre leurs leads du premier appel à la fin des travaux.',
+    },
   },
 };
 
+const COPY = {
+  en: {
+    notFound: 'Industry not found',
+    backToIndustries: 'Back to Industries',
+    kicker: 'Industry',
+    bookDemo: 'Book a demo',
+    mobileTitleLine1: 'The entire system,',
+    mobileTitleLine2: 'right in your pocket.',
+  },
+  fr: {
+    notFound: 'Industrie introuvable',
+    backToIndustries: 'Retour aux industries',
+    kicker: 'Industrie',
+    bookDemo: 'Réserver une démo',
+    mobileTitleLine1: 'Tout le système,',
+    mobileTitleLine2: 'directement dans votre poche.',
+  },
+} as const;
+
 export default function IndustryDetail() {
   const { slug } = useParams();
+  const { language, t } = useTranslation();
+  const c = COPY[language];
   const industry = slug ? INDUSTRY_DATA[slug] : null;
 
   if (!industry) {
     return (
       <div className="pt-36 pb-20 px-6 text-center" style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
-        <h1 className="text-3xl font-extrabold text-[#111]">Industry not found</h1>
-        <Link to="/industries" className="mt-4 inline-block text-sm text-[#3FAF97] font-medium">Back to Industries</Link>
+        <h1 className="text-3xl font-extrabold text-[#111]">{c.notFound}</h1>
+        <Link to="/industries" className="mt-4 inline-block text-sm text-[#3FAF97] font-medium">{c.backToIndustries}</Link>
       </div>
     );
   }
@@ -130,7 +217,7 @@ export default function IndustryDetail() {
           >
             <img
               src={industry.img}
-              alt={industry.name}
+              alt={industry.name[language]}
               className="w-full aspect-[3/4] object-cover"
             />
           </motion.div>
@@ -142,19 +229,19 @@ export default function IndustryDetail() {
             transition={{ delay: 0.1 }}
             className="flex-1"
           >
-            <p className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#1F5F4F] mb-3">Industry</p>
+            <p className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#1F5F4F] mb-3">{c.kicker}</p>
             <h1 className="text-4xl md:text-5xl font-extrabold tracking-[-0.03em] leading-[1.08] text-[#111]">
-              {industry.name}
+              {industry.name[language]}
             </h1>
             <p className="mt-5 text-lg text-text-secondary leading-relaxed">
-              {industry.description}
+              {industry.description[language]}
             </p>
             <Link
               to="/contact"
               className="mt-8 inline-flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-bold text-white transition-opacity hover:opacity-90 group"
               style={{ background: 'linear-gradient(135deg, #3FAF97 0%, #1F5F4F 100%)' }}
             >
-              Book a demo
+              {c.bookDemo}
               <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
             </Link>
           </motion.div>
@@ -170,7 +257,7 @@ export default function IndustryDetail() {
             viewport={{ once: true }}
             className="text-center text-base md:text-lg uppercase tracking-[0.15em] font-semibold text-black mb-12"
           >
-            Trusted by customers nationwide
+            {t.marketingSite.trust.heading}
           </motion.p>
           <motion.div
             initial={{ opacity: 0 }}
@@ -250,7 +337,7 @@ export default function IndustryDetail() {
           >
             <div className="bg-text-primary inline-block px-6 py-5 md:px-8 md:py-6 rounded-2xl">
               <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold tracking-[-0.03em] leading-[1.1] text-white whitespace-nowrap">
-                The entire system,<br />right in your pocket.
+                {c.mobileTitleLine1}<br />{c.mobileTitleLine2}
               </h2>
             </div>
           </motion.div>
@@ -280,6 +367,8 @@ export default function IndustryDetail() {
 }
 
 function PhoneMockup() {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   return (
     <div>
       <div className="relative rounded-[1.75rem] md:rounded-[2.25rem] bg-[#1c1c1c] p-[3px] md:p-1"
@@ -303,23 +392,23 @@ function PhoneMockup() {
                 </div>
               </div>
               <div className="flex items-center justify-between mb-4">
-                <div className="text-[10px] md:text-xs font-bold text-[#1a1a1a]">Dashboard</div>
+                <div className="text-[10px] md:text-xs font-bold text-[#1a1a1a]">{fr ? 'Tableau de bord' : 'Dashboard'}</div>
                 <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary/10 flex items-center justify-center">
                   <div className="w-2.5 h-2.5 rounded-full bg-primary/30" />
                 </div>
               </div>
               <div className="p-2.5 md:p-3 rounded-xl bg-[#f7f7f7] border border-[#eaeaea] mb-3">
-                <div className="text-[7px] md:text-[8px] text-[#999] uppercase tracking-wide font-medium">Today</div>
-                <div className="text-sm md:text-base font-bold text-[#1a1a1a] mt-1">3 Jobs</div>
+                <div className="text-[7px] md:text-[8px] text-[#999] uppercase tracking-wide font-medium">{fr ? 'Aujourd\'hui' : 'Today'}</div>
+                <div className="text-sm md:text-base font-bold text-[#1a1a1a] mt-1">{fr ? '3 jobs' : '3 Jobs'}</div>
                 <div className="mt-2 h-1.5 bg-[#e5e5e5] rounded-full overflow-hidden">
                   <div className="h-full bg-primary rounded-full w-2/3" />
                 </div>
               </div>
               <div className="space-y-2">
                 {[
-                  { time: '9:00 AM', name: 'J. Smith', addr: '142 Oak St', color: 'bg-emerald-50 border-emerald-100' },
-                  { time: '11:30 AM', name: 'M. Johnson', addr: '88 Pine Ave', color: 'bg-blue-50 border-blue-100' },
-                  { time: '2:00 PM', name: 'R. Davis', addr: '205 Maple Dr', color: 'bg-amber-50 border-amber-100' },
+                  { time: fr ? '9 h 00' : '9:00 AM', name: 'J. Smith', addr: '142 Oak St', color: 'bg-emerald-50 border-emerald-100' },
+                  { time: fr ? '11 h 30' : '11:30 AM', name: 'M. Johnson', addr: '88 Pine Ave', color: 'bg-blue-50 border-blue-100' },
+                  { time: fr ? '14 h 00' : '2:00 PM', name: 'R. Davis', addr: '205 Maple Dr', color: 'bg-amber-50 border-amber-100' },
                 ].map((item, i) => (
                   <div key={i} className={`p-2 md:p-2.5 rounded-lg border ${item.color}`}>
                     <div className="flex items-center justify-between">
@@ -333,7 +422,7 @@ function PhoneMockup() {
               </div>
               <div className="absolute bottom-2 md:bottom-3 left-3 md:left-4 right-3 md:right-4">
                 <div className="flex items-center justify-around py-1.5 md:py-2">
-                  {['Home', 'Map', 'Jobs', 'More'].map((label, i) => (
+                  {(fr ? ['Accueil', 'Carte', 'Jobs', 'Plus'] : ['Home', 'Map', 'Jobs', 'More']).map((label, i) => (
                     <div key={label} className="flex flex-col items-center gap-0.5">
                       <div className={`w-4 h-4 md:w-5 md:h-5 rounded ${i === 0 ? 'bg-primary/20' : 'bg-[#e5e5e5]'}`} />
                       <span className={`text-[6px] md:text-[7px] font-medium ${i === 0 ? 'text-primary' : 'text-[#aaa]'}`}>{label}</span>

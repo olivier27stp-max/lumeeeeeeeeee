@@ -90,7 +90,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
     setLoading(true);
     fetchPublicForm(apiKey)
       .then((f) => { if (!cancelled) setForm(f); })
-      .catch((err) => { if (!cancelled) setLoadError(err.message || 'Unable to load form.'); })
+      .catch((err) => { if (!cancelled) setLoadError(err.message || (language === 'fr' ? 'Impossible de charger le formulaire.' : 'Unable to load form.')); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [apiKey]);
@@ -144,7 +144,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
       await submitPublicForm(apiKey, payload);
       setDone(true);
     } catch (err: any) {
-      setSubmitError(err.message || 'Unable to submit. Please try again.');
+      setSubmitError(err.message || (language === 'fr' ? "Impossible d'envoyer. Réessaie." : 'Unable to submit. Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -166,7 +166,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
       <Shell>
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <AlertCircle className="h-10 w-10 text-text-muted/40" />
-          <p className="mt-3 text-sm font-medium text-text-secondary">{loadError || 'Form not found.'}</p>
+          <p className="mt-3 text-sm font-medium text-text-secondary">{loadError || (language === 'fr' ? 'Formulaire introuvable.' : 'Form not found.')}</p>
         </div>
       </Shell>
     );

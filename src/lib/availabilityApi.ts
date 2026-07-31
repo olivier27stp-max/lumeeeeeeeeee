@@ -20,10 +20,14 @@ export interface AvailabilityInput {
   timezone?: string;
 }
 
-const WEEKDAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const WEEKDAY_LABELS: Record<'en' | 'fr', string[]> = {
+  en: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+  fr: ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
+};
 
-export function weekdayLabel(weekday: number): string {
-  return WEEKDAY_LABELS[weekday] || `Day ${weekday}`;
+export function weekdayLabel(weekday: number, lang: 'en' | 'fr' = 'en'): string {
+  const labels = WEEKDAY_LABELS[lang] || WEEKDAY_LABELS.en;
+  return labels[weekday] || (lang === 'fr' ? `Jour ${weekday}` : `Day ${weekday}`);
 }
 
 export function minutesToTime(minutes: number): string {

@@ -72,8 +72,8 @@ function parseTab(raw: string | null): InsightsTab {
   return 'reports';
 }
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+function fmtMoney(cents: number, fr = false) {
+  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 }
 
 
@@ -105,7 +105,9 @@ function MetricCard({ label, value, prevValue, changePct, format = 'count', icon
   format?: 'count' | 'money' | 'percent' | 'days';
   icon?: React.ElementType;
 }) {
-  const formatted = format === 'money' ? fmtMoney(value)
+  const { language } = useTranslation();
+  const frLang = language === 'fr';
+  const formatted = format === 'money' ? fmtMoney(value, frLang)
     : format === 'percent' ? `${value.toFixed(1)}%`
     : format === 'days' ? `${value.toFixed(1)}d`
     : String(value);
@@ -129,7 +131,7 @@ function MetricCard({ label, value, prevValue, changePct, format = 'count', icon
             />
           </div>
           <span className="text-[10px] text-text-tertiary whitespace-nowrap">
-            vs {format === 'money' ? fmtMoney(prevValue) : prevValue}
+            vs {format === 'money' ? fmtMoney(prevValue, frLang) : prevValue}
           </span>
         </div>
       )}
@@ -225,7 +227,7 @@ function TopTeamCard({ title, hint, teams, loading }: { title: string; hint: str
               <tr key={tm.team_id} className="hover:bg-surface-secondary">
                 <td className="px-5 py-3 font-semibold text-text-primary border-b border-border-light">{tm.team_name}</td>
                 <td className="px-5 py-3 text-right text-text-muted tabular-nums border-b border-border-light">{tm.jobs_count}</td>
-                <td className="px-5 py-3 text-right font-bold text-text-primary tabular-nums border-b border-border-light">{fmtMoney(tm.revenue_cents)}</td>
+                <td className="px-5 py-3 text-right font-bold text-text-primary tabular-nums border-b border-border-light">{fmtMoney(tm.revenue_cents, fr)}</td>
               </tr>
             ))}
           </tbody>
@@ -518,8 +520,8 @@ export default function Insights() {
                     { label: fr ? 'Nouvelles demandes' : 'New requests', value: String(overview?.requests_count || 0), pct: cmp('requests').pct },
                     { label: fr ? 'Devis convertis' : 'Converted quotes', value: String(overview?.converted_quotes_count || 0), pct: cmp('converted_quotes').pct },
                     { label: fr ? 'Jobs ponctuels' : 'One-off jobs', value: String(overview?.new_oneoff_jobs_count || 0), pct: cmp('new_oneoff_jobs').pct },
-                    { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0), pct: cmp('revenue').pct },
-                    { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0), pct: cmp('invoiced_value').pct },
+                    { label: fr ? 'Revenu' : 'Revenue', value: fmtMoney(overview?.revenue_cents || 0, fr), pct: cmp('revenue').pct },
+                    { label: fr ? 'Valeur facturée' : 'Invoiced value', value: fmtMoney(overview?.invoiced_value_cents || 0, fr), pct: cmp('invoiced_value').pct },
                   ]}
                 />
               </section>
@@ -594,11 +596,11 @@ export default function Insights() {
                   <div className="flex items-center gap-4">
                     <div>
                       <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.insights.revenue}</p>
-                      <p className="text-[20px] font-bold text-text-primary tabular-nums">{fmtMoney(overview?.revenue_cents || 0)}</p>
+                      <p className="text-[20px] font-bold text-text-primary tabular-nums">{fmtMoney(overview?.revenue_cents || 0, fr)}</p>
                     </div>
                     <div>
                       <p className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.insights.invoiced}</p>
-                      <p className="text-[20px] font-bold text-text-primary tabular-nums">{fmtMoney(overview?.invoiced_value_cents || 0)}</p>
+                      <p className="text-[20px] font-bold text-text-primary tabular-nums">{fmtMoney(overview?.invoiced_value_cents || 0, fr)}</p>
                     </div>
                   </div>
                 </div>
@@ -609,7 +611,7 @@ export default function Insights() {
                       <XAxis dataKey="label" tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
                       <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
                       <Tooltip formatter={(value: number, name: string) => [
-                        new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(Number(value || 0)),
+                        new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(Number(value || 0)),
                         name === 'revenue' ? t.insights.revenue : t.insights.invoiced,
                       ]} />
                       <Legend />
@@ -623,8 +625,8 @@ export default function Insights() {
                           [
                             { key: 'invoice_number', label: fr ? 'Facture nº' : 'Invoice #' },
                             { key: 'status', label: fr ? 'Statut' : 'Status', render: (v: string) => <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold uppercase', v === 'paid' ? 'bg-emerald-100 text-emerald-700' : v === 'sent' ? 'bg-surface-secondary text-text-secondary' : 'bg-surface-secondary text-text-tertiary')}>{v}</span> },
-                            { key: 'total_cents', label: fr ? 'Montant' : 'Amount', align: 'right' as const, render: (v: number) => fmtMoney(v) },
-                            { key: 'issued_at', label: fr ? 'Émise' : 'Issued', render: (v: string) => v ? new Date(v).toLocaleDateString() : '--' },
+                            { key: 'total_cents', label: fr ? 'Montant' : 'Amount', align: 'right' as const, render: (v: number) => fmtMoney(v, fr) },
+                            { key: 'issued_at', label: fr ? 'Émise' : 'Issued', render: (v: string) => v ? new Date(v).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '--' },
                           ],
                           () => drilldownRevenueByMonth({ month: matchedSeries.bucket_start }),
                         );
@@ -662,7 +664,7 @@ export default function Insights() {
                               { key: 'title', label: fr ? 'Titre de la job' : 'Job Title' },
                               { key: 'client_name', label: 'Client' },
                               { key: 'status', label: fr ? 'Statut' : 'Status', render: (v: string) => <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[10px] font-bold uppercase text-text-secondary">{v}</span> },
-                              { key: 'total_cents', label: fr ? 'Valeur' : 'Value', align: 'right' as const, render: (v: number) => v ? fmtMoney(v) : '--' },
+                              { key: 'total_cents', label: fr ? 'Valeur' : 'Value', align: 'right' as const, render: (v: number) => v ? fmtMoney(v, fr) : '--' },
                             ],
                             () => drilldownJobsByTeam({ teamId, from, to }),
                           );

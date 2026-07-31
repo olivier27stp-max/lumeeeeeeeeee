@@ -45,9 +45,9 @@ function toDateStr(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, locale: string = 'en-CA'): string {
   const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 function formatTime(time: string): string {
@@ -394,7 +394,7 @@ export default function Availability() {
                     <ChevronLeft size={14} />
                   </button>
                   <span className="text-[13px] font-medium text-text-primary min-w-[180px] text-center">
-                    {formatDate(toDateStr(weekStart))} — {formatDate(toDateStr(weekEnd))}
+                    {formatDate(toDateStr(weekStart), isFr ? 'fr-CA' : 'en-CA')} — {formatDate(toDateStr(weekEnd), isFr ? 'fr-CA' : 'en-CA')}
                   </span>
                   <button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))} className="glass-button p-1.5">
                     <ChevronRight size={14} />
@@ -470,7 +470,7 @@ export default function Availability() {
                       return (
                         <div key={day} className="text-center">
                           <p className="text-[10px] font-semibold text-text-tertiary uppercase mb-1">
-                            {weekdayLabel(day).slice(0, 3)}
+                            {weekdayLabel(day, language).slice(0, 3)}
                           </p>
                           {daySlots.length === 0 ? (
                             <p className="text-[10px] text-text-tertiary italic">{t.availability.off}</p>
@@ -513,7 +513,7 @@ export default function Availability() {
                   return (
                   <div key={dateStr} className="border border-outline rounded-lg p-3 min-h-[120px]">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-[12px] font-semibold text-text-primary">{formatDate(dateStr)}</h4>
+                      <h4 className="text-[12px] font-semibold text-text-primary">{formatDate(dateStr, isFr ? 'fr-CA' : 'en-CA')}</h4>
                       <button
                         type="button"
                         onClick={() => openCreateSlot(dateStr)}
@@ -800,7 +800,7 @@ export default function Availability() {
                   className="glass-input mt-1 w-full"
                 >
                   {[1, 2, 3, 4, 5, 6, 0].map((d) => (
-                    <option key={d} value={d}>{weekdayLabel(d)}</option>
+                    <option key={d} value={d}>{weekdayLabel(d, language)}</option>
                   ))}
                 </select>
               </div>

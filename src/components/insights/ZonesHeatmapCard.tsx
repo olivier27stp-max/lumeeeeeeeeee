@@ -102,7 +102,7 @@ export default function ZonesHeatmapCard({
     staleTime: 60_000,
   });
 
-  const kc = (cents: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+  const kc = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
   const { zones, stats, maxRev, center } = useMemo(() => {
     const valid = (q.data?.pins || []).filter((p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude) && !(p.latitude === 0 && p.longitude === 0));
@@ -174,7 +174,7 @@ export default function ZonesHeatmapCard({
                   <Tooltip direction="top" offset={[0, -radius - 2]} opacity={1} className="zone-tip">
                     <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
                       <div style={{ fontWeight: 800, fontSize: 12.5 }}>{z.name}</div>
-                      <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} {fr ? 'jobs' : 'jobs'}</div>
+                      <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} jobs</div>
                     </div>
                   </Tooltip>
                 </CircleMarker>
@@ -227,7 +227,7 @@ export default function ZonesHeatmapCard({
                     <span className="text-[13px] font-bold text-text-primary tabular-nums shrink-0">{kc(z.rev)}</span>
                   </div>
                   <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((z.rev / maxRev) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
-                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{z.jobs} {fr ? 'jobs' : 'jobs'} · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
+                  <div className="text-[11px] text-text-tertiary font-semibold mt-1.5">{z.jobs} jobs · {kc(z.jobs ? z.rev / z.jobs : 0)} {fr ? 'moy.' : 'avg'}</div>
                 </div>
               ))}
             </div>

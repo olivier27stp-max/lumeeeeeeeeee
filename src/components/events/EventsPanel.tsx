@@ -397,7 +397,7 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                                   <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
                                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 uppercase">Email</span>
                                     {(item.email.status === 'bounced' || item.email.status === 'failed') && (
-                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 uppercase">Bounce</span>
+                                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700 uppercase">{lang === 'fr' ? 'Rebond' : 'Bounce'}</span>
                                     )}
                                     {Array.isArray((item.email.metadata as any)?.attachments) && (item.email.metadata as any).attachments.length > 0 && (
                                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-secondary flex items-center gap-1">

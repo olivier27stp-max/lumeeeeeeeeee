@@ -16,7 +16,8 @@ import {
  * - Reset cookie choices
  */
 export default function PrivacyCenter() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
   const [downloading, setDownloading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [justification, setJustification] = useState('');
@@ -28,7 +29,7 @@ export default function PrivacyCenter() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        setMessage({ kind: 'err', text: 'Not authenticated.' });
+        setMessage({ kind: 'err', text: fr ? 'Non authentifié.' : 'Not authenticated.' });
         return;
       }
       const blob = await exportMyData(session.access_token);
@@ -55,7 +56,7 @@ export default function PrivacyCenter() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user?.id || !session.access_token) {
-        setMessage({ kind: 'err', text: 'Not authenticated.' });
+        setMessage({ kind: 'err', text: fr ? 'Non authentifié.' : 'Not authenticated.' });
         return;
       }
       const res = await submitDsarRequest({
@@ -145,14 +146,16 @@ export default function PrivacyCenter() {
       <section className="mt-6 rounded-lg border border-gray-200 p-5 dark:border-gray-800">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Cookies</h2>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Reset your cookie choices — the banner will reappear on the next page load.
+          {fr
+            ? 'Réinitialisez vos choix de témoins (cookies) — la bannière réapparaîtra au prochain chargement de page.'
+            : 'Reset your cookie choices — the banner will reappear on the next page load.'}
         </p>
         <button
           type="button"
           onClick={resetCookieConsent}
           className="mt-3 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800"
         >
-          Reset cookie preferences
+          {fr ? 'Réinitialiser les préférences de témoins' : 'Reset cookie preferences'}
         </button>
       </section>
     </div>

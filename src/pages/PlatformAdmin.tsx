@@ -11,6 +11,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 import {
   fetchBusinessMetrics, fetchRevenueSeries, fetchGrowthSeries,
   fetchOperations, fetchUsersData, fetchBillingData, fetchOrgDetail,
@@ -27,25 +28,34 @@ type Tab = 'business' | 'operations' | 'users' | 'billing';
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format((cents || 0) / 100);
+/** Locale-aware formatters — follow the app language (fr → fr-CA, en → en-US). */
+function useFmt() {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-US';
+  return React.useMemo(() => ({
+    fr,
+    fmtMoney: (cents: number) =>
+      new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format((cents || 0) / 100),
+    fmtCompact: (cents: number) =>
+      new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100),
+    fmtNum: (n: number) => new Intl.NumberFormat(locale).format(n),
+    fmtDate: (iso: string | null) => {
+      if (!iso) return '—';
+      return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+    fmtShortDate: (iso: string) => new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' }),
+    timeAgo: (iso: string) => {
+      const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+      if (d === 0) return fr ? "Aujourd'hui" : 'Today';
+      if (d === 1) return fr ? 'Hier' : 'Yesterday';
+      if (d < 30) return fr ? `il y a ${d} j` : `${d}d ago`;
+      const mo = Math.floor(d / 30);
+      return fr ? `il y a ${mo} mois` : `${mo}mo ago`;
+    },
+  }), [locale, fr]);
 }
-function fmtCompact(cents: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
-}
-function fmtNum(n: number) { return new Intl.NumberFormat('en-US').format(n); }
-function fmtDate(iso: string | null) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-function fmtShortDate(iso: string) { return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
-function timeAgo(iso: string) {
-  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-  if (d === 0) return 'Today';
-  if (d === 1) return 'Yesterday';
-  if (d < 30) return `${d}d ago`;
-  return `${Math.floor(d / 30)}mo ago`;
-}
+
 function daysUntil(iso: string | null) {
   if (!iso) return null;
   return Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
@@ -54,14 +64,16 @@ function daysUntil(iso: string | null) {
 // ─── Main ───────────────────────────────────────────────────────
 
 export default function PlatformAdmin() {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [tab, setTab] = useState<Tab>('business');
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
-    { id: 'business', label: 'Business', icon: BarChart3 },
-    { id: 'operations', label: 'Operations', icon: Activity },
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
+    { id: 'business', label: fr ? 'Affaires' : 'Business', icon: BarChart3 },
+    { id: 'operations', label: fr ? 'Opérations' : 'Operations', icon: Activity },
+    { id: 'users', label: fr ? 'Utilisateurs' : 'Users', icon: Users },
+    { id: 'billing', label: fr ? 'Facturation' : 'Billing', icon: CreditCard },
   ];
 
   // Operations for health badge
@@ -78,8 +90,8 @@ export default function PlatformAdmin() {
             <Shield size={20} className="text-white" />
           </div>
           <div>
-            <h1 className="text-[22px] font-bold tracking-tight text-text-primary">Platform Admin</h1>
-            <p className="text-[11px] text-text-muted">Founder control center</p>
+            <h1 className="text-[22px] font-bold tracking-tight text-text-primary">{fr ? 'Admin plateforme' : 'Platform Admin'}</h1>
+            <p className="text-[11px] text-text-muted">{fr ? 'Centre de contrôle du fondateur' : 'Founder control center'}</p>
           </div>
         </div>
         {ops && <HealthBadge status={ops.healthStatus} />}
@@ -119,10 +131,12 @@ export default function PlatformAdmin() {
 // ─── Health Badge ───────────────────────────────────────────────
 
 function HealthBadge({ status }: { status: 'healthy' | 'attention' | 'critical' }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const cfg = {
-    healthy:   { label: 'Healthy',   bg: 'bg-emerald-500/10', fg: 'text-emerald-500', icon: CheckCircle, dot: 'bg-emerald-500' },
-    attention: { label: 'Attention', bg: 'bg-amber-500/10',   fg: 'text-amber-500',   icon: AlertCircle, dot: 'bg-amber-500' },
-    critical:  { label: 'Critical',  bg: 'bg-red-500/10',     fg: 'text-red-500',     icon: XCircle,     dot: 'bg-red-500' },
+    healthy:   { label: fr ? 'Sain' : 'Healthy',       bg: 'bg-emerald-500/10', fg: 'text-emerald-500', icon: CheckCircle, dot: 'bg-emerald-500' },
+    attention: { label: 'Attention',                    bg: 'bg-amber-500/10',   fg: 'text-amber-500',   icon: AlertCircle, dot: 'bg-amber-500' },
+    critical:  { label: fr ? 'Critique' : 'Critical',   bg: 'bg-red-500/10',     fg: 'text-red-500',     icon: XCircle,     dot: 'bg-red-500' },
   }[status];
   return (
     <div className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full', cfg.bg)}>
@@ -138,32 +152,33 @@ function HealthBadge({ status }: { status: 'healthy' | 'attention' | 'critical' 
 // ═══════════════════════════════════════════════════════════════
 
 function BusinessTab() {
+  const { fr, fmtMoney, fmtCompact, fmtNum, fmtShortDate } = useFmt();
   const [revDays, setRevDays] = useState(30);
   const { data: biz, isLoading, isError } = useQuery({ queryKey: ['pa-biz'], queryFn: fetchBusinessMetrics, staleTime: 30_000 });
   const { data: revSeries } = useQuery({ queryKey: ['pa-rev', revDays], queryFn: () => fetchRevenueSeries(revDays), staleTime: 60_000 });
   const { data: growthSeries } = useQuery({ queryKey: ['pa-growth'], queryFn: fetchGrowthSeries, staleTime: 120_000 });
 
   if (isLoading) return <Skeleton />;
-  if (isError || !biz) return <ErrorState msg="Failed to load business metrics. Make sure the server is running." />;
+  if (isError || !biz) return <ErrorState msg={fr ? "Impossible de charger les métriques d'affaires. Vérifiez que le serveur est démarré." : 'Failed to load business metrics. Make sure the server is running.'} />;
   const b = biz;
 
   return (
     <div className="space-y-5">
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <KpiCard gradient="from-emerald-500 to-teal-600" label="MRR" value={fmtMoney(b.mrrCents)} sub={`${b.activeSubscriptions} active subs`} icon={DollarSign} />
-        <KpiCard gradient="from-blue-500 to-indigo-600" label="Revenue (30d)" value={fmtCompact(b.revenue30dCents)}
-          sub={b.revenueGrowthPct !== null ? `${b.revenueGrowthPct > 0 ? '+' : ''}${b.revenueGrowthPct}% vs prev` : 'No comparison'} icon={TrendingUp} />
-        <KpiCard gradient="from-violet-500 to-purple-600" label="ARPU" value={fmtMoney(b.arpuCents)} sub="Per paying workspace" icon={Crown} />
-        <KpiCard gradient="from-gray-700 to-gray-800" label="Workspaces" value={fmtNum(b.totalOrgs)}
-          sub={`+${b.newOrgs30d} this month`} icon={Building2} />
+        <KpiCard gradient="from-emerald-500 to-teal-600" label={fr ? 'RMR' : 'MRR'} value={fmtMoney(b.mrrCents)} sub={fr ? `${b.activeSubscriptions} abonnements actifs` : `${b.activeSubscriptions} active subs`} icon={DollarSign} />
+        <KpiCard gradient="from-blue-500 to-indigo-600" label={fr ? 'Revenu (30 j)' : 'Revenue (30d)'} value={fmtCompact(b.revenue30dCents)}
+          sub={b.revenueGrowthPct !== null ? `${b.revenueGrowthPct > 0 ? '+' : ''}${b.revenueGrowthPct}% ${fr ? 'vs préc.' : 'vs prev'}` : (fr ? 'Aucune comparaison' : 'No comparison')} icon={TrendingUp} />
+        <KpiCard gradient="from-violet-500 to-purple-600" label="ARPU" value={fmtMoney(b.arpuCents)} sub={fr ? 'Par espace de travail payant' : 'Per paying workspace'} icon={Crown} />
+        <KpiCard gradient="from-gray-700 to-gray-800" label={fr ? 'Espaces de travail' : 'Workspaces'} value={fmtNum(b.totalOrgs)}
+          sub={fr ? `+${b.newOrgs30d} ce mois-ci` : `+${b.newOrgs30d} this month`} icon={Building2} />
       </div>
 
       {/* Secondary stats */}
       <div className="grid grid-cols-3 gap-3">
-        <MiniStat label="New Subscriptions (30d)" value={fmtNum(b.newSubscriptions30d)} />
-        <MiniStat label="Cancellations (30d)" value={fmtNum(b.canceled30d)} warn={b.canceled30d > 0} />
-        <MiniStat label="Active Subscriptions" value={fmtNum(b.activeSubscriptions)} />
+        <MiniStat label={fr ? 'Nouveaux abonnements (30 j)' : 'New Subscriptions (30d)'} value={fmtNum(b.newSubscriptions30d)} />
+        <MiniStat label={fr ? 'Annulations (30 j)' : 'Cancellations (30d)'} value={fmtNum(b.canceled30d)} warn={b.canceled30d > 0} />
+        <MiniStat label={fr ? 'Abonnements actifs' : 'Active Subscriptions'} value={fmtNum(b.activeSubscriptions)} />
       </div>
 
       {/* Charts */}
@@ -171,7 +186,7 @@ function BusinessTab() {
         {/* Revenue */}
         <div className={cn(panel, 'overflow-hidden')}>
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-light">
-            <h2 className="text-[13px] font-semibold text-text-primary">Revenue</h2>
+            <h2 className="text-[13px] font-semibold text-text-primary">{fr ? 'Revenu' : 'Revenue'}</h2>
             <div className="flex gap-1">
               {[7, 30, 90].map(d => (
                 <button key={d} onClick={() => setRevDays(d)}
@@ -199,14 +214,14 @@ function BusinessTab() {
                   <Line dataKey="revenue_cents" stroke="#3b82f6" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
-            ) : <Empty msg="No revenue data" />}
+            ) : <Empty msg={fr ? 'Aucune donnée de revenu' : 'No revenue data'} />}
           </div>
         </div>
 
         {/* Growth */}
         <div className={cn(panel, 'overflow-hidden')}>
           <div className="px-5 py-3.5 border-b border-border-light">
-            <h2 className="text-[13px] font-semibold text-text-primary">Growth</h2>
+            <h2 className="text-[13px] font-semibold text-text-primary">{fr ? 'Croissance' : 'Growth'}</h2>
           </div>
           <div className="px-5 py-4 h-[240px]">
             {growthSeries?.length ? (
@@ -220,7 +235,7 @@ function BusinessTab() {
                       <p className="text-[11px] text-text-muted mb-1">{label}</p>
                       {payload.map((e: any) => <p key={e.dataKey} className="text-[12px] font-semibold text-text-primary">
                         <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: e.color }} />
-                        {e.dataKey === 'new_orgs' ? 'Orgs' : 'Users'}: {e.value}
+                        {e.dataKey === 'new_orgs' ? 'Orgs' : (fr ? 'Utilisateurs' : 'Users')}: {e.value}
                       </p>)}
                     </div>
                   ) : null} />
@@ -228,7 +243,7 @@ function BusinessTab() {
                   <Bar dataKey="new_users" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <Empty msg="No growth data" />}
+            ) : <Empty msg={fr ? 'Aucune donnée de croissance' : 'No growth data'} />}
           </div>
         </div>
       </div>
@@ -237,8 +252,8 @@ function BusinessTab() {
       {b.planBreakdown.length > 0 && (
         <div className={cn(panel, 'overflow-hidden')}>
           <div className="px-5 py-3.5 border-b border-border-light flex items-center justify-between">
-            <h2 className="text-[13px] font-semibold text-text-primary">Plan Distribution</h2>
-            <span className="text-[11px] font-bold text-primary tabular-nums">MRR {fmtMoney(b.mrrCents)}</span>
+            <h2 className="text-[13px] font-semibold text-text-primary">{fr ? 'Répartition des plans' : 'Plan Distribution'}</h2>
+            <span className="text-[11px] font-bold text-primary tabular-nums">{fr ? 'RMR' : 'MRR'} {fmtMoney(b.mrrCents)}</span>
           </div>
           <div className="px-5 py-5 flex items-center gap-8">
             <div className="w-[140px] h-[140px] relative flex-shrink-0">
@@ -258,10 +273,10 @@ function BusinessTab() {
                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PLAN_COLORS[p.slug] || PLAN_COLORS.unknown }} />
                     <div>
                       <p className="text-[13px] font-semibold text-text-primary">{p.name}</p>
-                      <p className="text-[11px] text-text-muted">{p.active} active{p.trialing > 0 ? ` + ${p.trialing} trial` : ''}</p>
+                      <p className="text-[11px] text-text-muted">{p.active} {fr ? 'actifs' : 'active'}{p.trialing > 0 ? ` + ${p.trialing} ${fr ? 'essai' : 'trial'}` : ''}</p>
                     </div>
                   </div>
-                  <span className="text-[12px] font-bold text-text-secondary tabular-nums">{fmtMoney(p.mrr_cents)}/mo</span>
+                  <span className="text-[12px] font-bold text-text-secondary tabular-nums">{fmtMoney(p.mrr_cents)}{fr ? '/mois' : '/mo'}</span>
                 </div>
               ))}
             </div>
@@ -277,10 +292,11 @@ function BusinessTab() {
 // ═══════════════════════════════════════════════════════════════
 
 function OperationsTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
+  const { fr, fmtMoney, fmtDate, timeAgo } = useFmt();
   const { data: ops, isLoading, isError } = useQuery({ queryKey: ['pa-ops'], queryFn: fetchOperations, staleTime: 30_000 });
 
   if (isLoading) return <Skeleton />;
-  if (isError || !ops) return <ErrorState msg="Failed to load operations data." />;
+  if (isError || !ops) return <ErrorState msg={fr ? "Impossible de charger les données d'opérations." : 'Failed to load operations data.'} />;
   const o = ops;
   const totalAlerts = o.counts.failed_payments + o.counts.past_due + o.counts.trials_ending + o.counts.inactive_orgs;
 
@@ -288,29 +304,29 @@ function OperationsTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
     <div className="space-y-5">
       {/* Alert summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <AlertCard label="Failed Payments" count={o.counts.failed_payments} icon={XCircle} severity={o.counts.failed_payments > 0 ? 'red' : 'green'} />
-        <AlertCard label="Past Due" count={o.counts.past_due} icon={AlertTriangle} severity={o.counts.past_due > 0 ? 'red' : 'green'} />
-        <AlertCard label="Trials Ending" count={o.counts.trials_ending} icon={Clock} severity={o.counts.trials_ending > 0 ? 'amber' : 'green'} />
-        <AlertCard label="Inactive (30d+)" count={o.counts.inactive_orgs} icon={UserX} severity={o.counts.inactive_orgs > 0 ? 'amber' : 'green'} />
-        <AlertCard label="Webhook Errors" count={o.counts.webhook_errors} icon={Zap} severity={o.counts.webhook_errors > 0 ? 'amber' : 'green'} />
+        <AlertCard label={fr ? 'Paiements échoués' : 'Failed Payments'} count={o.counts.failed_payments} icon={XCircle} severity={o.counts.failed_payments > 0 ? 'red' : 'green'} />
+        <AlertCard label={fr ? 'En souffrance' : 'Past Due'} count={o.counts.past_due} icon={AlertTriangle} severity={o.counts.past_due > 0 ? 'red' : 'green'} />
+        <AlertCard label={fr ? 'Essais qui se terminent' : 'Trials Ending'} count={o.counts.trials_ending} icon={Clock} severity={o.counts.trials_ending > 0 ? 'amber' : 'green'} />
+        <AlertCard label={fr ? 'Inactifs (30 j+)' : 'Inactive (30d+)'} count={o.counts.inactive_orgs} icon={UserX} severity={o.counts.inactive_orgs > 0 ? 'amber' : 'green'} />
+        <AlertCard label={fr ? 'Erreurs de webhook' : 'Webhook Errors'} count={o.counts.webhook_errors} icon={Zap} severity={o.counts.webhook_errors > 0 ? 'amber' : 'green'} />
       </div>
 
       {totalAlerts === 0 ? (
         <div className={cn(panel, 'py-16 text-center')}>
           <CheckCircle size={32} className="text-emerald-500 mx-auto mb-3" />
-          <p className="text-[15px] font-semibold text-text-primary">All systems healthy</p>
-          <p className="text-[12px] text-text-muted mt-1">No issues requiring attention</p>
+          <p className="text-[15px] font-semibold text-text-primary">{fr ? 'Tous les systèmes sont sains' : 'All systems healthy'}</p>
+          <p className="text-[12px] text-text-muted mt-1">{fr ? 'Aucun problème ne requiert votre attention' : 'No issues requiring attention'}</p>
         </div>
       ) : (
         <div className="space-y-4">
           {/* Failed payments */}
           {o.failedPayments.length > 0 && (
-            <AlertSection title="Failed Payments" severity="red">
+            <AlertSection title={fr ? 'Paiements échoués' : 'Failed Payments'} severity="red">
               {o.failedPayments.map(p => (
                 <AlertRow key={p.id} onClick={() => onOpenOrg(p.org_id)}>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-text-primary truncate">{p.org_name}</p>
-                    <p className="text-[11px] text-text-muted">{p.failure_reason || 'Payment failed'} &middot; {fmtMoney(p.amount_cents)}</p>
+                    <p className="text-[11px] text-text-muted">{p.failure_reason || (fr ? 'Paiement échoué' : 'Payment failed')} &middot; {fmtMoney(p.amount_cents)}</p>
                   </div>
                   <span className="text-[11px] text-text-muted flex-shrink-0">{timeAgo(p.created_at)}</span>
                 </AlertRow>
@@ -320,14 +336,14 @@ function OperationsTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
 
           {/* Past due */}
           {o.pastDueSubscriptions.length > 0 && (
-            <AlertSection title="Past Due Subscriptions" severity="red">
+            <AlertSection title={fr ? 'Abonnements en souffrance' : 'Past Due Subscriptions'} severity="red">
               {o.pastDueSubscriptions.map(s => (
                 <AlertRow key={s.id} onClick={() => onOpenOrg(s.org_id)}>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-text-primary truncate">{s.org_name}</p>
-                    <p className="text-[11px] text-text-muted">{(s as any).plans?.name || 'Plan'} &middot; {fmtMoney(s.amount_cents)}/mo</p>
+                    <p className="text-[11px] text-text-muted">{(s as any).plans?.name || 'Plan'} &middot; {fmtMoney(s.amount_cents)}{fr ? '/mois' : '/mo'}</p>
                   </div>
-                  <span className="text-[11px] text-red-400 flex-shrink-0">Expired {fmtDate(s.current_period_end)}</span>
+                  <span className="text-[11px] text-red-400 flex-shrink-0">{fr ? 'Expiré le' : 'Expired'} {fmtDate(s.current_period_end)}</span>
                 </AlertRow>
               ))}
             </AlertSection>
@@ -335,17 +351,17 @@ function OperationsTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
 
           {/* Trials ending */}
           {o.trialsEndingSoon.length > 0 && (
-            <AlertSection title="Trials Ending Soon" severity="amber">
+            <AlertSection title={fr ? 'Essais qui se terminent bientôt' : 'Trials Ending Soon'} severity="amber">
               {o.trialsEndingSoon.map(t => {
                 const days = daysUntil(t.trial_end);
                 return (
                   <AlertRow key={t.id} onClick={() => onOpenOrg(t.org_id)}>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] font-semibold text-text-primary truncate">{t.org_name}</p>
-                      <p className="text-[11px] text-text-muted">{(t as any).plans?.name || 'Trial'}</p>
+                      <p className="text-[11px] text-text-muted">{(t as any).plans?.name || (fr ? 'Essai' : 'Trial')}</p>
                     </div>
                     <span className={cn('text-[11px] font-semibold flex-shrink-0', days !== null && days <= 2 ? 'text-red-400' : 'text-amber-500')}>
-                      {days !== null ? `${days}d left` : '—'}
+                      {days !== null ? (fr ? `${days} j restants` : `${days}d left`) : '—'}
                     </span>
                   </AlertRow>
                 );
@@ -355,11 +371,11 @@ function OperationsTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
 
           {/* Inactive orgs */}
           {o.inactiveOrgs.length > 0 && (
-            <AlertSection title={`Inactive Workspaces (${o.inactiveOrgs.length})`} severity="amber">
+            <AlertSection title={fr ? `Espaces de travail inactifs (${o.inactiveOrgs.length})` : `Inactive Workspaces (${o.inactiveOrgs.length})`} severity="amber">
               {o.inactiveOrgs.slice(0, 8).map(org => (
                 <AlertRow key={org.id} onClick={() => onOpenOrg(org.id)}>
                   <p className="text-[13px] font-medium text-text-primary flex-1 truncate">{org.name}</p>
-                  <span className="text-[11px] text-text-muted flex-shrink-0">Created {timeAgo(org.created_at)}</span>
+                  <span className="text-[11px] text-text-muted flex-shrink-0">{fr ? 'Créé' : 'Created'} {timeAgo(org.created_at)}</span>
                 </AlertRow>
               ))}
             </AlertSection>
@@ -375,32 +391,36 @@ function OperationsTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
 // ═══════════════════════════════════════════════════════════════
 
 function UsersTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
+  const { fr, fmtNum, timeAgo } = useFmt();
   const { data, isLoading, isError } = useQuery({ queryKey: ['pa-users'], queryFn: fetchUsersData, staleTime: 30_000 });
   const [filter, setFilter] = useState<'all' | 'high' | 'medium' | 'low' | 'inactive'>('all');
 
   if (isLoading) return <Skeleton />;
-  if (isError || !data) return <ErrorState msg="Failed to load user data." />;
+  if (isError || !data) return <ErrorState msg={fr ? "Impossible de charger les données d'utilisateurs." : 'Failed to load user data.'} />;
   const u = data;
   const filtered = filter === 'all' ? u.workspaces : u.workspaces.filter(w => w.engagement === filter);
+  const engagementLabel: Record<string, string> = fr
+    ? { high: 'élevé', medium: 'moyen', low: 'faible', inactive: 'inactif' }
+    : { high: 'high', medium: 'medium', low: 'low', inactive: 'inactive' };
 
   return (
     <div className="space-y-5">
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <MiniStat label="Total Users" value={fmtNum(u.totalUsers)} icon={Users} />
-        <MiniStat label="Active Orgs (7d)" value={fmtNum(u.activeOrgs7d)} icon={UserCheck} />
-        <MiniStat label="Inactive (30d+)" value={fmtNum(u.inactive30d)} warn={u.inactive30d > 0} icon={UserX} />
-        <MiniStat label="Avg Users/Org" value={String(u.avgUsersPerOrg)} icon={Building2} />
+        <MiniStat label={fr ? 'Utilisateurs totaux' : 'Total Users'} value={fmtNum(u.totalUsers)} icon={Users} />
+        <MiniStat label={fr ? 'Orgs actives (7 j)' : 'Active Orgs (7d)'} value={fmtNum(u.activeOrgs7d)} icon={UserCheck} />
+        <MiniStat label={fr ? 'Inactives (30 j+)' : 'Inactive (30d+)'} value={fmtNum(u.inactive30d)} warn={u.inactive30d > 0} icon={UserX} />
+        <MiniStat label={fr ? 'Utilisateurs/org (moy.)' : 'Avg Users/Org'} value={String(u.avgUsersPerOrg)} icon={Building2} />
       </div>
 
       {/* Engagement filters */}
       <div className="flex items-center gap-2">
         {[
-          { id: 'all' as const, label: 'All', count: u.workspaces.length },
-          { id: 'high' as const, label: 'High', count: u.workspaces.filter(w => w.engagement === 'high').length },
-          { id: 'medium' as const, label: 'Medium', count: u.workspaces.filter(w => w.engagement === 'medium').length },
-          { id: 'low' as const, label: 'Low', count: u.workspaces.filter(w => w.engagement === 'low').length },
-          { id: 'inactive' as const, label: 'Inactive', count: u.workspaces.filter(w => w.engagement === 'inactive').length },
+          { id: 'all' as const, label: fr ? 'Tous' : 'All', count: u.workspaces.length },
+          { id: 'high' as const, label: fr ? 'Élevé' : 'High', count: u.workspaces.filter(w => w.engagement === 'high').length },
+          { id: 'medium' as const, label: fr ? 'Moyen' : 'Medium', count: u.workspaces.filter(w => w.engagement === 'medium').length },
+          { id: 'low' as const, label: fr ? 'Faible' : 'Low', count: u.workspaces.filter(w => w.engagement === 'low').length },
+          { id: 'inactive' as const, label: fr ? 'Inactif' : 'Inactive', count: u.workspaces.filter(w => w.engagement === 'inactive').length },
         ].map(f => (
           <button key={f.id} onClick={() => setFilter(f.id)}
             className={cn('px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors',
@@ -413,12 +433,15 @@ function UsersTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
       {/* Workspaces table */}
       <div className={cn(panel, 'overflow-hidden')}>
         <div className="grid grid-cols-[2fr_0.8fr_0.8fr_0.8fr_1fr_0.8fr] gap-2 px-5 py-2.5 border-b border-border-light">
-          {['Workspace', 'Members', 'Jobs (30d)', 'Logins (30d)', 'Last Activity', 'Status'].map(h => (
+          {(fr
+            ? ['Espace de travail', 'Membres', 'Jobs (30 j)', 'Connexions (30 j)', 'Dernière activité', 'Statut']
+            : ['Workspace', 'Members', 'Jobs (30d)', 'Logins (30d)', 'Last Activity', 'Status']
+          ).map(h => (
             <p key={h} className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{h}</p>
           ))}
         </div>
         {filtered.length === 0 ? (
-          <Empty msg="No workspaces match this filter" />
+          <Empty msg={fr ? 'Aucun espace de travail ne correspond à ce filtre' : 'No workspaces match this filter'} />
         ) : filtered.map(w => (
           <button key={w.id} onClick={() => onOpenOrg(w.id)}
             className="w-full grid grid-cols-[2fr_0.8fr_0.8fr_0.8fr_1fr_0.8fr] gap-2 px-5 py-3 border-b border-border-light hover:bg-surface-tertiary/50 transition-colors text-left group">
@@ -433,7 +456,7 @@ function UsersTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
                 w.engagement === 'medium' && 'bg-blue-500/10 text-blue-500',
                 w.engagement === 'low' && 'bg-amber-500/10 text-amber-500',
                 w.engagement === 'inactive' && 'bg-red-500/10 text-red-500',
-              )}>{w.engagement}</span>
+              )}>{engagementLabel[w.engagement] || w.engagement}</span>
             </div>
           </button>
         ))}
@@ -447,6 +470,7 @@ function UsersTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
 // ═══════════════════════════════════════════════════════════════
 
 function BillingTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
+  const { fr, fmtMoney, fmtDate } = useFmt();
   const [statusFilter, setStatusFilter] = useState('');
   const [intervalFilter, setIntervalFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -465,30 +489,33 @@ function BillingTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative">
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search workspace..."
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={fr ? 'Rechercher un espace de travail...' : 'Search workspace...'}
             className="h-8 pl-8 pr-3 rounded-lg bg-surface-tertiary border border-border text-[12px] text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-primary w-48" />
         </div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
           className="h-8 px-3 rounded-lg bg-surface-tertiary border border-border text-[12px] text-text-primary focus:outline-none focus:ring-1 focus:ring-primary">
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="trialing">Trialing</option>
-          <option value="past_due">Past Due</option>
-          <option value="canceled">Canceled</option>
+          <option value="">{fr ? 'Tous les statuts' : 'All statuses'}</option>
+          <option value="active">{fr ? 'Actif' : 'Active'}</option>
+          <option value="trialing">{fr ? 'En essai' : 'Trialing'}</option>
+          <option value="past_due">{fr ? 'En souffrance' : 'Past Due'}</option>
+          <option value="canceled">{fr ? 'Annulé' : 'Canceled'}</option>
         </select>
         <select value={intervalFilter} onChange={e => setIntervalFilter(e.target.value)}
           className="h-8 px-3 rounded-lg bg-surface-tertiary border border-border text-[12px] text-text-primary focus:outline-none focus:ring-1 focus:ring-primary">
-          <option value="">All intervals</option>
-          <option value="monthly">Monthly</option>
-          <option value="yearly">Yearly</option>
+          <option value="">{fr ? 'Tous les intervalles' : 'All intervals'}</option>
+          <option value="monthly">{fr ? 'Mensuel' : 'Monthly'}</option>
+          <option value="yearly">{fr ? 'Annuel' : 'Yearly'}</option>
         </select>
-        {data && <span className="text-[11px] text-text-muted ml-auto">{data.total} subscription{data.total !== 1 ? 's' : ''}</span>}
+        {data && <span className="text-[11px] text-text-muted ml-auto">{data.total} {fr ? `abonnement${data.total !== 1 ? 's' : ''}` : `subscription${data.total !== 1 ? 's' : ''}`}</span>}
       </div>
 
       {/* Table */}
       <div className={cn(panel, 'overflow-hidden')}>
         <div className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_1fr_1fr_1fr_0.8fr] gap-2 px-5 py-2.5 border-b border-border-light">
-          {['Workspace', 'Plan', 'Interval', 'Amount', 'Status', 'Renewal', 'Last Payment', 'Actions'].map(h => (
+          {(fr
+            ? ['Espace de travail', 'Plan', 'Intervalle', 'Montant', 'Statut', 'Renouvellement', 'Dernier paiement', 'Actions']
+            : ['Workspace', 'Plan', 'Interval', 'Amount', 'Status', 'Renewal', 'Last Payment', 'Actions']
+          ).map(h => (
             <p key={h} className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider">{h}</p>
           ))}
         </div>
@@ -496,7 +523,7 @@ function BillingTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
         {isLoading ? (
           <div className="space-y-0">{[0,1,2,3].map(i => <div key={i} className="h-12 border-b border-border-light"><div className="h-4 skeleton rounded mx-5 my-4" /></div>)}</div>
         ) : subs.length === 0 ? (
-          <Empty msg="No subscriptions found" />
+          <Empty msg={fr ? 'Aucun abonnement trouvé' : 'No subscriptions found'} />
         ) : subs.map(s => (
           <div key={s.id} className="grid grid-cols-[2fr_1fr_0.8fr_0.8fr_1fr_1fr_1fr_0.8fr] gap-2 px-5 py-3 border-b border-border-light hover:bg-surface-tertiary/30 transition-colors">
             <p className="text-[13px] font-semibold text-text-primary truncate self-center">{s.org_name}</p>
@@ -507,7 +534,7 @@ function BillingTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
                 (!['enterprise', 'pro'].includes(s.plan_slug)) && 'bg-gray-500/10 text-gray-500',
               )}>{s.plan_name}</span>
             </div>
-            <p className="text-[12px] text-text-secondary self-center capitalize">{s.interval}</p>
+            <p className="text-[12px] text-text-secondary self-center capitalize">{fr ? (s.interval === 'yearly' ? 'annuel' : s.interval === 'monthly' ? 'mensuel' : s.interval) : s.interval}</p>
             <p className="text-[13px] font-semibold text-text-primary tabular-nums self-center">{fmtMoney(s.amount_cents)}</p>
             <div className="self-center">
               <SubStatusBadge status={s.status} />
@@ -516,11 +543,11 @@ function BillingTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
             <div className="self-center">
               {s.last_payment_status ? (
                 <span className={cn('text-[11px] font-medium', s.last_payment_status === 'succeeded' ? 'text-emerald-500' : s.last_payment_status === 'failed' ? 'text-red-500' : 'text-text-muted')}>
-                  {s.last_payment_status === 'succeeded' ? 'Paid' : s.last_payment_status === 'failed' ? 'Failed' : s.last_payment_status}
+                  {s.last_payment_status === 'succeeded' ? (fr ? 'Payé' : 'Paid') : s.last_payment_status === 'failed' ? (fr ? 'Échoué' : 'Failed') : s.last_payment_status}
                 </span>
               ) : <span className="text-[11px] text-text-muted">—</span>}
             </div>
-            <button onClick={() => onOpenOrg(s.org_id)} className="text-[11px] text-primary hover:underline self-center">View</button>
+            <button onClick={() => onOpenOrg(s.org_id)} className="text-[11px] text-primary hover:underline self-center">{fr ? 'Voir' : 'View'}</button>
           </div>
         ))}
       </div>
@@ -529,12 +556,14 @@ function BillingTab({ onOpenOrg }: { onOpenOrg: (id: string) => void }) {
 }
 
 function SubStatusBadge({ status }: { status: string }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const cfg: Record<string, { bg: string; fg: string; label: string }> = {
-    active: { bg: 'bg-emerald-500/10', fg: 'text-emerald-500', label: 'Active' },
-    trialing: { bg: 'bg-blue-500/10', fg: 'text-blue-500', label: 'Trial' },
-    past_due: { bg: 'bg-red-500/10', fg: 'text-red-500', label: 'Past Due' },
-    canceled: { bg: 'bg-gray-500/10', fg: 'text-gray-500', label: 'Canceled' },
-    incomplete: { bg: 'bg-amber-500/10', fg: 'text-amber-500', label: 'Incomplete' },
+    active: { bg: 'bg-emerald-500/10', fg: 'text-emerald-500', label: fr ? 'Actif' : 'Active' },
+    trialing: { bg: 'bg-blue-500/10', fg: 'text-blue-500', label: fr ? 'Essai' : 'Trial' },
+    past_due: { bg: 'bg-red-500/10', fg: 'text-red-500', label: fr ? 'En souffrance' : 'Past Due' },
+    canceled: { bg: 'bg-gray-500/10', fg: 'text-gray-500', label: fr ? 'Annulé' : 'Canceled' },
+    incomplete: { bg: 'bg-amber-500/10', fg: 'text-amber-500', label: fr ? 'Incomplet' : 'Incomplete' },
   };
   const c = cfg[status] || cfg.incomplete;
   return <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider', c.bg, c.fg)}>{c.label}</span>;
@@ -612,10 +641,12 @@ function Empty({ msg }: { msg: string }) {
 }
 
 function ErrorState({ msg }: { msg: string }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   return (
     <div className={cn(panel, 'py-16 text-center')}>
       <AlertCircle size={28} className="text-red-400 mx-auto mb-3" />
-      <p className="text-[14px] font-semibold text-text-primary">Something went wrong</p>
+      <p className="text-[14px] font-semibold text-text-primary">{fr ? 'Une erreur est survenue' : 'Something went wrong'}</p>
       <p className="text-[12px] text-text-muted mt-1 max-w-sm mx-auto">{msg}</p>
     </div>
   );
@@ -633,6 +664,7 @@ function Skeleton() {
 // ─── Org Detail Modal ───────────────────────────────────────────
 
 function OrgModal({ orgId, onClose }: { orgId: string; onClose: () => void }) {
+  const { fr, fmtMoney, fmtNum, fmtDate } = useFmt();
   const { data, isLoading } = useQuery({ queryKey: ['pa-org', orgId], queryFn: () => fetchOrgDetail(orgId), staleTime: 30_000 });
 
   return (
@@ -643,7 +675,7 @@ function OrgModal({ orgId, onClose }: { orgId: string; onClose: () => void }) {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
               <Building2 size={16} className="text-white" />
             </div>
-            <h2 className="text-[16px] font-bold text-text-primary">{data?.org?.name || 'Loading...'}</h2>
+            <h2 className="text-[16px] font-bold text-text-primary">{data?.org?.name || (fr ? 'Chargement...' : 'Loading...')}</h2>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-tertiary transition-colors"><X size={16} className="text-text-muted" /></button>
         </div>
@@ -657,8 +689,8 @@ function OrgModal({ orgId, onClose }: { orgId: string; onClose: () => void }) {
               {[
                 ['Jobs', fmtNum(data.stats.total_jobs)],
                 ['Clients', fmtNum(data.stats.total_clients)],
-                ['Revenue (30d)', fmtMoney(data.stats.revenue_30d_cents)],
-                ['All-Time', fmtMoney(data.stats.revenue_all_time_cents)],
+                [fr ? 'Revenu (30 j)' : 'Revenue (30d)', fmtMoney(data.stats.revenue_30d_cents)],
+                [fr ? 'Cumulatif' : 'All-Time', fmtMoney(data.stats.revenue_all_time_cents)],
               ].map(([l, v]) => (
                 <div key={l as string} className="rounded-xl bg-surface-tertiary p-3 text-center">
                   <p className="text-[10px] text-text-muted uppercase font-semibold tracking-wider">{l}</p>
@@ -670,7 +702,7 @@ function OrgModal({ orgId, onClose }: { orgId: string; onClose: () => void }) {
             {/* Subscription */}
             {data.subscription && (
               <div className="rounded-xl border border-border p-4">
-                <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Subscription</p>
+                <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">{fr ? 'Abonnement' : 'Subscription'}</p>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Crown size={14} className="text-amber-400" />
@@ -678,27 +710,27 @@ function OrgModal({ orgId, onClose }: { orgId: string; onClose: () => void }) {
                     <SubStatusBadge status={data.subscription.status} />
                   </div>
                   <span className="text-[13px] font-bold text-text-primary tabular-nums">
-                    {fmtMoney(data.subscription.amount_cents)}/{data.subscription.interval === 'yearly' ? 'yr' : 'mo'}
+                    {fmtMoney(data.subscription.amount_cents)}/{data.subscription.interval === 'yearly' ? (fr ? 'an' : 'yr') : (fr ? 'mois' : 'mo')}
                   </span>
                 </div>
                 {data.subscription.current_period_end && (
-                  <p className="text-[11px] text-text-muted mt-1">Renews: {fmtDate(data.subscription.current_period_end)}</p>
+                  <p className="text-[11px] text-text-muted mt-1">{fr ? 'Renouvellement :' : 'Renews:'} {fmtDate(data.subscription.current_period_end)}</p>
                 )}
               </div>
             )}
 
             {/* Details */}
             <div className="rounded-xl border border-border p-4">
-              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Details</p>
+              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">{fr ? 'Détails' : 'Details'}</p>
               <div className="grid grid-cols-2 gap-2">
-                <div><p className="text-[10px] text-text-muted">Created</p><p className="text-[12px] font-medium text-text-primary">{fmtDate(data.org.created_at)}</p></div>
-                <div><p className="text-[10px] text-text-muted">Members</p><p className="text-[12px] font-medium text-text-primary">{data.members.length}</p></div>
+                <div><p className="text-[10px] text-text-muted">{fr ? 'Créé le' : 'Created'}</p><p className="text-[12px] font-medium text-text-primary">{fmtDate(data.org.created_at)}</p></div>
+                <div><p className="text-[10px] text-text-muted">{fr ? 'Membres' : 'Members'}</p><p className="text-[12px] font-medium text-text-primary">{data.members.length}</p></div>
               </div>
             </div>
 
             {/* Members */}
             <div>
-              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">Members ({data.members.length})</p>
+              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">{fr ? 'Membres' : 'Members'} ({data.members.length})</p>
               <div className="space-y-1.5">
                 {data.members.map(m => (
                   <div key={m.user_id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-surface-tertiary">

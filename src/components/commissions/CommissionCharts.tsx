@@ -1,9 +1,14 @@
 import { useTranslation } from '../../i18n';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
 
+/** Locale suit la langue de l'app (document.documentElement.lang, posé par LanguageProvider). */
+function currentLocale(): string {
+  return typeof document !== 'undefined' && document.documentElement.lang === 'fr' ? 'fr-CA' : 'en-US';
+}
+
 /** $ formatter — compact for axis, full for values. */
 export function fmtMoney(n: number): string {
-  return '$' + Math.round(Number(n || 0)).toLocaleString('en-US');
+  return '$' + Math.round(Number(n || 0)).toLocaleString(currentLocale());
 }
 function fmtCompact(n: number): string {
   if (Math.abs(n) >= 1000) return '$' + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k';

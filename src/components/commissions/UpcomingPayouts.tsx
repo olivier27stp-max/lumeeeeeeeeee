@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '../d2d/card';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 import type { FsCommissionEntry } from '../../types';
 
 interface Props {
@@ -14,12 +15,12 @@ const statusStyles: Record<string, string> = {
   paid:     'bg-success text-white',
 };
 
-function fmtMoney(n: number) {
-  return '$' + Number(n || 0).toLocaleString('en-US');
+function fmtMoney(n: number, locale: string) {
+  return '$' + Number(n || 0).toLocaleString(locale);
 }
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function fmtDate(iso: string, locale: string) {
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
 /**
@@ -27,6 +28,13 @@ function fmtDate(iso: string) {
  * approval date (then created date). Designed to drop into either dashboard.
  */
 export default function UpcomingPayouts({ entries, limit = 5 }: Props) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-US';
+  const statusLabel = (s: string) =>
+    fr
+      ? ({ pending: 'en attente', approved: 'approuvé', paid: 'versé', reversed: 'reversé' }[s] ?? s)
+      : s;
   const upcoming = entries
     .filter((e) => e.status === 'pending' || e.status === 'approved')
     .sort((a, b) => {
@@ -39,7 +47,7 @@ export default function UpcomingPayouts({ entries, limit = 5 }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Upcoming payouts</CardTitle>
+        <CardTitle>{fr ? 'Prochains versements' : 'Upcoming payouts'}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <ul className="divide-y divide-border-subtle">
@@ -50,7 +58,7 @@ export default function UpcomingPayouts({ entries, limit = 5 }: Props) {
                   {e.description ?? e.lead_id ?? '—'}
                 </p>
                 <p className="text-xs text-text-muted">
-                  Closed {fmtDate(e.created_at)}
+                  {fr ? `Conclu le ${fmtDate(e.created_at, locale)}` : `Closed ${fmtDate(e.created_at, locale)}`}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -58,15 +66,15 @@ export default function UpcomingPayouts({ entries, limit = 5 }: Props) {
                   'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize',
                   statusStyles[e.status] ?? 'bg-surface-elevated text-text-muted'
                 )}>
-                  {e.status}
+                  {statusLabel(e.status)}
                 </span>
-                <span className="text-sm font-semibold text-text-primary">{fmtMoney(e.amount)}</span>
+                <span className="text-sm font-semibold text-text-primary">{fmtMoney(e.amount, locale)}</span>
               </div>
             </li>
           ))}
           {upcoming.length === 0 && (
             <li className="px-5 py-8 text-center text-sm text-text-muted">
-              No upcoming payouts
+              {fr ? 'Aucun versement à venir' : 'No upcoming payouts'}
             </li>
           )}
         </ul>

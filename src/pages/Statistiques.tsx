@@ -97,7 +97,7 @@ export default function Statistiques() {
   const range = useMemo(() => periodRange(period), [period]);
   const { from, to } = range;
 
-  const kc = (cents: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+  const kc = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
   const clientQ = useQuery({ queryKey: ['stats-clv'], queryFn: () => fetchClientLifetimeValue(6), staleTime: 60_000, enabled: isAdmin });
   const invQ = useQuery({ queryKey: ['stats-inv', from, to], queryFn: () => fetchInsightsInvoicesSummary({ from, to }), staleTime: 60_000, enabled: isAdmin });

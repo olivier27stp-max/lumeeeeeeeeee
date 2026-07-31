@@ -13,49 +13,58 @@ import AddressAutocomplete, { type StructuredAddress } from '../components/Addre
  * tax_configs/groups), so quotes, jobs and invoices work immediately.
  */
 
-type TaxRegion = { key: string; label: string; breakdown: string; total: string; us?: boolean };
+type Bilingual = { fr: string; en: string };
+type TaxRegion = { key: string; label: Bilingual; breakdown: Bilingual; total: Bilingual; us?: boolean };
+
+// FR uses « 9,975 % » (comma, spaced %), EN uses "9.975%".
+const fmtPct = (r: number, fr: boolean) =>
+  r === 0 ? (fr ? '0 %' : '0%') : fr ? `${String(r).replace('.', ',')} %` : `${r}%`;
 
 const CA_REGIONS: TaxRegion[] = [
-  { key: 'QC', label: 'Québec', breakdown: 'TPS 5 % + TVQ 9,975 %', total: '14,975 %' },
-  { key: 'ON', label: 'Ontario', breakdown: 'TVH 13 %', total: '13 %' },
-  { key: 'BC', label: 'Colombie-Britannique', breakdown: 'TPS 5 % + TVP 7 %', total: '12 %' },
-  { key: 'AB', label: 'Alberta', breakdown: 'TPS 5 %', total: '5 %' },
-  { key: 'MB', label: 'Manitoba', breakdown: 'TPS 5 % + TVD 7 %', total: '12 %' },
-  { key: 'SK', label: 'Saskatchewan', breakdown: 'TPS 5 % + TVP 6 %', total: '11 %' },
-  { key: 'NS', label: 'Nouvelle-Écosse', breakdown: 'TVH 14 %', total: '14 %' },
-  { key: 'NB', label: 'Nouveau-Brunswick', breakdown: 'TVH 15 %', total: '15 %' },
-  { key: 'NL', label: 'Terre-Neuve-et-Labrador', breakdown: 'TVH 15 %', total: '15 %' },
-  { key: 'PE', label: 'Île-du-Prince-Édouard', breakdown: 'TVH 15 %', total: '15 %' },
-  { key: 'CA-TERR', label: 'Territoires (Yukon, TNO, Nunavut)', breakdown: 'TPS 5 %', total: '5 %' },
+  { key: 'QC', label: { fr: 'Québec', en: 'Quebec' }, breakdown: { fr: 'TPS 5 % + TVQ 9,975 %', en: 'GST 5% + QST 9.975%' }, total: { fr: '14,975 %', en: '14.975%' } },
+  { key: 'ON', label: { fr: 'Ontario', en: 'Ontario' }, breakdown: { fr: 'TVH 13 %', en: 'HST 13%' }, total: { fr: '13 %', en: '13%' } },
+  { key: 'BC', label: { fr: 'Colombie-Britannique', en: 'British Columbia' }, breakdown: { fr: 'TPS 5 % + TVP 7 %', en: 'GST 5% + PST 7%' }, total: { fr: '12 %', en: '12%' } },
+  { key: 'AB', label: { fr: 'Alberta', en: 'Alberta' }, breakdown: { fr: 'TPS 5 %', en: 'GST 5%' }, total: { fr: '5 %', en: '5%' } },
+  { key: 'MB', label: { fr: 'Manitoba', en: 'Manitoba' }, breakdown: { fr: 'TPS 5 % + TVD 7 %', en: 'GST 5% + RST 7%' }, total: { fr: '12 %', en: '12%' } },
+  { key: 'SK', label: { fr: 'Saskatchewan', en: 'Saskatchewan' }, breakdown: { fr: 'TPS 5 % + TVP 6 %', en: 'GST 5% + PST 6%' }, total: { fr: '11 %', en: '11%' } },
+  { key: 'NS', label: { fr: 'Nouvelle-Écosse', en: 'Nova Scotia' }, breakdown: { fr: 'TVH 14 %', en: 'HST 14%' }, total: { fr: '14 %', en: '14%' } },
+  { key: 'NB', label: { fr: 'Nouveau-Brunswick', en: 'New Brunswick' }, breakdown: { fr: 'TVH 15 %', en: 'HST 15%' }, total: { fr: '15 %', en: '15%' } },
+  { key: 'NL', label: { fr: 'Terre-Neuve-et-Labrador', en: 'Newfoundland and Labrador' }, breakdown: { fr: 'TVH 15 %', en: 'HST 15%' }, total: { fr: '15 %', en: '15%' } },
+  { key: 'PE', label: { fr: 'Île-du-Prince-Édouard', en: 'Prince Edward Island' }, breakdown: { fr: 'TVH 15 %', en: 'HST 15%' }, total: { fr: '15 %', en: '15%' } },
+  { key: 'CA-TERR', label: { fr: 'Territoires (Yukon, TNO, Nunavut)', en: 'Territories (Yukon, NWT, Nunavut)' }, breakdown: { fr: 'TPS 5 %', en: 'GST 5%' }, total: { fr: '5 %', en: '5%' } },
 ];
 
-// [key, label, rate] — statewide base sales tax; 0 = no state tax.
-const US_RAW: Array<[string, string, number]> = [
-  ['AL', 'Alabama', 4], ['AK', 'Alaska', 0], ['AZ', 'Arizona', 5.6], ['AR', 'Arkansas', 6.5],
-  ['CA', 'Californie', 7.25], ['CO', 'Colorado', 2.9], ['CT', 'Connecticut', 6.35], ['DE', 'Delaware', 0],
-  ['FL', 'Floride', 6], ['GA', 'Géorgie', 4], ['HI', 'Hawaï', 4], ['ID', 'Idaho', 6], ['IL', 'Illinois', 6.25],
-  ['IN', 'Indiana', 7], ['IA', 'Iowa', 6], ['KS', 'Kansas', 6.5], ['KY', 'Kentucky', 6], ['LA', 'Louisiane', 4.45],
-  ['ME', 'Maine', 5.5], ['MD', 'Maryland', 6], ['MA', 'Massachusetts', 6.25], ['MI', 'Michigan', 6],
-  ['MN', 'Minnesota', 6.875], ['MS', 'Mississippi', 7], ['MO', 'Missouri', 4.225], ['MT', 'Montana', 0],
-  ['NE', 'Nebraska', 5.5], ['NV', 'Nevada', 6.85], ['NH', 'New Hampshire', 0], ['NJ', 'New Jersey', 6.625],
-  ['NM', 'Nouveau-Mexique', 4.875], ['NY', 'New York', 4], ['NC', 'Caroline du Nord', 4.75], ['ND', 'Dakota du Nord', 5],
-  ['OH', 'Ohio', 5.75], ['OK', 'Oklahoma', 4.5], ['OR', 'Oregon', 0], ['PA', 'Pennsylvanie', 6], ['RI', 'Rhode Island', 7],
-  ['SC', 'Caroline du Sud', 6], ['SD', 'Dakota du Sud', 4.2], ['TN', 'Tennessee', 7], ['TX', 'Texas', 6.25],
-  ['UT', 'Utah', 6.1], ['VT', 'Vermont', 6], ['VA', 'Virginie', 5.3], ['WA', 'Washington', 6.5], ['WV', 'Virginie-Occidentale', 6],
-  ['WI', 'Wisconsin', 5], ['WY', 'Wyoming', 4], ['DC', 'Washington D.C.', 6],
+// [key, frLabel, enLabel, rate] — statewide base sales tax; 0 = no state tax.
+const US_RAW: Array<[string, string, string, number]> = [
+  ['AL', 'Alabama', 'Alabama', 4], ['AK', 'Alaska', 'Alaska', 0], ['AZ', 'Arizona', 'Arizona', 5.6], ['AR', 'Arkansas', 'Arkansas', 6.5],
+  ['CA', 'Californie', 'California', 7.25], ['CO', 'Colorado', 'Colorado', 2.9], ['CT', 'Connecticut', 'Connecticut', 6.35], ['DE', 'Delaware', 'Delaware', 0],
+  ['FL', 'Floride', 'Florida', 6], ['GA', 'Géorgie', 'Georgia', 4], ['HI', 'Hawaï', 'Hawaii', 4], ['ID', 'Idaho', 'Idaho', 6], ['IL', 'Illinois', 'Illinois', 6.25],
+  ['IN', 'Indiana', 'Indiana', 7], ['IA', 'Iowa', 'Iowa', 6], ['KS', 'Kansas', 'Kansas', 6.5], ['KY', 'Kentucky', 'Kentucky', 6], ['LA', 'Louisiane', 'Louisiana', 4.45],
+  ['ME', 'Maine', 'Maine', 5.5], ['MD', 'Maryland', 'Maryland', 6], ['MA', 'Massachusetts', 'Massachusetts', 6.25], ['MI', 'Michigan', 'Michigan', 6],
+  ['MN', 'Minnesota', 'Minnesota', 6.875], ['MS', 'Mississippi', 'Mississippi', 7], ['MO', 'Missouri', 'Missouri', 4.225], ['MT', 'Montana', 'Montana', 0],
+  ['NE', 'Nebraska', 'Nebraska', 5.5], ['NV', 'Nevada', 'Nevada', 6.85], ['NH', 'New Hampshire', 'New Hampshire', 0], ['NJ', 'New Jersey', 'New Jersey', 6.625],
+  ['NM', 'Nouveau-Mexique', 'New Mexico', 4.875], ['NY', 'New York', 'New York', 4], ['NC', 'Caroline du Nord', 'North Carolina', 4.75], ['ND', 'Dakota du Nord', 'North Dakota', 5],
+  ['OH', 'Ohio', 'Ohio', 5.75], ['OK', 'Oklahoma', 'Oklahoma', 4.5], ['OR', 'Oregon', 'Oregon', 0], ['PA', 'Pennsylvanie', 'Pennsylvania', 6], ['RI', 'Rhode Island', 'Rhode Island', 7],
+  ['SC', 'Caroline du Sud', 'South Carolina', 6], ['SD', 'Dakota du Sud', 'South Dakota', 4.2], ['TN', 'Tennessee', 'Tennessee', 7], ['TX', 'Texas', 'Texas', 6.25],
+  ['UT', 'Utah', 'Utah', 6.1], ['VT', 'Vermont', 'Vermont', 6], ['VA', 'Virginie', 'Virginia', 5.3], ['WA', 'Washington', 'Washington', 6.5], ['WV', 'Virginie-Occidentale', 'West Virginia', 6],
+  ['WI', 'Wisconsin', 'Wisconsin', 5], ['WY', 'Wyoming', 'Wyoming', 4], ['DC', 'Washington D.C.', 'Washington D.C.', 6],
 ];
-const fmtPct = (r: number) => (r === 0 ? '0 %' : `${String(r).replace('.', ',')} %`);
-const US_REGIONS: TaxRegion[] = US_RAW.map(([abbr, label, rate]) => ({
-  key: `US-${abbr}`, label,
-  breakdown: rate > 0 ? `Taxe d'État ${fmtPct(rate)}` : "Aucune taxe d'État",
-  total: fmtPct(rate), us: true,
+const US_REGIONS: TaxRegion[] = US_RAW.map(([abbr, frLabel, enLabel, rate]) => ({
+  key: `US-${abbr}`,
+  label: { fr: frLabel, en: enLabel },
+  breakdown: {
+    fr: rate > 0 ? `Taxe d'État ${fmtPct(rate, true)}` : "Aucune taxe d'État",
+    en: rate > 0 ? `State tax ${fmtPct(rate, false)}` : 'No state tax',
+  },
+  total: { fr: fmtPct(rate, true), en: fmtPct(rate, false) },
+  us: true,
 }));
 
 const ALL_REGIONS: Record<string, TaxRegion> = {};
 [...CA_REGIONS, ...US_REGIONS].forEach((r) => { ALL_REGIONS[r.key] = r; });
 
-function money(cents: number, currency: string) {
-  return `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
+function money(cents: number, currency: string, isFr: boolean) {
+  return `$${(cents / 100).toLocaleString(isFr ? 'fr-CA' : 'en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
 }
 
 export default function CheckoutSetup({
@@ -87,7 +96,7 @@ export default function CheckoutSetup({
   const region = ALL_REGIONS[taxKey];
   const cur = (currency || 'CAD').toUpperCase();
   const intervalLabel = interval === 'yearly' ? (isFr ? 'Renouvellement annuel' : 'Annual renewal') : (isFr ? 'Renouvellement mensuel' : 'Monthly renewal');
-  const amountLabel = amountCents != null ? money(amountCents, cur) : '';
+  const amountLabel = amountCents != null ? money(amountCents, cur, isFr) : '';
   const perLabel = interval === 'yearly' ? (isFr ? `${cur} / an` : `${cur} / yr`) : (isFr ? `${cur} / mois` : `${cur} / mo`);
 
   async function handleSubmit() {
@@ -255,10 +264,10 @@ export default function CheckoutSetup({
             <div className="cs-field">
               <select value={taxKey} onChange={(e) => setTaxKey(e.target.value)}>
                 <optgroup label="Canada">
-                  {CA_REGIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                  {CA_REGIONS.map((r) => <option key={r.key} value={r.key}>{isFr ? r.label.fr : r.label.en}</option>)}
                 </optgroup>
                 <optgroup label={isFr ? "États-Unis (taxe d'État)" : 'United States (state tax)'}>
-                  {US_REGIONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                  {US_REGIONS.map((r) => <option key={r.key} value={r.key}>{isFr ? r.label.fr : r.label.en}</option>)}
                 </optgroup>
                 <option value="LATER">{isFr ? 'Je configure plus tard' : "I'll set this up later"}</option>
               </select>
@@ -266,8 +275,8 @@ export default function CheckoutSetup({
             {region && (
               <div className="cs-tax-out">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                <span>{region.breakdown}</span>
-                <span className="cs-chip">{region.total}</span>
+                <span>{isFr ? region.breakdown.fr : region.breakdown.en}</span>
+                <span className="cs-chip">{isFr ? region.total.fr : region.total.en}</span>
               </div>
             )}
             {region?.us && <div className="cs-tax-us">{isFr ? "Aux États-Unis, des taxes locales (comté / ville) peuvent s'ajouter au taux d'État — ajustable dans Réglages." : 'In the US, local taxes (county / city) may be added to the state rate — adjustable in Settings.'}</div>}

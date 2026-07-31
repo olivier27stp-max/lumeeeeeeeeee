@@ -364,7 +364,7 @@ export default function Timesheets() {
     const { data } = await supabase.from('time_entries').select('*').eq('org_id', orgId).order('date', { ascending: false });
     if (data) {
       const mapped: TimeEntry[] = data.map((e: any) => ({
-        id: e.id, employee_id: e.employee_id || e.id, employee_name: e.employee_name || 'Unknown',
+        id: e.id, employee_id: e.employee_id || e.id, employee_name: e.employee_name || (fr ? 'Inconnu' : 'Unknown'),
         date: e.date, punch_in: e.punch_in?.slice(0, 5) || '09:00',
         punch_out: e.punch_out ? e.punch_out.slice(0, 5) : null,
         breaks: Array.isArray(e.breaks) ? e.breaks : [], notes: e.notes || null,
@@ -372,7 +372,7 @@ export default function Timesheets() {
       setEntries(mapped);
     }
     setLoading(false);
-  }, []);
+  }, [fr]);
 
   // Liste d'employés = membres réels de l'org (memberships + profiles), pas les
   // noms dédupliqués des pointages : ceux-ci font apparaître des employés
@@ -642,7 +642,7 @@ export default function Timesheets() {
       if (msg.toLowerCase().includes('already punched')) {
         toast.error(fr ? 'Session déjà active' : 'Already have an active session');
       } else {
-        toast.error(msg || 'Error');
+        toast.error(msg || (fr ? 'Erreur' : 'Error'));
       }
     } finally { setTimerLoading(false); }
   };
@@ -655,7 +655,7 @@ export default function Timesheets() {
       toast.success(fr ? 'Punch Out !' : 'Punched Out!');
       setMyActiveEntry(null);
       loadData();
-    } catch (err: any) { toast.error(err?.message || 'Error'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Erreur' : 'Error')); }
     finally { setTimerLoading(false); }
   };
 
@@ -669,7 +669,7 @@ export default function Timesheets() {
       else await apiStartBreak(myActiveEntry.id);
       toast.success(onBrk ? (fr ? 'Reprise !' : 'Resumed!') : (fr ? 'En pause' : 'Paused'));
       loadMySession();
-    } catch (err: any) { toast.error(err?.message || 'Error'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Erreur' : 'Error')); }
     finally { setTimerLoading(false); }
   };
 
@@ -721,9 +721,9 @@ export default function Timesheets() {
   const updateSlotMut = useMutation({ mutationFn: ({ id, input }: { id: string; input: Partial<Omit<DateSlotInput, 'team_id'>> }) => updateDateSlot(id, input), onSuccess: () => { qc.invalidateQueries({ queryKey: ['dateSlots'] }); toast.success(t.availability.availabilityUpdated); setSlotModal({ open: false }); }, onError: (e: any) => toast.error(e?.message || t.availability.failedUpdate) });
   const deleteSlotMut = useMutation({ mutationFn: deleteDateSlot, onSuccess: () => { qc.invalidateQueries({ queryKey: ['dateSlots'] }); toast.success(t.availability.availabilityRemoved); }, onError: (e: any) => toast.error(e?.message || t.availability.failedRemove) });
   const bulkMut = useMutation({ mutationFn: ({ dates, start, end }: { dates: string[]; start: string; end: string }) => bulkCreateDateSlots(avSelectedTeamId, dates, start, end), onSuccess: () => { qc.invalidateQueries({ queryKey: ['dateSlots'] }); toast.success(t.availability.bulkAdded); setBulkModalOpen(false); }, onError: (e: any) => toast.error(e?.message || t.availability.failedBulk) });
-  const addWeeklyMut = useMutation({ mutationFn: (input: { team_id: string; weekday: number; start_minute: number; end_minute: number }) => createAvailability(input), onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Horaire mis à jour' : 'Schedule updated'); setWeeklyModalOpen(false); }, onError: (e: any) => toast.error(e?.message || 'Failed') });
-  const deleteWeeklyMut = useMutation({ mutationFn: deleteAvailability, onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Horaire supprimé' : 'Schedule removed'); }, onError: (e: any) => toast.error(e?.message || 'Failed') });
-  const setDefaultMut = useMutation({ mutationFn: () => setDefaultAvailability(avSelectedTeamId), onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Lun-Ven 8-17 défini' : 'Mon-Fri 8-17 set'); }, onError: (e: any) => toast.error(e?.message || 'Failed') });
+  const addWeeklyMut = useMutation({ mutationFn: (input: { team_id: string; weekday: number; start_minute: number; end_minute: number }) => createAvailability(input), onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Horaire mis à jour' : 'Schedule updated'); setWeeklyModalOpen(false); }, onError: (e: any) => toast.error(e?.message || (fr ? 'Échec' : 'Failed')) });
+  const deleteWeeklyMut = useMutation({ mutationFn: deleteAvailability, onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Horaire supprimé' : 'Schedule removed'); }, onError: (e: any) => toast.error(e?.message || (fr ? 'Échec' : 'Failed')) });
+  const setDefaultMut = useMutation({ mutationFn: () => setDefaultAvailability(avSelectedTeamId), onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Lun-Ven 8-17 défini' : 'Mon-Fri 8-17 set'); }, onError: (e: any) => toast.error(e?.message || (fr ? 'Échec' : 'Failed')) });
 
   // ── Availability handlers ──
   function openCreateTeam() { setTeamForm({ name: '', color_hex: TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)] }); setTeamModal({ open: true }); }
@@ -922,14 +922,14 @@ export default function Timesheets() {
                   className="absolute right-0 top-0 bottom-0 w-[340px] bg-surface-card border-l border-outline shadow-2xl z-[500] flex flex-col">
                   <div className="p-5 border-b border-outline">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3"><UnifiedAvatar id={selectedRep.user_id} name={selectedRep.user_name || 'Unknown'} size={36} /><div><h3 className="text-[14px] font-bold text-text-primary">{selectedRep.user_name || 'Unknown'}</h3><p className="text-[11px] text-text-tertiary">{selectedRep.team_name || ''}</p></div></div>
+                      <div className="flex items-center gap-3"><UnifiedAvatar id={selectedRep.user_id} name={selectedRep.user_name || (fr ? 'Inconnu' : 'Unknown')} size={36} /><div><h3 className="text-[14px] font-bold text-text-primary">{selectedRep.user_name || (fr ? 'Inconnu' : 'Unknown')}</h3><p className="text-[11px] text-text-tertiary">{selectedRep.team_name || ''}</p></div></div>
                       <button onClick={() => setSelectedRep(null)} className="p-1.5 rounded-md hover:bg-surface-secondary text-text-tertiary"><X size={14} /></button>
                     </div>
                   </div>
                   <div className="p-5 space-y-4 flex-1">
                     <div><p className="text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Statut' : 'Status'}</p><div className="mt-1.5"><StatusBadgePill statusKey={selectedRep.tracking_status === 'active' ? 'active' : selectedRep.tracking_status === 'idle' ? 'pause' : 'inactive'} label={selectedRep.tracking_status === 'active' ? (fr ? 'En service' : 'Working') : selectedRep.tracking_status === 'idle' ? (fr ? 'En pause' : 'On break') : (fr ? 'Hors ligne' : 'Offline')} /></div></div>
                     {selectedRep.speed_mps != null && <div><p className="text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Vitesse' : 'Speed'}</p><p className="text-[14px] font-medium text-text-primary mt-1">{(selectedRep.speed_mps * 3.6).toFixed(0)} km/h</p></div>}
-                    <div><p className="text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Dernière activité' : 'Last activity'}</p><p className="text-[14px] font-medium text-text-primary mt-1">{new Date(selectedRep.recorded_at).toLocaleTimeString()}</p></div>
+                    <div><p className="text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{fr ? 'Dernière activité' : 'Last activity'}</p><p className="text-[14px] font-medium text-text-primary mt-1">{new Date(selectedRep.recorded_at).toLocaleTimeString(fr ? 'fr-CA' : 'en-CA')}</p></div>
                   </div>
                   <div className="p-4 border-t border-outline space-y-2">
                     <a href={`tel:${selectedRep.user_name}`} className="md:hidden w-full flex items-center justify-center gap-2 h-9 rounded-md bg-surface-card border border-outline text-text-primary text-[13px] font-medium hover:bg-surface-secondary transition-colors"><Phone size={13} /> {fr ? 'Contacter' : 'Contact'}</a>
@@ -1077,7 +1077,7 @@ export default function Timesheets() {
                 <div className="rounded-2xl bg-surface-card border border-border shadow-card">
                   <div className="flex items-center gap-2 px-5 pt-5 pb-3">
                     <Calendar size={14} className="text-text-tertiary" />
-                    <h3 className="text-[14px] font-semibold text-text-primary">{fr ? 'Overrides & exceptions de dates' : 'Date Overrides & Exceptions'}</h3>
+                    <h3 className="text-[14px] font-semibold text-text-primary">{fr ? 'Dérogations et exceptions de dates' : 'Date Overrides & Exceptions'}</h3>
                     <span className="text-[12px] text-text-tertiary">— {fr ? "Remplace l'horaire hebdomadaire pour des journées précises" : 'Override default schedule for specific days'}</span>
                   </div>
                   <div className="px-5 pb-5">

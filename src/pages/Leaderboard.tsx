@@ -89,24 +89,24 @@ function formatRangeLabel(range: LeaderboardRange, fr: boolean): string {
 }
 
 // Les 8 KPIs du Rep Hub (mêmes libellés que RepProfile), format leaderboard
-function statsToKPIs(stats: RepPeriodStats): { label: string; value: string; sub?: string }[] {
+function statsToKPIs(stats: RepPeriodStats, fr: boolean): { label: string; value: string; sub?: string }[] {
   return [
-    { label: 'Revenue', value: money(stats.revenue) },
+    { label: fr ? 'Revenu' : 'Revenue', value: money(stats.revenue, fr) },
     { label: 'Jobs', value: String(stats.jobs) },
-    { label: 'Serviced Revenue', value: money(stats.servicedRevenue) },
-    { label: 'Serviced Jobs', value: String(stats.servicedJobs) },
-    { label: 'Avg Contract Value', value: stats.avgContractValue != null ? money(stats.avgContractValue) : '—' },
-    { label: 'Closing Rate', value: stats.contractClosingRate != null ? `${stats.contractClosingRate}%` : '—' },
-    { label: 'Cancel Rate', value: stats.cancelRate != null ? `${stats.cancelRate}%` : '—' },
-    { label: 'Days Worked', value: String(stats.daysWorked) },
+    { label: fr ? 'Revenu desservi' : 'Serviced Revenue', value: money(stats.servicedRevenue, fr) },
+    { label: fr ? 'Jobs desservies' : 'Serviced Jobs', value: String(stats.servicedJobs) },
+    { label: fr ? 'Valeur moyenne du contrat' : 'Avg Contract Value', value: stats.avgContractValue != null ? money(stats.avgContractValue, fr) : '—' },
+    { label: fr ? 'Taux de conclusion' : 'Closing Rate', value: stats.contractClosingRate != null ? `${stats.contractClosingRate}%` : '—' },
+    { label: fr ? "Taux d'annulation" : 'Cancel Rate', value: stats.cancelRate != null ? `${stats.cancelRate}%` : '—' },
+    { label: fr ? 'Jours travaillés' : 'Days Worked', value: String(stats.daysWorked) },
   ];
 }
 
 // Podium ring colors — gold / silver / bronze (mirrors the mobile RANK_RING).
 const RANK_RING = ['#F59E0B', '#94A3B8', '#EA580C'];
 
-const money = (v: number) =>
-  new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(v || 0);
+const money = (v: number, fr = false) =>
+  new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(v || 0);
 
 export default function D2DLeaderboard() {
   const navigate = useNavigate();
@@ -397,7 +397,7 @@ export default function D2DLeaderboard() {
                     </div>
                     <p className="mt-2 max-w-[120px] truncate text-center text-sm font-semibold text-text-primary">{rep.name}</p>
                     <p className={cn('text-center font-bold text-text-primary', isFirst ? 'text-xl' : 'text-lg')}>
-                      {money(rep.revenue)}
+                      {money(rep.revenue, fr)}
                     </p>
                     <p className="text-center text-xs font-semibold text-text-muted">{salesText(rep)}</p>
                   </button>
@@ -439,7 +439,7 @@ export default function D2DLeaderboard() {
                       <p className="shrink-0 text-base font-bold text-text-primary">
                         {rep.closes} <span className="text-xs font-semibold text-text-muted">{fr ? 'ventes' : 'sales'}</span>
                       </p>
-                      <p className="shrink-0 text-right text-base font-bold text-text-primary">{money(rep.revenue)}</p>
+                      <p className="shrink-0 text-right text-base font-bold text-text-primary">{money(rep.revenue, fr)}</p>
                       <ChevronDown className={cn('h-4 w-4 shrink-0 text-text-muted transition-transform duration-200', expanded && 'rotate-180')} />
                     </button>
 
@@ -459,7 +459,7 @@ export default function D2DLeaderboard() {
                             {/* Terrain — portes / conversations / ventes de la période (dérivé des pins) */}
                             {pins && (
                               <div className="mb-2 rounded-lg border border-border-subtle bg-white px-4 py-3">
-                                <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Terrain</p>
+                                <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{fr ? 'Terrain' : 'Field'}</p>
                                 {/* Milieu plus large : « Conversations » est le libellé le plus long */}
                                 <div className="mt-2.5 grid grid-cols-[1fr_1.4fr_1fr]">
                                   {([
@@ -480,7 +480,7 @@ export default function D2DLeaderboard() {
                             )}
 
                             <div className="grid grid-cols-3 gap-2">
-                              {statsToKPIs(stats).map((kpi) => (
+                              {statsToKPIs(stats, fr).map((kpi) => (
                                 <div key={kpi.label} className="rounded-lg border border-border-subtle bg-white px-3 py-2.5">
                                   <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">{kpi.label}</p>
                                   <p className="mt-0.5 text-sm font-bold text-text-primary">{kpi.value}</p>

@@ -55,15 +55,15 @@ type StepId = 'basic' | 'company' | 'profile' | 'revenue' | 'goals' | 'attributi
 const STEPS: StepId[] = ['basic', 'company', 'profile', 'revenue', 'goals', 'attribution', 'optimize', 'checkout'];
 
 // ─── Right-side panel content per step ───
-const STEP_PANELS: Record<StepId, { image: string; quote: string; author?: string }> = {
-  basic:       { image: '/industries/landscaping.png', quote: 'Businesses grow their revenue by 37% on average with Lume.', author: '' },
-  company:     { image: '/industries/landscaping.png', quote: 'Businesses grow their revenue by 37% on average with Lume.', author: '' },
-  profile:     { image: '/industries/construction.png', quote: 'Business owners who use Lume save 7 hours a week.', author: '' },
-  revenue:     { image: '/industries/hvac.png', quote: 'You can get paid 4x faster with Lume payments.', author: '' },
-  goals:       { image: '/industries/powerwash.jpg', quote: 'Lume has changed the game for us. Now we are actually starting to scale up our business.', author: 'Vision Lavage' },
-  attribution: { image: '/industries/roofing.png', quote: "We're here to help your business run smoothly.", author: '' },
-  optimize:    { image: '/industries/window.jpg', quote: 'Upgrade your plan and unlock more powerful features.', author: '' },
-  checkout:    { image: '', quote: '', author: '' },
+const STEP_PANELS: Record<StepId, { image: string; quote: string; quoteFr: string; author?: string }> = {
+  basic:       { image: '/industries/landscaping.png', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
+  company:     { image: '/industries/landscaping.png', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
+  profile:     { image: '/industries/construction.png', quote: 'Business owners who use Lume save 7 hours a week.', quoteFr: 'Les propriétaires d\'entreprise qui utilisent Lume économisent 7 heures par semaine.', author: '' },
+  revenue:     { image: '/industries/hvac.png', quote: 'You can get paid 4x faster with Lume payments.', quoteFr: 'Faites-vous payer 4 fois plus vite avec les paiements Lume.', author: '' },
+  goals:       { image: '/industries/powerwash.jpg', quote: 'Lume has changed the game for us. Now we are actually starting to scale up our business.', quoteFr: 'Lume a changé la donne pour nous. On commence vraiment à faire croître notre entreprise.', author: 'Vision Lavage' },
+  attribution: { image: '/industries/roofing.png', quote: "We're here to help your business run smoothly.", quoteFr: 'On est là pour que votre entreprise roule sans accroc.', author: '' },
+  optimize:    { image: '/industries/window.jpg', quote: 'Upgrade your plan and unlock more powerful features.', quoteFr: 'Passez à un plan supérieur et débloquez des fonctionnalités plus puissantes.', author: '' },
+  checkout:    { image: '', quote: '', quoteFr: '', author: '' },
 };
 
 // ─── Component ───
@@ -667,7 +667,7 @@ export default function OnboardingFlow() {
               {panel.quote && (
                 <>
                   <p className="text-xs text-white/50 font-semibold uppercase tracking-widest mb-3">{isFr ? 'Le saviez-vous...' : 'Did you know...'}</p>
-                  <p className="text-xl md:text-2xl font-bold text-white leading-snug">{panel.quote}</p>
+                  <p className="text-xl md:text-2xl font-bold text-white leading-snug">{isFr ? panel.quoteFr : panel.quote}</p>
                   {panel.author && <p className="text-sm text-white/60 mt-3 font-medium">{panel.author}</p>}
                 </>
               )}

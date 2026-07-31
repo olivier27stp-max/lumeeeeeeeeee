@@ -20,9 +20,9 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null, fr?: boolean): string {
   if (!iso) return '—';
-  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  try { return new Date(iso).toLocaleString(fr ? 'fr-CA' : 'en-CA'); } catch { return iso; }
 }
 
 function StatusDot({ status }: { status: string | null }) {
@@ -55,11 +55,11 @@ export default function WebhookSettings() {
       setEndpoints(list);
       setKnownEvents(events);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to load webhooks');
+      toast.error(err?.message || (fr ? 'Échec du chargement des webhooks' : 'Failed to load webhooks'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fr]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -70,7 +70,7 @@ export default function WebhookSettings() {
       toast.success(fr ? 'Test envoyé' : 'Test sent');
       setTimeout(load, 1500);
     } catch (err: any) {
-      toast.error(err?.message || 'Test failed');
+      toast.error(err?.message || (fr ? 'Échec du test' : 'Test failed'));
     } finally {
       setBusyId(null);
     }
@@ -84,7 +84,7 @@ export default function WebhookSettings() {
       toast.success(fr ? 'Webhook désactivé' : 'Webhook deactivated');
       load();
     } catch (err: any) {
-      toast.error(err?.message || 'Delete failed');
+      toast.error(err?.message || (fr ? 'Échec de la suppression' : 'Delete failed'));
     } finally {
       setBusyId(null);
     }
@@ -95,7 +95,7 @@ export default function WebhookSettings() {
       const deliveries = await listDeliveries(ep.id, 50);
       setDrawer({ endpoint: ep, deliveries });
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to load deliveries');
+      toast.error(err?.message || (fr ? 'Échec du chargement des livraisons' : 'Failed to load deliveries'));
     }
   };
 
@@ -144,7 +144,7 @@ export default function WebhookSettings() {
                 <div className="text-xs text-zinc-500 truncate font-mono">{truncate(ep.url, 80)}</div>
                 <div className="text-xs text-zinc-500 mt-1">
                   {(ep.events?.length || 0)} {wt.eventsCount || (fr ? 'événement(s)' : 'event(s)')} ·{' '}
-                  {wt.lastDelivery || (fr ? 'Dernier envoi' : 'Last delivery')}: {formatDate(ep.last_delivery_at)}
+                  {wt.lastDelivery || (fr ? 'Dernier envoi' : 'Last delivery')}: {formatDate(ep.last_delivery_at, fr)}
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -273,7 +273,7 @@ function EndpointModal({
         onCreated({ id: r.endpoint.id, secret: r.secret });
       }
     } catch (err: any) {
-      toast.error(err?.message || 'Save failed');
+      toast.error(err?.message || (fr ? "Échec de l'enregistrement" : 'Save failed'));
     } finally {
       setSaving(false);
     }
@@ -442,7 +442,7 @@ function DeliveriesDrawer({
                 <div className="flex items-center gap-2">
                   <StatusDot status={d.status} />
                   <span className="font-mono text-xs">{d.event_name}</span>
-                  <span className="ml-auto text-xs text-zinc-500">{formatDate(d.created_at)}</span>
+                  <span className="ml-auto text-xs text-zinc-500">{formatDate(d.created_at, fr)}</span>
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
                   {fr ? 'Statut' : 'Status'}: <b>{d.status}</b>

@@ -133,7 +133,7 @@ export default function D2DRepProfile() {
       const dbMember = info.member;
 
       if (!dbProfile && !dbMember) {
-        throw new Error('Profile not found');
+        throw new Error(isFr ? 'Profil introuvable' : 'Profile not found');
       }
 
       // Office = the bureau (org) this rep is pinned to
@@ -429,7 +429,7 @@ export default function D2DRepProfile() {
                       <div key={kind} className="flex items-center justify-between px-1.5 py-1.5">
                         <div className="flex items-center gap-2.5">
                           <span className="h-2.5 w-2.5 rounded-full" style={{ background: cfg.color }} />
-                          <span className="text-[13px] font-semibold text-text-primary">{cfg.label}</span>
+                          <span className="text-[13px] font-semibold text-text-primary">{isFr ? cfg.label : cfg.label_en}</span>
                         </div>
                         <span className="text-[13px] font-bold tabular-nums text-text-primary">{pinCounts?.byKind[kind] ?? 0}</span>
                       </div>
@@ -484,7 +484,7 @@ export default function D2DRepProfile() {
                           <td className="px-2 py-2 text-text-primary font-medium truncate max-w-[200px]">{j.title || '—'}</td>
                           <td className="px-2 py-2 text-text-secondary capitalize text-[12px]">{(j.status || '').replace(/_/g, ' ')}</td>
                           <td className="px-2 py-2 text-right tabular-nums text-text-primary">{fmtCurrency(Number(j.total_amount || 0))}</td>
-                          <td className="px-2 py-2 text-text-tertiary text-[12px]">{new Date(j.created_at).toLocaleDateString('fr-CA')}</td>
+                          <td className="px-2 py-2 text-text-tertiary text-[12px]">{new Date(j.created_at).toLocaleDateString(isFr ? 'fr-CA' : 'en-CA')}</td>
                         </tr>
                       ))}
                     </tbody>

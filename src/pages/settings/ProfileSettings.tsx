@@ -574,7 +574,7 @@ export default function ProfileSettings() {
             <>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <KpiCard icon={DollarSign} label={isFr ? 'Revenus totaux' : 'Total revenue'} value={stats ? fmtCurrency(stats.totalRevenue) : '—'} />
-                <KpiCard icon={Target} label="Closes" value={String(closesCount ?? '—')} />
+                <KpiCard icon={Target} label={isFr ? 'Ventes conclues' : 'Closes'} value={String(closesCount ?? '—')} />
                 <KpiCard icon={FileSignature} label={isFr ? 'Contrats signés' : 'Contracts signed'} value={String(stats?.contractsSigned ?? '—')} />
                 <KpiCard icon={CircleDollarSign} label={isFr ? 'Commissions à venir' : 'Next payout'} value={commissions ? fmtCurrency(commissions.nextPayout) : '—'} />
               </div>

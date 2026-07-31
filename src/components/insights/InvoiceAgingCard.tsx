@@ -5,8 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useTranslation } from '../../i18n';
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
+function fmtMoney(cents: number, locale: string) {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
 }
 
 async function fetchData() {
@@ -41,7 +41,8 @@ async function fetchData() {
 }
 
 export default function InvoiceAgingCard() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
   const ti = (t.insights as any).reports || {};
   const { data = [], isLoading } = useQuery({ queryKey: ['report-invoice-aging'], queryFn: fetchData, staleTime: 60_000 });
   const hasData = data.some((d) => d.value > 0);
@@ -63,7 +64,7 @@ export default function InvoiceAgingCard() {
               <CartesianGrid vertical={false} stroke="#e4e4e7" />
               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
-              <Tooltip formatter={(v: number) => fmtMoney(v)} />
+              <Tooltip formatter={(v: number) => fmtMoney(v, locale)} />
               <Bar dataKey="value" fill="var(--color-primary)" radius={[6, 6, 0, 0]} maxBarSize={50} />
             </BarChart>
           </ResponsiveContainer>

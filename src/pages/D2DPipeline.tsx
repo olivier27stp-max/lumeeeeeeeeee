@@ -55,7 +55,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-async function fetchPipeline(repFilter?: string): Promise<PipelineDeal[]> {
+async function fetchPipeline(repFilter?: string, fr = false): Promise<PipelineDeal[]> {
   const headers = await getAuthHeaders();
   const params = repFilter && repFilter !== 'all' ? `?rep_id=${repFilter}` : '';
   const res = await fetch(`/api/field-sales/pipeline${params}`, { headers });
@@ -67,7 +67,7 @@ async function fetchPipeline(repFilter?: string): Promise<PipelineDeal[]> {
     d2dStage: DB_TO_D2D_STAGE[d.stage] || 'new_lead',
     title: d.title || '',
     value: Number(d.value || 0),
-    leadName: d.lead_name || d.title || 'Unnamed',
+    leadName: d.lead_name || d.title || (fr ? 'Sans nom' : 'Unnamed'),
     repId: d.rep_id || null,
     repName: d.rep_name || null,
     createdById: d.created_by_id || null,
@@ -160,8 +160,8 @@ function DealCard({ deal, onStatusChange, onSelect }: {
             className={cn('px-1.5 py-0.5 rounded text-[8px] font-medium transition-all',
               deal.d2dStatus === s ? 'ring-1 ring-outline-strong' : 'opacity-50 hover:opacity-100')}
             style={{ color: D2D_STATUS_CONFIG[s].color, background: D2D_STATUS_CONFIG[s].color + '15' }}
-            title={D2D_STATUS_CONFIG[s].label}>
-            {D2D_STATUS_CONFIG[s].label.slice(0, 3)}
+            title={fr ? D2D_STATUS_CONFIG[s].labelFr : D2D_STATUS_CONFIG[s].label}>
+            {(fr ? D2D_STATUS_CONFIG[s].labelFr : D2D_STATUS_CONFIG[s].label).slice(0, 3)}
           </button>
         ))}
       </div>
@@ -368,7 +368,7 @@ export default function D2DPipeline() {
   useEffect(() => {
     async function load() {
       try {
-        const [dealsData, repsData] = await Promise.all([fetchPipeline(repFilter), fetchReps()]);
+        const [dealsData, repsData] = await Promise.all([fetchPipeline(repFilter, fr), fetchReps()]);
         setDeals(dealsData);
         setReps(repsData);
       } catch (err: any) {
@@ -418,7 +418,10 @@ export default function D2DPipeline() {
     if (targetStage === deal.d2dStage) return;
     const targetConfig = D2D_STAGE_CONFIG[targetStage];
     if (!targetConfig.manualEntry) {
-      toast.error(targetConfig.blockReason || 'Cannot move here');
+      const reason = targetConfig.blockReason
+        ? (fr ? targetConfig.blockReason.fr : targetConfig.blockReason.en)
+        : (fr ? 'Impossible de déplacer ici' : 'Cannot move here');
+      toast.error(reason);
       return;
     }
     const prevStage = deal.d2dStage;
@@ -479,7 +482,7 @@ export default function D2DPipeline() {
         <div>
           <h1 className="text-[18px] font-bold text-text-primary">Pipeline</h1>
           <p className="text-[12px] text-text-muted mt-0.5">
-            {totalDeals} {fr ? (totalDeals !== 1 ? 'deals' : 'deal') : (totalDeals !== 1 ? 'deals' : 'deal')} · {formatCurrency(totalValue * 100, 'CAD')}
+            {totalDeals} {totalDeals !== 1 ? 'deals' : 'deal'} · {formatCurrency(totalValue * 100, 'CAD')}
           </p>
         </div>
         <div className="flex items-center gap-2">

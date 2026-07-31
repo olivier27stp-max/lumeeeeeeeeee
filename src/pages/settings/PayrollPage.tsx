@@ -31,8 +31,8 @@ import {
 } from '../../lib/payrollApi';
 import PayrollSettingsPanel from '../../components/payroll/PayrollSettingsPanel';
 
-function money(cents: number): string {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2 }).format(cents / 100);
+function money(cents: number, fr: boolean = false): string {
+  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', minimumFractionDigits: 2 }).format(cents / 100);
 }
 
 function addDaysStr(dateStr: string, days: number): string {
@@ -263,7 +263,7 @@ export default function PayrollPage() {
           </div>
           <div className="section-card p-4">
             <div className="flex items-center gap-1.5 text-text-tertiary"><Banknote size={13} /><span className="text-[10px] font-bold uppercase tracking-wider">{fr ? 'Total brut' : 'Gross total'}</span></div>
-            <p className="mt-1 text-lg font-extrabold tabular-nums text-text-primary">{money(totals.total)}</p>
+            <p className="mt-1 text-lg font-extrabold tabular-nums text-text-primary">{money(totals.total, fr)}</p>
           </div>
         </div>
       )}
@@ -314,11 +314,11 @@ export default function PayrollPage() {
                     </span>
                   </span>
                   <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{row.hours.toFixed(2)}</span>
-                  <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{row.rate_cents ? money(row.rate_cents) : '—'}</span>
-                  <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{money(row.gross_cents)}</span>
-                  <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{money(row.commission_cents)}</span>
-                  <span className={cn('hidden md:block text-right text-[13px] tabular-nums', row.adjustments_cents < 0 ? 'text-danger' : 'text-text-secondary')}>{money(row.adjustments_cents)}</span>
-                  <span className="text-right text-[13.5px] font-bold tabular-nums text-text-primary">{money(row.total_cents)}</span>
+                  <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{row.rate_cents ? money(row.rate_cents, fr) : '—'}</span>
+                  <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{money(row.gross_cents, fr)}</span>
+                  <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{money(row.commission_cents, fr)}</span>
+                  <span className={cn('hidden md:block text-right text-[13px] tabular-nums', row.adjustments_cents < 0 ? 'text-danger' : 'text-text-secondary')}>{money(row.adjustments_cents, fr)}</span>
+                  <span className="text-right text-[13.5px] font-bold tabular-nums text-text-primary">{money(row.total_cents, fr)}</span>
                   <span className="text-right">
                     {row.payment ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-success/10 text-success px-2 py-0.5 text-[10.5px] font-semibold">
@@ -335,8 +335,8 @@ export default function PayrollPage() {
                 {isOpen && (
                   <div className="px-5 pb-4 pt-1 space-y-3 bg-surface-secondary/20">
                     <p className="text-[11px] text-text-tertiary">
-                      {row.punch_count} {fr ? 'punch(s) complété(s)' : 'completed punch(es)'} · {row.hours.toFixed(2)} h × {money(row.rate_cents)}/h = {money(row.gross_cents)}
-                      {row.commission_cents > 0 && <> · {fr ? 'commissions' : 'commissions'} {money(row.commission_cents)}</>}
+                      {row.punch_count} {fr ? 'punch(s) complété(s)' : 'completed punch(es)'} · {row.hours.toFixed(2)} h × {money(row.rate_cents, fr)}/h = {money(row.gross_cents, fr)}
+                      {row.commission_cents > 0 && <> · {fr ? 'commissions' : 'commissions'} {money(row.commission_cents, fr)}</>}
                     </p>
 
                     {/* Adjustments */}
@@ -345,7 +345,7 @@ export default function PayrollPage() {
                         {row.adjustments.map((a) => (
                           <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg bg-surface-card border border-outline/50 px-3 py-1.5">
                             <span className="text-[12px] text-text-secondary truncate">
-                              <span className={cn('font-semibold tabular-nums', a.amount_cents < 0 ? 'text-danger' : 'text-success')}>{money(a.amount_cents)}</span>
+                              <span className={cn('font-semibold tabular-nums', a.amount_cents < 0 ? 'text-danger' : 'text-success')}>{money(a.amount_cents, fr)}</span>
                               {a.note && <span className="ml-2 text-text-tertiary">{a.note}</span>}
                             </span>
                             <button onClick={() => handleDeleteAdjustment(a.id)} className="p-1 rounded text-text-tertiary hover:text-danger" title={fr ? 'Retirer' : 'Remove'}>
@@ -402,9 +402,9 @@ export default function PayrollPage() {
                                   </span>
                                   <span className="text-text-tertiary tabular-nums hidden sm:inline">
                                     {Number(h.hours).toFixed(1)} h
-                                    {h.commission_cents > 0 && <> · {fr ? 'comm.' : 'comm.'} {money(h.commission_cents)}</>}
+                                    {h.commission_cents > 0 && <> · {fr ? 'comm.' : 'comm.'} {money(h.commission_cents, fr)}</>}
                                   </span>
-                                  <span className="font-semibold text-text-primary tabular-nums">{money(h.total_cents)}</span>
+                                  <span className="font-semibold text-text-primary tabular-nums">{money(h.total_cents, fr)}</span>
                                 </div>
                               ))}
                             </div>
@@ -435,7 +435,7 @@ export default function PayrollPage() {
                           )}
                           {row.payment
                             ? (fr ? 'Annuler le statut payé' : 'Unmark paid')
-                            : (fr ? `Marquer payé (${money(row.total_cents)})` : `Mark paid (${money(row.total_cents)})`)}
+                            : (fr ? `Marquer payé (${money(row.total_cents, fr)})` : `Mark paid (${money(row.total_cents, fr)})`)}
                         </button>
                       </div>
                     )}

@@ -3,6 +3,50 @@ import { motion } from 'motion/react';
 import { Mail, MapPin, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
+import { useTranslation } from '../../i18n';
+
+// Copie locale bilingue — les dictionnaires i18n globaux (en.ts / fr.ts) ne
+// contiennent pas ces clés et ne doivent pas être modifiés d'ici.
+const COPY = {
+  en: {
+    kicker: 'Contact',
+    title: 'Book a demo',
+    subtitle: "We'll walk you through everything — no commitment required.",
+    getInTouch: 'Get in touch',
+    email: 'Email',
+    location: 'Location',
+    locationValue: 'Quebec, Canada',
+    whatToExpect: 'What to expect',
+    expectations: [
+      'A 20-30 min walkthrough of Lume',
+      'Tailored to your industry',
+      'No commitment, no pressure',
+      'Response within 24 hours',
+    ],
+    readyToTalk: 'Ready to talk?',
+    readyDesc: "Click below to open the booking form. We'll be in touch within 24 hours.",
+    bookDemo: 'Book a demo',
+  },
+  fr: {
+    kicker: 'Contact',
+    title: 'Réservez une démo',
+    subtitle: 'Nous vous présentons la plateforme de A à Z — sans aucun engagement.',
+    getInTouch: 'Contactez-nous',
+    email: 'Courriel',
+    location: 'Emplacement',
+    locationValue: 'Québec, Canada',
+    whatToExpect: 'À quoi vous attendre',
+    expectations: [
+      'Une visite guidée de Lume de 20 à 30 minutes',
+      'Adaptée à votre industrie',
+      'Sans engagement, sans pression',
+      'Une réponse d\'ici 24 heures',
+    ],
+    readyToTalk: 'Prêt à discuter ?',
+    readyDesc: 'Cliquez ci-dessous pour ouvrir le formulaire de réservation. Nous vous répondrons d\'ici 24 heures.',
+    bookDemo: 'Réserver une démo',
+  },
+} as const;
 
 /**
  * Contact page = wrapper that triggers the same BookDemoForm modal used
@@ -13,6 +57,8 @@ import BookDemoForm from '../../components/marketing/BookDemoForm';
 export default function Contact() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(true);
+  const { language } = useTranslation();
+  const c = COPY[language];
 
   return (
     <div style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
@@ -24,7 +70,7 @@ export default function Contact() {
             animate={{ opacity: 1, y: 0 }}
             className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#1F5F4F] mb-4"
           >
-            Contact
+            {c.kicker}
           </motion.p>
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
@@ -32,7 +78,7 @@ export default function Contact() {
             transition={{ delay: 0.05 }}
             className="text-4xl md:text-5xl font-extrabold text-[#111] tracking-tight leading-tight"
           >
-            Book a demo
+            {c.title}
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -40,7 +86,7 @@ export default function Contact() {
             transition={{ delay: 0.15 }}
             className="mt-5 text-lg font-normal text-text-secondary max-w-2xl mx-auto leading-relaxed"
           >
-            We'll walk you through everything — no commitment required.
+            {c.subtitle}
           </motion.p>
         </div>
       </section>
@@ -54,7 +100,7 @@ export default function Contact() {
             animate={{ opacity: 1, x: 0 }}
             className="flex-1 md:pt-4"
           >
-            <h2 className="text-2xl md:text-3xl font-extrabold text-[#111] leading-snug mb-8">Get in touch</h2>
+            <h2 className="text-2xl md:text-3xl font-extrabold text-[#111] leading-snug mb-8">{c.getInTouch}</h2>
 
             <div className="space-y-6">
               <div className="flex items-start gap-4">
@@ -62,7 +108,7 @@ export default function Contact() {
                   <Mail size={16} className="text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-[#111]">Email</p>
+                  <p className="text-sm font-bold text-[#111]">{c.email}</p>
                   <a href="mailto:support@lumecrm.ca" className="text-sm text-text-secondary hover:text-[#111] transition-colors">
                     support@lumecrm.ca
                   </a>
@@ -74,21 +120,16 @@ export default function Contact() {
                   <MapPin size={16} className="text-white" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-[#111]">Location</p>
-                  <p className="text-sm text-text-secondary">Quebec, Canada</p>
+                  <p className="text-sm font-bold text-[#111]">{c.location}</p>
+                  <p className="text-sm text-text-secondary">{c.locationValue}</p>
                 </div>
               </div>
             </div>
 
             <div className="mt-10 pt-8 border-t border-[#e0e0e0]">
-              <p className="text-sm font-bold text-[#111] mb-3">What to expect</p>
+              <p className="text-sm font-bold text-[#111] mb-3">{c.whatToExpect}</p>
               <ul className="space-y-2.5">
-                {[
-                  'A 20-30 min walkthrough of Lume',
-                  'Tailored to your industry',
-                  'No commitment, no pressure',
-                  'Response within 24 hours',
-                ].map((item) => (
+                {c.expectations.map((item) => (
                   <li key={item} className="flex items-center gap-2.5 text-sm text-text-secondary">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ border: '2px solid #3FAF97' }}>
                       <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
@@ -110,13 +151,13 @@ export default function Contact() {
             className="flex-1 w-full"
           >
             <div className="bg-[#111] rounded-2xl p-10 text-center">
-              <h3 className="text-xl font-bold text-white mb-3">Ready to talk?</h3>
-              <p className="text-sm text-white/60 mb-7">Click below to open the booking form. We'll be in touch within 24 hours.</p>
+              <h3 className="text-xl font-bold text-white mb-3">{c.readyToTalk}</h3>
+              <p className="text-sm text-white/60 mb-7">{c.readyDesc}</p>
               <button
                 onClick={() => setOpen(true)}
                 className="inline-flex items-center gap-2 bg-[#3FAF97] text-white px-7 py-3.5 rounded-lg text-sm font-medium hover:bg-[#1F5F4F] transition-colors group"
               >
-                Book a demo
+                {c.bookDemo}
                 <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
               </button>
             </div>

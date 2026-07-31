@@ -23,8 +23,8 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
   dbValue: string;
   /** Can a card be manually dragged INTO this stage? */
   manualEntry: boolean;
-  /** Reason shown if manual entry is blocked */
-  blockReason?: string;
+  /** Reason shown if manual entry is blocked (per language) */
+  blockReason?: { fr: string; en: string };
 }> = {
   new_lead: {
     label: 'New Lead',
@@ -49,7 +49,10 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
     bgClass: 'bg-gray-500/15 text-gray-400',
     dbValue: 'quote_sent',
     manualEntry: false,
-    blockReason: 'Un devis doit \u00eatre envoy\u00e9 pour d\u00e9placer ici',
+    blockReason: {
+      fr: 'Un devis doit \u00eatre envoy\u00e9 pour d\u00e9placer ici',
+      en: 'A quote must be sent to move here',
+    },
   },
   closed_won: {
     label: 'Closed Won',
@@ -58,7 +61,10 @@ export const D2D_STAGE_CONFIG: Record<D2DStage, {
     bgClass: 'bg-green-500/15 text-green-400',
     dbValue: 'closed_won',
     manualEntry: false,
-    blockReason: 'Une job doit \u00eatre cr\u00e9\u00e9e depuis le devis',
+    blockReason: {
+      fr: 'Une job doit \u00eatre cr\u00e9\u00e9e depuis le devis',
+      en: 'A job must be created from the quote',
+    },
   },
   closed_lost: {
     label: 'Closed Lost',

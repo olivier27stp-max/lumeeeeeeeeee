@@ -7,8 +7,10 @@ import { useTranslation } from '../../i18n';
 
 /* ─── HERO + DEVICES SIDE BY SIDE ─── */
 function Hero({ onBookDemo }: { onBookDemo: () => void }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const h = t.marketingSite.hero;
+  // Textes des maquettes UI (non couverts par les dictionnaires i18n globaux).
+  const fr = language === 'fr';
   return (
     <section className="relative pt-28 pb-16 md:pt-36 md:pb-24 px-6 overflow-hidden">
       <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
@@ -116,9 +118,9 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                     {/* Stat cards */}
                     <div className="grid grid-cols-3 gap-3 mb-6">
                       {[
-                        { label: 'Revenue', value: '$48,200', change: '+12%' },
-                        { label: 'New Leads', value: '147', change: '+23%' },
-                        { label: 'Close Rate', value: '68%', change: '+5%' },
+                        { label: fr ? 'Revenus' : 'Revenue', value: '$48,200', change: '+12%' },
+                        { label: fr ? 'Nouveaux leads' : 'New Leads', value: '147', change: '+23%' },
+                        { label: fr ? 'Taux de conclusion' : 'Close Rate', value: '68%', change: '+5%' },
                       ].map((stat, i) => (
                         <div key={i} className="p-3 md:p-4 rounded-xl border border-[#eaeaea] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
                           <div className="text-[9px] md:text-[10px] text-[#999] uppercase tracking-wide font-medium">{stat.label}</div>
@@ -140,7 +142,7 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                         </div>
                       </div>
                       <div className="p-3 md:p-4 rounded-xl border border-[#eaeaea] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                        <div className="text-[10px] font-semibold text-[#555] mb-3">Recent Activity</div>
+                        <div className="text-[10px] font-semibold text-[#555] mb-3">{fr ? 'Activité récente' : 'Recent Activity'}</div>
                         <div className="space-y-2.5">
                           {[...Array(4)].map((_, i) => (
                             <div key={i} className="flex items-center gap-2">
@@ -191,15 +193,15 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                   </div>
                   {/* App header */}
                   <div className="flex items-center justify-between mb-4">
-                    <div className="text-[10px] md:text-xs font-bold text-[#1a1a1a]">Dashboard</div>
+                    <div className="text-[10px] md:text-xs font-bold text-[#1a1a1a]">{fr ? 'Tableau de bord' : 'Dashboard'}</div>
                     <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary/10 flex items-center justify-center">
                       <div className="w-2.5 h-2.5 rounded-full bg-primary/30" />
                     </div>
                   </div>
                   {/* Summary card */}
                   <div className="p-2.5 md:p-3 rounded-xl bg-[#f7f7f7] border border-[#eaeaea] mb-3">
-                    <div className="text-[7px] md:text-[8px] text-[#999] uppercase tracking-wide font-medium">Today</div>
-                    <div className="text-sm md:text-base font-bold text-[#1a1a1a] mt-1">3 Jobs</div>
+                    <div className="text-[7px] md:text-[8px] text-[#999] uppercase tracking-wide font-medium">{fr ? 'Aujourd\'hui' : 'Today'}</div>
+                    <div className="text-sm md:text-base font-bold text-[#1a1a1a] mt-1">{fr ? '3 jobs' : '3 Jobs'}</div>
                     <div className="mt-2 h-1.5 bg-[#e5e5e5] rounded-full overflow-hidden">
                       <div className="h-full bg-primary rounded-full w-2/3" />
                     </div>
@@ -207,9 +209,9 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                   {/* Schedule items */}
                   <div className="space-y-2">
                     {[
-                      { time: '9:00 AM', name: 'J. Smith', addr: '142 Oak St', color: 'bg-emerald-50 border-emerald-100' },
-                      { time: '11:30 AM', name: 'M. Johnson', addr: '88 Pine Ave', color: 'bg-blue-50 border-blue-100' },
-                      { time: '2:00 PM', name: 'R. Davis', addr: '205 Maple Dr', color: 'bg-amber-50 border-amber-100' },
+                      { time: fr ? '9 h 00' : '9:00 AM', name: 'J. Smith', addr: '142 Oak St', color: 'bg-emerald-50 border-emerald-100' },
+                      { time: fr ? '11 h 30' : '11:30 AM', name: 'M. Johnson', addr: '88 Pine Ave', color: 'bg-blue-50 border-blue-100' },
+                      { time: fr ? '14 h 00' : '2:00 PM', name: 'R. Davis', addr: '205 Maple Dr', color: 'bg-amber-50 border-amber-100' },
                     ].map((item, i) => (
                       <div key={i} className={`p-2 md:p-2.5 rounded-lg border ${item.color}`}>
                         <div className="flex items-center justify-between">
@@ -224,7 +226,7 @@ function Hero({ onBookDemo }: { onBookDemo: () => void }) {
                   {/* Bottom nav */}
                   <div className="absolute bottom-2 md:bottom-3 left-3 md:left-4 right-3 md:right-4">
                     <div className="flex items-center justify-around py-1.5 md:py-2">
-                      {['Home', 'Map', 'Jobs', 'More'].map((label, i) => (
+                      {(fr ? ['Accueil', 'Carte', 'Jobs', 'Plus'] : ['Home', 'Map', 'Jobs', 'More']).map((label, i) => (
                         <div key={label} className="flex flex-col items-center gap-0.5">
                           <div className={`w-4 h-4 md:w-5 md:h-5 rounded ${i === 0 ? 'bg-primary/20' : 'bg-[#e5e5e5]'}`} />
                           <span className={`text-[6px] md:text-[7px] font-medium ${i === 0 ? 'text-primary' : 'text-[#aaa]'}`}>{label}</span>
@@ -440,8 +442,10 @@ function IndustriesGrid() {
 
 /* ─── FEATURE BLOCKS ─── */
 function FeatureBlocks() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const f = t.marketingSite.features;
+  // Textes des maquettes UI (non couverts par les dictionnaires i18n globaux).
+  const fr = language === 'fr';
   return (
     <section className="py-24 md:py-32 px-6 bg-text-primary">
       <div className="max-w-7xl mx-auto space-y-28 md:space-y-36">
@@ -550,10 +554,10 @@ function FeatureBlocks() {
                       <div className="absolute bottom-2 right-2 bg-white/90 rounded-lg p-2 shadow-sm">
                         <div className="space-y-1">
                           {[
-                            { color: 'bg-emerald-500', label: 'Sold' },
-                            { color: 'bg-primary', label: 'Follow-up' },
-                            { color: 'bg-amber-500', label: 'Not home' },
-                            { color: 'bg-red-500', label: 'Not interested' },
+                            { color: 'bg-emerald-500', label: fr ? 'Vendu' : 'Sold' },
+                            { color: 'bg-primary', label: fr ? 'À relancer' : 'Follow-up' },
+                            { color: 'bg-amber-500', label: fr ? 'Absent' : 'Not home' },
+                            { color: 'bg-red-500', label: fr ? 'Pas intéressé' : 'Not interested' },
                           ].map((item) => (
                             <div key={item.label} className="flex items-center gap-1.5">
                               <div className={`w-2 h-2 rounded-full ${item.color}`} />
@@ -663,10 +667,12 @@ function FeatureBlocks() {
                           <div className="bg-[#f0f0f0] rounded-xl rounded-tr-sm px-3.5 py-2.5 max-w-[75%]">
                             <div className="flex items-center gap-2 mb-1">
                               <div className="w-3 h-3 rounded-full bg-primary/30" />
-                              <span className="text-[9px] font-semibold text-primary">Voice Input</span>
+                              <span className="text-[9px] font-semibold text-primary">{fr ? 'Entrée vocale' : 'Voice Input'}</span>
                             </div>
                             <p className="text-[11px] text-[#333] font-medium leading-snug">
-                              "Create a quote for 123 Main Street, window cleaning, $350"
+                              {fr
+                                ? '« Crée une soumission pour le 123 rue Principale, lavage de vitres, 350 $ »'
+                                : '"Create a quote for 123 Main Street, window cleaning, $350"'}
                             </p>
                           </div>
                         </div>
@@ -682,13 +688,13 @@ function FeatureBlocks() {
                           </div>
                           <div className="bg-text-primary rounded-xl rounded-tl-sm px-3.5 py-2.5 max-w-[75%]">
                             <p className="text-[11px] text-white font-medium leading-snug mb-2">
-                              Quote created successfully
+                              {fr ? 'Soumission créée avec succès' : 'Quote created successfully'}
                             </p>
                             <div className="space-y-1 text-[9px] text-white/60">
-                              <p>Client: 123 Main Street</p>
-                              <p>Service: Window Cleaning</p>
-                              <p>Amount: $350.00</p>
-                              <p>Status: Draft — Ready to send</p>
+                              <p>{fr ? 'Client : 123 rue Principale' : 'Client: 123 Main Street'}</p>
+                              <p>{fr ? 'Service : Lavage de vitres' : 'Service: Window Cleaning'}</p>
+                              <p>{fr ? 'Montant : 350,00 $' : 'Amount: $350.00'}</p>
+                              <p>{fr ? 'Statut : Brouillon — Prête à envoyer' : 'Status: Draft — Ready to send'}</p>
                             </div>
                           </div>
                         </div>
@@ -698,7 +704,9 @@ function FeatureBlocks() {
                           <div className="w-6 h-6" />
                           <div className="bg-primary/10 border border-primary/20 rounded-xl rounded-tl-sm px-3.5 py-2 max-w-[70%]">
                             <p className="text-[10px] text-primary font-medium">
-                              Want me to send this quote to the client now?
+                              {fr
+                                ? 'Voulez-vous que j\'envoie cette soumission au client maintenant ?'
+                                : 'Want me to send this quote to the client now?'}
                             </p>
                           </div>
                         </div>
@@ -711,7 +719,7 @@ function FeatureBlocks() {
                           <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                           <line x1="12" y1="19" x2="12" y2="22" />
                         </svg>
-                        <span className="text-[10px] text-[#aaa] flex-1">Speak a command or type here...</span>
+                        <span className="text-[10px] text-[#aaa] flex-1">{fr ? 'Dictez une commande ou écrivez ici...' : 'Speak a command or type here...'}</span>
                         <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center">
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
                             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
@@ -788,9 +796,9 @@ function FeatureBlocks() {
                     <div className="flex-1 p-4 md:p-5">
                       {/* Top bar */}
                       <div className="flex items-center justify-between mb-4">
-                        <div className="text-[10px] font-bold text-[#333]">Sales Pipeline</div>
+                        <div className="text-[10px] font-bold text-[#333]">{fr ? 'Pipeline de ventes' : 'Sales Pipeline'}</div>
                         <div className="flex gap-1.5">
-                          {['Day', 'Week', 'Month'].map((t, i) => (
+                          {(fr ? ['Jour', 'Semaine', 'Mois'] : ['Day', 'Week', 'Month']).map((t, i) => (
                             <button key={t} className={`px-2 py-0.5 rounded text-[8px] font-medium ${i === 2 ? 'bg-text-primary text-white' : 'text-[#999] bg-[#f0f0f0]'}`}>{t}</button>
                           ))}
                         </div>
@@ -799,10 +807,10 @@ function FeatureBlocks() {
                       {/* KPI row */}
                       <div className="grid grid-cols-4 gap-2 mb-4">
                         {[
-                          { label: 'Revenue', value: '$127K', change: '+18%', color: 'text-success' },
-                          { label: 'Deals Won', value: '34', change: '+12%', color: 'text-success' },
-                          { label: 'Conversion', value: '62%', change: '+5%', color: 'text-success' },
-                          { label: 'Avg Deal', value: '$3.7K', change: '+8%', color: 'text-success' },
+                          { label: fr ? 'Revenus' : 'Revenue', value: '$127K', change: '+18%', color: 'text-success' },
+                          { label: fr ? 'Ventes conclues' : 'Deals Won', value: '34', change: '+12%', color: 'text-success' },
+                          { label: fr ? 'Conversion' : 'Conversion', value: '62%', change: '+5%', color: 'text-success' },
+                          { label: fr ? 'Vente moy.' : 'Avg Deal', value: '$3.7K', change: '+8%', color: 'text-success' },
                         ].map((kpi, i) => (
                           <div key={i} className="p-2 rounded-lg border border-[#eaeaea] bg-white">
                             <div className="text-[7px] text-[#999] uppercase tracking-wide font-medium">{kpi.label}</div>
@@ -815,10 +823,10 @@ function FeatureBlocks() {
                       {/* Pipeline columns */}
                       <div className="flex gap-2 flex-1">
                         {[
-                          { title: 'New Lead', count: 12, cards: 4, color: 'bg-blue-500' },
-                          { title: 'Contacted', count: 8, cards: 3, color: 'bg-amber-500' },
-                          { title: 'Quote Sent', count: 6, cards: 3, color: 'bg-purple-500' },
-                          { title: 'Won', count: 4, cards: 2, color: 'bg-[#3FAF97]' },
+                          { title: fr ? 'Nouveau lead' : 'New Lead', count: 12, cards: 4, color: 'bg-blue-500' },
+                          { title: fr ? 'Contacté' : 'Contacted', count: 8, cards: 3, color: 'bg-amber-500' },
+                          { title: fr ? 'Soumission envoyée' : 'Quote Sent', count: 6, cards: 3, color: 'bg-purple-500' },
+                          { title: fr ? 'Gagné' : 'Won', count: 4, cards: 2, color: 'bg-[#3FAF97]' },
                         ].map((col, ci) => (
                           <div key={ci} className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 mb-2">

@@ -43,8 +43,17 @@ export interface PinStatusConfig {
   color: string;
   gradientFrom: string;
   gradientTo: string;
+  /** Libellé affiché en français (la langue par défaut de l'app). */
   label: string;
+  /** Displayed label in English. */
+  label_en: string;
   iconPaths: string;
+}
+
+/** Display label for a pin status in the requested language. */
+export function pinStatusLabel(status: PinStatus, fr: boolean): string {
+  const cfg = PIN_STATUS_CONFIG[status];
+  return fr ? cfg.label : cfg.label_en;
 }
 
 // Single source of truth for pin statuses — colors AND labels. Every surface
@@ -56,6 +65,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#4ADE80',
     gradientTo: '#16A34A',
     label: 'Vendu ✓',
+    label_en: 'Sold ✓',
     // Crochet décalé de +0.5 en y : la polyline Lucide (y 6→17) est plus haute
     // que le centre du viewBox, ce qui faisait flotter l'icône dans le pin.
     iconPaths: '<polyline points="20 6.5 9 17.5 4 12.5"/>',
@@ -65,6 +75,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#C084FC',
     gradientTo: '#9333EA',
     label: 'Lead',
+    label_en: 'Lead',
     // Sniper target: scope circle + 4 crosshair ticks + center dot
     iconPaths: '<circle cx="12" cy="12" r="7"/><line x1="12" y1="2" x2="12" y2="5.5"/><line x1="12" y1="18.5" x2="12" y2="22"/><line x1="2" y1="12" x2="5.5" y2="12"/><line x1="18.5" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="1" fill="white" stroke="none"/>',
   },
@@ -73,6 +84,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#22D3EE',
     gradientTo: '#0891B2',
     label: 'À repasser',
+    label_en: 'Follow up',
     iconPaths: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   },
   appointment: {
@@ -80,6 +92,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#9CA3AF',
     gradientTo: '#4B5563',
     label: 'Rendez-vous',
+    label_en: 'Appointment',
     iconPaths: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   },
   no_answer: {
@@ -87,6 +100,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#FDE047',
     gradientTo: '#CA8A04',
     label: 'Aucune réponse',
+    label_en: 'No answer',
     // « ? » agrandi de 30 % et recentré sur (12,12) — le glyphe Lucide nu
     // (sans son cercle) était minuscule et optiquement hors centre.
     iconPaths: '<path d="M8.32 7.78a3.9 3.9 0 0 1 7.58 1.3c0 2.6-3.9 3.9-3.9 3.9"/><circle cx="12.1" cy="18.2" r=".5"/>',
@@ -96,6 +110,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#F87171',
     gradientTo: '#DC2626',
     label: 'Pas intéressé',
+    label_en: 'Not interested',
     iconPaths: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   },
   other: {
@@ -103,6 +118,7 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     gradientFrom: '#FB923C',
     gradientTo: '#EA580C',
     label: 'Autre',
+    label_en: 'Other',
     iconPaths: '<circle cx="12" cy="12" r="4.5" fill="white" stroke="none"/>',
   },
 };
@@ -258,8 +274,9 @@ export function createLeadPinPopupHTML(
   // Rangée des 7 statuts — un tap change le statut (bindé dans map-container)
   const statusDots = (Object.keys(PIN_STATUS_CONFIG) as PinStatus[]).map((st) => {
     const c = PIN_STATUS_CONFIG[st];
+    const stLabel = fr ? c.label : c.label_en;
     const active = st === pin.status;
-    return `<button type="button" id="${popupStatusDotId(pin.id, st)}" class="ppsd" title="${c.label}" aria-label="${c.label}" aria-pressed="${active}" style="width:30px;height:30px;border-radius:50%;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;background:linear-gradient(135deg,${c.gradientFrom},${c.gradientTo});border:2px solid ${active ? '#fff' : 'transparent'};${active ? `box-shadow:0 0 0 2px ${c.color},0 4px 10px rgba(20,25,50,.18);transform:scale(1.08);opacity:1;` : 'opacity:.4;'}">${svgIcon(c.iconPaths, 14, true)}</button>`;
+    return `<button type="button" id="${popupStatusDotId(pin.id, st)}" class="ppsd" title="${stLabel}" aria-label="${stLabel}" aria-pressed="${active}" style="width:30px;height:30px;border-radius:50%;flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;background:linear-gradient(135deg,${c.gradientFrom},${c.gradientTo});border:2px solid ${active ? '#fff' : 'transparent'};${active ? `box-shadow:0 0 0 2px ${c.color},0 4px 10px rgba(20,25,50,.18);transform:scale(1.08);opacity:1;` : 'opacity:.4;'}">${svgIcon(c.iconPaths, 14, true)}</button>`;
   }).join('');
 
   // Bloc client — le pin appartient au client ; la carte ouvre son hub.

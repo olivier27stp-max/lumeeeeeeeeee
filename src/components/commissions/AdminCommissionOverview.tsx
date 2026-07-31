@@ -75,7 +75,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       }
     } catch (err: any) {
       console.error('[AdminCommissionOverview] failed to load:', err);
-      setError(err?.message || 'Failed to load commissions');
+      setError(err?.message || (isFr ? 'Échec du chargement des commissions' : 'Failed to load commissions'));
     } finally {
       setLoading(false);
     }
@@ -89,7 +89,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       const updated = await approveCommission(id);
       setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
     } catch (err: any) {
-      setError(err?.message || 'Approve failed');
+      setError(err?.message || (isFr ? "Échec de l'approbation" : 'Approve failed'));
     } finally {
       setActionLoading(null);
     }
@@ -101,7 +101,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       const updated = await reverseCommission(id);
       setEntries((prev) => prev?.map((e) => (e.id === id ? updated : e)) ?? null);
     } catch (err: any) {
-      setError(err?.message || 'Reverse failed');
+      setError(err?.message || (isFr ? 'Échec du reversement' : 'Reverse failed'));
     } finally {
       setActionLoading(null);
     }
@@ -197,7 +197,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       {loading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
-          <span className="ml-2 text-sm text-text-muted">Loading commissions...</span>
+          <span className="ml-2 text-sm text-text-muted">{isFr ? 'Chargement des commissions...' : 'Loading commissions...'}</span>
         </div>
       )}
 
@@ -255,7 +255,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
               <CardHeader><CardTitle>{isFr ? 'Répartition' : 'Breakdown'}</CardTitle></CardHeader>
               <CardContent>
                 <StatusDonut
-                  centerLabel={isFr ? 'Total' : 'Total'}
+                  centerLabel="Total"
                   segments={[
                     { label: isFr ? 'Versé' : 'Paid', value: dash.paid, color: 'var(--color-success)' },
                     { label: isFr ? 'En attente' : 'Pending', value: dash.pending, color: 'var(--color-warning)' },

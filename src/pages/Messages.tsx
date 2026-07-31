@@ -94,7 +94,7 @@ function NewConversationModal({
       );
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send');
+      toast.error(err?.message || (language === 'fr' ? "Échec de l'envoi" : 'Failed to send'));
     } finally {
       setSending(false);
     }
@@ -226,37 +226,44 @@ function MessageStatusIcon({ status }: { status: string }) {
 }
 
 // ─── Time formatting ─────────────────────────────────────────────────
-function formatMessageTime(dateStr: string): string {
+function appLocale(language: string): string {
+  return language === 'fr' ? 'fr-CA' : 'en-CA';
+}
+
+function formatMessageTime(dateStr: string, language: string): string {
+  const fr = language === 'fr';
+  const locale = appLocale(language);
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   }
-  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === 1) return fr ? 'Hier' : 'Yesterday';
   if (diffDays < 7) {
-    return date.toLocaleDateString([], { weekday: 'short' });
+    return date.toLocaleDateString(locale, { weekday: 'short' });
   }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
 }
 
-function formatFullTime(dateStr: string): string {
+function formatFullTime(dateStr: string, language: string): string {
   const date = new Date(dateStr);
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return date.toLocaleTimeString(appLocale(language), { hour: '2-digit', minute: '2-digit' });
 }
 
 // ─── Date separator ──────────────────────────────────────────────────
-function formatDateSeparator(dateStr: string): string {
+function formatDateSeparator(dateStr: string, language: string): string {
+  const fr = language === 'fr';
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  if (diffDays === 0) return fr ? "Aujourd'hui" : 'Today';
+  if (diffDays === 1) return fr ? 'Hier' : 'Yesterday';
+  return date.toLocaleDateString(appLocale(language), { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
 // ─── Main Messages Page ──────────────────────────────────────────────
@@ -595,7 +602,7 @@ export default function Messages() {
                           {displayName}
                         </span>
                         <span className="text-[12px] text-text-tertiary shrink-0 leading-tight">
-                          {formatMessageTime(convo.last_message_at)}
+                          {formatMessageTime(convo.last_message_at, language)}
                         </span>
                       </div>
 
@@ -674,7 +681,7 @@ export default function Messages() {
                     <div key={gIdx}>
                       <div className="flex items-center justify-center my-4">
                         <span className="text-[11px] text-text-secondary bg-surface px-3 py-1 rounded-full font-medium border border-border">
-                          {formatDateSeparator(group.date)}
+                          {formatDateSeparator(group.date, language)}
                         </span>
                       </div>
                       {group.messages.map((msg) => (
@@ -690,7 +697,7 @@ export default function Messages() {
                             </p>
                             <div className={cn("flex items-center gap-1 mt-1", msg.direction === 'outbound' ? "justify-end" : "justify-start")}>
                               <span className={cn("text-[10px]", msg.direction === 'outbound' ? "text-white/50" : "text-text-tertiary")}>
-                                {formatFullTime(msg.created_at)}
+                                {formatFullTime(msg.created_at, language)}
                               </span>
                               {msg.direction === 'outbound' && <MessageStatusIcon status={msg.status} />}
                             </div>

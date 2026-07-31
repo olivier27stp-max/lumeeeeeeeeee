@@ -823,7 +823,7 @@ function PayoutTypeDropdown({ value, onChange, fr }: { value: string; onChange: 
   const options = [
     { value: 'all', label: fr ? 'Tous' : 'All' },
     { value: 'standard', label: 'Standard' },
-    { value: 'instant', label: 'Instant' },
+    { value: 'instant', label: fr ? 'Instantané' : 'Instant' },
   ];
   const activeLabel = options.find(o => o.value === value)?.label;
 

@@ -23,7 +23,7 @@ interface RequestPaymentModalProps {
 export default function RequestPaymentModal({
   open, onClose, invoiceId, invoiceNumber, balanceCents, currency, clientEmail, clientPhone, onSuccess,
 }: RequestPaymentModalProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const m = t.requestPaymentModal;
   const [loading, setLoading] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export default function RequestPaymentModal({
     navigator.clipboard.writeText(paymentUrl).then(() => {
       setLinkCopied(true);
       toast.success(m.linkCopied);
-    }).catch(() => toast.error('Failed to copy link'));
+    }).catch(() => toast.error(language === 'fr' ? 'Échec de la copie du lien' : 'Failed to copy link'));
     setTimeout(() => setLinkCopied(false), 2000);
   }
 

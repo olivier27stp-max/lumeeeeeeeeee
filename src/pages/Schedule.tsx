@@ -65,10 +65,15 @@ function buildRange(date: Date, view: CalendarUiView) {
 }
 
 function hLabel(date: Date, view: CalendarUiView) {
+  const fr = _isFr();
   const opts = { locale: _dfLocale() };
   if (view === 'month') return format(date, 'MMMM yyyy', opts);
-  if (view === 'day') return format(date, 'EEEE, MMMM d, yyyy', opts);
+  if (view === 'day') return format(date, fr ? 'EEEE d MMMM yyyy' : 'EEEE, MMMM d, yyyy', opts);
   const s = startOfWeek(date, { weekStartsOn: 1 }), e = addDays(s, 6);
+  if (fr) {
+    if (s.getMonth() === e.getMonth()) return `${format(s, 'd', opts)} – ${format(e, 'd MMMM yyyy', opts)}`;
+    return `${format(s, 'd MMM', opts)} – ${format(e, 'd MMM yyyy', opts)}`;
+  }
   if (s.getMonth() === e.getMonth()) return `${format(s, 'MMM d', opts)} – ${format(e, 'd, yyyy', opts)}`;
   return `${format(s, 'MMM d', opts)} – ${format(e, 'MMM d, yyyy', opts)}`;
 }
@@ -142,7 +147,7 @@ function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
                     <div key={ev.id} onClick={(e) => { e.stopPropagation(); onEventClick(ev.job_id); }}
                       className="cursor-pointer truncate rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
                       style={{ backgroundColor: toRgba(c, 0.15), color: c }}>
-                      {format(new Date(ev.start_at), 'h:mma', _LOC).toLowerCase()} {ev.job?.title || 'Job'}
+                      {_isFr() ? format(new Date(ev.start_at), 'HH:mm', _LOC) : format(new Date(ev.start_at), 'h:mma', _LOC).toLowerCase()} {ev.job?.title || 'Job'}
                     </div>
                   );
                 })}
@@ -254,7 +259,7 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
                         <div className="min-w-0 flex-1">
                           <p className="text-[14px] font-bold leading-snug" style={{ color: c }}>{ev.job?.title || 'Job'}</p>
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-text-secondary">
-                            <span className="font-medium">{format(s, 'h:mm a', _LOC)} – {format(e, 'h:mm a', _LOC)}</span>
+                            <span className="font-medium">{format(s, isFr ? 'HH:mm' : 'h:mm a', _LOC)} – {format(e, isFr ? 'HH:mm' : 'h:mm a', _LOC)}</span>
                             {ev.job?.client_name && <span>{ev.job.client_name}</span>}
                             {ev.job?.property_address && <span className="flex items-center gap-1 text-text-tertiary"><MapPin size={11} />{ev.job.property_address}</span>}
                           </div>

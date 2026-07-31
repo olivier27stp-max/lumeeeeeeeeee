@@ -93,7 +93,7 @@ export default function SettingsMessaging() {
         }
       }
     } catch (err: any) {
-      setLoadError(err?.message || 'Failed to load channel');
+      setLoadError(err?.message || (isFr ? 'Échec du chargement du canal' : 'Failed to load channel'));
     } finally {
       setLoading(false);
     }
@@ -384,15 +384,30 @@ const RULE_LABELS_FR: Record<string, string> = {
   seasonal_reminder_6m: 'Rappel saisonnier — 6 mois',
 };
 
-const TRIGGER_GROUPS_FR: Array<{ label: string; triggers: string[] }> = [
-  { label: 'Rendez-vous', triggers: ['appointment.created', 'appointment.cancelled'] },
-  { label: 'Devis & dépôts', triggers: ['quote.sent', 'quote.approved', 'estimate.sent'] },
-  { label: 'Factures & paiements', triggers: ['invoice.sent', 'invoice.paid'] },
-  { label: 'Leads', triggers: ['lead.created', 'lead.status_changed'] },
-  { label: 'Après la job', triggers: ['job.completed'] },
+const TRIGGER_GROUPS: Array<{ label: { fr: string; en: string }; triggers: string[] }> = [
+  { label: { fr: 'Rendez-vous', en: 'Appointments' }, triggers: ['appointment.created', 'appointment.cancelled'] },
+  { label: { fr: 'Devis & dépôts', en: 'Quotes & deposits' }, triggers: ['quote.sent', 'quote.approved', 'estimate.sent'] },
+  { label: { fr: 'Factures & paiements', en: 'Invoices & payments' }, triggers: ['invoice.sent', 'invoice.paid'] },
+  { label: { fr: 'Leads', en: 'Leads' }, triggers: ['lead.created', 'lead.status_changed'] },
+  { label: { fr: 'Après la job', en: 'After the job' }, triggers: ['job.completed'] },
 ];
 
 const SMS_VARIABLES = '[client_first_name] [client_name] [company_name] [appointment_date] [appointment_time] [appointment_address]';
+
+// A2P brand verticals — Twilio codes stay as values, only labels are localized.
+const VERTICAL_OPTIONS: Array<{ value: string; fr: string; en: string }> = [
+  { value: 'TECHNOLOGY', fr: 'Technologie', en: 'Technology' },
+  { value: 'RETAIL', fr: 'Commerce de détail', en: 'Retail' },
+  { value: 'HEALTHCARE', fr: 'Santé', en: 'Healthcare' },
+  { value: 'REAL_ESTATE', fr: 'Immobilier', en: 'Real estate' },
+  { value: 'PROFESSIONAL', fr: 'Services professionnels', en: 'Professional services' },
+  { value: 'CONSTRUCTION', fr: 'Construction', en: 'Construction' },
+  { value: 'EDUCATION', fr: 'Éducation', en: 'Education' },
+  { value: 'NON_PROFIT', fr: 'Sans but lucratif', en: 'Non-profit' },
+  { value: 'FINANCIAL', fr: 'Services financiers', en: 'Financial services' },
+  { value: 'HOSPITALITY', fr: 'Hôtellerie et restauration', en: 'Hospitality' },
+  { value: 'OTHER', fr: 'Autre', en: 'Other' },
+];
 
 function humanDelay(seconds: number, isFr: boolean): string {
   const abs = Math.abs(seconds);
@@ -474,13 +489,13 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
         </p>
       )}
 
-      {!rulesLoading && TRIGGER_GROUPS_FR.map((group) => {
+      {!rulesLoading && TRIGGER_GROUPS.map((group) => {
         const groupRules = rules.filter((r) => group.triggers.includes(r.trigger_event));
         if (groupRules.length === 0) return null;
         return (
-          <div key={group.label}>
+          <div key={group.label.fr}>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary pb-1.5">
-              {group.label}
+              {isFr ? group.label.fr : group.label.en}
             </p>
             <div className="divide-y divide-outline/30 rounded-xl border border-outline/50 overflow-hidden">
               {groupRules.map((rule) => {
@@ -593,7 +608,7 @@ function A2PSection({
       const latest = await fetchA2PStatus();
       onChange(latest);
     } catch (err: any) {
-      setError(err?.message || 'Refresh failed');
+      setError(err?.message || (isFr ? "Échec de l'actualisation" : 'Refresh failed'));
     } finally {
       setRefreshing(false);
     }
@@ -681,7 +696,7 @@ function A2PSection({
               onChange(latest);
               setStep('intro');
             } catch (err: any) {
-              setError(err?.message || 'Submit failed');
+              setError(err?.message || (isFr ? "Échec de l'envoi" : 'Submit failed'));
             } finally {
               setSubmitting(false);
             }
@@ -723,7 +738,7 @@ function A2PSection({
               onChange(latest);
               setStep('intro');
             } catch (err: any) {
-              setError(err?.message || 'Submit failed');
+              setError(err?.message || (isFr ? "Échec de l'envoi" : 'Submit failed'));
             } finally {
               setSubmitting(false);
             }
@@ -852,16 +867,16 @@ function BrandForm({
         </Field>
         <Field label={isFr ? "Type d'entreprise" : 'Business type'}>
           <select className="glass-input w-full" value={form.business_type} onChange={set('business_type')}>
-            <option value="PRIVATE_PROFIT">Private for-profit</option>
-            <option value="PUBLIC_PROFIT">Public for-profit</option>
-            <option value="NON_PROFIT">Non-profit</option>
-            <option value="SOLE_PROPRIETOR">Sole proprietor</option>
+            <option value="PRIVATE_PROFIT">{isFr ? 'Entreprise privée à but lucratif' : 'Private for-profit'}</option>
+            <option value="PUBLIC_PROFIT">{isFr ? 'Société publique à but lucratif' : 'Public for-profit'}</option>
+            <option value="NON_PROFIT">{isFr ? 'Organisme sans but lucratif' : 'Non-profit'}</option>
+            <option value="SOLE_PROPRIETOR">{isFr ? 'Entreprise individuelle' : 'Sole proprietor'}</option>
           </select>
         </Field>
         <Field label={isFr ? 'Secteur' : 'Vertical'}>
           <select className="glass-input w-full" value={form.vertical} onChange={set('vertical')}>
-            {['TECHNOLOGY', 'RETAIL', 'HEALTHCARE', 'REAL_ESTATE', 'PROFESSIONAL', 'CONSTRUCTION', 'EDUCATION', 'NON_PROFIT', 'FINANCIAL', 'HOSPITALITY', 'OTHER'].map(v => (
-              <option key={v} value={v}>{v}</option>
+            {VERTICAL_OPTIONS.map(v => (
+              <option key={v.value} value={v.value}>{isFr ? v.fr : v.en}</option>
             ))}
           </select>
         </Field>
@@ -956,10 +971,10 @@ function CampaignForm({
           value={form.use_case}
           onChange={(e) => setForm({ ...form, use_case: e.target.value })}
         >
-          <option value="CUSTOMER_CARE">Customer care</option>
+          <option value="CUSTOMER_CARE">{isFr ? 'Service à la clientèle' : 'Customer care'}</option>
           <option value="MARKETING">Marketing</option>
-          <option value="MIXED">Mixed</option>
-          <option value="LOW_VOLUME">Low volume / testing</option>
+          <option value="MIXED">{isFr ? 'Mixte' : 'Mixed'}</option>
+          <option value="LOW_VOLUME">{isFr ? 'Faible volume / test' : 'Low volume / testing'}</option>
         </select>
       </Field>
 

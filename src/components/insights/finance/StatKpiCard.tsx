@@ -4,8 +4,8 @@ import { useTranslation } from '../../../i18n';
 
 /* ── Helpers ────────────────────────────────────────────────── */
 
-function fmtDollars(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function fmtDollars(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'CAD',
     minimumFractionDigits: 0,
@@ -40,7 +40,8 @@ export function BalanceCard({
   onViewPayments?: () => void;
   onExport?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-US';
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col justify-between min-h-[180px]">
       <div>
@@ -50,7 +51,7 @@ export function BalanceCard({
         </div>
         <div className="flex items-end gap-3 flex-wrap">
           <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
-            {fmtDollars(value)}
+            {fmtDollars(value, locale)}
           </span>
           <DeltaBadge value={changePct} />
         </div>
@@ -85,19 +86,22 @@ export function NetProfitCard({
   value: number;
   changePct: number | null;
 }) {
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-US';
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col justify-between min-h-[180px]">
       <div>
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp size={16} className="text-zinc-400 dark:text-zinc-500" />
-          <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Net Profit</span>
+          <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{fr ? 'Profit net' : 'Net Profit'}</span>
         </div>
         <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
-          {fmtDollars(value)}
+          {fmtDollars(value, locale)}
         </span>
       </div>
       <div className="mt-3">
-        <DeltaBadge value={changePct} label="compared to last month" />
+        <DeltaBadge value={changePct} label={(t.insights as any).comparedLastMonth || 'compared to last month'} />
       </div>
     </div>
   );
@@ -112,19 +116,22 @@ export function ExpensesCard({
   value: number;
   changePct: number | null;
 }) {
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-US';
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col justify-between min-h-[180px]">
       <div>
         <div className="flex items-center gap-2 mb-3">
           <Receipt size={16} className="text-zinc-400 dark:text-zinc-500" />
-          <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Expenses</span>
+          <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">{fr ? 'Dépenses' : 'Expenses'}</span>
         </div>
         <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
-          {fmtDollars(value)}
+          {fmtDollars(value, locale)}
         </span>
       </div>
       <div className="mt-3">
-        <DeltaBadge value={changePct} label="compared to last month" />
+        <DeltaBadge value={changePct} label={(t.insights as any).comparedLastMonth || 'compared to last month'} />
       </div>
     </div>
   );
@@ -141,7 +148,8 @@ export function PendingInvoicesCard({
   overdueCount: number;
   microData?: number[];
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-US';
   const bars = microData || Array.from({ length: 24 }, () => Math.random() * 100);
   const maxBar = Math.max(...bars, 1);
 
@@ -160,7 +168,7 @@ export function PendingInvoicesCard({
           )}
         </div>
         <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
-          {fmtDollars(value)}
+          {fmtDollars(value, locale)}
         </span>
       </div>
       {/* Micro bar chart */}

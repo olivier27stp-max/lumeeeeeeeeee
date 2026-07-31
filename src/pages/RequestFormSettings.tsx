@@ -201,7 +201,7 @@ function FormPreview({
              preview layout matches what the form will look like with one. */
           <div aria-hidden className="h-40 mb-3" />
         )}
-        <h2 className="text-[17px] font-bold text-text-primary">{title || 'Service Request'}</h2>
+        <h2 className="text-[17px] font-bold text-text-primary">{title || (isFr ? 'Demande de service' : 'Service Request')}</h2>
         {description && <p className="text-[13px] text-text-tertiary">{description}</p>}
       </div>
 

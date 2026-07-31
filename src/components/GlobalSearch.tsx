@@ -426,7 +426,7 @@ export default function GlobalSearch() {
           onKeyDown={handleKeyDown}
           placeholder={t.globalSearch.placeholder}
           className="glass-input h-9 w-full rounded-lg pl-9 pr-4 focus:pr-16 py-0 text-[13px]"
-          aria-label="Global search"
+          aria-label={fr ? 'Recherche globale' : 'Global search'}
           role="combobox"
           aria-expanded={showDropdown}
           aria-controls={listboxId}
@@ -527,8 +527,8 @@ export default function GlobalSearch() {
 
 // ── Result Row Component ──
 
-function formatMoney(cents: number, currency: string | null | undefined) {
-  return new Intl.NumberFormat('en-CA', {
+function formatMoney(cents: number, currency: string | null | undefined, fr = false) {
+  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', {
     style: 'currency',
     currency: currency || 'CAD',
     minimumFractionDigits: 2,
@@ -547,7 +547,7 @@ function entityRowText(item: SuggestionAction, fr: boolean): { main: string; con
 
   if (item.entityType === 'payment') {
     main = item.amountCents != null
-      ? `${typeLabel} – ${formatMoney(item.amountCents, item.currency)}`
+      ? `${typeLabel} – ${formatMoney(item.amountCents, item.currency, fr)}`
       : typeLabel;
   }
 

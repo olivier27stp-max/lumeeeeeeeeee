@@ -30,6 +30,19 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+/* ── Role labels (display only — DB values untouched) ── */
+function roleLabel(role: string | null | undefined, fr: boolean): string {
+  const labels: Record<string, { fr: string; en: string }> = {
+    owner: { fr: 'Propriétaire', en: 'Owner' },
+    admin: { fr: 'Admin', en: 'Admin' },
+    member: { fr: 'Membre', en: 'Member' },
+    sales_rep: { fr: 'Représentant', en: 'Sales Rep' },
+    technician: { fr: 'Technicien', en: 'Technician' },
+  };
+  const key = (role || '').toLowerCase();
+  return labels[key] ? (fr ? labels[key].fr : labels[key].en) : (role || '');
+}
+
 /* ── Sortable Module (Chapter) Row ── */
 function SortableModuleRow({ mod, children, ...props }: { mod: CourseModule; children: React.ReactNode; [k: string]: any }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: mod.id });
@@ -930,8 +943,8 @@ export default function CourseBuilder() {
                                     )}
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[12px] font-medium text-text-primary truncate">{member.full_name || 'Unknown'}</p>
-                                    <p className="text-[10px] text-text-muted capitalize">{member.role}</p>
+                                    <p className="text-[12px] font-medium text-text-primary truncate">{member.full_name || (fr ? 'Inconnu' : 'Unknown')}</p>
+                                    <p className="text-[10px] text-text-muted capitalize">{roleLabel(member.role, fr)}</p>
                                   </div>
                                   {targetUserIds.includes(member.user_id) && (
                                     <Check size={14} className="text-primary shrink-0" />
@@ -1024,8 +1037,8 @@ export default function CourseBuilder() {
                 <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2.5 block">{t.courses.lessonContent}</label>
                 <div className="flex gap-1 mb-4 p-1 bg-surface-secondary rounded-xl">
                   {([
-                    { key: 'video', icon: Video, label: 'Video' },
-                    { key: 'embed', icon: Globe, label: 'Embed' },
+                    { key: 'video', icon: Video, label: fr ? 'Vidéo' : 'Video' },
+                    { key: 'embed', icon: Globe, label: fr ? 'Intégrer' : 'Embed' },
                     { key: 'text', icon: Type, label: fr ? 'Texte' : 'Text' },
                     { key: 'pdf', icon: FileText, label: 'PDF' },
                     { key: 'link', icon: Link2, label: fr ? 'Lien' : 'Link' },

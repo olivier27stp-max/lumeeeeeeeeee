@@ -40,11 +40,13 @@ function defaultRange() {
  */
 export default function PersonalCommissionView({
   userId,
-  title = 'My Commissions',
-  subtitle = 'Your closes, commission, and next payouts',
+  title,
+  subtitle,
 }: Props) {
   const { language } = useTranslation();
   const isFr = language === 'fr';
+  const resolvedTitle = title ?? (isFr ? 'Mes commissions' : 'My Commissions');
+  const resolvedSubtitle = subtitle ?? (isFr ? 'Vos ventes conclues, vos commissions et vos prochains versements' : 'Your closes, commission, and next payouts');
   const [filters, setFilters] = useState<CommissionFiltersValue>(() => {
     const { from, to } = defaultRange();
     return { status: 'all', from, to };
@@ -83,7 +85,7 @@ export default function PersonalCommissionView({
       }
     } catch (err: any) {
       console.error('[PersonalCommissionView] failed to load:', err);
-      setError(err?.message || 'Failed to load commissions');
+      setError(err?.message || (isFr ? 'Échec du chargement des commissions' : 'Failed to load commissions'));
     } finally {
       setLoading(false);
     }
@@ -120,8 +122,8 @@ export default function PersonalCommissionView({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
-        <p className="text-xs text-text-tertiary">{subtitle}</p>
+        <h2 className="text-lg font-semibold text-text-primary">{resolvedTitle}</h2>
+        <p className="text-xs text-text-tertiary">{resolvedSubtitle}</p>
       </div>
 
       <CommissionFilters value={filters} onChange={setFilters} />
@@ -129,7 +131,7 @@ export default function PersonalCommissionView({
       {loading && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
-          <span className="ml-2 text-sm text-text-muted">Loading commissions...</span>
+          <span className="ml-2 text-sm text-text-muted">{isFr ? 'Chargement des commissions...' : 'Loading commissions...'}</span>
         </div>
       )}
 
@@ -167,7 +169,7 @@ export default function PersonalCommissionView({
                 profileMap={profileMap}
                 showRep={false}
                 showActions={false}
-                emptyMessage="No closes for the selected period"
+                emptyMessage={isFr ? 'Aucune vente conclue sur la période sélectionnée' : 'No closes for the selected period'}
               />
             </CardContent>
           </Card>

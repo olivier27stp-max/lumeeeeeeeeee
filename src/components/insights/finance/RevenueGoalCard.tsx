@@ -1,8 +1,8 @@
 import React from 'react';
 import { useTranslation } from '../../../i18n';
 
-function fmtDollars(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function fmtDollars(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'CAD',
     minimumFractionDigits: 2,
@@ -10,8 +10,8 @@ function fmtDollars(cents: number): string {
   }).format((cents || 0) / 100);
 }
 
-function fmtCompact(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function fmtCompact(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'CAD',
     notation: 'compact',
@@ -30,7 +30,8 @@ export default function RevenueGoalCard({
   onViewReport?: () => void;
 }) {
   const pct = targetCents > 0 ? Math.min(100, (currentCents / targetCents) * 100) : 0;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-US';
   const ti = t.insights as any;
   const tc = t.common as any;
 
@@ -53,10 +54,10 @@ export default function RevenueGoalCard({
       {/* Value */}
       <div className="mt-4 mb-3 flex items-baseline gap-2">
         <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
-          {fmtDollars(currentCents)}
+          {fmtDollars(currentCents, locale)}
         </span>
         <span className="text-sm text-zinc-400 dark:text-zinc-500 font-medium">
-          {tc.of} {fmtCompact(targetCents)}
+          {tc.of} {fmtCompact(targetCents, locale)}
         </span>
       </div>
 

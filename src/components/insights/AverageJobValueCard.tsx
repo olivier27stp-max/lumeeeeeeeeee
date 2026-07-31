@@ -5,11 +5,11 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useTranslation } from '../../i18n';
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
+function fmtMoney(cents: number, locale: string) {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
 }
 
-async function fetchData() {
+async function fetchData(locale: string) {
   const orgId = await getCurrentOrgIdOrThrow();
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
@@ -38,16 +38,17 @@ async function fetchData() {
   return Array.from(buckets.entries()).map(([key, b]) => {
     const [y, m] = key.split('-').map(Number);
     return {
-      label: new Date(y, m, 1).toLocaleDateString('en-CA', { month: 'short' }),
+      label: new Date(y, m, 1).toLocaleDateString(locale, { month: 'short' }),
       value: b.count > 0 ? Math.round(b.sum / b.count) : 0,
     };
   });
 }
 
 export default function AverageJobValueCard() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
   const ti = (t.insights as any).reports || {};
-  const { data = [], isLoading } = useQuery({ queryKey: ['report-avg-job-value'], queryFn: fetchData, staleTime: 60_000 });
+  const { data = [], isLoading } = useQuery({ queryKey: ['report-avg-job-value', language], queryFn: () => fetchData(locale), staleTime: 60_000 });
   const hasData = data.some((d) => d.value > 0);
 
   return (
@@ -67,7 +68,7 @@ export default function AverageJobValueCard() {
               <CartesianGrid vertical={false} stroke="#e4e4e7" />
               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
-              <Tooltip formatter={(v: number) => fmtMoney(v)} />
+              <Tooltip formatter={(v: number) => fmtMoney(v, locale)} />
               <Bar dataKey="value" fill="var(--color-chart-primary)" radius={[6, 6, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>

@@ -1754,7 +1754,7 @@ export default function FieldSales() {
               eventHandlers={{ click: () => loadRepRoute(rep.user_id) }}>
               <Tooltip direction="top" offset={[0, -20]} opacity={0.95}>
                 <div style={{ fontSize: 11 }}>
-                  <div style={{ fontWeight: 700 }}>{rep.user_name || 'Unknown'}</div>
+                  <div style={{ fontWeight: 700 }}>{rep.user_name || (language === 'fr' ? 'Inconnu' : 'Unknown')}</div>
                   <div style={{ fontSize: 9, color: '#9ca3af' }}>{rep.team_name || ''} · {rep.tracking_status}</div>
                   {rep.speed_mps != null && <div style={{ fontSize: 9, color: '#9ca3af' }}>{(rep.speed_mps * 3.6).toFixed(0)} km/h</div>}
                 </div>

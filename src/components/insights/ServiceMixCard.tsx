@@ -35,7 +35,7 @@ export default function ServiceMixCard({
   });
 
   const money = (cents: number) =>
-    new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+    new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
 
   const { segs, total } = useMemo(() => {
     const data = (q.data || []).slice(0, 4);

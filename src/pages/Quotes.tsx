@@ -223,7 +223,7 @@ export default function Quotes() {
   async function onDel(id: string) {
     if (!confirm(t.quotes.deleteThisQuote)) return;
     try { await deleteQuote(id); qc.invalidateQueries({ queryKey: ['quotes-list'] }); qc.invalidateQueries({ queryKey: ['quote-kpis'] }); toast.success(t.quotes.quoteDeleted); }
-    catch { toast.error('Failed'); }
+    catch { toast.error(fr ? 'Échec' : 'Failed'); }
   }
 
   async function onArchive(q: { id: string; status: string }) {
@@ -233,7 +233,7 @@ export default function Quotes() {
       qc.invalidateQueries({ queryKey: ['quotes-list'] });
       qc.invalidateQueries({ queryKey: ['quote-kpis'] });
       toast.success(q.status === 'archived' ? (fr ? 'Devis désarchivé' : 'Quote unarchived') : (fr ? 'Devis archivé' : 'Quote archived'));
-    } catch (e: any) { toast.error(e?.message || 'Failed'); }
+    } catch (e: any) { toast.error(e?.message || (fr ? 'Échec' : 'Failed')); }
   }
 
   const badgeColor = (s: string): 'green' | 'orange' | 'red' | 'gray' | 'blue' => {
@@ -277,12 +277,12 @@ export default function Quotes() {
         <div className="flex items-center gap-2">
           <button onClick={() => nav('/quotes/presets')}
             className="inline-flex items-center gap-2 h-10 px-4 bg-surface-card border border-outline text-text-secondary rounded-md text-[13px] font-medium hover:bg-surface-secondary transition-all">
-            Presets
+            {fr ? 'Modèles' : 'Presets'}
           </button>
           <button onClick={() => nav('/quotes/measure')}
             className="inline-flex items-center gap-2 h-10 px-4 bg-surface-card border border-outline text-text-secondary rounded-md text-[13px] font-medium hover:bg-surface-secondary transition-all">
             <Ruler size={15} />
-            Mesure
+            {fr ? 'Mesure' : 'Measure'}
           </button>
           <button onClick={handleNewQuote}
             className="inline-flex items-center gap-2 h-10 px-5 bg-[#d8d0c2] text-[#000] hover:bg-[#cabfad] rounded-md text-[14px] font-medium active:scale-[0.98] transition-all">

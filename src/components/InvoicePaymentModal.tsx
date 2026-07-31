@@ -86,7 +86,7 @@ function StripePaymentForm({
 
 export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
   const { open, onClose, invoiceId, invoiceNumber, balanceCents, currency, onPaid } = props;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   const [settingsPayload, setSettingsPayload] = useState<PaymentSettingsResponse | null>(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
@@ -155,7 +155,7 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
         setStripePublishableKey(payload.publishable_key);
       })
       .catch((error: Error) => {
-        setStripeError(error.message || 'Unable to initialize Stripe payment intent.');
+        setStripeError(error.message || (language === 'fr' ? 'Impossible d\'initialiser le paiement Stripe.' : 'Unable to initialize Stripe payment intent.'));
       })
       .finally(() => {
         setStripeLoading(false);
@@ -301,11 +301,11 @@ export default function InvoicePaymentModal(props: InvoicePaymentModalProps) {
                             return order.order_id;
                           }}
                           onApprove={async (data) => {
-                            if (!data.orderID) throw new Error('PayPal order id is missing.');
+                            if (!data.orderID) throw new Error(language === 'fr' ? 'L\'identifiant de commande PayPal est manquant.' : 'PayPal order id is missing.');
                             await handlePayPalCapture(data.orderID);
                           }}
                           onError={(error) => {
-                            const message = error instanceof Error ? error.message : 'PayPal payment failed.';
+                            const message = error instanceof Error ? error.message : (language === 'fr' ? 'Le paiement PayPal a échoué.' : 'PayPal payment failed.');
                             toast.error(message);
                           }}
                         />

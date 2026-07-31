@@ -320,19 +320,19 @@ export default function QuotePresets() {
       await loadPresets();
       setMode('list');
     } catch (e: any) {
-      toast.error(e?.message || 'Failed');
+      toast.error(e?.message || (fr ? 'Échec' : 'Failed'));
     } finally { setSaving(false); }
   }
 
   async function handleDelete(preset: QuotePreset) {
     if (!confirm(fr ? `Supprimer "${preset.name}" ?` : `Delete "${preset.name}"?`)) return;
     try { await deleteQuotePreset(preset.id); toast.success(fr ? 'Supprimé' : 'Deleted'); await loadPresets(); }
-    catch { toast.error('Failed'); }
+    catch { toast.error(fr ? 'Échec' : 'Failed'); }
   }
 
   async function handleDuplicate(preset: QuotePreset) {
     try { await duplicateQuotePreset(preset.id); toast.success(fr ? 'Dupliqué' : 'Duplicated'); await loadPresets(); }
-    catch { toast.error('Failed'); }
+    catch { toast.error(fr ? 'Échec' : 'Failed'); }
   }
 
   // ── Section handlers ──
@@ -451,7 +451,7 @@ export default function QuotePresets() {
       contact_phone: '(514) 555-1234',
       contact_company: null,
       contact_address: '123 Main St, Montréal, QC',
-      company_name: companySettings?.company_name || 'Your Company',
+      company_name: companySettings?.company_name || (fr ? 'Votre entreprise' : 'Your Company'),
       company_email: companySettings?.company_email || null,
       company_phone: companySettings?.company_phone || null,
       company_address: companySettings?.company_address || null,

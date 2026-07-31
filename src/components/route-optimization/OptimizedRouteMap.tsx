@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import type { OptimizedStop } from '../../lib/routeOptimizationApi';
+import { useTranslation } from '../../i18n';
 
 interface Props {
   stops: OptimizedStop[];
@@ -19,6 +20,8 @@ interface Props {
  * GeoJSON source to a fetch of the Mapbox Directions API result.
  */
 export default function OptimizedRouteMap({ stops, totalDistanceKm, totalDriveMinutes, start }: Props) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -89,9 +92,10 @@ export default function OptimizedRouteMap({ stops, totalDistanceKm, totalDriveMi
         ].join(';');
 
         const popup = new mapboxgl.Popup({ offset: 18 }).setHTML(
+          // « Job » se dit pareil dans les deux langues de l'app (la job / the job).
           `<div style="font-size:12px"><strong>${idx + 1}. ${escapeHtml(s.title || 'Job')}</strong><br/>` +
           `${escapeHtml(s.address || '')}<br/>` +
-          `<span style="color:#6b7280">ETA ${new Date(s.estimated_arrival_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`,
+          `<span style="color:#6b7280">ETA ${new Date(s.estimated_arrival_time).toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', { hour: '2-digit', minute: '2-digit' })}</span></div>`,
         );
 
         const marker = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).setPopup(popup).addTo(map);
@@ -134,7 +138,7 @@ export default function OptimizedRouteMap({ stops, totalDistanceKm, totalDriveMi
 
     if (map.isStyleLoaded()) onReady();
     else map.once('load', onReady);
-  }, [stops, start]);
+  }, [stops, start, fr]);
 
   const token = import.meta.env.VITE_MAPBOX_TOKEN;
   if (!token) {

@@ -20,8 +20,8 @@ interface RowState {
   punchedToday: boolean;
 }
 
-function fmtCurrency(n: number): string {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(n || 0);
+function fmtCurrency(n: number, fr = false): string {
+  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(n || 0);
 }
 
 export default function TeamProfilesGrid({ orgId, fr = false }: { orgId: string; fr?: boolean }) {
@@ -177,7 +177,7 @@ export default function TeamProfilesGrid({ orgId, fr = false }: { orgId: string;
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <Stat icon={DollarSign} label={fr ? 'Revenu' : 'Revenue'} value={fmtCurrency(r.stats?.totalRevenue || 0)} />
+                  <Stat icon={DollarSign} label={fr ? 'Revenu' : 'Revenue'} value={fmtCurrency(r.stats?.totalRevenue || 0, fr)} />
                   <Stat icon={Briefcase} label={fr ? 'Jobs faits' : 'Jobs done'} value={String(r.stats?.jobsCompleted ?? 0)} />
                   <Stat icon={FileSignature} label={fr ? 'Contrats' : 'Contracts'} value={String(r.stats?.contractsSigned ?? 0)} />
                   <Stat icon={Timer} label={fr ? 'Heures' : 'Hours'} value={`${r.stats?.hoursWorked ?? 0}h`} />

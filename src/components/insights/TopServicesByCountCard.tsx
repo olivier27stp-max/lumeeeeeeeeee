@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useTranslation } from '../../i18n';
 
-async function fetchData() {
+async function fetchData(untitledLabel: string) {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data } = await supabase
     .from('jobs')
@@ -15,7 +15,7 @@ async function fetchData() {
     .limit(5000);
   const counts = new Map<string, number>();
   for (const j of data || []) {
-    const title = ((j as any).title || 'Untitled').trim();
+    const title = ((j as any).title || untitledLabel).trim();
     counts.set(title, (counts.get(title) || 0) + 1);
   }
   return Array.from(counts.entries())
@@ -25,9 +25,10 @@ async function fetchData() {
 }
 
 export default function TopServicesByCountCard() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
   const ti = (t.insights as any).reports || {};
-  const { data = [], isLoading } = useQuery({ queryKey: ['report-top-services-count'], queryFn: fetchData, staleTime: 60_000 });
+  const { data = [], isLoading } = useQuery({ queryKey: ['report-top-services-count', language], queryFn: () => fetchData(fr ? 'Sans titre' : 'Untitled'), staleTime: 60_000 });
 
   return (
     <div className="rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-5 flex flex-col h-full">

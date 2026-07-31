@@ -100,7 +100,7 @@ export default function Register() {
         body: JSON.stringify({ email, password, fullName: fullName.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Registration failed.');
+      if (!res.ok) throw new Error(data.error || (language === 'fr' ? "Échec de l'inscription." : 'Registration failed.'));
 
       // Record the signup against the referral code so it shows up in the
       // referrer's history as `signed_up`. Non-blocking: the reward itself is
@@ -127,7 +127,7 @@ export default function Register() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to resend.');
+      if (!res.ok) throw new Error(data.error || (language === 'fr' ? "Échec du renvoi." : 'Failed to resend.'));
       setMessage({ type: 'success', text: t.register.resendSuccess });
       setResendCooldown(60);
       const interval = setInterval(() => {

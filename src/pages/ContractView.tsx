@@ -155,7 +155,7 @@ export default function ContractView() {
         }),
       });
       const result = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((result as any)?.error || 'Failed to sign contract');
+      if (!res.ok) throw new Error((result as any)?.error || (fr ? 'Échec de la signature du contrat' : 'Failed to sign contract'));
       setData((prev) => prev ? {
         ...prev,
         agreement: {
@@ -338,7 +338,7 @@ export default function ContractView() {
         )}
 
         <p className="text-center text-[11px] text-[#bbb] mt-6 no-print">
-          {data.company.name} &mdash; Powered by Lume
+          {data.company.name} &mdash; {fr ? 'Propulsé par Lume' : 'Powered by Lume'}
         </p>
       </div>
     </div>

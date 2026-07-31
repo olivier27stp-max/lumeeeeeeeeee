@@ -61,8 +61,8 @@ function highlightText(text: string, query: string) {
   });
 }
 
-function formatAmount(cents: number, currency?: string | null) {
-  return new Intl.NumberFormat('en-CA', {
+function formatAmount(cents: number, currency?: string | null, locale: string = 'en-CA') {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: currency || 'CAD',
     minimumFractionDigits: 0,
@@ -71,7 +71,8 @@ function formatAmount(cents: number, currency?: string | null) {
 }
 
 function ResultsList({ items, query }: { items: SearchEntityItem[]; query: string }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
   const navigate = useNavigate();
 
   if (items.length === 0) {
@@ -110,7 +111,7 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
                   {item.amountCents != null && item.amountCents > 0 ? (
                     <>
                       <span>·</span>
-                      <span className="font-medium">{formatAmount(item.amountCents, item.currency)}</span>
+                      <span className="font-medium">{formatAmount(item.amountCents, item.currency, locale)}</span>
                     </>
                   ) : null}
                 </div>
@@ -118,11 +119,11 @@ function ResultsList({ items, query }: { items: SearchEntityItem[]; query: strin
               <div className="flex flex-col items-end gap-1 shrink-0">
                 {item.status ? <StatusBadge status={item.status} size="sm" /> : null}
                 <p className="text-[10px] text-text-tertiary">
-                  {new Date(item.createdAt).toLocaleDateString()}
+                  {new Date(item.createdAt).toLocaleDateString(locale)}
                 </p>
                 {item.date ? (
                   <p className="text-[10px] text-text-tertiary">
-                    {new Date(item.date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
+                    {new Date(item.date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
                   </p>
                 ) : null}
               </div>

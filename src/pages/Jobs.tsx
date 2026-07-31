@@ -98,6 +98,8 @@ interface JobCardProps {
 }
 
 const JobCard: React.FC<JobCardProps> = ({ job, onClick, onDelete, formatMoney }) => {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   return (
     <motion.button
       layout
@@ -153,7 +155,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onDelete, formatMoney }
         <div className="flex items-center justify-between pt-2 border-t border-outline/30">
           <span className="text-[11px] text-text-tertiary flex items-center gap-1">
             <Calendar size={10} />
-            {job.scheduled_at ? formatDate(job.scheduled_at) : 'Unscheduled'}
+            {job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}
           </span>
           <span className="text-sm font-bold text-text-primary tabular-nums">
             {formatMoney(job)}
@@ -183,7 +185,8 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
   onDelete: () => void;
   formatMoney: (job: Job) => string;
 }) {
-  const { t } = useTranslation();
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const mapsUrl = job.property_address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(job.property_address)}`
     : null;
@@ -219,7 +222,7 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
       <div className="px-5 py-4 space-y-5">
         {/* Amount card */}
         <div className="stat-card">
-          <p className="text-xs font-medium text-text-tertiary mb-1">Total Value</p>
+          <p className="text-xs font-medium text-text-tertiary mb-1">{fr ? 'Valeur totale' : 'Total Value'}</p>
           <p className="text-[24px] font-extrabold text-text-primary tabular-nums">{formatMoney(job)}</p>
         </div>
 
@@ -241,14 +244,14 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
         {/* Address */}
         {job.property_address && (
           <div>
-            <p className="text-xs font-medium text-text-tertiary mb-2.5">Property</p>
+            <p className="text-xs font-medium text-text-tertiary mb-2.5">{fr ? 'Propriété' : 'Property'}</p>
             <div className="flex items-start gap-2.5 rounded-xl bg-surface-secondary/50 p-3">
               <MapPin size={13} className="text-text-tertiary mt-0.5 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-[13px] text-text-primary">{job.property_address}</p>
                 {mapsUrl && (
                   <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] text-primary hover:underline mt-1 inline-flex items-center gap-1">
-                    Open in Google Maps <ExternalLink size={9} />
+                    {fr ? 'Ouvrir dans Google Maps' : 'Open in Google Maps'} <ExternalLink size={9} />
                   </a>
                 )}
               </div>
@@ -258,21 +261,21 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
 
         {/* Schedule */}
         <div>
-          <p className="text-xs font-medium text-text-tertiary mb-2.5">Schedule</p>
+          <p className="text-xs font-medium text-text-tertiary mb-2.5">{fr ? 'Horaire' : 'Schedule'}</p>
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-surface-secondary/50 p-3">
               <p className="text-[10px] font-medium text-text-tertiary uppercase mb-1">Date</p>
               <p className="text-[13px] font-semibold text-text-primary">
-                {job.scheduled_at ? formatDate(job.scheduled_at) : 'Unscheduled'}
+                {job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}
               </p>
             </div>
             <div className="rounded-xl bg-surface-secondary/50 p-3">
-              <p className="text-[10px] font-medium text-text-tertiary uppercase mb-1">Time</p>
+              <p className="text-[10px] font-medium text-text-tertiary uppercase mb-1">{fr ? 'Heure' : 'Time'}</p>
               <p className="text-[13px] font-semibold text-text-primary">
                 {job.scheduled_at
-                  ? new Date(job.scheduled_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                  ? new Date(job.scheduled_at).toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })
                   : '--'}
-                {job.end_at && ` — ${new Date(job.end_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                {job.end_at && ` — ${new Date(job.end_at).toLocaleTimeString(fr ? 'fr-CA' : 'en-US', { hour: 'numeric', minute: '2-digit' })}`}
               </p>
             </div>
           </div>
@@ -280,7 +283,7 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
 
         {/* Details */}
         <div>
-          <p className="text-xs font-medium text-text-tertiary mb-2.5">Details</p>
+          <p className="text-xs font-medium text-text-tertiary mb-2.5">{fr ? 'Détails' : 'Details'}</p>
           <div className="space-y-2">
             {job.job_type && (
               <div className="flex items-center justify-between text-[13px]">
@@ -289,9 +292,9 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
               </div>
             )}
             <div className="flex items-center justify-between text-[13px]">
-              <span className="text-text-tertiary">Invoicing</span>
+              <span className="text-text-tertiary">{fr ? 'Facturation' : 'Invoicing'}</span>
               <span className="text-text-primary font-medium">
-                {job.requires_invoicing ? 'Required' : 'Not required'}
+                {job.requires_invoicing ? (fr ? 'Requise' : 'Required') : (fr ? 'Non requise' : 'Not required')}
               </span>
             </div>
           </div>
@@ -314,13 +317,13 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
           onClick={onDelete}
           className="glass-button-ghost text-[12px] font-medium text-danger hover:text-danger flex items-center gap-1.5 hover:bg-danger/10"
         >
-          <Trash2 size={13} /> Delete
+          <Trash2 size={13} /> {fr ? 'Supprimer' : 'Delete'}
         </button>
         <button
           onClick={onEdit}
           className="glass-button-primary inline-flex items-center gap-1.5"
         >
-          <Edit2 size={13} /> Edit Job
+          <Edit2 size={13} /> {fr ? 'Modifier le job' : 'Edit Job'}
         </button>
       </div>
     </motion.div>
@@ -471,7 +474,7 @@ export default function Jobs() {
   const formatMoney = (job: Job) => {
     const amount = Math.round(job.total_cents / 100);
     if (!job.currency || job.currency === 'USD') return formatCurrency(amount);
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: job.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+    return new Intl.NumberFormat(language === 'fr' ? 'fr-CA' : 'en-US', { style: 'currency', currency: job.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
   };
 
   const handleDeleteJob = async () => {
@@ -487,14 +490,14 @@ export default function Jobs() {
       await Promise.all([loadJobs(), loadKpis()]);
       toast.success(t.jobs.jobDeleted, {
         action: {
-          label: 'Undo',
+          label: language === 'fr' ? 'Annuler' : 'Undo',
           onClick: async () => {
             try {
               const undoOrgId = await getCurrentOrgIdOrThrow();
               await supabase.from('jobs').update({ deleted_at: null, updated_at: new Date().toISOString() }).eq('id', jobToDelete.id).eq('org_id', undoOrgId);
               await loadJobs();
-              toast.success('Job restored');
-            } catch { toast.error('Failed to restore'); }
+              toast.success(language === 'fr' ? 'Job restauré' : 'Job restored');
+            } catch { toast.error(language === 'fr' ? 'Échec de la restauration' : 'Failed to restore'); }
           },
         },
         duration: 6000,
@@ -753,20 +756,20 @@ export default function Jobs() {
           <BulkActionBar
             count={selectedJobIds.size}
             actions={[
-              { id: 'schedule', label: 'Schedule', icon: Calendar, variant: 'default' as any },
-              { id: 'in_progress', label: 'In Progress', icon: Clock, variant: 'default' as any },
-              { id: 'complete', label: t.jobs?.markComplete || 'Complete', icon: Briefcase, variant: 'primary' },
+              { id: 'schedule', label: fr ? 'Planifier' : 'Schedule', icon: Calendar, variant: 'default' as any },
+              { id: 'in_progress', label: fr ? 'En cours' : 'In Progress', icon: Clock, variant: 'default' as any },
+              { id: 'complete', label: t.jobs?.markComplete || (fr ? 'Compléter' : 'Complete'), icon: Briefcase, variant: 'primary' },
               { id: 'delete', label: t.common.delete, icon: Trash2, variant: 'danger' },
             ]}
             onAction={async (actionId) => {
               const ids = Array.from(selectedJobIds);
               if (actionId === 'delete') {
-                if (!window.confirm(`Delete ${ids.length} jobs?`)) return;
+                if (!window.confirm(fr ? `Supprimer ${ids.length} job(s) ?` : `Delete ${ids.length} jobs?`)) return;
                 let deleteFailed = 0;
                 for (const jid of ids) { await softDeleteJob(String(jid)).catch(() => { deleteFailed++; }); }
                 setJobs((prev) => prev.filter((j) => !selectedJobIds.has(j.id)));
-                if (deleteFailed > 0) toast.error(`${deleteFailed} job(s) failed to delete`);
-                else toast.success(`${ids.length} jobs deleted`);
+                if (deleteFailed > 0) toast.error(fr ? `Échec de la suppression de ${deleteFailed} job(s)` : `${deleteFailed} job(s) failed to delete`);
+                else toast.success(fr ? `${ids.length} job(s) supprimé(s)` : `${ids.length} jobs deleted`);
               }
               if (actionId === 'complete' || actionId === 'in_progress' || actionId === 'schedule') {
                 const statusMap: Record<string, string> = { complete: 'completed', in_progress: 'in_progress', schedule: 'scheduled' };
@@ -778,8 +781,14 @@ export default function Jobs() {
                   if (updateErr) updateFailed++;
                 }
                 setJobs((prev) => prev.map((j) => selectedJobIds.has(j.id) ? { ...j, status: newStatus } : j));
-                if (updateFailed > 0) toast.error(`${updateFailed}/${ids.length} job(s) failed to update`);
-                else toast.success(`${ids.length} jobs updated to ${newStatus}`);
+                const statusLabels: Record<string, { fr: string; en: string }> = {
+                  scheduled: { fr: 'Planifié', en: 'Scheduled' },
+                  in_progress: { fr: 'En cours', en: 'In Progress' },
+                  completed: { fr: 'Terminé', en: 'Completed' },
+                };
+                const statusLabel = statusLabels[newStatus] ? (fr ? statusLabels[newStatus].fr : statusLabels[newStatus].en) : newStatus;
+                if (updateFailed > 0) toast.error(fr ? `Échec de la mise à jour de ${updateFailed}/${ids.length} job(s)` : `${updateFailed}/${ids.length} job(s) failed to update`);
+                else toast.success(fr ? `${ids.length} job(s) passé(s) à « ${statusLabel} »` : `${ids.length} jobs updated to ${statusLabel}`);
               }
               setSelectedJobIds(new Set());
             }}

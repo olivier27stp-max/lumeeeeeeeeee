@@ -58,7 +58,7 @@ export default function ProfitabilityCard({
   const key = ['job-pnl', range.from, range.to];
   const q = useQuery({ queryKey: key, queryFn: () => fetchJobPnL({ from: range.from, to: range.to }), staleTime: 30_000 });
 
-  const k = (cents: number) => new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
+  const k = (cents: number) => new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', notation: 'compact', maximumFractionDigits: 1 }).format((cents || 0) / 100);
   const data = q.data;
   const rows = data?.rows || [];
   const onSaved = () => qc.invalidateQueries({ queryKey: key });
@@ -85,7 +85,7 @@ export default function ProfitabilityCard({
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Montant' : 'Amount'}</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? "Main-d'œuvre" : 'Labour'}</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Dépenses' : 'Expenses'}</th>
-                  <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Profit' : 'Profit'}</th>
+                  <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">Profit</th>
                   <th className="text-right font-bold px-6 py-3 bg-surface-secondary border-b border-border">{fr ? 'Marge' : 'Margin'}</th>
                 </tr>
               </thead>

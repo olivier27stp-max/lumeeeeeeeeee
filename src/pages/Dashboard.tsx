@@ -389,7 +389,7 @@ function LeaderboardWidget({ navigate, fr }: { navigate: any; fr: boolean }) {
               <div key={session.id} className={cn('flex items-center gap-3 px-5 py-3', idx > 0 && 'border-t border-border-light')}>
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-text-primary truncate">{session.rep_name || 'Rep'}</p>
+                  <p className="text-[13px] font-medium text-text-primary truncate">{session.rep_name || (fr ? 'Représentant' : 'Rep')}</p>
                   {session.territory_name && (
                     <p className="text-[11px] text-text-muted truncate">{session.territory_name}</p>
                   )}
@@ -457,7 +457,7 @@ function RevenueChart({ data, fr }: { data: DashboardData; fr: boolean }) {
   const revenue = data.performance?.revenue?.today ?? 0;
 
   const { data: revenueHistory = [] } = useQuery({
-    queryKey: ['dashboard-revenue-7d'],
+    queryKey: ['dashboard-revenue-7d', fr],
     queryFn: async () => {
       const { supabase } = await import('../lib/supabase');
       const { getCurrentOrgIdOrThrow } = await import('../lib/orgApi');
@@ -475,7 +475,7 @@ function RevenueChart({ data, fr }: { data: DashboardData; fr: boolean }) {
         if (day && byDay.has(day)) byDay.set(day, (byDay.get(day) || 0) + Number(inv.total_cents || 0) / 100);
       }
       return Array.from(byDay.entries()).map(([date, value]) => ({
-        day: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' }),
+        day: new Date(date + 'T12:00:00').toLocaleDateString(fr ? 'fr-CA' : 'en-US', { weekday: 'short' }),
         value: Math.round(value),
       }));
     },
@@ -484,7 +484,7 @@ function RevenueChart({ data, fr }: { data: DashboardData; fr: boolean }) {
 
   const days = revenueHistory.length > 0 ? revenueHistory : Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - (6 - i));
-    return { day: d.toLocaleDateString('en-US', { weekday: 'short' }), value: 0 };
+    return { day: d.toLocaleDateString(fr ? 'fr-CA' : 'en-US', { weekday: 'short' }), value: 0 };
   });
 
   const maxVal = Math.max(...days.map(d => d.value), 1);

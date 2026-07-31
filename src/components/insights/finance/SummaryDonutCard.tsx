@@ -16,8 +16,8 @@ interface SummaryCategory {
   pct: number;
 }
 
-function fmtDollars(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function fmtDollars(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'CAD',
     minimumFractionDigits: 0,
@@ -35,7 +35,8 @@ export default function SummaryDonutCard({
   dateRange: string;
 }) {
   const dark = useIsDark();
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-US';
   const ti = t.insights as any;
 
   return (
@@ -73,7 +74,7 @@ export default function SummaryDonutCard({
         {/* Center label */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums">
-            {fmtDollars(totalCents)}
+            {fmtDollars(totalCents, locale)}
           </span>
         </div>
       </div>

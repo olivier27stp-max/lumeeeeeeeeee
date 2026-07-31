@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Maximize2, Minimize2, ZoomIn, ZoomOut } from 'lucide-react';
 import { fetchRelationshipGraph, type GraphNode, type GraphEdge } from '../../lib/insightsApi';
+import { useTranslation } from '../../i18n';
 
 /* ── Entity type colors (Mirofish-style) ─────────────────── */
 const TYPE_COLORS: Record<string, string> = {
@@ -17,9 +18,14 @@ const TYPE_RADIUS: Record<string, number> = {
   client: 6, job: 5, team: 8, invoice: 4, lead: 5, quote: 4,
 };
 
-const TYPE_LABELS: Record<string, string> = {
+const TYPE_LABELS_FR: Record<string, string> = {
   client: 'Client', job: 'Job', team: 'Équipe',
   invoice: 'Facture', lead: 'Lead', quote: 'Devis',
+};
+
+const TYPE_LABELS_EN: Record<string, string> = {
+  client: 'Client', job: 'Job', team: 'Team',
+  invoice: 'Invoice', lead: 'Lead', quote: 'Quote',
 };
 
 /* ── Simple force simulation ─────────────────────────────── */
@@ -95,6 +101,9 @@ function runForceSimulation(
 
 /* ── Main Component ──────────────────────────────────────── */
 export default function RelationshipGraph() {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const typeLabels = fr ? TYPE_LABELS_FR : TYPE_LABELS_EN;
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 900, height: 600 });
   const [zoom, setZoom] = useState(1);
@@ -158,13 +167,13 @@ export default function RelationshipGraph() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[500px] text-text-tertiary gap-2">
-        <Loader2 size={18} className="animate-spin" /> Loading relationship graph...
+        <Loader2 size={18} className="animate-spin" /> {fr ? 'Chargement du graphe des relations...' : 'Loading relationship graph...'}
       </div>
     );
   }
 
   if (!simNodes.length) {
-    return <div className="text-center py-16 text-text-tertiary text-sm">No relationship data available yet. Add clients, jobs, and teams to see the graph.</div>;
+    return <div className="text-center py-16 text-text-tertiary text-sm">{fr ? 'Aucune donnée de relation pour le moment. Ajoutez des clients, des jobs et des équipes pour voir le graphe.' : 'No relationship data available yet. Add clients, jobs, and teams to see the graph.'}</div>;
   }
 
   return (
@@ -172,13 +181,13 @@ export default function RelationshipGraph() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-outline bg-surface">
         <div>
-          <p className="text-[15px] font-bold text-text-primary">Visualisation des relations</p>
-          <p className="text-[11px] text-text-tertiary">{simNodes.length} entités · {simEdges.length} relations</p>
+          <p className="text-[15px] font-bold text-text-primary">{fr ? 'Visualisation des relations' : 'Relationship visualization'}</p>
+          <p className="text-[11px] text-text-tertiary">{simNodes.length} {fr ? 'entités' : 'entities'} · {simEdges.length} {fr ? 'relations' : 'relationships'}</p>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => setZoom((z) => Math.min(3, z + 0.2))} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><ZoomIn size={16} /></button>
           <button onClick={() => setZoom((z) => Math.max(0.2, z - 0.2))} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><ZoomOut size={16} /></button>
-          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="px-2 py-1 rounded-lg hover:bg-surface-secondary text-[11px] text-text-tertiary font-medium">Reset</button>
+          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="px-2 py-1 rounded-lg hover:bg-surface-secondary text-[11px] text-text-tertiary font-medium">{fr ? 'Réinitialiser' : 'Reset'}</button>
           <button onClick={() => setFullscreen(!fullscreen)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
             {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
@@ -253,9 +262,9 @@ export default function RelationshipGraph() {
 
       {/* Legend */}
       <div className="absolute bottom-4 left-4 bg-surface-card/95 backdrop-blur-sm rounded-xl border border-outline shadow-lg px-4 py-3" style={{ position: fullscreen ? 'fixed' : 'absolute' }}>
-        <p className="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">Types d'entités</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-rose-500 mb-2">{fr ? 'Types d\'entités' : 'Entity types'}</p>
         <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {Object.entries(TYPE_LABELS).map(([type, label]) => (
+          {Object.entries(typeLabels).map(([type, label]) => (
             <div key={type} className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: TYPE_COLORS[type] }} />
               <span className="text-[12px] text-text-secondary">{label}</span>
@@ -271,10 +280,10 @@ export default function RelationshipGraph() {
             <span className="w-3 h-3 rounded-full" style={{ backgroundColor: TYPE_COLORS[hoveredNode.type] }} />
             <span className="text-[13px] font-bold text-text-primary">{hoveredNode.label}</span>
           </div>
-          <p className="text-[11px] text-text-tertiary">{TYPE_LABELS[hoveredNode.type] || hoveredNode.type}</p>
+          <p className="text-[11px] text-text-tertiary">{typeLabels[hoveredNode.type] || hoveredNode.type}</p>
           <p className="text-[10px] text-text-tertiary mt-1 font-mono">{hoveredNode.id.slice(0, 8)}...</p>
           <p className="text-[11px] text-text-secondary mt-1">
-            {simEdges.filter((e) => e.source === hoveredNode.id || e.target === hoveredNode.id).length} connexion(s)
+            {simEdges.filter((e) => e.source === hoveredNode.id || e.target === hoveredNode.id).length} {fr ? 'connexion(s)' : 'connection(s)'}
           </p>
         </div>
       )}

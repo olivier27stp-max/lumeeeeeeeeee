@@ -32,6 +32,11 @@ import {
   type NativeStatus,
 } from '../lib/integrationStore';
 
+/** Display name in the current language (« Messagerie SMS » vs "SMS Messaging"). */
+function appName(app: Integration, isFr: boolean): string {
+  return isFr ? app.name : app.name_en || app.name;
+}
+
 // ─── Status helpers ─────────────────────────────────────────────
 type ResolvedStatus =
   | 'connected'
@@ -94,7 +99,7 @@ function nativeHint(
     if (s.detail === 'onboarding_incomplete') {
       return {
         text: isFr
-          ? 'Il reste des informations a fournir avant de recevoir des paiements.'
+          ? 'Il reste des informations à fournir avant de recevoir des paiements.'
           : 'Some information is still required before you can receive payments.',
         actionable: true,
       };
@@ -112,7 +117,7 @@ function nativeHint(
     if (t.active) {
       return {
         text: isFr
-          ? `Votre numero : ${t.number}`
+          ? `Votre numéro : ${t.number}`
           : `Your number: ${t.number}`,
         actionable: false,
       };
@@ -127,7 +132,7 @@ function nativeHint(
     }
     return {
       text: isFr
-        ? "Obtenez votre numero pour texter vos clients."
+        ? 'Obtenez votre numéro pour texter vos clients.'
         : 'Get your number to text your customers.',
       actionable: true,
     };
@@ -156,7 +161,7 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
     case 'requires_setup':
       return (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-warning bg-warning/10 rounded-full px-2 py-0.5">
-          {isFr ? 'A activer' : 'To activate'}
+          {isFr ? 'À activer' : 'To activate'}
         </span>
       );
     case 'pending':
@@ -174,13 +179,13 @@ function StatusBadge({ status }: { status: ResolvedStatus }) {
     case 'coming_soon':
       return (
         <span className="text-[10px] font-bold text-text-tertiary bg-surface-secondary rounded-full px-2 py-0.5">
-          {isFr ? 'Bientot disponible' : 'Coming soon'}
+          {isFr ? 'Bientôt disponible' : 'Coming soon'}
         </span>
       );
     default:
       return (
         <span className="text-[10px] font-bold text-text-tertiary bg-surface-secondary rounded-full px-2 py-0.5">
-          {isFr ? 'Non connecte' : 'Not connected'}
+          {isFr ? 'Non connecté' : 'Not connected'}
         </span>
       );
   }
@@ -254,10 +259,10 @@ const IntegrationRow: React.FC<RowProps> = ({ app, status, native, onOpen, onMan
 
   const ctaLabel = isNative
     ? status === 'connected'
-      ? isFr ? 'Gerer' : 'Manage'
+      ? isFr ? 'Gérer' : 'Manage'
       : isFr ? 'Activer' : 'Activate'
     : status === 'connected'
-      ? isFr ? 'Gerer' : 'Manage'
+      ? isFr ? 'Gérer' : 'Manage'
       : isFr ? 'Connecter' : 'Connect';
 
   return (
@@ -277,11 +282,11 @@ const IntegrationRow: React.FC<RowProps> = ({ app, status, native, onOpen, onMan
 
         <div className={cn('flex-1 min-w-0', isComingSoon && 'opacity-70')}>
           <div className="flex items-center gap-2 mb-1">
-            <p className="text-[15px] font-bold text-text-primary">{app.name}</p>
+            <p className="text-[15px] font-bold text-text-primary">{appName(app, isFr)}</p>
             <StatusBadge status={status} />
           </div>
           <p className="text-[12px] text-text-secondary leading-relaxed">
-            {app.description_short}
+            {isFr ? app.description_short.fr : app.description_short.en}
           </p>
           {hint && (
             <p
@@ -337,6 +342,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
 
   const status = resolveAppStatus(app.id, app.connection_type);
   const conn = getConnection(app.id);
+  const name = appName(app, isFr);
 
   const handleTest = async () => {
     setTesting(true);
@@ -344,15 +350,15 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       const result = await testConnectionApi(app.id);
       if (result.success) {
         toast.success(
-          (isFr ? `Connexion a ${app.name} fonctionnelle` : `Connection to ${app.name} is working`) +
+          (isFr ? `Connexion à ${name} fonctionnelle` : `Connection to ${name} is working`) +
             (result.account_name ? ` (${result.account_name})` : ''),
         );
       } else {
-        toast.error(result.error || (isFr ? `Test echoue pour ${app.name}` : `Test failed for ${app.name}`));
+        toast.error(result.error || (isFr ? `Test échoué pour ${name}` : `Test failed for ${name}`));
       }
       await onConnectionChange();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : isFr ? 'Test echoue' : 'Test failed');
+      toast.error(err instanceof Error ? err.message : isFr ? 'Test échoué' : 'Test failed');
     } finally {
       setTesting(false);
     }
@@ -368,8 +374,8 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
         err instanceof Error
           ? err.message
           : isFr
-            ? `Echec du demarrage OAuth pour ${app.name}`
-            : `Failed to start OAuth for ${app.name}`,
+            ? `Échec du démarrage OAuth pour ${name}`
+            : `Failed to start OAuth for ${name}`,
       );
       setSaving(false);
     }
@@ -380,17 +386,17 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
     try {
       const success = await refreshToken(app.id);
       if (success) {
-        toast.success(isFr ? `Connexion a ${app.name} renouvelee` : `${app.name} connection renewed`);
+        toast.success(isFr ? `Connexion à ${name} renouvelée` : `${name} connection renewed`);
         await onConnectionChange();
       } else {
         toast.error(
           isFr
-            ? `Impossible de renouveler. Reconnectez ${app.name}.`
-            : `Unable to renew. Please reconnect ${app.name}.`,
+            ? `Impossible de renouveler. Reconnectez ${name}.`
+            : `Unable to renew. Please reconnect ${name}.`,
         );
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : isFr ? 'Renouvellement echoue' : 'Refresh failed');
+      toast.error(err instanceof Error ? err.message : isFr ? 'Renouvellement échoué' : 'Refresh failed');
     } finally {
       setSaving(false);
     }
@@ -402,9 +408,9 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
       await disconnectApp(app.id);
       setShowDisconnectConfirm(false);
       await onConnectionChange();
-      toast.success(isFr ? `${app.name} deconnecte` : `${app.name} disconnected`);
+      toast.success(isFr ? `${name} déconnecté` : `${name} disconnected`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : isFr ? 'Echec de la deconnexion' : 'Disconnection failed');
+      toast.error(err instanceof Error ? err.message : isFr ? 'Échec de la déconnexion' : 'Disconnection failed');
     } finally {
       setDisconnecting(false);
     }
@@ -419,7 +425,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               <Check size={16} className="text-success" />
             </div>
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Connecte' : 'Connected'}</p>
+              <p className="text-[13px] font-semibold text-text-primary">{isFr ? 'Connecté' : 'Connected'}</p>
               <p className="text-[11px] text-text-tertiary">
                 {conn?.connected_account_name && (
                   <span className="font-medium text-text-secondary">{conn.connected_account_name}</span>
@@ -441,7 +447,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               {conn.last_test_result === 'success' ? (
                 <span className="text-success font-medium">— OK</span>
               ) : conn.last_test_result === 'failure' ? (
-                <span className="text-danger font-medium">{isFr ? '— Echec' : '— Failed'}</span>
+                <span className="text-danger font-medium">{isFr ? '— Échec' : '— Failed'}</span>
               ) : null}
             </div>
           )}
@@ -460,7 +466,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
                 onClick={() => setShowDisconnectConfirm(true)}
                 className="glass-button !text-[12px] inline-flex items-center gap-1.5 !text-danger !border-danger/30 hover:!bg-danger/5"
               >
-                <Unplug size={12} /> {isFr ? 'Deconnecter' : 'Disconnect'}
+                <Unplug size={12} /> {isFr ? 'Déconnecter' : 'Disconnect'}
               </button>
             ) : (
               <div className="flex items-center gap-2">
@@ -495,7 +501,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               </p>
               <p className="text-[11px] text-text-tertiary">
                 {isFr
-                  ? "L'acces a expire. Renouvelez-le pour continuer la synchronisation."
+                  ? "L'accès a expiré. Renouvelez-le pour continuer la synchronisation."
                   : 'Access has expired. Renew it to keep syncing.'}
               </p>
             </div>
@@ -535,7 +541,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
               </p>
               <p className="text-[11px] text-text-tertiary">
                 {conn?.last_error ||
-                  (isFr ? 'Une erreur est survenue avec cette integration.' : 'An error occurred with this integration.')}
+                  (isFr ? 'Une erreur est survenue avec cette intégration.' : 'An error occurred with this integration.')}
               </p>
             </div>
           </div>
@@ -568,8 +574,8 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
         <div className="p-4 bg-surface-secondary/50 rounded-xl space-y-3">
           <p className="text-[12px] text-text-secondary">
             {isFr
-              ? `Vous serez redirige vers ${app.oauth_provider || app.name} pour autoriser Lume a synchroniser vos factures.`
-              : `You'll be redirected to ${app.oauth_provider || app.name} to authorize Lume to sync your invoices.`}
+              ? `Vous serez redirigé vers ${app.oauth_provider || name} pour autoriser Lume à synchroniser vos factures.`
+              : `You'll be redirected to ${app.oauth_provider || name} to authorize Lume to sync your invoices.`}
           </p>
           <button
             onClick={handleOAuth}
@@ -582,8 +588,8 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
                 ? 'Redirection...'
                 : 'Redirecting...'
               : isFr
-                ? `Connecter ${app.name}`
-                : `Connect ${app.name}`}
+                ? `Connecter ${name}`
+                : `Connect ${name}`}
           </button>
         </div>
       </div>
@@ -623,7 +629,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
         <div className="flex-1 overflow-y-auto px-6 pt-9 pb-6 space-y-5">
           <div>
             <div className="flex items-center gap-2.5 mb-1">
-              <h2 className="text-[18px] font-bold text-text-primary">{app.name}</h2>
+              <h2 className="text-[18px] font-bold text-text-primary">{name}</h2>
               <StatusBadge status={status} />
             </div>
             {app.official_site_url && (
@@ -641,14 +647,16 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
             )}
           </div>
 
-          <p className="text-[13px] text-text-secondary leading-relaxed">{app.description_long}</p>
+          <p className="text-[13px] text-text-secondary leading-relaxed">
+            {isFr ? app.description_long.fr : app.description_long.en}
+          </p>
 
           <div>
             <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">
-              {isFr ? 'Ce que ca fait' : 'What it does'}
+              {isFr ? 'Ce que ça fait' : 'What it does'}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {app.supported_features.map((f, i) => (
+              {(isFr ? app.supported_features.fr : app.supported_features.en).map((f, i) => (
                 <div key={i} className="flex items-center gap-2 text-[12px] text-text-secondary">
                   <Check size={11} className="text-success shrink-0" />
                   {f}
@@ -689,7 +697,7 @@ export default function AppMarketplace() {
           </h1>
           <p className="text-[13px] text-text-tertiary">
             {isFr
-              ? 'Les outils branches a votre compte Lume.'
+              ? 'Les outils branchés à votre compte Lume.'
               : 'The tools connected to your Lume account.'}
           </p>
         </div>
@@ -726,7 +734,7 @@ export default function AppMarketplace() {
 
       <p className="text-[11px] text-text-tertiary">
         {isFr
-          ? "D'autres connexions s'ajouteront au fur et a mesure."
+          ? "D'autres connexions s'ajouteront au fur et à mesure."
           : 'More connections will be added over time.'}
       </p>
 

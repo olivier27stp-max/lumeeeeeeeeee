@@ -23,6 +23,21 @@ export const DEFAULT_LEAD_SOURCES = [
   'Vehicle wrap',
 ];
 
+/**
+ * French display labels for the built-in sources. Display-only: the value
+ * stored in the DB (clients.lead_source) stays the English name above.
+ */
+export const DEFAULT_LEAD_SOURCE_LABELS_FR: Record<string, string> = {
+  'Existing client': 'Client existant',
+  'Facebook': 'Facebook',
+  'Flyer': 'Dépliant',
+  'Google': 'Google',
+  'Instagram': 'Instagram',
+  'Other': 'Autre',
+  'Referral': 'Référence',
+  'Vehicle wrap': 'Lettrage de véhicule',
+};
+
 export async function listLeadSources(): Promise<LeadSourceRecord[]> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase

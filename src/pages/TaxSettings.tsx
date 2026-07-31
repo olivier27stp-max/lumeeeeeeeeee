@@ -368,7 +368,7 @@ export default function TaxSettings() {
               <div className="flex items-center gap-2 mb-3">
                 <DollarSign size={14} className="text-text-tertiary" />
                 <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Aperçu des taxes' : 'Tax Preview'}</p>
-                <span className="text-[11px] text-text-tertiary">{fr ? 'sur une facture de $1,000' : 'on a $1,000 invoice'}</span>
+                <span className="text-[11px] text-text-tertiary">{fr ? 'sur une facture de 1 000 $' : 'on a $1,000 invoice'}</span>
               </div>
               <div className="bg-surface-secondary/50 rounded-lg p-4 space-y-1.5 text-[12px]">
                 <div className="flex justify-between">
@@ -406,7 +406,7 @@ export default function TaxSettings() {
                       <button key={p.key} onClick={() => handleSetupPreset(p.key)} disabled={busy}
                         className="text-left p-3 rounded-lg border border-outline hover:border-primary/30 hover:bg-primary/5 transition-all">
                         <p className="text-[12px] font-semibold text-text-primary">{p.name.split('(')[0].trim()}</p>
-                        <p className="text-[10px] text-text-tertiary mt-0.5">{p.taxes.map(t => `${t.name} ${t.rate}%`).join(' + ') || 'No tax'}</p>
+                        <p className="text-[10px] text-text-tertiary mt-0.5">{p.taxes.map(t => `${t.name} ${t.rate}%`).join(' + ') || (fr ? 'Aucune taxe' : 'No tax')}</p>
                       </button>
                     ))}
                   </div>
@@ -416,13 +416,13 @@ export default function TaxSettings() {
               {/* USA */}
               {availablePresets.filter(p => p.country === 'US').length > 0 && (
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-2">United States</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-text-tertiary mb-2">{fr ? 'États-Unis' : 'United States'}</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {availablePresets.filter(p => p.country === 'US').map(p => (
                       <button key={p.key} onClick={() => handleSetupPreset(p.key)} disabled={busy}
                         className="text-left p-3 rounded-lg border border-outline hover:border-primary/30 hover:bg-primary/5 transition-all">
                         <p className="text-[12px] font-semibold text-text-primary">{p.name.split('(')[0].trim()}</p>
-                        <p className="text-[10px] text-text-tertiary mt-0.5">{p.taxes.map(t => `${t.name} ${t.rate}%`).join(' + ') || 'No sales tax'}</p>
+                        <p className="text-[10px] text-text-tertiary mt-0.5">{p.taxes.map(t => `${t.name} ${t.rate}%`).join(' + ') || (fr ? 'Aucune taxe de vente' : 'No sales tax')}</p>
                       </button>
                     ))}
                   </div>

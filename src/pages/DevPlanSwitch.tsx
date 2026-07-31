@@ -16,11 +16,11 @@ import {
 } from '../lib/billingApi';
 import { invalidatePlanFeatureCache } from '../hooks/usePlanFeature';
 
-const FEATURE_FLAGS: Array<{ key: keyof Plan; label: string }> = [
+const FEATURE_FLAGS: Array<{ key: keyof Plan; label: string; labelFr?: string }> = [
   { key: 'includes_sms', label: 'SMS' },
-  { key: 'includes_ai', label: 'AI' },
+  { key: 'includes_ai', label: 'AI', labelFr: 'IA' },
   { key: 'includes_d2d', label: 'D2D' },
-  { key: 'includes_courses', label: 'Courses' },
+  { key: 'includes_courses', label: 'Courses', labelFr: 'Cours' },
   { key: 'includes_api', label: 'API' },
 ];
 
@@ -165,7 +165,7 @@ export default function DevPlanSwitch() {
                             : 'text-text-tertiary border-outline bg-surface-secondary/50 line-through'
                         )}
                       >
-                        {on && <Check size={10} />}{f.label}
+                        {on && <Check size={10} />}{fr ? (f.labelFr || f.label) : f.label}
                       </span>
                     );
                   })}

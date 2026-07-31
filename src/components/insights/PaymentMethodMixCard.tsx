@@ -7,8 +7,8 @@ import { useTranslation } from '../../i18n';
 
 const COLORS = ['var(--color-primary)', 'var(--color-text-secondary)', 'var(--color-text-tertiary)', 'var(--color-outline-strong)', 'var(--color-border)'];
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
+function fmtMoney(cents: number, locale: string) {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
 }
 
 function normalizeMethod(method: string | null | undefined, provider: string | null | undefined): string {
@@ -39,7 +39,8 @@ async function fetchData() {
 }
 
 export default function PaymentMethodMixCard() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
   const ti = (t.insights as any).reports || {};
   const { data = [], isLoading } = useQuery({ queryKey: ['report-payment-method-mix'], queryFn: fetchData, staleTime: 60_000 });
   const total = data.reduce((s, d) => s + d.value, 0);
@@ -61,7 +62,7 @@ export default function PaymentMethodMixCard() {
               <Pie data={data} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={2}>
                 {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v: number) => fmtMoney(v)} />
+              <Tooltip formatter={(v: number) => fmtMoney(v, locale)} />
             </PieChart>
           </ResponsiveContainer>
           <ul className="space-y-1.5 text-sm self-center">

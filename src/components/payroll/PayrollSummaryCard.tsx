@@ -14,8 +14,8 @@ interface Props {
   metric?: 'hours' | 'deals';
 }
 
-function fmtMoney(n: number) {
-  return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmtMoney(n: number, fr: boolean) {
+  return '$' + Number(n || 0).toLocaleString(fr ? 'fr-CA' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtDate(iso: string, fr: boolean) {
@@ -47,7 +47,7 @@ export default function PayrollSummaryCard({ userId, metric = 'hours' }: Props) 
         const res = await getCurrentPayPeriod(userId);
         if (!cancelled) setData(res);
       } catch (err: any) {
-        if (!cancelled) setError(err?.message || 'Failed to load payroll summary');
+        if (!cancelled) setError(err?.message || (fr ? 'Échec du chargement du résumé de paie' : 'Failed to load payroll summary'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -123,20 +123,20 @@ export default function PayrollSummaryCard({ userId, metric = 'hours' }: Props) 
             <Wallet size={13} />
             <span className="text-[11px] font-medium uppercase tracking-wide">{tp.commissionComing || (fr ? 'Commission à venir' : 'Commission coming')}</span>
           </div>
-          <p className="mt-1.5 text-2xl font-bold tabular-nums text-emerald-600">{fmtMoney(upcoming)}</p>
+          <p className="mt-1.5 text-2xl font-bold tabular-nums text-emerald-600">{fmtMoney(upcoming, fr)}</p>
         </div>
       </div>
 
       {/* Breakdown */}
       <div className="flex items-center justify-between text-[12px] pt-1">
         <span className="text-text-tertiary">
-          {tp.pending || (fr ? 'En attente' : 'Pending')}: <span className="font-semibold text-text-secondary">{fmtMoney(commission.pending)}</span>
+          {tp.pending || (fr ? 'En attente' : 'Pending')}: <span className="font-semibold text-text-secondary">{fmtMoney(commission.pending, fr)}</span>
         </span>
         <span className="text-text-tertiary">
-          {tp.approved || (fr ? 'Approuvé' : 'Approved')}: <span className="font-semibold text-text-secondary">{fmtMoney(commission.approved)}</span>
+          {tp.approved || (fr ? 'Approuvé' : 'Approved')}: <span className="font-semibold text-text-secondary">{fmtMoney(commission.approved, fr)}</span>
         </span>
         <span className="text-text-tertiary">
-          {tp.paid || (fr ? 'Payé' : 'Paid')}: <span className="font-semibold text-text-secondary">{fmtMoney(commission.paid)}</span>
+          {tp.paid || (fr ? 'Payé' : 'Paid')}: <span className="font-semibold text-text-secondary">{fmtMoney(commission.paid, fr)}</span>
         </span>
       </div>
     </div>

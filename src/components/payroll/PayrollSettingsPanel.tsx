@@ -37,7 +37,7 @@ export default function PayrollSettingsPanel() {
         const s = await getPayrollSettings();
         setForm(s);
       } catch (err: any) {
-        setError(err?.message || 'Failed to load');
+        setError(err?.message || (fr ? 'Erreur de chargement' : 'Failed to load'));
       } finally {
         setLoading(false);
       }
@@ -59,7 +59,7 @@ export default function PayrollSettingsPanel() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err: any) {
-      setError(err?.message || 'Failed to save');
+      setError(err?.message || (fr ? "Échec de l'enregistrement" : 'Failed to save'));
     } finally {
       setSaving(false);
     }

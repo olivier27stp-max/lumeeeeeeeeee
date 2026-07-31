@@ -12,7 +12,7 @@ import { ChevronDown, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient, findClientsByEmail, type ClientPhone } from '../lib/clientsApi';
 import { isEntityNumberTaken, peekNextNumbers } from '../lib/numbersApi';
-import { DEFAULT_LEAD_SOURCES, createLeadSource, listLeadSources } from '../lib/leadSourcesApi';
+import { DEFAULT_LEAD_SOURCES, DEFAULT_LEAD_SOURCE_LABELS_FR, createLeadSource, listLeadSources } from '../lib/leadSourcesApi';
 import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
@@ -455,7 +455,9 @@ export default function NewClient() {
               >
                 <option value="">{fr ? '— Choisir une source —' : '— Select a source —'}</option>
                 {allSources.map((source) => (
-                  <option key={source} value={source}>{source}</option>
+                  <option key={source} value={source}>
+                    {fr ? (DEFAULT_LEAD_SOURCE_LABELS_FR[source] ?? source) : source}
+                  </option>
                 ))}
                 <option value={CREATE_SOURCE_VALUE}>{fr ? '+ Créer une nouvelle source' : '+ Create new lead source'}</option>
               </select>

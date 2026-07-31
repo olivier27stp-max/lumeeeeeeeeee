@@ -37,16 +37,16 @@ export default function D2DSettingsGeneral() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-3.5 w-3.5 text-text-secondary" />
-            Company Information
+            {isFr ? "Informations de l'entreprise" : 'Company Information'}
           </CardTitle>
           <CardDescription>
-            Basic details about your organization
+            {isFr ? 'Détails de base sur votre organisation' : 'Basic details about your organization'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-text-secondary">
-              Company Name
+              {isFr ? "Nom de l'entreprise" : 'Company Name'}
             </label>
             <Input
               value={companyName}
@@ -56,7 +56,7 @@ export default function D2DSettingsGeneral() {
 
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-text-secondary">
-              Company Logo
+              {isFr ? "Logo de l'entreprise" : 'Company Logo'}
             </label>
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border-subtle bg-surface-elevated">
@@ -65,10 +65,10 @@ export default function D2DSettingsGeneral() {
               <div>
                 <Button variant="outline" size="sm" className="gap-1.5">
                   <Upload className="h-3 w-3" />
-                  Upload Logo
+                  {isFr ? 'Téléverser le logo' : 'Upload Logo'}
                 </Button>
                 <p className="mt-1 text-[11px] text-text-muted">
-                  SVG, PNG, or JPG. Max 2MB.
+                  {isFr ? 'SVG, PNG ou JPG. Max 2 Mo.' : 'SVG, PNG, or JPG. Max 2MB.'}
                 </p>
               </div>
             </div>
@@ -81,42 +81,42 @@ export default function D2DSettingsGeneral() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-3.5 w-3.5 text-text-secondary" />
-            Localization
+            {isFr ? 'Localisation' : 'Localization'}
           </CardTitle>
           <CardDescription>
-            Timezone and language settings
+            {isFr ? 'Fuseau horaire et paramètres de langue' : 'Timezone and language settings'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-text-secondary">
-              Timezone
+              {isFr ? 'Fuseau horaire' : 'Timezone'}
             </label>
             <select
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               className="w-full rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm text-text-primary outline-none transition-colors hover:border-border focus:border-outline-strong focus:ring-2 focus:ring-outline/30"
             >
-              <option value="America/New_York">Eastern Time (ET)</option>
-              <option value="America/Chicago">Central Time (CT)</option>
-              <option value="America/Denver">Mountain Time (MT)</option>
-              <option value="America/Los_Angeles">Pacific Time (PT)</option>
-              <option value="America/Toronto">Toronto (ET)</option>
-              <option value="America/Montreal">Montreal (ET)</option>
+              <option value="America/New_York">{isFr ? "Heure de l'Est (HE)" : 'Eastern Time (ET)'}</option>
+              <option value="America/Chicago">{isFr ? 'Heure du Centre (HC)' : 'Central Time (CT)'}</option>
+              <option value="America/Denver">{isFr ? 'Heure des Rocheuses (HR)' : 'Mountain Time (MT)'}</option>
+              <option value="America/Los_Angeles">{isFr ? 'Heure du Pacifique (HP)' : 'Pacific Time (PT)'}</option>
+              <option value="America/Toronto">{isFr ? 'Toronto (HE)' : 'Toronto (ET)'}</option>
+              <option value="America/Montreal">{isFr ? 'Montréal (HE)' : 'Montreal (ET)'}</option>
             </select>
           </div>
 
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-text-secondary">
-              Default Locale
+              {isFr ? 'Langue par défaut' : 'Default Locale'}
             </label>
             <select
               value={locale}
               onChange={(e) => setLocale(e.target.value)}
               className="w-full rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm text-text-primary outline-none transition-colors hover:border-border focus:border-outline-strong focus:ring-2 focus:ring-outline/30"
             >
-              <option value="en">English</option>
-              <option value="fr">French</option>
+              <option value="en">{isFr ? 'Anglais' : 'English'}</option>
+              <option value="fr">{isFr ? 'Français' : 'French'}</option>
             </select>
           </div>
         </CardContent>
@@ -127,16 +127,16 @@ export default function D2DSettingsGeneral() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-3.5 w-3.5 text-text-secondary" />
-            Branding
+            {isFr ? 'Image de marque' : 'Branding'}
           </CardTitle>
           <CardDescription>
-            Customize the look and feel
+            {isFr ? "Personnalisez l'apparence" : 'Customize the look and feel'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-text-secondary">
-              Primary Color
+              {isFr ? 'Couleur principale' : 'Primary Color'}
             </label>
             <div className="flex items-center gap-3">
               <input
@@ -159,7 +159,7 @@ export default function D2DSettingsGeneral() {
       <div className="flex justify-end">
         <Button className="gap-1.5" size="sm">
           <Save className="h-3.5 w-3.5" />
-          Save Changes
+          {isFr ? 'Enregistrer les modifications' : 'Save Changes'}
         </Button>
       </div>
     </div>

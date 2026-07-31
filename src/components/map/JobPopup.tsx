@@ -5,6 +5,7 @@ import type { MapJobPin } from '../../lib/mapApi';
 import StatusBadge from '../ui/StatusBadge';
 import IconTile from '../ui/IconTile';
 import { formatCurrency } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 
 interface JobPopupProps {
   pin: MapJobPin;
@@ -13,28 +14,31 @@ interface JobPopupProps {
   onOpenClient?: (pin: MapJobPin) => void;
 }
 
-function formatTime(iso: string | null) {
+function formatTime(iso: string | null, locale: string) {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
   } catch {
     return null;
   }
 }
 
-function formatDate(iso: string | null) {
+function formatDate(iso: string | null, locale: string) {
   if (!iso) return null;
   try {
-    return new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    return new Date(iso).toLocaleDateString(locale, { weekday: 'short', month: 'short', day: 'numeric' });
   } catch {
     return null;
   }
 }
 
 export default function JobPopup({ pin, onClose, onOpenJob, onOpenClient }: JobPopupProps) {
-  const startTime = formatTime(pin.scheduledAt);
-  const endTime = formatTime(pin.endAt);
-  const dateLabel = formatDate(pin.scheduledAt);
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
+  const startTime = formatTime(pin.scheduledAt, locale);
+  const endTime = formatTime(pin.endAt, locale);
+  const dateLabel = formatDate(pin.scheduledAt, locale);
   const timeLabel = startTime && endTime ? `${startTime} - ${endTime}` : startTime;
   const openClient = onOpenClient && pin.clientName ? () => onOpenClient(pin) : null;
 
@@ -119,7 +123,7 @@ export default function JobPopup({ pin, onClose, onOpenJob, onOpenClient }: JobP
                 onClick={openClient}
                 className="glass-button-primary flex-1 inline-flex items-center justify-center gap-1.5 text-xs"
               >
-                <User size={12} /> Open Client
+                <User size={12} /> {fr ? 'Ouvrir le client' : 'Open Client'}
               </button>
             )}
             {onOpenJob && (
@@ -128,7 +132,7 @@ export default function JobPopup({ pin, onClose, onOpenJob, onOpenClient }: JobP
                 onClick={() => onOpenJob(pin.jobId)}
                 className="glass-button flex-1 inline-flex items-center justify-center gap-1.5 text-xs"
               >
-                Open Job <ArrowUpRight size={12} />
+                {fr ? 'Ouvrir la job' : 'Open Job'} <ArrowUpRight size={12} />
               </button>
             )}
           </div>

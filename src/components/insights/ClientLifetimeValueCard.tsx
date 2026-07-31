@@ -5,8 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useTranslation } from '../../i18n';
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
+function fmtMoney(cents: number, locale: string) {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
 }
 
 function csvEscape(v: any): string {
@@ -14,7 +14,7 @@ function csvEscape(v: any): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-async function fetchData() {
+async function fetchData(unknownLabel: string) {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data: clients } = await supabase
     .from('clients')
@@ -38,7 +38,7 @@ async function fetchData() {
   return (clients || [])
     .map((c: any) => ({
       id: c.id,
-      name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || 'Unknown',
+      name: `${c.first_name || ''} ${c.last_name || ''}`.trim() || unknownLabel,
       total: totals.get(c.id) || 0,
     }))
     .filter((c) => c.total > 0)
@@ -47,12 +47,14 @@ async function fetchData() {
 }
 
 export default function ClientLifetimeValueCard() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const ti = (t.insights as any).reports || {};
-  const { data = [], isLoading } = useQuery({ queryKey: ['report-client-ltv'], queryFn: fetchData, staleTime: 60_000 });
+  const { data = [], isLoading } = useQuery({ queryKey: ['report-client-ltv', language], queryFn: () => fetchData(fr ? 'Inconnu' : 'Unknown'), staleTime: 60_000 });
 
   function exportCsv() {
-    const rows = [['Client', 'Lifetime Revenue'], ...data.map((d) => [d.name, ((d.total || 0) / 100).toFixed(2)])];
+    const rows = [['Client', fr ? 'Revenu à vie' : 'Lifetime Revenue'], ...data.map((d) => [d.name, ((d.total || 0) / 100).toFixed(2)])];
     const csv = rows.map((r) => r.map(csvEscape).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -85,7 +87,7 @@ export default function ClientLifetimeValueCard() {
           {data.map((c, i) => (
             <li key={c.id} className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-1.5 last:border-none">
               <span className="text-zinc-700 dark:text-zinc-300 truncate"><span className="text-zinc-400 mr-2">{i + 1}.</span>{c.name}</span>
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmtMoney(c.total)}</span>
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">{fmtMoney(c.total, locale)}</span>
             </li>
           ))}
         </ul>

@@ -1,85 +1,154 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
-  ArrowRight, Check,
+  ArrowRight,
   Kanban, FileText, Map, Trophy, Mic, BellRing,
   Star, Calendar, Zap, CreditCard,
 } from 'lucide-react';
+import { useTranslation } from '../../i18n';
+import type { Language } from '../../i18n';
 
-const FEATURES = [
+// Copie bilingue locale — les dictionnaires i18n globaux ne couvrent pas ces
+// clés et ne doivent pas être modifiés d'ici.
+type Bi = Record<Language, string>;
+
+interface Feature {
+  id: string;
+  icon: typeof Mic;
+  title: Bi;
+  subtitle: Bi;
+  bullets: Record<Language, string[]>;
+}
+
+const FEATURES: Feature[] = [
   {
     id: 'ai-voice',
     icon: Mic,
-    title: 'AI Voice Assistant',
-    subtitle: 'Speak. Lume acts.',
-    bullets: ['Create leads by voice', 'Send quotes instantly', 'Smart daily summaries', 'Hands-free productivity'],
+    title: { en: 'AI Voice Assistant', fr: 'Assistant vocal IA' },
+    subtitle: { en: 'Speak. Lume acts.', fr: 'Parlez. Lume s\'exécute.' },
+    bullets: {
+      en: ['Create leads by voice', 'Send quotes instantly', 'Smart daily summaries', 'Hands-free productivity'],
+      fr: ['Créez des leads à la voix', 'Envoyez des soumissions instantanément', 'Résumés quotidiens intelligents', 'Productivité mains libres'],
+    },
   },
   {
     id: 'pipeline',
     icon: Kanban,
-    title: 'Visual Pipeline',
-    subtitle: 'Never lose a lead again',
-    bullets: ['Drag-and-drop Kanban board', 'Filter by stage or assignee', 'Complete lead history', 'Bulk actions'],
+    title: { en: 'Visual Pipeline', fr: 'Pipeline visuel' },
+    subtitle: { en: 'Never lose a lead again', fr: 'Ne perdez plus jamais un lead' },
+    bullets: {
+      en: ['Drag-and-drop Kanban board', 'Filter by stage or assignee', 'Complete lead history', 'Bulk actions'],
+      fr: ['Tableau kanban en glisser-déposer', 'Filtrez par étape ou par assigné', 'Historique complet de chaque lead', 'Actions en lot'],
+    },
   },
   {
     id: 'request-form',
     icon: FileText,
-    title: 'Request Forms',
-    subtitle: 'Capture leads 24/7',
-    bullets: ['Embeddable web form', 'Auto-creates leads in pipeline', 'Instant notifications', 'Custom fields and branding'],
+    title: { en: 'Request Forms', fr: 'Formulaires de demande' },
+    subtitle: { en: 'Capture leads 24/7', fr: 'Captez des leads 24/7' },
+    bullets: {
+      en: ['Embeddable web form', 'Auto-creates leads in pipeline', 'Instant notifications', 'Custom fields and branding'],
+      fr: ['Formulaire web intégrable', 'Création automatique des leads dans le pipeline', 'Notifications instantanées', 'Champs personnalisés et image de marque'],
+    },
   },
   {
     id: 'd2d-map',
     icon: Map,
-    title: 'D2D Map',
-    subtitle: 'Your territory, mastered',
-    bullets: ['Color-coded pins by status', 'Real-time GPS tracking', 'Assignable territory zones', 'Offline mode'],
+    title: { en: 'D2D Map', fr: 'Carte porte-à-porte' },
+    subtitle: { en: 'Your territory, mastered', fr: 'Votre territoire, maîtrisé' },
+    bullets: {
+      en: ['Color-coded pins by status', 'Real-time GPS tracking', 'Assignable territory zones', 'Offline mode'],
+      fr: ['Punaises colorées selon le statut', 'Suivi GPS en temps réel', 'Zones de territoire assignables', 'Mode hors ligne'],
+    },
   },
   {
     id: 'leaderboard',
     icon: Trophy,
-    title: 'Leaderboard',
-    subtitle: 'Performance becomes a game',
-    bullets: ['Real-time rankings', 'Badges and achievements', 'Daily challenges', 'Team comparisons'],
+    title: { en: 'Leaderboard', fr: 'Classement' },
+    subtitle: { en: 'Performance becomes a game', fr: 'La performance devient un jeu' },
+    bullets: {
+      en: ['Real-time rankings', 'Badges and achievements', 'Daily challenges', 'Team comparisons'],
+      fr: ['Classements en temps réel', 'Badges et accomplissements', 'Défis quotidiens', 'Comparaisons entre équipes'],
+    },
   },
   {
     id: 'notifications',
     icon: BellRing,
-    title: 'Quote Notifications',
-    subtitle: 'Follow up at the right time',
-    bullets: ['Know when quotes are opened', 'Auto reminders', 'View count tracking', 'Push and email alerts'],
+    title: { en: 'Quote Notifications', fr: 'Notifications de soumission' },
+    subtitle: { en: 'Follow up at the right time', fr: 'Relancez au bon moment' },
+    bullets: {
+      en: ['Know when quotes are opened', 'Auto reminders', 'View count tracking', 'Push and email alerts'],
+      fr: ['Sachez quand vos soumissions sont ouvertes', 'Rappels automatiques', 'Suivi du nombre de consultations', 'Alertes push et par courriel'],
+    },
   },
   {
     id: 'reviews',
     icon: Star,
-    title: 'Google Reviews',
-    subtitle: 'Build reputation on autopilot',
-    bullets: ['Auto review requests post-service', 'Satisfaction filter', 'Track reviews generated', 'Direct Google integration'],
+    title: { en: 'Google Reviews', fr: 'Avis Google' },
+    subtitle: { en: 'Build reputation on autopilot', fr: 'Bâtissez votre réputation en pilote automatique' },
+    bullets: {
+      en: ['Auto review requests post-service', 'Satisfaction filter', 'Track reviews generated', 'Direct Google integration'],
+      fr: ['Demandes d\'avis automatiques après le service', 'Filtre de satisfaction', 'Suivi des avis générés', 'Intégration directe à Google'],
+    },
   },
   {
     id: 'scheduling',
     icon: Calendar,
-    title: 'Scheduling & Dispatch',
-    subtitle: 'Centralized team scheduling',
-    bullets: ['Day / week / month views', 'Job assignment', 'Conflict detection', 'Google Calendar sync'],
+    title: { en: 'Scheduling & Dispatch', fr: 'Planification et répartition' },
+    subtitle: { en: 'Centralized team scheduling', fr: 'Une planification d\'équipe centralisée' },
+    bullets: {
+      en: ['Day / week / month views', 'Job assignment', 'Conflict detection', 'Google Calendar sync'],
+      fr: ['Vues jour / semaine / mois', 'Assignation des jobs', 'Détection de conflits', 'Synchronisation Google Agenda'],
+    },
   },
   {
     id: 'automation',
     icon: Zap,
-    title: 'Automations',
-    subtitle: 'Eliminate repetitive work',
-    bullets: ['No-code workflows', 'Auto follow-ups', 'Status-based triggers', 'Quote reminders'],
+    title: { en: 'Automations', fr: 'Automatisations' },
+    subtitle: { en: 'Eliminate repetitive work', fr: 'Éliminez le travail répétitif' },
+    bullets: {
+      en: ['No-code workflows', 'Auto follow-ups', 'Status-based triggers', 'Quote reminders'],
+      fr: ['Workflows sans code', 'Relances automatiques', 'Déclencheurs selon le statut', 'Rappels de soumission'],
+    },
   },
   {
     id: 'payments',
     icon: CreditCard,
-    title: 'Lume Payments',
-    subtitle: 'Get paid faster, every time',
-    bullets: ['Accept cards on-site or online', 'Auto-invoice after job completion', 'Payment tracking per client'],
+    title: { en: 'Lume Payments', fr: 'Lume Payments' },
+    subtitle: { en: 'Get paid faster, every time', fr: 'Soyez payé plus vite, chaque fois' },
+    bullets: {
+      en: ['Accept cards on-site or online', 'Auto-invoice after job completion', 'Payment tracking per client'],
+      fr: ['Acceptez les cartes sur place ou en ligne', 'Facturation automatique à la fin de la job', 'Suivi des paiements par client'],
+    },
   },
 ];
 
+const COPY = {
+  en: {
+    kicker: 'Features',
+    titleLine1: 'One platform.',
+    titleLine2: 'Every tool your business needs.',
+    subtitle: 'From lead capture to 5-star reviews — manage sales, operations, scheduling, automation, and team performance in one place.',
+    ctaHeading: 'Ready to see Lume in action?',
+    ctaDesc: 'Book a personalized demo and discover how Lume can transform your operations.',
+    bookDemo: 'Book a demo',
+  },
+  fr: {
+    kicker: 'Fonctionnalités',
+    titleLine1: 'Une seule plateforme.',
+    titleLine2: 'Tous les outils dont votre entreprise a besoin.',
+    subtitle: 'De la capture de leads aux avis 5 étoiles — gérez vos ventes, vos opérations, votre horaire, vos automatisations et la performance de votre équipe au même endroit.',
+    ctaHeading: 'Prêt à voir Lume en action ?',
+    ctaDesc: 'Réservez une démo personnalisée et découvrez comment Lume peut transformer vos opérations.',
+    bookDemo: 'Réserver une démo',
+  },
+} as const;
+
 function FeatureMockup({ id }: { id: string }) {
+  const { language } = useTranslation();
+  // Petit sélecteur local pour les textes des maquettes UI.
+  const L = (en: string, fr: string) => (language === 'fr' ? fr : en);
+
   const shell = (children: React.ReactNode) => (
     <div className="rounded-lg border border-white/10 overflow-hidden bg-[#111]" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
       <div className="bg-white aspect-[16/9]">
@@ -108,13 +177,13 @@ function FeatureMockup({ id }: { id: string }) {
             <div className="w-5 h-5 rounded-full bg-[#ebebeb]" />
           </div>
           <div className="flex-1 space-y-2">
-            <div className="flex justify-end"><div className="bg-[#f0f0f0] rounded-lg rounded-tr-sm px-2.5 py-1.5 max-w-[70%]"><div className="flex items-center gap-1 mb-0.5"><div className="w-2 h-2 rounded-full bg-primary/30" /><span className="text-[7px] font-semibold text-primary">Voice</span></div><p className="text-[8px] text-[#333]">"Quote for 123 Main St, $350"</p></div></div>
-            <div className="flex gap-1.5"><div className="w-4 h-4 rounded-full bg-[#1a1a1a] shrink-0" /><div className="bg-[#1a1a1a] rounded-lg rounded-tl-sm px-2.5 py-1.5 max-w-[70%]"><p className="text-[8px] text-white font-medium mb-1">Quote created</p><div className="text-[7px] text-white/50 space-y-0.5"><p>$350.00 — Window Cleaning</p><p>Status: Draft</p></div></div></div>
-            <div className="flex gap-1.5"><div className="w-4 h-4" /><div className="bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1"><p className="text-[7px] text-primary">Send to client?</p></div></div>
+            <div className="flex justify-end"><div className="bg-[#f0f0f0] rounded-lg rounded-tr-sm px-2.5 py-1.5 max-w-[70%]"><div className="flex items-center gap-1 mb-0.5"><div className="w-2 h-2 rounded-full bg-primary/30" /><span className="text-[7px] font-semibold text-primary">{L('Voice', 'Voix')}</span></div><p className="text-[8px] text-[#333]">{L('"Quote for 123 Main St, $350"', '« Soumission pour le 123 rue Principale, 350 $ »')}</p></div></div>
+            <div className="flex gap-1.5"><div className="w-4 h-4 rounded-full bg-[#1a1a1a] shrink-0" /><div className="bg-[#1a1a1a] rounded-lg rounded-tl-sm px-2.5 py-1.5 max-w-[70%]"><p className="text-[8px] text-white font-medium mb-1">{L('Quote created', 'Soumission créée')}</p><div className="text-[7px] text-white/50 space-y-0.5"><p>{L('$350.00 — Window Cleaning', '350,00 $ — Lavage de vitres')}</p><p>{L('Status: Draft', 'Statut : Brouillon')}</p></div></div></div>
+            <div className="flex gap-1.5"><div className="w-4 h-4" /><div className="bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1"><p className="text-[7px] text-primary">{L('Send to client?', 'Envoyer au client ?')}</p></div></div>
           </div>
           <div className="flex items-center gap-1.5 bg-[#f5f5f5] rounded-lg px-2.5 py-1.5 border border-[#e5e5e5] mt-2">
             <div className="w-4 h-4 rounded-full bg-primary" />
-            <span className="text-[7px] text-[#aaa] flex-1">Speak a command...</span>
+            <span className="text-[7px] text-[#aaa] flex-1">{L('Speak a command...', 'Dictez une commande...')}</span>
           </div>
         </div>
       </>
@@ -124,7 +193,7 @@ function FeatureMockup({ id }: { id: string }) {
         <div className="flex-1 p-3">
           <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
           <div className="flex gap-1.5 h-[calc(100%-20px)]">
-            {[{t:'New',n:3,c:'bg-blue-500'},{t:'Contact',n:2,c:'bg-amber-500'},{t:'Quote',n:2,c:'bg-purple-500'},{t:'Won',n:1,c:'bg-emerald-500'}].map((col,ci) => (
+            {[{t:L('New','Nouveau'),n:3,c:'bg-blue-500'},{t:L('Contact','Contact'),n:2,c:'bg-amber-500'},{t:L('Quote','Soumission'),n:2,c:'bg-purple-500'},{t:L('Won','Gagné'),n:1,c:'bg-emerald-500'}].map((col,ci) => (
               <div key={ci} className="flex-1 min-w-0">
                 <div className="flex items-center gap-1 mb-1.5"><div className={`w-1.5 h-1.5 rounded-full ${col.c}`} /><span className="text-[6px] font-semibold text-[#555]">{col.t}</span></div>
                 <div className="space-y-1">
@@ -147,10 +216,10 @@ function FeatureMockup({ id }: { id: string }) {
         <div className="flex-1 p-3">
           <div className="h-3 bg-[#ebebeb] rounded w-28 mb-3" />
           <div className="max-w-[65%] space-y-2">
-            {['Name', 'Email', 'Phone', 'Service'].map((label) => (
+            {[L('Name', 'Nom'), L('Email', 'Courriel'), L('Phone', 'Téléphone'), L('Service', 'Service')].map((label) => (
               <div key={label}><div className="text-[6px] text-[#999] mb-0.5">{label}</div><div className="h-5 bg-[#f5f5f5] rounded border border-[#e5e5e5]" /></div>
             ))}
-            <div><div className="text-[6px] text-[#999] mb-0.5">Message</div><div className="h-10 bg-[#f5f5f5] rounded border border-[#e5e5e5]" /></div>
+            <div><div className="text-[6px] text-[#999] mb-0.5">{L('Message', 'Message')}</div><div className="h-10 bg-[#f5f5f5] rounded border border-[#e5e5e5]" /></div>
             <div className="h-5 bg-primary rounded w-20 mt-1" />
           </div>
         </div>
@@ -172,10 +241,10 @@ function FeatureMockup({ id }: { id: string }) {
       <>{sidebar(2)}
         <div className="flex-1 p-3">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-[7px] font-bold text-[#333]">Leaderboard</div>
-            <div className="flex gap-1">{['D','W','M'].map((t,i) => (<div key={t} className={`px-1.5 py-0.5 rounded text-[6px] font-medium ${i===1?'bg-[#1a1a1a] text-white':'text-[#999]'}`}>{t}</div>))}</div>
+            <div className="text-[7px] font-bold text-[#333]">{L('Leaderboard', 'Classement')}</div>
+            <div className="flex gap-1">{(language === 'fr' ? ['J','S','M'] : ['D','W','M']).map((t,i) => (<div key={t} className={`px-1.5 py-0.5 rounded text-[6px] font-medium ${i===1?'bg-[#1a1a1a] text-white':'text-[#999]'}`}>{t}</div>))}</div>
           </div>
-          {[{n:'Marc D.',s:'14 sales',r:1},{n:'Sophie L.',s:'12 sales',r:2},{n:'Antoine R.',s:'9 sales',r:3},{n:'Julie M.',s:'7 sales',r:4},{n:'Phil K.',s:'5 sales',r:5}].map((rep) => (
+          {[{n:'Marc D.',s:L('14 sales','14 ventes'),r:1},{n:'Sophie L.',s:L('12 sales','12 ventes'),r:2},{n:'Antoine R.',s:L('9 sales','9 ventes'),r:3},{n:'Julie M.',s:L('7 sales','7 ventes'),r:4},{n:'Phil K.',s:L('5 sales','5 ventes'),r:5}].map((rep) => (
             <div key={rep.n} className="flex items-center gap-2 py-1.5 border-t border-[#f0f0f0]">
               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[6px] font-bold ${rep.r===1?'bg-yellow-100 text-yellow-700':rep.r===2?'bg-gray-100 text-gray-600':rep.r===3?'bg-orange-100 text-orange-700':'bg-[#f5f5f5] text-[#aaa]'}`}>{rep.r}</span>
               <div className="w-4 h-4 rounded-full bg-[#e5e5e5]" />
@@ -191,7 +260,12 @@ function FeatureMockup({ id }: { id: string }) {
         <div className="flex-1 p-3">
           <div className="h-3 bg-[#ebebeb] rounded w-28 mb-3" />
           <div className="space-y-2">
-            {[{t:'Quote #1042 opened',d:'John Smith — 2 min ago',s:'bg-emerald-500'},{t:'Quote #1038 viewed 3x',d:'Maria Johnson — 1h ago',s:'bg-primary'},{t:'Reminder: Follow up #1035',d:'Robert Davis — overdue',s:'bg-amber-500'},{t:'Quote #1031 expired',d:'Lisa Chen — 3 days ago',s:'bg-red-500'}].map((n) => (
+            {[
+              {t:L('Quote #1042 opened','Soumission #1042 ouverte'),d:L('John Smith — 2 min ago','John Smith — il y a 2 min'),s:'bg-emerald-500'},
+              {t:L('Quote #1038 viewed 3x','Soumission #1038 vue 3x'),d:L('Maria Johnson — 1h ago','Maria Johnson — il y a 1 h'),s:'bg-primary'},
+              {t:L('Reminder: Follow up #1035','Rappel : relancer #1035'),d:L('Robert Davis — overdue','Robert Davis — en retard'),s:'bg-amber-500'},
+              {t:L('Quote #1031 expired','Soumission #1031 expirée'),d:L('Lisa Chen — 3 days ago','Lisa Chen — il y a 3 jours'),s:'bg-red-500'},
+            ].map((n) => (
               <div key={n.t} className="flex items-start gap-2 p-2 rounded-lg bg-[#fafafa] border border-[#eee]">
                 <div className={`w-2 h-2 rounded-full ${n.s} mt-1 shrink-0`} />
                 <div><div className="text-[7px] font-semibold text-[#1a1a1a]">{n.t}</div><div className="text-[6px] text-[#999]">{n.d}</div></div>
@@ -206,12 +280,16 @@ function FeatureMockup({ id }: { id: string }) {
         <div className="flex-1 p-3">
           <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
           <div className="flex gap-2 mb-3">
-            {[{l:'Avg Rating',v:'4.8',c:''},{l:'Total',v:'127',c:''},{l:'This Month',v:'+12',c:'text-emerald-600'}].map((s) => (
+            {[{l:L('Avg Rating','Note moyenne'),v:'4.8',c:''},{l:L('Total','Total'),v:'127',c:''},{l:L('This Month','Ce mois-ci'),v:'+12',c:'text-emerald-600'}].map((s) => (
               <div key={s.l} className="flex-1 p-2 rounded-lg border border-[#eee]"><div className="text-[6px] text-[#999]">{s.l}</div><div className={`text-[10px] font-bold text-[#1a1a1a] ${s.c}`}>{s.v}</div></div>
             ))}
           </div>
           <div className="space-y-1.5">
-            {[{n:'J. Smith',r:5,t:'Excellent service!'},{n:'M. Johnson',r:5,t:'Very professional'},{n:'R. Davis',r:4,t:'Good work, on time'}].map((rev) => (
+            {[
+              {n:'J. Smith',r:5,t:L('Excellent service!','Excellent service !')},
+              {n:'M. Johnson',r:5,t:L('Very professional','Très professionnel')},
+              {n:'R. Davis',r:4,t:L('Good work, on time','Bon travail, à l\'heure')},
+            ].map((rev) => (
               <div key={rev.n} className="flex items-start gap-2 p-1.5 rounded-lg bg-[#fafafa] border border-[#eee]">
                 <div className="w-4 h-4 rounded-full bg-[#e5e5e5] shrink-0" />
                 <div><div className="text-[7px] font-semibold text-[#1a1a1a]">{rev.n}</div><div className="flex gap-0.5">{[...Array(rev.r)].map((_,i)=>(<span key={i} className="text-[6px] text-amber-400">★</span>))}</div><div className="text-[6px] text-[#999]">{rev.t}</div></div>
@@ -225,17 +303,17 @@ function FeatureMockup({ id }: { id: string }) {
       <>{sidebar(3)}
         <div className="flex-1 p-3">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-[7px] font-bold text-[#333]">April 2026</div>
-            <div className="flex gap-1">{['Day','Week','Month'].map((t,i) => (<div key={t} className={`px-1.5 py-0.5 rounded text-[6px] font-medium ${i===0?'bg-[#1a1a1a] text-white':'text-[#999]'}`}>{t}</div>))}</div>
+            <div className="text-[7px] font-bold text-[#333]">{L('April 2026', 'Avril 2026')}</div>
+            <div className="flex gap-1">{[L('Day','Jour'),L('Week','Semaine'),L('Month','Mois')].map((t,i) => (<div key={t} className={`px-1.5 py-0.5 rounded text-[6px] font-medium ${i===0?'bg-[#1a1a1a] text-white':'text-[#999]'}`}>{t}</div>))}</div>
           </div>
           <div className="space-y-1">
             {['8:00','9:00','10:00','11:00','12:00','1:00','2:00','3:00'].map((time,i) => (
               <div key={time} className="flex items-stretch gap-1.5">
                 <span className="text-[6px] text-[#999] w-6 pt-0.5">{time}</span>
                 <div className="flex-1 border-t border-[#f0f0f0] min-h-[12px] relative">
-                  {i===1 && <div className="absolute inset-x-0 top-0 h-[20px] bg-primary/10 border-l-2 border-primary rounded-r px-1"><span className="text-[5px] font-medium text-primary">J. Smith — Window cleaning</span></div>}
-                  {i===3 && <div className="absolute inset-x-0 top-0 h-[20px] bg-emerald-50 border-l-2 border-emerald-500 rounded-r px-1"><span className="text-[5px] font-medium text-emerald-700">M. Johnson — Pressure wash</span></div>}
-                  {i===5 && <div className="absolute inset-x-0 top-0 h-[20px] bg-amber-50 border-l-2 border-amber-500 rounded-r px-1"><span className="text-[5px] font-medium text-amber-700">R. Davis — Gutter cleaning</span></div>}
+                  {i===1 && <div className="absolute inset-x-0 top-0 h-[20px] bg-primary/10 border-l-2 border-primary rounded-r px-1"><span className="text-[5px] font-medium text-primary">{L('J. Smith — Window cleaning', 'J. Smith — Lavage de vitres')}</span></div>}
+                  {i===3 && <div className="absolute inset-x-0 top-0 h-[20px] bg-emerald-50 border-l-2 border-emerald-500 rounded-r px-1"><span className="text-[5px] font-medium text-emerald-700">{L('M. Johnson — Pressure wash', 'M. Johnson — Lavage à pression')}</span></div>}
+                  {i===5 && <div className="absolute inset-x-0 top-0 h-[20px] bg-amber-50 border-l-2 border-amber-500 rounded-r px-1"><span className="text-[5px] font-medium text-amber-700">{L('R. Davis — Gutter cleaning', 'R. Davis — Nettoyage de gouttières')}</span></div>}
                 </div>
               </div>
             ))}
@@ -248,15 +326,15 @@ function FeatureMockup({ id }: { id: string }) {
         <div className="flex-1 p-3">
           <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
           <div className="flex flex-col items-center gap-1.5 py-2">
-            <div className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[7px] font-semibold text-primary">New Lead Created</div>
+            <div className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[7px] font-semibold text-primary">{L('New Lead Created', 'Nouveau lead créé')}</div>
             <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-[7px] text-[#555]">Wait 2 hours</div>
+            <div className="px-3 py-1.5 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-[7px] text-[#555]">{L('Wait 2 hours', 'Attendre 2 heures')}</div>
             <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[7px] text-emerald-700">Send welcome email</div>
+            <div className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[7px] text-emerald-700">{L('Send welcome email', 'Envoyer le courriel de bienvenue')}</div>
             <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-[7px] text-[#555]">Wait 24 hours</div>
+            <div className="px-3 py-1.5 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-[7px] text-[#555]">{L('Wait 24 hours', 'Attendre 24 heures')}</div>
             <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[7px] text-amber-700">Send follow-up SMS</div>
+            <div className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[7px] text-amber-700">{L('Send follow-up SMS', 'Envoyer le texto de relance')}</div>
           </div>
         </div>
       </>
@@ -266,12 +344,17 @@ function FeatureMockup({ id }: { id: string }) {
         <div className="flex-1 p-3">
           <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
           <div className="flex gap-2 mb-3">
-            {[{l:'Collected',v:'$24,800'},{l:'Pending',v:'$3,200'},{l:'Overdue',v:'$850'}].map((s) => (
+            {[{l:L('Collected','Encaissé'),v:'$24,800'},{l:L('Pending','En attente'),v:'$3,200'},{l:L('Overdue','En retard'),v:'$850'}].map((s) => (
               <div key={s.l} className="flex-1 p-2 rounded-lg border border-[#eee]"><div className="text-[6px] text-[#999]">{s.l}</div><div className="text-[10px] font-bold text-[#1a1a1a]">{s.v}</div></div>
             ))}
           </div>
           <div className="space-y-1.5">
-            {[{n:'INV-1042',c:'J. Smith',a:'$350',s:'Paid',sc:'text-emerald-600 bg-emerald-50'},{n:'INV-1041',c:'M. Johnson',a:'$780',s:'Pending',sc:'text-amber-600 bg-amber-50'},{n:'INV-1040',c:'R. Davis',a:'$1,200',s:'Paid',sc:'text-emerald-600 bg-emerald-50'},{n:'INV-1039',c:'L. Chen',a:'$450',s:'Overdue',sc:'text-red-600 bg-red-50'}].map((inv) => (
+            {[
+              {n:'INV-1042',c:'J. Smith',a:'$350',s:L('Paid','Payée'),sc:'text-emerald-600 bg-emerald-50'},
+              {n:'INV-1041',c:'M. Johnson',a:'$780',s:L('Pending','En attente'),sc:'text-amber-600 bg-amber-50'},
+              {n:'INV-1040',c:'R. Davis',a:'$1,200',s:L('Paid','Payée'),sc:'text-emerald-600 bg-emerald-50'},
+              {n:'INV-1039',c:'L. Chen',a:'$450',s:L('Overdue','En retard'),sc:'text-red-600 bg-red-50'},
+            ].map((inv) => (
               <div key={inv.n} className="flex items-center gap-2 p-1.5 rounded-lg bg-[#fafafa] border border-[#eee]">
                 <div className="text-[7px] font-semibold text-[#1a1a1a] w-14">{inv.n}</div>
                 <div className="text-[7px] text-[#666] flex-1">{inv.c}</div>
@@ -289,6 +372,8 @@ function FeatureMockup({ id }: { id: string }) {
 }
 
 export default function Features() {
+  const { language } = useTranslation();
+  const c = COPY[language];
   return (
     <div className="min-h-screen">
       {/* Hero */}
@@ -299,7 +384,7 @@ export default function Features() {
             animate={{ opacity: 1, y: 0 }}
             className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#1F5F4F] mb-4"
           >
-            Features
+            {c.kicker}
           </motion.p>
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
@@ -307,9 +392,9 @@ export default function Features() {
             transition={{ delay: 0.05 }}
             className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-[-0.03em] leading-[1.08] text-text-primary"
           >
-            One platform.
+            {c.titleLine1}
             <br />
-            Every tool your business needs.
+            {c.titleLine2}
           </motion.h1>
           <motion.p
             initial={{ opacity: 0, y: 16 }}
@@ -317,7 +402,7 @@ export default function Features() {
             transition={{ delay: 0.15 }}
             className="mt-5 text-lg font-normal text-text-tertiary max-w-2xl mx-auto leading-relaxed"
           >
-            From lead capture to 5-star reviews — manage sales, operations, scheduling, automation, and team performance in one place.
+            {c.subtitle}
           </motion.p>
         </div>
       </section>
@@ -338,7 +423,7 @@ export default function Features() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-tertiary border border-outline transition-colors"
               >
                 <f.icon size={12} />
-                {f.title}
+                {f.title[language]}
               </a>
             ))}
           </motion.div>
@@ -372,13 +457,13 @@ export default function Features() {
                 <div className="space-y-5">
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
                     <feature.icon size={14} className="text-[#3FAF97]" />
-                    <span className="text-[10px] uppercase tracking-[0.15em] font-semibold text-white/60">{feature.title}</span>
+                    <span className="text-[10px] uppercase tracking-[0.15em] font-semibold text-white/60">{feature.title[language]}</span>
                   </div>
                   <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white leading-[1.1]">
-                    {feature.subtitle}
+                    {feature.subtitle[language]}
                   </h2>
                   <ul className="space-y-3">
-                    {feature.bullets.map(b => (
+                    {feature.bullets[language].map(b => (
                       <li key={b} className="flex items-center gap-3 text-sm font-bold text-white">
                         <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ border: '2px solid #ffffff' }}>
                           <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
@@ -410,17 +495,17 @@ export default function Features() {
             viewport={{ once: true }}
           >
             <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white">
-              Ready to see Lume in action?
+              {c.ctaHeading}
             </h2>
             <p className="mt-3 text-white/50 font-normal max-w-lg mx-auto">
-              Book a personalized demo and discover how Lume can transform your operations.
+              {c.ctaDesc}
             </p>
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link
                 to="/contact"
                 className="inline-flex items-center gap-2 bg-white text-text-primary px-8 py-4 rounded-xl text-sm font-bold hover:bg-white/90 transition-colors group"
               >
-                Book a demo
+                {c.bookDemo}
                 <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>

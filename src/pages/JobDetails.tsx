@@ -2081,7 +2081,7 @@ export default function JobDetails() {
                   <p className="text-[13px] font-semibold text-text-primary capitalize">
                     {recurrence.frequency === 'biweekly'
                       ? (language === 'fr' ? 'Aux 2 semaines' : 'Every 2 weeks')
-                      : (language === 'fr' ? recFreqLabelFr(recurrence.frequency) : recurrence.frequency)}
+                      : (language === 'fr' ? recFreqLabelFr(recurrence.frequency) : recFreqLabelEn(recurrence.frequency))}
                   </p>
                   <p className="text-[12px] text-text-tertiary">
                     {language === 'fr' ? 'Depuis' : 'Since'} {new Date(recurrence.start_date).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')} — {recurrence.occurrences_created} {language === 'fr' ? 'créées' : 'created'}
@@ -2636,6 +2636,18 @@ function recFreqLabelFr(freq: string): string {
     case 'weekly': return 'Hebdomadaire';
     case 'biweekly': return 'Aux 2 semaines';
     case 'monthly': return 'Mensuel';
+    case 'custom': return 'Personnalisé';
+    default: return freq;
+  }
+}
+
+function recFreqLabelEn(freq: string): string {
+  switch (freq) {
+    case 'daily': return 'Daily';
+    case 'weekly': return 'Weekly';
+    case 'biweekly': return 'Biweekly';
+    case 'monthly': return 'Monthly';
+    case 'custom': return 'Custom';
     default: return freq;
   }
 }

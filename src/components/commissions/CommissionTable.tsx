@@ -27,8 +27,8 @@ interface Props {
   emptyMessage?: string;
 }
 
-function fmtMoney(n: number) {
-  return '$' + Number(n || 0).toLocaleString('en-US');
+function fmtMoney(n: number, locale: string) {
+  return '$' + Number(n || 0).toLocaleString(locale);
 }
 
 /** Read-only by default; renders admin actions only when `showActions` is true. */
@@ -45,6 +45,7 @@ export default function CommissionTable({
 }: Props) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const numLocale = fr ? 'fr-CA' : 'en-US';
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString(fr ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const statusLabel = (s: string) =>
@@ -84,9 +85,9 @@ export default function CommissionTable({
                     </Link>
                   </td>
                 )}
-                <td className="px-5 py-2.5 text-right text-sm text-text-secondary">{fmtMoney(e.base_amount)}</td>
+                <td className="px-5 py-2.5 text-right text-sm text-text-secondary">{fmtMoney(e.base_amount, numLocale)}</td>
                 <td className="px-5 py-2.5 text-right text-sm font-medium text-text-primary">
-                  {fmtMoney(e.amount)}
+                  {fmtMoney(e.amount, numLocale)}
                   <span className="ml-1 text-xs text-text-muted">({pct}%)</span>
                 </td>
                 <td className="px-5 py-2.5">

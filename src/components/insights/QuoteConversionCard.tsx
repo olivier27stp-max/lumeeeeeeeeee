@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useTranslation } from '../../i18n';
 
-async function fetchData() {
+async function fetchData(locale: string) {
   const orgId = await getCurrentOrgIdOrThrow();
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
@@ -33,16 +33,17 @@ async function fetchData() {
   return Array.from(buckets.entries()).map(([key, b]) => {
     const [y, m] = key.split('-').map(Number);
     return {
-      label: new Date(y, m, 1).toLocaleDateString('en-CA', { month: 'short' }),
+      label: new Date(y, m, 1).toLocaleDateString(locale, { month: 'short' }),
       rate: b.sent > 0 ? Number(((b.accepted / b.sent) * 100).toFixed(1)) : 0,
     };
   });
 }
 
 export default function QuoteConversionCard() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-CA';
   const ti = (t.insights as any).reports || {};
-  const { data = [], isLoading } = useQuery({ queryKey: ['report-quote-conversion'], queryFn: fetchData, staleTime: 60_000 });
+  const { data = [], isLoading } = useQuery({ queryKey: ['report-quote-conversion', language], queryFn: () => fetchData(locale), staleTime: 60_000 });
   const hasData = data.some((d) => d.rate > 0);
 
   return (

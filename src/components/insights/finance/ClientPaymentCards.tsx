@@ -1,9 +1,10 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
 import type { LumePaymentClient } from '../../../lib/financeDashboardApi';
+import { useTranslation } from '../../../i18n';
 
-function fmtDollars(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function fmtDollars(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'CAD',
     minimumFractionDigits: 2,
@@ -38,6 +39,9 @@ function ClientCard({
   client: LumePaymentClient;
   styleIndex: number;
 }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-US';
   const cardStyle = CARD_STYLES[styleIndex % CARD_STYLES.length];
   const cardNumber = generateCardNumber(client.client_id);
 
@@ -54,7 +58,7 @@ function ClientCard({
       {/* Top row */}
       <div className="flex items-start justify-between relative z-10">
         <div>
-          <p className="text-xs font-medium text-white/60">Lume Card</p>
+          <p className="text-xs font-medium text-white/60">{fr ? 'Carte Lume' : 'Lume Card'}</p>
           <span className="inline-flex items-center gap-1 mt-1 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
             Active
           </span>
@@ -76,7 +80,7 @@ function ClientCard({
           </p>
         </div>
         <p className="text-lg font-bold text-white tabular-nums">
-          {fmtDollars(client.total_paid_cents)}
+          {fmtDollars(client.total_paid_cents, locale)}
         </p>
       </div>
     </div>
@@ -86,12 +90,14 @@ function ClientCard({
 /* ── Empty state ────────────────────────────────────────────── */
 
 export function EmptyClientCardsState() {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   return (
     <div className="rounded-2xl border border-zinc-200 bg-white p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-base font-semibold text-zinc-900">Client Cards</h3>
-          <p className="text-xs text-zinc-400">Virtual client cards linked to Lume Payments</p>
+          <h3 className="text-base font-semibold text-zinc-900">{fr ? 'Cartes clients' : 'Client Cards'}</h3>
+          <p className="text-xs text-zinc-400">{fr ? 'Cartes clients virtuelles liées à Lume Payments' : 'Virtual client cards linked to Lume Payments'}</p>
         </div>
       </div>
 
@@ -99,7 +105,7 @@ export function EmptyClientCardsState() {
       <div className="rounded-2xl bg-zinc-100 p-5 opacity-50 blur-[0.5px] min-h-[140px] flex flex-col justify-between border border-zinc-200">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs font-medium text-zinc-400">Lume Card</p>
+            <p className="text-xs font-medium text-zinc-400">{fr ? 'Carte Lume' : 'Lume Card'}</p>
             <span className="inline-flex items-center rounded-full bg-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-400 mt-1">
               Inactive
             </span>
@@ -109,15 +115,15 @@ export function EmptyClientCardsState() {
         <p className="text-sm font-mono tracking-[0.15em] text-zinc-300 mt-3">
           **** **** **** ****
         </p>
-        <p className="text-xs text-zinc-300 mt-3">No client linked</p>
+        <p className="text-xs text-zinc-300 mt-3">{fr ? 'Aucun client lié' : 'No client linked'}</p>
       </div>
 
       <p className="text-sm text-zinc-500 text-center mt-4">
-        No active Lume Payments clients yet
+        {fr ? 'Aucun client Lume Payments actif pour le moment' : 'No active Lume Payments clients yet'}
       </p>
       <div className="flex justify-center mt-3">
         <button className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-900 text-white text-xs font-medium py-2.5 px-5 hover:bg-zinc-800 transition-colors">
-          Activate Lume Payments
+          {fr ? 'Activer Lume Payments' : 'Activate Lume Payments'}
         </button>
       </div>
     </div>
@@ -131,6 +137,8 @@ export default function ClientPaymentCards({
 }: {
   clients: LumePaymentClient[];
 }) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   if (clients.length === 0) {
     return <EmptyClientCardsState />;
   }
@@ -140,14 +148,16 @@ export default function ClientPaymentCards({
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-base font-semibold text-zinc-900">Client Cards</h3>
+          <h3 className="text-base font-semibold text-zinc-900">{fr ? 'Cartes clients' : 'Client Cards'}</h3>
           <p className="text-xs text-zinc-400">
-            A total of {clients.length} card{clients.length > 1 ? 's' : ''} listed
+            {fr
+              ? `${clients.length} carte${clients.length > 1 ? 's' : ''} au total`
+              : `A total of ${clients.length} card${clients.length > 1 ? 's' : ''} listed`}
           </p>
         </div>
         <button className="inline-flex items-center gap-1 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 transition-colors">
           <Plus size={13} />
-          Add New
+          {fr ? 'Ajouter' : 'Add New'}
         </button>
       </div>
 

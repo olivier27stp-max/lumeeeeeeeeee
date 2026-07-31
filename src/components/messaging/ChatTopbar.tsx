@@ -1,11 +1,14 @@
 import React from 'react';
 import { PanelLeft, Search, Bell, Moon, Settings } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 interface ChatTopbarProps {
   onToggleSidebar?: () => void;
 }
 
 export default function ChatTopbar({ onToggleSidebar }: ChatTopbarProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   return (
     <div className="h-[56px] bg-[#F7F7F8] border-b border-[#E5E7EB] flex items-center justify-between px-4 shrink-0">
       {/* Left section */}
@@ -26,7 +29,7 @@ export default function ChatTopbar({ onToggleSidebar }: ChatTopbarProps) {
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder={fr ? 'Rechercher...' : 'Search...'}
             className="h-[34px] w-[240px] pl-9 pr-14 rounded-full bg-surface-secondary border-0 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
           />
           {/* ⌘ K badge */}
@@ -45,7 +48,7 @@ export default function ChatTopbar({ onToggleSidebar }: ChatTopbarProps) {
       <div className="flex items-center gap-2">
         {/* Get Pro */}
         <button className="text-[13px] font-semibold text-text-primary hover:text-text-primary transition-colors px-2 py-1">
-          Get Pro
+          {fr ? 'Passer à Pro' : 'Get Pro'}
         </button>
 
         {/* Notification bell */}

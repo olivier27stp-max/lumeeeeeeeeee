@@ -17,6 +17,13 @@ import { useTranslation } from '../../i18n';
 import { listTerritories, createTerritory, updateTerritory, deleteTerritory, listReps } from '../../lib/fieldSalesApi';
 import { toast } from 'sonner';
 
+// Current app language at call time. LanguageProvider mirrors the chosen
+// language onto <html lang>, so map event handlers registered once (which
+// would otherwise capture a stale `fr`) can still label things correctly.
+function isFrNow(): boolean {
+  return typeof document === 'undefined' || document.documentElement.lang !== 'en';
+}
+
 // field_territories row → ZoneData used by the map. Server returns the raw DB
 // row (polygon_geojson / assigned_user_id), not the aspirational FieldTerritory
 // TS shape — same casting FieldSales.tsx already relies on.
@@ -614,7 +621,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
         type: 'geojson',
         data: {
           type: 'Feature',
-          properties: { name: zone.name, assigned: zone.assigned_to_name || 'Non assigné', created: zone.created_at },
+          properties: { name: zone.name, assigned: zone.assigned_to_name || (fr ? 'Non assigné' : 'Unassigned'), created: zone.created_at },
           geometry: { type: 'Polygon', coordinates: [coords] },
         },
       });
@@ -937,7 +944,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
             const status = (containerRef.current.dataset.status || 'other') as PinStatus;
             const { lng, lat } = e.lngLat;
             const id = crypto.randomUUID();
-            const pin: LeadPinData = { id, lat, lng, status, name: 'Nouveau lead', phone: '', email: '', address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, note: '' };
+            const pin: LeadPinData = { id, lat, lng, status, name: isFrNow() ? 'Nouveau lead' : 'New lead', phone: '', email: '', address: `${lat.toFixed(5)}, ${lng.toFixed(5)}`, note: '' };
             localPinIdsRef.current.add(id);
             placePin(map, pin);
             containerRef.current!.dataset.mapMode = 'view';
@@ -950,7 +957,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                 const place = data.features?.[0];
                 const rec = markersRef.current.get(id);
                 if (rec) {
-                  rec.pin.name = place?.text || 'Nouveau lead';
+                  rec.pin.name = place?.text || (isFrNow() ? 'Nouveau lead' : 'New lead');
                   rec.pin.address = place?.place_name || pin.address;
                 }
                 const finalPin = rec?.pin || pin;
@@ -2135,15 +2142,15 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
               <>
                 <div className="flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-[13px] font-semibold text-white shadow-xl shadow-indigo-500/25">
                   <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-white" /></span>
-                  Tracez la zone ({drawingPoints.length} points)
+                  {fr ? `Tracez la zone (${drawingPoints.length} points)` : `Draw the zone (${drawingPoints.length} points)`}
                 </div>
                 {drawingPoints.length >= 3 && (
                   <button onClick={finishDrawing} className="rounded-xl bg-emerald-500 px-4 py-2.5 text-[13px] font-semibold text-white shadow-xl shadow-emerald-500/25 transition-all hover:bg-emerald-400">
-                    Terminer
+                    {fr ? 'Terminer' : 'Finish'}
                   </button>
                 )}
                 <button onClick={cancelDrawing} className="rounded-xl border border-white/10 bg-black/60 px-4 py-2.5 text-[13px] font-semibold text-white/60 shadow-xl backdrop-blur-xl transition-all hover:bg-white/10 hover:text-white/80">
-                  Annuler
+                  {fr ? 'Annuler' : 'Cancel'}
                 </button>
               </>
             )}
@@ -2197,7 +2204,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                             {isActive && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
                           </span>
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: cfg.color, opacity: isActive ? 1 : 0.35 }} />
-                          <span className="text-[12px] font-medium flex-1">{cfg.label}</span>
+                          <span className="text-[12px] font-medium flex-1">{fr ? cfg.label : cfg.label_en}</span>
                           {navigatingStatus === key && navPinsRef.current.length > 0 && (
                             <span className="text-[10px] font-bold text-white/60">{navIndex + 1}/{navPinsRef.current.length}</span>
                           )}
@@ -2251,7 +2258,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
 
                   {/* --- ZONES section --- */}
                   <div className="mt-3 border-t border-white/8 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-indigo-300/50">{fr ? 'Zones' : 'Zones'}</p>
+                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-indigo-300/50">Zones</p>
 
                     {/* Show zones toggle */}
                     <button onClick={() => setShowZones(!showZones)}
@@ -2339,7 +2346,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                   />
                 </span>
                 <span className="whitespace-nowrap text-center text-[10px] font-medium leading-tight text-white">
-                  {cfg.label}
+                  {fr ? cfg.label : cfg.label_en}
                 </span>
               </button>
             ))}
@@ -2366,12 +2373,12 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                   </svg>
-                  Supprimer tout
+                  {fr ? 'Supprimer tout' : 'Delete all'}
                 </button>
                 <button onClick={() => { setSelectedPinIds(new Set()); clearPinHighlights(); }}
                   className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[12px] text-white/50 transition-all hover:bg-white/10 hover:text-white/70"
                 >
-                  Désélectionner
+                  {fr ? 'Désélectionner' : 'Deselect'}
                 </button>
               </>
             )}
@@ -2461,7 +2468,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
               </div>
               <div className="bg-neutral-950 px-2.5 py-3 text-center">
                 <div className="text-[19px] font-semibold leading-none tracking-tight text-white tabular-nums">{stats.pipeline}</div>
-                <div className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Pipeline' : 'Pipeline'}</div>
+                <div className="mt-1.5 text-[9px] font-medium uppercase tracking-[0.08em] text-neutral-500">Pipeline</div>
               </div>
             </div>
 
@@ -2499,7 +2506,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
               </div>
               <div>
                 <div className="text-[13px] font-semibold text-white tabular-nums">{stats.repCount}</div>
-                <div className="mt-0.5 text-[9.5px] text-neutral-500">{fr ? 'Reps' : 'Reps'}</div>
+                <div className="mt-0.5 text-[9.5px] text-neutral-500">Reps</div>
               </div>
             </div>
 
@@ -2516,7 +2523,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                       <div key={st}>
                         <div className="mb-1 flex items-center gap-2">
                           <span className="h-2 w-2 flex-none rounded-full" style={{ backgroundColor: cfg.color }} />
-                          <span className="flex-1 truncate text-[11px] text-neutral-300">{cfg.label}</span>
+                          <span className="flex-1 truncate text-[11px] text-neutral-300">{fr ? cfg.label : cfg.label_en}</span>
                           <span className="text-[11px] font-medium text-white tabular-nums">{n}</span>
                           <span className="w-8 text-right text-[10px] text-neutral-500 tabular-nums">{pct}%</span>
                         </div>
@@ -2586,7 +2593,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                     style={{ backgroundColor: `${PIN_STATUS_CONFIG[actionPin.status].color}18`, color: PIN_STATUS_CONFIG[actionPin.status].color }}
                   >
                     <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: PIN_STATUS_CONFIG[actionPin.status].color }} />
-                    {PIN_STATUS_CONFIG[actionPin.status].label}
+                    {fr ? PIN_STATUS_CONFIG[actionPin.status].label : PIN_STATUS_CONFIG[actionPin.status].label_en}
                   </span>
                 )}
               </div>
@@ -2629,7 +2636,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                   {(['no_answer', 'rejected', 'follow_up', 'lead', 'closed_won'] as PinStatus[]).map((status) => {
                     const cfg = PIN_STATUS_CONFIG[status];
                     // Button color = the color of the pin it creates.
-                    const label = status === 'closed_won' ? (fr ? '+ Créer une Job' : '+ Create Job') : cfg.label;
+                    const label = status === 'closed_won' ? (fr ? '+ Créer une Job' : '+ Create Job') : fr ? cfg.label : cfg.label_en;
                     return (
                       <button
                         key={status}
@@ -2658,7 +2665,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                             ? { backgroundColor: cfg.color }
                             : { color: cfg.color, backgroundColor: `${cfg.color}14`, ['--tw-ring-color' as string]: `${cfg.color}40` } as React.CSSProperties}
                         >
-                          {active ? '✓ ' : ''}{status === 'closed_won' ? (fr ? 'Vendu ✓' : 'Sold ✓') : cfg.label}
+                          {active ? '✓ ' : ''}{status === 'closed_won' ? (fr ? 'Vendu ✓' : 'Sold ✓') : fr ? cfg.label : cfg.label_en}
                         </button>
                       );
                     })}
@@ -2752,7 +2759,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                     style={editStatus === key ? { backgroundColor: cfg.color } : undefined}
                   >
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: editStatus === key ? 'white' : cfg.color }} />
-                    {cfg.label}
+                    {fr ? cfg.label : cfg.label_en}
                   </button>
                 ))}
               </div>

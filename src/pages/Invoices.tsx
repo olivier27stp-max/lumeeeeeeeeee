@@ -348,7 +348,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
           email,
           inv.status || '',
           formatMoneyFromCents(inv.total_cents || 0),
-          inv.due_date ? new Date(inv.due_date).toLocaleDateString('fr-CA') : '',
+          inv.due_date ? new Date(inv.due_date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
         ];
       });
       exportToCsv(
@@ -358,7 +358,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       );
       toast.success(fr ? 'Export CSV terminé' : 'CSV exported');
     } catch (err: any) {
-      toast.error(err?.message || 'Export failed');
+      toast.error(err?.message || (fr ? 'Échec de l\'export' : 'Export failed'));
     }
   };
 
@@ -378,7 +378,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       queryClient.invalidateQueries({ queryKey: ['jobsTable'] });
       toast.success(fr ? 'Facture marquée payée' : 'Invoice marked as paid');
     } catch (err: any) {
-      toast.error(err?.message || 'Error');
+      toast.error(err?.message || (fr ? 'Erreur' : 'Error'));
     }
     setActionMenuId(null);
   };
@@ -393,7 +393,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       toast.success(fr ? 'Facture dupliquée' : 'Invoice duplicated');
       navigate(`/invoices/${draft.id}`);
     } catch (err: any) {
-      toast.error(err?.message || 'Error');
+      toast.error(err?.message || (fr ? 'Erreur' : 'Error'));
     }
     setActionMenuId(null);
   };
@@ -412,7 +412,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       setInvoiceToDelete(null);
       toast.success(fr ? 'Facture supprimée définitivement' : 'Invoice permanently deleted');
     } catch (err: any) {
-      toast.error(err?.message || 'Error');
+      toast.error(err?.message || (fr ? 'Erreur' : 'Error'));
     } finally { setIsDeletingInvoice(false); }
   };
 
@@ -438,7 +438,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       invalidateAll();
       toast.success(fr ? 'Facture envoyée' : 'Invoice sent');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send invoice');
+      toast.error(err?.message || (fr ? 'Échec de l\'envoi de la facture' : 'Failed to send invoice'));
     }
     setActionMenuId(null);
   };
@@ -594,7 +594,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                 <button onClick={() => applySort('total')} className="inline-flex items-center gap-1">Total {IconSort}</button>
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
-                <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Balance' : 'Balance'} {IconSort}</button>
+                <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Solde' : 'Balance'} {IconSort}</button>
               </div>
               <div className="py-3 border-b border-outline" />
 
@@ -823,7 +823,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                   } catch { failed++; }
                 }
                 invalidateAll();
-                if (failed > 0) toast.error(`${failed} invoice(s) failed to delete`);
+                if (failed > 0) toast.error(fr ? `Échec de la suppression de ${failed} facture(s)` : `${failed} invoice(s) failed to delete`);
                 else toast.success(fr ? `${ids.length} facture(s) supprimée(s)` : `${ids.length} invoice(s) deleted`);
               }
               if (actionId === 'mark_paid') {
@@ -832,7 +832,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                   try { await markInvoicePaidManually(id); } catch { failed++; }
                 }
                 invalidateAll();
-                if (failed > 0) toast.error(`${failed} invoice(s) failed`);
+                if (failed > 0) toast.error(fr ? `Échec pour ${failed} facture(s)` : `${failed} invoice(s) failed`);
                 else toast.success(fr ? `${ids.length} facture(s) marquée(s) payée(s)` : `${ids.length} invoice(s) marked as paid`);
               }
               if (actionId === 'send') {

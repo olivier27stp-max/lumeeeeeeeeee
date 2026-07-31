@@ -30,19 +30,80 @@ import {
 } from '../lib/automationRulesApi';
 
 // ── Automation name translations (for DB-seeded English names) ──
+// Couvre toutes les variantes de noms semées par les migrations
+// (default_workflow_presets, advanced_automation_presets, dedup, activate_all).
 const AUTOMATION_NAME_FR: Record<string, string> = {
+  // Leads
   'Lead — Welcome': 'Prospect — Bienvenue',
+  'Welcome New Lead': 'Bienvenue au nouveau prospect',
   'Lead Alert — 7 Days Stale': 'Alerte prospect — 7 jours inactif',
+  'Stale Lead Alert — 7 Days': 'Alerte prospect inactif — 7 jours',
+  'Stale Lead — 7 Days': 'Prospect inactif — 7 jours',
   'Lead Final Follow-Up — 14 Days': 'Dernier suivi prospect — 14 jours',
   'Lead Follow-Up — 1 Day': 'Suivi prospect — 1 jour',
   'Lead Follow-Up — 3 Days': 'Suivi prospect — 3 jours',
   'Lost Lead Re-engagement — 90 Days': 'Réengagement prospect perdu — 90 jours',
+  'Lost Lead Re-engagement': 'Réengagement prospect perdu',
+  'Lost Lead — Re-engagement': 'Prospect perdu — Réengagement',
+  // Quotes / Estimates
   'Estimate Follow-Up': "Suivi d'estimation",
+  'Estimate Follow-Up (3 days)': "Suivi d'estimation (3 jours)",
   'Quote Follow-Up — 1 Day': 'Suivi de devis — 1 jour',
+  'Quote Follow-Up — 1 Day After Sent': 'Suivi de devis — 1 jour après envoi',
   'Quote Follow-Up — 3 Days': 'Suivi de devis — 3 jours',
   'Quote Follow-Up — 7 Days': 'Suivi de devis — 7 jours',
   'Quote Follow-Up — 14 Days': 'Suivi de devis — 14 jours',
   'Quote Follow-Up — 21 Days': 'Suivi de devis — 21 jours',
+  'Quote Follow-Up — 21 Days (Final)': 'Suivi de devis — 21 jours (final)',
+  // Jobs / Scheduling
+  'Appointment Confirmation': 'Confirmation de rendez-vous',
+  'Job Reminder — 1 Week Before': 'Rappel de rendez-vous — 1 semaine avant',
+  'Job Reminder — 7 Days Before': 'Rappel de rendez-vous — 7 jours avant',
+  'Job Reminder — 1 Day Before': 'Rappel de rendez-vous — 1 jour avant',
+  'Job Reminder — 2 Hours Before': 'Rappel de rendez-vous — 2 heures avant',
+  'No-Show / Cancellation Follow-Up': "Suivi d'absence / annulation",
+  'No-Show Follow-Up': "Suivi d'absence",
+  // Invoices
+  'Invoice Reminder — 1 Day': 'Rappel de facture — 1 jour',
+  'Invoice Reminder — 1 Day After Sent': 'Rappel de facture — 1 jour après envoi',
+  'Invoice Reminder — 3 Days': 'Rappel de facture — 3 jours',
+  'Invoice Reminder — 3 Days After Sent': 'Rappel de facture — 3 jours après envoi',
+  'Invoice Reminder — 7 Days': 'Rappel de facture — 7 jours',
+  'Invoice Reminder — 7 Days After Sent': 'Rappel de facture — 7 jours après envoi',
+  'Invoice Reminder — 14 Days': 'Rappel de facture — 14 jours',
+  'Invoice Final Reminder — 30 Days': 'Dernier rappel de facture — 30 jours',
+  'Invoice Final Reminder — 30 Days After Sent': 'Dernier rappel de facture — 30 jours après envoi',
+  'Invoice Reminder (J+1)': 'Rappel de facture (J+1)',
+  'Invoice Reminder (J+3)': 'Rappel de facture (J+3)',
+  'Invoice Reminder (J+5)': 'Rappel de facture (J+5)',
+  'Invoice Reminder (J+15)': 'Rappel de facture (J+15)',
+  'Invoice Reminder (J+30)': 'Rappel de facture (J+30)',
+  // Payments
+  'Payment Confirmation': 'Confirmation de paiement',
+  'Payment Confirmation — Thank You': 'Confirmation de paiement — Merci',
+  'Deposit Received': 'Dépôt reçu',
+  'Deposit Received Confirmation': 'Confirmation de dépôt reçu',
+  'Deposit Reminder — Quote Approved': 'Rappel de dépôt — Devis accepté',
+  'Deposit Follow-Up — 2 Days': 'Suivi de dépôt — 2 jours',
+  // Follow-up
+  'Thank You After Job': 'Merci après le job',
+  'Thank You — After Job Completed': 'Merci — Job terminé',
+  'Cross-Sell — 30 Days After Job': 'Vente croisée — 30 jours après le job',
+  'Cross-Sell Follow-Up — 30 Days After Job': 'Suivi de vente croisée — 30 jours après le job',
+  'Cross-Sell — 30 Days': 'Vente croisée — 30 jours',
+  'Re-Engagement — 90 Days': 'Réengagement — 90 jours',
+  'Post-Job Survey': 'Sondage après le job',
+  'Post-Appointment Survey': 'Sondage après rendez-vous',
+  'Post-Appointment Satisfaction Check': 'Vérification de satisfaction après rendez-vous',
+  // Reviews
+  'Google Review Request': "Demande d'avis Google",
+  'Review Request — After Job': "Demande d'avis — Après le job",
+  'Review Reminder — 7 Days': "Rappel d'avis — 7 jours",
+  // Client
+  'Client Anniversary': 'Anniversaire client',
+  'Client Anniversary — 1 Year': 'Anniversaire client — 1 an',
+  'Seasonal Reminder — 6 Months': 'Rappel saisonnier — 6 mois',
+  'Seasonal Reminder — 6 Months After Job': 'Rappel saisonnier — 6 mois après le job',
 };
 
 function localizeAutomationName(name: string, lang: string): string {
@@ -227,30 +288,34 @@ function formatDelay(seconds: number, lang: string): string {
   return `${m} ${lang === 'fr' ? 'mois' : (m > 1 ? 'months' : 'month')} ${dir}`;
 }
 
-function getChannels(actions: AutomationRule['actions']): string[] {
+function getChannels(actions: AutomationRule['actions'], fr: boolean): string[] {
+  const taskLabel = fr ? 'Tâche' : 'Task';
+  const reviewLabel = fr ? 'Avis' : 'Review';
   const channels: string[] = [];
   for (const a of actions) {
     if (a.type === 'send_sms' && !channels.includes('SMS')) channels.push('SMS');
     if (a.type === 'send_email' && !channels.includes('Email')) channels.push('Email');
     if (a.type === 'create_notification' && !channels.includes('Notif')) channels.push('Notif');
-    if (a.type === 'create_task' && !channels.includes('Task')) channels.push('Task');
-    if (a.type === 'request_review' && !channels.includes('Review')) channels.push('Review');
+    if (a.type === 'create_task' && !channels.includes(taskLabel)) channels.push(taskLabel);
+    if (a.type === 'request_review' && !channels.includes(reviewLabel)) channels.push(reviewLabel);
   }
   return channels;
 }
 
-function getActionLabel(type: string): string {
-  const labels: Record<string, string> = {
-    send_sms: 'Send SMS',
-    send_email: 'Send Email',
-    create_notification: 'Notification',
-    create_task: 'Create Task',
-    request_review: 'Request Review',
-    update_status: 'Update Status',
-    add_tag: 'Add Tag',
-    assign_user: 'Assign User',
+function getActionLabel(type: string, fr: boolean): string {
+  const labels: Record<string, { en: string; fr: string }> = {
+    send_sms: { en: 'Send SMS', fr: 'Envoyer un SMS' },
+    send_email: { en: 'Send Email', fr: 'Envoyer un courriel' },
+    create_notification: { en: 'Notification', fr: 'Notification' },
+    create_task: { en: 'Create Task', fr: 'Créer une tâche' },
+    request_review: { en: 'Request Review', fr: 'Demander un avis' },
+    update_status: { en: 'Update Status', fr: 'Mettre à jour le statut' },
+    add_tag: { en: 'Add Tag', fr: 'Ajouter une étiquette' },
+    assign_user: { en: 'Assign User', fr: 'Assigner un utilisateur' },
   };
-  return labels[type] || type.replace(/_/g, ' ');
+  const label = labels[type];
+  if (label) return fr ? label.fr : label.en;
+  return type.replace(/_/g, ' ');
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -509,7 +574,7 @@ export default function Automations() {
                         const Icon = meta?.icon || Zap;
                         const trigger = TRIGGER_DISPLAY[rule.trigger_event];
                         const isDefault = rule.is_preset && DEFAULT_ACTIVE_PRESETS.has(rule.preset_key || '');
-                        const channels = getChannels(rule.actions);
+                        const channels = getChannels(rule.actions, fr);
                         const isExpanded = expandedId === rule.id;
 
                         return (
@@ -578,7 +643,7 @@ export default function Automations() {
                                     ? 'bg-primary/8 text-text-primary'
                                     : 'bg-surface-tertiary text-text-tertiary',
                                 )}>
-                                  {rule.is_active ? (fr ? 'Active' : 'Active') : (t.automations.off)}
+                                  {rule.is_active ? 'Active' : (t.automations.off)}
                                 </span>
                               </td>
 
@@ -621,7 +686,7 @@ export default function Automations() {
                                         {rule.actions.map((a, i) => (
                                           <div key={i} className="flex items-center gap-1.5 text-text-secondary">
                                             <span className="w-1 h-1 rounded-full bg-text-tertiary shrink-0" />
-                                            <span>{getActionLabel(a.type)}</span>
+                                            <span>{getActionLabel(a.type, fr)}</span>
                                           </div>
                                         ))}
                                       </div>

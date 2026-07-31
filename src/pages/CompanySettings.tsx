@@ -138,7 +138,7 @@ export default function CompanySettings() {
         // Warn instead of failing silently: saving on top of a failed load
         // used to create a duplicate settings row.
         setLoadFailed(true);
-        toast.error(e?.message || 'Failed to load company settings.');
+        toast.error(e?.message || (language === 'fr' ? "Échec du chargement des paramètres de l'entreprise." : 'Failed to load company settings.'));
       }
       setLoading(false);
   }
@@ -342,7 +342,7 @@ export default function CompanySettings() {
               <div className="w-20 h-20 rounded-xl border border-outline overflow-hidden bg-surface-secondary flex items-center justify-center">
                 <img
                   src={form.logo_url}
-                  alt="Company logo"
+                  alt={language === 'fr' ? "Logo de l'entreprise" : 'Company logo'}
                   className="w-full h-full object-contain"
                 />
               </div>

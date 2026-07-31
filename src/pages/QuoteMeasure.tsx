@@ -695,14 +695,16 @@ export default function QuoteMeasure() {
 
   function finishShape(t: Tool, points: LatLng[]) {
     if (points.length < 2) return;
-    if (t === 'polygon' && points.length < 3) { toast.error('Min 3 points'); return; }
+    if (t === 'polygon' && points.length < 3) { toast.error(fr ? 'Minimum 3 points' : 'Min 3 points'); return; }
     const type: MeasurementType = t === 'select' ? 'line' : t;
     const result = computeMeasurement(type, points);
     const idx = cnt.current++;
     const newId = `sh-${idx}`;
     setShapes(p => [...p, {
       id: newId,
-      label: type === 'polygon' ? `Zone ${idx + 1}` : `Mesure ${idx + 1}`,
+      label: type === 'polygon'
+        ? `Zone ${idx + 1}`
+        : fr ? `Mesure ${idx + 1}` : `Measure ${idx + 1}`,
       color: nextColor(idx), result, notes: '', visible: true,
     }]);
     setPts([]); setSelId(newId);
@@ -728,7 +730,7 @@ export default function QuoteMeasure() {
     const shape = shapes.find(s => s.id === selId);
     if (!shape) return;
     const idx = cnt.current++;
-    setShapes(p => [...p, { ...shape, id: `sh-${idx}`, label: `${shape.label} (copy)`, color: nextColor(idx) }]);
+    setShapes(p => [...p, { ...shape, id: `sh-${idx}`, label: `${shape.label} ${fr ? '(copie)' : '(copy)'}`, color: nextColor(idx) }]);
     setSelId(`sh-${idx}`);
   }
 
@@ -780,7 +782,7 @@ export default function QuoteMeasure() {
       await persistShapes(quoteId, getCameraStateNow());
       qc.invalidateQueries({ queryKey: ['quoteMeasurements', quoteId] });
       toast.success(fr ? 'Mesures sauvegardées' : 'Saved');
-    } catch (e: any) { toast.error(e?.message || 'Error'); }
+    } catch (e: any) { toast.error(e?.message || (fr ? 'Erreur' : 'Error')); }
     finally { setSaving(false); }
   }
 
@@ -794,7 +796,7 @@ export default function QuoteMeasure() {
       await uploadMeasurementScreenshot(quoteId, blob);
       toast.success(fr ? 'Capture sauvegardée' : 'Screenshot saved');
       try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch {}
-    } catch (e: any) { toast.error(e?.message || 'Failed'); }
+    } catch (e: any) { toast.error(e?.message || (fr ? 'Échec' : 'Failed')); }
   }
 
   // Height measurements are informational (a building height isn't a billable
@@ -849,7 +851,7 @@ export default function QuoteMeasure() {
       await saveQuoteLineItems(quoteId, [...existing, ...items]);
       qc.invalidateQueries({ queryKey: ['quoteDetail', quoteId] });
       toast.success(fr ? `${shapes.length} mesure(s) envoyée(s)` : `${shapes.length} sent`);
-    } catch (e: any) { toast.error(e?.message || 'Failed'); }
+    } catch (e: any) { toast.error(e?.message || (fr ? 'Échec' : 'Failed')); }
     finally { setSaving(false); }
   }
 
@@ -926,7 +928,7 @@ export default function QuoteMeasure() {
           </div>
         </form>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button onClick={doScreenshot} title="Screenshot" className="glass-button p-1.5 rounded-lg"><Camera size={14} /></button>
+          <button onClick={doScreenshot} title={fr ? "Capture d'écran" : 'Screenshot'} className="glass-button p-1.5 rounded-lg"><Camera size={14} /></button>
           <button onClick={doSave} disabled={saving || !shapes.length}
             className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium disabled:opacity-40">
             <Save size={13} /><span className="hidden lg:inline">{fr ? 'Sauvegarder' : 'Save'}</span>

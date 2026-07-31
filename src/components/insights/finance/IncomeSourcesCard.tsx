@@ -9,8 +9,8 @@ interface IncomeSource {
   value: number;
 }
 
-function fmtDollars(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function fmtDollars(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'CAD',
     minimumFractionDigits: 0,
@@ -28,7 +28,8 @@ export default function IncomeSourcesCard({
   sources: IncomeSource[];
 }) {
   const total = sources.reduce((s, src) => s + src.value, 0) || 1;
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const locale = language === 'fr' ? 'fr-CA' : 'en-US';
   const ti = t.insights as any;
 
   return (
@@ -43,7 +44,7 @@ export default function IncomeSourcesCard({
       <div className="mb-1">
         <p className="text-xs text-zinc-400 dark:text-zinc-500 mb-0.5">{ti.totalIncome}</p>
         <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tabular-nums tracking-tight">
-          {fmtDollars(totalIncome)}
+          {fmtDollars(totalIncome, locale)}
         </p>
       </div>
       {changePct != null && (
@@ -83,7 +84,7 @@ export default function IncomeSourcesCard({
               <span className="text-sm text-zinc-600 dark:text-zinc-400">{src.name}</span>
             </div>
             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 tabular-nums">
-              {fmtDollars(src.value)}
+              {fmtDollars(src.value, locale)}
             </span>
           </div>
         ))}

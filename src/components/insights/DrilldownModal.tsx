@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 interface Column {
   key: string;
@@ -20,6 +21,8 @@ interface Props {
 }
 
 export default function DrilldownModal({ isOpen, onClose, title, subtitle, columns, data, loading }: Props) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -56,7 +59,7 @@ export default function DrilldownModal({ isOpen, onClose, title, subtitle, colum
                   {[1, 2, 3, 4, 5].map((i) => <div key={i} className="skeleton h-10 rounded-lg" />)}
                 </div>
               ) : data.length === 0 ? (
-                <div className="text-center py-10 text-text-tertiary text-sm">No data to display.</div>
+                <div className="text-center py-10 text-text-tertiary text-sm">{fr ? 'Aucune donnée à afficher.' : 'No data to display.'}</div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
@@ -85,8 +88,8 @@ export default function DrilldownModal({ isOpen, onClose, title, subtitle, colum
 
             {/* Footer */}
             <div className="px-5 py-3 border-t border-outline shrink-0 flex items-center justify-between text-xs text-text-tertiary">
-              <span>{data.length} record{data.length !== 1 ? 's' : ''}</span>
-              <button onClick={onClose} className="glass-button !py-1.5 !px-3 !text-xs">Close</button>
+              <span>{data.length} {fr ? 'enregistrement' : 'record'}{data.length !== 1 ? 's' : ''}</span>
+              <button onClick={onClose} className="glass-button !py-1.5 !px-3 !text-xs">{fr ? 'Fermer' : 'Close'}</button>
             </div>
           </motion.div>
         </div>

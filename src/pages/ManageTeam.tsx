@@ -1007,7 +1007,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
         const visible = member.show_on_leaderboard !== false;
         return (
           <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-            <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">Leaderboard</label>
+            <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Classement' : 'Leaderboard'}</label>
             <button
               type="button"
               role="switch"

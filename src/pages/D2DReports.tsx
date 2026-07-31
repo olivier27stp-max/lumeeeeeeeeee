@@ -70,7 +70,7 @@ function computeFunnel(data: LeaderboardEntry[]) {
 // ---------------------------------------------------------------------------
 // Revenue Bar Chart (horizontal)
 // ---------------------------------------------------------------------------
-function RevenueBarChart({ data }: { data: LeaderboardEntry[] }) {
+function RevenueBarChart({ data, locale }: { data: LeaderboardEntry[]; locale: string }) {
   const sorted = [...data].sort((a, b) => b.revenue - a.revenue);
   const maxRevenue = sorted[0]?.revenue || 1;
 
@@ -89,7 +89,7 @@ function RevenueBarChart({ data }: { data: LeaderboardEntry[] }) {
                 style={{ width: `${pct}%` }}
               />
               <span className="absolute inset-y-0 right-2 flex items-center text-[10px] font-semibold text-text-primary">
-                {formatCurrency(rep.revenue)}
+                {formatCurrency(rep.revenue, locale)}
               </span>
             </div>
           </div>
@@ -102,13 +102,13 @@ function RevenueBarChart({ data }: { data: LeaderboardEntry[] }) {
 // ---------------------------------------------------------------------------
 // Conversion Funnel (vertical)
 // ---------------------------------------------------------------------------
-function ConversionFunnel({ data }: { data: LeaderboardEntry[] }) {
+function ConversionFunnel({ data, fr }: { data: LeaderboardEntry[]; fr: boolean }) {
   const funnel = computeFunnel(data);
   const stages = [
-    { label: 'Doors', value: funnel.doors, color: 'bg-blue-500/70' },
+    { label: fr ? 'Portes' : 'Doors', value: funnel.doors, color: 'bg-blue-500/70' },
     { label: 'Conversations', value: funnel.conversations, color: 'bg-indigo-500/70' },
-    { label: 'Demos', value: funnel.demos, color: 'bg-violet-500/70' },
-    { label: 'Closes', value: funnel.closes, color: 'bg-emerald-500/80' },
+    { label: fr ? 'Démos' : 'Demos', value: funnel.demos, color: 'bg-violet-500/70' },
+    { label: fr ? 'Ventes' : 'Closes', value: funnel.closes, color: 'bg-emerald-500/80' },
   ];
   const maxVal = stages[0]?.value || 1;
 
@@ -231,11 +231,11 @@ export default function D2DReports() {
           ))}
           <Button variant="outline" size="sm" className="gap-1.5">
             <Filter className="h-3 w-3" />
-            Filters
+            {fr ? 'Filtres' : 'Filters'}
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5">
             <Download className="h-3 w-3" />
-            Export
+            {fr ? 'Exporter' : 'Export'}
           </Button>
         </div>
       </div>
@@ -244,7 +244,7 @@ export default function D2DReports() {
       {loading && (
         <div className="flex items-center gap-2 text-xs text-text-muted">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading report data...
+          {fr ? 'Chargement des données du rapport...' : 'Loading report data...'}
         </div>
       )}
 
@@ -266,7 +266,7 @@ export default function D2DReports() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <RevenueBarChart data={data} />
+            <RevenueBarChart data={data} locale={fr ? 'fr-CA' : 'en-CA'} />
           </CardContent>
         </Card>
 
@@ -279,7 +279,7 @@ export default function D2DReports() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ConversionFunnel data={data} />
+            <ConversionFunnel data={data} fr={fr} />
           </CardContent>
         </Card>
       </div>
@@ -294,7 +294,10 @@ export default function D2DReports() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border-subtle">
-                  {['Rep', 'Team', 'Doors', 'Closes', 'Revenue', 'Conv %', 'Trend'].map(
+                  {(fr
+                    ? ['Rep', 'Équipe', 'Portes', 'Ventes', 'Revenu', 'Conv %', 'Tendance']
+                    : ['Rep', 'Team', 'Doors', 'Closes', 'Revenue', 'Conv %', 'Trend']
+                  ).map(
                     (col) => (
                       <th
                         key={col}
@@ -337,7 +340,7 @@ export default function D2DReports() {
                       {rep.closes}
                     </td>
                     <td className="px-5 py-2.5 text-[13px] font-medium text-text-primary">
-                      {formatCurrency(rep.revenue)}
+                      {formatCurrency(rep.revenue, fr ? 'fr-CA' : 'en-CA')}
                     </td>
                     <td className="px-5 py-2.5 text-[13px] text-text-secondary">
                       {rep.conversion_rate.toFixed(1)}%
@@ -361,7 +364,7 @@ export default function D2DReports() {
                       colSpan={7}
                       className="px-5 py-8 text-center text-xs text-text-muted"
                     >
-                      No data available for this period.
+                      {fr ? 'Aucune donnée disponible pour cette période.' : 'No data available for this period.'}
                     </td>
                   </tr>
                 )}

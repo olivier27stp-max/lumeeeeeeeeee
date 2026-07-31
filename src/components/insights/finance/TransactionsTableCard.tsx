@@ -4,8 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import type { RecentTransaction } from '../../../lib/financeDashboardApi';
 import { useTranslation } from '../../../i18n';
 
-function fmtDollars(cents: number): string {
-  return new Intl.NumberFormat('en-US', {
+function fmtDollars(cents: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: 'CAD',
     minimumFractionDigits: 2,
@@ -13,20 +13,21 @@ function fmtDollars(cents: number): string {
   }).format((cents || 0) / 100);
 }
 
-function fmtDate(iso: string): string {
+function fmtDate(iso: string, fr: boolean): string {
   const d = new Date(iso);
-  return d.toLocaleDateString('en-US', {
+  const locale = fr ? 'fr-CA' : 'en-US';
+  return d.toLocaleDateString(locale, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
-  }) + ', ' + d.toLocaleTimeString('en-US', {
+  }) + ', ' + d.toLocaleTimeString(locale, {
     hour: 'numeric',
     minute: '2-digit',
-    hour12: true,
+    hour12: !fr,
   });
 }
 
-function TypeBadge({ type }: { type: string }) {
+function TypeBadge({ type, fr }: { type: string; fr: boolean }) {
   const isIncome = type === 'income';
   return (
     <span
@@ -36,7 +37,7 @@ function TypeBadge({ type }: { type: string }) {
           : 'bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400'
       }`}
     >
-      {isIncome ? 'Income' : 'Expenses'}
+      {isIncome ? (fr ? 'Revenu' : 'Income') : (fr ? 'Dépenses' : 'Expenses')}
     </span>
   );
 }
@@ -48,7 +49,9 @@ export default function TransactionsTableCard({
   transactions: RecentTransaction[];
   onViewAll?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-US';
   const ti = t.insights as any;
   const navigate = useNavigate();
   return (
@@ -69,14 +72,14 @@ export default function TransactionsTableCard({
         <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">Transaction</span>
         <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">Date</span>
         <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500">Type</span>
-        <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500 text-right">Amount</span>
+        <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500 text-right">{fr ? 'Montant' : 'Amount'}</span>
       </div>
 
       {/* Rows */}
       <div className="flex-1 overflow-y-auto divide-y divide-zinc-50 dark:divide-zinc-800">
         {transactions.length === 0 && (
           <div className="py-10 text-center text-sm text-zinc-400 dark:text-zinc-500">
-            No recent transactions
+            {fr ? 'Aucune transaction récente' : 'No recent transactions'}
           </div>
         )}
         {transactions.map((tx) => {
@@ -100,16 +103,16 @@ export default function TransactionsTableCard({
                 </span>
               </div>
               {/* Date */}
-              <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{fmtDate(tx.date)}</span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{fmtDate(tx.date, fr)}</span>
               {/* Type */}
-              <TypeBadge type={tx.type} />
+              <TypeBadge type={tx.type} fr={fr} />
               {/* Amount */}
               <span
                 className={`text-sm font-semibold tabular-nums text-right ${
                   isIncome ? 'text-zinc-900 dark:text-zinc-100' : 'text-rose-500'
                 }`}
               >
-                {isIncome ? '' : '-'}{fmtDollars(tx.amount_cents)}
+                {isIncome ? '' : '-'}{fmtDollars(tx.amount_cents, locale)}
               </span>
             </div>
           );

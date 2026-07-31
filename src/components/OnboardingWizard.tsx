@@ -149,7 +149,7 @@ export default function OnboardingWizard({
     setSaving(true);
     const url = await uploadToAttachments(file, resolvedOrgId, 'avatars');
     if (url) update('photo_url', url);
-    else toast.error('Upload failed');
+    else toast.error(state.language === 'fr' ? 'Échec du téléversement' : 'Upload failed');
     setSaving(false);
   };
   const onLogoFile = async (file: File | null) => {
@@ -157,7 +157,7 @@ export default function OnboardingWizard({
     setSaving(true);
     const url = await uploadToAttachments(file, resolvedOrgId, 'logos');
     if (url) update('logo_url', url);
-    else toast.error('Upload failed');
+    else toast.error(state.language === 'fr' ? 'Échec du téléversement' : 'Upload failed');
     setSaving(false);
   };
 
@@ -205,7 +205,7 @@ export default function OnboardingWizard({
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || 'Server error');
+        throw new Error(body?.error || (state.language === 'fr' ? 'Erreur du serveur' : 'Server error'));
       }
       try { sessionStorage.removeItem(SESSION_KEY); } catch (err) { console.warn(err); }
       onComplete();

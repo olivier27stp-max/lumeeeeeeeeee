@@ -307,7 +307,7 @@ function AddColumnModal({
       onCreated(col);
     } catch (e: any) {
       console.error('Failed to create column:', e);
-      alert(e.message || 'Failed to create column');
+      alert(e.message || (isFr ? 'Échec de la création de la colonne' : 'Failed to create column'));
     }
     setSaving(false);
   };

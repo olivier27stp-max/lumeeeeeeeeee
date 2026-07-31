@@ -3,8 +3,8 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useTranslation } from '../../i18n';
 
-function fmtMoney(cents: number) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
+function fmtMoney(cents: number, locale: string) {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format((cents || 0) / 100);
 }
 
 async function fetchData(from: string, to: string) {
@@ -31,6 +31,7 @@ async function fetchData(from: string, to: string) {
 export default function RecurringVsOneOffCard({ from, to }: { from: string; to: string }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-CA';
   const { data, isLoading } = useQuery({
     queryKey: ['recurring-vs-oneoff', from, to],
     queryFn: () => fetchData(from, to),
@@ -67,7 +68,7 @@ export default function RecurringVsOneOffCard({ from, to }: { from: string; to: 
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-[19px] font-extrabold text-text-primary tabular-nums tracking-tight leading-none">{fmtMoney(total)}</span>
+              <span className="text-[19px] font-extrabold text-text-primary tabular-nums tracking-tight leading-none">{fmtMoney(total, locale)}</span>
               <span className="text-[11px] text-text-muted font-semibold mt-1">Total</span>
             </div>
           </div>
@@ -75,13 +76,13 @@ export default function RecurringVsOneOffCard({ from, to }: { from: string; to: 
             <div className="flex items-center gap-2.5 text-[13px] font-medium text-text-secondary">
               <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--color-text-tertiary)' }} />
               {fr ? 'Récurrent' : 'Recurring'}
-              <span className="ml-auto font-bold text-text-primary tabular-nums">{fmtMoney(recurring)}</span>
+              <span className="ml-auto font-bold text-text-primary tabular-nums">{fmtMoney(recurring, locale)}</span>
               <span className="text-text-muted tabular-nums w-9 text-right">{recPct}%</span>
             </div>
             <div className="flex items-center gap-2.5 text-[13px] font-medium text-text-secondary">
               <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'var(--color-chart-primary)' }} />
               {fr ? 'Ponctuel' : 'One-off'}
-              <span className="ml-auto font-bold text-text-primary tabular-nums">{fmtMoney(oneoff)}</span>
+              <span className="ml-auto font-bold text-text-primary tabular-nums">{fmtMoney(oneoff, locale)}</span>
               <span className="text-text-muted tabular-nums w-9 text-right">{oneoffPct}%</span>
             </div>
           </div>

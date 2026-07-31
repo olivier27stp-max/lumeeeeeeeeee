@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../d2d/card';
 import { Avatar } from '../d2d/avatar';
 import { getRepAvatar } from '../../lib/constants/avatars';
+import { useTranslation } from '../../i18n';
 import type { FsCommissionEntry } from '../../types';
 
 interface Props {
@@ -20,8 +21,8 @@ interface RepRow {
   paid: number;
 }
 
-function fmtMoney(n: number) {
-  return '$' + Number(n || 0).toLocaleString('en-US');
+function fmtMoney(n: number, locale: string) {
+  return '$' + Number(n || 0).toLocaleString(locale);
 }
 
 /**
@@ -29,6 +30,9 @@ function fmtMoney(n: number) {
  * top performers and let the viewer drill into a specific rep.
  */
 export default function RepCommissionSummary({ entries, profileMap, onSelectRep }: Props) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
+  const locale = fr ? 'fr-CA' : 'en-US';
   const byRep = new Map<string, RepRow>();
   for (const e of entries) {
     const row = byRep.get(e.user_id) ?? {
@@ -50,18 +54,18 @@ export default function RepCommissionSummary({ entries, profileMap, onSelectRep 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sales reps</CardTitle>
+        <CardTitle>{fr ? 'Représentants' : 'Sales reps'}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border-subtle">
-                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">Rep</th>
-                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Deals</th>
-                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Pending</th>
-                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Paid</th>
-                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">Total earned</th>
+                <th className="px-5 py-2.5 text-left text-xs font-medium text-text-muted">{fr ? 'Représentant' : 'Rep'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Ventes' : 'Deals'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'En attente' : 'Pending'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Versé' : 'Paid'}</th>
+                <th className="px-5 py-2.5 text-right text-xs font-medium text-text-muted">{fr ? 'Total gagné' : 'Total earned'}</th>
               </tr>
             </thead>
             <tbody>
@@ -85,15 +89,15 @@ export default function RepCommissionSummary({ entries, profileMap, onSelectRep 
                     )}
                   </td>
                   <td className="px-5 py-2.5 text-right text-sm text-text-secondary">{r.deals}</td>
-                  <td className="px-5 py-2.5 text-right text-sm text-warning">{fmtMoney(r.pending)}</td>
-                  <td className="px-5 py-2.5 text-right text-sm text-success">{fmtMoney(r.paid)}</td>
-                  <td className="px-5 py-2.5 text-right text-sm font-semibold text-text-primary">{fmtMoney(r.totalEarned)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm text-warning">{fmtMoney(r.pending, locale)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm text-success">{fmtMoney(r.paid, locale)}</td>
+                  <td className="px-5 py-2.5 text-right text-sm font-semibold text-text-primary">{fmtMoney(r.totalEarned, locale)}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-5 py-8 text-center text-sm text-text-muted">
-                    No sales reps with commissions yet
+                    {fr ? 'Aucun représentant avec des commissions pour le moment' : 'No sales reps with commissions yet'}
                   </td>
                 </tr>
               )}

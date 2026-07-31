@@ -39,11 +39,13 @@ function SortableItemRow({
   onChange,
   onRemove,
   t,
+  fr,
 }: {
   item: ChecklistItem;
   onChange: (next: ChecklistItem) => void;
   onRemove: () => void;
   t: any;
+  fr: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
@@ -59,7 +61,7 @@ function SortableItemRow({
         {...listeners}
         className="mt-1.5 text-text-tertiary hover:text-text-primary cursor-grab active:cursor-grabbing"
         type="button"
-        aria-label="drag"
+        aria-label={fr ? 'Glisser pour réordonner' : 'Drag to reorder'}
       >
         <GripVertical size={16} />
       </button>
@@ -95,7 +97,7 @@ function SortableItemRow({
         type="button"
         onClick={onRemove}
         className="mt-1 text-text-tertiary hover:text-danger"
-        aria-label="remove"
+        aria-label={fr ? 'Retirer' : 'Remove'}
       >
         <X size={16} />
       </button>
@@ -130,7 +132,7 @@ export default function ChecklistTemplates() {
       const list = await listChecklistTemplates(true);
       setTemplates(list);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to load');
+      toast.error(err?.message || (fr ? 'Échec du chargement' : 'Failed to load'));
     } finally { setLoading(false); }
   }
 
@@ -183,7 +185,7 @@ export default function ChecklistTemplates() {
       setMode('list');
       await load();
     } catch (err: any) {
-      toast.error(err?.message || 'Save failed');
+      toast.error(err?.message || (fr ? "Échec de l'enregistrement" : 'Save failed'));
     } finally { setSaving(false); }
   }
 
@@ -191,7 +193,7 @@ export default function ChecklistTemplates() {
     try {
       await updateChecklistTemplate(tpl.id, { is_active: !tpl.is_active });
       await load();
-    } catch (err: any) { toast.error(err?.message || 'Failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec' : 'Failed')); }
   }
 
   async function remove(tpl: ChecklistTemplate) {
@@ -200,7 +202,7 @@ export default function ChecklistTemplates() {
       await deleteChecklistTemplate(tpl.id);
       toast.success(t.checklists.templateDeleted);
       await load();
-    } catch (err: any) { toast.error(err?.message || 'Delete failed'); }
+    } catch (err: any) { toast.error(err?.message || (fr ? 'Échec de la suppression' : 'Delete failed')); }
   }
 
   // ── EDIT VIEW ──
@@ -250,6 +252,7 @@ export default function ChecklistTemplates() {
                     onChange={(next) => setItems((prev) => prev.map((x, i) => (i === idx ? next : x)))}
                     onRemove={() => setItems((prev) => prev.filter((_, i) => i !== idx))}
                     t={t}
+                    fr={fr}
                   />
                 ))}
               </div>

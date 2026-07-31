@@ -114,7 +114,7 @@ export default function InvoiceDetails() {
       invalidateAll();
       toast.success(t.invoiceDetails.invoiceSent);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to send');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de l\'envoi' : 'Failed to send'));
     } finally {
       setSendLoading(false);
     }
@@ -127,7 +127,7 @@ export default function InvoiceDetails() {
       invalidateAll();
       toast.success(t.invoiceDetails.invoiceVoided);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de l\'opération' : 'Failed'));
     }
     setActionsOpen(false);
   }
@@ -139,7 +139,7 @@ export default function InvoiceDetails() {
       toast.success(t.invoiceDetails.invoiceDuplicated);
       navigate(`/invoices/${newId}/edit`);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de l\'opération' : 'Failed'));
     }
     setActionsOpen(false);
   }
@@ -154,7 +154,7 @@ export default function InvoiceDetails() {
       queryClient.invalidateQueries({ queryKey: ['paymentsOverview'] });
       toast.success(t.invoiceDetails.invoiceMarkedAsPaid);
     } catch (err: any) {
-      toast.error(err?.message || 'Failed');
+      toast.error(err?.message || (language === 'fr' ? 'Échec de l\'opération' : 'Failed'));
     } finally {
       setMarkingPaid(false);
     }
@@ -436,7 +436,7 @@ export default function InvoiceDetails() {
                         ? (t.invoiceDetails.recurringEnabled)
                         : (t.invoiceDetails.recurringDisabled));
                     } catch (err: any) {
-                      toast.error(err.message || 'Failed to update');
+                      toast.error(err.message || (language === 'fr' ? 'Échec de la mise à jour' : 'Failed to update'));
                     } finally {
                       setRecurringLoading(false);
                     }
@@ -476,7 +476,7 @@ export default function InvoiceDetails() {
                       queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
                       toast.success(t.invoiceDetails.intervalUpdated);
                     } catch (err: any) {
-                      toast.error(err.message || 'Failed to update');
+                      toast.error(err.message || (language === 'fr' ? 'Échec de la mise à jour' : 'Failed to update'));
                     } finally {
                       setRecurringLoading(false);
                     }

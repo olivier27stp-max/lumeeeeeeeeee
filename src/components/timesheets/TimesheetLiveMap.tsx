@@ -94,7 +94,7 @@ export default function TimesheetLiveMap<R extends LiveRep>({ reps, flyTo, onSel
 
       const popup = new mapboxgl.Popup({ offset: 22, closeButton: false, closeOnClick: false })
         .setHTML(
-          `<div style="font:600 11px Inter,system-ui,sans-serif;color:#171717;">${esc(rep.user_name || 'Unknown')}` +
+          `<div style="font:600 11px Inter,system-ui,sans-serif;color:#171717;">${esc(rep.user_name || (frRef.current ? 'Inconnu' : 'Unknown'))}` +
           `<div style="font-size:9px;color:#9ca3af;font-weight:500;">${esc(statusLabel(rep.tracking_status, frRef.current))}</div></div>`,
         );
 

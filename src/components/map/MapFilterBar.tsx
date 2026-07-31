@@ -2,6 +2,7 @@ import React from 'react';
 import { Maximize2, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { MapDateRange } from '../../lib/mapApi';
+import { useTranslation } from '../../i18n';
 
 interface MapFilterBarProps {
   dateRange: MapDateRange;
@@ -12,11 +13,11 @@ interface MapFilterBarProps {
   jobCount?: number;
 }
 
-const DATE_CHIPS: { value: MapDateRange; label: string }[] = [
-  { value: 'today', label: 'Today' },
-  { value: 'tomorrow', label: 'Tomorrow' },
-  { value: 'this_week', label: 'This Week' },
-  { value: 'all', label: 'All Scheduled' },
+const DATE_CHIPS: { value: MapDateRange; label: { fr: string; en: string } }[] = [
+  { value: 'today', label: { fr: "Aujourd'hui", en: 'Today' } },
+  { value: 'tomorrow', label: { fr: 'Demain', en: 'Tomorrow' } },
+  { value: 'this_week', label: { fr: 'Cette semaine', en: 'This Week' } },
+  { value: 'all', label: { fr: 'Toutes planifiées', en: 'All Scheduled' } },
 ];
 
 export default function MapFilterBar({
@@ -26,6 +27,8 @@ export default function MapFilterBar({
   onRefresh,
   loading,
 }: MapFilterBarProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   return (
     <div className="flex items-center justify-between gap-2 flex-wrap">
       <div className="flex items-center gap-1.5">
@@ -41,7 +44,7 @@ export default function MapFilterBar({
                 : 'border-outline-subtle bg-surface text-text-secondary hover:border-outline hover:bg-surface-secondary'
             )}
           >
-            {chip.label}
+            {fr ? chip.label.fr : chip.label.en}
           </button>
         ))}
       </div>
@@ -51,7 +54,7 @@ export default function MapFilterBar({
           <button
             type="button"
             onClick={onFitAll}
-            title="Fit all jobs"
+            title={fr ? 'Ajuster à toutes les jobs' : 'Fit all jobs'}
             className="rounded-lg border border-outline-subtle bg-surface p-1.5 text-text-tertiary hover:text-text-primary hover:border-outline transition-colors"
           >
             <Maximize2 size={13} />
@@ -61,7 +64,7 @@ export default function MapFilterBar({
           <button
             type="button"
             onClick={onRefresh}
-            title="Refresh"
+            title={fr ? 'Actualiser' : 'Refresh'}
             className={cn(
               'rounded-lg border border-outline-subtle bg-surface p-1.5 text-text-tertiary hover:text-text-primary hover:border-outline transition-colors',
               loading && 'animate-spin'

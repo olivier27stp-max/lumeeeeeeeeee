@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Plus } from 'lucide-react';
 import ChatItem, { type ChatItemData } from './ChatItem';
+import { useTranslation } from '../../i18n';
 
 const MOCK_CHATS: ChatItemData[] = [];
 
@@ -10,6 +11,8 @@ interface ChatSidebarProps {
 }
 
 export default function ChatSidebar({ activeChatId, onChatSelect }: ChatSidebarProps) {
+  const { language } = useTranslation();
+  const fr = language === 'fr';
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredChats = MOCK_CHATS.filter((chat) => {
@@ -25,7 +28,7 @@ export default function ChatSidebar({ activeChatId, onChatSelect }: ChatSidebarP
     <div className="w-[300px] border-r border-[#E5E7EB] flex flex-col bg-white shrink-0 h-full">
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
-        <h2 className="text-[20px] font-bold text-text-primary">Chats</h2>
+        <h2 className="text-[20px] font-bold text-text-primary">{fr ? 'Conversations' : 'Chats'}</h2>
         <button className="w-[30px] h-[30px] rounded-full border border-[#E5E7EB] flex items-center justify-center hover:bg-gray-50 transition-colors">
           <Plus size={16} className="text-[#6B7280]" />
         </button>
@@ -39,7 +42,7 @@ export default function ChatSidebar({ activeChatId, onChatSelect }: ChatSidebarP
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Chats search..."
+            placeholder={fr ? 'Rechercher une conversation...' : 'Chats search...'}
             className="w-full h-[36px] pl-9 pr-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
           />
         </div>
