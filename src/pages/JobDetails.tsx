@@ -56,7 +56,7 @@ import EventsPanel from '../components/events/EventsPanel';
 import { useDropZone } from '../hooks/useDropZone';
 import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type RecurrenceRule, type RecurrenceFrequency } from '../lib/recurringJobsApi';
 import { getServiceContractByJob, type ServiceContract } from '../lib/serviceContractsApi';
-import { getJobAgreementByJob, sendAgreementEmail, type JobAgreement } from '../lib/jobAgreementsApi';
+import { getJobAgreementByJob, sendAgreementEmail, sendAgreementSms, type JobAgreement } from '../lib/jobAgreementsApi';
 import { getQuoteForJob, getQuoteStatusLabel, type Quote } from '../lib/quotesApi';
 import { resolveApprovedDocument } from '../lib/approvedDocument';
 import AgreementPreviewModal from '../components/agreements/AgreementPreviewModal';
@@ -225,10 +225,18 @@ export default function JobDetails() {
   // "Send booking confirmation" picker (texto / courriel). Auto-opened when
   // landing here right after creating the job; reopenable from the More menu.
   const location = useLocation();
-  const [confirmPrompt, setConfirmPrompt] = useState<null | 'created' | 'manual'>(null);
+  const [confirmPrompt, setConfirmPrompt] = useState<null | 'created' | 'manual' | 'signed'>(null);
+  // Quand un contrat à signer existe, le prompt propose d'abord d'envoyer le
+  // contrat ; ce drapeau permet de passer outre et d'envoyer la confirmation
+  // sans attendre la signature.
+  const [confirmSkipContractGate, setConfirmSkipContractGate] = useState(false);
+  // Le prompt post-création n'ouvre qu'une fois le contrat vérifié (fetch
+  // async) — sinon il s'affiche en mode « confirmation » avant de savoir
+  // qu'un contrat attend une signature.
+  const [pendingCreatedPrompt, setPendingCreatedPrompt] = useState(false);
   useEffect(() => {
     if ((location.state as any)?.justCreated) {
-      setConfirmPrompt('created');
+      setPendingCreatedPrompt(true);
       // Clear the flag so a refresh or back-navigation doesn't re-open it.
       navigate(location.pathname, { replace: true, state: null });
     }
@@ -607,9 +615,13 @@ export default function JobDetails() {
   }, [id]);
 
   // Load written agreement (null when none / migration pending)
+  const [agreementChecked, setAgreementChecked] = useState(false);
   const reloadAgreement = useCallback(() => {
     if (!id) return;
-    getJobAgreementByJob(id).then(setAgreement).catch(() => {});
+    getJobAgreementByJob(id)
+      .then(setAgreement)
+      .catch(() => {})
+      .finally(() => setAgreementChecked(true));
   }, [id]);
 
   useEffect(() => {
@@ -625,6 +637,71 @@ export default function JobDetails() {
   // Single source of truth: the job's contractual document is the quote OR
   // the agreement, never both (same rule as the DB trigger).
   const approvedDoc = resolveApprovedDocument(sourceQuote, agreement);
+
+  // ── Contrat avant confirmation ──
+  // Un contrat exigeant une signature et pas encore signé bloque (par défaut)
+  // l'envoi de la confirmation : le prompt propose d'envoyer le contrat, et la
+  // confirmation est proposée une fois la signature reçue.
+  const contractAwaitingSignature = Boolean(
+    agreement && agreement.require_signature && agreement.status !== 'signed' && !sourceQuote,
+  );
+  const confirmAfterSignKey = id ? `lume-job-confirm-after-sign:${id}` : null;
+
+  // Ouvre le prompt post-création seulement quand on sait si un contrat existe.
+  useEffect(() => {
+    if (pendingCreatedPrompt && agreementChecked) {
+      setPendingCreatedPrompt(false);
+      setConfirmPrompt('created');
+    }
+  }, [pendingCreatedPrompt, agreementChecked]);
+
+  // Signature reçue alors qu'on attendait pour confirmer → proposer la confirmation.
+  useEffect(() => {
+    if (!confirmAfterSignKey || agreement?.status !== 'signed') return;
+    try {
+      if (localStorage.getItem(confirmAfterSignKey)) {
+        localStorage.removeItem(confirmAfterSignKey);
+        setConfirmPrompt('signed');
+      }
+    } catch { /* localStorage indisponible — tant pis, pas de prompt auto */ }
+  }, [agreement?.status, confirmAfterSignKey]);
+
+  // Pendant l'attente de signature (contrat envoyé depuis le prompt), on
+  // rafraîchit le contrat périodiquement et au retour sur l'onglet pour
+  // détecter la signature sans recharger la page.
+  useEffect(() => {
+    if (!confirmAfterSignKey || !contractAwaitingSignature) return;
+    let pending = false;
+    try { pending = !!localStorage.getItem(confirmAfterSignKey); } catch {}
+    if (!pending) return;
+    const interval = window.setInterval(reloadAgreement, 30_000);
+    const onFocus = () => reloadAgreement();
+    window.addEventListener('focus', onFocus);
+    return () => { window.clearInterval(interval); window.removeEventListener('focus', onFocus); };
+  }, [confirmAfterSignKey, contractAwaitingSignature, reloadAgreement]);
+
+  // Envoi du contrat depuis le prompt de confirmation (texto ou courriel).
+  const [contractPromptSending, setContractPromptSending] = useState<null | 'sms' | 'email'>(null);
+  const handleSendContractFromPrompt = async (channel: 'sms' | 'email') => {
+    if (!agreement) return;
+    setContractPromptSending(channel);
+    try {
+      if (channel === 'sms') await sendAgreementSms(agreement.id);
+      else await sendAgreementEmail(agreement.id);
+      try { if (confirmAfterSignKey) localStorage.setItem(confirmAfterSignKey, '1'); } catch {}
+      toast.success(language === 'fr'
+        ? 'Contrat envoyé — la confirmation vous sera proposée une fois signé.'
+        : 'Agreement sent — you will be prompted to send the confirmation once signed.');
+      reloadAgreement();
+      setConfirmPrompt(null);
+      setConfirmSkipContractGate(false);
+      setCommRefreshKey((k) => k + 1);
+    } catch (err: any) {
+      toast.error(err?.message || (language === 'fr' ? "Échec de l'envoi du contrat." : 'Failed to send the agreement.'));
+    } finally {
+      setContractPromptSending(null);
+    }
+  };
 
   // ── Agreement actions ──
   const handleAgreementDownload = async () => {
@@ -2103,56 +2180,136 @@ export default function JobDetails() {
         <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
       </div>
 
-      {/* ── Booking-confirmation picker (texto / courriel) ── */}
+      {/* ── Booking-confirmation picker (texto / courriel) ──
+          Quand un contrat doit être signé, le prompt propose d'abord d'envoyer
+          le contrat ; la confirmation est proposée après la signature. */}
       <AnimatePresence>
         {confirmPrompt && job && (
-          <ModalOverlay onClose={() => setConfirmPrompt(null)}>
+          <ModalOverlay onClose={() => { setConfirmPrompt(null); setConfirmSkipContractGate(false); }}>
             <div className="p-6">
-              <div className="flex flex-col items-center text-center mb-5">
-                {confirmPrompt === 'created' && (
-                  <span className="w-11 h-11 rounded-full bg-success-light text-success flex items-center justify-center mb-3">
-                    <CheckCircle2 size={22} />
-                  </span>
-                )}
-                <h3 className="text-[17px] font-bold text-text-primary">
-                  {confirmPrompt === 'created'
-                    ? (language === 'fr' ? 'Job créé !' : 'Job created!')
-                    : (language === 'fr' ? 'Envoyer une confirmation' : 'Send Confirmation')}
-                </h3>
-                <p className="text-[13px] text-text-secondary mt-1">
-                  {language === 'fr'
-                    ? `Envoyer une confirmation de rendez-vous${job.client_name ? ` à ${job.client_name}` : ' au client'} ?`
-                    : `Send a booking confirmation${job.client_name ? ` to ${job.client_name}` : ' to the client'}?`}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => { setConfirmPrompt(null); setShowSmsModal(true); }}
-                  className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0"
-                >
-                  <MessageSquare size={20} className="text-primary" />
-                  <span className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Par texto' : 'By text'}</span>
-                  <span className="text-[11px] text-text-tertiary truncate max-w-full">
-                    {clientInfo?.phone || (language === 'fr' ? 'Aucun numéro au dossier' : 'No phone on file')}
-                  </span>
-                </button>
-                <button
-                  onClick={() => { setConfirmPrompt(null); setEmailMode('confirmation'); setShowEmailModal(true); }}
-                  className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0"
-                >
-                  <Mail size={20} className="text-primary" />
-                  <span className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Par courriel' : 'By email'}</span>
-                  <span className="text-[11px] text-text-tertiary truncate max-w-full">
-                    {clientInfo?.email || (language === 'fr' ? 'Aucun courriel au dossier' : 'No email on file')}
-                  </span>
-                </button>
-              </div>
-              <button
-                onClick={() => setConfirmPrompt(null)}
-                className="w-full mt-3 py-2 text-[12px] text-text-tertiary hover:text-text-primary transition-colors"
-              >
-                {language === 'fr' ? 'Pas maintenant' : 'Not now'}
-              </button>
+              {contractAwaitingSignature && !confirmSkipContractGate && confirmPrompt !== 'signed' ? (
+                <>
+                  <div className="flex flex-col items-center text-center mb-5">
+                    {confirmPrompt === 'created' ? (
+                      <span className="w-11 h-11 rounded-full bg-success-light text-success flex items-center justify-center mb-3">
+                        <CheckCircle2 size={22} />
+                      </span>
+                    ) : (
+                      <span className="w-11 h-11 rounded-full bg-primary-lighter text-primary flex items-center justify-center mb-3">
+                        <FileSignature size={22} />
+                      </span>
+                    )}
+                    <h3 className="text-[17px] font-bold text-text-primary">
+                      {confirmPrompt === 'created'
+                        ? (language === 'fr' ? 'Job créé !' : 'Job created!')
+                        : (language === 'fr' ? 'Contrat à signer' : 'Agreement to sign')}
+                    </h3>
+                    <p className="text-[13px] text-text-secondary mt-1">
+                      {language === 'fr'
+                        ? `Un contrat doit être signé${job.client_name ? ` par ${job.client_name}` : ' par le client'}. Envoyez-le d'abord — la confirmation vous sera proposée une fois le contrat signé.`
+                        : `An agreement needs${job.client_name ? ` ${job.client_name}'s` : ' the client’s'} signature. Send it first — you'll be prompted to send the confirmation once it's signed.`}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => handleSendContractFromPrompt('sms')}
+                      disabled={contractPromptSending !== null}
+                      className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0 disabled:opacity-60"
+                    >
+                      <MessageSquare size={20} className="text-primary" />
+                      <span className="text-[13px] font-semibold text-text-primary">
+                        {contractPromptSending === 'sms'
+                          ? (language === 'fr' ? 'Envoi…' : 'Sending…')
+                          : (language === 'fr' ? 'Contrat par texto' : 'Agreement by text')}
+                      </span>
+                      <span className="text-[11px] text-text-tertiary truncate max-w-full">
+                        {clientInfo?.phone || (language === 'fr' ? 'Aucun numéro au dossier' : 'No phone on file')}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => handleSendContractFromPrompt('email')}
+                      disabled={contractPromptSending !== null}
+                      className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0 disabled:opacity-60"
+                    >
+                      <Mail size={20} className="text-primary" />
+                      <span className="text-[13px] font-semibold text-text-primary">
+                        {contractPromptSending === 'email'
+                          ? (language === 'fr' ? 'Envoi…' : 'Sending…')
+                          : (language === 'fr' ? 'Contrat par courriel' : 'Agreement by email')}
+                      </span>
+                      <span className="text-[11px] text-text-tertiary truncate max-w-full">
+                        {clientInfo?.email || (language === 'fr' ? 'Aucun courriel au dossier' : 'No email on file')}
+                      </span>
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setConfirmSkipContractGate(true)}
+                    className="w-full mt-3 py-2 text-[12px] text-text-secondary hover:text-text-primary transition-colors"
+                  >
+                    {language === 'fr' ? 'Envoyer la confirmation sans attendre la signature' : 'Send the confirmation without waiting for the signature'}
+                  </button>
+                  <button
+                    onClick={() => { setConfirmPrompt(null); setConfirmSkipContractGate(false); }}
+                    className="w-full mt-1 py-2 text-[12px] text-text-tertiary hover:text-text-primary transition-colors"
+                  >
+                    {language === 'fr' ? 'Pas maintenant' : 'Not now'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col items-center text-center mb-5">
+                    {(confirmPrompt === 'created' || confirmPrompt === 'signed') && (
+                      <span className="w-11 h-11 rounded-full bg-success-light text-success flex items-center justify-center mb-3">
+                        <CheckCircle2 size={22} />
+                      </span>
+                    )}
+                    <h3 className="text-[17px] font-bold text-text-primary">
+                      {confirmPrompt === 'created'
+                        ? (language === 'fr' ? 'Job créé !' : 'Job created!')
+                        : confirmPrompt === 'signed'
+                          ? (language === 'fr' ? 'Contrat signé !' : 'Agreement signed!')
+                          : (language === 'fr' ? 'Envoyer une confirmation' : 'Send Confirmation')}
+                    </h3>
+                    <p className="text-[13px] text-text-secondary mt-1">
+                      {confirmPrompt === 'signed'
+                        ? (language === 'fr'
+                          ? `${job.client_name || 'Le client'} a signé le contrat. Envoyer la confirmation de rendez-vous maintenant ?`
+                          : `${job.client_name || 'The client'} signed the agreement. Send the booking confirmation now?`)
+                        : (language === 'fr'
+                          ? `Envoyer une confirmation de rendez-vous${job.client_name ? ` à ${job.client_name}` : ' au client'} ?`
+                          : `Send a booking confirmation${job.client_name ? ` to ${job.client_name}` : ' to the client'}?`)}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => { setConfirmPrompt(null); setConfirmSkipContractGate(false); setShowSmsModal(true); }}
+                      className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0"
+                    >
+                      <MessageSquare size={20} className="text-primary" />
+                      <span className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Par texto' : 'By text'}</span>
+                      <span className="text-[11px] text-text-tertiary truncate max-w-full">
+                        {clientInfo?.phone || (language === 'fr' ? 'Aucun numéro au dossier' : 'No phone on file')}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => { setConfirmPrompt(null); setConfirmSkipContractGate(false); setEmailMode('confirmation'); setShowEmailModal(true); }}
+                      className="rounded-xl border border-outline hover:border-primary hover:bg-primary-lighter transition-colors p-4 flex flex-col items-center gap-2 min-w-0"
+                    >
+                      <Mail size={20} className="text-primary" />
+                      <span className="text-[13px] font-semibold text-text-primary">{language === 'fr' ? 'Par courriel' : 'By email'}</span>
+                      <span className="text-[11px] text-text-tertiary truncate max-w-full">
+                        {clientInfo?.email || (language === 'fr' ? 'Aucun courriel au dossier' : 'No email on file')}
+                      </span>
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => { setConfirmPrompt(null); setConfirmSkipContractGate(false); }}
+                    className="w-full mt-3 py-2 text-[12px] text-text-tertiary hover:text-text-primary transition-colors"
+                  >
+                    {language === 'fr' ? 'Pas maintenant' : 'Not now'}
+                  </button>
+                </>
+              )}
             </div>
           </ModalOverlay>
         )}

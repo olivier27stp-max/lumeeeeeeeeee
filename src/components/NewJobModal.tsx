@@ -2194,7 +2194,12 @@ export default function NewJobModal({
                     <input
                       type="checkbox"
                       checked={createContract}
-                      onChange={(event) => setCreateContract(event.target.checked)}
+                      onChange={(event) => {
+                        // Plan à forfait : les deux cases « créer un contrat »
+                        // (contrat de service + contrat écrit) restent synchronisées.
+                        setCreateContract(event.target.checked);
+                        setCreateAgreement(event.target.checked);
+                      }}
                       className="h-4 w-4 mt-0.5"
                     />
                     <span>
@@ -2556,7 +2561,11 @@ export default function NewJobModal({
                       <input
                         type="checkbox"
                         checked={createAgreement}
-                        onChange={(e) => setCreateAgreement(e.target.checked)}
+                        onChange={(e) => {
+                          setCreateAgreement(e.target.checked);
+                          // Miroir de la case du plan à forfait (voir plus haut).
+                          if (isServicePlan) setCreateContract(e.target.checked);
+                        }}
                         className="h-4 w-4 rounded accent-primary"
                       />
                       <span className="text-[13px] font-medium text-text-primary">
