@@ -18,6 +18,42 @@ import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 
+/**
+ * N7.7 — Journalise un export de données personnelles.
+ *
+ * « La RLS empêche l'accès, elle ne le journalise pas. Sans lecture journalisée,
+ *   la réponse honnête après un incident est "je ne peux pas savoir qui a lu
+ *   quoi" — la pire phrase possible dans une notification à la CAI. »
+ *
+ * `data_export_log` existait, l'écran de consultation aussi
+ * (GET /api/security/export-log), mais RIEN ne l'alimentait : 0 ligne en prod.
+ * Volontairement non bloquant — un échec de journalisation ne doit pas priver
+ * la personne concernée de son droit à la portabilité.
+ */
+async function logDataExport(params: {
+  orgId: string;
+  userId: string;
+  exportType: string;
+  entityType: string;
+  recordCount: number;
+  req: any;
+}): Promise<void> {
+  try {
+    await getServiceClient().from('data_export_log').insert({
+      org_id: params.orgId,
+      user_id: params.userId,
+      export_type: params.exportType,
+      entity_type: params.entityType,
+      record_count: params.recordCount,
+      ip_address: clientIp(params.req),
+      user_agent: String(params.req.headers?.['user-agent'] || '').slice(0, 500) || null,
+      watermark: `${params.userId}:${Date.now()}`,
+    });
+  } catch (err) {
+    console.error('[dsr] data_export_log insert failed:', err);
+  }
+}
+
 function clientIp(req: any): string | null {
   const fwd = req.headers['x-forwarded-for'];
   if (typeof fwd === 'string') return fwd.split(',')[0]?.trim() || null;
@@ -32,8 +68,22 @@ router.get('/dsr/export/me', async (req, res) => {
   if (!auth) return;
 
   const svc = getServiceClient();
+  // L'identite provient de requireAuthedClient : on n'exporte que SES propres
+  // donnees, l'autorisation est donc acquise par construction. (La garde interne
+  // d'export_user_data() compare auth.uid(), NULL sous service_role — elle ne
+  // peut pas servir ici : meme cause que /dsr/export/client/:id.)
   const { data, error } = await svc.rpc('export_user_data', { p_user_id: auth.user.id });
   if (error) return sendSafeError(res, error, 'Export failed.', '[dsr/export/me]');
+
+  // N7.7 — journaliser la lecture de donnees personnelles.
+  await logDataExport({
+    orgId: auth.orgId,
+    userId: auth.user.id,
+    exportType: 'dsr_portability',
+    entityType: 'user',
+    recordCount: 1,
+    req,
+  });
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename="lume-export-${auth.user.id}.json"`);
@@ -51,8 +101,34 @@ router.get('/dsr/export/client/:id', async (req, res) => {
   if (!/^[0-9a-f-]{36}$/i.test(clientId)) return res.status(400).json({ error: 'Invalid client id' });
 
   const svc = getServiceClient();
+
+  // N3.5 — La garde interne d'export_client_data() repose sur auth.uid(), qui
+  // est NULL sous service_role : elle renvoyait donc toujours « Not authorized »
+  // et l'export DSR etait CASSE en production pour tout le monde (verifie).
+  // On valide l'appartenance ici, avec l'orgId issu de requireAuthedClient —
+  // jamais de la requete.
+  const { data: client, error: clientErr } = await svc
+    .from('clients')
+    .select('org_id')
+    .eq('id', clientId)
+    .maybeSingle();
+
+  if (clientErr) return sendSafeError(res, clientErr, 'Export failed.', '[dsr/export/client]');
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (client.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden' });
+
   const { data, error } = await svc.rpc('export_client_data', { p_client_id: clientId });
   if (error) return sendSafeError(res, error, 'Export failed.', '[dsr/export/client]');
+
+  // N7.7 — journaliser la lecture de donnees personnelles.
+  await logDataExport({
+    orgId: auth.orgId,
+    userId: auth.user.id,
+    exportType: 'dsr_portability',
+    entityType: 'client',
+    recordCount: 1,
+    req,
+  });
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Content-Disposition', `attachment; filename="lume-client-${clientId}.json"`);
