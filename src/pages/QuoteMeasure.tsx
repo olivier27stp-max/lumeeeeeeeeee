@@ -771,8 +771,10 @@ export default function QuoteMeasure() {
   }
 
   async function doSave() {
-    if (!quoteId) { toast.error(fr ? 'Créez un devis d\'abord pour sauvegarder' : 'Create a quote first to save'); return; }
     if (!shapes.length) return;
+    // Standalone: measurements can only live on a quote, so saving routes
+    // through the same client → quote-creation flow as "Send to Quote".
+    if (!quoteId) { setQuotePickerOpen(true); return; }
     setSaving(true);
     try {
       await persistShapes(quoteId, getCameraStateNow());
