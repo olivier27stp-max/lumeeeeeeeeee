@@ -101,6 +101,19 @@ export const geocodeJobSchema = z.object({
   jobId: z.string().trim().min(1, 'jobId is required.'),
 });
 
+export const placesAutocompleteSchema = z.object({
+  input: z.string().trim().min(3, 'input too short.').max(200),
+  countries: z.array(z.string().trim().toLowerCase().length(2)).max(5).optional(),
+  language: z.string().trim().max(10).optional(),
+  sessionToken: z.string().trim().max(64).optional(),
+});
+
+export const placesDetailsSchema = z.object({
+  placeId: z.string().trim().min(5).max(300),
+  language: z.string().trim().max(10).optional(),
+  sessionToken: z.string().trim().max(64).optional(),
+});
+
 // geocode-batch has no required body fields (it fetches jobs internally)
 
 // ─── Messages ─────────────────────────────────────────────────────────────────

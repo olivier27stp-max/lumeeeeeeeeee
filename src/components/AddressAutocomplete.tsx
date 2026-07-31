@@ -3,7 +3,6 @@ import { useTranslation } from '../i18n';
 import { AlertCircle, Loader2, MapPin } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 
 /** Structured address returned when user picks a suggestion. */
 export interface StructuredAddress {
@@ -63,224 +62,60 @@ const ErrorCatcher = (() => {
   return EC as any as React.ComponentType<{ children: React.ReactNode; onError: () => void }>;
 })()
 
-// ── Google Maps script loader (inline, no separate hook needed) ──
-const SCRIPT_ID = 'google-maps-places';
-type ScriptStatus = 'idle' | 'loading' | 'ready' | 'error';
-
-function useGooglePlaces() {
-  const [status, setStatus] = useState<ScriptStatus>(() => {
-    try { if (window.google?.maps?.places) return 'ready'; } catch { /* */ }
-    return 'idle';
-  });
-
-  const apiKey = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '') as string;
-
-  useEffect(() => {
-    if (!apiKey) { setStatus('error'); return; }
-    try { if (window.google?.maps?.places) { setStatus('ready'); return; } } catch { /* */ }
-
-    const existing = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
-    if (existing) {
-      // Script tag already in DOM — poll until ready
-      const id = setInterval(() => {
-        try { if (window.google?.maps?.places) { setStatus('ready'); clearInterval(id); } } catch { /* */ }
-      }, 200);
-      return () => clearInterval(id);
-    }
-
-    setStatus('loading');
-    const s = document.createElement('script');
-    s.id = SCRIPT_ID;
-    // Classic (non-async) loading: google.maps.places is populated on load.
-    // `loading=async` would require importLibrary() and leave places undefined.
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`;
-    s.async = true;
-    s.onload = () => {
-      // The script might not expose google.maps.places immediately
-      const id = setInterval(() => {
-        try {
-          if (window.google?.maps?.places) { setStatus('ready'); clearInterval(id); }
-        } catch { /* */ }
-      }, 100);
-      setTimeout(() => { clearInterval(id); setStatus((prev) => prev === 'ready' ? prev : 'error'); }, 10000);
-    };
-    s.onerror = () => setStatus('error');
-    document.head.appendChild(s);
-  }, [apiKey]);
-
-  return { isReady: status === 'ready', isLoading: status === 'loading' || status === 'idle', isError: status === 'error', hasKey: Boolean(apiKey) };
-}
-
-// ── Org location bias ──
-// Suggestions are biased around the company's address (company_settings) so
-// nearby streets rank first. Geocoded once per session; anonymous visitors
-// (public request form) simply get no bias — Google falls back to IP bias.
-const ORG_GEO_CACHE_KEY = 'lume:org-geo';
-let orgBiasPromise: Promise<{ lat: number; lng: number } | null> | null = null;
-
-function getOrgLocationBias(): Promise<{ lat: number; lng: number } | null> {
-  if (!orgBiasPromise) {
-    orgBiasPromise = (async () => {
-      try {
-        const cached = sessionStorage.getItem(ORG_GEO_CACHE_KEY);
-        if (cached) return JSON.parse(cached);
-        const orgId = await getCurrentOrgIdOrThrow();
-        const { data } = await supabase
-          .from('company_settings')
-          .select('street1, city, province, postal_code')
-          .eq('org_id', orgId)
-          .limit(1)
-          .maybeSingle();
-        const query = [data?.street1, data?.city, data?.province, data?.postal_code]
-          .filter(Boolean).join(', ').trim();
-        if (!query) return null;
-        const geocoder = new window.google.maps.Geocoder();
-        const res = await geocoder.geocode({ address: query });
-        const loc = res.results?.[0]?.geometry?.location;
-        if (!loc) return null;
-        const point = { lat: loc.lat(), lng: loc.lng() };
-        sessionStorage.setItem(ORG_GEO_CACHE_KEY, JSON.stringify(point));
-        return point;
-      } catch {
-        return null;
-      }
-    })();
-  }
-  return orgBiasPromise;
-}
-
-// ── Suggestion fetching ──
-// Uses the new Places Autocomplete Data API (AutocompleteSuggestion) when the
-// key supports it, falling back to the legacy AutocompleteService otherwise.
-// We render our own dropdown: the input stays a plain controlled input, so
-// Google can never hijack or disable it (the old widget did exactly that when
-// a Places request failed, freezing the field after a few keystrokes).
+// ── Server proxy calls ──
+// Suggestions go through our own API (/api/places/*): the browser Google key
+// is referer-restricted and broke on new domains, and the legacy Google widget
+// used to disable the input outright when its request failed. Server-side the
+// key always works, and the org's address biases results to nearby streets.
 interface SuggestionItem {
   placeId: string;
   main: string;
   secondary: string;
-  /** New-API prediction object (has .toPlace()) — null for legacy results. */
-  prediction: any | null;
 }
 
-const BIAS_RADIUS_METERS = 50000;
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 250;
 
-// Flipped when the new Places API rejects (not enabled / not allowed for the
-// key) so later queries go straight to the legacy service.
-let newPlacesApiFailed = false;
+async function apiHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+    const activeOrg = localStorage.getItem('lume-active-org') || '';
+    if (activeOrg) headers['x-org-id'] = activeOrg;
+  } catch { /* unauthenticated (public form) — server will refuse, input stays manual */ }
+  return headers;
+}
 
 async function fetchSuggestions(
   input: string,
-  countries: string[],
-  sessionToken: any,
+  countries: string[] | undefined,
+  sessionToken: string,
   language: string,
-): Promise<SuggestionItem[]> {
-  const places: any = window.google?.maps?.places;
-  if (!places) return [];
-  // The bias is a nice-to-have — never let it delay or block suggestions.
-  const bias = await Promise.race([
-    getOrgLocationBias(),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
-  ]);
-
-  if (!newPlacesApiFailed && places.AutocompleteSuggestion?.fetchAutocompleteSuggestions) {
-    try {
-      const req: any = {
-        input,
-        sessionToken,
-        includedRegionCodes: countries,
-        language,
-      };
-      if (bias) req.locationBias = { center: bias, radius: BIAS_RADIUS_METERS };
-      const { suggestions } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
-      return (suggestions || [])
-        .map((s: any) => {
-          const p = s.placePrediction;
-          if (!p) return null;
-          return {
-            placeId: p.placeId,
-            main: p.mainText?.text || p.text?.text || '',
-            secondary: p.secondaryText?.text || '',
-            prediction: p,
-          };
-        })
-        .filter(Boolean) as SuggestionItem[];
-    } catch (err) {
-      newPlacesApiFailed = true;
-      console.warn('[AddressAutocomplete] new Places API rejected, falling back to legacy:', err);
-    }
-  }
-
-  // Legacy fallback
-  const svc = new places.AutocompleteService();
-  const req: any = {
-    input,
-    sessionToken,
-    types: ['address'],
-    componentRestrictions: { country: countries },
-  };
-  if (bias) {
-    req.location = new window.google.maps.LatLng(bias.lat, bias.lng);
-    req.radius = BIAS_RADIUS_METERS;
-  }
-  const preds = await new Promise<any[]>((resolve) => {
-    svc.getPlacePredictions(req, (results: any, status: any) => {
-      resolve(status === 'OK' && results ? results : []);
-    });
+): Promise<SuggestionItem[] | null> {
+  const res = await fetch('/api/places/autocomplete', {
+    method: 'POST',
+    headers: await apiHeaders(),
+    body: JSON.stringify({ input, countries, sessionToken, language }),
   });
-  return preds.map((p: any) => ({
-    placeId: p.place_id,
-    main: p.structured_formatting?.main_text || p.description || '',
-    secondary: p.structured_formatting?.secondary_text || '',
-    prediction: null,
-  }));
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  return (data?.suggestions || []) as SuggestionItem[];
 }
 
-async function resolvePlace(item: SuggestionItem): Promise<StructuredAddress | null> {
-  try {
-    if (item.prediction?.toPlace) {
-      const place = item.prediction.toPlace();
-      await place.fetchFields({ fields: ['addressComponents', 'formattedAddress', 'location', 'id'] });
-      const comps: any[] = place.addressComponents || [];
-      const get = (type: string) => comps.find((c) => (c.types || []).includes(type))?.longText || '';
-      return {
-        formatted_address: place.formattedAddress || '',
-        street_number: get('street_number'),
-        street_name: get('route'),
-        city: get('locality') || get('sublocality') || get('postal_town'),
-        province: get('administrative_area_level_1'),
-        postal_code: get('postal_code'),
-        country: get('country'),
-        latitude: place.location?.lat() ?? null,
-        longitude: place.location?.lng() ?? null,
-        place_id: place.id || item.placeId,
-      };
-    }
-    // Legacy: resolve details through the Geocoder (no DOM node needed).
-    const geocoder = new window.google.maps.Geocoder();
-    const res = await geocoder.geocode({ placeId: item.placeId });
-    const r = res.results?.[0];
-    if (!r) return null;
-    const get = (type: string) => r.address_components?.find((c) => c.types.includes(type))?.long_name || '';
-    const loc = r.geometry?.location;
-    return {
-      formatted_address: r.formatted_address || '',
-      street_number: get('street_number'),
-      street_name: get('route'),
-      city: get('locality') || get('sublocality') || get('postal_town'),
-      province: get('administrative_area_level_1'),
-      postal_code: get('postal_code'),
-      country: get('country'),
-      latitude: loc ? loc.lat() : null,
-      longitude: loc ? loc.lng() : null,
-      place_id: item.placeId,
-    };
-  } catch (err) {
-    console.error('[AddressAutocomplete] place details error:', err);
-    return null;
-  }
+async function resolvePlace(
+  placeId: string,
+  sessionToken: string,
+  language: string,
+): Promise<StructuredAddress | null> {
+  const res = await fetch('/api/places/details', {
+    method: 'POST',
+    headers: await apiHeaders(),
+    body: JSON.stringify({ placeId, sessionToken, language }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => null);
+  return (data?.address as StructuredAddress) || null;
 }
 
 // ── Main component ──
@@ -288,7 +123,6 @@ function AddressAutocompleteInner({
   value, onChange, onSelect, duplicateWarning, className, placeholder, restrictCountries, hideStatusHint,
 }: AddressAutocompleteProps) {
   const { t, language } = useTranslation();
-  const { isReady, isLoading, isError, hasKey } = useGooglePlaces();
   const inputRef = useRef<HTMLInputElement>(null);
   const cbRef = useRef({ onChange, onSelect });
   cbRef.current = { onChange, onSelect };
@@ -298,7 +132,8 @@ function AddressAutocompleteInner({
   const [activeIdx, setActiveIdx] = useState(-1);
   const [fetching, setFetching] = useState(false);
   const [noResults, setNoResults] = useState(false);
-  const tokenRef = useRef<any>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const tokenRef = useRef<string>('');
   const requestSeqRef = useRef(0);
   const suppressFetchRef = useRef(false);
   const countriesRef = useRef(restrictCountries);
@@ -306,7 +141,7 @@ function AddressAutocompleteInner({
 
   // Debounced suggestion fetch on user input
   useEffect(() => {
-    if (!isReady || !focused) return;
+    if (!focused) return;
     if (suppressFetchRef.current) { suppressFetchRef.current = false; return; }
     const query = value.trim();
     if (query.length < MIN_QUERY_LENGTH) {
@@ -316,13 +151,17 @@ function AddressAutocompleteInner({
     const seq = ++requestSeqRef.current;
     const timer = setTimeout(async () => {
       try {
-        if (!tokenRef.current) {
-          const Token = (window.google?.maps?.places as any)?.AutocompleteSessionToken;
-          tokenRef.current = Token ? new Token() : null;
-        }
+        if (!tokenRef.current) tokenRef.current = crypto.randomUUID();
         setFetching(true);
-        const items = await fetchSuggestions(query, countriesRef.current || ['ca'], tokenRef.current, language);
+        const items = await fetchSuggestions(query, countriesRef.current, tokenRef.current, language);
         if (seq !== requestSeqRef.current) return; // stale response
+        if (items === null) {
+          // Server refused (not configured / not authed) — degrade to manual input
+          setUnavailable(true);
+          setSuggestions([]); setOpen(false); setNoResults(false);
+          return;
+        }
+        setUnavailable(false);
         setSuggestions(items);
         setActiveIdx(-1);
         setNoResults(items.length === 0);
@@ -335,7 +174,7 @@ function AddressAutocompleteInner({
       }
     }, DEBOUNCE_MS);
     return () => { clearTimeout(timer); };
-  }, [value, isReady, focused, language]);
+  }, [value, focused, language]);
 
   async function pick(item: SuggestionItem) {
     setOpen(false);
@@ -343,8 +182,9 @@ function AddressAutocompleteInner({
     setNoResults(false);
     suppressFetchRef.current = true;
     cbRef.current.onChange(item.secondary ? `${item.main}, ${item.secondary}` : item.main);
-    const addr = await resolvePlace(item);
-    tokenRef.current = null; // session consumed by the details call
+    const token = tokenRef.current;
+    tokenRef.current = ''; // session consumed by the details call
+    const addr = await resolvePlace(item.placeId, token, language);
     if (!addr) return;
     suppressFetchRef.current = true;
     cbRef.current.onChange(addr.formatted_address);
@@ -372,8 +212,7 @@ function AddressAutocompleteInner({
     }
   }
 
-  // Fallback label for missing key or error
-  const hint = hideStatusHint ? null : !hasKey ? t.address.apiKeyMissing : isError ? t.address.loadError : null;
+  const hint = hideStatusHint ? null : unavailable ? t.address.loadError : null;
 
   return (
     <div>
@@ -394,7 +233,7 @@ function AddressAutocompleteInner({
           aria-expanded={open}
           aria-autocomplete="list"
         />
-        {((isLoading && hasKey) || fetching) && (
+        {fetching && (
           <Loader2 size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-text-tertiary" />
         )}
         {open && (suggestions.length > 0 || noResults) && (
@@ -435,7 +274,7 @@ function AddressAutocompleteInner({
         )}
       </div>
       {hint && (
-        <p className={cn('mt-1 flex items-center gap-1 text-[11px]', isError && hasKey ? 'text-danger' : 'text-text-tertiary')}>
+        <p className="mt-1 flex items-center gap-1 text-[11px] text-text-tertiary">
           <AlertCircle size={11} /> {hint}
         </p>
       )}
