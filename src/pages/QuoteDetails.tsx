@@ -301,6 +301,14 @@ export default function QuoteDetails() {
                   }}
                     disabled={!entityEmail || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                     <Mail size={14} /> {isFr ? 'Courriel' : 'Email'}</button>
+                  <button onClick={() => {
+                    const target = entityPhone || '';
+                    if (!target) return;
+                    if (typeof window !== 'undefined' && !window.confirm(isFr ? `Envoyer la soumission par texto à ${target}?` : `Send quote by text to ${target}?`)) return;
+                    act(async () => { await sendQuoteSms(quote.id); toast.success(isFr ? 'Texto envoyé' : 'Text sent'); loadQuote(); });
+                  }}
+                    disabled={!entityPhone || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
+                    <MessageSquare size={14} /> {isFr ? 'Texto' : 'Text message'}</button>
                   <div className="border-t border-outline my-1" />
                   <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{isFr ? 'Marquer comme...' : 'Mark as...'}</p>
                   <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'awaiting_response'); toast.success(isFr ? 'En attente de réponse' : 'Awaiting Response'); loadQuote(); })}
