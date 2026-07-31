@@ -71,7 +71,7 @@ export const gmailProvider: EmailProviderDefinition = {
       }),
     });
 
-    const json = await res.json().catch(() => ({}));
+    const json = (await res.json().catch(() => ({}))) as Record<string, any>;
     if (!res.ok) {
       throw new Error(`Gmail token exchange failed: ${json.error_description || json.error || res.status}`);
     }
@@ -105,7 +105,7 @@ export const gmailProvider: EmailProviderDefinition = {
       }),
     });
 
-    const json = await res.json().catch(() => ({}));
+    const json = (await res.json().catch(() => ({}))) as Record<string, any>;
     if (!res.ok) {
       throw new Error(`Gmail token refresh failed: ${json.error_description || json.error || res.status}`);
     }
@@ -124,7 +124,7 @@ export const gmailProvider: EmailProviderDefinition = {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) throw new Error(`Gmail userinfo failed: ${res.status}`);
-    const json = await res.json();
+    const json = (await res.json()) as Record<string, any>;
     return String(json.email || '');
   },
 };

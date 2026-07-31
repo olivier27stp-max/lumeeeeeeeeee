@@ -326,7 +326,7 @@ router.get('/email/messages/:messageId/attachments/:attachmentId', async (req, r
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     if (!gRes.ok) { res.status(502).json({ error: 'Failed to fetch attachment' }); return; }
-    const json = await gRes.json();
+    const json = (await gRes.json()) as Record<string, any>;
     const data = Buffer.from(String(json.data || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 
     res.setHeader('Content-Type', meta.mimeType || 'application/octet-stream');

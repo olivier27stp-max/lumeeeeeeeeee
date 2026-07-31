@@ -78,7 +78,7 @@ export async function sendGmail(params: SendParams): Promise<{ id: string; threa
     body: JSON.stringify(payload),
   });
 
-  const json = await res.json().catch(() => ({}));
+  const json = (await res.json().catch(() => ({}))) as Record<string, any>;
   if (!res.ok) {
     throw new Error(`Gmail send failed: ${json.error?.message || res.status}`);
   }

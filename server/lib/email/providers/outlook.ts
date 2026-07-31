@@ -69,7 +69,7 @@ export const outlookProvider: EmailProviderDefinition = {
       body: new URLSearchParams(body),
     });
 
-    const json = await res.json().catch(() => ({}));
+    const json = (await res.json().catch(() => ({}))) as Record<string, any>;
     if (!res.ok) {
       throw new Error(`Outlook token exchange failed: ${json.error_description || json.error || res.status}`);
     }
@@ -106,7 +106,7 @@ export const outlookProvider: EmailProviderDefinition = {
       body: new URLSearchParams(body),
     });
 
-    const json = await res.json().catch(() => ({}));
+    const json = (await res.json().catch(() => ({}))) as Record<string, any>;
     if (!res.ok) {
       throw new Error(`Outlook token refresh failed: ${json.error_description || json.error || res.status}`);
     }
@@ -124,7 +124,7 @@ export const outlookProvider: EmailProviderDefinition = {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) throw new Error(`Graph /me failed: ${res.status}`);
-    const json = await res.json();
+    const json = (await res.json()) as Record<string, any>;
     // mail is the primary SMTP address; userPrincipalName is the fallback.
     return String(json.mail || json.userPrincipalName || '');
   },

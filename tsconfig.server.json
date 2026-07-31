@@ -2,12 +2,17 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    // Le serveur est execute par `tsx` (voir package.json: api:dev/start), qui
+    // resout les imports comme un bundler — pas comme Node ESM natif. Declarer
+    // NodeNext ici produisait 513 erreurs TS2835 « missing .js extension » sur
+    // du code qui tourne parfaitement, et faisait degrader en `unknown` les
+    // types issus des modules non resolus (d'ou de fausses erreurs en cascade
+    // dans search.ts). On aligne donc la verification sur le runtime reel.
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022"],
     "types": ["node"],
     "jsx": "preserve",
-    "allowImportingTsExtensions": false,
     "noEmit": true
   },
   "include": ["server/**/*.ts"],
