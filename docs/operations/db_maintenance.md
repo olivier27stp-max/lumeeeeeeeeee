@@ -41,16 +41,24 @@ est un incident. Un cron qui échoue en silence est un cron qui n'existe pas.
 
 ---
 
-## 2. ⚠️ Le trou principal : personne n'est prévenu
+## 2. Alerte sortante — active, mais il manque une variable
 
-**Les sondes écrivent, mais rien ne notifie.** `lume_invariant_checks` consigne
-ses défaillances dans `security_events`, et `security_events` n'est lu par
-personne automatiquement.
+`server/lib/security-alerting.ts` surveille `security_events` toutes les
+10 minutes et envoie **un courriel de synthèse** par salve pour les évènements
+`high`/`critical` non résolus. Démarré automatiquement avec le serveur.
 
-C'est le dernier maillon manquant, et c'est le plus important : une détection
-que personne ne regarde équivaut à pas de détection.
+> ⚠️ **Il faut définir `SECURITY_ALERT_EMAIL`** (variable Railway). Sans elle,
+> les évènements sortent uniquement dans les journaux du serveur, avec un
+> avertissement affiché une fois au démarrage. Le mécanisme tourne, mais
+> personne ne reçoit rien.
 
-**En attendant, contrôle manuel — à faire chaque matin :**
+**Limites connues de cette première version** : le repère de progression est en
+mémoire, donc un redéploiement peut manquer ou re-notifier quelques évènements ;
+et le mécanisme suppose une seule instance de serveur. Pour un vrai canal
+d'astreinte (Slack, PagerDuty), une seule fonction est à remplacer dans ce
+fichier.
+
+**Contrôle manuel, utile en complément :**
 
 ```sql
 select created_at::timestamp(0), event_type, severity, details
@@ -61,10 +69,7 @@ select created_at::timestamp(0), event_type, severity, details
 
 **Zéro ligne = tout va bien.** Toute ligne est à traiter le jour même.
 
-**Pour fermer ce trou** (une demi-journée) : brancher un webhook sortant sur
-l'insertion dans `security_events` (Supabase Database Webhooks → Slack ou
-courriel), ou faire lire la table par le serveur au démarrage et à intervalle
-régulier.
+Zéro ligne = tout va bien.
 
 ---
 
@@ -190,9 +195,9 @@ Par ordre de rentabilité.
 
 | # | Manque | Effort | Pourquoi ça compte |
 |---|---|---|---|
-| 1 | **Alerte sortante sur `security_events`** | ½ journée | Sans elle, toute la détection installée ne sert à rien |
+| 1 | ~~Alerte sortante sur `security_events`~~ | ✅ **fait** | Il reste à définir `SECURITY_ALERT_EMAIL` dans Railway |
 | 2 | **Tester une restauration** | 2 h | Une sauvegarde jamais restaurée n'est pas une sauvegarde |
-| 3 | **Capturer les connexions échouées** | 1 journée | Le login ne passe pas par le serveur ; il faut un Auth Hook Supabase. Sans ça, aucune détection de force brute |
+| 3 | ~~Capturer les connexions échouées~~ | ✅ **fait** | `POST /api/auth/login-failed` ; toute la chaîne force brute → alerte → blocage d'IP revit |
 | 4 | **Environnement de staging** | 1 journée | Impossible aujourd'hui de tester une migration ailleurs qu'en production |
 | 5 | **Rendre le dossier de migrations exécutable** | 1 journée | 25 collisions de timestamps : `supabase db push` est inutilisable, tout est appliqué à la main, et la dérive est déjà prouvée |
 | 6 | **Activer le test d'isolation en CI** | ½ journée | Aujourd'hui il sort **en vert** sans avoir rien testé. Nécessite le point 4 |
@@ -219,3 +224,44 @@ Ces tables existent et fonctionnent — la déclaration d'incident et l'effaceme
 DSR ont été réparés le 31 juillet et testés. Elles sont vides parce que rien ne
 s'est encore produit, **sauf `data_export_log`** dont le remplissage doit être
 confirmé par un export réel.
+
+---
+
+## 7. Détecter les migrations qui ne se sont jamais appliquées
+
+**Ajouté le 2026-07-31**, après en avoir trouvé deux par hasard, chacune ayant
+coûté une fonctionnalité pendant des semaines : le filtre « factures par
+vendeur » (perdu sur une collision d'horodatage) et la table
+`quote_measurement_camera` (simplement oubliée, horodatage pourtant unique).
+
+```bash
+npm run check:missing-migrations
+```
+
+Le script compare ce que chaque migration prétend créer — tables, fonctions,
+colonnes — à ce qui existe réellement dans le catalogue. Il écarte les objets
+volontairement supprimés par une migration ultérieure.
+
+**C'est un détecteur, pas un correcteur, et sa sortie demande un tri.** Une
+suspecte peut être une migration morte sans conséquence. La question qui tranche
+est toujours la même : **est-ce que le code en dépend ?**
+
+```bash
+grep -rl "<nom_de_objet>" src/ server/
+```
+
+Zéro résultat → dette technique, sans urgence. Des résultats → fonctionnalité
+potentiellement cassée, à traiter.
+
+**Avant de rejouer une vieille migration**, vérifier que TOUTES ses références
+existent encore. Une migration du 17 juillet a cassé la liste des factures en
+production parce qu'elle citait `payments.card_last4`, colonne supprimée depuis.
+Le schéma bouge sous les vieilles migrations.
+
+### État au 2026-07-31
+
+24 groupes de collisions d'horodatage (51 fichiers), et **10 migrations
+suspectes — toutes sans dépendance dans le code**. La seule qu'il touche
+(`20260506000000_jobs_structured_address`) est explicitement contournée :
+`src/lib/jobsApi.ts:665-670` retire ces champs du payload et documente que les
+colonnes n'existent pas. Aucune fonctionnalité cassée à ce jour.
