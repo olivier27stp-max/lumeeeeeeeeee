@@ -9,19 +9,44 @@
  * Height = roof − ground. (We don't guess "is this click on a building" — the user
  * tells us by click order — because Solar bounding boxes overlap streets.)
  *
- * Solar is CORS-enabled for the app origin (direct browser fetch).
+ * The lookups go through the server relay (/api/geocode/elevation) because the
+ * browser key is referer-restricted and doesn't cover the Solar/Elevation APIs
+ * on every domain — same fix as the address autocomplete. The direct browser
+ * calls remain as fallbacks.
  */
 
-/** Ground/terrain elevation in meters above sea level, or null. */
+import { supabase } from './supabase';
+
+/** Server relay lookup — returns null on any failure so callers can fall back. */
+async function serverElevation(surface: 'ground' | 'roof', lat: number, lng: number): Promise<number | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return null;
+    const res = await fetch('/api/geocode/elevation', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng, surface }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return typeof data?.elevation === 'number' ? data.elevation : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ground/terrain elevation in meters above sea level, or null.
+ *  Browser ElevationService first (the REST endpoint rejects referer-restricted
+ *  keys, so the relay is only a fallback here — the opposite of the roof). */
 export async function groundElevation(lat: number, lng: number): Promise<number | null> {
   try {
     const svc = new google.maps.ElevationService();
     const res = await svc.getElevationForLocations({ locations: [{ lat, lng }] });
     const e = res.results?.[0]?.elevation;
-    return typeof e === 'number' ? e : null;
-  } catch {
-    return null;
-  }
+    if (typeof e === 'number') return e;
+  } catch { /* fall through to relay */ }
+  return serverElevation('ground', lat, lng);
 }
 
 /**
@@ -29,6 +54,8 @@ export async function groundElevation(lat: number, lng: number): Promise<number 
  * Solar roof segment to the click. Returns null when Google has no roof data there.
  */
 export async function roofElevation(lat: number, lng: number, apiKey: string): Promise<number | null> {
+  const relayed = await serverElevation('roof', lat, lng);
+  if (relayed != null) return relayed;
   try {
     const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&key=${apiKey}`;
     const r = await fetch(url);

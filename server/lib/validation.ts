@@ -411,6 +411,14 @@ export const commissionActionSchema = z.object({
   id: z.string().trim().optional(),
 }).passthrough();
 
+// ─── Elevation (height tool relay) ──────────────────────────────
+
+export const elevationSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  surface: z.enum(['ground', 'roof']),
+});
+
 // ─── Courses (LMS) ──────────────────────────────────────────────
 
 const optionalStorageUrl = z.string().trim().max(2000).optional().nullable();
