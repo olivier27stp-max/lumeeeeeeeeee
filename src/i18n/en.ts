@@ -1653,6 +1653,7 @@ const en = {
     country: 'Country',
     apiKeyMissing: 'Google Maps API key not configured — address autocomplete disabled.',
     loadError: 'Could not load Google Maps. You can still type the address manually.',
+    noResults: 'No addresses found.',
     duplicateWarning: 'This address is already used by: {names}',
   },
 

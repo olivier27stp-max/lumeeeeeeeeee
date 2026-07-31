@@ -1645,6 +1645,7 @@ const fr: TranslationKeys = {
     country: 'Pays',
     apiKeyMissing: 'Clé API Google Maps non configurée — autocomplétion désactivée.',
     loadError: 'Impossible de charger Google Maps. Tu peux quand même taper l\'adresse manuellement.',
+    noResults: 'Aucune adresse trouvée.',
     duplicateWarning: 'Cette adresse est déjà utilisée par : {names}',
   },
 
