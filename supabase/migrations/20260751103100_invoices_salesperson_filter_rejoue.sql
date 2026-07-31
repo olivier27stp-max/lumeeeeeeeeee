@@ -1,3 +1,36 @@
+-- ############################################################################
+-- RENOMMEE ET CORRIGEE LE 2026-07-31 — lire ceci avant de la rejouer
+-- ############################################################################
+--
+-- Cette migration s'appelait 20260717000000_invoices_salesperson_filter.sql et
+-- N'A JAMAIS ETE APPLIQUEE, pendant deux semaines, sans que personne le sache.
+--
+-- CAUSE : elle partageait son horodatage 20260717000000 avec
+-- 20260717000000_team_members_birth_date.sql. Or ce prefixe a 14 chiffres est
+-- la CLE PRIMAIRE du registre supabase_migrations.schema_migrations : des deux,
+-- une seule pouvait etre enregistree. birth_date a gagne, le filtre vendeur a
+-- ete perdu en silence.
+--
+-- C'est la preuve concrete que les 25 collisions d'horodatage du dossier ne
+-- sont pas un probleme theorique : celle-ci a coute une fonctionnalite
+-- utilisateur (filtrer les factures par vendeur) pendant deux semaines.
+-- Verifie : le registre ne compte que 250 versions pour 353 fichiers.
+--
+-- Renommee ici avec un horodatage unique pour qu'elle soit enfin enregistrable.
+--
+-- ⚠️ ELLE CONTENAIT AUSSI UN DEFAUT, corrige plus bas : ecrite le 17 juillet,
+-- elle referencait payments.card_last4 et payments.card_brand, colonnes
+-- disparues du schema depuis. L'appliquer telle quelle cassait la liste des
+-- factures en ERROR 42703. C'est arrive en production le 2026-07-31 a 14:58,
+-- et a ete corrige a 15:02 — la lecon est notee dans docs/operations :
+-- rejouer une vieille migration exige de verifier que TOUTES ses references
+-- existent encore.
+--
+-- Verifie apres correction, en simulant un membre authentifie :
+--   liste normale (9 arguments)      -> 5 factures
+--   filtre vendeur (10 arguments)    -> repond correctement
+-- ############################################################################
+
 -- ════════════════════════════════════════════════════════════════
 -- Invoices — salesperson assignment + salesperson filter
 --
@@ -134,7 +167,15 @@ begin
     left join public.jobs ij on ij.id = i.job_id
     -- latest succeeded payment for this invoice (limit 1 → no row fan-out)
     left join lateral (
-      select p.id, p.method, p.provider, p.card_last4, p.card_brand, p.client_id
+      -- CORRIGE 2026-07-31 : cette migration, ecrite le 17 juillet, referencait
+      -- payments.card_last4 et payments.card_brand. Ces deux colonnes n'existent
+      -- plus (seul `method` subsiste). Appliquee telle quelle, elle produisait
+      -- ERROR 42703 sur CHAQUE appel — la liste des factures ne repondait plus.
+      -- On garde les colonnes dans la sortie, toujours nulles, pour ne pas
+      -- changer la forme du resultat attendue par le client.
+      select p.id, p.method, p.provider,
+             null::text as card_last4, null::text as card_brand,
+             p.client_id
       from public.payments p
       where p.invoice_id = i.id
         and p.org_id = v_org
