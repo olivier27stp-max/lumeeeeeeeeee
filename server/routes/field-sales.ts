@@ -526,8 +526,23 @@ router.delete('/houses/:id', async (req: Request, res: Response) => {
 
     if (hErr) return sendSafeError(res, hErr, 'Field sales operation failed.', '[field-sales]');
 
-    // Delete associated pin (scoped to org for safety)
-    const { error: pinErr, count: pinCount } = await admin
+    // Suppression du pin associé, TOUJOURS bornée à l'org de l'appelant.
+    //
+    // Il y avait ici un repli « au cas où le pin aurait un autre org_id » qui
+    // supprimait par house_id SANS filtre d'org. Deux défauts (audit 2026-07-31) :
+    //
+    //   1. il s'exécutait SYSTÉMATIQUEMENT — `supabase-js` ne renvoie `count`
+    //      que si on le demande via { count: 'exact' }, donc `pinCount` valait
+    //      toujours null et la condition `!pinCount` toujours vrai ;
+    //   2. sans filtre d'org, un utilisateur authentifié pouvait supprimer les
+    //      pins d'une AUTRE organisation en passant son house_id — les deux
+    //      requêtes précédentes, elles, sont correctement bornées et
+    //      n'affectaient aucune ligne.
+    //
+    // Le cas qu'il prétendait couvrir (pin dont l'org_id diffère de celui de la
+    // maison) est une incohérence de données à corriger à la source, pas à
+    // contourner par une suppression non bornée.
+    const { error: pinErr } = await admin
       .from('field_pins')
       .delete()
       .eq('house_id', req.params.id)
@@ -535,14 +550,6 @@ router.delete('/houses/:id', async (req: Request, res: Response) => {
 
     if (pinErr) {
       console.error('[field-sales] Pin delete failed:', pinErr.message);
-    }
-
-    // Also try without org_id filter as fallback (in case pin has different org_id)
-    if (!pinCount || pinCount === 0) {
-      await admin
-        .from('field_pins')
-        .delete()
-        .eq('house_id', req.params.id);
     }
 
     return res.json({ success: true });
