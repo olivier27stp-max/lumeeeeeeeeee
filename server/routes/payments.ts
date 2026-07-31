@@ -563,8 +563,23 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const session = event.data.object as Stripe.Checkout.Session;
         const meta = session.metadata || {};
 
-        // Only process sessions with our billing metadata (plan_slug present)
-        if (meta.plan_slug && session.payment_status === 'paid') {
+        // C1-05 — Billing provisioning must ONLY come from the PLATFORM account.
+        // Both webhook secrets (platform + Connect) are accepted for signature
+        // verification, so a connected merchant can craft a Checkout Session in
+        // THEIR OWN account with our billing metadata (plan_slug/plan_id/email)
+        // and a $1 amount. Such an event carries `event.account` (the merchant's
+        // acct id). Provisioning on it would let the merchant self-grant the top
+        // plan for $1, or hijack another org's billing via an email collision.
+        // Platform billing events have `event.account === null`.
+        if (connectAccountId) {
+          logSecurityEvent({
+            event_type: 'stripe_billing_event_from_connect_rejected',
+            severity: 'high',
+            source: 'webhook',
+            ip_address: extractIP(req),
+            details: { event_id: event.id, account: connectAccountId, session_id: session.id },
+          });
+        } else if (meta.plan_slug && session.payment_status === 'paid') {
           await handleCheckoutSessionCompleted(session, meta);
         }
       }
