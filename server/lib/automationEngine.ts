@@ -385,7 +385,13 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
   // Fetch pending tasks that are ready
   const { data: tasks, error } = await supabase
     .from('automation_scheduled_tasks')
-    .select('*, automation_rules(name, actions, conditions)')
+    // Clé étrangère nommée explicitement — même cause que dans
+    // recurringJobScheduler : depuis 20260751100200, automation_scheduled_tasks
+    // a deux clés vers automation_rules (l'originale, et la composite
+    // (org_id, automation_rule_id) qui porte l'isolation multi-tenant).
+    // PostgREST répondait PGRST201 et AUCUNE tâche d'automatisation planifiée
+    // n'était plus exécutée.
+    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions)')
     .eq('status', 'pending')
     .lte('execute_at', now)
     .order('execute_at', { ascending: true })

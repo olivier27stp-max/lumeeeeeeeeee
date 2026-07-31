@@ -32,7 +32,13 @@ async function processRecurringJobs(supabase: SupabaseClient) {
     // Find active rules that are due
     const { data: rules, error } = await supabase
       .from('job_recurrence_rules')
-      .select('*, jobs!inner(id, org_id, client_id, property_id, title, description, job_type, property_address, team_id, created_by)')
+      // La clé étrangère est nommée EXPLICITEMENT : depuis le durcissement
+      // multi-tenant du 30 juillet (20260751100200), job_recurrence_rules a DEUX
+      // clés vers jobs — l'originale sur job_id, et une composite (job_id,
+      // org_id) qui porte l'isolation. PostgREST ne pouvait plus choisir et
+      // répondait PGRST201, donc AUCUN job récurrent n'était plus planifié
+      // (constaté dans les journaux de production le 2026-07-31).
+      .select('*, jobs!job_recurrence_rules_job_id_fkey!inner(id, org_id, client_id, property_id, title, description, job_type, property_address, team_id, created_by)')
       .eq('is_active', true)
       .lte('next_run_at', now)
       .limit(50);
