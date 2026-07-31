@@ -91,7 +91,9 @@ function useGooglePlaces() {
     setStatus('loading');
     const s = document.createElement('script');
     s.id = SCRIPT_ID;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly&loading=async`;
+    // Classic (non-async) loading: google.maps.places is populated on load.
+    // `loading=async` would require importLibrary() and leave places undefined.
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&v=weekly`;
     s.async = true;
     s.onload = () => {
       // The script might not expose google.maps.places immediately
@@ -165,6 +167,10 @@ const BIAS_RADIUS_METERS = 50000;
 const MIN_QUERY_LENGTH = 3;
 const DEBOUNCE_MS = 250;
 
+// Flipped when the new Places API rejects (not enabled / not allowed for the
+// key) so later queries go straight to the legacy service.
+let newPlacesApiFailed = false;
+
 async function fetchSuggestions(
   input: string,
   countries: string[],
@@ -173,29 +179,38 @@ async function fetchSuggestions(
 ): Promise<SuggestionItem[]> {
   const places: any = window.google?.maps?.places;
   if (!places) return [];
-  const bias = await getOrgLocationBias();
+  // The bias is a nice-to-have — never let it delay or block suggestions.
+  const bias = await Promise.race([
+    getOrgLocationBias(),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500)),
+  ]);
 
-  if (places.AutocompleteSuggestion?.fetchAutocompleteSuggestions) {
-    const req: any = {
-      input,
-      sessionToken,
-      includedRegionCodes: countries,
-      language,
-    };
-    if (bias) req.locationBias = { center: bias, radius: BIAS_RADIUS_METERS };
-    const { suggestions } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
-    return (suggestions || [])
-      .map((s: any) => {
-        const p = s.placePrediction;
-        if (!p) return null;
-        return {
-          placeId: p.placeId,
-          main: p.mainText?.text || p.text?.text || '',
-          secondary: p.secondaryText?.text || '',
-          prediction: p,
-        };
-      })
-      .filter(Boolean) as SuggestionItem[];
+  if (!newPlacesApiFailed && places.AutocompleteSuggestion?.fetchAutocompleteSuggestions) {
+    try {
+      const req: any = {
+        input,
+        sessionToken,
+        includedRegionCodes: countries,
+        language,
+      };
+      if (bias) req.locationBias = { center: bias, radius: BIAS_RADIUS_METERS };
+      const { suggestions } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
+      return (suggestions || [])
+        .map((s: any) => {
+          const p = s.placePrediction;
+          if (!p) return null;
+          return {
+            placeId: p.placeId,
+            main: p.mainText?.text || p.text?.text || '',
+            secondary: p.secondaryText?.text || '',
+            prediction: p,
+          };
+        })
+        .filter(Boolean) as SuggestionItem[];
+    } catch (err) {
+      newPlacesApiFailed = true;
+      console.warn('[AddressAutocomplete] new Places API rejected, falling back to legacy:', err);
+    }
   }
 
   // Legacy fallback
