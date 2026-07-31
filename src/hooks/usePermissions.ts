@@ -33,11 +33,22 @@ const IS_DEV = import.meta.env.DEV || (typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
 ));
 
-// ⚠️ TEMPORARY (QA): set to `true` to let the role switcher work on the
-// DEPLOYED site for role testing. This is a CLIENT-SIDE UI preview only —
-// the server (RBAC) and Supabase RLS still enforce your real role for data.
-// Set back to `false` (or delete this flag) once role testing is done.
-const ALLOW_ROLE_OVERRIDE_IN_PROD = true;
+// Le commutateur de rôle est désactivé en production.
+//
+// Il avait été ouvert « temporairement » pour tester des rôles sur le site
+// déployé, avec une note disant de le refermer ensuite — ce qui n'a jamais
+// été fait. Tant qu'il est ouvert, n'importe quelle extension de navigateur
+// ou faille XSS peut écrire `localStorage['lume-dev-role-override'] = 'owner'`
+// et l'interface obéit.
+//
+// Le serveur (RBAC) et la RLS refusent toujours l'accès aux données, donc ce
+// n'est pas une élévation de privilège réelle. Mais l'affichage se met à
+// mentir sur les droits, ce qui produit exactement le symptôme observé :
+// une interface incohérente avec l'abonnement réel, sans aucun message
+// d'erreur pour l'expliquer.
+//
+// Pour tester des rôles : sur localhost, où IS_DEV vaut true.
+const ALLOW_ROLE_OVERRIDE_IN_PROD = false;
 const ROLE_OVERRIDE_ENABLED = IS_DEV || ALLOW_ROLE_OVERRIDE_IN_PROD;
 
 export function setDevRoleOverride(role: TeamRole | null) {
