@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X, Search, Calendar, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
-import { addVisit } from '../lib/scheduleApi';
+import { addVisit, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { getJobs } from '../lib/jobsApi';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
@@ -64,6 +64,8 @@ export default function AddVisitModal({
   const [date, setDate] = useState(toDateInput(baseStart));
   const [startTime, setStartTime] = useState(toTimeInput(baseStart));
   const [endTime, setEndTime] = useState(toTimeInput(baseEnd));
+  // « N'importe quand » : pas d'heures précises — la visite couvre la journée.
+  const [anytime, setAnytime] = useState(false);
   const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [teamId, setTeamId] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<LockedJob | null>(job);
@@ -84,6 +86,7 @@ export default function AddVisitModal({
     setDate(toDateInput(s));
     setStartTime(toTimeInput(s));
     setEndTime(toTimeInput(e));
+    setAnytime(false);
     setTeamId(null);
     setSelectedJob(job);
     setJobQuery('');
@@ -128,7 +131,10 @@ export default function AddVisitModal({
     return () => clearTimeout(timer);
   }, [jobQuery, open, selectedJob, allowJobPick, fr]);
 
-  const canSubmit = useMemo(() => !!selectedJob && !!date && !!startTime && !!endTime, [selectedJob, date, startTime, endTime]);
+  const canSubmit = useMemo(
+    () => !!selectedJob && !!date && (anytime || (!!startTime && !!endTime)),
+    [selectedJob, date, startTime, endTime, anytime],
+  );
 
   if (!open) return null;
 
@@ -137,8 +143,8 @@ export default function AddVisitModal({
       toast.error(fr ? 'Choisis un job pour la visite.' : 'Pick a job for the visit.');
       return;
     }
-    const start = new Date(`${date}T${startTime}`);
-    const end = new Date(`${date}T${endTime}`);
+    const start = new Date(`${date}T${anytime ? ANYTIME_START_TIME : startTime}`);
+    const end = new Date(`${date}T${anytime ? ANYTIME_END_TIME : endTime}`);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       toast.error(fr ? 'Date ou heure invalide.' : 'Invalid date or time.');
       return;
@@ -231,16 +237,27 @@ export default function AddVisitModal({
             <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Date' : 'Date'}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="glass-input mt-1.5 w-full" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Début' : 'Start'}</label>
-              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="glass-input mt-1.5 w-full" />
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={anytime}
+              onChange={(e) => { setAnytime(e.target.checked); setDirty(true); }}
+              className="h-4 w-4 rounded"
+            />
+            <span className="text-[13px] text-text-primary">{fr ? "N'importe quand (pas d'heure précise)" : 'Anytime (no set time)'}</span>
+          </label>
+          {!anytime && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Début' : 'Start'}</label>
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="glass-input mt-1.5 w-full" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Fin' : 'End'}</label>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="glass-input mt-1.5 w-full" />
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Fin' : 'End'}</label>
-              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="glass-input mt-1.5 w-full" />
-            </div>
-          </div>
+          )}
           {teams.length > 0 && (
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Équipe (optionnel)' : 'Team (optional)'}</label>

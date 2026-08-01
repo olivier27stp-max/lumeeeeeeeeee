@@ -55,6 +55,26 @@ export interface UnscheduledJobRecord {
   total_cents?: number | null;
 }
 
+// ── Visites « N'importe quand » ─────────────────────────────────────────────
+// Convention de stockage (aucune colonne dédiée) : une visite sans heures
+// précises couvre sa journée entière, 00:00 → 23:59 heure locale. Le tri,
+// recompute_job_schedule et les vues dispatch fonctionnent sans changement;
+// seul l'affichage remplace la plage horaire par « N'importe quand ».
+export const ANYTIME_START_TIME = '00:00';
+export const ANYTIME_END_TIME = '23:59';
+
+export function isAnytimeVisit(startAt?: string | null, endAt?: string | null): boolean {
+  if (!startAt || !endAt) return false;
+  const s = new Date(startAt);
+  const e = new Date(endAt);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return false;
+  return s.getHours() === 0 && s.getMinutes() === 0 && e.getHours() === 23 && e.getMinutes() === 59;
+}
+
+export function anytimeLabel(fr: boolean): string {
+  return fr ? "N'importe quand" : 'Anytime';
+}
+
 const eventsCache = new Map<string, { cachedAt: number; rows: ScheduleEventRecord[] }>();
 
 function buildCacheKey(startAt: string, endAt: string, teamIds: string[]) {

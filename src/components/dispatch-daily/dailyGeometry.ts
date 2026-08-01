@@ -5,7 +5,7 @@
  * positionnement des cartes dérive de ces fonctions — jamais de valeurs
  * arbitraires par carte.
  */
-import type { ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
 
 export const HOUR_WIDTH_PX = 128;
 export const PX_PER_MINUTE = HOUR_WIDTH_PX / 60;
@@ -64,6 +64,9 @@ export function computeDayRange(events: ScheduleEventRecord[]): DayRange {
   let startHour = DEFAULT_DAY_START_HOUR;
   let endHour = DEFAULT_DAY_END_HOUR;
   for (const ev of events) {
+    // « N'importe quand » (00:00–23:59) : rendue clampée à la plage visible —
+    // elle ne force jamais l'affichage des 24 h.
+    if (isAnytimeVisit(ev.start_at, ev.end_at)) continue;
     const { startMin, endMin } = eventMinutes(ev);
     startHour = Math.min(startHour, Math.floor(startMin / 60));
     endHour = Math.max(endHour, Math.ceil(endMin / 60));

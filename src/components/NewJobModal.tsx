@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
 import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
-import { addVisit, listJobVisits, rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
+import { addVisit, listJobVisits, rescheduleEvent, unscheduleJob, isAnytimeVisit, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { createServiceContract } from '../lib/serviceContractsApi';
 import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
@@ -53,6 +53,8 @@ interface VisitDraft {
   date: string;      // YYYY-MM-DD
   startTime: string; // HH:mm
   endTime: string;   // HH:mm
+  /** « N'importe quand » : pas d'heures précises — la visite couvre la journée. */
+  anytime: boolean;
 }
 
 function newVisitDraft(seed?: Partial<VisitDraft>): VisitDraft {
@@ -62,8 +64,16 @@ function newVisitDraft(seed?: Partial<VisitDraft>): VisitDraft {
     date: new Date().toISOString().slice(0, 10),
     startTime: '09:00',
     endTime: '10:00',
+    anytime: false,
     ...seed,
   };
+}
+
+/** Heures effectives d'une visite du form (convention 00:00–23:59 si « N'importe quand »). */
+function draftTimes(v: VisitDraft): { start: string; end: string } {
+  return v.anytime
+    ? { start: ANYTIME_START_TIME, end: ANYTIME_END_TIME }
+    : { start: v.startTime || '09:00', end: v.endTime || '10:00' };
 }
 
 export interface JobDraftLineItem {
@@ -547,7 +557,7 @@ export default function NewJobModal({
   // ── Visits (one_off / edit) ──
   const sortedVisitDrafts = useMemo(
     () => [...visitDrafts].sort((a, b) =>
-      `${a.date}T${a.startTime || '09:00'}`.localeCompare(`${b.date}T${b.startTime || '09:00'}`)),
+      `${a.date}T${draftTimes(a).start}`.localeCompare(`${b.date}T${draftTimes(b).start}`)),
     [visitDrafts]
   );
   // Feed TeamSuggestions / conflict checks with the first (earliest) visit.
@@ -555,8 +565,8 @@ export default function NewJobModal({
     if (isServicePlan) return;
     const first = sortedVisitDrafts[0];
     setStartDate(first?.date || '');
-    setStartTime(first?.startTime || '');
-    setEndTime(first?.endTime || '');
+    setStartTime(first ? draftTimes(first).start : '');
+    setEndTime(first ? draftTimes(first).end : '');
   }, [isServicePlan, sortedVisitDrafts]);
   const updateVisitDraft = (key: string, patch: Partial<VisitDraft>) => {
     setVisitDrafts((prev) => prev.map((v) => (v.key === key ? { ...v, ...patch } : v)));
@@ -565,7 +575,7 @@ export default function NewJobModal({
     setDirty(true);
     setVisitDrafts((prev) => {
       const last = prev[prev.length - 1];
-      return [...prev, newVisitDraft(last ? { date: last.date, startTime: last.startTime, endTime: last.endTime } : undefined)];
+      return [...prev, newVisitDraft(last ? { date: last.date, startTime: last.startTime, endTime: last.endTime, anytime: last.anytime } : undefined)];
     });
   };
   const removeVisitDraft = (key: string) => {
@@ -641,7 +651,12 @@ export default function NewJobModal({
       const editEndTime = formatLocalTimeInput(initialValues?.end_at || null);
       // Seed one row from the job's mirrored date until the real visits load.
       setVisitDrafts(editStartDate
-        ? [newVisitDraft({ date: editStartDate, startTime: editStartTime || '09:00', endTime: editEndTime || '10:00' })]
+        ? [newVisitDraft({
+            date: editStartDate,
+            startTime: editStartTime || '09:00',
+            endTime: editEndTime || '10:00',
+            anytime: isAnytimeVisit(initialValues?.scheduled_at, initialValues?.end_at),
+          })]
         : []);
       setStatus(initialValues?.status || (editStartDate ? 'Scheduled' : 'Draft'));
       setVisitsLoaded(false);
@@ -655,10 +670,11 @@ export default function NewJobModal({
                 date: formatLocalDateInput(ev.start_at),
                 startTime: formatLocalTimeInput(ev.start_at) || '09:00',
                 endTime: formatLocalTimeInput(ev.end_at) || '10:00',
+                anytime: isAnytimeVisit(ev.start_at, ev.end_at),
               }));
               setVisitDrafts(rows);
               originalVisitsRef.current = new Map(rows.map((r) => [r.eventId as string, {
-                date: r.date, startTime: r.startTime, endTime: r.endTime,
+                date: r.date, startTime: draftTimes(r).start, endTime: draftTimes(r).end,
               }]));
             }
             setVisitsLoaded(true);
@@ -1347,8 +1363,9 @@ export default function NewJobModal({
           try { toast.error(msg); } catch {}
           return;
         }
-        const vStart = buildDateTime(v.date, v.startTime || '09:00');
-        const vEnd = buildDateTime(v.date, v.endTime || '10:00');
+        const vTimes = draftTimes(v);
+        const vStart = buildDateTime(v.date, vTimes.start);
+        const vEnd = buildDateTime(v.date, vTimes.end);
         if (!vStart || !vEnd || new Date(vEnd) <= new Date(vStart)) {
           setInlineError(t.modals.endTimeAfterStart);
           return;
@@ -1363,12 +1380,12 @@ export default function NewJobModal({
       ? (firstServiceMonth != null
         ? buildDateTime(serviceMonthDates[firstServiceMonth], visitTimeFor(firstServiceMonth).start)
         : null)
-      : (firstVisit ? buildDateTime(firstVisit.date, firstVisit.startTime || '09:00') : null);
+      : (firstVisit ? buildDateTime(firstVisit.date, draftTimes(firstVisit).start) : null);
     const endAt = isServicePlan
       ? (firstServiceMonth != null
         ? buildDateTime(serviceMonthDates[firstServiceMonth], visitTimeFor(firstServiceMonth).end)
         : null)
-      : (firstVisit ? buildDateTime(firstVisit.date, firstVisit.endTime || '10:00') : null);
+      : (firstVisit ? buildDateTime(firstVisit.date, draftTimes(firstVisit).end) : null);
 
     // If user picked a non-draft status but didn't pick a date, confirm the
     // silent demotion to Draft (otherwise job wouldn't appear on calendar).
@@ -1467,15 +1484,16 @@ export default function NewJobModal({
           await unscheduleJob({ jobId: initialValues.id, eventId });
         }
         for (const v of sortedVisitDrafts) {
-          const vStart = buildDateTime(v.date, v.startTime || '09:00');
-          const vEnd = buildDateTime(v.date, v.endTime || '10:00');
+          const vTimes = draftTimes(v);
+          const vStart = buildDateTime(v.date, vTimes.start);
+          const vEnd = buildDateTime(v.date, vTimes.end);
           if (!vStart || !vEnd) continue;
           if (v.eventId) {
             const orig = originalVisitsRef.current.get(v.eventId);
             const changed = !orig
               || orig.date !== v.date
-              || orig.startTime !== (v.startTime || '09:00')
-              || orig.endTime !== (v.endTime || '10:00');
+              || orig.startTime !== vTimes.start
+              || orig.endTime !== vTimes.end;
             if (changed) {
               await rescheduleEvent({ eventId: v.eventId, startAt: vStart, endAt: vEnd, timezone });
             }
@@ -1538,8 +1556,9 @@ export default function NewJobModal({
       if (createdJob?.id && !isEditMode && !isServicePlan && sortedVisitDrafts.length > 1) {
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Montreal';
         for (const v of sortedVisitDrafts.slice(1)) {
-          const vStart = buildDateTime(v.date, v.startTime || '09:00');
-          const vEnd = buildDateTime(v.date, v.endTime || '10:00');
+          const vTimes = draftTimes(v);
+          const vStart = buildDateTime(v.date, vTimes.start);
+          const vEnd = buildDateTime(v.date, vTimes.end);
           if (!vStart || !vEnd) continue;
           try {
             await addVisit({ jobId: createdJob.id, startAt: vStart, endAt: vEnd, teamId: teamIdPayload, timezone });
@@ -2246,56 +2265,79 @@ export default function NewJobModal({
                       {sortedVisitDrafts.map((visit, idx) => (
                         <div
                           key={visit.key}
-                          className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3"
+                          className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-2"
                         >
-                          <div className="md:col-span-5 space-y-1">
-                            <label className="text-xs font-medium text-text-tertiary">
-                              {(language === 'fr' ? 'Visite' : 'Visit')} {idx + 1} — {t.modals.startDate}
-                            </label>
-                            <div className="relative">
-                              <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                              <input
-                                type="date"
-                                value={visit.date}
-                                onChange={(event) => updateVisitDraft(visit.key, { date: event.target.value })}
-                                className="glass-input w-full pl-10"
-                              />
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                            <div className="md:col-span-5 space-y-1">
+                              <label className="text-xs font-medium text-text-tertiary">
+                                {(language === 'fr' ? 'Visite' : 'Visit')} {idx + 1} — {t.modals.startDate}
+                              </label>
+                              <div className="relative">
+                                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                <input
+                                  type="date"
+                                  value={visit.date}
+                                  onChange={(event) => updateVisitDraft(visit.key, { date: event.target.value })}
+                                  className="glass-input w-full pl-10"
+                                />
+                              </div>
+                            </div>
+                            {!visit.anytime && (
+                              <>
+                                <div className="md:col-span-3 space-y-1">
+                                  <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
+                                  <div className="relative">
+                                    <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                    <input
+                                      type="time"
+                                      value={visit.startTime}
+                                      onChange={(event) => updateVisitDraft(visit.key, { startTime: event.target.value })}
+                                      className="glass-input w-full pl-10"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="md:col-span-3 space-y-1">
+                                  <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                                  <div className="relative">
+                                    <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                    <input
+                                      type="time"
+                                      value={visit.endTime}
+                                      onChange={(event) => updateVisitDraft(visit.key, { endTime: event.target.value })}
+                                      className="glass-input w-full pl-10"
+                                    />
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                            <div className={visit.anytime ? 'md:col-span-7 flex items-center justify-end' : 'md:col-span-1 flex justify-end'}>
+                              <button
+                                type="button"
+                                onClick={() => removeVisitDraft(visit.key)}
+                                className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
+                                title={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
+                              >
+                                <Trash2 size={13} />
+                              </button>
                             </div>
                           </div>
-                          <div className="md:col-span-3 space-y-1">
-                            <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
-                            <div className="relative">
-                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                              <input
-                                type="time"
-                                value={visit.startTime}
-                                onChange={(event) => updateVisitDraft(visit.key, { startTime: event.target.value })}
-                                className="glass-input w-full pl-10"
-                              />
-                            </div>
-                          </div>
-                          <div className="md:col-span-3 space-y-1">
-                            <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
-                            <div className="relative">
-                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                              <input
-                                type="time"
-                                value={visit.endTime}
-                                onChange={(event) => updateVisitDraft(visit.key, { endTime: event.target.value })}
-                                className="glass-input w-full pl-10"
-                              />
-                            </div>
-                          </div>
-                          <div className="md:col-span-1 flex justify-end">
-                            <button
-                              type="button"
-                              onClick={() => removeVisitDraft(visit.key)}
-                              className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
-                              title={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                            <input
+                              type="checkbox"
+                              checked={visit.anytime}
+                              onChange={(event) => {
+                                setDirty(true);
+                                updateVisitDraft(visit.key, event.target.checked
+                                  ? { anytime: true }
+                                  // Décoché : repartir sur des heures normales (jamais 00:00–23:59).
+                                  : { anytime: false, startTime: '09:00', endTime: '10:00' });
+                              }}
+                              className="h-3.5 w-3.5 rounded"
+                            />
+                            <span className="text-xs text-text-secondary">
+                              {language === 'fr' ? "N'importe quand (pas d'heure précise)" : 'Anytime (no set time)'}
+                            </span>
+                          </label>
                         </div>
                       ))}
                     </div>

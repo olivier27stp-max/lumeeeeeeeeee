@@ -35,7 +35,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
 import AddVisitModal from '../components/AddVisitModal';
-import { invalidateScheduleCache, rescheduleEvent, unscheduleJob } from '../lib/scheduleApi';
+import { invalidateScheduleCache, rescheduleEvent, unscheduleJob, isAnytimeVisit, anytimeLabel, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import {
@@ -164,6 +164,7 @@ export default function JobDetails() {
   const [editVisitDate, setEditVisitDate] = useState('');
   const [editVisitStart, setEditVisitStart] = useState('');
   const [editVisitEnd, setEditVisitEnd] = useState('');
+  const [editVisitAnytime, setEditVisitAnytime] = useState(false);
   const [editVisitTeamId, setEditVisitTeamId] = useState('');
   const [visitActionBusy, setVisitActionBusy] = useState(false);
   // Assignment context: les visites appartiennent à une ÉQUIPE seulement —
@@ -373,21 +374,24 @@ export default function JobDetails() {
     const start = new Date(visit.start_at);
     const end = visit.end_at ? new Date(visit.end_at) : null;
     const pad = (n: number) => String(n).padStart(2, '0');
+    const anytime = isAnytimeVisit(visit.start_at, visit.end_at);
     setEditingVisitId(visit.id);
     setEditVisitDate(`${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`);
-    setEditVisitStart(`${pad(start.getHours())}:${pad(start.getMinutes())}`);
-    setEditVisitEnd(end ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : '');
+    setEditVisitAnytime(anytime);
+    // Une visite « N'importe quand » repart sur des heures normales si on décoche.
+    setEditVisitStart(anytime ? '09:00' : `${pad(start.getHours())}:${pad(start.getMinutes())}`);
+    setEditVisitEnd(anytime ? '10:00' : (end ? `${pad(end.getHours())}:${pad(end.getMinutes())}` : ''));
     setEditVisitTeamId(visit.team_id || '');
   };
 
   const handleSaveVisit = async () => {
     if (!editingVisitId || visitActionBusy) return;
-    if (!editVisitDate || !editVisitStart || !editVisitEnd) {
+    if (!editVisitDate || (!editVisitAnytime && (!editVisitStart || !editVisitEnd))) {
       toast.error(language === 'fr' ? 'Date et heures requises.' : 'Date and times are required.');
       return;
     }
-    const start = new Date(`${editVisitDate}T${editVisitStart}`);
-    const end = new Date(`${editVisitDate}T${editVisitEnd}`);
+    const start = new Date(`${editVisitDate}T${editVisitAnytime ? ANYTIME_START_TIME : editVisitStart}`);
+    const end = new Date(`${editVisitDate}T${editVisitAnytime ? ANYTIME_END_TIME : editVisitEnd}`);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       toast.error(language === 'fr' ? "L'heure de fin doit être après le début." : 'End time must be after the start.');
       return;
@@ -1393,9 +1397,11 @@ export default function JobDetails() {
               <div className="space-y-2">
                 {visits.map((visit) => {
                   const tloc = language === 'fr' ? 'fr-CA' : 'en-CA';
-                  const timeRange = visit.start_at
-                    ? `${new Date(visit.start_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}${visit.end_at ? ` — ${new Date(visit.end_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}` : ''}`
-                    : null;
+                  const timeRange = isAnytimeVisit(visit.start_at, visit.end_at)
+                    ? anytimeLabel(language === 'fr')
+                    : visit.start_at
+                      ? `${new Date(visit.start_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}${visit.end_at ? ` — ${new Date(visit.end_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}` : ''}`
+                      : null;
                   const { team: assignedTeam, label: assignLabel } = getVisitAssignment(visit);
                   const visitStatus = (visit.status || '').toLowerCase();
                   const isCompleted = visitStatus === 'completed';
@@ -2378,9 +2384,11 @@ export default function JobDetails() {
         const isPast = visit.start_at ? new Date(visit.start_at).getTime() < Date.now() : false;
         const isEditing = editingVisitId === visit.id;
         const { team: assignedTeam, label: assignLabel } = getVisitAssignment(visit);
-        const timeRange = visit.start_at
-          ? `${new Date(visit.start_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}${visit.end_at ? ` — ${new Date(visit.end_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}` : ''}`
-          : (fr ? 'Toute la journée' : 'Anytime');
+        const timeRange = isAnytimeVisit(visit.start_at, visit.end_at)
+          ? anytimeLabel(fr)
+          : visit.start_at
+            ? `${new Date(visit.start_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}${visit.end_at ? ` — ${new Date(visit.end_at).toLocaleTimeString(tloc, { hour: '2-digit', minute: '2-digit' })}` : ''}`
+            : (fr ? 'Toute la journée' : 'Anytime');
         const detailsSentence = isCancelled
           ? (fr ? 'Cette visite a été annulée — elle ne compte plus dans le statut du job.' : 'This visit was cancelled — it no longer counts toward the job status.')
           : isCompleted
@@ -2420,16 +2428,27 @@ export default function JobDetails() {
                         <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">Date</label>
                         <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Début' : 'Start'}</label>
-                          <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
+                      <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                        <input
+                          type="checkbox"
+                          checked={editVisitAnytime}
+                          onChange={(e) => setEditVisitAnytime(e.target.checked)}
+                          className="h-4 w-4 rounded"
+                        />
+                        <span className="text-[13px] font-bold text-black dark:text-white">{fr ? "N'importe quand (pas d'heure précise)" : 'Anytime (no set time)'}</span>
+                      </label>
+                      {!editVisitAnytime && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Début' : 'Start'}</label>
+                            <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Fin' : 'End'}</label>
+                            <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
+                          </div>
                         </div>
-                        <div>
-                          <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Fin' : 'End'}</label>
-                          <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
-                        </div>
-                      </div>
+                      )}
                       <div>
                         <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Équipe' : 'Team'}</label>
                         <select value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white">

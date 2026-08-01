@@ -20,6 +20,8 @@ export interface DailyVisitCardProps {
   height: number;
   timeLabel: string;
   dimmed: boolean;
+  /** Visite « N'importe quand » : pas d'heure précise — ni drag ni resize. */
+  anytime?: boolean;
   /** Couleur du premier tag de la job — null si aucun tag. */
   tagColor?: string | null;
   onOpen: () => void;
@@ -28,7 +30,7 @@ export interface DailyVisitCardProps {
 }
 
 export default function DailyVisitCard({
-  ev, left, top, width, height, timeLabel, dimmed, tagColor, onOpen, onMoveStart, onResizeStart,
+  ev, left, top, width, height, timeLabel, dimmed, anytime = false, tagColor, onOpen, onMoveStart, onResizeStart,
 }: DailyVisitCardProps) {
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
   const city = shortAddress(ev.job?.property_address);
@@ -45,7 +47,10 @@ export default function DailyVisitCard({
         'transition-shadow',
         dimmed
           ? 'opacity-40 shadow-none'
-          : 'shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:z-10 hover:shadow-md cursor-grab active:cursor-grabbing',
+          : cn(
+              'shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:z-10 hover:shadow-md',
+              anytime ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
+            ),
       )}
       style={{
         left, top, width, height,
@@ -75,16 +80,18 @@ export default function DailyVisitCard({
           <div className="truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{jobNumber}</div>
         )}
       </div>
-      {/* Poignée de redimensionnement (bord droit → durée) */}
-      <span
-        data-resize="true"
-        className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-border/70 opacity-0 transition-opacity group-hover/daily-card:opacity-100"
-        onPointerDown={(e) => {
-          if (e.button !== 0) return;
-          e.stopPropagation();
-          onResizeStart(e);
-        }}
-      />
+      {/* Poignée de redimensionnement (bord droit → durée) — absente en « N'importe quand » */}
+      {!anytime && (
+        <span
+          data-resize="true"
+          className="absolute inset-y-0 right-0 w-2 cursor-ew-resize bg-border/70 opacity-0 transition-opacity group-hover/daily-card:opacity-100"
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            e.stopPropagation();
+            onResizeStart(e);
+          }}
+        />
+      )}
     </div>
   );
 }

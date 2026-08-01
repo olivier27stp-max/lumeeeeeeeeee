@@ -4,7 +4,7 @@ import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle, Clock, MapPin, X as XIcon } from 'lucide-react';
 import { cn, formatCurrency } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import type { ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
 import { useJobTagColors } from '../../hooks/useJobTagColors';
@@ -249,8 +249,10 @@ export default function WeeklyDispatchView({
     return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
   }, [isFr]);
   const timeLabelFor = useCallback(
-    (ev: ScheduleEventRecord) => `${fmtTime(new Date(ev.start_at))} – ${fmtTime(new Date(new Date(ev.start_at).getTime() + eventDurationMs(ev)))}`,
-    [fmtTime],
+    (ev: ScheduleEventRecord) => (isAnytimeVisit(ev.start_at, ev.end_at)
+      ? anytimeLabel(isFr)
+      : `${fmtTime(new Date(ev.start_at))} – ${fmtTime(new Date(new Date(ev.start_at).getTime() + eventDurationMs(ev)))}`),
+    [fmtTime, isFr],
   );
 
   /* ── Drag local : déplacer une carte vers un autre jour / une autre route ── */

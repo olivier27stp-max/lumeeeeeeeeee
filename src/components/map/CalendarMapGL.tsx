@@ -85,6 +85,8 @@ function scheduleLabel(iso: string | null): string | null {
   try {
     const d = new Date(iso);
     const date = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    // Visite « N'importe quand » (convention 00:00) : date seule, sans heure.
+    if (d.getHours() === 0 && d.getMinutes() === 0) return date;
     const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return `${date} · ${time}`;
   } catch {

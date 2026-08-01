@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import { CRMMapCard } from '../components/map';
 import { DashboardData, getDashboardData } from '../lib/dashboardApi';
+import { isAnytimeVisit, anytimeLabel } from '../lib/scheduleApi';
 import { formatCurrency, cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { useOfflineCache } from '../hooks/useOfflineCache';
@@ -234,12 +235,20 @@ export default function Dashboard() {
                   )}
                 >
                   <div className="shrink-0 w-12 text-right">
-                    <p className="text-[13px] font-semibold text-text-primary tabular-nums leading-none">
-                      {new Date(apt.startAt).toLocaleTimeString(t.dashboard.enus, { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                    <p className="text-[10px] text-text-muted tabular-nums leading-none mt-1">
-                      {new Date(apt.endAt).toLocaleTimeString(t.dashboard.enus, { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    {isAnytimeVisit(apt.startAt, apt.endAt) ? (
+                      <p className="text-[10px] font-semibold text-text-primary leading-tight">
+                        {anytimeLabel(language === 'fr')}
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[13px] font-semibold text-text-primary tabular-nums leading-none">
+                          {new Date(apt.startAt).toLocaleTimeString(t.dashboard.enus, { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        <p className="text-[10px] text-text-muted tabular-nums leading-none mt-1">
+                          {new Date(apt.endAt).toLocaleTimeString(t.dashboard.enus, { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </>
+                    )}
                   </div>
                   <div className="w-[3px] self-stretch rounded-full shrink-0" style={{ backgroundColor: apt.teamColor || '#6b7280' }} />
                   <div className="flex-1 min-w-0">

@@ -4,7 +4,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import type { ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import { getRosterForDate, fetchMemberNames, firstNameOf } from '../../lib/teamScheduleApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
@@ -539,24 +539,30 @@ export default function DailyDispatchView({
 
                     {/* Cartes de visite */}
                     {layout.positioned.map((p) => {
+                      // « N'importe quand » : la carte couvre la plage visible
+                      // (pas d'heure précise) — ni déplaçable ni redimensionnable.
+                      const anytime = isAnytimeVisit(p.ev.start_at, p.ev.end_at);
+                      const cardStartMin = anytime ? range.startMin : p.startMin;
+                      const cardEndMin = anytime ? range.endMin : p.endMin;
                       const isDraggingThis = drag?.mode === 'move' && drag.ev.id === p.ev.id && drag.moved;
                       const isResizingThis = drag?.mode === 'resize' && drag.ev.id === p.ev.id && drag.moved;
-                      const durMin = isResizingThis ? drag.previewDurationMin : p.endMin - p.startMin;
+                      const durMin = isResizingThis ? drag.previewDurationMin : cardEndMin - cardStartMin;
                       const width = Math.max(durMin * PX_PER_MINUTE - CARD_GAP_X_PX * 2, 26);
                       return (
                         <DailyVisitCard
                           key={p.ev.id}
                           ev={p.ev}
-                          left={minutesToX(p.startMin, range.startMin) + CARD_GAP_X_PX}
+                          left={minutesToX(cardStartMin, range.startMin) + CARD_GAP_X_PX}
                           top={laneTop(p.lane)}
                           width={width}
                           height={CARD_HEIGHT_PX}
-                          timeLabel={timeLabelFor(p.startMin, p.startMin + durMin)}
+                          timeLabel={anytime ? anytimeLabel(isFr) : timeLabelFor(cardStartMin, cardStartMin + durMin)}
+                          anytime={anytime}
                           dimmed={isDraggingThis}
                           tagColor={colorForTagIds(p.ev.job?.tag_ids)}
                           onOpen={() => openEvent(p.ev.job_id)}
-                          onMoveStart={(e) => handleMoveStart(p.ev, ri, e)}
-                          onResizeStart={(e) => handleResizeStart(p.ev, e)}
+                          onMoveStart={(e) => { if (!anytime) handleMoveStart(p.ev, ri, e); }}
+                          onResizeStart={(e) => { if (!anytime) handleResizeStart(p.ev, e); }}
                         />
                       );
                     })}
