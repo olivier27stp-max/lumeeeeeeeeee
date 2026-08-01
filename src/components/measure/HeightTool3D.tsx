@@ -23,6 +23,10 @@ import Cam3DControls from './Cam3DControls';
 const FT_TO_M = 0.3048;
 const M_TO_FT = 1 / FT_TO_M;
 const MIN_HEIGHT_M = 1;
+// Hauteur typique de la caméra des voitures Street View (m). Sert de référence
+// d'échelle au mode Photo : cliquer le pied du mur (angle sous l'horizon) donne
+// la distance, puis l'angle du sommet donne la hauteur. C'est une ESTIMATION.
+const SV_CAMERA_HEIGHT_M = 2.5;
 
 interface Props {
   quoteAddress: string;
@@ -58,6 +62,16 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const [ptA, setPtA] = useState<Pt | null>(null);
   const [ptB, setPtB] = useState<Pt | null>(null);
   const [manualH, setManualH] = useState('');
+
+  // ── Mode « Photo » (Street View) — mesure par estimation trigonométrique ──
+  const streetPanoDiv = useRef<HTMLDivElement>(null);
+  const panoRef = useRef<google.maps.StreetViewPanorama | null>(null);
+  const svTargetRef = useRef<{ lat: number; lng: number } | null>(null);
+  const [streetMode, setStreetMode] = useState(false);
+  const [streetState, setStreetState] = useState<'idle' | 'loading' | 'ok' | 'none'>('idle');
+  const [svMeasuring, setSvMeasuring] = useState(false);
+  const [svBase, setSvBase] = useState<{ pitch: number } | null>(null);
+  const [svHeight, setSvHeight] = useState<number | null>(null);
 
   function setA(p: Pt | null) { aRef.current = p; setPtA(p); }
   function setB(p: Pt | null) { bRef.current = p; setPtB(p); }
@@ -232,6 +246,126 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     setWants3d(to3d);
   }
 
+  // ── Mode Photo : cible courante (dernière recherche, sinon centre de la carte) ──
+  function currentTarget(): { lat: number; lng: number } {
+    if (svTargetRef.current) return svTargetRef.current;
+    try {
+      if (map3dRef.current?.center) {
+        const c = map3dRef.current.center;
+        if (typeof c.lat === 'number') return { lat: c.lat, lng: c.lng };
+      }
+      const c2 = mapRef.current?.getCenter();
+      if (c2) return { lat: c2.lat(), lng: c2.lng() };
+    } catch { /* centre indisponible */ }
+    return { lat: 45.5017, lng: -73.5673 };
+  }
+
+  // ── Mode Photo : chargement du panorama (imagerie officielle extérieure) ──
+  useEffect(() => {
+    if (!streetMode || streetState !== 'idle' || !streetPanoDiv.current) return;
+    setStreetState('loading');
+    const target = currentTarget();
+    const svc = new google.maps.StreetViewService();
+    const show = (data: google.maps.StreetViewPanoramaData) => {
+      if (!data?.location?.latLng || !streetPanoDiv.current) { setStreetState('none'); return; }
+      let heading = 0;
+      try {
+        heading = google.maps.geometry.spherical.computeHeading(
+          data.location.latLng, new google.maps.LatLng(target.lat, target.lng));
+      } catch { /* heading par défaut */ }
+      streetPanoDiv.current.innerHTML = '';
+      panoRef.current = new google.maps.StreetViewPanorama(streetPanoDiv.current, {
+        pano: data.location.pano,
+        pov: { heading, pitch: 0 },
+        zoom: 0.8,
+        addressControl: false,
+        fullscreenControl: false,
+        motionTracking: false,
+        motionTrackingControl: false,
+      });
+      setStreetState('ok');
+    };
+    // Tentative stricte (officiel+extérieur), repli extérieur, garde-fou 10 s —
+    // même mécanique que la visionneuse (Viewer3D).
+    const attempt = (extra: Record<string, unknown>, onFail: () => void) => {
+      let settled = false;
+      const settle = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
+      const timer = setTimeout(() => settle(onFail), 10000);
+      try {
+        const req = { location: target, radius: 120, preference: 'nearest', ...extra } as unknown as google.maps.StreetViewLocationRequest;
+        const p: any = svc.getPanorama(req, (data, status) => {
+          if (String(status).toUpperCase() === 'OK') settle(() => show(data as google.maps.StreetViewPanoramaData));
+          else settle(onFail);
+        });
+        p?.catch?.(() => settle(onFail));
+      } catch { settle(onFail); }
+    };
+    attempt({ sources: ['google', 'outdoor'] }, () =>
+      attempt({ source: 'outdoor' }, () => setStreetState('none')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streetMode, streetState]);
+
+  // ── Mode Photo : clic sur la photo → angle → hauteur estimée ──
+  function svResetMeasure() { setSvBase(null); setSvHeight(null); }
+  function svClick(e: React.MouseEvent<HTMLDivElement>) {
+    const pano = panoRef.current;
+    if (!pano) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const pov = pano.getPov();
+    const zoom = pano.getZoom() ?? 1;
+    // FOV horizontal Street View ≈ 180°/2^zoom; projection rectilinéaire approx.
+    const hfov = (180 / Math.pow(2, zoom)) * (Math.PI / 180);
+    const f = (rect.width / 2) / Math.tan(hfov / 2);
+    const upRad = Math.atan((rect.height / 2 - y) / f);
+    const sideRad = Math.atan((x - rect.width / 2) / f);
+    // Le pitch réel du rayon dépend un peu de l'écart horizontal — négligé (estimation).
+    void sideRad;
+    const pitchDeg = (pov.pitch ?? 0) + (upRad * 180) / Math.PI;
+    if (!svBase) {
+      if (pitchDeg >= -0.5) {
+        toast.error(fr
+          ? 'Cliquez d’abord le point où le mur touche le SOL (sous l’horizon).'
+          : 'First click where the wall meets the GROUND (below the horizon).');
+        return;
+      }
+      setSvBase({ pitch: pitchDeg });
+    } else {
+      const d = SV_CAMERA_HEIGHT_M / Math.tan((-svBase.pitch * Math.PI) / 180);
+      const h = SV_CAMERA_HEIGHT_M + d * Math.tan((pitchDeg * Math.PI) / 180);
+      if (!Number.isFinite(h) || h <= 0.3 || h > 200 || d > 120) {
+        toast.error(fr ? 'Mesure invalide — recommencez plus près du mur.' : 'Invalid measurement — retry closer to the wall.');
+        setSvBase(null);
+        return;
+      }
+      setSvHeight(h);
+      setSvMeasuring(false);
+    }
+  }
+
+  function addStreetEstimate() {
+    if (svHeight == null) return;
+    const pos = panoRef.current?.getPosition?.();
+    const base = pos ? { lat: pos.lat(), lng: pos.lng() } : currentTarget();
+    const points: LatLng[] = [
+      { lat: base.lat, lng: base.lng, elevation: 0 },
+      { lat: base.lat, lng: base.lng, elevation: svHeight },
+    ];
+    const geojson: any = { type: 'LineString', coordinates: points.map(p => [p.lng, p.lat, p.elevation]) };
+    const shape: Shape = {
+      id: `sh-${index}`,
+      label: fr ? `Hauteur ${index + 1} (photo)` : `Height ${index + 1} (photo)`,
+      color: nextColor(index),
+      result: { type: 'line', value: svHeight * M_TO_FT, areaValue: null, perimeterValue: null, geojson, points, elevation: elevationStats(points) },
+      notes: '',
+      visible: true,
+      metadata: { kind: 'height', heightMeters: svHeight, source: 'street-estimate' },
+    };
+    onComplete(shape);
+    onClose();
+  }
+
   // ── Markers for the two points ──
   useEffect(() => {
     // Mode 3D : marqueurs et ligne verticale via les primitives 3D (best-effort —
@@ -307,12 +441,21 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (!search.trim() || !gcRef.current) return;
+    if (!search.trim()) return;
+    if (!gcRef.current) { try { gcRef.current = new google.maps.Geocoder(); } catch { return; } }
     setSearching(true);
     gcRef.current.geocode({ address: search }, (r, s) => {
       setSearching(false);
-      if (s === 'OK' && r?.[0]) { const loc = r[0].geometry.location; flyTo(loc.lat(), loc.lng()); }
-      else toast.error(fr ? 'Adresse introuvable' : 'Address not found');
+      if (s === 'OK' && r?.[0]) {
+        const loc = r[0].geometry.location;
+        svTargetRef.current = { lat: loc.lat(), lng: loc.lng() };
+        if (streetMode) {
+          // Recharge le panorama le plus proche de la nouvelle adresse.
+          svResetMeasure(); setSvMeasuring(false); setStreetState('idle');
+        } else {
+          flyTo(loc.lat(), loc.lng());
+        }
+      } else toast.error(fr ? 'Adresse introuvable' : 'Address not found');
     });
   }
 
@@ -356,13 +499,17 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           <span className="text-[13px] font-bold text-text-primary truncate">{fr ? 'Hauteur du bâtiment' : 'Building height'}</span>
         </div>
         <div className="flex items-center rounded-lg border border-outline/30 overflow-hidden shrink-0">
-          <button onClick={() => switchMode(true)}
-            className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${(wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
+          <button onClick={() => { setStreetMode(false); switchMode(true); }}
+            className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${!streetMode && (wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
             3D
           </button>
-          <button onClick={() => switchMode(false)}
-            className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${!(wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
+          <button onClick={() => { setStreetMode(false); switchMode(false); }}
+            className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${!streetMode && !(wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
             2D
+          </button>
+          <button onClick={() => { if (!streetMode) { svResetMeasure(); setSvMeasuring(false); setStreetMode(true); if (streetState === 'none') setStreetState('idle'); } }}
+            className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${streetMode ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
+            Photo
           </button>
         </div>
         <form onSubmit={handleSearch} className="flex-1 max-w-md mx-4">
@@ -379,13 +526,63 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
 
       <div className="flex-1 relative">
         <div ref={mapDiv} className="absolute inset-0" />
-        {!ready && (
+
+        {/* ── Mode Photo : panorama Street View + couche de mesure ── */}
+        <div ref={streetPanoDiv} className={`absolute inset-0 z-[15] ${streetMode ? '' : 'hidden'}`} />
+        {streetMode && streetState === 'loading' && (
+          <div className="absolute inset-0 flex items-center justify-center bg-surface/80 z-[16]">
+            <Loader2 size={28} className="animate-spin text-text-muted" />
+          </div>
+        )}
+        {streetMode && streetState === 'none' && (
+          <div className="absolute inset-0 flex items-center justify-center z-[16]">
+            <p className="text-[13px] text-text-secondary bg-surface-card border border-outline/30 rounded-xl px-4 py-3">
+              {fr ? 'Street View n’est pas disponible ici — cherchez une adresse ou utilisez 2D/3D.' : 'Street View is not available here — search an address or use 2D/3D.'}
+            </p>
+          </div>
+        )}
+        {streetMode && streetState === 'ok' && svMeasuring && (
+          <div className="absolute inset-0 z-[17] cursor-crosshair" onClick={svClick} />
+        )}
+        {streetMode && streetState === 'ok' && svMeasuring && svHeight == null && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-[18] pointer-events-none backdrop-blur-sm font-medium">
+            {!svBase
+              ? (fr ? '1. Cliquez le point où le mur touche le SOL' : '1. Click where the wall meets the GROUND')
+              : (fr ? '2. Cliquez le SOMMET du mur (même verticale)' : '2. Click the TOP of the wall (same vertical)')}
+          </div>
+        )}
+        {streetMode && streetState === 'ok' && !svMeasuring && svHeight == null && (
+          <button
+            onClick={() => { svResetMeasure(); setSvMeasuring(true); }}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[18] glass-button-primary flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] font-semibold shadow-xl"
+          >
+            <MoveVertical size={14} /> {fr ? 'Mesurer (estimation)' : 'Measure (estimate)'}
+          </button>
+        )}
+        {streetMode && svHeight != null && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-[18] shadow-xl text-center min-w-[260px] space-y-1.5">
+            <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wide">
+              {fr ? 'Estimation photo (±10-15 %)' : 'Photo estimate (±10-15%)'}
+            </p>
+            <p className="text-2xl font-bold text-text-primary">≈ {fmt(svHeight)}</p>
+            <div className="flex items-center gap-2 justify-center pt-1">
+              <button onClick={() => { svResetMeasure(); setSvMeasuring(true); }} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium">
+                <RotateCcw size={13} /> {fr ? 'Refaire' : 'Redo'}
+              </button>
+              <button onClick={addStreetEstimate} className="glass-button-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold">
+                <Check size={13} /> {fr ? 'Ajouter' : 'Add'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!streetMode && !ready && (
           <div className="absolute inset-0 flex items-center justify-center bg-surface/80 z-10">
             <Loader2 size={28} className="animate-spin text-text-muted" />
           </div>
         )}
 
-        {is3d && ready && (
+        {!streetMode && is3d && ready && (
           <>
             <Cam3DControls getEl={() => map3dRef.current} fr={fr} className="absolute right-3 top-14 z-20" />
             <div className="absolute bottom-3 right-3 z-20 bg-gray-900/70 text-white/90 text-[10px] px-3 py-1.5 rounded-lg pointer-events-none backdrop-blur-sm hidden sm:block">
@@ -394,7 +591,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           </>
         )}
 
-        {step < 3 && ready && (
+        {!streetMode && step < 3 && ready && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-20 pointer-events-none backdrop-blur-sm font-medium">
             {step === 1
               ? (is3d
@@ -406,7 +603,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           </div>
         )}
 
-        {(ptA || ptB) && (
+        {!streetMode && (ptA || ptB) && (
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-20 shadow-xl text-center min-w-[280px] space-y-1.5">
             <div className="flex items-center justify-between gap-6 text-[11px] font-mono">
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#FF4444' }} />{fr ? 'Base (sol)' : 'Base (ground)'}</span>
