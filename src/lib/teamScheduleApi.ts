@@ -472,6 +472,38 @@ export function scheduledMinutes(entries: ResolvedMemberDay[]): number {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// NOMS DES MEMBRES
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * user_id → nom complet, pour l'org active. Source directe Supabase
+ * (memberships → profiles), même chemin que listSalespeople — pas de détour
+ * par l'API serveur, donc fiable partout où le client est authentifié.
+ */
+export async function fetchMemberNames(): Promise<Map<string, string>> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data: memberships } = await supabase
+    .from('memberships')
+    .select('user_id')
+    .eq('org_id', orgId)
+    .limit(200);
+  const ids = [...new Set((memberships || []).map((r: { user_id: string | null }) => r.user_id).filter(Boolean))] as string[];
+  if (!ids.length) return new Map();
+  const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+  const map = new Map<string, string>();
+  for (const p of (profiles || []) as Array<{ id: string; full_name: string | null }>) {
+    map.set(p.id, (p.full_name || '').trim() || `User ${p.id.slice(0, 6)}`);
+  }
+  return map;
+}
+
+/** Prénom (premier mot du nom complet). */
+export function firstNameOf(fullName: string | undefined | null): string {
+  const name = (fullName || '').trim();
+  return name.split(/\s+/)[0] || name;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // AUDIT
 // ═══════════════════════════════════════════════════════════════════════════
 

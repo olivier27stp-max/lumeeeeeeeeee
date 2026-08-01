@@ -10,8 +10,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '../lib/utils';
 import { useCompany } from '../contexts/CompanyContext';
-import { getRosterForDate } from '../lib/teamScheduleApi';
-import { fetchTeamList } from '../lib/invitationsApi';
+import { getRosterForDate, fetchMemberNames, firstNameOf } from '../lib/teamScheduleApi';
 
 interface Props {
   teamId: string | null | undefined;
@@ -32,22 +31,22 @@ export default function TeamDayRoster({ teamId, date, fr, className }: Props) {
     staleTime: 60_000,
     retry: false,
   });
-  const membersQuery = useQuery({
-    queryKey: ['org-members', currentOrgId],
-    queryFn: fetchTeamList,
-    enabled: !!currentOrgId && !!rosterQuery.data && !rosterQuery.data.missing,
+  // Noms en direct Supabase (memberships → profiles) — même source que le
+  // dropdown Vendeur, fiable partout où le client est connecté.
+  const namesQuery = useQuery({
+    queryKey: ['member-names', currentOrgId],
+    queryFn: fetchMemberNames,
+    enabled: !!currentOrgId,
     staleTime: 5 * 60_000,
-    retry: false,
   });
 
   const firstName = useMemo(() => {
     const map = new Map<string, string>();
-    for (const m of membersQuery.data?.members ?? []) {
-      const name = (m.full_name || '').trim() || m.email || '';
-      map.set(m.user_id, name.split(/\s+/)[0] || name);
+    for (const [id, name] of namesQuery.data ?? new Map<string, string>()) {
+      map.set(id, firstNameOf(name));
     }
     return map;
-  }, [membersQuery.data]);
+  }, [namesQuery.data]);
 
   if (!teamId || !validDate || !rosterQuery.data || rosterQuery.data.missing) return null;
 

@@ -6,8 +6,7 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import type { ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
-import { getRosterForDate } from '../../lib/teamScheduleApi';
-import { fetchTeamList } from '../../lib/invitationsApi';
+import { getRosterForDate, fetchMemberNames, firstNameOf } from '../../lib/teamScheduleApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
 import { FALLBACK_TEAM_COLOR, isHexColor } from '../../lib/colorUtils';
 import {
@@ -117,21 +116,21 @@ export default function DailyDispatchView({
     staleTime: 60_000,
     retry: false,
   });
-  const membersQuery = useQuery({
-    queryKey: ['org-members', orgId],
-    queryFn: fetchTeamList,
+  // Noms en direct Supabase (memberships → profiles) — même source que le
+  // reste des rosters, sans dépendre de l'API serveur.
+  const namesQuery = useQuery({
+    queryKey: ['member-names', orgId],
+    queryFn: fetchMemberNames,
     enabled: !!orgId && !!rosterQuery.data && !rosterQuery.data.missing,
     staleTime: 5 * 60_000,
-    retry: false,
   });
   const memberFirstName = useMemo(() => {
     const map = new Map<string, string>();
-    for (const m of membersQuery.data?.members ?? []) {
-      const name = (m.full_name || '').trim() || m.email || '';
-      map.set(m.user_id, name.split(/\s+/)[0] || name);
+    for (const [id, name] of namesQuery.data ?? new Map<string, string>()) {
+      map.set(id, firstNameOf(name));
     }
     return map;
-  }, [membersQuery.data]);
+  }, [namesQuery.data]);
 
   /* ── Lignes (ressources) ── */
   const activeTeams = useMemo(() => teams.filter((tm) => tm.is_active !== false), [teams]);

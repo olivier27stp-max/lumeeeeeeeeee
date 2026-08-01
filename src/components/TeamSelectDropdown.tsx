@@ -12,8 +12,7 @@ import { AlertTriangle, Check, ChevronDown } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '../lib/utils';
 import { useCompany } from '../contexts/CompanyContext';
-import { getRosterForDate } from '../lib/teamScheduleApi';
-import { fetchTeamList } from '../lib/invitationsApi';
+import { getRosterForDate, fetchMemberNames, firstNameOf } from '../lib/teamScheduleApi';
 import UnifiedAvatar from './ui/UnifiedAvatar';
 import type { TeamRecord } from '../lib/teamsApi';
 import type { TeamSuggestion } from '../lib/teamSuggestionsApi';
@@ -59,21 +58,21 @@ export default function TeamSelectDropdown({
     staleTime: 60_000,
     retry: false,
   });
-  const membersQuery = useQuery({
-    queryKey: ['org-members', currentOrgId],
-    queryFn: fetchTeamList,
-    enabled: !!currentOrgId && !!rosterQuery.data && !rosterQuery.data.missing,
+  // Noms en direct Supabase (memberships → profiles) — pas de dépendance à
+  // l'API serveur, qui laissait des « Membre » génériques quand elle échouait.
+  const namesQuery = useQuery({
+    queryKey: ['member-names', currentOrgId],
+    queryFn: fetchMemberNames,
+    enabled: !!currentOrgId,
     staleTime: 5 * 60_000,
-    retry: false,
   });
   const firstName = useMemo(() => {
     const map = new Map<string, string>();
-    for (const m of membersQuery.data?.members ?? []) {
-      const name = (m.full_name || '').trim() || m.email || '';
-      map.set(m.user_id, name.split(/\s+/)[0] || name);
+    for (const [id, name] of namesQuery.data ?? new Map<string, string>()) {
+      map.set(id, firstNameOf(name));
     }
     return map;
-  }, [membersQuery.data]);
+  }, [namesQuery.data]);
 
   const rosterReady = !!rosterQuery.data && !rosterQuery.data.missing;
   const membersFor = (teamId: string): string[] => {
