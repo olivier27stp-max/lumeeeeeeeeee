@@ -142,11 +142,19 @@ export async function revokeInvitation(invitationId: string): Promise<{ message:
   return res.json();
 }
 
-export async function updateMemberRole(memberId: string, role: MemberRole): Promise<{ message: string }> {
+export async function updateMemberRole(
+  memberId: string,
+  role: MemberRole,
+  options?: { team_id?: string | null },
+): Promise<{ message: string }> {
   const res = await fetch(`${API_BASE}/invitations/update-role`, {
     method: 'POST',
     headers: await authHeaders(),
-    body: JSON.stringify({ memberId, role }),
+    body: JSON.stringify({
+      memberId,
+      role,
+      ...(options && 'team_id' in options ? { team_id: options.team_id } : {}),
+    }),
   });
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to update role.');
   return res.json();

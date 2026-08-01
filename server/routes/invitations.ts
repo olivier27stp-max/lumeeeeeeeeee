@@ -125,8 +125,11 @@ const revokeInviteSchema = z.object({
 
 const updateMemberRoleSchema = z.object({
   memberId: z.string().uuid('Invalid member ID.'),
-  role: z.enum(['admin', 'sales_rep', 'technician'], {
-    error: 'Role must be admin, sales_rep, or technician.',
+  // 'owner' n'est jamais un rôle cible de promotion — il n'est accepté que
+  // pour les mises à jour sans changement de rôle (ex. équipe d'attache de
+  // l'owner), gardé par la route.
+  role: z.enum(['owner', 'admin', 'sales_rep', 'technician'], {
+    error: 'Role must be owner, admin, sales_rep, or technician.',
   }),
   scope: z.enum(['self', 'assigned', 'team', 'company'], { error: 'Invalid scope.' }).optional(),
   team_id: z.string().uuid().nullable().optional(),
@@ -149,7 +152,7 @@ router.get('/invitations/list', async (req, res) => {
     // Fetch memberships with profile data
     const { data: memberships, error: memError } = await admin
       .from('memberships')
-      .select('user_id, org_id, role, status, permissions, created_at, experience_level')
+      .select('user_id, org_id, role, status, permissions, created_at, experience_level, team_id')
       .eq('org_id', auth.orgId);
 
     if (memError) {
@@ -190,6 +193,7 @@ router.get('/invitations/list', async (req, res) => {
         permissions: m.permissions,
         created_at: m.created_at,
         experience_level: m.experience_level || null,
+        team_id: m.team_id || null,
         show_on_leaderboard: !hiddenOnLeaderboard.has(m.user_id),
         full_name: profile?.full_name || '',
         avatar_url: profile?.avatar_url || null,
@@ -757,8 +761,13 @@ router.post('/invitations/update-role', validate(updateMemberRoleSchema), async 
       return res.status(404).json({ error: 'Member not found.' });
     }
 
-    if (membership.role === 'owner') {
+    // L'owner garde son rôle, mais ses autres champs (équipe d'attache,
+    // portée) restent modifiables via un appel où role === 'owner'.
+    if (membership.role === 'owner' && role !== 'owner') {
       return res.status(403).json({ error: 'Cannot change the owner\'s role.' });
+    }
+    if (role === 'owner' && membership.role !== 'owner') {
+      return res.status(403).json({ error: 'Cannot promote a member to owner.' });
     }
 
     // Only the org owner can demote another admin

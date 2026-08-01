@@ -52,6 +52,7 @@ import { useCompany } from '../contexts/CompanyContext';
 import { fetchSeatUsage, fetchCurrentBilling, setExtraSeats, type SeatUsage } from '../lib/billingApi';
 import { getTeamStats, type TeamMemberStats } from '../lib/repStatsApi';
 import { fetchHourlyRates, setHourlyRate } from '../lib/teamMembersApi';
+import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { setRepExperience, setRepLeaderboardVisibility } from '../lib/leaderboardApi';
 import SeatChargeConfirmModal from '../components/SeatChargeConfirmModal';
 
@@ -111,6 +112,7 @@ export default function ManageTeam() {
   const [rates, setRates] = useState<Record<string, number>>({});
   const [seatUsage, setSeatUsage] = useState<SeatUsage | null>(null);
   const [teamStats, setTeamStats] = useState<Record<string, TeamMemberStats>>({});
+  const [orgTeams, setOrgTeams] = useState<TeamRecord[]>([]);
   const [roleFilter, setRoleFilter] = useState<MemberRole | 'all'>('all');
   const [removeTarget, setRemoveTarget] = useState<OrgMember | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
@@ -127,6 +129,7 @@ export default function ManageTeam() {
       setInvitations(data.invitations);
       fetchHourlyRates().then(setRates).catch(() => {});
       fetchSeatUsage().then(setSeatUsage).catch(() => {});
+      listTeams().then(setOrgTeams).catch(() => {});
       // Stats réelles par membre (3 requêtes batch pour toute l'équipe)
       getCurrentOrgId()
         .then((orgId) => orgId ? getTeamStats(orgId, data.members.map((m) => m.user_id)) : {})
@@ -164,6 +167,20 @@ export default function ManageTeam() {
       toast.success(isFr ? 'Catégorie enregistrée' : 'Category saved');
     } catch {
       setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, experience_level: prev } : m));
+      toast.error(isFr ? 'Échec de l\'enregistrement' : 'Failed to save');
+    }
+  };
+
+  // Équipe d'attache (memberships.team_id) — tous rôles confondus, owner inclus :
+  // le serveur ne bloque que les vrais changements de rôle sur l'owner.
+  const handleSaveTeam = async (member: OrgMember, teamId: string | null) => {
+    const prev = member.team_id ?? null;
+    setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, team_id: teamId } : m));
+    try {
+      await updateMemberRole(member.user_id, member.role, { team_id: teamId });
+      toast.success(isFr ? 'Équipe enregistrée' : 'Team saved');
+    } catch {
+      setMembers((ms) => ms.map((m) => m.user_id === member.user_id ? { ...m, team_id: prev } : m));
       toast.error(isFr ? 'Échec de l\'enregistrement' : 'Failed to save');
     }
   };
@@ -565,6 +582,8 @@ export default function ManageTeam() {
                 onSaveRate={(c) => handleSaveRate(member, c)}
                 onSaveExperience={(lvl) => handleSaveExperience(member, lvl)}
                 onSaveLeaderboardVisibility={(visible) => handleSaveLeaderboardVisibility(member, visible)}
+                teams={orgTeams}
+                onSaveTeam={(teamId) => handleSaveTeam(member, teamId)}
                 stats={teamStats[member.user_id]}
               />
             ))}
@@ -905,6 +924,8 @@ interface MemberRowProps {
   onSaveRate: (cents: number) => void;
   onSaveExperience?: (level: 'rookie' | 'experienced' | null) => void;
   onSaveLeaderboardVisibility?: (visible: boolean) => void;
+  teams?: TeamRecord[];
+  onSaveTeam?: (teamId: string | null) => void;
   isSuspended?: boolean;
   stats?: TeamMemberStats;
 }
@@ -922,6 +943,8 @@ const MemberRow: React.FC<MemberRowProps> = ({
   onSaveRate,
   onSaveExperience,
   onSaveLeaderboardVisibility,
+  teams,
+  onSaveTeam,
   isSuspended,
   stats,
 }) => {
@@ -1043,6 +1066,23 @@ const MemberRow: React.FC<MemberRowProps> = ({
             <option value="">{isFr ? '—' : '—'}</option>
             <option value="rookie">{isFr ? '1re année' : 'First year'}</option>
             <option value="experienced">{isFr ? 'Expérimenté' : 'Experienced'}</option>
+          </select>
+        </div>
+      )}
+
+      {/* Équipe d'attache — tous les rôles, owner inclus */}
+      {onSaveTeam && teams && teams.length > 0 && (
+        <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Équipe' : 'Team'}</label>
+          <select
+            value={member.team_id ?? ''}
+            onChange={(e) => onSaveTeam(e.target.value || null)}
+            className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 text-[12px] font-medium text-text-primary focus:border-primary focus:outline-none max-w-[130px]"
+          >
+            <option value="">{isFr ? '— Aucune —' : '— None —'}</option>
+            {teams.map((tm) => (
+              <option key={tm.id} value={tm.id}>{tm.name}</option>
+            ))}
           </select>
         </div>
       )}
@@ -1172,7 +1212,6 @@ function InviteForm({
   // Auto-pick a sensible scope when role changes (user can still override)
   useEffect(() => {
     setScope(defaultScopeForRole(role));
-    if (role === 'admin') setTeamId(null);
   }, [role]);
 
   // Load teams for the SELECTED office so we can assign at invite time.
@@ -1204,7 +1243,7 @@ function InviteForm({
     try {
       await onSend(email.trim(), role, {
         scope,
-        team_id: scope === 'team' ? teamId : null,
+        team_id: teamId,
         org_id: officeId || undefined,
       });
     } finally {
@@ -1214,7 +1253,9 @@ function InviteForm({
     }
   };
 
-  const showTeamPicker = scope === 'team' && role !== 'admin';
+  // L'équipe d'attache est indépendante de la portée d'accès : un admin (portée
+  // compagnie) peut quand même appartenir à une équipe sur le terrain.
+  const showTeamPicker = true;
 
   return (
     <div className="space-y-5">
@@ -1312,11 +1353,11 @@ function InviteForm({
         </div>
       )}
 
-      {/* Team picker — only when scope=team */}
+      {/* Team picker — équipe d'attache, tous rôles confondus */}
       {showTeamPicker && (
         <div>
           <label className="text-xs font-medium text-text-tertiary">
-            {isFr ? 'Équipe à assigner' : 'Assign to team'}
+            {isFr ? 'Équipe à assigner (optionnel)' : 'Assign to team (optional)'}
           </label>
           {teams.length === 0 ? (
             <p className="text-[12px] text-text-tertiary mt-1.5 italic">
