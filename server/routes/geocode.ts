@@ -132,7 +132,39 @@ router.post('/geocode/elevation', validate(elevationSchema), async (req, res) =>
       return res.status(429).json({ error: 'Too many requests.' });
     }
 
-    const { lat, lng, surface } = req.body as { lat: number; lng: number; surface: 'ground' | 'roof' };
+    const { lat, lng, surface, target_lat, target_lng } = req.body as {
+      lat: number; lng: number; surface: 'ground' | 'roof' | 'wall-distance';
+      target_lat?: number; target_lng?: number;
+    };
+
+    // Distance caméra→MUR via le contour Solar du bâtiment (boundingBox).
+    // La distance au centre géocodé surestime (~+10 %) toutes les cotes du
+    // mode Photo; la distance au bord de la boîte colle au mur photographié.
+    if (surface === 'wall-distance') {
+      if (typeof target_lat !== 'number' || typeof target_lng !== 'number') {
+        return res.status(400).json({ error: 'target_lat/target_lng required.' });
+      }
+      const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${target_lat}&location.longitude=${target_lng}`;
+      const r = await fetch(url, { headers: { 'X-Goog-Api-Key': PLACES_KEY, Referer: PLACES_REFERER } });
+      const d: any = await r.json().catch(() => ({}));
+      const bb = d?.boundingBox;
+      if (!r.ok || !bb?.sw || !bb?.ne) return res.json({ distance: null });
+      // Équirectangulaire local (mètres autour de la cible), puis distance
+      // point→rectangle aligné sur les axes.
+      const R = 111320;
+      const cosLat = Math.cos((target_lat * Math.PI) / 180);
+      const toXY = (la: number, lo: number) => ({ x: (lo - target_lng) * R * cosLat, y: (la - target_lat) * R });
+      const pt = toXY(lat, lng);
+      const sw = toXY(bb.sw.latitude, bb.sw.longitude);
+      const ne = toXY(bb.ne.latitude, bb.ne.longitude);
+      const cx = (sw.x + ne.x) / 2, cy = (sw.y + ne.y) / 2;
+      const hw = Math.abs(ne.x - sw.x) / 2, hh = Math.abs(ne.y - sw.y) / 2;
+      const ddx = Math.max(0, Math.abs(pt.x - cx) - hw);
+      const ddy = Math.max(0, Math.abs(pt.y - cy) - hh);
+      const dist = Math.hypot(ddx, ddy);
+      // Caméra dans la boîte (ou collée) → pas exploitable, le client se replie.
+      return res.json({ distance: dist > 1 ? dist : null });
+    }
 
     if (surface === 'ground') {
       const url = `https://maps.googleapis.com/maps/api/elevation/json?locations=${lat},${lng}&key=${PLACES_KEY}`;

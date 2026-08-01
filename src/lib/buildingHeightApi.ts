@@ -36,6 +36,26 @@ async function serverElevation(surface: 'ground' | 'roof', lat: number, lng: num
   }
 }
 
+/** Distance caméra Street View → mur du bâtiment (m), via le contour Solar.
+ *  Null si le serveur n'a pas de contour (le caller se replie sur le centre). */
+export async function wallDistance(panoLat: number, panoLng: number, targetLat: number, targetLng: number): Promise<number | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return null;
+    const res = await fetch('/api/geocode/elevation', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: panoLat, lng: panoLng, surface: 'wall-distance', target_lat: targetLat, target_lng: targetLng }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return typeof data?.distance === 'number' ? data.distance : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Ground/terrain elevation in meters above sea level, or null.
  *  Browser ElevationService first (the REST endpoint rejects referer-restricted
  *  keys, so the relay is only a fallback here — the opposite of the roof). */

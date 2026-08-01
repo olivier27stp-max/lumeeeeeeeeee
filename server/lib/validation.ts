@@ -416,7 +416,10 @@ export const commissionActionSchema = z.object({
 export const elevationSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
-  surface: z.enum(['ground', 'roof']),
+  surface: z.enum(['ground', 'roof', 'wall-distance']),
+  // wall-distance : (lat,lng) = caméra Street View, cible = propriété
+  target_lat: z.number().min(-90).max(90).optional(),
+  target_lng: z.number().min(-180).max(180).optional(),
 });
 
 // ─── Courses (LMS) ──────────────────────────────────────────────

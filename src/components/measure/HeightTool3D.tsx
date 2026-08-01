@@ -16,7 +16,7 @@ import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical, X } from 'l
 import { toast } from 'sonner';
 import type { LatLng, UnitSystem, Shape } from '../../lib/measurementTypes';
 import { nextColor, elevationStats, formatElevation } from '../../lib/measurementEngine';
-import { groundElevation, roofElevation } from '../../lib/buildingHeightApi';
+import { groundElevation, roofElevation, wallDistance } from '../../lib/buildingHeightApi';
 import { useGMaps3D } from './useGMaps3D';
 import Cam3DControls from './Cam3DControls';
 
@@ -291,9 +291,17 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       // Plus besoin de cliquer le sol ni d'être proche — le clic-sol reste un
       // secours (svCal) si cette distance n'est pas calculable.
       try {
-        const dAuto = google.maps.geometry.spherical.computeDistanceBetween(
-          data.location.latLng, new google.maps.LatLng(target.lat, target.lng));
-        if (Number.isFinite(dAuto) && dAuto >= 2 && dAuto <= 250) setSvD(dAuto);
+        const panoPos = data.location.latLng;
+        // 1) Distance au MUR via le contour Solar (précis) ; 2) repli : distance
+        // au centre géocodé (~+10 %) ; 3) sinon le clic-sol prendra le relais.
+        const dCentre = google.maps.geometry.spherical.computeDistanceBetween(
+          panoPos, new google.maps.LatLng(target.lat, target.lng));
+        if (Number.isFinite(dCentre) && dCentre >= 2 && dCentre <= 250) setSvD(dCentre);
+        wallDistance(panoPos.lat(), panoPos.lng(), target.lat, target.lng)
+          .then((dWall) => {
+            if (dWall != null && dWall >= 2 && dWall <= 250) setSvD(dWall);
+          })
+          .catch(() => { /* on garde la distance centre */ });
       } catch { /* pas de distance auto — repli sur le clic-sol */ }
       streetPanoDiv.current.innerHTML = '';
       panoRef.current = new google.maps.StreetViewPanorama(streetPanoDiv.current, {
