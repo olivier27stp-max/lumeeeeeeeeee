@@ -13,6 +13,7 @@ import {
   DispatchDailyPrefs, loadDispatchDailyPrefs, saveDispatchDailyPrefs, vehicleNumberForTeam,
 } from '../../lib/dispatchDailyPrefs';
 import DailyCustomizePopover from '../dispatch-daily/DailyCustomizePopover';
+import VisitDetailModal from '../schedule/VisitDetailModal';
 import {
   CARD_HEIGHT_PX, DRAG_THRESHOLD_PX, HEADER_HEIGHT_PX, RESOURCE_COL_PX, ROW_PAD_Y_PX,
 } from '../dispatch-daily/dailyGeometry';
@@ -538,74 +539,24 @@ export default function WeeklyDispatchView({
         </div>
       </div>
 
-      {/* ── Détails de la visite — clic sur une carte ── */}
+      {/* ── Détails de la visite — modale partagée avec la vue Mois ── */}
       {detailEv && (() => {
         const tid = detailEv.team_id || detailEv.job?.team_id || null;
         const team = tid ? activeTeams.find((tm) => tm.id === tid) || teams.find((tm) => tm.id === tid) || null : null;
         const color = team && isHexColor(team.color_hex) ? team.color_hex : FALLBACK_TEAM_COLOR;
-        const s = new Date(detailEv.start_at);
-        const clientName = detailEv.job?.client_name || detailEv.job?.title || 'Job';
-        const address = (detailEv.job?.property_address || '').trim() || null;
-        const jobNumber = detailEv.job?.job_number ? `#${detailEv.job.job_number}` : null;
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={() => setDetailEv(null)}>
-            <div
-              className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="mb-3 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-                    <h2 className="truncate text-[15px] font-bold text-text-primary">{clientName}</h2>
-                  </div>
-                  {detailEv.job?.title && detailEv.job.title !== clientName && (
-                    <p className="mt-0.5 truncate text-[12px] text-text-secondary">
-                      {detailEv.job.title}{jobNumber ? ` · ${jobNumber}` : ''}
-                    </p>
-                  )}
-                </div>
-                <button onClick={() => setDetailEv(null)} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary">
-                  <XIcon size={16} />
-                </button>
-              </div>
-              <div className="space-y-2 rounded-xl bg-surface-secondary p-3">
-                <p className="flex items-center gap-2 text-[12px] font-medium text-text-primary">
-                  <Clock size={12} className="shrink-0 text-text-tertiary" />
-                  <span>{cap(format(s, isFr ? 'EEEE d MMMM' : 'EEEE, MMMM d', { locale }))} · {timeLabelFor(detailEv)}</span>
-                </p>
-                {address && (
-                  <p className="flex items-center gap-2 text-[12px] text-text-secondary">
-                    <MapPin size={12} className="shrink-0 text-text-tertiary" />
-                    <span className="truncate">{address}</span>
-                  </p>
-                )}
-                <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                  <span
-                    className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-                    style={{ backgroundColor: toRgba(color, 0.12), color }}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-                    {team?.name || t.schedule.unassigned}
-                  </span>
-                  {detailEv.job?.total_cents ? (
-                    <span className="text-[12px] font-bold text-text-primary">{formatCurrency((detailEv.job.total_cents || 0) / 100)}</span>
-                  ) : null}
-                </div>
-                {detailEv.notes && <p className="text-[11px] leading-relaxed text-text-tertiary">{detailEv.notes}</p>}
-              </div>
-              <button
-                onClick={() => {
-                  const jobId = detailEv.job_id;
-                  setDetailEv(null);
-                  if (jobId) onEventClick(jobId);
-                }}
-                className="mt-4 w-full rounded-lg bg-text-primary px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
-              >
-                {isFr ? 'Voir la visite' : 'View Visit'}
-              </button>
-            </div>
-          </div>
+          <VisitDetailModal
+            ev={detailEv}
+            color={color}
+            teamName={team?.name || null}
+            timeLabel={timeLabelFor(detailEv)}
+            onClose={() => setDetailEv(null)}
+            onView={() => {
+              const jobId = detailEv.job_id;
+              setDetailEv(null);
+              if (jobId) onEventClick(jobId);
+            }}
+          />
         );
       })()}
     </div>

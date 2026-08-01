@@ -18,6 +18,7 @@ import CalendarMapModal from '../components/CalendarMapModal';
 import AddVisitModal from '../components/AddVisitModal';
 import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
 import WeeklyDispatchView from '../components/dispatch-weekly/WeeklyDispatchView';
+import MonthlyDispatchView from '../components/dispatch-monthly/MonthlyDispatchView';
 import AgendaRoutePanel, { type RouteJob } from '../components/schedule/AgendaRoutePanel';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarControllerProvider, CalendarUiView, useCalendarController } from '../contexts/CalendarController';
@@ -96,73 +97,6 @@ const ns = (v: string | null | undefined) => String(v || '').trim().toLowerCase(
 const isEnd30 = (e: ScheduleEventRecord, now: Date) => { const s = ns(e.job?.status || e.status); if (s === 'completed' || s === 'cancelled' || s === 'canceled') return false; const d = new Date(e.end_at); return !isNaN(d.getTime()) && d >= now && d <= addDays(now, 30); };
 const reqInv = (e: ScheduleEventRecord) => ns(e.job?.status || e.status) === 'completed';
 const needsAtt = (e: ScheduleEventRecord) => { const s = ns(e.job?.status || e.status); return s === 'blocked' || s === 'late' || s === 'action_required' || (!e.team_id && !e.job?.team_id) || !e.start_at || !e.end_at; };
-
-function eventsForDay(events: ScheduleEventRecord[], day: Date) {
-  const dStr = format(day, 'yyyy-MM-dd');
-  // Comparer sur la date LOCALE de l'event: start_at est en UTC, donc
-  // startsWith(prefixe UTC) rangeait les jobs du soir dans la mauvaise case
-  // (un job 21h local = lendemain 01h UTC apparaissait le mauvais jour).
-  return events.filter((e) => format(new Date(e.start_at), 'yyyy-MM-dd') === dStr);
-}
-
-/* ════════════════════════════════════════════════════════════════
-   CUSTOM MONTH VIEW (unchanged — no drag in month view)
-   ════════════════════════════════════════════════════════════════ */
-function MonthView({ date, events, tcMap, onDayClick, onEventClick }: {
-  date: Date; events: ScheduleEventRecord[]; tcMap: Map<string, string>;
-  onDayClick: (d: Date) => void; onEventClick: (jobId: string) => void;
-}) {
-  const mStart = startOfMonth(date);
-  const gStart = startOfWeek(mStart, { weekStartsOn: 0 });
-  const gEnd = endOfWeek(endOfMonth(date), { weekStartsOn: 0 });
-  const days: Date[] = [];
-  for (let d = gStart; d <= gEnd; d = addDays(d, 1)) days.push(d);
-  const numWeeks = Math.ceil(days.length / 7);
-
-  return (
-    <div className="flex h-full flex-col">
-      <div className="grid grid-cols-7 border-b-[1.5px] border-border">
-        {(_isFr() ? ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'] : ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']).map((d) => (
-          <div key={d} className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{d}</div>
-        ))}
-      </div>
-      <div className="grid flex-1 grid-cols-7" style={{ gridTemplateRows: `repeat(${numWeeks}, 1fr)` }}>
-        {days.map((day, i) => {
-          const cur = isSameMonth(day, date);
-          const today = isSameDay(day, new Date());
-          const dayEvs = eventsForDay(events, day);
-          return (
-            <div key={i} onClick={() => onDayClick(day)}
-              className={cn('cursor-pointer border-b-[1.5px] border-r-[1.5px] border-border px-2 pb-1 pt-1.5 transition-colors hover:bg-surface-secondary/30',
-                !cur && 'bg-surface-secondary/10')}>
-              <div className="mb-1">
-                <span className={cn('flex h-7 w-7 items-center justify-center rounded-full text-[13px]',
-                  today ? 'bg-primary font-bold text-white' : cur ? 'font-medium text-text-primary' : 'text-text-tertiary/40')}>
-                  {format(day, 'd')}
-                </span>
-              </div>
-              <div className="space-y-0.5">
-                {dayEvs.slice(0, 3).map((ev) => {
-                  const c = tcMap.get(ev.team_id || ev.job?.team_id || '') || FALLBACK_TEAM_COLOR;
-                  return (
-                    <div key={ev.id} onClick={(e) => { e.stopPropagation(); onEventClick(ev.job_id); }}
-                      className="cursor-pointer truncate rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
-                      style={{ backgroundColor: toRgba(c, 0.15), color: c }}>
-                      {isAnytimeVisit(ev.start_at, ev.end_at)
-                        ? (ev.job?.title || 'Job')
-                        : `${_isFr() ? format(new Date(ev.start_at), 'HH:mm', _LOC) : format(new Date(ev.start_at), 'h:mma', _LOC).toLowerCase()} ${ev.job?.title || 'Job'}`}
-                    </div>
-                  );
-                })}
-                {dayEvs.length > 3 && <div className="px-1.5 text-[10px] font-semibold text-primary">+ {dayEvs.length - 3} {_isFr() ? 'de plus' : 'more'}</div>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 /* ════════════════════════════════════════════════════════════════
    CUSTOM AGENDA VIEW (unchanged — no drag in agenda view)
@@ -788,7 +722,14 @@ function ScheduleContent() {
         <div className="min-w-0 flex-1 overflow-hidden bg-surface">
           {evQ.isLoading ? <div className="h-full animate-pulse bg-surface-secondary/50" /> :
            view === 'month' ? (
-            <MonthView date={selectedDate} events={filtered} tcMap={tcMap} onDayClick={(d) => { setDate(d); setView('day'); }} onEventClick={openExisting} />
+            <MonthlyDispatchView
+              date={selectedDate}
+              events={filtered}
+              teams={teams}
+              isError={evQ.isError}
+              onDayClick={(d) => { setDate(d); setView('day'); }}
+              onEventClick={openExisting}
+            />
           ) : view === 'week' ? (
             <WeeklyDispatchView
               weekDays={weekColumns}
