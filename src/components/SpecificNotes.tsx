@@ -36,6 +36,8 @@ interface SpecificNotesProps {
   entityId: string;
   mode?: 'full' | 'tab' | 'inline';
   className?: string;
+  /** Legacy free-text note stored on the entity itself (e.g. jobs.notes), shown read-only above the list */
+  legacyNote?: string | null;
 }
 
 // ── Helpers ──
@@ -81,7 +83,7 @@ function relativeTime(dateStr: string, fr: boolean): string {
 
 // ── Main Component ──
 
-export default function SpecificNotes({ entityType, entityId, mode = 'full', className }: SpecificNotesProps) {
+export default function SpecificNotes({ entityType, entityId, mode = 'full', className, legacyNote }: SpecificNotesProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [notes, setNotes] = useState<SpecificNote[]>([]);
@@ -586,6 +588,13 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
         )}
       </AnimatePresence>
 
+      {/* Legacy entity note (read-only, edited via the entity form) */}
+      {legacyNote && (
+        <div className="rounded-xl border border-outline-subtle bg-surface p-4">
+          <p className="text-[13px] text-text-secondary whitespace-pre-wrap leading-relaxed">{legacyNote}</p>
+        </div>
+      )}
+
       {/* Notes list */}
       {loading ? (
         <div className="space-y-3">
@@ -603,10 +612,10 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           <p className="text-[13px] text-text-tertiary">{fr ? 'Notes spécifiques' : 'Specific notes'}</p>
           <p className="text-[11px] text-text-muted mt-1">{fr ? 'La table n’est pas encore configurée. Exécutez la migration SQL.' : 'The table is not configured yet. Run the SQL migration.'}</p>
         </div>
-      ) : notes.length === 0 && !showForm ? (
+      ) : notes.length === 0 && !showForm && !legacyNote ? (
         <div className="text-center py-8">
           <Paperclip size={24} className="mx-auto text-text-tertiary mb-2 opacity-40" />
-          <p className="text-[13px] text-text-tertiary">{fr ? 'Aucune note spécifique pour le moment.' : 'No specific notes yet.'}</p>
+          <p className="text-[13px] text-text-tertiary">{fr ? 'Aucune note pour le moment.' : 'No notes yet.'}</p>
           <p className="text-[11px] text-text-muted mt-1">{fr ? 'Ajoutez des photos, vidéos, documents ou notes textuelles.' : 'Add photos, videos, documents or text notes.'}</p>
         </div>
       ) : (
@@ -686,7 +695,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           <div className="icon-tile icon-tile-sm icon-tile-purple">
             <Paperclip size={13} strokeWidth={2} />
           </div>
-          {fr ? 'Notes spécifiques' : 'Specific notes'}
+          Notes
         </h2>
       </div>
       <div className="p-5">

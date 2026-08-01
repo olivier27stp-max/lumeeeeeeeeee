@@ -2035,21 +2035,9 @@ export default function JobDetails() {
           </div>
         </div>}
 
-        {/* ═══ NOTES ═══ */}
-        {job.notes && (
-          <div className="rounded-xl border border-outline bg-surface overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-outline-subtle">
-              <h2 className="text-[13px] font-semibold text-text-primary">Notes</h2>
-            </div>
-            <div className="p-5">
-              <p className="text-[13px] text-text-secondary whitespace-pre-wrap leading-relaxed">{job.notes}</p>
-            </div>
-          </div>
-        )}
-
-        {/* ═══ SPECIFIC NOTES + CLIENT SALES-MAP PIN ═══ */}
+        {/* ═══ NOTES + CLIENT SALES-MAP PIN ═══ */}
         <div className="grid gap-4 md:grid-cols-2">
-          <SpecificNotes entityType="job" entityId={id!} mode="full" />
+          <SpecificNotes entityType="job" entityId={id!} mode="full" legacyNote={job.notes} />
           <ClientPinMiniMap
             pin={miniMapPin}
             hasClient={Boolean(job.client_id)}
