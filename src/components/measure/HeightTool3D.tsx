@@ -84,6 +84,9 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   // géocodée pointe le CENTRE du bâtiment (pas le mur) → biais systématique
   // (~+10 %). Étalonner sur une dimension connue (ex. porte 6 pi 8) le corrige.
   const [svScale, setSvScale] = useState(1);
+  // Distance au mur dérivée du dernier clic « au sol » (auto-portée, par cote) —
+  // plus fiable que le géocodage/contour quand la cote part du pied du mur.
+  const svWallD = useRef<number | null>(null);
   const [svCalibIdx, setSvCalibIdx] = useState<number | null>(null);
   const [svCalibVal, setSvCalibVal] = useState('');
 
@@ -342,6 +345,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     setSvScale(1);
     setSvCalibIdx(null);
     setSvCalibVal('');
+    svWallD.current = null;
     // La distance AUTO (géocodage) survit au « Refaire » — on ne repart en
     // calibrage clic-sol que si l'échelle venait justement d'un clic-sol.
     if (svCal) { setSvCal(null); setSvD(null); }
@@ -412,7 +416,20 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       toast.error(fr ? 'Les 2 points doivent être sur le même mur.' : 'Both points must be on the same wall.');
       return;
     }
-    const c = svMakeCote(first, pt, svD);
+    // Distance pour CETTE cote : si son point bas touche le sol (angle net sous
+    // l'horizon), on la dérive du clic lui-même — indépendante du géocodage,
+    // c'est la plus fiable pour un mur. Sinon: dernier mur connu, puis la
+    // distance auto (géocodage/contour) en dernier recours.
+    let dCote = svWallD.current ?? svD;
+    const lowPitch = Math.min(first.pitch, pt.pitch);
+    if (lowPitch <= -3) {
+      const dg = SV_CAMERA_HEIGHT_M / Math.tan((-lowPitch * Math.PI) / 180);
+      if (Number.isFinite(dg) && dg >= 2 && dg <= 80) {
+        dCote = dg;
+        svWallD.current = dg;
+      }
+    }
+    const c = svMakeCote(first, pt, dCote);
     if (!Number.isFinite(c.len) || c.len < 0.2 || c.len > 300) {
       toast.error(fr ? 'Cote invalide — recommencez.' : 'Invalid dimension — try again.');
       return;
