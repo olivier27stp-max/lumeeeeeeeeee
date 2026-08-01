@@ -96,7 +96,7 @@ export default function RevenueOverviewCard({ className = '' }: { className?: st
         <div>
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full" style={{ backgroundColor: SCHEDULED_COLOR }} />
-            <span className="text-[16px] font-bold text-text-primary">{fr ? 'Planifié' : 'Schedule'}</span>
+            <span className="text-[16px] font-bold text-text-primary">{fr ? 'Planifié' : 'Scheduled'}</span>
           </div>
           <p className="text-[28px] font-bold text-text-primary tabular-nums tracking-tight mt-1 leading-none">
             {formatCurrency(scheduledTotal)}
@@ -150,7 +150,7 @@ export default function RevenueOverviewCard({ className = '' }: { className?: st
                   formatCurrency(value),
                   name === 'collected'
                     ? fr ? 'Collecté' : 'Collected'
-                    : fr ? 'Planifié' : 'Schedule',
+                    : fr ? 'Planifié' : 'Scheduled',
                 ]}
               />
               <Area

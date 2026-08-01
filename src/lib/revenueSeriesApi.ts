@@ -4,7 +4,10 @@
  * Two measures, bucketed over a chosen period:
  *  - collected : paid invoices, by `paid_at`
  *  - scheduled : outstanding expected revenue (sent / partial invoices with a
- *                positive balance), by `due_date`
+ *                positive balance), by `due_date`. Invoices already overdue
+ *                (or without a due date) are still money we expect to collect,
+ *                so they are clamped into the current-time bucket instead of
+ *                being dropped.
  *
  * Period drives both the date window and the bucket granularity:
  *  - today : 24 hourly buckets
@@ -108,11 +111,12 @@ function buildWindow(period: RevenuePeriod, now: Date): Window {
 
 export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSeries> {
   const orgId = await getCurrentOrgIdOrThrow();
-  const w = buildWindow(period, new Date());
+  const now = new Date();
+  const w = buildWindow(period, now);
   const startIso = w.start.toISOString();
   const endIso = w.end.toISOString();
-  const startYmd = ymd(w.start);
   const endYmd = ymd(w.end);
+  const nowIdx = w.bucketOf(now);
 
   const [collectedRes, scheduledRes] = await Promise.all([
     // Collected — paid invoices by paid_at
@@ -124,7 +128,8 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
       .eq('status', 'paid')
       .gte('paid_at', startIso)
       .lte('paid_at', endIso),
-    // Scheduled — outstanding (sent / partial) invoices by due_date
+    // Scheduled — outstanding (sent / partial) invoices due by the end of the
+    // window. Overdue and undated invoices are kept (clamped to "now" below).
     supabase
       .from('invoices')
       .select('balance_cents, due_date')
@@ -132,8 +137,7 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
       .is('deleted_at', null)
       .in('status', ['sent', 'partial'])
       .gt('balance_cents', 0)
-      .gte('due_date', startYmd)
-      .lte('due_date', endYmd),
+      .or(`due_date.is.null,due_date.lte.${endYmd}`),
   ]);
 
   if (collectedRes.error) throw collectedRes.error;
@@ -152,9 +156,15 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
   }
 
   for (const row of scheduledRes.data || []) {
-    if (!row.due_date) continue;
     // due_date is a YYYY-MM-DD date — parse at local midnight
-    const idx = w.bucketOf(new Date(`${row.due_date as string}T00:00:00`));
+    const due = row.due_date ? new Date(`${row.due_date as string}T00:00:00`) : null;
+    let idx = due ? w.bucketOf(due) : -1;
+    if (idx < 0) {
+      if (due && due.getTime() > w.end.getTime()) continue;
+      // Overdue before the window (or no due date): still expected revenue,
+      // attach it to the current bucket.
+      idx = nowIdx;
+    }
     if (idx < 0) continue;
     const amount = Number(row.balance_cents || 0) / 100;
     w.buckets[idx].scheduled += amount;
