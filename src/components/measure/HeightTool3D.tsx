@@ -82,6 +82,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const [svRefPts, setSvRefPts] = useState<SvPoint[]>([]);
   const [svRefVal, setSvRefVal] = useState('');
   const svRefLocked = useRef(false);
+  const svRefHeading = useRef<number | null>(null);
   // Point de référence au sol (calibration d'échelle) + distance au mur déduite.
   const [svCal, setSvCal] = useState<{ pitch: number; heading: number; x: number; y: number } | null>(null);
   const [svD, setSvD] = useState<number | null>(null);
@@ -376,6 +377,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     setSvRefPts([]);
     setSvRefVal('');
     svRefLocked.current = false;
+    svRefHeading.current = null;
     setSvScale(1);
     setSvCalibIdx(null);
     setSvCalibVal('');
@@ -484,6 +486,19 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         }
       }
     }
+    // Garde-fou : une référence vaut pour SON mur. Si la cote s'éloigne
+    // nettement du cap de la référence (aile en L, façade différente), la
+    // distance peut différer — on avertit sans bloquer.
+    if (svRefLocked.current && svRefHeading.current != null) {
+      let drift = ((first.heading + pt.heading) / 2) - svRefHeading.current;
+      while (drift > 180) drift -= 360;
+      while (drift < -180) drift += 360;
+      if (Math.abs(drift) > 14) {
+        toast.warning(fr
+          ? 'Autre mur que la référence ? L’échelle peut différer — refaites une référence sur ce mur pour une mesure fiable.'
+          : 'Different wall than the reference? Scale may differ — set a new reference on this wall for a reliable measure.');
+      }
+    }
     const c = svMakeCote(first, pt, dCote);
     if (!Number.isFinite(c.len) || c.len < 0.2 || c.len > 300) {
       toast.error(fr ? 'Cote invalide — recommencez.' : 'Invalid dimension — try again.');
@@ -511,6 +526,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     setSvD(d);
     svWallD.current = d;
     svRefLocked.current = true;
+    svRefHeading.current = (a.heading + b.heading) / 2;
     setSvRefVal('');
     setSvPhase('measure');
     toast.success(fr ? 'Échelle verrouillée — mesurez vos cotes (2 clics chacune).' : 'Scale locked — measure your dimensions (2 clicks each).');
