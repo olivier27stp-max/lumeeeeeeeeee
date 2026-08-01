@@ -80,6 +80,12 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   // Cotes mesurées sur le plan du mur : écran (x,y) + plan (X latéral, Y hauteur) en mètres.
   const [svCotes, setSvCotes] = useState<SvCote[]>([]);
   const [svPending, setSvPending] = useState<SvPoint | null>(null);
+  // Étalonnage : facteur appliqué à toutes les cotes du mur. La distance
+  // géocodée pointe le CENTRE du bâtiment (pas le mur) → biais systématique
+  // (~+10 %). Étalonner sur une dimension connue (ex. porte 6 pi 8) le corrige.
+  const [svScale, setSvScale] = useState(1);
+  const [svCalibIdx, setSvCalibIdx] = useState<number | null>(null);
+  const [svCalibVal, setSvCalibVal] = useState('');
 
   function setA(p: Pt | null) { aRef.current = p; setPtA(p); }
   function setB(p: Pt | null) { bRef.current = p; setPtB(p); }
@@ -325,6 +331,9 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   function svResetMeasure() {
     setSvCotes([]);
     setSvPending(null);
+    setSvScale(1);
+    setSvCalibIdx(null);
+    setSvCalibVal('');
     // La distance AUTO (géocodage) survit au « Refaire » — on ne repart en
     // calibrage clic-sol que si l'échelle venait justement d'un clic-sol.
     if (svCal) { setSvCal(null); setSvD(null); }
@@ -405,7 +414,17 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
 
   function svCoteLabel(c: SvCote, i: number): string {
     const prefix = c.kind === 'V' ? 'H' : c.kind === 'H' ? (fr ? 'L' : 'W') : '↔';
-    return `${prefix}${i + 1} ≈ ${fmt(c.len)}`;
+    return `${prefix}${i + 1} ≈ ${fmt(c.len * svScale)}`;
+  }
+
+  /** Étalonne toutes les cotes du mur : la cote i vaut « vraiment » realMeters. */
+  function svCalibrate(i: number, realMeters: number) {
+    const raw = svCotes[i]?.len;
+    if (!raw || !Number.isFinite(realMeters) || realMeters <= 0) return;
+    setSvScale(realMeters / raw);
+    setSvCalibIdx(null);
+    setSvCalibVal('');
+    toast.success(fr ? 'Étalonné — toutes les cotes sont recalées.' : 'Calibrated — all dimensions rescaled.');
   }
 
   function addStreetCotes() {
@@ -413,9 +432,10 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     const pos = panoRef.current?.getPosition?.();
     const base = pos ? { lat: pos.lat(), lng: pos.lng() } : currentTarget();
     svCotes.forEach((c, i) => {
+      const len = c.len * svScale;
       const points: LatLng[] = [
         { lat: base.lat, lng: base.lng, elevation: 0 },
-        { lat: base.lat, lng: base.lng, elevation: c.kind === 'V' ? c.len : 0 },
+        { lat: base.lat, lng: base.lng, elevation: c.kind === 'V' ? len : 0 },
       ];
       const geojson: any = { type: 'LineString', coordinates: points.map(p => [p.lng, p.lat, p.elevation]) };
       const noun = c.kind === 'V' ? (fr ? 'Hauteur' : 'Height') : c.kind === 'H' ? (fr ? 'Largeur' : 'Width') : (fr ? 'Cote' : 'Dim');
@@ -423,14 +443,14 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         id: `sh-${index + i}`,
         label: `${noun} ${index + i + 1} (photo)`,
         color: nextColor(index + i),
-        result: { type: 'line', value: c.len * M_TO_FT, areaValue: null, perimeterValue: null, geojson, points, elevation: elevationStats(points) },
+        result: { type: 'line', value: len * M_TO_FT, areaValue: null, perimeterValue: null, geojson, points, elevation: elevationStats(points) },
         notes: '',
         visible: true,
         metadata: {
           kind: 'height',
-          source: 'street-estimate',
+          source: svScale !== 1 ? 'street-calibrated' : 'street-estimate',
           cote: c.kind,
-          ...(c.kind === 'V' ? { heightMeters: c.len } : { lengthMeters: c.len }),
+          ...(c.kind === 'V' ? { heightMeters: len } : { lengthMeters: len }),
         },
       };
       onComplete(shape);
@@ -665,15 +685,23 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         {streetMode && svCotes.length > 0 && (
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-[19] shadow-xl text-center min-w-[300px] space-y-1.5">
             <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wide">
-              {fr ? 'Cotes estimées (photo, ±10-15 %)' : 'Estimated dimensions (photo, ±10-15%)'}
+              {svScale !== 1
+                ? (fr ? 'Cotes étalonnées ✓' : 'Calibrated dimensions ✓')
+                : (fr ? 'Cotes estimées (photo, ±10-15 %)' : 'Estimated dimensions (photo, ±10-15%)')}
             </p>
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {svCotes.map((c, i) => (
-                <div key={i} className="flex items-center justify-between gap-3 text-[12px]">
+                <div key={i} className="flex items-center justify-between gap-2 text-[12px]">
                   <span className="font-mono font-bold text-text-primary">{svCoteLabel(c, i)}</span>
                   <span className="text-[10px] text-text-muted">
                     {c.kind === 'V' ? (fr ? 'hauteur' : 'height') : c.kind === 'H' ? (fr ? 'largeur' : 'width') : (fr ? 'diagonale' : 'diagonal')}
                   </span>
+                  <button
+                    onClick={() => { setSvCalibIdx(svCalibIdx === i ? null : i); setSvCalibVal(''); }}
+                    title={fr ? 'Je connais la vraie valeur de cette cote (étalonner)' : 'I know this dimension’s real value (calibrate)'}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${svCalibIdx === i ? 'bg-text-primary text-surface' : 'bg-surface-secondary text-text-muted hover:text-text-primary'}`}>
+                    {fr ? 'étal.' : 'cal.'}
+                  </button>
                   <button onClick={() => setSvCotes(prev => prev.filter((_, j) => j !== i))}
                     className="p-0.5 rounded hover:bg-danger-light text-text-muted hover:text-danger transition-colors">
                     <X size={12} />
@@ -681,6 +709,37 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
                 </div>
               ))}
             </div>
+            {svCalibIdx != null && svCotes[svCalibIdx] && (
+              <div className="space-y-1.5 pt-1 border-t border-outline/20">
+                <p className="text-[10px] text-text-secondary">
+                  {fr ? 'Vraie valeur de cette cote :' : 'Real value of this dimension:'}
+                </p>
+                <div className="flex items-center gap-1.5 justify-center flex-wrap">
+                  <input
+                    type="number" min="0" step="0.01" value={svCalibVal}
+                    onChange={e => setSvCalibVal(e.target.value)}
+                    placeholder={unitSystem === 'metric' ? 'm' : (fr ? 'pi' : 'ft')}
+                    className="w-20 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center"
+                  />
+                  <button
+                    onClick={() => {
+                      const v = parseFloat(svCalibVal);
+                      if (Number.isFinite(v) && v > 0) svCalibrate(svCalibIdx, unitSystem === 'metric' ? v : v * FT_TO_M);
+                    }}
+                    className="glass-button-primary px-2.5 py-1 rounded-lg text-[11px] font-semibold">
+                    OK
+                  </button>
+                  <button onClick={() => svCalibrate(svCalibIdx, 2.032)}
+                    className="glass-button px-2 py-1 rounded-lg text-[10px] font-medium">
+                    {fr ? 'Porte 6′8″' : 'Door 6′8″'}
+                  </button>
+                  <button onClick={() => svCalibrate(svCalibIdx, 2.134)}
+                    className="glass-button px-2 py-1 rounded-lg text-[10px] font-medium">
+                    {fr ? 'Garage 7′' : 'Garage 7′'}
+                  </button>
+                </div>
+              </div>
+            )}
             {svMeasuring && (
               <p className="text-[10px] text-text-tertiary">{fr ? 'Continuez à cliquer pour d’autres cotes' : 'Keep clicking for more dimensions'}</p>
             )}
