@@ -74,6 +74,14 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const [streetMode, setStreetMode] = useState(false);
   const [streetState, setStreetState] = useState<'idle' | 'loading' | 'ok' | 'none'>('idle');
   const [svMeasuring, setSvMeasuring] = useState(false);
+  // Flux « référence d'abord » : l'échelle vient d'un objet de dimension connue
+  // (porte) cliqué en premier — triangulation exacte, immune au géocodage, au
+  // terrain et à la hauteur de caméra. 'ref' = cliquer la référence, 'refValue'
+  // = dire sa vraie dimension, 'measure' = mesurer les cotes.
+  const [svPhase, setSvPhase] = useState<'ref' | 'refValue' | 'measure'>('ref');
+  const [svRefPts, setSvRefPts] = useState<SvPoint[]>([]);
+  const [svRefVal, setSvRefVal] = useState('');
+  const svRefLocked = useRef(false);
   // Point de référence au sol (calibration d'échelle) + distance au mur déduite.
   const [svCal, setSvCal] = useState<{ pitch: number; heading: number; x: number; y: number } | null>(null);
   const [svD, setSvD] = useState<number | null>(null);
@@ -364,6 +372,10 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   function svResetMeasure() {
     setSvCotes([]);
     setSvPending(null);
+    setSvPhase('ref');
+    setSvRefPts([]);
+    setSvRefVal('');
+    svRefLocked.current = false;
     setSvScale(1);
     setSvCalibIdx(null);
     setSvCalibVal('');
@@ -423,8 +435,25 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       return;
     }
 
-    // Mesure directe : chaque paire de clics = une cote, peu importe la distance.
     const pt: SvPoint = { x, y, pitch: pitchDeg, heading: headingDeg };
+
+    // Phase référence : 2 clics sur un objet de hauteur connue (bas puis haut).
+    if (svPhase === 'ref') {
+      if (svRefPts.length === 0) {
+        setSvRefPts([pt]);
+        return;
+      }
+      const base = svRefPts[0];
+      if (pt.pitch - base.pitch < 0.8) {
+        toast.error(fr ? 'Cliquez le HAUT de la référence (au-dessus du 1er point).' : 'Click the TOP of the reference (above the 1st point).');
+        return;
+      }
+      setSvRefPts([base, pt]);
+      setSvPhase('refValue');
+      return;
+    }
+
+    // Mesure directe : chaque paire de clics = une cote, peu importe la distance.
     if (!svPending) {
       setSvPending(pt);
       return;
@@ -444,7 +473,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     // distance auto (géocodage/contour) en dernier recours.
     let dCote = svWallD.current ?? svD;
     const lowPitch = Math.min(first.pitch, pt.pitch);
-    if (lowPitch <= -3) {
+    if (!svRefLocked.current && lowPitch <= -3) {
       // Hauteur effective de la caméra au-dessus du PIED du mur (terrain corrigé)
       const effH = SV_CAMERA_HEIGHT_M + svElevDelta.current;
       if (effH > 0.8) {
@@ -461,6 +490,30 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       return;
     }
     setSvCotes(prev => [...prev, c]);
+  }
+
+  /** Fixe l'échelle depuis la référence cliquée : d = H_réelle / Δtan(pitch). */
+  function svLockReference(realMeters: number) {
+    if (svRefPts.length !== 2 || !Number.isFinite(realMeters) || realMeters <= 0) return;
+    const [a, b] = svRefPts;
+    const dTan = Math.tan((b.pitch * Math.PI) / 180) - Math.tan((a.pitch * Math.PI) / 180);
+    if (dTan <= 0.003) {
+      toast.error(fr ? 'Référence trop petite à l’écran — zoomez et recommencez.' : 'Reference too small on screen — zoom in and retry.');
+      setSvPhase('ref'); setSvRefPts([]);
+      return;
+    }
+    const d = realMeters / dTan;
+    if (!Number.isFinite(d) || d < 2 || d > 300) {
+      toast.error(fr ? 'Référence incohérente — recommencez.' : 'Inconsistent reference — retry.');
+      setSvPhase('ref'); setSvRefPts([]);
+      return;
+    }
+    setSvD(d);
+    svWallD.current = d;
+    svRefLocked.current = true;
+    setSvRefVal('');
+    setSvPhase('measure');
+    toast.success(fr ? 'Échelle verrouillée — mesurez vos cotes (2 clics chacune).' : 'Scale locked — measure your dimensions (2 clicks each).');
   }
 
   function svCoteLabel(c: SvCote, i: number): string {
@@ -706,17 +759,19 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           <div className="absolute inset-0 z-[17] cursor-crosshair" onClick={svClick} />
         )}
         {streetMode && streetState === 'ok' && svMeasuring && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-[18] pointer-events-none backdrop-blur-sm font-medium">
-            {svD == null
-              ? (fr ? 'Calibrage : cliquez le point où le mur touche le SOL' : 'Calibration: click where the wall meets the GROUND')
-              : svPending
-                ? (fr ? '2e point de la cote…' : '2nd point of the dimension…')
-                : (fr
-                  ? `Cliquez 2 points par cote (bas→haut, gauche→droite…) · distance ≈ ${fmt(svD)}`
-                  : `Click 2 points per dimension (bottom→top, left→right…) · distance ≈ ${fmt(svD)}`)}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-[18] pointer-events-none backdrop-blur-sm font-medium max-w-[92vw] truncate">
+            {svPhase === 'ref'
+              ? (svRefPts.length === 0
+                ? (fr ? 'Étape 1 — Référence : cliquez le BAS d’une porte (zoomez d’abord !)' : 'Step 1 — Reference: click the BOTTOM of a door (zoom in first!)')
+                : (fr ? 'Référence : cliquez maintenant le HAUT de la porte' : 'Reference: now click the TOP of the door'))
+              : svPhase === 'refValue'
+                ? (fr ? 'Indiquez la dimension de la référence ↓' : 'Enter the reference dimension ↓')
+                : svPending
+                  ? (fr ? '2e point de la cote…' : '2nd point of the dimension…')
+                  : (fr ? 'Mesurez : 2 clics par cote (bas→haut, gauche→droite…)' : 'Measure: 2 clicks per dimension (bottom→top, left→right…)')}
           </div>
         )}
-        {streetMode && streetState === 'ok' && (svCal || svCotes.length > 0 || svPending) && (
+        {streetMode && streetState === 'ok' && (svCal || svCotes.length > 0 || svPending || svRefPts.length > 0) && (
           <svg className="absolute inset-0 z-[18] pointer-events-none w-full h-full">
             {svCal && (
               <g>
@@ -741,6 +796,23 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
             {svPending && (
               <circle cx={svPending.x} cy={svPending.y} r={7} fill="#FF4444" stroke="#FFF" strokeWidth={2} />
             )}
+            {svRefPts.length > 0 && (
+              <g>
+                {svRefPts.length === 2 && (
+                  <line x1={svRefPts[0].x} y1={svRefPts[0].y} x2={svRefPts[1].x} y2={svRefPts[1].y}
+                    stroke="#3B82F6" strokeWidth={3} strokeDasharray="4 3" />
+                )}
+                {svRefPts.map((m, i) => (
+                  <circle key={i} cx={m.x} cy={m.y} r={7} fill="#3B82F6" stroke="#FFF" strokeWidth={2} />
+                ))}
+                {svRefPts.length === 2 && svRefLocked.current && (
+                  <text x={(svRefPts[0].x + svRefPts[1].x) / 2 + 12} y={(svRefPts[0].y + svRefPts[1].y) / 2}
+                    fill="#FFF" stroke="#1a1a1a" strokeWidth={3.5} paintOrder="stroke" fontSize="12" fontWeight="800">
+                    {fr ? 'réf.' : 'ref.'}
+                  </text>
+                )}
+              </g>
+            )}
           </svg>
         )}
         {streetMode && streetState === 'ok' && !svMeasuring && svCotes.length === 0 && (
@@ -749,6 +821,49 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
             className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[18] glass-button-primary flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] font-semibold shadow-xl"
           >
             <MoveVertical size={14} /> {fr ? 'Mesurer (estimation)' : 'Measure (estimate)'}
+          </button>
+        )}
+        {streetMode && streetState === 'ok' && svMeasuring && svPhase === 'refValue' && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-[19] shadow-xl text-center min-w-[300px] space-y-2">
+            <p className="text-[11px] font-semibold text-text-primary">
+              {fr ? 'Cette référence, c’est quoi ?' : 'What is this reference?'}
+            </p>
+            <div className="flex items-center gap-1.5 justify-center flex-wrap">
+              <button onClick={() => svLockReference(2.032)} className="glass-button-primary px-2.5 py-1.5 rounded-lg text-[11px] font-semibold">
+                {fr ? 'Porte d’entrée 6′8″' : 'Entry door 6′8″'}
+              </button>
+              <button onClick={() => svLockReference(2.134)} className="glass-button-primary px-2.5 py-1.5 rounded-lg text-[11px] font-semibold">
+                {fr ? 'Porte de garage 7′' : 'Garage door 7′'}
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 justify-center">
+              <input
+                type="text" inputMode="decimal" value={svRefVal}
+                onChange={e => setSvRefVal(e.target.value)}
+                placeholder={unitSystem === 'metric' ? (fr ? 'autre (m)' : 'other (m)') : (fr ? 'autre : 7 5' : 'other: 7 5')}
+                className="w-24 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center"
+              />
+              <button
+                onClick={() => {
+                  const meters = parseLengthInput(svRefVal);
+                  if (meters != null) svLockReference(meters);
+                  else toast.error(fr ? 'Valeur invalide — ex.: 7′5, 7 5, ou 7.42' : 'Invalid value — e.g. 7′5, 7 5, or 7.42');
+                }}
+                className="glass-button px-2.5 py-1 rounded-lg text-[11px] font-semibold">
+                OK
+              </button>
+            </div>
+            <button onClick={() => { setSvPhase('ref'); setSvRefPts([]); }}
+              className="text-[10px] text-text-tertiary hover:text-text-primary transition-colors">
+              {fr ? 'Recliquer la référence' : 'Re-click the reference'}
+            </button>
+          </div>
+        )}
+        {streetMode && streetState === 'ok' && svMeasuring && svPhase === 'ref' && svRefPts.length === 0 && (
+          <button
+            onClick={() => { svRefLocked.current = false; setSvPhase('measure'); }}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[18] text-[10px] text-white/80 hover:text-white bg-gray-900/60 px-3 py-1 rounded-lg backdrop-blur-sm transition-colors">
+            {fr ? 'Mesurer sans référence (approximatif ±10-15 %)' : 'Measure without reference (approximate ±10-15%)'}
           </button>
         )}
         {streetMode && svCotes.length > 0 && (
