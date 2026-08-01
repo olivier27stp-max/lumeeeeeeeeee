@@ -79,7 +79,7 @@ export default function DailyDispatchView({
 }: DailyDispatchViewProps) {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
-  const { colorForTagIds } = useJobTagColors();
+  const { firstTagFor } = useJobTagColors();
 
   /* ── Préférences colonne de gauche (par organisation) ── */
   const [prefs, setPrefs] = useState<DispatchDailyPrefs>(() => loadDispatchDailyPrefs(orgId));
@@ -548,6 +548,7 @@ export default function DailyDispatchView({
                       const isResizingThis = drag?.mode === 'resize' && drag.ev.id === p.ev.id && drag.moved;
                       const durMin = isResizingThis ? drag.previewDurationMin : cardEndMin - cardStartMin;
                       const width = Math.max(durMin * PX_PER_MINUTE - CARD_GAP_X_PX * 2, 26);
+                      const tag = firstTagFor(p.ev.job?.tag_ids);
                       return (
                         <DailyVisitCard
                           key={p.ev.id}
@@ -559,7 +560,8 @@ export default function DailyDispatchView({
                           timeLabel={anytime ? anytimeLabel(isFr) : timeLabelFor(cardStartMin, cardStartMin + durMin)}
                           anytime={anytime}
                           dimmed={isDraggingThis}
-                          tagColor={colorForTagIds(p.ev.job?.tag_ids)}
+                          tagColor={tag?.hex ?? null}
+                          tagName={tag?.name ?? null}
                           onOpen={() => openEvent(p.ev.job_id)}
                           onMoveStart={(e) => { if (!anytime) handleMoveStart(p.ev, ri, e); }}
                           onResizeStart={(e) => { if (!anytime) handleResizeStart(p.ev, e); }}

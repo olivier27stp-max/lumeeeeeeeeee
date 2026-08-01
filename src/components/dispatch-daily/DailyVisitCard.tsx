@@ -24,18 +24,20 @@ export interface DailyVisitCardProps {
   anytime?: boolean;
   /** Couleur du premier tag de la job — null si aucun tag. */
   tagColor?: string | null;
+  /** Nom du premier tag — affiché en haut de la carte dans sa couleur. */
+  tagName?: string | null;
   onOpen: () => void;
   onMoveStart: (e: React.PointerEvent) => void;
   onResizeStart: (e: React.PointerEvent) => void;
 }
 
 export default function DailyVisitCard({
-  ev, left, top, width, height, timeLabel, dimmed, anytime = false, tagColor, onOpen, onMoveStart, onResizeStart,
+  ev, left, top, width, height, timeLabel, dimmed, anytime = false, tagColor, tagName, onOpen, onMoveStart, onResizeStart,
 }: DailyVisitCardProps) {
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
   const city = shortAddress(ev.job?.property_address);
   const jobNumber = ev.job?.job_number ? `#${ev.job.job_number}` : null;
-  const tooltip = [timeLabel, clientName, city, jobNumber].filter(Boolean).join(' · ');
+  const tooltip = [tagName, timeLabel, clientName, city, jobNumber].filter(Boolean).join(' · ');
 
   return (
     <div
@@ -69,8 +71,22 @@ export default function DailyVisitCard({
       }}
     >
       <div className="flex h-full min-w-0 flex-col justify-center py-1 pl-3 pr-2">
-        {width >= 96 && (
-          <div className="truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</div>
+        {/* Rangée du haut : nom du tag (dans sa couleur) + plage horaire —
+            une seule ligne pour respecter la hauteur fixe de la carte. */}
+        {(tagName || width >= 96) && (
+          <div className="flex min-w-0 items-center gap-1.5">
+            {tagName && (
+              <span
+                className="truncate text-[10px] font-bold leading-[1.4]"
+                style={tagColor ? { color: tagColor } : undefined}
+              >
+                {tagName}
+              </span>
+            )}
+            {width >= 96 && (
+              <span className="shrink-0 truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</span>
+            )}
+          </div>
         )}
         <div className="truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary">{clientName}</div>
         {width >= 132 && city && (

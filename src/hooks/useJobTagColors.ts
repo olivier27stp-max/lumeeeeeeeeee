@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { listJobTags, JobTagRecord } from '../lib/jobTagsApi';
 
 /**
- * Couleurs des tags de jobs pour le calendrier : charge les tags de l'org une
- * fois et expose `colorForTagIds(tag_ids)` — la couleur du PREMIER tag assigné
+ * Tags de jobs pour le calendrier : charge les tags de l'org une fois et
+ * expose `firstTagFor(tag_ids)` — nom + couleur du PREMIER tag assigné
  * (ordre de jobs.tag_ids), ou null si la job n'a aucun tag.
  */
 export function useJobTagColors() {
@@ -14,14 +14,14 @@ export function useJobTagColors() {
     return () => { alive = false; };
   }, []);
 
-  const byId = useMemo(() => new Map(tags.map((tg) => [tg.id, tg.color_hex])), [tags]);
+  const byId = useMemo(() => new Map(tags.map((tg) => [tg.id, tg])), [tags]);
 
   return useMemo(() => ({
-    colorForTagIds(tagIds: string[] | null | undefined): string | null {
+    firstTagFor(tagIds: string[] | null | undefined): { name: string; hex: string } | null {
       if (!tagIds?.length) return null;
       for (const id of tagIds) {
-        const hex = byId.get(id);
-        if (hex) return hex;
+        const tag = byId.get(id);
+        if (tag) return { name: tag.name, hex: tag.color_hex };
       }
       return null;
     },

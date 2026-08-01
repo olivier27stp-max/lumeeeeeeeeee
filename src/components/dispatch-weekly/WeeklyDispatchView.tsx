@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { frCA, enCA } from 'date-fns/locale';
-import { AlertTriangle, Clock, MapPin, X as XIcon } from 'lucide-react';
-import { cn, formatCurrency } from '../../lib/utils';
+import { AlertTriangle } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
@@ -104,10 +104,12 @@ const sameCell = (a: CellRef | null, b: CellRef | null) =>
    Même gabarit que DailyVisitCard : rayon, bordure, ombre, typographie —
    avec le fond pastel de la couleur de route + barre gauche pleine. */
 const WeekVisitCard = React.memo(function WeekVisitCard({
-  ev, color, timeLabel, attention, dimmed, onOpen, onMoveStart,
+  ev, color, tagName, timeLabel, attention, dimmed, onOpen, onMoveStart,
 }: {
   ev: ScheduleEventRecord;
   color: string;
+  /** Nom du premier tag de la job — affiché en haut de la carte dans `color`. */
+  tagName?: string | null;
   timeLabel: string;
   attention: boolean;
   dimmed: boolean;
@@ -116,7 +118,7 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
 }) {
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
   const address = (ev.job?.property_address || '').trim() || null;
-  const tooltip = [timeLabel, clientName, address].filter(Boolean).join(' · ');
+  const tooltip = [tagName, timeLabel, clientName, address].filter(Boolean).join(' · ');
   return (
     <div
       role="button"
@@ -134,8 +136,11 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
       onPointerDown={(e) => { if (e.button === 0) onMoveStart(e); }}
     >
-      <div className="flex min-w-0 items-center gap-1">
-        <span className="truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        {tagName && (
+          <span className="truncate text-[10px] font-bold leading-[1.4]" style={{ color }}>{tagName}</span>
+        )}
+        <span className="shrink-0 truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</span>
         {attention && <AlertTriangle size={9} className="shrink-0 text-[#c2410c]" />}
       </div>
       <div className="truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary">{clientName}</div>
@@ -163,7 +168,7 @@ export default function WeeklyDispatchView({
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
   const locale = isFr ? frCA : enCA;
-  const { colorForTagIds } = useJobTagColors();
+  const { firstTagFor } = useJobTagColors();
 
   /* ── Préférences colonne de gauche — partagées avec la vue Jour ── */
   const [prefs, setPrefs] = useState<DispatchDailyPrefs>(() => loadDispatchDailyPrefs(orgId));
@@ -504,11 +509,13 @@ export default function WeeklyDispatchView({
                       >
                         {cellEvents.map((ev) => {
                           const st = String(ev.job?.status || ev.status || '').trim().toLowerCase().replace(/\s+/g, '_');
+                          const tag = firstTagFor(ev.job?.tag_ids);
                           return (
                             <WeekVisitCard
                               key={ev.id}
                               ev={ev}
-                              color={colorForTagIds(ev.job?.tag_ids) || teamColor}
+                              color={tag?.hex || teamColor}
+                              tagName={tag?.name ?? null}
                               timeLabel={timeLabelFor(ev)}
                               attention={st === 'blocked' || st === 'late' || st === 'action_required'}
                               dimmed={!!(drag?.moved && drag.ev.id === ev.id)}
