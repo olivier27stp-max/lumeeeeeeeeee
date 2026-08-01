@@ -73,51 +73,56 @@ export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props
   useEffect(() => {
     if (mode !== 'street' || street !== 'idle' || !streetDiv.current) return;
     setStreet('loading');
-    try {
-      const svc = new google.maps.StreetViewService();
-      // Littéraux plutôt qu'enums (le canal beta de Maps peut ne pas les exposer)
-      // et double filtre sources: imagerie OFFICIELLE Google ET extérieure —
-      // sinon getPanorama peut retourner la photo sphère intérieure d'un
-      // utilisateur (observé au banc: un salon au lieu de la rue).
-      const request = {
-        location: { lat, lng },
-        radius: 120,
-        preference: 'nearest',
-        source: 'outdoor',
-        sources: ['google', 'outdoor'],
-      } as unknown as google.maps.StreetViewLocationRequest;
-      svc.getPanorama(
-        request,
-        (data, status) => {
-          if (String(status).toUpperCase() === 'OK' && data?.location?.latLng && streetDiv.current) {
-            const panoPos = data.location.latLng;
-            // Oriente la caméra vers la propriété, pas vers la rue.
-            let heading = 0;
-            try {
-              heading = google.maps.geometry.spherical.computeHeading(panoPos, new google.maps.LatLng(lat, lng));
-            } catch { /* geometry indisponible — heading par défaut */ }
-            panoRef.current = new google.maps.StreetViewPanorama(streetDiv.current, {
-              pano: data.location.pano,
-              pov: { heading, pitch: 5 },
-              zoom: 0.8,
-              addressControl: false,
-              fullscreenControl: false,
-              motionTracking: false,
-              motionTrackingControl: false,
-            });
-            // Verrouille sur le pano officiel retourné (évite tout repli implicite).
-            try { panoRef.current.setPano(data.location.pano as string); } catch {}
-            setStreet('ok');
-          } else {
-            setStreet('none');
-            if (threeDFailed.current) onUnavailable();
-          }
-        },
-      );
-    } catch {
+
+    const svc = new google.maps.StreetViewService();
+    const giveUp = () => {
       setStreet('none');
       if (threeDFailed.current) onUnavailable();
-    }
+    };
+    const show = (data: google.maps.StreetViewPanoramaData) => {
+      if (!data?.location?.latLng || !streetDiv.current) { giveUp(); return; }
+      const panoPos = data.location.latLng;
+      // Oriente la caméra vers la propriété, pas vers la rue.
+      let heading = 0;
+      try {
+        heading = google.maps.geometry.spherical.computeHeading(panoPos, new google.maps.LatLng(lat, lng));
+      } catch { /* geometry indisponible — heading par défaut */ }
+      panoRef.current = new google.maps.StreetViewPanorama(streetDiv.current, {
+        pano: data.location.pano,
+        pov: { heading, pitch: 5 },
+        zoom: 0.8,
+        addressControl: false,
+        fullscreenControl: false,
+        motionTracking: false,
+        motionTrackingControl: false,
+      });
+      setStreet('ok');
+    };
+
+    // Une tentative = un appel getPanorama avec garde-fou : si Google rejette la
+    // requête en async (combinaison de paramètres refusée, promesse rejetée) ou
+    // ne répond pas en 10 s, on passe à la suite au lieu de rester en chargement.
+    const attempt = (extra: Record<string, unknown>, onFail: () => void) => {
+      let settled = false;
+      const settle = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
+      const timer = setTimeout(() => settle(onFail), 10000);
+      try {
+        const req = { location: { lat, lng }, radius: 120, preference: 'nearest', ...extra } as unknown as google.maps.StreetViewLocationRequest;
+        const maybePromise: any = svc.getPanorama(req, (data, status) => {
+          if (String(status).toUpperCase() === 'OK') settle(() => show(data as google.maps.StreetViewPanoramaData));
+          else settle(onFail);
+        });
+        maybePromise?.catch?.(() => settle(onFail));
+      } catch {
+        settle(onFail);
+      }
+    };
+
+    // 1) Imagerie officielle Google extérieure (évite les photos sphères
+    //    d'utilisateurs — observé au banc: un salon au lieu de la rue).
+    // 2) Repli: extérieur simple. 3) Sinon: indisponible.
+    attempt({ sources: ['google', 'outdoor'] }, () =>
+      attempt({ source: 'outdoor' }, giveUp));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, street]);
 
