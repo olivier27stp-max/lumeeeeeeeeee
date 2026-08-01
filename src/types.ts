@@ -113,6 +113,8 @@ export interface Job {
   job_type?: string | null;
   salesperson_id?: string | null;
   sale_date?: string | null;
+  /** Ids des job_tags assignés (uuid[]); [] tant que la migration n'est pas appliquée. */
+  tag_ids?: string[];
   show_on_leaderboard?: boolean;
   requires_invoicing?: boolean;
   billing_split?: boolean;

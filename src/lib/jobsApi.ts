@@ -17,6 +17,7 @@ export interface JobsQuery {
   jobType?: string;
   clientId?: string;
   salespersonId?: string;
+  tagId?: string;
   q?: string;
   sort?: JobSort;
   sortDirection?: JobSortDirection;
@@ -260,6 +261,7 @@ function mapJob(raw: any, clientNameFallback?: string | null): Job {
     job_type: raw.job_type || null,
     salesperson_id: raw.salesperson_id || null,
     sale_date: raw.sale_date || null,
+    tag_ids: Array.isArray(raw.tag_ids) ? raw.tag_ids : [],
     show_on_leaderboard: raw.show_on_leaderboard !== false,
     requires_invoicing: !!raw.requires_invoicing,
     billing_split: !!raw.billing_split,
@@ -313,7 +315,7 @@ async function loadClientNames(clientIds: string[]): Promise<Map<string, { name:
 
 function applyTableFilters(request: any, query: JobsQuery) {
   let builder = request;
-  const { status, jobType, clientId, salespersonId, q } = query;
+  const { status, jobType, clientId, salespersonId, tagId, q } = query;
   if (status && status !== 'All') {
     const normalized = status.trim().toLowerCase().replace(/\s+/g, '_');
     // Filter on the precise visit-based derived_status (jobs_active view).
@@ -336,6 +338,7 @@ function applyTableFilters(request: any, query: JobsQuery) {
   }
   if (clientId && clientId !== 'All') builder = builder.eq('client_id', clientId);
   if (salespersonId && salespersonId !== 'All') builder = builder.eq('salesperson_id', salespersonId);
+  if (tagId && tagId !== 'All') builder = builder.contains('tag_ids', [tagId]);
   if (q && q.trim()) builder = builder.or(buildSearchFilter(q));
   return builder;
 }

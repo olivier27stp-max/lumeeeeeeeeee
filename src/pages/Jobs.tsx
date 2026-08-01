@@ -47,6 +47,7 @@ import {
   SalespersonOption,
   softDeleteJob,
 } from '../lib/jobsApi';
+import { JobTagRecord, listJobTags } from '../lib/jobTagsApi';
 import { Job } from '../types';
 import StatusBadge, { statusDotColor } from '../components/ui/StatusBadge';
 import FilterPill from '../components/ui/FilterPill';
@@ -343,6 +344,8 @@ export default function Jobs() {
   const [kpis, setKpis] = useState<JobsKpis | null>(null);
   const [statusFilter, setStatusFilter] = useState('All');
   const [salespersonFilter, setSalespersonFilter] = useState('All');
+  const [tagFilter, setTagFilter] = useState('All');
+  const [jobTags, setJobTags] = useState<JobTagRecord[]>([]);
   const [salespeople, setSalespeople] = useState<SalespersonOption[]>([]);
   // Two separate tables, one per tab: one-off jobs vs service plans.
   const [jobTypeFilter, setJobTypeFilter] = useState('one_off');
@@ -398,7 +401,7 @@ export default function Jobs() {
     setLoading(true);
     setError(null);
     try {
-      const result = await getJobs({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, q: debouncedQuery, sort: sortBy, sortDirection, page, pageSize });
+      const result = await getJobs({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery, sort: sortBy, sortDirection, page, pageSize });
       setJobs(result.jobs);
       setTotal(result.total);
     } catch (err: any) {
@@ -421,7 +424,8 @@ export default function Jobs() {
 
   useEffect(() => { getJobTypes().then(setJobTypes).catch(() => setJobTypes([])); }, []);
   useEffect(() => { listSalespeople().then(setSalespeople).catch(() => setSalespeople([])); }, []);
-  useEffect(() => { void loadJobs(); }, [statusFilter, jobTypeFilter, salespersonFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
+  useEffect(() => { listJobTags().then(setJobTags).catch(() => setJobTags([])); }, []);
+  useEffect(() => { void loadJobs(); }, [statusFilter, jobTypeFilter, salespersonFilter, tagFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
   useEffect(() => { void loadKpis(); }, [jobTypeFilter, debouncedQuery]);
 
   // Listen for command palette create event
@@ -457,7 +461,7 @@ export default function Jobs() {
 
   const handleExportCsv = async () => {
     try {
-      const csv = await exportJobsCsv({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, q: debouncedQuery });
+      const csv = await exportJobsCsv({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -610,6 +614,15 @@ export default function Jobs() {
           options={[
             { value: 'All', label: fr ? 'Tous' : 'All' },
             ...salespeople.map((p) => ({ value: p.id, label: p.label })),
+          ]}
+        />
+        <FilterPill
+          label="Tags"
+          value={tagFilter}
+          onChange={(v) => { setTagFilter(v); setPage(1); }}
+          options={[
+            { value: 'All', label: fr ? 'Tous' : 'All' },
+            ...jobTags.map((tg) => ({ value: tg.id, label: tg.name, dotColor: tg.color_hex })),
           ]}
         />
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
