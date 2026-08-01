@@ -516,7 +516,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
 
     // ── Send receipt email (if paid plan, non-blocking) ──
     if (amountCents > 0 && subscription) {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
       try {
         const { sendPaymentReceipt } = await import('../lib/billing-email');
         await sendPaymentReceipt({
@@ -1563,7 +1563,7 @@ router.post('/billing/customer-portal', async (req, res) => {
       if (linkErr) console.error('[billing/customer-portal] relink customer failed:', linkErr.message);
     }
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
     const session = await stripe.billingPortal.sessions.create({
       customer: customerId,
       return_url: `${frontendUrl}/settings?tab=billing`,
@@ -1676,7 +1676,7 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       metadata: { company_name: company_name || '', plan_slug },
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:5173').trim();
 
     // Resolve persistent Stripe Price ID for this plan + interval + currency.
     const priceIdField =
