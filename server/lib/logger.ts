@@ -18,6 +18,13 @@ const REDACTED_FIELDS = new Set([
   'supabase_service_role_key', 'encryption_key',
   'credit_card', 'card_number', 'cvv', 'ssn',
   'pii_encryption_key', 'payments_encryption_key',
+  // PII client (C1-09) — jamais en clair dans les logs. Le matching normalise
+  // la clé (minuscule, sans - ni _), donc 'first_name' -> 'firstname'. Note :
+  // 'ip_address' -> 'ipaddress' != 'address', donc l'IP reste loggable pour la
+  // sécurité.
+  'email', 'phone', 'phones', 'phonenumber',
+  'address', 'billingaddress', 'postalcode',
+  'firstname', 'lastname',
 ]);
 
 // Patterns to redact from string values
