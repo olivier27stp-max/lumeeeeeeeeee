@@ -614,6 +614,9 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           </div>
         )}
         {streetMode && streetState === 'ok' && svMeasuring && (
+          <div className="absolute inset-0 z-[17] cursor-crosshair" onClick={svClick} />
+        )}
+        {streetMode && streetState === 'ok' && svMeasuring && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-[18] pointer-events-none backdrop-blur-sm font-medium">
             {svD == null
               ? (fr ? 'Calibrage : cliquez le point où le mur touche le SOL' : 'Calibration: click where the wall meets the GROUND')
@@ -650,17 +653,6 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
               <circle cx={svPending.x} cy={svPending.y} r={7} fill="#FF4444" stroke="#FFF" strokeWidth={2} />
             )}
           </svg>
-        )}
-        {streetMode && streetState === 'ok' && svMeasuring && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-[18] pointer-events-none backdrop-blur-sm font-medium">
-            {!svCal
-              ? (fr ? '1. Cliquez le point où le mur touche le SOL (référence)' : '1. Click where the wall meets the GROUND (reference)')
-              : svCotes.length === 0 && !svPending
-                ? (fr ? '2. Cliquez le SOMMET du mur → hauteur' : '2. Click the TOP of the wall → height')
-                : svPending
-                  ? (fr ? 'Cliquez le 2e point de la cote' : 'Click the 2nd point of the dimension')
-                  : (fr ? 'Cliquez 2 points pour une autre cote (largeur, fenêtre...)' : 'Click 2 points for another dimension (width, window...)')}
-          </div>
         )}
         {streetMode && streetState === 'ok' && !svMeasuring && svCotes.length === 0 && (
           <button
