@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Users, AlertTriangle, Check, Loader2, UserPlus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Users, AlertTriangle, Check, Loader2, Minus, Plus, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
@@ -11,21 +11,29 @@ interface SeatsBannerProps {
 }
 
 /**
- * Shows the org's seat usage vs the plan limit.
- * If the org is over its included seats, surfaces an inline action to
- * sync the extra-seats billing (charged immediately via Stripe proration).
+ * Seat usage + self-serve extra-seat purchase for the billing page.
+ * Mirrors OfficesManager: a stepper lets an admin buy (or drop) extra seats
+ * at any time — not only once the org is already over its limit. Billing goes
+ * through POST /billing/seats (immediate Stripe proration when the sub is
+ * linked; DB-only fallback otherwise).
  */
 export default function SeatsBanner({ onChange }: SeatsBannerProps) {
   const { language } = useTranslation();
   const isFr = language === 'fr';
   const navigate = useNavigate();
   const [usage, setUsage] = useState<SeatUsage | null>(null);
+  const [draft, setDraft] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchSeatUsage()
-      .then(setUsage)
+      .then((u) => {
+        setUsage(u);
+        // Pre-select what's actually needed when usage already exceeds what's
+        // billed, so "Mettre à jour" fixes the gap in one click.
+        setDraft(Math.max(u.extras_charged, u.used - u.included));
+      })
       .catch(() => setUsage(null))
       .finally(() => setLoading(false));
   }, []);
@@ -33,167 +41,161 @@ export default function SeatsBanner({ onChange }: SeatsBannerProps) {
   if (loading) return null;
   if (!usage || usage.included === 0) return null;
 
-  const needed = Math.max(0, usage.used - usage.included);
-  const isOverLimit = needed > 0;
-  const billingMismatch = needed !== usage.extras_charged;
   const extraPrice = usage.extra_price_cents / 100;
-  const monthlyCost = extraPrice * needed;
+  const supportsExtra = usage.extra_price_cents > 0;
+  const capacity = usage.included + usage.extras_charged;
+  const needed = Math.max(0, usage.used - usage.included);
+  const billingMismatch = needed > usage.extras_charged;
+  // Never let the stepper strand members already over the included limit.
+  const minDraft = needed;
+  const monthlyCost = extraPrice * draft;
+  const dirty = draft !== usage.extras_charged;
+  const utilization = capacity > 0 ? Math.round((usage.used / capacity) * 100) : 0;
 
-  // Within limit — show a discreet usage indicator
-  if (!isOverLimit) {
-    const utilization = Math.round((usage.used / usage.included) * 100);
-    return (
-      <div className="rounded-2xl p-4 bg-surface-card border border-outline-subtle">
-        <div className="flex items-center gap-3">
-          <div className="shrink-0 w-9 h-9 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <Users size={15} className="text-emerald-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-[13px] font-semibold text-text-primary">
-                {usage.used} / {usage.included} {isFr ? 'sièges utilisés' : 'seats used'}
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate('/settings/team')}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-              >
-                <UserPlus size={11} />
-                {isFr ? 'Inviter un membre' : 'Invite a member'}
-              </button>
-            </div>
-            <div className="mt-1.5 h-1.5 bg-surface-secondary rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-500 rounded-full transition-all"
-                style={{ width: `${Math.min(100, utilization)}%` }}
-              />
-            </div>
-          </div>
-          <span className="text-[11px] font-bold text-text-tertiary tabular-nums">{utilization}%</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Over limit but already billed correctly — informational
-  if (!billingMismatch) {
-    return (
-      <div className="rounded-2xl p-4 bg-amber-500/5 border border-amber-500/20">
-        <div className="flex items-start gap-3">
-          <div className="shrink-0 w-9 h-9 rounded-full bg-amber-500/15 flex items-center justify-center mt-0.5">
-            <Users size={15} className="text-amber-600" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-[13px] font-semibold text-text-primary">
-                {usage.used} / {usage.included} {isFr ? 'sièges' : 'seats'} · +{needed} {isFr ? 'supplémentaires facturés' : 'extra billed'}
-              </p>
-              <button
-                type="button"
-                onClick={() => navigate('/settings/team')}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
-              >
-                <UserPlus size={11} />
-                {isFr ? 'Inviter un membre' : 'Invite a member'}
-              </button>
-            </div>
-            <p className="text-[12px] text-text-secondary mt-0.5">
-              {isFr
-                ? `Vous payez $${monthlyCost.toFixed(0)}/mois supplémentaire pour vos sièges en plus.`
-                : `You're paying $${monthlyCost.toFixed(0)}/mo extra for the additional seats.`}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Over limit and billing not synced — actionable
-  const handleSync = async () => {
-    setSyncing(true);
+  const handleSave = async () => {
+    setSaving(true);
     try {
-      const result = await setExtraSeats(needed);
+      const result = await setExtraSeats(draft);
       if (result.no_change) {
-        toast.success(isFr ? 'Déjà synchronisé' : 'Already in sync');
+        toast.success(isFr ? 'Déjà à jour' : 'Already in sync');
       } else if (result.no_stripe) {
-        toast.success(isFr ? 'Sièges mis à jour' : 'Seats updated');
+        toast.success(
+          isFr
+            ? 'Sièges mis à jour — aucun abonnement Stripe lié, rien n\'a été facturé.'
+            : 'Seats updated — no Stripe subscription linked, nothing was billed.',
+          { duration: 6000 },
+        );
       } else {
         toast.success(
           isFr
-            ? `+${needed} sièges activés · facturé maintenant`
-            : `+${needed} extra seats added · billed now`,
+            ? 'Sièges mis à jour · facturé maintenant via Stripe'
+            : 'Seats updated · billed now via Stripe',
           { duration: 5000 },
         );
       }
       const fresh = await fetchSeatUsage();
       setUsage(fresh);
+      setDraft(Math.max(fresh.extras_charged, fresh.used - fresh.included));
       onChange?.();
     } catch (err: any) {
-      toast.error(err.message || (isFr ? 'Échec de la synchronisation' : 'Sync failed'));
+      toast.error(err.message || (isFr ? 'Échec de la mise à jour' : 'Update failed'));
     } finally {
-      setSyncing(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="rounded-2xl p-5 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border-2 border-amber-500/30">
-      <div className="flex items-start gap-3">
-        <div className="shrink-0 w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center mt-0.5">
-          <AlertTriangle size={18} className="text-amber-600" />
+    <div
+      className={
+        billingMismatch
+          ? 'rounded-2xl p-4 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border-2 border-amber-500/30'
+          : 'rounded-2xl p-4 bg-surface-card border border-outline-subtle'
+      }
+    >
+      <div className="flex items-center gap-3">
+        <div
+          className={
+            'shrink-0 w-9 h-9 rounded-full flex items-center justify-center ' +
+            (billingMismatch ? 'bg-amber-500/20' : 'bg-emerald-500/10')
+          }
+        >
+          {billingMismatch
+            ? <AlertTriangle size={15} className="text-amber-600" />
+            : <Users size={15} className="text-emerald-600" />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-extrabold text-text-primary">
-            {isFr
-              ? `${needed} ${needed === 1 ? 'siège' : 'sièges'} au-delà de votre limite`
-              : `${needed} ${needed === 1 ? 'seat' : 'seats'} over your plan limit`}
-          </p>
-          <p className="text-[12px] text-text-secondary mt-1 leading-relaxed">
-            {isFr
-              ? `Votre plan inclut ${usage.included} sièges. Vous utilisez actuellement ${usage.used}. Activez la facturation des sièges supplémentaires pour ${needed} membre${needed === 1 ? '' : 's'} à +$${extraPrice}/${isFr ? 'mois' : 'mo'} chacun.`
-              : `Your plan includes ${usage.included} seats. You're currently using ${usage.used}. Enable extra-seat billing for ${needed} member${needed === 1 ? '' : 's'} at +$${extraPrice}/mo each.`}
-          </p>
-
-          {/* Price summary */}
-          <div className="mt-3 p-3 rounded-xl bg-surface-card border border-outline-subtle">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-text-tertiary">
-                  {isFr ? 'Coût supplémentaire' : 'Additional cost'}
-                </p>
-                <p className="text-xl font-extrabold text-text-primary tabular-nums mt-0.5">
-                  +${monthlyCost.toFixed(0)}<span className="text-xs font-normal text-text-tertiary">/{isFr ? 'mois' : 'mo'}</span>
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] uppercase tracking-wider font-bold text-text-tertiary">
-                  {isFr ? 'Détail' : 'Detail'}
-                </p>
-                <p className="text-[11px] text-text-secondary tabular-nums">
-                  {needed} × ${extraPrice}/{isFr ? 'mois' : 'mo'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 flex flex-col-reverse sm:flex-row gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-[13px] font-semibold text-text-primary">
+              {usage.used} / {capacity} {isFr ? 'sièges utilisés' : 'seats used'}
+              {usage.extras_charged > 0 && (
+                <span className="font-normal text-text-secondary">
+                  {' '}· {usage.included} {isFr ? 'inclus' : 'included'} + {usage.extras_charged} {isFr ? 'en plus' : 'extra'}
+                </span>
+              )}
+            </p>
             <button
               type="button"
-              onClick={handleSync}
-              disabled={syncing}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-extrabold bg-text-primary text-surface hover:bg-text-primary/90 active:scale-[0.98] transition-all shadow-md disabled:opacity-60"
+              onClick={() => navigate('/settings/team')}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
             >
-              {syncing ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Check size={14} />
-              )}
-              {syncing
-                ? (isFr ? 'Activation...' : 'Activating...')
-                : (isFr ? `Activer & facturer maintenant` : `Activate & bill now`)}
+              <UserPlus size={11} />
+              {isFr ? 'Inviter un membre' : 'Invite a member'}
             </button>
           </div>
+          {supportsExtra && (
+            <p className="text-[12px] text-text-secondary mt-0.5">
+              {isFr
+                ? `Sièges supplémentaires à +$${extraPrice}/mois chacun, facturés immédiatement.`
+                : `Extra seats at +$${extraPrice}/mo each, billed immediately.`}
+            </p>
+          )}
+          {billingMismatch && (
+            <p className="text-[12px] text-amber-600 font-medium mt-0.5">
+              {isFr
+                ? `${needed - usage.extras_charged} siège${needed - usage.extras_charged === 1 ? '' : 's'} utilisé${needed - usage.extras_charged === 1 ? '' : 's'} au-delà de ce qui est facturé.`
+                : `${needed - usage.extras_charged} seat${needed - usage.extras_charged === 1 ? '' : 's'} in use beyond what's billed.`}
+            </p>
+          )}
+          <div className="mt-1.5 h-1.5 bg-surface-secondary rounded-full overflow-hidden">
+            <div
+              className={
+                'h-full rounded-full transition-all ' +
+                (billingMismatch ? 'bg-amber-500' : 'bg-emerald-500')
+              }
+              style={{ width: `${Math.min(100, utilization)}%` }}
+            />
+          </div>
         </div>
+        <span className="text-[11px] font-bold text-text-tertiary tabular-nums self-start">{utilization}%</span>
       </div>
+
+      {supportsExtra && (
+        <div className="mt-4 flex items-center justify-between gap-3">
+          {/* Stepper */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setDraft((d) => Math.max(minDraft, d - 1))}
+              disabled={saving || draft <= minDraft}
+              className="w-9 h-9 rounded-full border border-outline-subtle flex items-center justify-center text-text-primary hover:bg-surface-secondary disabled:opacity-40 transition"
+              aria-label={isFr ? 'Retirer un siège' : 'Remove a seat'}
+            >
+              <Minus size={15} />
+            </button>
+            <span className="min-w-[2.5rem] text-center text-lg font-extrabold tabular-nums text-text-primary">
+              {draft}
+            </span>
+            <button
+              type="button"
+              onClick={() => setDraft((d) => Math.min(1000, d + 1))}
+              disabled={saving}
+              className="w-9 h-9 rounded-full border border-outline-subtle flex items-center justify-center text-text-primary hover:bg-surface-secondary disabled:opacity-40 transition"
+              aria-label={isFr ? 'Ajouter un siège' : 'Add a seat'}
+            >
+              <Plus size={15} />
+            </button>
+            {draft > 0 && (
+              <span className="text-[12px] font-semibold text-text-secondary tabular-nums">
+                +${monthlyCost.toFixed(0)}/{isFr ? 'mois' : 'mo'}
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !dirty}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-extrabold bg-text-primary text-surface hover:bg-text-primary/90 active:scale-[0.98] transition-all shadow-md disabled:opacity-40"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            {saving
+              ? (isFr ? 'Mise à jour...' : 'Updating...')
+              : dirty && draft > usage.extras_charged
+                ? (isFr ? 'Facturer maintenant' : 'Bill now')
+                : (isFr ? 'Mettre à jour' : 'Update')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
