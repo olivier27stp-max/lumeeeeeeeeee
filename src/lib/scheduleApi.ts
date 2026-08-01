@@ -72,7 +72,7 @@ export function isAnytimeVisit(startAt?: string | null, endAt?: string | null): 
 }
 
 export function anytimeLabel(fr: boolean): string {
-  return fr ? "N'importe quand" : 'Anytime';
+  return fr ? "Pas d'heure précise" : 'No set time';
 }
 
 const eventsCache = new Map<string, { cachedAt: number; rows: ScheduleEventRecord[] }>();

@@ -2435,7 +2435,7 @@ export default function JobDetails() {
                           onChange={(e) => setEditVisitAnytime(e.target.checked)}
                           className="h-4 w-4 rounded"
                         />
-                        <span className="text-[13px] font-bold text-black dark:text-white">{fr ? "N'importe quand (pas d'heure précise)" : 'Anytime (no set time)'}</span>
+                        <span className="text-[13px] font-bold text-black dark:text-white">{fr ? "Pas d'heure précise" : 'No set time'}</span>
                       </label>
                       {!editVisitAnytime && (
                         <div className="grid grid-cols-2 gap-3">

@@ -244,7 +244,7 @@ export default function AddVisitModal({
               onChange={(e) => { setAnytime(e.target.checked); setDirty(true); }}
               className="h-4 w-4 rounded"
             />
-            <span className="text-[13px] text-text-primary">{fr ? "N'importe quand (pas d'heure précise)" : 'Anytime (no set time)'}</span>
+            <span className="text-[13px] text-text-primary">{fr ? "Pas d'heure précise" : 'No set time'}</span>
           </label>
           {!anytime && (
             <div className="grid grid-cols-2 gap-3">

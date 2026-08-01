@@ -2335,7 +2335,7 @@ export default function NewJobModal({
                               className="h-3.5 w-3.5 rounded"
                             />
                             <span className="text-xs text-text-secondary">
-                              {language === 'fr' ? "N'importe quand (pas d'heure précise)" : 'Anytime (no set time)'}
+                              {language === 'fr' ? "Pas d'heure précise" : 'No set time'}
                             </span>
                           </label>
                         </div>
