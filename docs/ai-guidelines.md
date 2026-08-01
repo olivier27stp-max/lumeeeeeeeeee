@@ -64,7 +64,7 @@ Confirm fix — do not scan unrelated code
 ## What NOT to Do
 - Do not suggest adding Redux, Zustand, or any state manager — project uses local state intentionally
 - Do not suggest migrating to Next.js — project is a Vite SPA by design
-- Do not rewrite `complete_schema.sql` — it is the canonical DB reference, not a migration file
+- Schema reference is `supabase/SCHEMA_SNAPSHOT.md` (généré depuis la prod). `complete_schema.sql` a été supprimé (périmé, dérive prouvée) — ne pas le recréer
 - Do not add `console.log` in production code
 - Do not skip Zod validation on new server routes
 - Do not hard-delete database rows

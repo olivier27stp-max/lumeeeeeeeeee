@@ -36,7 +36,7 @@ server/
 
 supabase/
   migrations/     # SQL migrations
-  complete_schema.sql  # Full schema reference
+  SCHEMA_SNAPSHOT.md   # Full schema reference (généré depuis la prod — SEULE source fiable)
 ```
 
 ## Database Patterns
