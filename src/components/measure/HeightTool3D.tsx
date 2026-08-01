@@ -442,6 +442,24 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     return `${prefix}${i + 1} ≈ ${fmt(c.len * svScale)}`;
   }
 
+  /** Saisie de longueur : accepte « 6'5 », « 6 5 », « 6′5″ », « 6.42 » (pi) ou
+   *  « 1.96 » (m selon l'unité courante). Retourne des MÈTRES, ou null. */
+  function parseLengthInput(raw: string): number | null {
+    const t = raw.trim().replace(',', '.');
+    if (!t) return null;
+    if (unitSystem === 'metric') {
+      const v = parseFloat(t);
+      return Number.isFinite(v) && v > 0 ? v : null;
+    }
+    const m = t.match(/^(\d+(?:\.\d+)?)\s*(?:['′]|pi|ft)?\s*(\d+(?:\.\d+)?)?\s*(?:["″]|po|in)?$/i);
+    if (!m) return null;
+    const ft = parseFloat(m[1]);
+    const inches = m[2] ? parseFloat(m[2]) : 0;
+    if (!Number.isFinite(ft) || inches >= 12) return null;
+    const total = ft + inches / 12;
+    return total > 0 ? total * FT_TO_M : null;
+  }
+
   /** Étalonne toutes les cotes du mur : la cote i vaut « vraiment » realMeters. */
   function svCalibrate(i: number, realMeters: number) {
     const raw = svCotes[i]?.len;
@@ -741,15 +759,16 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
                 </p>
                 <div className="flex items-center gap-1.5 justify-center flex-wrap">
                   <input
-                    type="number" min="0" step="0.01" value={svCalibVal}
+                    type="text" inputMode="decimal" value={svCalibVal}
                     onChange={e => setSvCalibVal(e.target.value)}
-                    placeholder={unitSystem === 'metric' ? 'm' : (fr ? 'pi' : 'ft')}
+                    placeholder={unitSystem === 'metric' ? 'm' : (fr ? 'ex: 6′5' : 'e.g. 6′5')}
                     className="w-20 text-[12px] rounded-md border border-outline/30 bg-surface-card px-2 py-1 text-center"
                   />
                   <button
                     onClick={() => {
-                      const v = parseFloat(svCalibVal);
-                      if (Number.isFinite(v) && v > 0) svCalibrate(svCalibIdx, unitSystem === 'metric' ? v : v * FT_TO_M);
+                      const meters = parseLengthInput(svCalibVal);
+                      if (meters != null) svCalibrate(svCalibIdx, meters);
+                      else toast.error(fr ? 'Valeur invalide — ex.: 6′5, 6 5, ou 6.42' : 'Invalid value — e.g. 6′5, 6 5, or 6.42');
                     }}
                     className="glass-button-primary px-2.5 py-1 rounded-lg text-[11px] font-semibold">
                     OK
