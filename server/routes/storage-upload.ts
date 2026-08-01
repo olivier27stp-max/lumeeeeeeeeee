@@ -43,10 +43,14 @@ router.post(
         return res.status(400).json({ error: 'Only image uploads are allowed.' });
       }
 
+      // Upsert opt-in for stable per-user paths (avatar/bannière) — safe here
+      // because the path is already forced under the caller's org folder.
+      const upsert = String(req.query.upsert || '') === 'true';
+
       const admin = getServiceClient();
       const { data, error } = await admin.storage
         .from(bucket)
-        .upload(path, buffer, { contentType, upsert: false, cacheControl: '3600' });
+        .upload(path, buffer, { contentType, upsert, cacheControl: '3600' });
       if (error) throw error;
 
       const { data: pub } = admin.storage.from(bucket).getPublicUrl(data.path);

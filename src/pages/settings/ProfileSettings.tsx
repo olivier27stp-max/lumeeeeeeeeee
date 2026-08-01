@@ -28,6 +28,7 @@ import { useTranslation } from '../../i18n';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ROLE_LABELS, normalizeRole, hasPermission, type TeamRole } from '../../lib/permissions';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
+import { uploadViaServer } from '../../lib/storage';
 import { getRepRealStats, getTechRealStats, type RepRealStats, type TechRealStats } from '../../lib/repStatsApi';
 import { getCommissionEntries } from '../../lib/commissionsApi';
 import { Avatar } from '../../components/d2d/avatar';
@@ -86,14 +87,16 @@ export default function ProfileSettings() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Banner — stored by convention at avatars/banners/{userId} (no DB column);
-  // the <img> falls back to the gradient when no banner was ever uploaded.
+  // Banner — stored by convention at avatars/{orgId}/banners/{userId} (no DB
+  // column); the <img> falls back to the gradient when no banner was ever
+  // uploaded. Uploads go through the server relay: the avatars bucket has no
+  // client INSERT policy, so direct uploads die on RLS.
   const [bannerBroken, setBannerBroken] = useState(false);
   const [bannerVersion, setBannerVersion] = useState(0);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   const bannerInputRef = useRef<HTMLInputElement>(null);
-  const bannerUrl = userId
-    ? `${supabase.storage.from('avatars').getPublicUrl(`banners/${userId}`).data.publicUrl}?v=${bannerVersion}`
+  const bannerUrl = userId && orgId
+    ? `${supabase.storage.from('avatars').getPublicUrl(`${orgId}/banners/${userId}`).data.publicUrl}?v=${bannerVersion}`
     : null;
 
   // Email change flow
@@ -268,16 +271,17 @@ export default function ProfileSettings() {
   async function handleBannerChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
+    if (!orgId) {
+      toast.error(isFr ? 'Organisation introuvable' : 'Organization not found');
+      return;
+    }
     if (file.size > 8 * 1024 * 1024) {
       toast.error(isFr ? 'Image trop lourde (max 8 Mo)' : 'Image too large (max 8MB)');
       return;
     }
     setUploadingBanner(true);
     try {
-      const { error } = await supabase.storage
-        .from('avatars')
-        .upload(`banners/${userId}`, file, { upsert: true, contentType: file.type });
-      if (error) throw error;
+      await uploadViaServer('avatars', `${orgId}/banners/${userId}`, file, { upsert: true });
       setBannerBroken(false);
       setBannerVersion((v) => v + 1);
       toast.success(isFr ? 'Bannière mise à jour' : 'Banner updated');
@@ -296,15 +300,17 @@ export default function ProfileSettings() {
       toast.error(isFr ? 'Image trop lourde (max 5 Mo)' : 'Image too large (max 5MB)');
       return;
     }
+    if (!orgId) {
+      toast.error(isFr ? 'Organisation introuvable' : 'Organization not found');
+      return;
+    }
     setUploadingAvatar(true);
     try {
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `avatars/${userId}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
-      if (upErr) throw upErr;
-      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+      const path = `${orgId}/avatars/${userId}.${ext}`;
+      const { url: publicUrl } = await uploadViaServer('avatars', path, file, { upsert: true });
       // Cache-bust so the new photo shows immediately everywhere.
-      const url = `${urlData.publicUrl}?v=${Date.now()}`;
+      const url = `${publicUrl}?v=${Date.now()}`;
       const { error: profErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId);
       if (profErr) throw profErr;
       if (memberRowId) {
