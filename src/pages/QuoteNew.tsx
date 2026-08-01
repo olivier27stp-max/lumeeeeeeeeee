@@ -29,6 +29,7 @@ import SpecificNotesInline, { type SpecificNotesInlineHandle } from '../componen
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { STORAGE_BUCKETS, uploadFile } from '../lib/storage';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 
 /* ── Design (maquette approuvée) : texte noir pur / blanc pur uniquement ── */
 const OUTLINE = 'border-[#e8e8e8] dark:border-white/10';
@@ -510,9 +511,12 @@ export default function QuoteNew() {
     setPhotoUploading(true);
     setDirty(true);
     try {
+      // Org-scoped prefix — storage RLS resolves the tenant from the first path
+      // segment, so every object must live under `${orgId}/…` (C1-04).
+      const orgId = await getCurrentOrgIdOrThrow();
       for (const file of Array.from(files)) {
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = `quotes/photos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const path = `${orgId}/quotes/photos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { url } = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, path, file);
         setPhotos(p => [...p, url]);
       }

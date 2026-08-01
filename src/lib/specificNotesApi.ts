@@ -123,7 +123,10 @@ export async function uploadSpecificNoteFile(
 ): Promise<SpecificNoteFile> {
   const ext = file.name.split('.').pop() || 'bin';
   const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const storagePath = `specific-notes/${entityType}/${entityId}/${safeName}`;
+  // Org-scoped prefix — storage RLS resolves the tenant from the first path
+  // segment, so every object must live under `${orgId}/…` (C1-04).
+  const orgId = await getCurrentOrgIdOrThrow();
+  const storagePath = `${orgId}/specific-notes/${entityType}/${entityId}/${safeName}`;
 
   const { error: uploadError } = await supabase.storage
     .from(STORAGE_BUCKET)

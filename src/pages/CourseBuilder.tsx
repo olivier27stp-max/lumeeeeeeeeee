@@ -132,9 +132,13 @@ export default function CourseBuilder() {
   const fr = language === 'fr';
   const { currentOrgId } = useCompany();
   // Préfixe org: scelle les uploads de formation par organisation (le relais
-  // serveur exige aussi ce préfixe). Sans ça, tout atterrissait dans un espace
-  // "courses/" commun à toutes les orgs.
-  const uploadPrefix = currentOrgId ? `${currentOrgId}/courses` : 'courses';
+  // serveur exige aussi ce préfixe). Sans org, on REFUSE l'upload plutôt que de
+  // retomber sur un espace "courses/" commun à toutes les orgs — la branche
+  // legacy des policies storage a été retirée (C1-04).
+  const requireUploadPrefix = () => {
+    if (!currentOrgId) throw new Error(fr ? 'Organisation introuvable.' : 'No organization context.');
+    return `${currentOrgId}/courses`;
+  };
 
   // Core state
   const [courseId, setCourseId] = useState<string | null>(id || null);
@@ -308,7 +312,7 @@ export default function CourseBuilder() {
     if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null; }
     try {
       const ext = file.name.split('.').pop();
-      const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `${uploadPrefix}/${Date.now()}.${ext}`, file);
+      const result = await uploadFile(STORAGE_BUCKETS.ATTACHMENTS, `${requireUploadPrefix()}/${Date.now()}.${ext}`, file);
       setCoverImage(result.url);
       // Immediately save the cover image if course exists, to avoid relying on auto-save
       if (courseId) {
@@ -476,7 +480,7 @@ export default function CourseBuilder() {
       const ext = file.name.split('.').pop();
       const result = await uploadFile(
         STORAGE_BUCKETS.ATTACHMENTS,
-        `${uploadPrefix}/videos/${Date.now()}.${ext}`,
+        `${requireUploadPrefix()}/videos/${Date.now()}.${ext}`,
         file,
         { onProgress: (r) => setVideoProgress(Math.round(r * 100)) },
       );
@@ -502,7 +506,7 @@ export default function CourseBuilder() {
       const ext = file.name.split('.').pop();
       const result = await uploadFile(
         STORAGE_BUCKETS.ATTACHMENTS,
-        `${uploadPrefix}/attachments/${Date.now()}.${ext}`,
+        `${requireUploadPrefix()}/attachments/${Date.now()}.${ext}`,
         file,
         { onProgress: (r) => setAttachmentProgress(Math.round(r * 100)) },
       );
