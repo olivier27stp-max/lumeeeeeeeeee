@@ -320,8 +320,12 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
             groundElevation(p.lat(), p.lng()),
             groundElevation(target.lat, target.lng),
           ]);
-          if (ePano != null && eTarget != null && Math.abs(ePano - eTarget) < 15) {
-            svElevDelta.current = ePano - eTarget;
+          // Zone morte : sous 0,5 m, le « dénivelé » est du bruit du modèle de
+          // terrain (±30 cm) et injecte de l'erreur (mesuré: -12 % sur une rue
+          // plate). On ne corrige que les vraies pentes (entrée montante, etc.).
+          const delta = ePano != null && eTarget != null ? ePano - eTarget : 0;
+          if (Math.abs(delta) >= 0.5 && Math.abs(delta) < 15) {
+            svElevDelta.current = delta;
           }
         } catch { /* terrain plat supposé */ }
       })();
