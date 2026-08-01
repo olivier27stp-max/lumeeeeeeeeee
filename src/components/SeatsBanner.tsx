@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Users, AlertTriangle, Check, Loader2 } from 'lucide-react';
+import { Users, AlertTriangle, Check, Loader2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
 import { fetchSeatUsage, setExtraSeats, type SeatUsage } from '../lib/billingApi';
 
@@ -17,6 +18,7 @@ interface SeatsBannerProps {
 export default function SeatsBanner({ onChange }: SeatsBannerProps) {
   const { language } = useTranslation();
   const isFr = language === 'fr';
+  const navigate = useNavigate();
   const [usage, setUsage] = useState<SeatUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -47,9 +49,19 @@ export default function SeatsBanner({ onChange }: SeatsBannerProps) {
             <Users size={15} className="text-emerald-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">
-              {usage.used} / {usage.included} {isFr ? 'sièges utilisés' : 'seats used'}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-[13px] font-semibold text-text-primary">
+                {usage.used} / {usage.included} {isFr ? 'sièges utilisés' : 'seats used'}
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/settings/team')}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+              >
+                <UserPlus size={11} />
+                {isFr ? 'Inviter un membre' : 'Invite a member'}
+              </button>
+            </div>
             <div className="mt-1.5 h-1.5 bg-surface-secondary rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all"
@@ -72,9 +84,19 @@ export default function SeatsBanner({ onChange }: SeatsBannerProps) {
             <Users size={15} className="text-amber-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-text-primary">
-              {usage.used} / {usage.included} {isFr ? 'sièges' : 'seats'} · +{needed} {isFr ? 'supplémentaires facturés' : 'extra billed'}
-            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-[13px] font-semibold text-text-primary">
+                {usage.used} / {usage.included} {isFr ? 'sièges' : 'seats'} · +{needed} {isFr ? 'supplémentaires facturés' : 'extra billed'}
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/settings/team')}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+              >
+                <UserPlus size={11} />
+                {isFr ? 'Inviter un membre' : 'Invite a member'}
+              </button>
+            </div>
             <p className="text-[12px] text-text-secondary mt-0.5">
               {isFr
                 ? `Vous payez $${monthlyCost.toFixed(0)}/mois supplémentaire pour vos sièges en plus.`
