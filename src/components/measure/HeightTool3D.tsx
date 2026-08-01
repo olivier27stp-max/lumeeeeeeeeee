@@ -322,7 +322,13 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   }, [streetMode, streetState]);
 
   // ── Mode Photo : clics sur la photo → cotes estimées (trigonométrie) ──
-  function svResetMeasure() { setSvCal(null); setSvD(null); setSvCotes([]); setSvPending(null); }
+  function svResetMeasure() {
+    setSvCotes([]);
+    setSvPending(null);
+    // La distance AUTO (géocodage) survit au « Refaire » — on ne repart en
+    // calibrage clic-sol que si l'échelle venait justement d'un clic-sol.
+    if (svCal) { setSvCal(null); setSvD(null); }
+  }
 
   /** Écran → angles (pitch/heading absolus du rayon), projection rectilinéaire approx. */
   function svAngles(e: React.MouseEvent<HTMLDivElement>) {
