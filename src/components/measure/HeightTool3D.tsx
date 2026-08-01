@@ -39,8 +39,8 @@ interface Props {
 
 type Pt = { lat: number; lng: number; elev: number | null; onBuilding: boolean; loading: boolean; from3d?: boolean };
 
-// Mode Photo : un point cliqué (écran + position sur le plan du mur, en mètres)
-type SvPoint = { x: number; y: number; X: number; Y: number };
+// Mode Photo : un point cliqué (écran + angles absolus du rayon)
+type SvPoint = { x: number; y: number; pitch: number; heading: number };
 type SvCote = { a: SvPoint; b: SvPoint; len: number; kind: 'V' | 'H' | 'D' };
 
 export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onComplete, onClose }: Props) {
@@ -281,6 +281,14 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         heading = google.maps.geometry.spherical.computeHeading(
           data.location.latLng, new google.maps.LatLng(target.lat, target.lng));
       } catch { /* heading par défaut */ }
+      // Échelle automatique : distance caméra → propriété (géocodée / centre carte).
+      // Plus besoin de cliquer le sol ni d'être proche — le clic-sol reste un
+      // secours (svCal) si cette distance n'est pas calculable.
+      try {
+        const dAuto = google.maps.geometry.spherical.computeDistanceBetween(
+          data.location.latLng, new google.maps.LatLng(target.lat, target.lng));
+        if (Number.isFinite(dAuto) && dAuto >= 2 && dAuto <= 250) setSvD(dAuto);
+      } catch { /* pas de distance auto — repli sur le clic-sol */ }
       streetPanoDiv.current.innerHTML = '';
       panoRef.current = new google.maps.StreetViewPanorama(streetPanoDiv.current, {
         pano: data.location.pano,
@@ -332,9 +340,12 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     return { x, y, pitchDeg, headingDeg };
   }
 
-  function svMakeCote(a: SvPoint, b: SvPoint): SvCote {
-    const dX = b.X - a.X;
-    const dY = b.Y - a.Y;
+  function svMakeCote(a: SvPoint, b: SvPoint, d: number): SvCote {
+    let dh = b.heading - a.heading;
+    while (dh > 180) dh -= 360;
+    while (dh < -180) dh += 360;
+    const dX = d * Math.tan((dh * Math.PI) / 180);
+    const dY = d * (Math.tan((b.pitch * Math.PI) / 180) - Math.tan((a.pitch * Math.PI) / 180));
     const len = Math.hypot(dX, dY);
     const kind: SvCote['kind'] = Math.abs(dX) < Math.abs(dY) * 0.35 ? 'V' : Math.abs(dY) < Math.abs(dX) * 0.35 ? 'H' : 'D';
     return { a, b, len, kind };
@@ -345,17 +356,17 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     if (!ang) return;
     const { x, y, pitchDeg, headingDeg } = ang;
 
-    // 1er clic : référence au SOL — donne l'échelle (distance au mur).
-    if (!svCal) {
+    // Secours seulement : pas de distance auto → on calibre avec un clic au sol.
+    if (svD == null) {
       if (pitchDeg >= -0.5) {
         toast.error(fr
-          ? 'Cliquez d’abord le point où le mur touche le SOL (sous l’horizon).'
-          : 'First click where the wall meets the GROUND (below the horizon).');
+          ? 'Distance inconnue — cliquez le point où le mur touche le sol pour calibrer.'
+          : 'Unknown distance — click where the wall meets the ground to calibrate.');
         return;
       }
       const d = SV_CAMERA_HEIGHT_M / Math.tan((-pitchDeg * Math.PI) / 180);
-      if (!Number.isFinite(d) || d > 120) {
-        toast.error(fr ? 'Trop loin — rapprochez-vous du mur (autre panorama).' : 'Too far — get closer to the wall (another panorama).');
+      if (!Number.isFinite(d) || d > 250) {
+        toast.error(fr ? 'Point de sol trop près de l’horizon — recliquez plus bas.' : 'Ground point too close to the horizon — click lower.');
         return;
       }
       setSvCal({ pitch: pitchDeg, heading: headingDeg, x, y });
@@ -363,37 +374,27 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
       return;
     }
 
-    // Clics suivants : positions sur le plan du mur (X latéral, Y hauteur).
-    const d = svD as number;
-    let dh = headingDeg - svCal.heading;
+    // Mesure directe : chaque paire de clics = une cote, peu importe la distance.
+    const pt: SvPoint = { x, y, pitch: pitchDeg, heading: headingDeg };
+    if (!svPending) {
+      setSvPending(pt);
+      return;
+    }
+    const first = svPending;
+    setSvPending(null);
+    let dh = pt.heading - first.heading;
     while (dh > 180) dh -= 360;
     while (dh < -180) dh += 360;
     if (Math.abs(dh) > 60) {
-      toast.error(fr ? 'Restez sur le même mur que le point de référence.' : 'Stay on the same wall as the reference point.');
+      toast.error(fr ? 'Les 2 points doivent être sur le même mur.' : 'Both points must be on the same wall.');
       return;
     }
-    const pt: SvPoint = {
-      x, y,
-      X: d * Math.tan((dh * Math.PI) / 180),
-      Y: SV_CAMERA_HEIGHT_M + d * Math.tan((pitchDeg * Math.PI) / 180),
-    };
-    const push = (c: SvCote) => {
-      if (!Number.isFinite(c.len) || c.len < 0.3 || c.len > 200) {
-        toast.error(fr ? 'Cote invalide — recommencez.' : 'Invalid dimension — try again.');
-        return;
-      }
-      setSvCotes(prev => [...prev, c]);
-    };
-    if (svCotes.length === 0 && !svPending) {
-      // 1re cote : du sol (référence) au point cliqué → hauteur du mur en 2 clics.
-      push(svMakeCote({ x: svCal.x, y: svCal.y, X: 0, Y: 0 }, pt));
-    } else if (!svPending) {
-      setSvPending(pt);
-    } else {
-      const first = svPending;
-      setSvPending(null);
-      push(svMakeCote(first, pt));
+    const c = svMakeCote(first, pt, svD);
+    if (!Number.isFinite(c.len) || c.len < 0.2 || c.len > 300) {
+      toast.error(fr ? 'Cote invalide — recommencez.' : 'Invalid dimension — try again.');
+      return;
     }
+    setSvCotes(prev => [...prev, c]);
   }
 
   function svCoteLabel(c: SvCote, i: number): string {
@@ -407,8 +408,8 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     const base = pos ? { lat: pos.lat(), lng: pos.lng() } : currentTarget();
     svCotes.forEach((c, i) => {
       const points: LatLng[] = [
-        { lat: base.lat, lng: base.lng, elevation: Math.max(0, c.a.Y) },
-        { lat: base.lat, lng: base.lng, elevation: Math.max(0, c.b.Y) },
+        { lat: base.lat, lng: base.lng, elevation: 0 },
+        { lat: base.lat, lng: base.lng, elevation: c.kind === 'V' ? c.len : 0 },
       ];
       const geojson: any = { type: 'LineString', coordinates: points.map(p => [p.lng, p.lat, p.elevation]) };
       const noun = c.kind === 'V' ? (fr ? 'Hauteur' : 'Height') : c.kind === 'H' ? (fr ? 'Largeur' : 'Width') : (fr ? 'Cote' : 'Dim');
@@ -607,7 +608,15 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           </div>
         )}
         {streetMode && streetState === 'ok' && svMeasuring && (
-          <div className="absolute inset-0 z-[17] cursor-crosshair" onClick={svClick} />
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-[18] pointer-events-none backdrop-blur-sm font-medium">
+            {svD == null
+              ? (fr ? 'Calibrage : cliquez le point où le mur touche le SOL' : 'Calibration: click where the wall meets the GROUND')
+              : svPending
+                ? (fr ? '2e point de la cote…' : '2nd point of the dimension…')
+                : (fr
+                  ? `Cliquez 2 points par cote (bas→haut, gauche→droite…) · distance ≈ ${fmt(svD)}`
+                  : `Click 2 points per dimension (bottom→top, left→right…) · distance ≈ ${fmt(svD)}`)}
+          </div>
         )}
         {streetMode && streetState === 'ok' && (svCal || svCotes.length > 0 || svPending) && (
           <svg className="absolute inset-0 z-[18] pointer-events-none w-full h-full">
