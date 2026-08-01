@@ -16,6 +16,7 @@ import {
   type Plan,
   type Subscription,
 } from '../../lib/billingApi';
+import { translatePlanFeature } from '../../lib/planFeatures';
 
 /* ═══════════════════════════════════════════════════════════════
    Plan & billing — connected to real Stripe/DB data.
@@ -522,7 +523,7 @@ function PlansGrid({
                 {features.map((feat, fi) => (
                   <li key={fi} className="flex items-start gap-2 text-[13px] text-text-secondary leading-snug">
                     <Check size={14} className={cn('mt-0.5 shrink-0', isCurrent ? 'text-emerald-500' : isFeatured ? 'text-primary' : 'text-emerald-500')} />
-                    <span>{feat}</span>
+                    <span>{translatePlanFeature(feat, isFr)}</span>
                   </li>
                 ))}
               </ul>
@@ -788,7 +789,7 @@ function DowngradeModal({
                 <div className="shrink-0 w-5 h-5 rounded-full bg-red-500/5 flex items-center justify-center mt-0.5">
                   <X size={11} className="text-red-500/70" strokeWidth={2.5} />
                 </div>
-                <span>{feat}</span>
+                <span>{translatePlanFeature(feat, isFr)}</span>
               </li>
             ))}
             {lostFeatures.length > 6 && (
