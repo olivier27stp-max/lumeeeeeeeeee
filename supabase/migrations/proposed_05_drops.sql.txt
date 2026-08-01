@@ -1,0 +1,70 @@
+-- ============================================================================
+-- 05_drops — CANDIDATS À LA SUPPRESSION — *** NE PAS EXÉCUTER SANS REVUE ***
+-- Audit métadonnées, 2026-08-01
+-- ============================================================================
+-- Fichier .txt volontairement (pas .sql) pour qu'aucun outil de migration ne le
+-- ramasse. Chaque table ci-dessous : 0 ligne en prod ET 0 référence dans
+-- src/ + server/ (seules mentions = migrations d'origine + docs de specs).
+--
+-- PREUVE requise avant tout DROP réel (règle de l'audit) :
+--   1. Reconfirmer 0 ligne : select count(*) from <table>;
+--   2. Reconfirmer 0 référence code (grep src/ server/).
+--   3. Vérifier qu'aucune fonction/trigger/vue ne dépend de la table.
+-- Ordre : enfants avant parents (FK).
+-- ============================================================================
+
+
+-- ─── GROUPE A — HAUTE CONFIANCE : reliquats du module IA « intelligence/agent »
+-- Origine : migrations 20260325000000_ai_training_loop.sql + 20260507000001_agent_tables.sql
+-- Seules mentions hors migrations : docs/MR_LUME_INTELLIGENCE_SPEC.md.
+-- La feature agent LIVE (src/features/agent/) n'utilise QUE `agent_messages`.
+-- Aucune de ces tables n'est requêtée par l'app.
+--
+-- drop table if exists public.decision_outcomes;      -- 0 ligne, 0 ref
+-- drop table if exists public.decision_logs;          -- 0 ligne, 0 ref
+-- drop table if exists public.scenario_options;       -- 0 ligne, 0 ref (enfant scenario_runs)
+-- drop table if exists public.scenario_runs;          -- 0 ligne, 0 ref
+-- drop table if exists public.confidence_calibration; -- 0 ligne, 0 ref
+-- drop table if exists public.few_shot_examples;      -- 0 ligne, 0 ref
+-- drop table if exists public.user_agent_preferences; -- 0 ligne, 0 ref
+-- drop table if exists public.approvals;              -- 0 ligne, 0 ref — MAIS nom générique,
+--   confirmer qu'aucune UI d'approbation planifiée ne l'utilisera (ActionConfirmCard.tsx
+--   existe mais ne persiste pas ici).
+
+
+-- ─── GROUPE B — MOYENNE CONFIANCE : cluster « note-boards » (collaboratif) jamais câblé
+-- Distinct de `activity_notes` (UTILISÉE) et de `notes` (DORMANTE, refs agent).
+-- Enfants d'abord.
+--
+-- drop table if exists public.board_votes;
+-- drop table if exists public.board_drawings;
+-- drop table if exists public.board_comments;
+-- drop table if exists public.notes_tags;
+-- drop table if exists public.notes_files;
+-- drop table if exists public.notes_checklist;
+-- drop table if exists public.note_history;
+-- drop table if exists public.note_entity_links;
+-- drop table if exists public.note_connections;
+-- drop table if exists public.note_items;
+-- drop table if exists public.note_boards;
+
+
+-- ─── GROUPE C — MOYENNE CONFIANCE : tables remplacées (superseded)
+-- drop table if exists public.job_materials;           -- remplacée par job_line_items (utilisée)
+-- drop table if exists public.job_time_logs;           -- remplacée par time_entries
+-- drop table if exists public.org_invoice_sequences;   -- remplacée par invoice_sequences ;
+--   un snapshot `orphans_org_invoice_sequences_20260710` existe => dépréciation déjà entamée.
+--   *** VÉRIFIER d'abord quelle table le trigger de numérotation écrit réellement. ***
+-- drop table if exists public.email_campaign_recipients; -- côté « recipients » jamais construit
+--   (email_campaigns n'a qu'un stub dans server/routes/cron.ts)
+-- drop table if exists public.booking_pages;           -- 0 ligne/0 ref (bookings a 3 refs, pages non)
+
+
+-- ─── NE PAS SUPPRIMER (vides mais légitimes — roadmap/conformité/infra) ──────
+--   email_opt_outs        : conformité CASL (sibling sms_opt_outs utilisée)
+--   rate_limits           : infra système
+--   secret_rotation_log   : audit sécurité
+--   field_pin_templates / field_rep_performance / field_schedule_slots : roadmap field-sales
+--   TOUTES les tables « DORMANTE » (invoices, payments, team_members…) : PRÉ-LANCEMENT,
+--   construites et attendant les premiers clients — surtout PAS des candidats.
+-- ============================================================================
