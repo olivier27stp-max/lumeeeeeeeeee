@@ -8,6 +8,7 @@ import type { ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import { getRosterForDate, fetchMemberNames, firstNameOf } from '../../lib/teamScheduleApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
+import { useJobTagColors } from '../../hooks/useJobTagColors';
 import { FALLBACK_TEAM_COLOR, isHexColor } from '../../lib/colorUtils';
 import {
   DispatchDailyPrefs, loadDispatchDailyPrefs, saveDispatchDailyPrefs, vehicleNumberForTeam,
@@ -24,9 +25,9 @@ import {
 /**
  * Vue Jour du calendrier Dispatch — timeline horizontale.
  * Heures en haut, ressources (équipes / véhicules) à gauche, visites en
- * cartes entièrement blanches — aucune couleur appliquée directement au
- * calendrier; la couleur d'équipe n'apparaît que dans la pastille de la
- * colonne ressource.
+ * cartes blanches — sauf si la job porte un tag : la carte prend alors la
+ * couleur vive du premier tag (fond pâle + barre gauche). La couleur
+ * d'équipe n'apparaît que dans la pastille de la colonne ressource.
  * Composant DÉDIÉ à la vue Jour : les vues Semaine / Mois / Agenda gardent
  * leurs composants existants (TimeGrid, MonthView, AgendaView) intacts.
  */
@@ -78,6 +79,7 @@ export default function DailyDispatchView({
 }: DailyDispatchViewProps) {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
+  const { colorForTagIds } = useJobTagColors();
 
   /* ── Préférences colonne de gauche (par organisation) ── */
   const [prefs, setPrefs] = useState<DispatchDailyPrefs>(() => loadDispatchDailyPrefs(orgId));
@@ -551,6 +553,7 @@ export default function DailyDispatchView({
                           height={CARD_HEIGHT_PX}
                           timeLabel={timeLabelFor(p.startMin, p.startMin + durMin)}
                           dimmed={isDraggingThis}
+                          tagColor={colorForTagIds(p.ev.job?.tag_ids)}
                           onOpen={() => openEvent(p.ev.job_id)}
                           onMoveStart={(e) => handleMoveStart(p.ev, ri, e)}
                           onResizeStart={(e) => handleResizeStart(p.ev, e)}

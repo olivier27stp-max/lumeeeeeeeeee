@@ -3,9 +3,9 @@ import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { getEventColors, toRgba } from '../lib/colorUtils';
-import { PRESET_GRADIENTS } from '../lib/presetPalette';
-import TeamColorSwatches from './TeamColorSwatches';
+import { toRgba } from '../lib/colorUtils';
+import { TAG_COLORS } from '../lib/tagPalette';
+import TagColorSwatches from './TagColorSwatches';
 import {
   JobTagRecord, createJobTag, listJobTags, setJobTagIds, softDeleteJobTag, updateJobTag,
 } from '../lib/jobTagsApi';
@@ -13,8 +13,8 @@ import {
 /**
  * Carte « Tags » du hub job : chips des tags assignés + menu déroulant blanc
  * où tout se passe — assigner/retirer un tag, en créer un (nom + couleur de
- * la palette partagée) et modifier/supprimer les existants, sans quitter le
- * menu. Aucun tag par défaut : la liste de l'org démarre vide.
+ * la palette vive des tags) et modifier/supprimer les existants, sans quitter
+ * le menu. Aucun tag par défaut : la liste de l'org démarre vide.
  */
 interface JobTagsCardProps {
   jobId: string;
@@ -31,7 +31,7 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
 
   // Création inline
   const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState(PRESET_GRADIENTS[0][0]);
+  const [newColor, setNewColor] = useState(TAG_COLORS[0]);
   const [creating, setCreating] = useState(false);
 
   // Édition inline (un tag à la fois)
@@ -75,7 +75,7 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
       const tag = await createJobTag(name, newColor);
       setTags((prev) => [...prev, tag].sort((a, b) => a.name.localeCompare(b.name)));
       setNewName('');
-      setNewColor(PRESET_GRADIENTS[0][0]);
+      setNewColor(TAG_COLORS[0]);
       // Un tag créé depuis le hub est directement assigné à la job.
       void persist([...tagIds, tag.id]);
     } catch (e: any) {
@@ -124,12 +124,11 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
       <div className="px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
           {assigned.map((tag) => {
-            const c = getEventColors(tag.color_hex);
             return (
               <span
                 key={tag.id}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-semibold"
-                style={{ backgroundColor: toRgba(tag.color_hex, 0.15), color: c.text }}
+                style={{ backgroundColor: toRgba(tag.color_hex, 0.14), color: tag.color_hex }}
               >
                 <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color_hex }} />
                 {tag.name}
@@ -179,7 +178,7 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
                             className="w-full rounded-md border border-outline bg-white px-2 py-1.5 text-[12px] text-text-primary dark:bg-surface-tertiary"
                             autoFocus
                           />
-                          <TeamColorSwatches size="sm" value={editColor} onChange={setEditColor} />
+                          <TagColorSwatches size="sm" value={editColor} onChange={setEditColor} />
                           <div className="flex gap-1.5">
                             <button
                               onClick={() => void handleSaveEdit()}
@@ -240,7 +239,7 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
                     placeholder={fr ? 'Nom du tag…' : 'Tag name…'}
                     className="w-full rounded-md border border-outline bg-white px-2 py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary dark:bg-surface-tertiary"
                   />
-                  <TeamColorSwatches size="sm" value={newColor} onChange={setNewColor} />
+                  <TagColorSwatches size="sm" value={newColor} onChange={setNewColor} />
                   <button
                     onClick={() => void handleCreate()}
                     disabled={creating || !newName.trim()}

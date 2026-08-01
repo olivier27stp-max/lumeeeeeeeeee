@@ -27,6 +27,7 @@ export interface ScheduleJobRef {
   geocode_status: string | null;
   total_cents?: number | null;
   job_number?: string | null;
+  tag_ids?: string[] | null;
 }
 
 export interface ScheduleEventRecord {
@@ -91,6 +92,7 @@ function mapScheduleRow(row: any): ScheduleEventRecord {
           longitude: row.job.longitude == null ? null : Number(row.job.longitude),
           geocode_status: row.job.geocode_status ?? null,
           total_cents: row.job.total_cents == null ? null : Number(row.job.total_cents),
+          tag_ids: Array.isArray(row.job.tag_ids) ? row.job.tag_ids : null,
         }
       : null,
   };
@@ -156,7 +158,7 @@ export async function listScheduleEventsRange(params: {
   if (jobIds.length > 0) {
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,deleted_at')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,tag_ids,deleted_at')
       .in('id', jobIds);
     for (const j of jobs || []) {
       jobMap[j.id] = j;
@@ -353,7 +355,7 @@ export async function listUnassignedScheduledEvents(params: {
   if (jobIds.length > 0) {
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,deleted_at')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,tag_ids,deleted_at')
       .in('id', jobIds);
     for (const j of jobs || []) {
       jobMap[j.id] = j;

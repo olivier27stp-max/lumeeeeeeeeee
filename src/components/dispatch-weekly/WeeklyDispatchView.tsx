@@ -7,6 +7,7 @@ import { useTranslation } from '../../i18n';
 import type { ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
+import { useJobTagColors } from '../../hooks/useJobTagColors';
 import { FALLBACK_TEAM_COLOR, isHexColor, toRgba } from '../../lib/colorUtils';
 import {
   DispatchDailyPrefs, loadDispatchDailyPrefs, saveDispatchDailyPrefs, vehicleNumberForTeam,
@@ -23,8 +24,9 @@ import {
  * différence structurelle : X = les 7 jours de la semaine, Y = les routes
  * (équipes). Les cartes de visite s'empilent verticalement dans chaque
  * cellule — jamais de chevauchement.
- * Couleurs : UNIQUEMENT la couleur de route existante (team.color_hex) —
- * fond pastel + barre gauche de la carte; jamais de couleur par statut.
+ * Couleurs : la couleur de route existante (team.color_hex) — fond pastel +
+ * barre gauche de la carte; si la job porte un tag, la couleur vive du
+ * premier tag remplace celle de la route. Jamais de couleur par statut.
  */
 
 type CalendarDnd = ReturnType<typeof useCalendarDnd>;
@@ -161,6 +163,7 @@ export default function WeeklyDispatchView({
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
   const locale = isFr ? frCA : enCA;
+  const { colorForTagIds } = useJobTagColors();
 
   /* ── Préférences colonne de gauche — partagées avec la vue Jour ── */
   const [prefs, setPrefs] = useState<DispatchDailyPrefs>(() => loadDispatchDailyPrefs(orgId));
@@ -503,7 +506,7 @@ export default function WeeklyDispatchView({
                             <WeekVisitCard
                               key={ev.id}
                               ev={ev}
-                              color={teamColor}
+                              color={colorForTagIds(ev.job?.tag_ids) || teamColor}
                               timeLabel={timeLabelFor(ev)}
                               attention={st === 'blocked' || st === 'late' || st === 'action_required'}
                               dimmed={!!(drag?.moved && drag.ev.id === ev.id)}
