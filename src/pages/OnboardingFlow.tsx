@@ -15,6 +15,7 @@
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { translatePlanFeature } from '../lib/planFeatures';
 import {
   ArrowRight, ArrowLeft, Check, CreditCard, Lock, Loader2,
   Building2, Mail, User, Globe, Phone, Tag, Gift,
@@ -607,7 +608,7 @@ export default function OnboardingFlow() {
                             {extraFeatures.map((f: string, i: number) => (
                               <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
                                 <Check size={12} className="text-[#3FAF97] shrink-0" strokeWidth={3} />
-                                {f}
+                                {translatePlanFeature(f, isFr)}
                               </div>
                             ))}
                           </div>
@@ -871,7 +872,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
               {(plan.features || []).map((f: string, i: number) => (
                 <div key={i} className="flex items-center gap-2 text-xs text-gray-600 py-1">
                   <Check size={12} className="text-[#3FAF97] shrink-0" strokeWidth={3} />
-                  {f}
+                  {translatePlanFeature(f, isFr)}
                 </div>
               ))}
             </div>
