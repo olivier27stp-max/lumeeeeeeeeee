@@ -397,7 +397,11 @@ app.use('/api', scheduledReportsRouter);
 app.use('/api', goalsRouter);
 app.use('/api', auditLogRouter);
 app.use('/api', activityNotesRouter);
-app.use('/api', orgKnowledgeRouter);
+// C4-01 — monté sous son propre préfixe. Avant, `app.use('/api', …)` avec des
+// routes nues (`/`, `/:id`, `/bulk`) faisait ombrage à `GET/POST /api`, créait un
+// `DELETE /api/:id` fourre-tout, cassait `/bulk`, et fuitait maxBodySize/guardCommonShape
+// sur les ~29 routers montés après cette ligne.
+app.use('/api/org-knowledge', orgKnowledgeRouter);
 // External agent auth (API-key → short-lived JWT) + webhook — owns its auth
 app.use('/api', agentAuthRouter);
 // Lume Agent — in-app AI chat (Gemini). Auth per-request via requireAuthedClient.
