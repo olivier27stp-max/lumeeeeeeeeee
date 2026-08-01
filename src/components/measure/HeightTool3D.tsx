@@ -78,7 +78,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   // (porte) cliqué en premier — triangulation exacte, immune au géocodage, au
   // terrain et à la hauteur de caméra. 'ref' = cliquer la référence, 'refValue'
   // = dire sa vraie dimension, 'measure' = mesurer les cotes.
-  const [svPhase, setSvPhase] = useState<'ref' | 'refValue' | 'measure'>('ref');
+  const [svPhase, setSvPhase] = useState<'ref' | 'refValue' | 'measure'>('measure');
   const [svRefPts, setSvRefPts] = useState<SvPoint[]>([]);
   const [svRefVal, setSvRefVal] = useState('');
   const svRefLocked = useRef(false);
@@ -373,7 +373,7 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   function svResetMeasure() {
     setSvCotes([]);
     setSvPending(null);
-    setSvPhase('ref');
+    setSvPhase('measure');
     setSvRefPts([]);
     setSvRefVal('');
     svRefLocked.current = false;
@@ -875,11 +875,11 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
             </button>
           </div>
         )}
-        {streetMode && streetState === 'ok' && svMeasuring && svPhase === 'ref' && svRefPts.length === 0 && (
+        {streetMode && streetState === 'ok' && svMeasuring && svPhase === 'measure' && !svRefLocked.current && (
           <button
-            onClick={() => { svRefLocked.current = false; setSvPhase('measure'); }}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 z-[18] text-[10px] text-white/80 hover:text-white bg-gray-900/60 px-3 py-1 rounded-lg backdrop-blur-sm transition-colors">
-            {fr ? 'Mesurer sans référence (approximatif ±10-15 %)' : 'Measure without reference (approximate ±10-15%)'}
+            onClick={() => { setSvPhase('ref'); setSvRefPts([]); }}
+            className="absolute bottom-3 left-3 z-[18] text-[10px] text-white/90 hover:text-white bg-gray-900/60 px-3 py-1.5 rounded-lg backdrop-blur-sm transition-colors">
+            {fr ? '🎯 Précision max : définir une référence (porte)' : '🎯 Max precision: set a reference (door)'}
           </button>
         )}
         {streetMode && svCotes.length > 0 && (
