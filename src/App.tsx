@@ -1258,7 +1258,7 @@ function AuthenticatedApp({
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
                     <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><JobDetails /></PageWrapper></Gated>} />
                     <Route path="/calendar" element={<Gated permission="calendar.read"><Schedule /></Gated>} />
-                    <Route path="/availability" element={<Navigate to="/timesheets?view=disponibilites" replace />} />
+                    <Route path="/availability" element={<Navigate to="/timesheets?view=horaire" replace />} />
                     <Route path="/search" element={<Gated permission="settings.read"><PageWrapper><SearchResultsPage /></PageWrapper></Gated>} />
                     <Route path="/quotes" element={<Gated permission="quotes.read"><div className="px-8 py-6"><Quotes /></div></Gated>} />
                     <Route path="/quotes/new" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteNew /></React.Suspense></Gated>} />

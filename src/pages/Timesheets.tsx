@@ -18,34 +18,20 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useCompany } from '../contexts/CompanyContext';
 import PermissionGate from '../components/PermissionGate';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
-import {
-  listTeams, createTeam, updateTeam, softDeleteTeam, listTeamAssignments,
-  type TeamRecord, type TeamInput,
-} from '../lib/teamsApi';
-import {
-  listDateSlots, createDateSlot, updateDateSlot, deleteDateSlot, bulkCreateDateSlots,
-  type DateSlotRecord, type DateSlotInput,
-} from '../lib/dateAvailabilityApi';
-import {
-  listAvailability, createAvailability, deleteAvailability, setDefaultAvailability,
-  minutesToTime, timeToMinutes, weekdayLabel,
-  type AvailabilityRecord,
-} from '../lib/availabilityApi';
+import { listTeams, listTeamAssignments } from '../lib/teamsApi';
 import { punchIn as apiPunchIn, punchOut as apiPunchOut, startBreak as apiStartBreak, endBreak as apiEndBreak } from '../lib/timesheetsApi';
 import { fetchTeamList } from '../lib/invitationsApi';
 import { useGpsTracker } from '../hooks/useGpsTracker';
 import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimesheetTable';
 import TeamScheduleGrid from '../components/timesheets/TeamScheduleGrid';
 import { usePermissions } from '../hooks/usePermissions';
-import TeamColorSwatches from '../components/TeamColorSwatches';
-import { PRESET_GRADIENTS } from '../lib/presetPalette';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════════════════════
 
 type ViewMode = 'day' | 'week' | 'month';
-type HubTab = 'feuilles' | 'carte' | 'disponibilites' | 'horaire';
+type HubTab = 'feuilles' | 'carte' | 'horaire';
 
 interface TimeEntry {
   id: string;
@@ -185,24 +171,6 @@ function getStatus(entry: TimeEntry, fr: boolean): { label: string; key: string 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// AVAILABILITY HELPERS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const TEAM_COLORS = PRESET_GRADIENTS.map(([primary]) => primary);
-
-function avStartOfWeek(date: Date): Date {
-  const d = new Date(date); const day = d.getDay(); const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff); d.setHours(0, 0, 0, 0); return d;
-}
-function avAddDays(date: Date, n: number): Date { const d = new Date(date); d.setDate(d.getDate() + n); return d; }
-function avToDateStr(date: Date): string { return date.toISOString().slice(0, 10); }
-function avFormatDate(dateStr: string, fr: boolean): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString(fr ? 'fr-CA' : 'en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
-}
-function avFormatTime(time: string): string { return time.slice(0, 5); }
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // MAP HELPERS
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -295,7 +263,8 @@ export default function Timesheets() {
   // ── Hub tab (check URL params for redirect from /availability) ──
   const [hubTab, setHubTab] = useState<HubTab>(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('view') === 'disponibilites') return 'disponibilites';
+    // L'onglet Disponibilités n'existe plus : les anciens liens tombent sur Horaire.
+    if (params.get('view') === 'disponibilites') return 'horaire';
     if (params.get('view') === 'horaire') return 'horaire';
     return 'feuilles';
   });
@@ -330,29 +299,6 @@ export default function Timesheets() {
   const [flyTarget, setFlyTarget] = useState<{ lat: number; lng: number } | null>(null);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // DISPONIBILITÉS STATE
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const [avSelectedTeamId, setAvSelectedTeamId] = useState('');
-  const [avWeekStart, setAvWeekStart] = useState(() => avStartOfWeek(new Date()));
-  const [teamModal, setTeamModal] = useState<{ open: boolean; editing?: TeamRecord }>({ open: false });
-  const [teamForm, setTeamForm] = useState<TeamInput>({ name: '', color_hex: TEAM_COLORS[0] });
-  const [slotModal, setSlotModal] = useState<{ open: boolean; editing?: DateSlotRecord }>({ open: false });
-  const [slotForm, setSlotForm] = useState<DateSlotInput>({ team_id: '', slot_date: avToDateStr(new Date()), start_time: '08:00', end_time: '17:00' });
-  const [slotStatus, setSlotStatus] = useState<'available' | 'blocked'>('available');
-  const [slotNotes, setSlotNotes] = useState('');
-  const [confirmDeleteTeam, setConfirmDeleteTeam] = useState<string | null>(null);
-  const [weeklyModalOpen, setWeeklyModalOpen] = useState(false);
-  const [weeklyDay, setWeeklyDay] = useState(1);
-  const [weeklyStart, setWeeklyStart] = useState('08:00');
-  const [weeklyEnd, setWeeklyEnd] = useState('17:00');
-  const [bulkModalOpen, setBulkModalOpen] = useState(false);
-  const [bulkDays, setBulkDays] = useState([true, true, true, true, true, false, false]);
-  const [bulkStart, setBulkStart] = useState('08:00');
-  const [bulkEnd, setBulkEnd] = useState('17:00');
-  const [avTeamSearch, setAvTeamSearch] = useState('');
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // FEUILLES DATA
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -377,7 +323,7 @@ export default function Timesheets() {
   // Liste d'employés = membres réels de l'org (memberships + profiles), pas les
   // noms dédupliqués des pointages : ceux-ci font apparaître des employés
   // fantômes issus de vieilles saisies. `team_id` vient du même rattachement
-  // que celui affiché dans l'onglet Disponibilité — source unique.
+  // que celui affiché dans l'onglet Horaire — source unique.
   const membersQuery = useQuery({
     queryKey: ['org-members', currentOrgId],
     queryFn: fetchTeamList,
@@ -681,63 +627,12 @@ export default function Timesheets() {
   const gps = useGpsTracker({ enabled: !!myActiveEntry && !isOnBreak });
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // DISPONIBILITÉS DATA
+  // ÉQUIPES (filtres Feuilles/Carte + grille Horaire)
   // ═══════════════════════════════════════════════════════════════════════════
 
   // Clé scopée sur l'org : listTeams filtre désormais par org_id, sans ça le
   // cache resservirait les équipes de l'office précédent après un changement.
   const teamsQuery = useQuery({ queryKey: ['teams', currentOrgId], queryFn: listTeams });
-  const teams = teamsQuery.data || [];
-  if (!avSelectedTeamId && teams.length > 0) setAvSelectedTeamId(teams[0].id);
-
-  const weeklyQuery = useQuery({ queryKey: ['weeklyAvailability', avSelectedTeamId], queryFn: () => listAvailability(avSelectedTeamId), enabled: !!avSelectedTeamId });
-  const weeklySlots = weeklyQuery.data || [];
-  const avWeekEnd = avAddDays(avWeekStart, 6);
-  const slotsQuery = useQuery({ queryKey: ['dateSlots', avSelectedTeamId, avToDateStr(avWeekStart)], queryFn: () => listDateSlots(avSelectedTeamId, avToDateStr(avWeekStart), avToDateStr(avWeekEnd)), enabled: !!avSelectedTeamId });
-  const slots = slotsQuery.data || [];
-
-  const slotsByDate = useMemo(() => {
-    const map = new Map<string, DateSlotRecord[]>();
-    for (let i = 0; i < 7; i++) map.set(avToDateStr(avAddDays(avWeekStart, i)), []);
-    for (const s of slots) { const bucket = map.get(s.slot_date) || []; bucket.push(s); map.set(s.slot_date, bucket); }
-    return map;
-  }, [slots, avWeekStart]);
-
-  const weeklyByDay = useMemo(() => {
-    const map = new Map<number, AvailabilityRecord[]>();
-    for (let d = 0; d < 7; d++) map.set(d, []);
-    for (const s of weeklySlots) { const arr = map.get(s.weekday) || []; arr.push(s); map.set(s.weekday, arr); }
-    return map;
-  }, [weeklySlots]);
-
-  const selectedTeam = teams.find(tm => tm.id === avSelectedTeamId);
-  const filteredTeams = avTeamSearch ? teams.filter(tm => tm.name.toLowerCase().includes(avTeamSearch.toLowerCase())) : teams;
-
-  // ── Availability mutations ──
-  const createTeamMut = useMutation({ mutationFn: createTeam, onSuccess: (team) => { qc.invalidateQueries({ queryKey: ['teams'] }); toast.success(t.availability.teamCreated); setTeamModal({ open: false }); setAvSelectedTeamId(team.id); }, onError: (e: any) => toast.error(e?.message || t.availability.failedCreateTeam) });
-  const updateTeamMut = useMutation({ mutationFn: ({ id, input }: { id: string; input: TeamInput }) => updateTeam(id, input), onSuccess: () => { qc.invalidateQueries({ queryKey: ['teams'] }); toast.success(t.availability.teamUpdated); setTeamModal({ open: false }); }, onError: (e: any) => toast.error(e?.message || t.availability.failedUpdateTeam) });
-  const deleteTeamMut = useMutation({ mutationFn: softDeleteTeam, onSuccess: () => { qc.invalidateQueries({ queryKey: ['teams'] }); toast.success(t.availability.teamDeleted); setConfirmDeleteTeam(null); if (avSelectedTeamId === confirmDeleteTeam) setAvSelectedTeamId(''); }, onError: (e: any) => toast.error(e?.message || t.availability.failedDeleteTeam) });
-  const createSlotMut = useMutation({ mutationFn: createDateSlot, onSuccess: () => { qc.invalidateQueries({ queryKey: ['dateSlots'] }); toast.success(t.availability.availabilityAdded); setSlotModal({ open: false }); }, onError: (e: any) => toast.error(e?.message || t.availability.failedAdd) });
-  const updateSlotMut = useMutation({ mutationFn: ({ id, input }: { id: string; input: Partial<Omit<DateSlotInput, 'team_id'>> }) => updateDateSlot(id, input), onSuccess: () => { qc.invalidateQueries({ queryKey: ['dateSlots'] }); toast.success(t.availability.availabilityUpdated); setSlotModal({ open: false }); }, onError: (e: any) => toast.error(e?.message || t.availability.failedUpdate) });
-  const deleteSlotMut = useMutation({ mutationFn: deleteDateSlot, onSuccess: () => { qc.invalidateQueries({ queryKey: ['dateSlots'] }); toast.success(t.availability.availabilityRemoved); }, onError: (e: any) => toast.error(e?.message || t.availability.failedRemove) });
-  const bulkMut = useMutation({ mutationFn: ({ dates, start, end }: { dates: string[]; start: string; end: string }) => bulkCreateDateSlots(avSelectedTeamId, dates, start, end), onSuccess: () => { qc.invalidateQueries({ queryKey: ['dateSlots'] }); toast.success(t.availability.bulkAdded); setBulkModalOpen(false); }, onError: (e: any) => toast.error(e?.message || t.availability.failedBulk) });
-  const addWeeklyMut = useMutation({ mutationFn: (input: { team_id: string; weekday: number; start_minute: number; end_minute: number }) => createAvailability(input), onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Horaire mis à jour' : 'Schedule updated'); setWeeklyModalOpen(false); }, onError: (e: any) => toast.error(e?.message || (fr ? 'Échec' : 'Failed')) });
-  const deleteWeeklyMut = useMutation({ mutationFn: deleteAvailability, onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Horaire supprimé' : 'Schedule removed'); }, onError: (e: any) => toast.error(e?.message || (fr ? 'Échec' : 'Failed')) });
-  const setDefaultMut = useMutation({ mutationFn: () => setDefaultAvailability(avSelectedTeamId), onSuccess: () => { qc.invalidateQueries({ queryKey: ['weeklyAvailability'] }); toast.success(fr ? 'Lun-Ven 8-17 défini' : 'Mon-Fri 8-17 set'); }, onError: (e: any) => toast.error(e?.message || (fr ? 'Échec' : 'Failed')) });
-
-  // ── Availability handlers ──
-  function openCreateTeam() { setTeamForm({ name: '', color_hex: TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)] }); setTeamModal({ open: true }); }
-  function openEditTeam(team: TeamRecord) { setTeamForm({ name: team.name, color_hex: team.color_hex, description: team.description || '', is_active: team.is_active }); setTeamModal({ open: true, editing: team }); }
-  function handleTeamSubmit() { if (teamModal.editing) updateTeamMut.mutate({ id: teamModal.editing.id, input: teamForm }); else createTeamMut.mutate(teamForm); }
-  function openCreateSlot(dateStr?: string) { setSlotForm({ team_id: avSelectedTeamId, slot_date: dateStr || avToDateStr(new Date()), start_time: '08:00', end_time: '17:00' }); setSlotStatus('available'); setSlotNotes(''); setSlotModal({ open: true }); }
-  function openEditSlot(slot: DateSlotRecord) { setSlotForm({ team_id: slot.team_id, slot_date: slot.slot_date, start_time: avFormatTime(slot.start_time), end_time: avFormatTime(slot.end_time) }); setSlotStatus(slot.status); setSlotNotes(slot.notes || ''); setSlotModal({ open: true, editing: slot }); }
-  function handleSlotSubmit() { if (slotModal.editing) updateSlotMut.mutate({ id: slotModal.editing.id, input: { slot_date: slotForm.slot_date, start_time: slotForm.start_time, end_time: slotForm.end_time, status: slotStatus, notes: slotNotes } }); else createSlotMut.mutate({ ...slotForm, status: slotStatus, notes: slotNotes }); }
-  function handleBulkSubmit() {
-    const dates: string[] = [];
-    for (let i = 0; i < 7; i++) { if (bulkDays[i]) dates.push(avToDateStr(avAddDays(avWeekStart, i))); }
-    if (dates.length === 0) return;
-    bulkMut.mutate({ dates, start: bulkStart, end: bulkEnd });
-  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // RENDER
@@ -751,7 +646,7 @@ export default function Timesheets() {
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-[28px] font-bold text-text-primary leading-tight tracking-tight">{fr ? 'Feuilles de temps' : 'Timesheets'}</h1>
-          <p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Suivi des équipes, pointages, disponibilité et répartition terrain' : 'Team tracking, punches, availability and field distribution'}</p>
+          <p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Suivi des équipes, pointages, horaire et répartition terrain' : 'Team tracking, punches, schedule and field distribution'}</p>
         </div>
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Date controls for feuilles/carte */}
@@ -783,7 +678,7 @@ export default function Timesheets() {
 
       {/* ── Sub-tabs — same underline pattern as Finances/Jobs ── */}
       <div className="tab-nav">
-        {([['feuilles', fr ? 'Feuilles de temps' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['disponibilites', fr ? 'Disponibilités' : 'Availability'], ['horaire', fr ? 'Horaire' : 'Schedule']] as [HubTab, string][]).map(([key, label]) => (
+        {([['feuilles', fr ? 'Feuilles de temps' : 'Timesheets'], ['carte', fr ? 'Carte' : 'Map'], ['horaire', fr ? 'Horaire' : 'Schedule']] as [HubTab, string][]).map(([key, label]) => (
           <button key={key} className={hubTab === key ? 'tab-item-active' : 'tab-item'} onClick={() => setHubTab(key)}>
             {label}
           </button>
@@ -942,189 +837,6 @@ export default function Timesheets() {
         </>
       )}
 
-      {hubTab === 'disponibilites' && (
-        /* ════ DISPONIBILITÉS VIEW ════ */
-        <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-5">
-          {/* ── LEFT: Teams Panel ── */}
-          <div className="rounded-2xl bg-surface-card border border-border shadow-card flex flex-col">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <h2 className="text-[15px] font-semibold text-text-primary flex items-center gap-2"><Users size={16} /> {fr ? 'Équipes' : 'Teams'}</h2>
-              <button onClick={openCreateTeam} className="inline-flex items-center gap-1.5 h-8 px-3 bg-text-primary text-white rounded-md text-[12px] font-medium hover:opacity-90 transition-all">
-                <Plus size={13} /> {fr ? 'Ajouter' : 'Add'}
-              </button>
-            </div>
-            <div className="px-5 pb-3">
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
-                <input value={avTeamSearch} onChange={e => setAvTeamSearch(e.target.value)} placeholder={fr ? 'Rechercher une équipe...' : 'Search teams...'}
-                  className="h-8 w-full pl-8 pr-3 text-[13px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary transition-all" />
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1">
-              {filteredTeams.length === 0 && (
-                <div className="py-10 text-center">
-                  <Users size={28} className="mx-auto text-text-tertiary opacity-20 mb-2" />
-                  <p className="text-[13px] font-medium text-text-primary">{fr ? 'Aucune équipe' : 'No teams'}</p>
-                  <p className="text-[12px] text-text-tertiary mt-0.5">{fr ? 'Créez votre première équipe' : 'Create your first team'}</p>
-                </div>
-              )}
-              {filteredTeams.map(team => (
-                <div key={team.id} onClick={() => setAvSelectedTeamId(team.id)}
-                  className={cn('flex items-center gap-3 rounded-lg px-3.5 py-3 cursor-pointer transition-all group',
-                    avSelectedTeamId === team.id ? 'bg-surface-secondary border border-outline shadow-sm' : 'hover:bg-surface-secondary border border-transparent')}>
-                  <span className="h-3.5 w-3.5 rounded-full shrink-0 ring-2 ring-white shadow-sm" style={{ backgroundColor: team.color_hex }} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-medium text-text-primary truncate">{team.name}</span>
-                      {!team.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600 font-medium">{fr ? 'Inactive' : 'Inactive'}</span>}
-                    </div>
-                    {team.description && <p className="text-[11px] text-text-tertiary truncate mt-0.5">{team.description}</p>}
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button onClick={e => { e.stopPropagation(); openEditTeam(team); }} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary"><Pencil size={12} /></button>
-                    <button onClick={e => { e.stopPropagation(); setConfirmDeleteTeam(team.id); }} className="p-1.5 rounded-md text-text-tertiary hover:text-red-600 hover:bg-red-50"><Trash2 size={12} /></button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── RIGHT: Workspace ── */}
-          <div className="space-y-5">
-            {!avSelectedTeamId ? (
-              <div className="rounded-2xl bg-surface-card border border-border shadow-card py-20 text-center">
-                <Calendar size={32} className="mx-auto text-text-tertiary opacity-20 mb-3" />
-                <p className="text-[15px] font-semibold text-text-primary">{fr ? 'Sélectionnez une équipe' : 'Select a team'}</p>
-                <p className="text-[13px] text-text-tertiary mt-1">{fr ? 'Choisissez une équipe pour gérer sa disponibilité' : 'Choose a team to manage its availability'}</p>
-              </div>
-            ) : (
-              <>
-                {/* Workspace header */}
-                <div className="rounded-2xl bg-surface-card border border-border shadow-card px-5 py-4">
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="flex items-center gap-3">
-                      {selectedTeam && <span className="h-4 w-4 rounded-full ring-2 ring-white shadow-sm" style={{ backgroundColor: selectedTeam.color_hex }} />}
-                      <span className="text-[16px] font-semibold text-text-primary">{selectedTeam?.name}</span>
-                      {selectedTeam && !selectedTeam.is_active && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600 font-medium">{fr ? 'Inactive' : 'Inactive'}</span>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setAvWeekStart(avAddDays(avWeekStart, -7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
-                      <span className="text-[13px] font-semibold text-text-primary min-w-[200px] text-center tabular-nums">{avFormatDate(avToDateStr(avWeekStart), fr)} — {avFormatDate(avToDateStr(avWeekEnd), fr)}</span>
-                      <button onClick={() => setAvWeekStart(avAddDays(avWeekStart, 7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
-                      <button onClick={() => setAvWeekStart(avStartOfWeek(new Date()))} className="h-9 px-3 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? 'Cette semaine' : 'This week'}</button>
-                      <button onClick={() => { setBulkDays([true,true,true,true,true,false,false]); setBulkStart('08:00'); setBulkEnd('17:00'); setBulkModalOpen(true); }}
-                        className="h-9 px-3 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? 'Ajout en lot' : 'Bulk add'}</button>
-                      <button onClick={() => openCreateSlot()} className="inline-flex items-center gap-1.5 h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 transition-all">
-                        <Plus size={14} /> {fr ? 'Ajouter un créneau' : 'Add slot'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Weekly default schedule */}
-                <div className="rounded-2xl bg-surface-card border border-border shadow-card">
-                  <div className="flex items-center justify-between px-5 pt-5 pb-3">
-                    <div>
-                      <h3 className="text-[14px] font-semibold text-text-primary flex items-center gap-2"><RefreshCw size={14} className="text-text-tertiary" /> {fr ? 'Horaire hebdomadaire par défaut' : 'Default Weekly Schedule'}</h3>
-                      <p className="text-[12px] text-text-tertiary mt-0.5">{fr ? 'Disponibilité récurrente normale de cette équipe' : 'Recurring default availability for this team'}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {weeklySlots.length === 0 && (
-                        <button onClick={() => setDefaultMut.mutate()} disabled={setDefaultMut.isPending}
-                          className="h-8 px-3 bg-surface-card border border-outline rounded-md text-[12px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
-                          {fr ? 'Définir lun-ven 8–17' : 'Set Mon-Fri 8-17'}
-                        </button>
-                      )}
-                      <button onClick={() => { setWeeklyDay(1); setWeeklyStart('08:00'); setWeeklyEnd('17:00'); setWeeklyModalOpen(true); }}
-                        className="inline-flex items-center gap-1 h-8 px-3 bg-text-primary text-white rounded-md text-[12px] font-medium hover:opacity-90 transition-all">
-                        <Plus size={12} /> {fr ? 'Ajouter' : 'Add'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="px-5 pb-5">
-                    {weeklySlots.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-outline bg-surface-secondary/50 py-6 text-center">
-                        <Clock size={24} className="mx-auto text-text-tertiary opacity-30 mb-2" />
-                        <p className="text-[13px] font-medium text-text-primary">{fr ? 'Aucun horaire hebdomadaire défini' : 'No default schedule set'}</p>
-                        <p className="text-[12px] text-text-tertiary mt-0.5">{fr ? "L'équipe sera disponible uniquement lors des créneaux ajoutés manuellement" : 'Team will only be available on specifically added dates'}</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-7 gap-2">
-                        {[1, 2, 3, 4, 5, 6, 0].map(day => {
-                          const daySlots = weeklyByDay.get(day) || [];
-                          const dayNames = fr ? ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'] : ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-                          const dayLabel = dayNames[day];
-                          return (
-                            <div key={day} className={cn('rounded-lg border p-2.5 text-center', daySlots.length > 0 ? 'border-emerald-200 bg-emerald-50/50' : 'border-outline bg-surface-secondary/30')}>
-                              <p className="text-[11px] font-semibold text-text-tertiary uppercase mb-1.5">{dayLabel}</p>
-                              {daySlots.length === 0 ? (
-                                <p className="text-[11px] text-text-tertiary">{fr ? 'Fermé' : 'Off'}</p>
-                              ) : daySlots.map(s => (
-                                <div key={s.id} className="group relative bg-emerald-100/60 rounded px-1.5 py-1 mb-1">
-                                  <span className="text-[11px] font-medium text-emerald-700 tabular-nums">{minutesToTime(s.start_minute)}–{minutesToTime(s.end_minute)}</span>
-                                  <button onClick={() => deleteWeeklyMut.mutate(s.id)} className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-surface-card border border-outline text-text-tertiary hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"><X size={8} /></button>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Date overrides */}
-                <div className="rounded-2xl bg-surface-card border border-border shadow-card">
-                  <div className="flex items-center gap-2 px-5 pt-5 pb-3">
-                    <Calendar size={14} className="text-text-tertiary" />
-                    <h3 className="text-[14px] font-semibold text-text-primary">{fr ? 'Dérogations et exceptions de dates' : 'Date Overrides & Exceptions'}</h3>
-                    <span className="text-[12px] text-text-tertiary">— {fr ? "Remplace l'horaire hebdomadaire pour des journées précises" : 'Override default schedule for specific days'}</span>
-                  </div>
-                  <div className="px-5 pb-5">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-                      {Array.from(slotsByDate.entries()).map(([dateStr, daySlots]) => {
-                        const hasSlots = daySlots.length > 0;
-                        const hasBlocked = daySlots.some(s => s.status === 'blocked');
-                        const tagLabel = !hasSlots ? (fr ? 'Par défaut' : 'Default') : hasBlocked ? (fr ? 'Exception' : 'Exception') : (fr ? 'Personnalisé' : 'Custom');
-                        const tagColor = !hasSlots ? 'text-text-tertiary bg-surface-secondary border-outline' : hasBlocked ? 'text-red-600 bg-red-50 border-red-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200';
-                        return (
-                          <div key={dateStr} className={cn('rounded-xl border p-3.5 min-h-[130px] flex flex-col', hasSlots ? 'border-outline bg-surface' : 'border-dashed border-outline bg-surface-secondary/30')}>
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="text-[12px] font-semibold text-text-primary">{avFormatDate(dateStr, fr)}</h4>
-                              <button onClick={() => openCreateSlot(dateStr)} className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary"><Plus size={13} /></button>
-                            </div>
-                            <span className={cn('self-start inline-block rounded-full border px-2 py-[1px] text-[9px] font-semibold uppercase tracking-wider leading-[14px] mb-2', tagColor)}>{tagLabel}</span>
-                            <div className="flex-1 space-y-1.5">
-                              {daySlots.length === 0 ? (
-                                <p className="text-[11px] text-text-tertiary italic">{fr ? 'Horaire par défaut appliqué' : 'Default schedule applied'}</p>
-                              ) : daySlots.map(slot => (
-                                <div key={slot.id} className={cn('rounded-md px-2 py-1.5 group/slot flex items-start justify-between gap-1', slot.status === 'available' ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200')}>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      {slot.status === 'available' ? <Check size={11} className="text-emerald-600 shrink-0" /> : <Ban size={11} className="text-red-500 shrink-0" />}
-                                      <span className="text-[11px] font-medium text-text-primary tabular-nums">{avFormatTime(slot.start_time)} – {avFormatTime(slot.end_time)}</span>
-                                    </div>
-                                    {slot.notes && <p className="text-[10px] text-text-tertiary mt-0.5 truncate">{slot.notes}</p>}
-                                  </div>
-                                  <div className="flex items-center gap-0.5 opacity-0 group-hover/slot:opacity-100 transition-opacity shrink-0">
-                                    <button onClick={() => openEditSlot(slot)} className="p-0.5 rounded text-text-tertiary hover:text-text-primary"><Pencil size={10} /></button>
-                                    <button onClick={() => deleteSlotMut.mutate(slot.id)} className="p-0.5 rounded text-text-tertiary hover:text-red-600"><Trash2 size={10} /></button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {hubTab === 'horaire' && (
         /* ════ HORAIRE VIEW — qui travaille dans quelle équipe, par jour ════ */
         <TeamScheduleGrid
@@ -1178,112 +890,6 @@ export default function Timesheets() {
         )}
       </AnimatePresence>
 
-      {/* Team modal */}
-      {teamModal.open && (
-        <ModalShell open onClose={() => setTeamModal({ open: false })}>
-          <div className="p-6 space-y-4">
-            <h3 className="text-[16px] font-bold text-text-primary">{teamModal.editing ? (fr ? 'Modifier l\'équipe' : 'Edit Team') : (fr ? 'Ajouter une équipe' : 'Add Team')}</h3>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Nom' : 'Name'}</label><input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))} className="glass-input mt-1.5 w-full" placeholder={fr ? 'Ex: Équipe Installation' : 'e.g. Installation Team'} autoFocus /></div>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">Description</label><input value={teamForm.description || ''} onChange={e => setTeamForm(f => ({ ...f, description: e.target.value }))} className="glass-input mt-1.5 w-full" placeholder={fr ? 'Optionnel...' : 'Optional...'} /></div>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Couleur' : 'Color'}</label><div className="mt-2"><TeamColorSwatches value={teamForm.color_hex} onChange={hex => setTeamForm(f => ({ ...f, color_hex: hex }))} /></div></div>
-            {teamModal.editing && (
-              <div className="flex items-center gap-2">
-                <label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Statut' : 'Status'}</label>
-                <button onClick={() => setTeamForm(f => ({ ...f, is_active: !f.is_active }))} className={cn('text-[12px] px-2.5 py-1 rounded-full font-medium border', teamForm.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-surface-secondary text-text-tertiary border-outline')}>{teamForm.is_active ? (fr ? 'Active' : 'Active') : (fr ? 'Inactive' : 'Inactive')}</button>
-              </div>
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setTeamModal({ open: false })} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
-              <button onClick={handleTeamSubmit} disabled={!teamForm.name.trim() || createTeamMut.isPending || updateTeamMut.isPending} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{createTeamMut.isPending || updateTeamMut.isPending ? '...' : teamModal.editing ? (fr ? 'Sauvegarder' : 'Save') : (fr ? 'Créer' : 'Create')}</button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
-
-      {/* Slot modal */}
-      {slotModal.open && (
-        <ModalShell open onClose={() => setSlotModal({ open: false })}>
-          <div className="p-6 space-y-4">
-            <h3 className="text-[16px] font-bold text-text-primary">{slotModal.editing ? (fr ? 'Modifier le créneau' : 'Edit Slot') : (fr ? 'Ajouter un créneau' : 'Add Slot')}</h3>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Date' : 'Date'}</label><input type="date" value={slotForm.slot_date} onChange={e => setSlotForm(f => ({ ...f, slot_date: e.target.value }))} className="glass-input mt-1.5 w-full" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Début' : 'Start'}</label><input type="time" value={slotForm.start_time} onChange={e => setSlotForm(f => ({ ...f, start_time: e.target.value }))} className="glass-input mt-1.5 w-full" /></div>
-              <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Fin' : 'End'}</label><input type="time" value={slotForm.end_time} onChange={e => setSlotForm(f => ({ ...f, end_time: e.target.value }))} className="glass-input mt-1.5 w-full" /></div>
-            </div>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Statut' : 'Status'}</label>
-              <div className="flex gap-2 mt-1.5">
-                <button onClick={() => setSlotStatus('available')} className={cn('flex-1 text-[13px] py-2 rounded-md font-medium border transition-colors', slotStatus === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-surface-card text-text-tertiary border-outline hover:bg-surface-secondary')}>{fr ? 'Disponible' : 'Available'}</button>
-                <button onClick={() => setSlotStatus('blocked')} className={cn('flex-1 text-[13px] py-2 rounded-md font-medium border transition-colors', slotStatus === 'blocked' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-surface-card text-text-tertiary border-outline hover:bg-surface-secondary')}>{fr ? 'Bloqué' : 'Blocked'}</button>
-              </div>
-            </div>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Notes' : 'Notes'}</label><input value={slotNotes} onChange={e => setSlotNotes(e.target.value)} className="glass-input mt-1.5 w-full" placeholder={fr ? 'Optionnel...' : 'Optional...'} /></div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setSlotModal({ open: false })} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
-              <button onClick={handleSlotSubmit} disabled={createSlotMut.isPending || updateSlotMut.isPending} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{createSlotMut.isPending || updateSlotMut.isPending ? '...' : slotModal.editing ? (fr ? 'Sauvegarder' : 'Save') : (fr ? 'Ajouter' : 'Add')}</button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
-
-      {/* Delete team confirmation */}
-      {confirmDeleteTeam && (
-        <ModalShell open onClose={() => setConfirmDeleteTeam(null)} width="w-[380px]">
-          <div className="p-6 space-y-4">
-            <h3 className="text-[16px] font-bold text-text-primary">{fr ? 'Supprimer l\'équipe' : 'Delete Team'}</h3>
-            <p className="text-[13px] text-text-secondary">{fr ? 'Cette action est irréversible. Continuer ?' : 'This action cannot be undone. Continue?'}</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmDeleteTeam(null)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
-              <button onClick={() => deleteTeamMut.mutate(confirmDeleteTeam)} disabled={deleteTeamMut.isPending} className="h-9 px-4 bg-red-600 text-white rounded-md text-[13px] font-medium hover:bg-red-700 disabled:opacity-50">{deleteTeamMut.isPending ? '...' : (fr ? 'Supprimer' : 'Delete')}</button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
-
-      {/* Weekly schedule modal */}
-      {weeklyModalOpen && (
-        <ModalShell open onClose={() => setWeeklyModalOpen(false)} width="w-[380px]">
-          <div className="p-6 space-y-4">
-            <div><h3 className="text-[16px] font-bold text-text-primary">{fr ? 'Ajouter un horaire récurrent' : 'Add Default Schedule'}</h3><p className="text-[12px] text-text-tertiary mt-1">{fr ? 'Sera répété chaque semaine automatiquement' : 'Will repeat every week automatically'}</p></div>
-            <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Jour' : 'Day'}</label><select value={weeklyDay} onChange={e => setWeeklyDay(Number(e.target.value))} className="glass-input mt-1.5 w-full">{[1,2,3,4,5,6,0].map(d => <option key={d} value={d}>{weekdayLabel(d)}</option>)}</select></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Début' : 'Start'}</label><input type="time" value={weeklyStart} onChange={e => setWeeklyStart(e.target.value)} className="glass-input mt-1.5 w-full" /></div>
-              <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Fin' : 'End'}</label><input type="time" value={weeklyEnd} onChange={e => setWeeklyEnd(e.target.value)} className="glass-input mt-1.5 w-full" /></div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setWeeklyModalOpen(false)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
-              <button disabled={addWeeklyMut.isPending} onClick={() => addWeeklyMut.mutate({ team_id: avSelectedTeamId, weekday: weeklyDay, start_minute: timeToMinutes(weeklyStart), end_minute: timeToMinutes(weeklyEnd) })} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{addWeeklyMut.isPending ? '...' : (fr ? 'Ajouter' : 'Add')}</button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
-
-      {/* Bulk add modal */}
-      {bulkModalOpen && (
-        <ModalShell open onClose={() => setBulkModalOpen(false)}>
-          <div className="p-6 space-y-4">
-            <div><h3 className="text-[16px] font-bold text-text-primary">{fr ? 'Ajout en lot' : 'Bulk Add Slots'}</h3><p className="text-[12px] text-text-tertiary mt-1">{fr ? 'Ajouter des créneaux sur plusieurs jours' : 'Add slots across multiple days'}</p></div>
-            <div>
-              <label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Jours' : 'Days'}</label>
-              <div className="flex gap-2 mt-2">
-                {(fr ? ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'] : ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']).map((d, i) => (
-                  <button key={i} onClick={() => { const n = [...bulkDays]; n[i] = !n[i]; setBulkDays(n); }}
-                    className={cn('h-9 w-11 rounded-md text-[12px] font-medium border transition-colors', bulkDays[i] ? 'bg-text-primary text-white border-text-primary' : 'bg-surface-card text-text-secondary border-outline hover:bg-surface-secondary')}>
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Début' : 'Start'}</label><input type="time" value={bulkStart} onChange={e => setBulkStart(e.target.value)} className="glass-input mt-1.5 w-full" /></div>
-              <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Fin' : 'End'}</label><input type="time" value={bulkEnd} onChange={e => setBulkEnd(e.target.value)} className="glass-input mt-1.5 w-full" /></div>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setBulkModalOpen(false)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
-              <button onClick={handleBulkSubmit} disabled={bulkMut.isPending} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90 disabled:opacity-50">{bulkMut.isPending ? '...' : (fr ? 'Appliquer' : 'Apply')}</button>
-            </div>
-          </div>
-        </ModalShell>
-      )}
     </div>
   );
 

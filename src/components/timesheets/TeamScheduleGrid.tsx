@@ -12,7 +12,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, X, Check, Trash2, Clock, Users,
-  AlertTriangle, RefreshCw, Copy, StickyNote, Loader2, Ban, CheckSquare,
+  AlertTriangle, RefreshCw, Copy, StickyNote, Loader2, Ban, CheckSquare, Pencil,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +22,9 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { useCompany } from '../../contexts/CompanyContext';
 import UnifiedAvatar from '../ui/UnifiedAvatar';
-import type { TeamRecord } from '../../lib/teamsApi';
+import TeamColorSwatches from '../TeamColorSwatches';
+import { PRESET_GRADIENTS } from '../../lib/presetPalette';
+import { createTeam, updateTeam, softDeleteTeam, type TeamRecord } from '../../lib/teamsApi';
 import {
   fetchScheduleRange, resolveRange, resolveDay, cellKey, scheduledMinutes, hhmm, timeToMin,
   resolveTeamHours, setTeamHoursForDate, DEFAULT_TEAM_HOURS,
@@ -95,6 +97,9 @@ const KIND_LABELS: Record<TimeOffKind, { fr: string; en: string }> = {
 
 type EditScope = 'one' | 'future' | 'all';
 
+/** Palette partagée (même nuancier que les presets de devis). */
+const TEAM_COLORS = PRESET_GRADIENTS.map(([primary]) => primary);
+
 /** Nombre maximal de membres assignables à une même équipe pour une journée. */
 const MAX_MEMBERS_PER_TEAM_DAY = 5;
 
@@ -158,6 +163,7 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
   const [editModal, setEditModal] = useState<EditModalState | null>(null);
   const [timeOffModal, setTimeOffModal] = useState<TimeOffModalState | null>(null);
   const [hoursModal, setHoursModal] = useState<{ teamId: string; date: string; hours: TeamDayHours } | null>(null);
+  const [teamModal, setTeamModal] = useState<{ editing: TeamRecord | null } | null>(null);
   const [copyMenuDate, setCopyMenuDate] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -542,20 +548,35 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
               <div className="col-span-8 py-16 text-center">
                 <Users size={28} className="mx-auto text-text-tertiary opacity-20 mb-2" />
                 <p className="text-[13px] font-medium text-text-primary">{fr ? 'Aucune équipe' : 'No teams'}</p>
-                <p className="text-[12px] text-text-tertiary mt-0.5">{fr ? 'Créez vos équipes dans l’onglet Disponibilités' : 'Create teams in the Availability tab'}</p>
+                <p className="text-[12px] text-text-tertiary mt-0.5">
+                  {canManage
+                    ? (fr ? 'Créez votre première équipe avec le bouton ci-dessous' : 'Create your first team with the button below')
+                    : (fr ? 'Aucune équipe n’a encore été créée' : 'No team has been created yet')}
+                </p>
               </div>
             ) : (
               visibleTeams.map((team) => (
                 <React.Fragment key={team.id}>
-                  {/* Colonne équipe (sticky) */}
-                  <div className="sticky left-0 z-20 flex items-center gap-2.5 bg-surface border-b border-r border-border/70 px-4 py-3">
+                  {/* Colonne équipe (sticky) — clic sur le crayon = édition
+                      nom/couleur directement depuis la grille. */}
+                  <div className="group/team sticky left-0 z-20 flex items-center gap-2.5 bg-surface border-b border-r border-border/70 px-4 py-3">
                     <span className="h-3.5 w-3.5 rounded-full shrink-0 ring-2 ring-white shadow-sm" style={{ backgroundColor: team.color_hex }} />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-semibold text-text-primary truncate">{team.name}</p>
                       {team.is_active === false && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600 font-medium">{fr ? 'Archivée' : 'Archived'}</span>
                       )}
                     </div>
+                    {canManage && (
+                      <button
+                        type="button"
+                        onClick={() => setTeamModal({ editing: team })}
+                        title={fr ? 'Modifier l’équipe' : 'Edit team'}
+                        className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary opacity-0 group-hover/team:opacity-100 transition-opacity shrink-0"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
                   </div>
                   {/* Cellules jour */}
                   {dates.map((date) => {
@@ -677,6 +698,18 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                 </React.Fragment>
               ))
             )}
+            {/* Rangée d'ajout d'équipe — création directement dans la grille. */}
+            {canManage && !scheduleQuery.isLoading && (
+              <div style={{ gridColumn: '1 / -1' }} className="p-2">
+                <button
+                  type="button"
+                  onClick={() => setTeamModal({ editing: null })}
+                  className="sticky left-2 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-outline px-3.5 py-2 text-[12px] font-medium text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
+                >
+                  <Plus size={12} /> {fr ? 'Nouvelle équipe' : 'New team'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -775,8 +808,130 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
             onSaved={() => { setHoursModal(null); refresh(); }}
           />
         )}
+        {teamModal && (
+          <TeamEditModal
+            key="team"
+            fr={fr}
+            editing={teamModal.editing}
+            onClose={() => setTeamModal(null)}
+            onSaved={() => { setTeamModal(null); qc.invalidateQueries({ queryKey: ['teams'] }); refresh(); }}
+          />
+        )}
       </AnimatePresence>
     </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL — Créer / modifier une équipe (nom, couleur, statut) depuis la grille
+// ═══════════════════════════════════════════════════════════════════════════
+
+function TeamEditModal({ fr, editing, onClose, onSaved }: {
+  fr: boolean;
+  editing: TeamRecord | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(editing?.name || '');
+  const [color, setColor] = useState(editing?.color_hex || TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]);
+  const [description, setDescription] = useState(editing?.description || '');
+  const [isActive, setIsActive] = useState(editing ? editing.is_active !== false : true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!name.trim()) { toast.error(fr ? 'Le nom de l’équipe est requis.' : 'Team name is required.'); return; }
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateTeam(editing.id, { name, color_hex: color, description, is_active: isActive });
+        toast.success(fr ? 'Équipe mise à jour' : 'Team updated');
+      } else {
+        await createTeam({ name, color_hex: color, description });
+        toast.success(fr ? 'Équipe créée' : 'Team created');
+      }
+      onSaved();
+    } catch (e) {
+      toast.error(scheduleErrorMessage(e, fr));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove() {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      await softDeleteTeam(editing.id);
+      toast.success(fr ? 'Équipe supprimée' : 'Team deleted');
+      onSaved();
+    } catch (e) {
+      toast.error(scheduleErrorMessage(e, fr));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell onClose={onClose} width="w-[420px]">
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-5">
+          <h3 className="text-[16px] font-bold text-text-primary">
+            {editing ? (fr ? 'Modifier l’équipe' : 'Edit team') : (fr ? 'Nouvelle équipe' : 'New team')}
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className={labelCls}>{fr ? 'Nom' : 'Name'}</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} className="glass-input w-full mt-1.5"
+              placeholder={fr ? 'Ex. : Équipe Installation' : 'e.g. Installation Team'} autoFocus />
+          </div>
+          <div>
+            <label className={labelCls}>Description</label>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} className="glass-input w-full mt-1.5"
+              placeholder={fr ? 'Optionnel...' : 'Optional...'} />
+          </div>
+          <div>
+            <label className={labelCls}>{fr ? 'Couleur' : 'Color'}</label>
+            <div className="mt-2"><TeamColorSwatches value={color} onChange={setColor} /></div>
+          </div>
+          {editing && (
+            <div className="flex items-center gap-2">
+              <label className={labelCls}>{fr ? 'Statut' : 'Status'}</label>
+              <button type="button" onClick={() => setIsActive((v) => !v)}
+                className={cn('text-[12px] px-2.5 py-1 rounded-full font-medium border transition-colors',
+                  isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-surface-secondary text-text-tertiary border-outline')}>
+                {isActive ? (fr ? 'Active' : 'Active') : (fr ? 'Archivée' : 'Archived')}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between gap-2 mt-6 flex-wrap">
+          {editing ? (
+            confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-medium text-red-600">{fr ? 'Supprimer ?' : 'Delete?'}</span>
+                <button onClick={remove} disabled={saving} className={cn(btnGhost, 'h-8 px-3 text-[12px] text-red-600')}>
+                  {fr ? 'Oui, supprimer' : 'Yes, delete'}
+                </button>
+                <button onClick={() => setConfirmDelete(false)} className={cn(btnGhost, 'h-8 px-3 text-[12px]')}>{fr ? 'Non' : 'No'}</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)} disabled={saving} className={cn(btnGhost, 'h-8 px-3 text-[12px] text-red-600')}>
+                <Trash2 size={12} className="inline mr-1" /> {fr ? 'Supprimer' : 'Delete'}
+              </button>
+            )
+          ) : <span />}
+          <div className="flex items-center gap-2 ml-auto">
+            <button onClick={onClose} className={btnGhost}>{fr ? 'Annuler' : 'Cancel'}</button>
+            <button onClick={save} disabled={saving || !name.trim()} className={btnPrimary}>
+              {saving ? <Loader2 size={14} className="animate-spin inline" /> : editing ? (fr ? 'Sauvegarder' : 'Save') : (fr ? 'Créer' : 'Create')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
