@@ -1226,7 +1226,11 @@ export default function JobDetails() {
               <div className="space-y-0">
                 <JobDetailRow label={language === 'fr' ? 'Type de job' : 'Job type'} value={job.job_type || (language === 'fr' ? 'Job unique' : 'One-off job')} />
                 <JobDetailRow label={language === 'fr' ? 'Débute le' : 'Starts on'} value={job.scheduled_at ? formatDate(job.scheduled_at) : '—'} />
-                <JobDetailRow label={language === 'fr' ? 'Se termine le' : 'Ends on'} value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
+                {job.job_type === 'recurring' ? (
+                  <JobDetailRow label={language === 'fr' ? 'Durée' : 'Duration'} value={jobDurationLabel(job.scheduled_at, job.end_at, language)} />
+                ) : (
+                  <JobDetailRow label={language === 'fr' ? 'Se termine le' : 'Ends on'} value={job.end_at ? formatDate(job.end_at) : (job.scheduled_at ? formatDate(job.scheduled_at) : '—')} />
+                )}
                 <JobDetailRow label={language === 'fr' ? 'Fréquence de facturation' : 'Billing frequency'} value={(job as any).requires_invoicing === false ? (language === 'fr' ? 'Sans facturation' : 'No invoicing') : (language === 'fr' ? 'À la fin du job' : 'Upon job completion')} />
                 <JobDetailRow label={language === 'fr' ? 'Dépôt' : 'Deposit'} value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : (language === 'fr' ? 'Aucun' : 'None')} />
                 <JobDetailRow label={language === 'fr' ? 'Vendeur' : 'Salesperson'} value={(job as any).salesperson_name || (job as any).salesperson?.full_name || '—'} isLast />
@@ -2648,6 +2652,25 @@ function recFreqLabelEn(freq: string): string {
     case 'custom': return 'Custom';
     default: return freq;
   }
+}
+
+/** Human span between a recurring job's start and end (e.g. "6 mois", "1 an", "12 jours"). */
+function jobDurationLabel(startAt: string | null | undefined, endAt: string | null | undefined, language: string): string {
+  if (!startAt || !endAt) return '—';
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const ms = end.getTime() - start.getTime();
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  const days = Math.round(ms / 86400000);
+  if (days < 28) {
+    return language === 'fr' ? `${days} jour${days > 1 ? 's' : ''}` : `${days} day${days > 1 ? 's' : ''}`;
+  }
+  const months = Math.round(days / 30.44);
+  if (months >= 12 && months % 12 === 0) {
+    const years = months / 12;
+    return language === 'fr' ? `${years} an${years > 1 ? 's' : ''}` : `${years} year${years > 1 ? 's' : ''}`;
+  }
+  return language === 'fr' ? `${months} mois` : `${months} month${months > 1 ? 's' : ''}`;
 }
 
 function JobDetailRow({ label, value, isLast }: { label: string; value: string; isLast?: boolean }) {
