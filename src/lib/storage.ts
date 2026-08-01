@@ -17,15 +17,26 @@ export interface UploadOptions {
   signal?: AbortSignal;
 }
 
-/** Authenticated server relay for image uploads blocked by storage RLS. */
-async function uploadViaServer(bucket: string, path: string, file: File): Promise<{ url: string; path: string }> {
+/**
+ * Authenticated server relay for image uploads blocked by storage RLS.
+ * The path MUST start with the caller's org id (`${orgId}/…`) — the server
+ * rejects anything else. Exported for buckets with no client INSERT policy
+ * at all (e.g. `avatars`), where trying the direct upload first is pointless.
+ */
+export async function uploadViaServer(
+  bucket: string,
+  path: string,
+  file: File,
+  options: { upsert?: boolean } = {},
+): Promise<{ url: string; path: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
   if (!token) throw new Error('Not authenticated');
   let activeOrg = '';
   try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
 
-  const res = await fetch(`/api/storage/upload?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}`, {
+  const upsertParam = options.upsert ? '&upsert=true' : '';
+  const res = await fetch(`/api/storage/upload?bucket=${encodeURIComponent(bucket)}&path=${encodeURIComponent(path)}${upsertParam}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

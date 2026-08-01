@@ -1203,6 +1203,19 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
       return res.json({ message: 'Seats updated (no Stripe link).', no_stripe: true, extra_seats });
     }
 
+    // Lien Stripe mort — l'objet référencé date du mode test (avant le passage
+    // aux clés live) et n'existe plus. On garde la vérité du compte de sièges
+    // en base au lieu de bloquer l'utilisateur sur un 502.
+    const deadStripeLink = async (context: string) => {
+      console.error(`[billing/seats] ${context}: objet Stripe introuvable (mode test ?) — maj DB seule`);
+      const { error: errDb } = await admin.from('subscriptions').update({
+        extra_seats,
+        stripe_seat_item_id: null,
+      }).eq('id', subRow.id);
+      if (errDb) console.error('[billing/seats] écriture subscriptions échouée:', errDb.message);
+      return res.json({ message: 'Seats updated (Stripe link broken).', no_stripe: true, extra_seats });
+    };
+
     // If we already have a seat line item on Stripe, just update its quantity
     if (subRow.stripe_seat_item_id && extra_seats > 0) {
       try {
@@ -1211,6 +1224,7 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
           proration_behavior: 'always_invoice',
         });
       } catch (err: any) {
+        if (err?.code === 'resource_missing') return deadStripeLink('update seat item');
         console.error('[billing/seats] Stripe seat item update failed', err.message);
         return res.status(502).json({ error: `Stripe update failed: ${err.message}` });
       }
@@ -1227,6 +1241,7 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
           proration_behavior: 'always_invoice',
         });
       } catch (err: any) {
+        if (err?.code === 'resource_missing') return deadStripeLink('delete seat item');
         console.error('[billing/seats] Stripe seat item delete failed', err.message);
         return res.status(502).json({ error: `Stripe delete failed: ${err.message}` });
       }
@@ -1299,6 +1314,7 @@ router.post('/billing/seats', validate(setSeatsSchema), async (req, res) => {
 
       return res.json({ message: 'Extra seats added and billed.', extra_seats });
     } catch (err: any) {
+      if (err?.code === 'resource_missing') return deadStripeLink('create seat item');
       console.error('[billing/seats] Stripe seat item create failed', err.message);
       return res.status(502).json({ error: `Stripe create failed: ${err.message}` });
     }
@@ -1505,27 +1521,58 @@ router.post('/billing/customer-portal', async (req, res) => {
 
     const { data: subRow } = await admin
       .from('subscriptions')
-      .select('stripe_customer_id')
+      .select('id, stripe_customer_id')
       .in('org_id', await companyOrgIds(admin, auth.orgId))
       .in('status', ['active', 'trialing', 'past_due'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (!subRow?.stripe_customer_id) {
-      return res.status(404).json({ error: 'No Stripe customer linked to this account.' });
+    if (!subRow) {
+      return res.status(404).json({ error: 'No active subscription found for this account.' });
+    }
+
+    // Le customer stocké peut dater du mode test Stripe (orgs provisionnées
+    // avant le passage aux clés live) — il n'existe alors pas en live et le
+    // portail explosait en 500. On vérifie le customer, on retombe sur le
+    // customer live du même email s'il existe, sinon on en crée un, et on
+    // répare la ligne subscriptions au passage.
+    let customerId: string | null = subRow.stripe_customer_id;
+    if (customerId) {
+      try {
+        const existing = await stripe.customers.retrieve(customerId);
+        if ((existing as Stripe.DeletedCustomer).deleted) customerId = null;
+      } catch {
+        customerId = null;
+      }
+    }
+    if (!customerId) {
+      const email = auth.user.email || undefined;
+      if (email) {
+        const byEmail = await stripe.customers.list({ email, limit: 1 });
+        customerId = byEmail.data[0]?.id ?? null;
+      }
+      if (!customerId) {
+        const created = await stripe.customers.create({ email, metadata: { org_id: auth.orgId } });
+        customerId = created.id;
+      }
+      const { error: linkErr } = await admin
+        .from('subscriptions')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', subRow.id);
+      if (linkErr) console.error('[billing/customer-portal] relink customer failed:', linkErr.message);
     }
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     const session = await stripe.billingPortal.sessions.create({
-      customer: subRow.stripe_customer_id,
+      customer: customerId,
       return_url: `${frontendUrl}/settings?tab=billing`,
     });
 
     return res.json({ url: session.url });
   } catch (err: any) {
     console.error('[billing/customer-portal]', err.message);
-    return res.status(500).json({ error: 'Internal server error.' });
+    return res.status(500).json({ error: `Billing portal unavailable: ${err.message}` });
   }
 });
 

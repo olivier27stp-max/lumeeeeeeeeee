@@ -5,6 +5,8 @@ import { Button } from '../components/d2d/button';
 import { Avatar } from '../components/d2d/avatar';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
+import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { uploadViaServer } from '../lib/storage';
 import { Camera, User, Briefcase, Check } from 'lucide-react';
 
 type UserRole = 'owner' | 'admin' | 'team_leader' | 'sales_rep';
@@ -78,17 +80,21 @@ export default function D2DOnboarding() {
     try {
       let avatarUrl: string | null = null;
 
-      // Upload avatar if provided
+      // Upload avatar if provided — via the server relay (the avatars bucket
+      // has no client INSERT policy), path scoped under the caller's org.
       if (avatarFile) {
-        const ext = avatarFile.name.split('.').pop();
-        const path = `avatars/${userId}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(path, avatarFile, { upsert: true });
-
-        if (!uploadError) {
-          const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
-          avatarUrl = urlData.publicUrl;
+        try {
+          const orgId = await getCurrentOrgIdOrThrow();
+          const ext = avatarFile.name.split('.').pop();
+          const { url } = await uploadViaServer(
+            'avatars',
+            `${orgId}/avatars/${userId}.${ext}`,
+            avatarFile,
+            { upsert: true },
+          );
+          avatarUrl = url;
+        } catch {
+          // Same behavior as before: a failed avatar upload never blocks onboarding.
         }
       }
 
