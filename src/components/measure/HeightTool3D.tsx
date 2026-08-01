@@ -26,7 +26,7 @@ const MIN_HEIGHT_M = 1;
 // Hauteur typique de la caméra des voitures Street View (m). Sert de référence
 // d'échelle au mode Photo : cliquer le pied du mur (angle sous l'horizon) donne
 // la distance, puis l'angle du sommet donne la hauteur. C'est une ESTIMATION.
-const SV_CAMERA_HEIGHT_M = 2.5;
+const SV_CAMERA_HEIGHT_M = 2.6; // flotte Street View récente (~2,6 m)
 
 interface Props {
   quoteAddress: string;
@@ -87,6 +87,10 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   // Distance au mur dérivée du dernier clic « au sol » (auto-portée, par cote) —
   // plus fiable que le géocodage/contour quand la cote part du pied du mur.
   const svWallD = useRef<number | null>(null);
+  // Dénivelé terrain (élévation caméra − élévation au bâtiment, m). Corrige les
+  // entrées de garage en pente / maisons surélevées: la hauteur effective de la
+  // caméra au-dessus du pied du mur n'est pas 2,6 m quand le terrain monte.
+  const svElevDelta = useRef<number>(0);
   const [svCalibIdx, setSvCalibIdx] = useState<number | null>(null);
   const [svCalibVal, setSvCalibVal] = useState('');
 
@@ -307,6 +311,20 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           .catch(() => { /* on garde la distance centre */ });
       } catch { /* pas de distance auto — repli sur le clic-sol */ }
       streetPanoDiv.current.innerHTML = '';
+      // Dénivelé rue→bâtiment (best-effort; 0 si l'élévation ne répond pas)
+      svElevDelta.current = 0;
+      (async () => {
+        try {
+          const p = data.location!.latLng!;
+          const [ePano, eTarget] = await Promise.all([
+            groundElevation(p.lat(), p.lng()),
+            groundElevation(target.lat, target.lng),
+          ]);
+          if (ePano != null && eTarget != null && Math.abs(ePano - eTarget) < 15) {
+            svElevDelta.current = ePano - eTarget;
+          }
+        } catch { /* terrain plat supposé */ }
+      })();
       panoRef.current = new google.maps.StreetViewPanorama(streetPanoDiv.current, {
         pano: data.location.pano,
         pov: { heading, pitch: 0 },
@@ -423,10 +441,14 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     let dCote = svWallD.current ?? svD;
     const lowPitch = Math.min(first.pitch, pt.pitch);
     if (lowPitch <= -3) {
-      const dg = SV_CAMERA_HEIGHT_M / Math.tan((-lowPitch * Math.PI) / 180);
-      if (Number.isFinite(dg) && dg >= 2 && dg <= 80) {
-        dCote = dg;
-        svWallD.current = dg;
+      // Hauteur effective de la caméra au-dessus du PIED du mur (terrain corrigé)
+      const effH = SV_CAMERA_HEIGHT_M + svElevDelta.current;
+      if (effH > 0.8) {
+        const dg = effH / Math.tan((-lowPitch * Math.PI) / 180);
+        if (Number.isFinite(dg) && dg >= 2 && dg <= 80) {
+          dCote = dg;
+          svWallD.current = dg;
+        }
       }
     }
     const c = svMakeCote(first, pt, dCote);
