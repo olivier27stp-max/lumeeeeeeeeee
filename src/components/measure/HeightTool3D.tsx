@@ -12,7 +12,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical } from 'lucide-react';
+import { ArrowLeft, Search, Loader2, RotateCcw, Check, MoveVertical, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { LatLng, UnitSystem, Shape } from '../../lib/measurementTypes';
 import { nextColor, elevationStats, formatElevation } from '../../lib/measurementEngine';
@@ -38,6 +38,10 @@ interface Props {
 }
 
 type Pt = { lat: number; lng: number; elev: number | null; onBuilding: boolean; loading: boolean; from3d?: boolean };
+
+// Mode Photo : un point cliqué (écran + position sur le plan du mur, en mètres)
+type SvPoint = { x: number; y: number; X: number; Y: number };
+type SvCote = { a: SvPoint; b: SvPoint; len: number; kind: 'V' | 'H' | 'D' };
 
 export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onComplete, onClose }: Props) {
   const { ok: mapsOk, key } = useGMaps3D();
@@ -70,8 +74,12 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const [streetMode, setStreetMode] = useState(false);
   const [streetState, setStreetState] = useState<'idle' | 'loading' | 'ok' | 'none'>('idle');
   const [svMeasuring, setSvMeasuring] = useState(false);
-  const [svBase, setSvBase] = useState<{ pitch: number } | null>(null);
-  const [svHeight, setSvHeight] = useState<number | null>(null);
+  // Point de référence au sol (calibration d'échelle) + distance au mur déduite.
+  const [svCal, setSvCal] = useState<{ pitch: number; heading: number; x: number; y: number } | null>(null);
+  const [svD, setSvD] = useState<number | null>(null);
+  // Cotes mesurées sur le plan du mur : écran (x,y) + plan (X latéral, Y hauteur) en mètres.
+  const [svCotes, setSvCotes] = useState<SvCote[]>([]);
+  const [svPending, setSvPending] = useState<SvPoint | null>(null);
 
   function setA(p: Pt | null) { aRef.current = p; setPtA(p); }
   function setB(p: Pt | null) { bRef.current = p; setPtB(p); }
@@ -305,64 +313,121 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streetMode, streetState]);
 
-  // ── Mode Photo : clic sur la photo → angle → hauteur estimée ──
-  function svResetMeasure() { setSvBase(null); setSvHeight(null); }
-  function svClick(e: React.MouseEvent<HTMLDivElement>) {
+  // ── Mode Photo : clics sur la photo → cotes estimées (trigonométrie) ──
+  function svResetMeasure() { setSvCal(null); setSvD(null); setSvCotes([]); setSvPending(null); }
+
+  /** Écran → angles (pitch/heading absolus du rayon), projection rectilinéaire approx. */
+  function svAngles(e: React.MouseEvent<HTMLDivElement>) {
     const pano = panoRef.current;
-    if (!pano) return;
+    if (!pano) return null;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     const pov = pano.getPov();
     const zoom = pano.getZoom() ?? 1;
-    // FOV horizontal Street View ≈ 180°/2^zoom; projection rectilinéaire approx.
-    const hfov = (180 / Math.pow(2, zoom)) * (Math.PI / 180);
+    const hfov = (180 / Math.pow(2, zoom)) * (Math.PI / 180); // FOV horizontal ≈ 180°/2^zoom
     const f = (rect.width / 2) / Math.tan(hfov / 2);
-    const upRad = Math.atan((rect.height / 2 - y) / f);
-    const sideRad = Math.atan((x - rect.width / 2) / f);
-    // Le pitch réel du rayon dépend un peu de l'écart horizontal — négligé (estimation).
-    void sideRad;
-    const pitchDeg = (pov.pitch ?? 0) + (upRad * 180) / Math.PI;
-    if (!svBase) {
+    const pitchDeg = (pov.pitch ?? 0) + (Math.atan((rect.height / 2 - y) / f) * 180) / Math.PI;
+    const headingDeg = (pov.heading ?? 0) + (Math.atan((x - rect.width / 2) / f) * 180) / Math.PI;
+    return { x, y, pitchDeg, headingDeg };
+  }
+
+  function svMakeCote(a: SvPoint, b: SvPoint): SvCote {
+    const dX = b.X - a.X;
+    const dY = b.Y - a.Y;
+    const len = Math.hypot(dX, dY);
+    const kind: SvCote['kind'] = Math.abs(dX) < Math.abs(dY) * 0.35 ? 'V' : Math.abs(dY) < Math.abs(dX) * 0.35 ? 'H' : 'D';
+    return { a, b, len, kind };
+  }
+
+  function svClick(e: React.MouseEvent<HTMLDivElement>) {
+    const ang = svAngles(e);
+    if (!ang) return;
+    const { x, y, pitchDeg, headingDeg } = ang;
+
+    // 1er clic : référence au SOL — donne l'échelle (distance au mur).
+    if (!svCal) {
       if (pitchDeg >= -0.5) {
         toast.error(fr
           ? 'Cliquez d’abord le point où le mur touche le SOL (sous l’horizon).'
           : 'First click where the wall meets the GROUND (below the horizon).');
         return;
       }
-      setSvBase({ pitch: pitchDeg });
-    } else {
-      const d = SV_CAMERA_HEIGHT_M / Math.tan((-svBase.pitch * Math.PI) / 180);
-      const h = SV_CAMERA_HEIGHT_M + d * Math.tan((pitchDeg * Math.PI) / 180);
-      if (!Number.isFinite(h) || h <= 0.3 || h > 200 || d > 120) {
-        toast.error(fr ? 'Mesure invalide — recommencez plus près du mur.' : 'Invalid measurement — retry closer to the wall.');
-        setSvBase(null);
+      const d = SV_CAMERA_HEIGHT_M / Math.tan((-pitchDeg * Math.PI) / 180);
+      if (!Number.isFinite(d) || d > 120) {
+        toast.error(fr ? 'Trop loin — rapprochez-vous du mur (autre panorama).' : 'Too far — get closer to the wall (another panorama).');
         return;
       }
-      setSvHeight(h);
-      setSvMeasuring(false);
+      setSvCal({ pitch: pitchDeg, heading: headingDeg, x, y });
+      setSvD(d);
+      return;
+    }
+
+    // Clics suivants : positions sur le plan du mur (X latéral, Y hauteur).
+    const d = svD as number;
+    let dh = headingDeg - svCal.heading;
+    while (dh > 180) dh -= 360;
+    while (dh < -180) dh += 360;
+    if (Math.abs(dh) > 60) {
+      toast.error(fr ? 'Restez sur le même mur que le point de référence.' : 'Stay on the same wall as the reference point.');
+      return;
+    }
+    const pt: SvPoint = {
+      x, y,
+      X: d * Math.tan((dh * Math.PI) / 180),
+      Y: SV_CAMERA_HEIGHT_M + d * Math.tan((pitchDeg * Math.PI) / 180),
+    };
+    const push = (c: SvCote) => {
+      if (!Number.isFinite(c.len) || c.len < 0.3 || c.len > 200) {
+        toast.error(fr ? 'Cote invalide — recommencez.' : 'Invalid dimension — try again.');
+        return;
+      }
+      setSvCotes(prev => [...prev, c]);
+    };
+    if (svCotes.length === 0 && !svPending) {
+      // 1re cote : du sol (référence) au point cliqué → hauteur du mur en 2 clics.
+      push(svMakeCote({ x: svCal.x, y: svCal.y, X: 0, Y: 0 }, pt));
+    } else if (!svPending) {
+      setSvPending(pt);
+    } else {
+      const first = svPending;
+      setSvPending(null);
+      push(svMakeCote(first, pt));
     }
   }
 
-  function addStreetEstimate() {
-    if (svHeight == null) return;
+  function svCoteLabel(c: SvCote, i: number): string {
+    const prefix = c.kind === 'V' ? 'H' : c.kind === 'H' ? (fr ? 'L' : 'W') : '↔';
+    return `${prefix}${i + 1} ≈ ${fmt(c.len)}`;
+  }
+
+  function addStreetCotes() {
+    if (svCotes.length === 0) return;
     const pos = panoRef.current?.getPosition?.();
     const base = pos ? { lat: pos.lat(), lng: pos.lng() } : currentTarget();
-    const points: LatLng[] = [
-      { lat: base.lat, lng: base.lng, elevation: 0 },
-      { lat: base.lat, lng: base.lng, elevation: svHeight },
-    ];
-    const geojson: any = { type: 'LineString', coordinates: points.map(p => [p.lng, p.lat, p.elevation]) };
-    const shape: Shape = {
-      id: `sh-${index}`,
-      label: fr ? `Hauteur ${index + 1} (photo)` : `Height ${index + 1} (photo)`,
-      color: nextColor(index),
-      result: { type: 'line', value: svHeight * M_TO_FT, areaValue: null, perimeterValue: null, geojson, points, elevation: elevationStats(points) },
-      notes: '',
-      visible: true,
-      metadata: { kind: 'height', heightMeters: svHeight, source: 'street-estimate' },
-    };
-    onComplete(shape);
+    svCotes.forEach((c, i) => {
+      const points: LatLng[] = [
+        { lat: base.lat, lng: base.lng, elevation: Math.max(0, c.a.Y) },
+        { lat: base.lat, lng: base.lng, elevation: Math.max(0, c.b.Y) },
+      ];
+      const geojson: any = { type: 'LineString', coordinates: points.map(p => [p.lng, p.lat, p.elevation]) };
+      const noun = c.kind === 'V' ? (fr ? 'Hauteur' : 'Height') : c.kind === 'H' ? (fr ? 'Largeur' : 'Width') : (fr ? 'Cote' : 'Dim');
+      const shape: Shape = {
+        id: `sh-${index + i}`,
+        label: `${noun} ${index + i + 1} (photo)`,
+        color: nextColor(index + i),
+        result: { type: 'line', value: c.len * M_TO_FT, areaValue: null, perimeterValue: null, geojson, points, elevation: elevationStats(points) },
+        notes: '',
+        visible: true,
+        metadata: {
+          kind: 'height',
+          source: 'street-estimate',
+          cote: c.kind,
+          ...(c.kind === 'V' ? { heightMeters: c.len } : { lengthMeters: c.len }),
+        },
+      };
+      onComplete(shape);
+    });
     onClose();
   }
 
@@ -544,14 +609,45 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
         {streetMode && streetState === 'ok' && svMeasuring && (
           <div className="absolute inset-0 z-[17] cursor-crosshair" onClick={svClick} />
         )}
-        {streetMode && streetState === 'ok' && svMeasuring && svHeight == null && (
+        {streetMode && streetState === 'ok' && (svCal || svCotes.length > 0 || svPending) && (
+          <svg className="absolute inset-0 z-[18] pointer-events-none w-full h-full">
+            {svCal && (
+              <g>
+                <circle cx={svCal.x} cy={svCal.y} r={9} fill="#FFCC00" stroke="#FFF" strokeWidth={2.5} />
+                <text x={svCal.x} y={svCal.y + 4} textAnchor="middle" fill="#1a1a1a" fontSize="10" fontWeight="800">S</text>
+              </g>
+            )}
+            {svCotes.map((c, i) => {
+              const mx = (c.a.x + c.b.x) / 2;
+              const my = (c.a.y + c.b.y) / 2;
+              return (
+                <g key={i}>
+                  <line x1={c.a.x} y1={c.a.y} x2={c.b.x} y2={c.b.y} stroke="#FFCC00" strokeWidth={3} strokeDasharray="6 4" />
+                  <circle cx={c.a.x} cy={c.a.y} r={7} fill="#FF4444" stroke="#FFF" strokeWidth={2} />
+                  <circle cx={c.b.x} cy={c.b.y} r={7} fill="#44BB44" stroke="#FFF" strokeWidth={2} />
+                  <text x={mx + 12} y={my - 8} fill="#FFF" stroke="#1a1a1a" strokeWidth={3.5} paintOrder="stroke" fontSize="14" fontWeight="800">
+                    {svCoteLabel(c, i)}
+                  </text>
+                </g>
+              );
+            })}
+            {svPending && (
+              <circle cx={svPending.x} cy={svPending.y} r={7} fill="#FF4444" stroke="#FFF" strokeWidth={2} />
+            )}
+          </svg>
+        )}
+        {streetMode && streetState === 'ok' && svMeasuring && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-gray-900/80 text-white text-[12px] px-4 py-1.5 rounded-full z-[18] pointer-events-none backdrop-blur-sm font-medium">
-            {!svBase
-              ? (fr ? '1. Cliquez le point où le mur touche le SOL' : '1. Click where the wall meets the GROUND')
-              : (fr ? '2. Cliquez le SOMMET du mur (même verticale)' : '2. Click the TOP of the wall (same vertical)')}
+            {!svCal
+              ? (fr ? '1. Cliquez le point où le mur touche le SOL (référence)' : '1. Click where the wall meets the GROUND (reference)')
+              : svCotes.length === 0 && !svPending
+                ? (fr ? '2. Cliquez le SOMMET du mur → hauteur' : '2. Click the TOP of the wall → height')
+                : svPending
+                  ? (fr ? 'Cliquez le 2e point de la cote' : 'Click the 2nd point of the dimension')
+                  : (fr ? 'Cliquez 2 points pour une autre cote (largeur, fenêtre...)' : 'Click 2 points for another dimension (width, window...)')}
           </div>
         )}
-        {streetMode && streetState === 'ok' && !svMeasuring && svHeight == null && (
+        {streetMode && streetState === 'ok' && !svMeasuring && svCotes.length === 0 && (
           <button
             onClick={() => { svResetMeasure(); setSvMeasuring(true); }}
             className="absolute bottom-8 left-1/2 -translate-x-1/2 z-[18] glass-button-primary flex items-center gap-2 px-4 py-2 rounded-xl text-[12px] font-semibold shadow-xl"
@@ -559,18 +655,34 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
             <MoveVertical size={14} /> {fr ? 'Mesurer (estimation)' : 'Measure (estimate)'}
           </button>
         )}
-        {streetMode && svHeight != null && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-[18] shadow-xl text-center min-w-[260px] space-y-1.5">
+        {streetMode && svCotes.length > 0 && (
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-sm border border-outline/30 rounded-2xl px-5 py-4 z-[19] shadow-xl text-center min-w-[300px] space-y-1.5">
             <p className="text-[10px] text-text-muted font-semibold uppercase tracking-wide">
-              {fr ? 'Estimation photo (±10-15 %)' : 'Photo estimate (±10-15%)'}
+              {fr ? 'Cotes estimées (photo, ±10-15 %)' : 'Estimated dimensions (photo, ±10-15%)'}
             </p>
-            <p className="text-2xl font-bold text-text-primary">≈ {fmt(svHeight)}</p>
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {svCotes.map((c, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 text-[12px]">
+                  <span className="font-mono font-bold text-text-primary">{svCoteLabel(c, i)}</span>
+                  <span className="text-[10px] text-text-muted">
+                    {c.kind === 'V' ? (fr ? 'hauteur' : 'height') : c.kind === 'H' ? (fr ? 'largeur' : 'width') : (fr ? 'diagonale' : 'diagonal')}
+                  </span>
+                  <button onClick={() => setSvCotes(prev => prev.filter((_, j) => j !== i))}
+                    className="p-0.5 rounded hover:bg-danger-light text-text-muted hover:text-danger transition-colors">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {svMeasuring && (
+              <p className="text-[10px] text-text-tertiary">{fr ? 'Continuez à cliquer pour d’autres cotes' : 'Keep clicking for more dimensions'}</p>
+            )}
             <div className="flex items-center gap-2 justify-center pt-1">
               <button onClick={() => { svResetMeasure(); setSvMeasuring(true); }} className="glass-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium">
                 <RotateCcw size={13} /> {fr ? 'Refaire' : 'Redo'}
               </button>
-              <button onClick={addStreetEstimate} className="glass-button-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold">
-                <Check size={13} /> {fr ? 'Ajouter' : 'Add'}
+              <button onClick={addStreetCotes} className="glass-button-primary flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold">
+                <Check size={13} /> {fr ? `Ajouter (${svCotes.length})` : `Add (${svCotes.length})`}
               </button>
             </div>
           </div>
