@@ -2282,7 +2282,7 @@ export default function NewJobModal({
                     className="w-full rounded-lg border border-dashed border-outline-subtle py-2.5 text-sm font-medium text-text-tertiary hover:text-primary hover:border-primary/50 transition-colors inline-flex items-center justify-center gap-2"
                   >
                     <Plus size={14} />
-                    {language === 'fr' ? `Ajouter ${Math.max(...serviceYears) + 1}` : `Add ${Math.max(...serviceYears) + 1}`}
+                    {language === 'fr' ? 'Ajouter année suivante' : 'Add next year'}
                   </button>
 
                   {/* Visit time window — same for every visit, or per visit */}
