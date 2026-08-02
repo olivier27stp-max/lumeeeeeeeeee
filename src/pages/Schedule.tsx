@@ -546,11 +546,21 @@ function ScheduleContent() {
       <header className="relative z-50 flex items-center gap-2 border-b border-border bg-surface px-4 py-2.5 lg:px-6">
         <button onClick={goPrev} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronLeft size={18} /></button>
         <button onClick={goNext} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronRight size={18} /></button>
-        {view === 'day' && !isSameDay(selectedDate, new Date()) && (
-          <button onClick={goToday} className="rounded-lg border border-border px-2.5 py-[5px] text-[12px] font-medium text-text-secondary hover:bg-surface-secondary transition-colors">
-            {t.schedule.today}
-          </button>
-        )}
+        {(() => {
+          // « Aujourd'hui » — visible dès que la période affichée (jour,
+          // semaine ou mois) ne contient pas la date du jour.
+          const now = new Date();
+          const showToday =
+            view === 'day' ? !isSameDay(selectedDate, now)
+            : view === 'week' ? !isSameDay(startOfWeek(selectedDate, { weekStartsOn: 1 }), startOfWeek(now, { weekStartsOn: 1 }))
+            : view === 'month' ? !isSameMonth(selectedDate, now)
+            : !isSameDay(selectedDate, now);
+          return showToday ? (
+            <button onClick={goToday} className="rounded-lg border border-border px-2.5 py-[5px] text-[12px] font-medium text-text-secondary hover:bg-surface-secondary transition-colors">
+              {t.schedule.today}
+            </button>
+          ) : null;
+        })()}
         <div className="relative">
           <button onClick={() => setCalPop(!calPop)} className="flex items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-surface-secondary transition-colors">
             <h1 className="text-[17px] font-bold text-text-primary">{label}</h1>
