@@ -918,8 +918,10 @@ export default function QuoteMeasure() {
           if (qty <= 0) continue;
           out.push({
             source_service_id: svc.id,
-            name: `${svc.name} — ${s.label}`,
-            description: `${measureText}${svc.pricing_unit === 'linear_ft' && s.result.type === 'polygon' ? ` (${fr ? 'périmètre' : 'perimeter'})` : ''}${s.notes ? ` — ${s.notes}` : ''}`,
+            // Nom = le service seul; la mesure d'origine reste traçable dans la
+            // description (petit texte sous la ligne sur la soumission).
+            name: svc.name,
+            description: `${s.label} · ${measureText}${svc.pricing_unit === 'linear_ft' && s.result.type === 'polygon' ? ` (${fr ? 'périmètre' : 'perimeter'})` : ''}${s.notes ? ` — ${s.notes}` : ''}`,
             quantity: qty,
             unit_price_cents: svc.default_price_cents,
             sort_order: startOrder + out.length,
