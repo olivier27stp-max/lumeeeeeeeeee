@@ -57,9 +57,17 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const bRef = useRef<Pt | null>(null);
 
   const [ready, setReady] = useState(false);
-  // Mode 3D photoréaliste : tenté par défaut, repli automatique sur la carte
-  // satellite 2D si l'élément <gmp-map-3d> ne s'initialise pas.
-  const [wants3d, setWants3d] = useState(true);
+  // Mode initial : dernier choix de l'utilisateur (Photo par défaut — le 3D
+  // photoréaliste est « fondu » hors des centres-villes). Repli 2D automatique
+  // si <gmp-map-3d> ne s'initialise pas quand le 3D est demandé.
+  const initialMode = ((): 'photo' | '3d' | '2d' => {
+    try {
+      const m = localStorage.getItem('lume-height-mode');
+      if (m === '3d' || m === '2d' || m === 'photo') return m;
+    } catch { /* localStorage indisponible */ }
+    return 'photo';
+  })();
+  const [wants3d, setWants3d] = useState(initialMode === '3d');
   const [is3d, setIs3d] = useState(false);
   const [search, setSearch] = useState(quoteAddress || '');
   const [searching, setSearching] = useState(false);
@@ -71,7 +79,8 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
   const streetPanoDiv = useRef<HTMLDivElement>(null);
   const panoRef = useRef<google.maps.StreetViewPanorama | null>(null);
   const svTargetRef = useRef<{ lat: number; lng: number } | null>(null);
-  const [streetMode, setStreetMode] = useState(false);
+  const [streetMode, setStreetMode] = useState(initialMode === 'photo');
+  const rememberMode = (m: 'photo' | '3d' | '2d') => { try { localStorage.setItem('lume-height-mode', m); } catch {} };
   const [streetState, setStreetState] = useState<'idle' | 'loading' | 'ok' | 'none'>('idle');
   const [svMeasuring, setSvMeasuring] = useState(false);
   // Flux « référence d'abord » : l'échelle vient d'un objet de dimension connue
@@ -729,15 +738,15 @@ export default function HeightTool3D({ quoteAddress, fr, unitSystem, index, onCo
           <span className="text-[13px] font-bold text-text-primary truncate">{fr ? 'Hauteur du bâtiment' : 'Building height'}</span>
         </div>
         <div className="flex items-center rounded-lg border border-outline/30 overflow-hidden shrink-0">
-          <button onClick={() => { setStreetMode(false); switchMode(true); }}
+          <button onClick={() => { rememberMode('3d'); setStreetMode(false); switchMode(true); }}
             className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${!streetMode && (wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
             3D
           </button>
-          <button onClick={() => { setStreetMode(false); switchMode(false); }}
+          <button onClick={() => { rememberMode('2d'); setStreetMode(false); switchMode(false); }}
             className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${!streetMode && !(wants3d || is3d) ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
             2D
           </button>
-          <button onClick={() => { if (!streetMode) { svResetMeasure(); setSvMeasuring(false); setStreetMode(true); if (streetState === 'none') setStreetState('idle'); } }}
+          <button onClick={() => { rememberMode('photo'); if (!streetMode) { svResetMeasure(); setSvMeasuring(false); setStreetMode(true); if (streetState === 'none') setStreetState('idle'); } }}
             className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${streetMode ? 'bg-text-primary text-surface' : 'text-text-muted hover:text-text-primary'}`}>
             Photo
           </button>

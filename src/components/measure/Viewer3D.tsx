@@ -28,7 +28,16 @@ export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props
   const panoRef = useRef<google.maps.StreetViewPanorama | null>(null);
   const threeDFailed = useRef(false);
   const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState<'3d' | 'street'>('3d');
+  const [mode, setMode] = useState<'3d' | 'street'>(() => {
+    try {
+      const m = localStorage.getItem('lume-viewer-mode');
+      if (m === '3d' || m === 'street') return m;
+    } catch { /* localStorage indisponible */ }
+    // Street View par défaut : photos nettes partout, alors que le 3D
+    // photoréaliste est fondu hors des centres-villes.
+    return 'street';
+  });
+  const pickMode = (m: '3d' | 'street') => { setMode(m); try { localStorage.setItem('lume-viewer-mode', m); } catch {} };
   const [street, setStreet] = useState<'idle' | 'loading' | 'ok' | 'none'>('idle');
 
   // ── Mode 3D photoréaliste ──
@@ -134,8 +143,8 @@ export default function Viewer3D({ lat, lng, fr, onClose, onUnavailable }: Props
       <div className="h-12 border-b border-outline/20 flex items-center px-4 gap-3 bg-surface-card shrink-0">
         <span className="text-[13px] font-bold text-text-primary">{fr ? 'Visionneuse' : 'Viewer'}</span>
         <div className="flex items-center rounded-lg border border-outline/30 overflow-hidden shrink-0">
-          <button onClick={() => setMode('3d')} className={tabBtn(mode === '3d')}>3D</button>
-          <button onClick={() => setMode('street')} className={tabBtn(mode === 'street')}>Street View</button>
+          <button onClick={() => pickMode('3d')} className={tabBtn(mode === '3d')}>3D</button>
+          <button onClick={() => pickMode('street')} className={tabBtn(mode === 'street')}>Street View</button>
         </div>
         <span className="hidden md:flex items-center gap-1.5 text-[11px] text-text-tertiary min-w-0 truncate">
           <MoveVertical size={12} className="shrink-0" />
