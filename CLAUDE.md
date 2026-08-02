@@ -62,3 +62,14 @@ supabase/
 - Ask for clarification if the affected file is unclear
 - Do not scan the whole repo unless explicitly asked
 - See `docs/ai-guidelines.md` for full workflow
+
+## ⚠️ Coordination DB & anti-dérive (LEÇONS CRITIQUES)
+**Le vrai risque de ce projet, c'est la DÉRIVE : plusieurs agents/sessions modifient le même code + la même prod en parallèle, et la prod finit par ne plus correspondre à la source.** Bugs réels déjà causés : fonctions référençant une table `leads` supprimée (cassées ~1 mois sans détection), `search_global` figée sur une vieille version. Règles :
+
+1. **Une seule main à la fois sur le schéma/les fonctions DB.** L'UI isolée peut paralléliser ; les changements DB, non. Avant de toucher la DB, s'assurer qu'aucune autre session ne le fait.
+2. **JAMAIS de SQL appliqué directement à la prod hors du pipeline de migration.** Tout passe par `supabase/migrations/`. (Le script `scripts/deploy-functions.mjs`, qui redéployait un schéma périmé, a été supprimé pour cette raison — ne pas le recréer.)
+3. **Référence de schéma = `supabase/SCHEMA_SNAPSHOT.md`** (généré depuis la prod). `complete_schema.sql` a été supprimé (périmé). Ne pas le recréer.
+4. **En supprimant une table/colonne/fonction : grep d'abord** les fonctions/triggers/migrations/code pour les références (`pg_get_functiondef`, `grep -r`). Une référence orpheline plante silencieusement.
+5. **Après TOUTE modif DB, lancer** `npm run check:broken-objects` + `npm run check:db-coherence`. Ils attrapent la dérive (c'est ainsi que les 2 bugs `leads` ont été trouvés).
+6. **Push via git worktree isolé** (`git worktree add --detach <tmp> origin/main`, commit là, `git push origin HEAD:main` avec rebase-retry). Les sessions parallèles font dériver le checkout principal — un `add`/`commit` classique peut se faire rafler.
+7. **Secrets** : `SUPABASE_ACCESS_TOKEN` et compagnie vont dans `.env.local` (gitignoré) UNIQUEMENT, jamais dans le chat, un commit, ou une commande hardcodée.
