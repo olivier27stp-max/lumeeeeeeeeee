@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from 'date-fns';
+import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -25,8 +26,12 @@ import VisitDetailModal from '../schedule/VisitDetailModal';
 /** Hauteur FIXE d'une carte (3 lignes compactes, style Jobber). */
 const MONTH_CARD_PX = 50;
 /** Hauteur minimale d'une rangée semaine — les rangées s'allongent avec les
-    visites (toutes les cartes sont affichées, la grille défile). */
+    visites (jusqu'à MAX_CARDS_PER_DAY cartes), la grille défile. */
 const ROW_MIN_PX = 112;
+/** Cartes affichées au maximum par case — au-delà : « +X de plus ». */
+const MAX_CARDS_PER_DAY = 8;
+/** Largeur du popover « +X de plus ». */
+const MORE_POP_W_PX = 288;
 
 interface MonthlyDispatchViewProps {
   date: Date;
@@ -162,8 +167,17 @@ export default function MonthlyDispatchView({
     return st === 'blocked' || st === 'late' || st === 'action_required';
   };
 
-  /* ── Modale de détails (clic sur une carte) ── */
+  /* ── Popover « +X de plus » + modale de détails ── */
+  const [morePop, setMorePop] = useState<{ dayKey: string; left: number; top: number } | null>(null);
   const [detailEv, setDetailEv] = useState<ScheduleEventRecord | null>(null);
+
+  const openMore = useCallback((dayKey: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const left = Math.min(Math.max(8, rect.left), window.innerWidth - MORE_POP_W_PX - 8);
+    const top = Math.min(rect.bottom + 6, window.innerHeight - 336);
+    setMorePop({ dayKey, left, top: Math.max(8, top) });
+  }, []);
 
   /* ── États particuliers ── */
   if (isError) {
@@ -214,7 +228,7 @@ export default function MonthlyDispatchView({
                   </span>
                 </div>
                 <div className="space-y-0.5">
-                  {dayEvents.map((ev) => {
+                  {dayEvents.slice(0, MAX_CARDS_PER_DAY).map((ev) => {
                     const tag = firstTagFor(ev.job?.tag_ids);
                     return (
                       <MonthVisitCard
@@ -229,12 +243,61 @@ export default function MonthlyDispatchView({
                       />
                     );
                   })}
+                  {dayEvents.length > MAX_CARDS_PER_DAY && (
+                    <button
+                      onClick={(e) => openMore(dayKey, e)}
+                      className="w-full rounded px-1 py-px text-left text-[10px] font-semibold text-primary transition-colors duration-150 hover:bg-primary/5"
+                    >
+                      + {dayEvents.length - MAX_CARDS_PER_DAY} {isFr ? 'de plus' : 'more'}
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* ── Popover « +X de plus » — toutes les visites de la journée ── */}
+      {morePop && (() => {
+        const day = new Date(morePop.dayKey + 'T12:00:00');
+        const dayEvents = eventsByDay.get(morePop.dayKey) || [];
+        const locale = isFr ? frCA : enCA;
+        const label = format(day, isFr ? 'EEEE d MMMM' : 'EEEE, MMMM d', { locale });
+        return (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setMorePop(null)} />
+            <div
+              className="fixed z-40 max-h-80 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-xl"
+              style={{ left: morePop.left, top: morePop.top, width: MORE_POP_W_PX }}
+            >
+              <div className="mb-1.5 flex items-center justify-between px-1">
+                <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+                  {label.charAt(0).toUpperCase() + label.slice(1)}
+                </span>
+                <span className="rounded-md bg-surface-tertiary px-1.5 py-0.5 text-[10px] font-bold text-text-secondary">{dayEvents.length}</span>
+              </div>
+              <div className="space-y-0.5">
+                {dayEvents.map((ev) => {
+                  const tag = firstTagFor(ev.job?.tag_ids);
+                  return (
+                    <MonthVisitCard
+                      key={ev.id}
+                      ev={ev}
+                      barColor={teamColorFor(ev)}
+                      tagName={tag?.name ?? null}
+                      tagColor={tag?.hex ?? null}
+                      timeLabel={startLabelFor(ev)}
+                      attention={attentionFor(ev)}
+                      onOpen={() => { setMorePop(null); setDetailEv(ev); }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ── Détails de la visite — même modale que la vue Semaine ── */}
       {detailEv && (() => {
