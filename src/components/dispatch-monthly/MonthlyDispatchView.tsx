@@ -207,7 +207,7 @@ export default function MonthlyDispatchView({
               >
                 <div className="mb-0.5 flex shrink-0">
                   <span className={cn(
-                    'flex h-6 min-w-6 items-center justify-center rounded-full px-0.5 text-[12px] font-semibold tabular-nums',
+                    'flex h-6 min-w-6 items-center justify-center rounded-full px-0.5 text-[12px] font-bold tabular-nums',
                     today ? 'bg-primary text-white' : cur ? 'text-text-primary' : 'text-text-tertiary/50',
                   )}>
                     {format(day, 'd')}
