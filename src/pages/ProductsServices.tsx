@@ -9,6 +9,7 @@ import {
   updatePredefinedService,
   archivePredefinedService,
   PredefinedService,
+  type ServicePricingUnit,
 } from '../lib/servicesApi';
 
 export default function ProductsServices() {
@@ -26,6 +27,8 @@ export default function ProductsServices() {
   const [formPrice, setFormPrice] = useState('');
   const [formCategory, setFormCategory] = useState('');
   const [formDuration, setFormDuration] = useState('');
+  const [formUnit, setFormUnit] = useState<ServicePricingUnit>('flat');
+  const [formMeasureDefault, setFormMeasureDefault] = useState(false);
   const [saving, setSaving] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -81,6 +84,8 @@ export default function ProductsServices() {
     setFormPrice('');
     setFormCategory('');
     setFormDuration('');
+    setFormUnit('flat');
+    setFormMeasureDefault(false);
     setShowForm(true);
   }
 
@@ -90,6 +95,8 @@ export default function ProductsServices() {
     setFormPrice(String(service.default_price_cents / 100));
     setFormCategory(service.category || '');
     setFormDuration(service.default_duration_minutes ? String(service.default_duration_minutes) : '');
+    setFormUnit(service.pricing_unit || 'flat');
+    setFormMeasureDefault(!!service.measure_default);
     setEditingId(service.id);
     setShowForm(true);
   }
@@ -109,6 +116,8 @@ export default function ProductsServices() {
           default_price_cents: priceCents,
           category: formCategory.trim(),
           default_duration_minutes: durationMin,
+          pricing_unit: formUnit,
+          measure_default: formUnit !== 'flat' && formMeasureDefault,
         });
         setServices((prev) => prev.map((s) => (s.id === editingId ? updated : s)));
         toast.success(isFr ? 'Service modifié' : 'Service updated');
@@ -119,6 +128,8 @@ export default function ProductsServices() {
           default_price_cents: priceCents,
           category: formCategory.trim() || undefined,
           default_duration_minutes: durationMin,
+          pricing_unit: formUnit,
+          measure_default: formUnit !== 'flat' && formMeasureDefault,
         });
         setServices((prev) => [...prev, created]);
         toast.success(isFr ? 'Service créé' : 'Service created');
@@ -216,6 +227,35 @@ export default function ProductsServices() {
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Durée (min)' : 'Duration (min)'}</label>
               <input value={formDuration} onChange={(e) => setFormDuration(e.target.value)} type="number" className="glass-input w-full mt-1" placeholder="60" />
             </div>
+            <div>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Tarification' : 'Pricing'}</label>
+              <select value={formUnit} onChange={(e) => setFormUnit(e.target.value as ServicePricingUnit)} className="glass-input w-full mt-1">
+                <option value="flat">{isFr ? 'Forfait' : 'Flat rate'}</option>
+                <option value="linear_ft">{isFr ? '$ / pi linéaire' : '$ / linear ft'}</option>
+                <option value="sq_ft">{isFr ? '$ / pi²' : '$ / sq ft'}</option>
+              </select>
+            </div>
+            {formUnit !== 'flat' && (
+              <div className="md:col-span-2 flex items-start gap-2.5 rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                <input
+                  id="measure-default"
+                  type="checkbox"
+                  checked={formMeasureDefault}
+                  onChange={(e) => setFormMeasureDefault(e.target.checked)}
+                  className="h-4 w-4 mt-0.5"
+                />
+                <label htmlFor="measure-default" className="cursor-pointer">
+                  <span className="block text-[12.5px] text-text-primary font-medium">
+                    {isFr ? 'Service par défaut pour les mesures' : 'Default service for measurements'}
+                  </span>
+                  <span className="block text-[11px] text-text-tertiary mt-0.5">
+                    {isFr
+                      ? `Ajouté automatiquement à chaque nouvelle mesure ${formUnit === 'linear_ft' ? 'linéaire (chemin, périmètre)' : 'de surface (zone)'} dans l’outil Mesure — quantité remplie, prix du catalogue.`
+                      : `Automatically added to every new ${formUnit === 'linear_ft' ? 'linear measurement (path, perimeter)' : 'area measurement (zone)'} in the Measure tool — quantity filled, catalog price.`}
+                  </span>
+                </label>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowForm(false)} className="glass-button !text-[12px]">{isFr ? 'Annuler' : 'Cancel'}</button>
@@ -271,6 +311,8 @@ export default function ProductsServices() {
                     </div>
                     <span className="text-[14px] font-bold text-text-primary tabular-nums shrink-0">
                       {formatCurrency(service.default_price_cents / 100)}
+                      {service.pricing_unit === 'linear_ft' && <span className="text-[10px] text-text-tertiary font-normal"> {isFr ? '/pi lin' : '/lin ft'}</span>}
+                      {service.pricing_unit === 'sq_ft' && <span className="text-[10px] text-text-tertiary font-normal"> /pi²</span>}
                     </span>
                     {/* Always visible on touch — hover-only controls are unusable on mobile */}
                     <div className="flex items-center gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">

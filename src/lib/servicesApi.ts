@@ -1,6 +1,9 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 
+/** Unité de tarification d'un service : forfait, $/pi linéaire ou $/pi². */
+export type ServicePricingUnit = 'flat' | 'linear_ft' | 'sq_ft';
+
 export interface PredefinedService {
   id: string;
   org_id: string;
@@ -11,6 +14,10 @@ export interface PredefinedService {
   default_duration_minutes: number | null;
   is_active: boolean;
   sort_order: number;
+  /** flat = forfait (défaut historique); linear_ft/sq_ft = tarifé à la mesure. */
+  pricing_unit: ServicePricingUnit;
+  /** Attaché automatiquement aux nouvelles mesures du type correspondant. */
+  measure_default: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -36,23 +43,35 @@ export async function createPredefinedService(service: {
   default_price_cents: number;
   category?: string;
   default_duration_minutes?: number;
+  pricing_unit?: ServicePricingUnit;
+  measure_default?: boolean;
 }): Promise<PredefinedService> {
   // Use the ACTIVE org — resolving via `memberships … limit(1)` picked an
   // arbitrary org for multi-org users, so services landed in the wrong company.
   const orgId = await getCurrentOrgIdOrThrow();
 
-  const { data, error } = await supabase
+  const base = {
+    org_id: orgId,
+    name: service.name,
+    description: service.description || null,
+    default_price_cents: service.default_price_cents,
+    category: service.category || null,
+    default_duration_minutes: service.default_duration_minutes || null,
+  };
+  let { data, error } = await supabase
     .from('predefined_services')
     .insert({
-      org_id: orgId,
-      name: service.name,
-      description: service.description || null,
-      default_price_cents: service.default_price_cents,
-      category: service.category || null,
-      default_duration_minutes: service.default_duration_minutes || null,
+      ...base,
+      pricing_unit: service.pricing_unit || 'flat',
+      measure_default: service.measure_default ?? false,
     })
     .select()
     .single();
+  // Migration 20260802100000 pas encore appliquée : on retombe sur les champs
+  // historiques pour ne jamais bloquer la création de services.
+  if (error && /pricing_unit|measure_default/.test(error.message || '')) {
+    ({ data, error } = await supabase.from('predefined_services').insert(base).select().single());
+  }
   if (error) throw error;
   return data as PredefinedService;
 }
@@ -65,13 +84,26 @@ export async function updatePredefinedService(id: string, updates: Partial<{
   default_duration_minutes: number;
   is_active: boolean;
   sort_order: number;
+  pricing_unit: ServicePricingUnit;
+  measure_default: boolean;
 }>): Promise<PredefinedService> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('predefined_services')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
+  // Migration 20260802100000 pas encore appliquée : réessaie sans les champs
+  // d'unité de tarification pour ne jamais bloquer l'édition de services.
+  if (error && /pricing_unit|measure_default/.test(error.message || '')) {
+    const { pricing_unit: _pu, measure_default: _md, ...legacy } = updates as Record<string, unknown>;
+    ({ data, error } = await supabase
+      .from('predefined_services')
+      .update({ ...legacy, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single());
+  }
   if (error) throw error;
   return data as PredefinedService;
 }

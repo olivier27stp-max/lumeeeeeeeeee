@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import type { Shape, UnitSystem } from '../../lib/measurementTypes';
+import type { PredefinedService } from '../../lib/servicesApi';
 import {
   formatLength, formatArea, haversineDistanceFt, formatElevation,
 } from '../../lib/measurementEngine';
@@ -22,6 +23,9 @@ interface Props {
   onToggleVisibility: (id: string) => void;
   onDelete: (id: string) => void;
   onNotesChange: (id: string, notes: string) => void;
+  /** Catalogue de services tarifés à la mesure ($/pi lin, $/pi²). */
+  services?: PredefinedService[];
+  onServicesChange?: (id: string, serviceIds: string[]) => void;
   fr: boolean;
 }
 
@@ -31,13 +35,33 @@ const TYPE_ICON: Record<string, React.ElementType> = {
 
 export default function MeasureSidebar({
   shapes, selectedId, unitSystem, onSelect, onRename,
-  onToggleVisibility, onDelete, onNotesChange, fr,
+  onToggleVisibility, onDelete, onNotesChange, services, onServicesChange, fr,
 }: Props) {
   const fmtLen = (ft: number) => formatLength(ft, unitSystem);
   const fmtArea = (sqft: number) => formatArea(sqft, unitSystem);
   const fmtElev = (m: number) => formatElevation(m, unitSystem);
 
   const isHeight = (s: Shape) => s.metadata?.kind === 'height';
+
+  // ── Services tarifés à la mesure ──
+  const measurable = (services || []).filter(svc => svc.pricing_unit !== 'flat');
+  const shapeServiceIds = (s: Shape): string[] => (s.metadata?.service_ids as string[] | undefined) || [];
+  /** Quantité facturable d'un service sur une forme : pi² (zone), pi lin
+   *  (chemin), ou PÉRIMÈTRE d'une zone pour un service linéaire. */
+  const svcQty = (s: Shape, svc: PredefinedService): number =>
+    svc.pricing_unit === 'sq_ft'
+      ? (s.result.type === 'polygon' ? s.result.value : 0)
+      : (s.result.type === 'polygon' ? (s.result.perimeterValue || 0) : s.result.value);
+  const fmtMoney = (v: number) =>
+    v.toLocaleString(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 });
+  const svcAmount = (s: Shape, svc: PredefinedService) => (svcQty(s, svc) * svc.default_price_cents) / 100;
+  const estimatedTotal = shapes.reduce((acc, s) => {
+    if (isHeight(s)) return acc;
+    return acc + shapeServiceIds(s)
+      .map(id => measurable.find(svc => svc.id === id))
+      .filter((svc): svc is PredefinedService => !!svc)
+      .reduce((a, svc) => a + svcAmount(s, svc), 0);
+  }, 0);
 
   // Totals — exclude height shapes from the horizontal-length total (height is vertical).
   const totalLinear = shapes.filter(s => s.result.type !== 'polygon' && !isHeight(s)).reduce((a, s) => a + s.result.value, 0);
@@ -163,6 +187,52 @@ export default function MeasureSidebar({
                     </div>
                   )}
 
+                  {/* Services tarifés à la mesure attachés à la forme */}
+                  {!heightShape && onServicesChange && (() => {
+                    const ids = shapeServiceIds(s);
+                    const attached = ids
+                      .map(id => measurable.find(svc => svc.id === id))
+                      .filter((svc): svc is PredefinedService => !!svc);
+                    const eligible = measurable.filter(svc =>
+                      !ids.includes(svc.id) &&
+                      (svc.pricing_unit === 'sq_ft' ? s.result.type === 'polygon' : true));
+                    if (!attached.length && (!sel || !eligible.length)) return null;
+                    return (
+                      <div className="mt-2 ml-[20px] space-y-1" onClick={(e) => e.stopPropagation()}>
+                        {attached.map(svc => (
+                          <div key={svc.id} className="flex items-center gap-1.5 text-[10px]">
+                            <span className="px-1.5 py-0.5 rounded-md bg-primary-lighter text-primary font-semibold truncate max-w-[130px]">{svc.name}</span>
+                            <span className="text-text-muted font-mono">
+                              {Math.round(svcQty(s, svc))} {svc.pricing_unit === 'sq_ft' ? 'pi²' : (fr ? 'pi lin' : 'lin ft')}
+                              {svc.pricing_unit === 'linear_ft' && s.result.type === 'polygon' ? (fr ? ' (périm.)' : ' (perim.)') : ''}
+                            </span>
+                            <span className="font-mono font-bold text-text-primary ml-auto">{fmtMoney(svcAmount(s, svc))}</span>
+                            <button
+                              onClick={() => onServicesChange(s.id, ids.filter(id => id !== svc.id))}
+                              className="p-0.5 text-text-muted hover:text-danger shrink-0">
+                              <X size={11} />
+                            </button>
+                          </div>
+                        ))}
+                        {sel && eligible.length > 0 && (
+                          <select
+                            value=""
+                            onChange={(e) => { if (e.target.value) onServicesChange(s.id, [...ids, e.target.value]); }}
+                            className="w-full text-[10px] rounded-md border border-outline/30 bg-surface-card px-1.5 py-1 text-text-secondary"
+                          >
+                            <option value="">{fr ? '+ Ajouter un service…' : '+ Add a service…'}</option>
+                            {eligible.map(svc => (
+                              <option key={svc.id} value={svc.id}>
+                                {svc.name} — {(svc.default_price_cents / 100).toFixed(2)} $ {svc.pricing_unit === 'sq_ft' ? '/pi²' : (fr ? '/pi lin' : '/lin ft')}
+                                {svc.pricing_unit === 'linear_ft' && s.result.type === 'polygon' ? (fr ? ' (périmètre)' : ' (perimeter)') : ''}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Notes (expanded) */}
                   {sel && (
                     <textarea
@@ -194,6 +264,12 @@ export default function MeasureSidebar({
             <div className="flex justify-between text-[10px]">
               <span className="text-text-muted">{fr ? 'Total superficie' : 'Total area'}</span>
               <span className="font-mono font-semibold text-text-primary">{fmtArea(totalArea)}</span>
+            </div>
+          )}
+          {estimatedTotal > 0 && (
+            <div className="flex justify-between text-[10px] pt-1 border-t border-outline/20">
+              <span className="text-text-muted font-semibold">{fr ? 'Services estimés' : 'Estimated services'}</span>
+              <span className="font-mono font-bold text-text-primary">{fmtMoney(estimatedTotal)}</span>
             </div>
           )}
         </div>

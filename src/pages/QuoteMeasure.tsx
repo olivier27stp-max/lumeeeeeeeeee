@@ -16,6 +16,7 @@ import {
 import { useTranslation } from '../i18n';
 import { getQuoteById, saveQuoteLineItems, type QuoteLineItemInput, type QuoteDetail } from '../lib/quotesApi';
 import { listClients, clientDisplayName, type ClientRecord } from '../lib/clientsApi';
+import { listPredefinedServices, type PredefinedService } from '../lib/servicesApi';
 import NewClientModal from '../components/NewClientModal';
 import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import {
@@ -50,6 +51,9 @@ export default function QuoteMeasure() {
 
   // Data
   const { data: quote } = useQuery({ queryKey: ['quoteDetail', quoteId], queryFn: () => getQuoteById(quoteId!), enabled: Boolean(quoteId) });
+  // Catalogue de services : source unique pour les services tarifés à la mesure
+  // ($/pi lin, $/pi²) attachés aux formes et envoyés comme vraies lignes.
+  const { data: servicesCatalog } = useQuery({ queryKey: ['servicesCatalog'], queryFn: listPredefinedServices, staleTime: 60_000 });
   const addr = quote?.lead?.address || quote?.client?.address || '';
   const contactName = quote ? `${quote.lead?.first_name || quote.client?.first_name || ''} ${quote.lead?.last_name || quote.client?.last_name || ''}`.trim() : '';
   const { data: saved } = useQuery({ queryKey: ['quoteMeasurements', quoteId], queryFn: () => listMeasurements(quoteId!), enabled: Boolean(quoteId) });
@@ -694,6 +698,12 @@ export default function QuoteMeasure() {
   // ACTIONS
   // ════════════════════════════════════════════
 
+  function setShapeServices(shapeId: string, serviceIds: string[]) {
+    setShapes(p => p.map(sh => sh.id === shapeId
+      ? { ...sh, metadata: { ...(sh.metadata || {}), service_ids: serviceIds } }
+      : sh));
+  }
+
   function finishShape(t: Tool, points: LatLng[]) {
     if (points.length < 2) return;
     if (t === 'polygon' && points.length < 3) { toast.error(fr ? 'Minimum 3 points' : 'Min 3 points'); return; }
@@ -701,12 +711,18 @@ export default function QuoteMeasure() {
     const result = computeMeasurement(type, points);
     const idx = cnt.current++;
     const newId = `sh-${idx}`;
+    // Services par défaut du catalogue : zone → $/pi², chemin/ligne → $/pi lin.
+    // La forme naît déjà chiffrée; ajustable par forme dans le panneau.
+    const defaultServiceIds = (servicesCatalog || [])
+      .filter(svc => svc.measure_default && svc.pricing_unit === (type === 'polygon' ? 'sq_ft' : 'linear_ft'))
+      .map(svc => svc.id);
     setShapes(p => [...p, {
       id: newId,
       label: type === 'polygon'
         ? `Zone ${idx + 1}`
         : fr ? `Mesure ${idx + 1}` : `Measure ${idx + 1}`,
       color: nextColor(idx), result, notes: '', visible: true,
+      ...(defaultServiceIds.length ? { metadata: { service_ids: defaultServiceIds } } : {}),
     }]);
     setPts([]); setSelId(newId);
     clearDrawOverlays();
@@ -816,17 +832,48 @@ export default function QuoteMeasure() {
   // Height measurements are informational (a building height isn't a billable
   // per-foot quantity), so they're excluded from the quote line items.
   function buildMeasureItems(startOrder: number): QuoteLineItemInput[] {
-    return shapes.filter(s => s.metadata?.kind !== 'height').map((s, i) => ({
-      name: `${s.label} (${formatMeasurementValue(s.result.type, s.result.value, unitSystem)})`,
-      description: `${formatMeasurementValue(s.result.type, s.result.value, unitSystem)}${
-        s.result.type === 'polygon' && s.result.perimeterValue ? ` • ${fr ? 'Périmètre' : 'Perimeter'}: ${fmtLen(s.result.perimeterValue)}` : ''
-      }${s.notes ? ` — ${s.notes}` : ''}`,
-      // Quantity 1: the typed price IS the price for the whole measured zone.
-      // (Quantity = superficie multiplied the price by hundreds — surprising.)
-      // For per-sq-ft pricing, edit the line's quantity to the measured value.
-      quantity: 1, unit_price_cents: 0,
-      sort_order: startOrder + i, is_optional: false, item_type: 'service' as const,
-    }));
+    const catalog = servicesCatalog || [];
+    const out: QuoteLineItemInput[] = [];
+    for (const s of shapes) {
+      if (s.metadata?.kind === 'height') continue;
+      const measureText = formatMeasurementValue(s.result.type, s.result.value, unitSystem);
+      const ids = (s.metadata?.service_ids as string[] | undefined) || [];
+      const attached = ids
+        .map(id => catalog.find(svc => svc.id === id))
+        .filter((svc): svc is PredefinedService => !!svc);
+      if (attached.length) {
+        // Une VRAIE ligne de service par service attaché : quantité = la mesure
+        // (pi² pour les zones, pi lin pour les chemins — et le PÉRIMÈTRE d'une
+        // zone pour un service linéaire, ex. gouttières autour d'une toiture).
+        for (const svc of attached) {
+          const qty = svc.pricing_unit === 'sq_ft'
+            ? (s.result.type === 'polygon' ? r2(s.result.value) : 0)
+            : (s.result.type === 'polygon' ? r2(s.result.perimeterValue || 0) : r2(s.result.value));
+          if (qty <= 0) continue;
+          out.push({
+            source_service_id: svc.id,
+            name: `${svc.name} — ${s.label}`,
+            description: `${measureText}${svc.pricing_unit === 'linear_ft' && s.result.type === 'polygon' ? ` (${fr ? 'périmètre' : 'perimeter'})` : ''}${s.notes ? ` — ${s.notes}` : ''}`,
+            quantity: qty,
+            unit_price_cents: svc.default_price_cents,
+            sort_order: startOrder + out.length,
+            is_optional: false,
+            item_type: 'service' as const,
+          });
+        }
+        continue;
+      }
+      // Sans service attaché : comportement historique (prix à remplir).
+      out.push({
+        name: `${s.label} (${measureText})`,
+        description: `${measureText}${
+          s.result.type === 'polygon' && s.result.perimeterValue ? ` • ${fr ? 'Périmètre' : 'Perimeter'}: ${fmtLen(s.result.perimeterValue)}` : ''
+        }${s.notes ? ` — ${s.notes}` : ''}`,
+        quantity: 1, unit_price_cents: 0,
+        sort_order: startOrder + out.length, is_optional: false, item_type: 'service' as const,
+      });
+    }
+    return out;
   }
 
   async function persistShapes(toQuoteId: string, camState: CameraState) {
@@ -999,6 +1046,8 @@ export default function QuoteMeasure() {
               onToggleVisibility={(id) => setShapes(p => p.map(s => s.id === id ? { ...s, visible: !s.visible } : s))}
               onDelete={(id) => { setShapes(p => p.filter(s => s.id !== id)); if (selId === id) setSelId(null); }}
               onNotesChange={(id, notes) => setShapes(p => p.map(s => s.id === id ? { ...s, notes } : s))}
+              services={servicesCatalog}
+              onServicesChange={setShapeServices}
               fr={fr} />
           )}
         </div>
