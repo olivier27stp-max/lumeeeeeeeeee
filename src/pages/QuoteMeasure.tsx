@@ -67,13 +67,32 @@ export default function QuoteMeasure() {
   // (chips du panneau). Pré-cochés depuis les défauts du catalogue; chaque
   // nouvelle forme prend les actifs correspondant à son type.
   const [activeServiceIds, setActiveServiceIds] = useState<string[] | null>(null);
+  // La sélection survit aux rechargements : mémorisée par org, restaurée au
+  // montage (intersectée avec le catalogue courant); les défauts du catalogue
+  // ne servent qu'à la toute première visite.
+  const activeServicesStorageKey = (() => {
+    let org = '';
+    try { org = localStorage.getItem('lume-active-org') || ''; } catch { /* stockage indisponible */ }
+    return `lume-measure-services:${org}`;
+  })();
   useEffect(() => {
     if (activeServiceIds === null && servicesCatalog) {
-      setActiveServiceIds(servicesCatalog.filter(svc => svc.measure_default).map(svc => svc.id));
+      let stored: unknown = null;
+      try { stored = JSON.parse(localStorage.getItem(activeServicesStorageKey) || 'null'); } catch { /* valeur corrompue */ }
+      const valid = new Set(servicesCatalog.map(svc => svc.id));
+      setActiveServiceIds(
+        Array.isArray(stored)
+          ? (stored as string[]).filter(id => valid.has(id))
+          : servicesCatalog.filter(svc => svc.measure_default).map(svc => svc.id),
+      );
     }
-  }, [servicesCatalog, activeServiceIds]);
+  }, [servicesCatalog, activeServiceIds, activeServicesStorageKey]);
   const toggleActiveService = (id: string) =>
-    setActiveServiceIds(prev => (prev || []).includes(id) ? (prev || []).filter(x => x !== id) : [...(prev || []), id]);
+    setActiveServiceIds(prev => {
+      const next = (prev || []).includes(id) ? (prev || []).filter(x => x !== id) : [...(prev || []), id];
+      try { localStorage.setItem(activeServicesStorageKey, JSON.stringify(next)); } catch { /* stockage indisponible */ }
+      return next;
+    });
   const addr = quote?.lead?.address || quote?.client?.address || '';
   const contactName = quote ? `${quote.lead?.first_name || quote.client?.first_name || ''} ${quote.lead?.last_name || quote.client?.last_name || ''}`.trim() : '';
   const { data: saved } = useQuery({ queryKey: ['quoteMeasurements', quoteId], queryFn: () => listMeasurements(quoteId!), enabled: Boolean(quoteId) });
