@@ -216,7 +216,13 @@ export default function ProductsServices() {
               <input value={formDesc} onChange={(e) => setFormDesc(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'Courte description…' : 'Short description...'} />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Prix par défaut ($)' : 'Default Price ($)'}</label>
+              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                {formUnit === 'linear_ft'
+                  ? (isFr ? 'Prix ($ / pi linéaire)' : 'Price ($ / linear ft)')
+                  : formUnit === 'sq_ft'
+                    ? (isFr ? 'Prix ($ / pi²)' : 'Price ($ / sq ft)')
+                    : (isFr ? 'Prix par défaut ($)' : 'Default Price ($)')}
+              </label>
               <input value={formPrice} onChange={(e) => setFormPrice(e.target.value)} type="text" inputMode="decimal" className="glass-input w-full mt-1" placeholder="475,00" />
             </div>
             <div>

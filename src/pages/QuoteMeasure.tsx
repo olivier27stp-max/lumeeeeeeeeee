@@ -54,7 +54,15 @@ export default function QuoteMeasure() {
   const { data: quote } = useQuery({ queryKey: ['quoteDetail', quoteId], queryFn: () => getQuoteById(quoteId!), enabled: Boolean(quoteId) });
   // Catalogue de services : source unique pour les services tarifés à la mesure
   // ($/pi lin, $/pi²) attachés aux formes et envoyés comme vraies lignes.
-  const { data: servicesCatalog } = useQuery({ queryKey: ['servicesCatalog'], queryFn: listPredefinedServices, staleTime: 60_000 });
+  // refetchOnWindowFocus 'always' : un service configuré dans un autre onglet
+  // (Produits & services) apparaît ici dès qu'on revient sur la page Mesure.
+  const { data: servicesCatalog } = useQuery({
+    queryKey: ['servicesCatalog'],
+    queryFn: listPredefinedServices,
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
+    refetchOnMount: 'always',
+  });
   // Services ACTIFS pour cette session de mesure — choisis dans la page même
   // (chips du panneau). Pré-cochés depuis les défauts du catalogue; chaque
   // nouvelle forme prend les actifs correspondant à son type.
