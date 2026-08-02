@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   Eye, EyeOff, X, Ruler, Pentagon, PenLine, ChevronRight, Mountain, MoveVertical,
 } from 'lucide-react';
@@ -78,6 +79,24 @@ export default function MeasureSidebar({
         <h3 className="text-[13px] font-bold text-text-primary">{fr ? 'Mesures' : 'Measurements'}</h3>
         <span className="text-[11px] text-text-muted font-medium bg-surface-secondary px-2 py-0.5 rounded-md">{shapes.length}</span>
       </div>
+
+      {/* Aucun service tarifé à la mesure : guider vers le catalogue au lieu
+          de cacher la section (personne ne devine une feature invisible). */}
+      {onToggleActiveService && measurable.length === 0 && (
+        <div className="px-4 py-2.5 border-b border-outline/20 shrink-0">
+          <p className="text-[9px] font-semibold text-text-muted uppercase tracking-wider mb-1">
+            {fr ? 'Services (nouvelles mesures)' : 'Services (new measurements)'}
+          </p>
+          <p className="text-[10px] text-text-muted leading-relaxed">
+            {fr
+              ? 'Aucun service au pi lin / pi². Configurez la tarification de vos services pour chiffrer les mesures automatiquement. '
+              : 'No per-ft services yet. Set your services’ pricing unit to price measurements automatically. '}
+            <Link to="/settings/products" className="text-primary font-semibold hover:underline">
+              {fr ? 'Produits & services →' : 'Products & services →'}
+            </Link>
+          </p>
+        </div>
+      )}
 
       {/* Services de la session : cochés = appliqués aux nouvelles mesures */}
       {onToggleActiveService && measurable.length > 0 && (
