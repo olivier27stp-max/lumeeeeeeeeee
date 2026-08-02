@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronDown, Clock3, Eye, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
@@ -66,6 +66,23 @@ function newVisitDraft(seed?: Partial<VisitDraft>): VisitDraft {
     endTime: '10:00',
     anytime: false,
     ...seed,
+  };
+}
+
+/** Une visite planifiée du plan de service (une année/mois peut en tenir plusieurs). */
+interface PlanVisitDraft {
+  key: string;
+  year: number;
+  month: number; // 1..12
+  date: string;  // YYYY-MM-DD
+}
+
+function newPlanVisit(year: number, month: number, date?: string): PlanVisitDraft {
+  return {
+    key: crypto.randomUUID(),
+    year,
+    month,
+    date: date || `${year}-${String(month).padStart(2, '0')}-01`,
   };
 }
 
@@ -355,22 +372,22 @@ export default function NewJobModal({
   // so we can never duplicate or drop a visit we haven't seen.
   const [visitsLoaded, setVisitsLoaded] = useState(true);
   const originalVisitsRef = useRef<Map<string, { date: string; startTime: string; endTime: string }>>(new Map());
-  // Service plan (job_type = recurring, creation only): the year being planned,
-  // the planned months mapped to their exact visit date (month 1-12 -> YYYY-MM-DD),
-  // and whether a contract should be created alongside the job.
-  const [serviceYear, setServiceYear] = useState(new Date().getFullYear());
-  const [serviceMonthDates, setServiceMonthDates] = useState<Record<number, string>>({});
+  // Service plan (job_type = recurring, creation only): the planned years and
+  // their visits (a month can hold several), plus whether a contract should be
+  // created alongside the job. Each visit is keyed by a stable uuid.
+  const [serviceYears, setServiceYears] = useState<number[]>([new Date().getFullYear()]);
+  const [planVisits, setPlanVisits] = useState<PlanVisitDraft[]>([]);
   const [createContract, setCreateContract] = useState(false);
   // Per-visit customization of the service plan. Both boxes are checked by
-  // default ("apply to all visits"); unchecking one lets each planned month
-  // carry its own time window / its own products & services.
+  // default ("apply to all visits"); unchecking one lets each planned visit
+  // carry its own time window / its own products & services (keyed by visit key).
   const [applyTimesToAllVisits, setApplyTimesToAllVisits] = useState(true);
   const [applyItemsToAllVisits, setApplyItemsToAllVisits] = useState(true);
-  const [serviceVisitTimes, setServiceVisitTimes] = useState<Record<number, { startTime: string; endTime: string }>>({});
-  const [serviceVisitItems, setServiceVisitItems] = useState<Record<number, LineItemForm[]>>({});
-  // Month whose list the catalog picker is currently feeding (null = the
+  const [serviceVisitTimes, setServiceVisitTimes] = useState<Record<string, { startTime: string; endTime: string }>>({});
+  const [serviceVisitItems, setServiceVisitItems] = useState<Record<string, LineItemForm[]>>({});
+  // Visit whose list the catalog picker is currently feeding (null = the
   // job-level list used when items apply to all visits).
-  const [pickerMonth, setPickerMonth] = useState<number | null>(null);
+  const [pickerVisitKey, setPickerVisitKey] = useState<string | null>(null);
   // Written agreement (job contract) — optional, created after the job insert
   const [createAgreement, setCreateAgreement] = useState(false);
   const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
@@ -432,120 +449,162 @@ export default function NewJobModal({
     return Array.from({ length: 12 }, (_, i) =>
       new Date(2000, i, 1).toLocaleDateString(locale, { month: 'long' }));
   }, [language]);
-  const selectedServiceMonths = useMemo(
-    () => Object.keys(serviceMonthDates).map(Number).sort((a, b) => a - b),
-    [serviceMonthDates]
+  // All planned visits, chronological — source of truth for scheduling,
+  // billing lines and the contract snapshot.
+  const sortedPlanVisits = useMemo(
+    () => [...planVisits].sort((a, b) => a.date.localeCompare(b.date)),
+    [planVisits]
   );
   const serviceVisitDates = useMemo(
-    () => Object.values(serviceMonthDates).filter(Boolean).sort(),
-    [serviceMonthDates]
+    () => sortedPlanVisits.map((v) => v.date).filter(Boolean),
+    [sortedPlanVisits]
   );
+  const monthVisitsOf = (year: number, month: number) =>
+    planVisits
+      .filter((v) => v.year === year && v.month === month)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  const multiYearPlan = serviceYears.length > 1;
+  // Label distinguishing one visit on billing lines / calendar notes:
+  // "juillet", "juillet 2027" (multi-year plan), "juillet (15)" (several
+  // visits the same month — the day in parentheses).
+  const planVisitLabel = (visit: PlanVisitDraft) => {
+    const siblings = planVisits.filter((v) => v.year === visit.year && v.month === visit.month);
+    let label = monthNames[visit.month - 1];
+    if (multiYearPlan) label += ` ${visit.year}`;
+    if (siblings.length > 1) label += ` (${Number(visit.date.slice(8, 10)) || '?'})`;
+    return label;
+  };
   const lastDayOfMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
   // Fresh ids so a month's list never shares row identities with the job-level
   // list (or another month's) — updates would otherwise cross lists.
   const cloneLineItems = (items: LineItemForm[]): LineItemForm[] =>
     items.map((item) => ({ ...item, id: crypto.randomUUID() }));
-  const seedVisitTimes = (months: number[]) => {
+  const seedVisitTimes = (keys: string[]) => {
     setServiceVisitTimes((prev) => {
       const next = { ...prev };
-      for (const m of months) {
-        if (!next[m]) next[m] = { startTime: startTime || '09:00', endTime: endTime || '10:00' };
+      for (const k of keys) {
+        if (!next[k]) next[k] = { startTime: startTime || '09:00', endTime: endTime || '10:00' };
       }
       return next;
     });
   };
-  const seedVisitItems = (months: number[]) => {
+  const seedVisitItems = (keys: string[]) => {
     setServiceVisitItems((prev) => {
       const next = { ...prev };
-      for (const m of months) {
-        if (!next[m] || next[m].length === 0) next[m] = cloneLineItems(lineItems);
+      for (const k of keys) {
+        if (!next[k] || next[k].length === 0) next[k] = cloneLineItems(lineItems);
       }
       return next;
     });
   };
-  const toggleServiceMonth = (month: number) => {
+  const dropVisitPersonalization = (keys: string[]) => {
+    // Drop the visits' personalization so their services stop counting in totals.
+    setServiceVisitTimes((prev) => { const next = { ...prev }; for (const k of keys) delete next[k]; return next; });
+    setServiceVisitItems((prev) => { const next = { ...prev }; for (const k of keys) delete next[k]; return next; });
+  };
+  const addPlanVisit = (year: number, month: number) => {
     setDirty(true);
-    const removing = Boolean(serviceMonthDates[month]);
-    setServiceMonthDates((prev) => {
-      const next = { ...prev };
-      if (next[month]) delete next[month];
-      else next[month] = `${serviceYear}-${String(month).padStart(2, '0')}-01`;
-      return next;
-    });
-    if (removing) {
-      // Drop the month's personalization so its services stop counting in totals.
-      setServiceVisitTimes((prev) => { const next = { ...prev }; delete next[month]; return next; });
-      setServiceVisitItems((prev) => { const next = { ...prev }; delete next[month]; return next; });
+    const visit = newPlanVisit(year, month);
+    setPlanVisits((prev) => [...prev, visit]);
+    if (!applyTimesToAllVisits) seedVisitTimes([visit.key]);
+    if (!applyItemsToAllVisits) seedVisitItems([visit.key]);
+  };
+  const toggleServiceMonth = (year: number, month: number) => {
+    const existing = monthVisitsOf(year, month);
+    if (existing.length > 0) {
+      setDirty(true);
+      const keys = existing.map((v) => v.key);
+      const keySet = new Set(keys);
+      setPlanVisits((prev) => prev.filter((v) => !keySet.has(v.key)));
+      dropVisitPersonalization(keys);
     } else {
-      if (!applyTimesToAllVisits) seedVisitTimes([month]);
-      if (!applyItemsToAllVisits) seedVisitItems([month]);
+      addPlanVisit(year, month);
     }
+  };
+  const removePlanVisit = (key: string) => {
+    setDirty(true);
+    setPlanVisits((prev) => prev.filter((v) => v.key !== key));
+    dropVisitPersonalization([key]);
+  };
+  const setPlanVisitDate = (key: string, date: string) => {
+    if (!date) return;
+    setPlanVisits((prev) => prev.map((v) => (v.key === key ? { ...v, date } : v)));
   };
   const toggleApplyTimesToAllVisits = (checked: boolean) => {
     setApplyTimesToAllVisits(checked);
-    if (!checked) seedVisitTimes(selectedServiceMonths);
+    if (!checked) seedVisitTimes(planVisits.map((v) => v.key));
   };
   const toggleApplyItemsToAllVisits = (checked: boolean) => {
     setApplyItemsToAllVisits(checked);
-    if (!checked) seedVisitItems(selectedServiceMonths);
+    if (!checked) seedVisitItems(planVisits.map((v) => v.key));
   };
-  const setVisitTime = (month: number, patch: Partial<{ startTime: string; endTime: string }>) => {
+  const setVisitTime = (key: string, patch: Partial<{ startTime: string; endTime: string }>) => {
     setServiceVisitTimes((prev) => ({
       ...prev,
-      [month]: {
-        startTime: prev[month]?.startTime || startTime || '09:00',
-        endTime: prev[month]?.endTime || endTime || '10:00',
+      [key]: {
+        startTime: prev[key]?.startTime || startTime || '09:00',
+        endTime: prev[key]?.endTime || endTime || '10:00',
         ...patch,
       },
     }));
   };
-  const updateVisitItem = (month: number, id: string, patch: Partial<LineItemForm>) => {
+  const updateVisitItem = (key: string, id: string, patch: Partial<LineItemForm>) => {
     setServiceVisitItems((prev) => ({
       ...prev,
-      [month]: (prev[month] || []).map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      [key]: (prev[key] || []).map((item) => (item.id === id ? { ...item, ...patch } : item)),
     }));
   };
-  const removeVisitItem = (month: number, id: string) => {
+  const removeVisitItem = (key: string, id: string) => {
     setServiceVisitItems((prev) => {
-      const list = prev[month] || [];
+      const list = prev[key] || [];
       if (list.length <= 1) return prev;
-      return { ...prev, [month]: list.filter((item) => item.id !== id) };
+      return { ...prev, [key]: list.filter((item) => item.id !== id) };
     });
   };
-  const addVisitItemRow = (month: number) => {
+  const addVisitItemRow = (key: string) => {
     setDirty(true);
     setServiceVisitItems((prev) => ({
       ...prev,
-      [month]: [...(prev[month] || []), { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }],
+      [key]: [...(prev[key] || []), { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }],
     }));
   };
   // Effective time window of one planned visit (personalized or global).
-  const visitTimeFor = (month: number) => {
-    const custom = !applyTimesToAllVisits ? serviceVisitTimes[month] : null;
+  const visitTimeFor = (key: string) => {
+    const custom = !applyTimesToAllVisits ? serviceVisitTimes[key] : null;
     return {
       start: custom?.startTime || startTime || '09:00',
       end: custom?.endTime || endTime || '10:00',
     };
   };
-  const setServiceMonthDate = (month: number, date: string) => {
-    if (!date) return;
-    setServiceMonthDates((prev) => ({ ...prev, [month]: date }));
+  // Editable big-bold year of one block: re-anchor its visits (clamped day).
+  const setYearAt = (index: number, year: number) => {
+    const prevYear = serviceYears[index];
+    if (!Number.isFinite(year) || year < 2000 || year > 2100 || year === prevYear) return;
+    if (serviceYears.includes(year)) return;
+    setDirty(true);
+    setServiceYears((prev) => prev.map((y, i) => (i === index ? year : y)));
+    setPlanVisits((prev) => prev.map((v) => {
+      if (v.year !== prevYear) return v;
+      const day = Math.min(Number(v.date.slice(8, 10)) || 1, lastDayOfMonth(year, v.month));
+      return { ...v, year, date: `${year}-${String(v.month).padStart(2, '0')}-${String(day).padStart(2, '0')}` };
+    }));
   };
-  const changeServiceYear = (delta: number) => {
-    setServiceYear((prevYear) => {
-      const year = prevYear + delta;
-      // Re-anchor already-picked dates in the new year (clamping the day).
-      setServiceMonthDates((prev) => {
-        const next: Record<number, string> = {};
-        for (const [key, date] of Object.entries(prev)) {
-          const month = Number(key);
-          const day = Math.min(Number(date.slice(8, 10)) || 1, lastDayOfMonth(year, month));
-          next[month] = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        }
-        return next;
-      });
-      return year;
-    });
+  // "+" under the last year block: plan the following year too.
+  const addNextYear = () => {
+    setDirty(true);
+    setServiceYears((prev) => [...prev, Math.max(...prev) + 1]);
+  };
+  const removeYearAt = (index: number) => {
+    if (serviceYears.length <= 1) return;
+    const year = serviceYears[index];
+    setDirty(true);
+    setServiceYears((prev) => prev.filter((_, i) => i !== index));
+    const keys = planVisits.filter((v) => v.year === year).map((v) => v.key);
+    if (keys.length > 0) {
+      const keySet = new Set(keys);
+      setPlanVisits((prev) => prev.filter((v) => !keySet.has(v.key)));
+      dropVisitPersonalization(keys);
+    }
   };
   // Keep startDate aligned with the first planned visit so team suggestions
   // and conflict checks target the right day.
@@ -635,14 +694,14 @@ export default function NewJobModal({
     setAskForReview(Boolean(iv?.ask_for_review));
     setSaleDate(initialValues?.sale_date || new Date().toISOString().slice(0, 10));
     setShowOnLeaderboard(initialValues?.show_on_leaderboard !== false);
-    setServiceYear(new Date().getFullYear());
-    setServiceMonthDates({});
+    setServiceYears([new Date().getFullYear()]);
+    setPlanVisits([]);
     setCreateContract(false);
     setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
     setServiceVisitItems({});
-    setPickerMonth(null);
+    setPickerVisitKey(null);
     setRemovedVisitIds([]);
     originalVisitsRef.current = new Map();
     if (isEditMode) {
@@ -875,15 +934,18 @@ export default function NewJobModal({
   // Items that actually bill: the job-level list, or — when the service plan's
   // products/services are personalized — every planned visit's own list.
   const personalizedItems = isServicePlan && !applyItemsToAllVisits;
-  const billableLineItems = useMemo<Array<LineItemForm & { visitMonth?: number }>>(() => {
+  const billableLineItems = useMemo<Array<LineItemForm & { visitKey?: string }>>(() => {
     if (!personalizedItems) return lineItems;
-    return selectedServiceMonths.flatMap((month) =>
-      (serviceVisitItems[month] || []).map((item) => ({ ...item, visitMonth: month })));
-  }, [personalizedItems, lineItems, selectedServiceMonths, serviceVisitItems]);
-  // "Lavage — juillet" on billing lines/contract so each visit's services stay
-  // identifiable once flattened at the job level.
-  const billableItemName = (item: LineItemForm & { visitMonth?: number }) =>
-    (item.name.trim() || 'Service') + (item.visitMonth ? ` — ${monthNames[item.visitMonth - 1]}` : '');
+    return sortedPlanVisits.flatMap((visit) =>
+      (serviceVisitItems[visit.key] || []).map((item) => ({ ...item, visitKey: visit.key })));
+  }, [personalizedItems, lineItems, sortedPlanVisits, serviceVisitItems]);
+  // "Lavage — juillet" (or "juillet 2027" / "juillet (15)") on billing lines/
+  // contract so each visit's services stay identifiable once flattened at the
+  // job level.
+  const billableItemName = (item: LineItemForm & { visitKey?: string }) => {
+    const visit = item.visitKey ? planVisits.find((v) => v.key === item.visitKey) : null;
+    return (item.name.trim() || 'Service') + (visit ? ` — ${planVisitLabel(visit)}` : '');
+  };
 
   const totalCents = useMemo(() => {
     return billableLineItems.reduce((sum, item) => {
@@ -954,14 +1016,17 @@ export default function NewJobModal({
       }),
     taxLines: taxLines.filter((tx) => tx.enabled && tx.rate > 0).map((tx) => ({ label: tx.label, rate: tx.rate })),
     subtotalCents: effectiveSubtotalCents,
-    servicePlan: isServicePlan && selectedServiceMonths.length > 0
-      ? { year: serviceYear, visits: selectedServiceMonths.map((month) => ({ month, date: serviceMonthDates[month] })) }
+    servicePlan: isServicePlan && sortedPlanVisits.length > 0
+      ? {
+          year: sortedPlanVisits[0].year,
+          visits: sortedPlanVisits.map((v) => ({ month: v.month, date: v.date, year: v.year })),
+        }
       : null,
   }), [
     jobNumber, nextJobNumber, isCreatingNewClient, newClientFirst, newClientLast, newClientCompany,
     newClientEmail, newClientPhone, selectedClient, addressLine1, addressLine2, addressCity,
     addressProvince, addressPostalCode, prefilledAddress, billableLineItems, taxLines, effectiveSubtotalCents,
-    isServicePlan, selectedServiceMonths, serviceMonthDates, serviceYear, monthNames,
+    isServicePlan, sortedPlanVisits, monthNames,
   ]);
 
   const resetForm = () => {
@@ -987,11 +1052,13 @@ export default function NewJobModal({
     setSaleDate(new Date().toISOString().slice(0, 10));
     setShowOnLeaderboard(true);
     setJobType('one_off');
+    setServiceYears([new Date().getFullYear()]);
+    setPlanVisits([]);
     setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
     setServiceVisitItems({});
-    setPickerMonth(null);
+    setPickerVisitKey(null);
     setVisitDrafts([newVisitDraft()]);
     setRemovedVisitIds([]);
     setVisitsLoaded(true);
@@ -1094,12 +1161,12 @@ export default function NewJobModal({
   };
 
   const handleServiceSelected = (service: PredefinedService) => {
-    if (pickerMonth != null) {
+    if (pickerVisitKey != null) {
       // Picker opened from one visit of a personalized service plan: only that
-      // month's list is touched (its "added" checkmarks are derived, not global).
+      // visit's list is touched (its "added" checkmarks are derived, not global).
       setServiceVisitItems((prev) => ({
         ...prev,
-        [pickerMonth]: addServiceToList(prev[pickerMonth] || [], service),
+        [pickerVisitKey]: addServiceToList(prev[pickerVisitKey] || [], service),
       }));
       return;
     }
@@ -1116,12 +1183,12 @@ export default function NewJobModal({
       name: service.name,
       unitPriceInput: String(service.default_price_cents / 100),
     } : item;
-    // Row ids are unique across the job-level list and every month's list, so
+    // Row ids are unique across the job-level list and every visit's list, so
     // mapping them all only ever fills the targeted line.
     setLineItems((prev) => prev.map(fill));
     setServiceVisitItems((prev) => {
-      const next: Record<number, LineItemForm[]> = {};
-      for (const [month, list] of Object.entries(prev)) next[Number(month)] = list.map(fill);
+      const next: Record<string, LineItemForm[]> = {};
+      for (const [key, list] of Object.entries(prev)) next[key] = list.map(fill);
       return next;
     });
     // The global "added" checkmarks only mirror the job-level list.
@@ -1132,12 +1199,12 @@ export default function NewJobModal({
   };
 
   const handleServiceRemoved = (serviceId: string) => {
-    if (pickerMonth != null) {
+    if (pickerVisitKey != null) {
       setServiceVisitItems((prev) => {
-        const filtered = (prev[pickerMonth] || []).filter((item) => item.source_service_id !== serviceId);
+        const filtered = (prev[pickerVisitKey] || []).filter((item) => item.source_service_id !== serviceId);
         return {
           ...prev,
-          [pickerMonth]: filtered.length > 0
+          [pickerVisitKey]: filtered.length > 0
             ? filtered
             : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }],
         };
@@ -1153,13 +1220,13 @@ export default function NewJobModal({
 
   // Checkmarks shown in the catalog picker for the list it is currently feeding.
   const pickerAddedIds = useMemo(() => {
-    if (pickerMonth == null) return addedServiceIds;
+    if (pickerVisitKey == null) return addedServiceIds;
     return new Set(
-      (serviceVisitItems[pickerMonth] || [])
+      (serviceVisitItems[pickerVisitKey] || [])
         .map((item) => item.source_service_id)
         .filter((id): id is string => Boolean(id))
     );
-  }, [pickerMonth, addedServiceIds, serviceVisitItems]);
+  }, [pickerVisitKey, addedServiceIds, serviceVisitItems]);
 
   // ── Team availability conflict detection ──
   const selectedTeamSuggestion = useMemo(() => {
@@ -1332,20 +1399,20 @@ export default function NewJobModal({
     // Les visites sont assignées à une équipe seulement (jamais à un individu).
     const teamIdPayload = teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection;
 
-    // Service plan: the schedule comes from the planned months (first visit =
-    // the job's own schedule); at least one month with its date is required.
-    if (isServicePlan && selectedServiceMonths.length === 0) {
+    // Service plan: the schedule comes from the planned visits (first visit =
+    // the job's own schedule); at least one visit with its date is required.
+    if (isServicePlan && sortedPlanVisits.length === 0) {
       setInlineError(t.modals.servicePlanNoMonths);
       try { toast.error(t.modals.servicePlanNoMonths); } catch {}
       return;
     }
     // Every planned visit needs a coherent time window (global hours, or the
-    // month's own hours when they're personalized per visit).
+    // visit's own hours when they're personalized per visit).
     if (isServicePlan) {
-      for (const month of selectedServiceMonths) {
-        const { start, end } = visitTimeFor(month);
-        const vStart = buildDateTime(serviceMonthDates[month], start);
-        const vEnd = buildDateTime(serviceMonthDates[month], end);
+      for (const visit of sortedPlanVisits) {
+        const { start, end } = visitTimeFor(visit.key);
+        const vStart = buildDateTime(visit.date, start);
+        const vEnd = buildDateTime(visit.date, end);
         if (!vStart || !vEnd || new Date(vEnd) <= new Date(vStart)) {
           setInlineError(t.modals.endTimeAfterStart);
           try { toast.error(t.modals.endTimeAfterStart); } catch {}
@@ -1374,16 +1441,16 @@ export default function NewJobModal({
     }
     // The job's own scheduled_at/end_at mirror its FIRST visit (the server
     // recomputes them from the visit set afterwards anyway).
-    const firstServiceMonth = isServicePlan ? (selectedServiceMonths[0] ?? null) : null;
+    const firstPlanVisit = isServicePlan ? (sortedPlanVisits[0] ?? null) : null;
     const firstVisit = !isServicePlan ? (sortedVisitDrafts[0] || null) : null;
     const scheduledAt = isServicePlan
-      ? (firstServiceMonth != null
-        ? buildDateTime(serviceMonthDates[firstServiceMonth], visitTimeFor(firstServiceMonth).start)
+      ? (firstPlanVisit
+        ? buildDateTime(firstPlanVisit.date, visitTimeFor(firstPlanVisit.key).start)
         : null)
       : (firstVisit ? buildDateTime(firstVisit.date, draftTimes(firstVisit).start) : null);
     const endAt = isServicePlan
-      ? (firstServiceMonth != null
-        ? buildDateTime(serviceMonthDates[firstServiceMonth], visitTimeFor(firstServiceMonth).end)
+      ? (firstPlanVisit
+        ? buildDateTime(firstPlanVisit.date, visitTimeFor(firstPlanVisit.key).end)
         : null)
       : (firstVisit ? buildDateTime(firstVisit.date, draftTimes(firstVisit).end) : null);
 
@@ -1461,9 +1528,9 @@ export default function NewJobModal({
 
     // Human-readable services list stamped on each visit's calendar notes when
     // the plan's products/services are personalized per visit.
-    const visitNotesFor = (month: number): string | null => {
+    const visitNotesFor = (key: string): string | null => {
       if (!personalizedItems) return null;
-      const parts = (serviceVisitItems[month] || [])
+      const parts = (serviceVisitItems[key] || [])
         .filter((item) => item.included && item.name.trim())
         .map((item) => {
           const qty = Number.parseFloat(item.qtyInput || '1') || 1;
@@ -1568,15 +1635,15 @@ export default function NewJobModal({
         }
       }
 
-      // Service plan: create one visit per additional planned month (the first
-      // month is the job's own schedule, created above), then the optional
-      // contract snapshotting the 12-month plan.
+      // Service plan: create one visit per additional planned visit (the first
+      // one is the job's own schedule, created above), then the optional
+      // contract snapshotting the multi-year plan.
       if (createdJob?.id && isServicePlan) {
         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Montreal';
         // The first visit was inserted by the job save itself, so it's the only
         // event the job has right now — stamp its personalized services on it
         // before the extra visits make it ambiguous. Best-effort.
-        const firstNotes = firstServiceMonth != null ? visitNotesFor(firstServiceMonth) : null;
+        const firstNotes = firstPlanVisit ? visitNotesFor(firstPlanVisit.key) : null;
         if (firstNotes) {
           try {
             const visits = await listJobVisits(createdJob.id);
@@ -1587,11 +1654,10 @@ export default function NewJobModal({
             console.error('[jobs] failed to stamp first visit services', err);
           }
         }
-        for (const month of selectedServiceMonths.slice(1)) {
-          const date = serviceMonthDates[month];
-          const { start, end } = visitTimeFor(month);
-          const visitStart = buildDateTime(date, start);
-          const visitEnd = buildDateTime(date, end);
+        for (const visit of sortedPlanVisits.slice(1)) {
+          const { start, end } = visitTimeFor(visit.key);
+          const visitStart = buildDateTime(visit.date, start);
+          const visitEnd = buildDateTime(visit.date, end);
           if (!visitStart || !visitEnd) continue;
           try {
             await addVisit({
@@ -1600,10 +1666,10 @@ export default function NewJobModal({
               endAt: visitEnd,
               teamId: teamIdPayload,
               timezone,
-              notes: visitNotesFor(month),
+              notes: visitNotesFor(visit.key),
             });
           } catch (err) {
-            console.error('[jobs] failed to add service plan visit', date, err);
+            console.error('[jobs] failed to add service plan visit', visit.date, err);
           }
         }
         if (createContract) {
@@ -1612,14 +1678,15 @@ export default function NewJobModal({
               job_id: createdJob.id,
               client_id: resolvedClientId || null,
               title: title.trim(),
-              year: serviceYear,
-              visits: selectedServiceMonths.map((month) => ({
-                month,
-                date: serviceMonthDates[month],
-                ...(applyTimesToAllVisits ? {} : { start_time: visitTimeFor(month).start, end_time: visitTimeFor(month).end }),
+              year: sortedPlanVisits[0]?.year ?? serviceYears[0],
+              visits: sortedPlanVisits.map((visit) => ({
+                month: visit.month,
+                date: visit.date,
+                year: visit.year,
+                ...(applyTimesToAllVisits ? {} : { start_time: visitTimeFor(visit.key).start, end_time: visitTimeFor(visit.key).end }),
                 ...(personalizedItems
                   ? {
-                      items: (serviceVisitItems[month] || [])
+                      items: (serviceVisitItems[visit.key] || [])
                         .filter((item) => item.included && (item.name.trim() || (Number.parseFloat(item.unitPriceInput || '0') || 0) > 0))
                         .map((item) => ({
                           name: item.name.trim() || 'Service',
@@ -2057,113 +2124,166 @@ export default function NewJobModal({
               <Box
                 title={t.modals.servicePlanSchedule}
                 subtitle={t.modals.servicePlanScheduleHint}
-                right={(
-                  <div className="inline-flex items-center gap-1 rounded-xl bg-surface-secondary border border-border p-1">
-                    <button
-                      type="button"
-                      onClick={() => changeServiceYear(-1)}
-                      className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface transition-colors"
-                      aria-label={language === 'fr' ? 'Année précédente' : 'Previous year'}
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
-                    <span className="text-sm font-semibold tabular-nums px-1">{serviceYear}</span>
-                    <button
-                      type="button"
-                      onClick={() => changeServiceYear(1)}
-                      className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface transition-colors"
-                      aria-label={language === 'fr' ? 'Année suivante' : 'Next year'}
-                    >
-                      <ChevronRight size={14} />
-                    </button>
-                  </div>
-                )}
               >
-                  {/* Which months of the year the service happens */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanMonths}</label>
-                    <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
-                      {monthNames.map((name, idx) => {
-                        const month = idx + 1;
-                        const selected = Boolean(serviceMonthDates[month]);
-                        return (
-                          <button
-                            key={month}
-                            type="button"
-                            onClick={() => toggleServiceMonth(month)}
-                            className={cn(
-                              'px-3 py-2 rounded-lg border text-sm font-medium capitalize transition-colors',
-                              selected
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-outline-subtle bg-surface-secondary/30 text-text-tertiary hover:text-text-secondary'
-                            )}
-                          >
-                            {name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  {serviceYears.map((year, yearIdx) => {
+                    const yearMonths = Array.from(
+                      new Set(planVisits.filter((v) => v.year === year).map((v) => v.month))
+                    ).sort((a, b) => a - b);
+                    return (
+                      <div key={yearIdx} className="space-y-3">
+                        {/* The planned year — big, bold, editable (commits on blur/Enter) */}
+                        <div className="flex items-center justify-between gap-2">
+                          <input
+                            key={year}
+                            type="number"
+                            defaultValue={year}
+                            min={2000}
+                            max={2100}
+                            onBlur={(event) => {
+                              setYearAt(yearIdx, parseInt(event.target.value, 10));
+                              // Rejected value (invalid / duplicate year): snap the
+                              // display back — an accepted one remounts via key={year}.
+                              event.target.value = String(year);
+                            }}
+                            onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                            className="w-32 bg-transparent border-0 p-0 text-3xl font-bold tabular-nums text-text-primary focus:outline-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            aria-label={language === 'fr' ? 'Année du plan' : 'Plan year'}
+                          />
+                          {serviceYears.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeYearAt(yearIdx)}
+                              className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-danger-light transition-colors"
+                              aria-label={language === 'fr' ? `Retirer l'année ${year}` : `Remove year ${year}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
 
-                  {/* Exact visit date inside each planned month (+ its own hours
-                      when the time window is personalized per visit) */}
-                  {selectedServiceMonths.length > 0 && (
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanDates}</label>
-                      <div className="space-y-2">
-                        {selectedServiceMonths.map((month) => {
-                          const mm = String(month).padStart(2, '0');
-                          const lastDay = String(lastDayOfMonth(serviceYear, month)).padStart(2, '0');
-                          return (
-                            <div key={month} className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
-                                <span className="text-sm font-medium capitalize text-text-primary">{monthNames[month - 1]} {serviceYear}</span>
-                                <div className="relative">
-                                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                  <input
-                                    type="date"
-                                    value={serviceMonthDates[month] || ''}
-                                    min={`${serviceYear}-${mm}-01`}
-                                    max={`${serviceYear}-${mm}-${lastDay}`}
-                                    onChange={(event) => setServiceMonthDate(month, event.target.value)}
-                                    className="glass-input w-full pl-10"
-                                  />
-                                </div>
-                              </div>
-                              {!applyTimesToAllVisits && (
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div className="space-y-1">
-                                    <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
-                                    <div className="relative">
-                                      <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                      <input
-                                        type="time"
-                                        value={serviceVisitTimes[month]?.startTime || startTime || '09:00'}
-                                        onChange={(event) => setVisitTime(month, { startTime: event.target.value })}
-                                        className="glass-input w-full pl-10"
-                                      />
+                        {/* Which months of this year the service happens */}
+                        <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+                          {monthNames.map((name, idx) => {
+                            const month = idx + 1;
+                            const count = monthVisitsOf(year, month).length;
+                            const selected = count > 0;
+                            return (
+                              <button
+                                key={month}
+                                type="button"
+                                onClick={() => toggleServiceMonth(year, month)}
+                                className={cn(
+                                  'px-3 py-2 rounded-lg border text-sm font-medium capitalize transition-colors',
+                                  selected
+                                    ? 'border-primary bg-primary/10 text-primary'
+                                    : 'border-outline-subtle bg-surface-secondary/30 text-text-tertiary hover:text-text-secondary'
+                                )}
+                              >
+                                {name}{count > 1 ? ` ×${count}` : ''}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Exact visit date(s) inside each planned month — "+" adds
+                            another visit in the same month (+ each visit's own hours
+                            when the time window is personalized per visit) */}
+                        {yearMonths.length > 0 && (
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanDates}</label>
+                            <div className="space-y-2">
+                              {yearMonths.map((month) => {
+                                const visits = monthVisitsOf(year, month);
+                                const mm = String(month).padStart(2, '0');
+                                const lastDay = String(lastDayOfMonth(year, month)).padStart(2, '0');
+                                return (
+                                  <div key={month} className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-sm font-medium capitalize text-text-primary">{monthNames[month - 1]} {year}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => addPlanVisit(year, month)}
+                                        className="p-1.5 rounded-lg text-text-tertiary hover:text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-1 text-xs font-medium"
+                                        aria-label={language === 'fr' ? `Ajouter une visite en ${monthNames[month - 1]}` : `Add a visit in ${monthNames[month - 1]}`}
+                                        title={language === 'fr' ? 'Ajouter une visite ce mois-ci' : 'Add a visit this month'}
+                                      >
+                                        <Plus size={14} />
+                                      </button>
                                     </div>
+                                    {visits.map((visit) => (
+                                      <div key={visit.key} className="space-y-3">
+                                        <div className="flex items-center gap-2">
+                                          <div className="relative flex-1">
+                                            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                            <input
+                                              type="date"
+                                              value={visit.date}
+                                              min={`${year}-${mm}-01`}
+                                              max={`${year}-${mm}-${lastDay}`}
+                                              onChange={(event) => setPlanVisitDate(visit.key, event.target.value)}
+                                              className="glass-input w-full pl-10"
+                                            />
+                                          </div>
+                                          {visits.length > 1 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => removePlanVisit(visit.key)}
+                                              className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-danger-light transition-colors"
+                                              aria-label={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
+                                            >
+                                              <X size={14} />
+                                            </button>
+                                          )}
+                                        </div>
+                                        {!applyTimesToAllVisits && (
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                              <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
+                                              <div className="relative">
+                                                <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                                <input
+                                                  type="time"
+                                                  value={serviceVisitTimes[visit.key]?.startTime || startTime || '09:00'}
+                                                  onChange={(event) => setVisitTime(visit.key, { startTime: event.target.value })}
+                                                  className="glass-input w-full pl-10"
+                                                />
+                                              </div>
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                                              <div className="relative">
+                                                <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                                <input
+                                                  type="time"
+                                                  value={serviceVisitTimes[visit.key]?.endTime || endTime || '10:00'}
+                                                  onChange={(event) => setVisitTime(visit.key, { endTime: event.target.value })}
+                                                  className="glass-input w-full pl-10"
+                                                />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
-                                    <div className="relative">
-                                      <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                      <input
-                                        type="time"
-                                        value={serviceVisitTimes[month]?.endTime || endTime || '10:00'}
-                                        onChange={(event) => setVisitTime(month, { endTime: event.target.value })}
-                                        className="glass-input w-full pl-10"
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
+                                );
+                              })}
                             </div>
-                          );
-                        })}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
+
+                  {/* "+" — plan the next year below this one */}
+                  <button
+                    type="button"
+                    onClick={addNextYear}
+                    className="w-full rounded-lg border border-dashed border-outline-subtle py-2.5 text-sm font-medium text-text-tertiary hover:text-primary hover:border-primary/50 transition-colors inline-flex items-center justify-center gap-2"
+                  >
+                    <Plus size={14} />
+                    {language === 'fr' ? `Ajouter ${Math.max(...serviceYears) + 1}` : `Add ${Math.max(...serviceYears) + 1}`}
+                  </button>
 
                   {/* Visit time window — same for every visit, or per visit */}
                   <div className="space-y-3">
@@ -2427,7 +2547,7 @@ export default function NewJobModal({
                 right={!personalizedItems ? (
                   <button
                     type="button"
-                    onClick={() => { setPickerMonth(null); setServicePickerOpen(true); }}
+                    onClick={() => { setPickerVisitKey(null); setServicePickerOpen(true); }}
                     className="glass-button !py-2 !px-4 inline-flex items-center gap-2"
                   >
                     <Package size={14} />
@@ -2454,27 +2574,25 @@ export default function NewJobModal({
                 )}
 
                 {personalizedItems ? (
-                  selectedServiceMonths.length === 0 ? (
+                  sortedPlanVisits.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
                       <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
                       <p className="text-sm text-text-secondary">{t.modals.servicePlanItemsNoMonths}</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {selectedServiceMonths.map((month) => {
-                        const monthItems = serviceVisitItems[month] || [];
+                      {sortedPlanVisits.map((visit) => {
+                        const visitItems = serviceVisitItems[visit.key] || [];
                         return (
-                          <div key={month} className="rounded-xl border border-outline-subtle/40 p-3 space-y-2">
+                          <div key={visit.key} className="rounded-xl border border-outline-subtle/40 p-3 space-y-2">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-sm font-semibold capitalize text-text-primary">
-                                {monthNames[month - 1]} {serviceYear}
-                                {serviceMonthDates[month] && (
-                                  <span className="ml-2 text-xs font-normal tabular-nums text-text-tertiary">{serviceMonthDates[month]}</span>
-                                )}
+                                {monthNames[visit.month - 1]} {visit.year}
+                                <span className="ml-2 text-xs font-normal tabular-nums text-text-tertiary">{visit.date}</span>
                               </p>
                               <button
                                 type="button"
-                                onClick={() => { setPickerMonth(month); setServicePickerOpen(true); }}
+                                onClick={() => { setPickerVisitKey(visit.key); setServicePickerOpen(true); }}
                                 className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
                               >
                                 <Package size={13} />
@@ -2482,15 +2600,15 @@ export default function NewJobModal({
                               </button>
                             </div>
                             <div className="space-y-2">
-                              {monthItems.map((item) => renderLineItemRow(item, {
-                                update: (patch) => updateVisitItem(month, item.id, patch),
-                                remove: () => removeVisitItem(month, item.id),
-                                removeDisabled: monthItems.length <= 1,
+                              {visitItems.map((item) => renderLineItemRow(item, {
+                                update: (patch) => updateVisitItem(visit.key, item.id, patch),
+                                remove: () => removeVisitItem(visit.key, item.id),
+                                removeDisabled: visitItems.length <= 1,
                               }))}
                             </div>
                             <button
                               type="button"
-                              onClick={() => addVisitItemRow(month)}
+                              onClick={() => addVisitItemRow(visit.key)}
                               className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
                             >
                               <Plus size={13} />
@@ -2511,7 +2629,7 @@ export default function NewJobModal({
                     <p className="text-xs text-text-tertiary mt-1">{t.modals.addFromCatalogHint}</p>
                     <button
                       type="button"
-                      onClick={() => { setPickerMonth(null); setServicePickerOpen(true); }}
+                      onClick={() => { setPickerVisitKey(null); setServicePickerOpen(true); }}
                       className="mt-3 text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
                     >
                       <Plus size={11} /> {t.modals.browseServices}
@@ -2883,7 +3001,7 @@ export default function NewJobModal({
       {servicePickerOpen && (
         <ServicePicker
           isOpen={servicePickerOpen}
-          onClose={() => { setServicePickerOpen(false); setPickerMonth(null); }}
+          onClose={() => { setServicePickerOpen(false); setPickerVisitKey(null); }}
           onSelect={handleServiceSelected}
           onRemove={handleServiceRemoved}
           addedIds={pickerAddedIds}

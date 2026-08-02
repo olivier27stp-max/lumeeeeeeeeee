@@ -57,7 +57,7 @@ export function buildAgreementDocData(params: {
   clientEmail: string | null;
   clientPhone: string | null;
   /** 12-month calendar of service-plan jobs — shown on the contract when present. */
-  serviceContract?: { year: number; visits: Array<{ month: number; date: string }> } | null;
+  serviceContract?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
 }): AgreementDocData {
   const { agreement, job, lineItems, company, clientName, clientEmail, clientPhone, serviceContract } = params;
 

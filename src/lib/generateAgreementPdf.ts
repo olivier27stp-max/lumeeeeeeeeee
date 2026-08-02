@@ -122,51 +122,74 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
   doc.line(marginL, y, pageW - marginR, y);
   y += 16;
 
-  // ── SERVICE PLAN: 12-month grid, planned months selected ──
+  // ── SERVICE PLAN: one 12-month grid per planned year ──
   if (data.servicePlan && data.servicePlan.visits.length > 0) {
     const plan = data.servicePlan;
-    const planByMonth: Record<number, string> = {};
-    for (const v of plan.visits) planByMonth[v.month] = v.date;
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7);
-    doc.setTextColor(...lightGray);
-    doc.text(`${L('SERVICE PLAN', 'PLAN DE SERVICE')} — ${plan.year}`, marginL, y);
-    doc.text(
-      `${plan.visits.length} ${plan.visits.length > 1 ? L('VISITS', 'VISITES') : L('VISIT', 'VISITE')}`,
-      pageW - marginR, y, { align: 'right' },
-    );
-    y += 8;
+    // Group visits by year — legacy plans carry no per-visit year (all in plan.year).
+    const byYear = new Map<number, Record<number, string[]>>();
+    for (const v of plan.visits) {
+      const yr = v.year ?? plan.year;
+      if (!byYear.has(yr)) byYear.set(yr, {});
+      const months = byYear.get(yr)!;
+      (months[v.month] = months[v.month] || []).push(v.date);
+    }
+    const planYears = [...byYear.keys()].sort((a, b) => a - b);
+    const multiYearPlan = planYears.length > 1;
 
     const gap = 6;
     const boxW = (contentW - gap * 3) / 4;
     const boxH = 26;
     const abbrs = isFr() ? MONTH_ABBR_FR : MONTH_ABBR_EN;
-    for (let i = 0; i < 12; i++) {
-      const x = marginL + (i % 4) * (boxW + gap);
-      const boxY = y + Math.floor(i / 4) * (boxH + gap);
-      const date = planByMonth[i + 1];
-      if (date) {
-        doc.setFillColor(250, 250, 250);
-        doc.setDrawColor(...black);
-      } else {
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(229, 231, 235);
-      }
-      doc.setLineWidth(0.75);
-      doc.roundedRect(x, boxY, boxW, boxH, 4, 4, 'FD');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(6.5);
-      if (date) doc.setTextColor(...black); else doc.setTextColor(209, 213, 219);
-      doc.text(abbrs[i].toUpperCase(), x + 7, boxY + 10);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      if (date) doc.setTextColor(...black); else doc.setTextColor(229, 231, 235);
-      doc.text(date ? fmtVisitShort(date) : '—', x + 7, boxY + 20);
-    }
-    y += 3 * boxH + 2 * gap + 18;
 
-    // Visits with their full dates, below the grid
+    for (const planYear of planYears) {
+      const datesByMonth = byYear.get(planYear)!;
+      const yearCount = Object.values(datesByMonth).reduce((sum, list) => sum + list.length, 0);
+      // Keep the year's header + grid on one page.
+      if (y > pageH - (3 * boxH + 2 * gap + 40)) {
+        doc.addPage();
+        y = 50;
+      }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.setTextColor(...lightGray);
+      doc.text(`${L('SERVICE PLAN', 'PLAN DE SERVICE')} — ${planYear}`, marginL, y);
+      doc.text(
+        `${yearCount} ${yearCount > 1 ? L('VISITS', 'VISITES') : L('VISIT', 'VISITE')}`,
+        pageW - marginR, y, { align: 'right' },
+      );
+      y += 8;
+
+      for (let i = 0; i < 12; i++) {
+        const x = marginL + (i % 4) * (boxW + gap);
+        const boxY = y + Math.floor(i / 4) * (boxH + gap);
+        const dates = [...(datesByMonth[i + 1] || [])].sort();
+        const selected = dates.length > 0;
+        if (selected) {
+          doc.setFillColor(250, 250, 250);
+          doc.setDrawColor(...black);
+        } else {
+          doc.setFillColor(255, 255, 255);
+          doc.setDrawColor(229, 231, 235);
+        }
+        doc.setLineWidth(0.75);
+        doc.roundedRect(x, boxY, boxW, boxH, 4, 4, 'FD');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(6.5);
+        if (selected) doc.setTextColor(...black); else doc.setTextColor(209, 213, 219);
+        doc.text(abbrs[i].toUpperCase(), x + 7, boxY + 10);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        if (selected) doc.setTextColor(...black); else doc.setTextColor(229, 231, 235);
+        const cellText = selected
+          ? fmtVisitShort(dates[0]) + (dates.length > 1 ? ` +${dates.length - 1}` : '')
+          : '—';
+        doc.text(cellText, x + 7, boxY + 20);
+      }
+      y += 3 * boxH + 2 * gap + 18;
+    }
+
+    // Visits with their full dates, below the grids (chronological, all years)
     const sortedVisits = [...plan.visits].sort((a, b) => a.date.localeCompare(b.date));
     const monthNames = isFr() ? MONTH_FULL_FR : MONTH_FULL_EN;
     doc.setLineWidth(0.5);
@@ -176,10 +199,11 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
         y = 50;
       }
       const v = sortedVisits[i];
+      const monthLabel = (monthNames[v.month - 1] || '') + (multiYearPlan ? ` ${v.year ?? plan.year}` : '');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(34, 34, 34);
-      doc.text(`${L('Visit', 'Visite')} ${i + 1} · ${monthNames[v.month - 1] || ''}`, marginL, y);
+      doc.text(`${L('Visit', 'Visite')} ${i + 1} · ${monthLabel}`, marginL, y);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(85, 85, 85);
       doc.text(fmtVisitFull(v.date), pageW - marginR, y, { align: 'right' });

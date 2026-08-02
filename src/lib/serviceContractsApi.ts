@@ -19,6 +19,8 @@ export interface ServiceContractVisit {
   month: number;
   /** YYYY-MM-DD */
   date: string;
+  /** Année de la visite — absent sur les vieux contrats (= year du contrat). */
+  year?: number;
   /** HH:mm — only set when the plan's hours are personalized per visit */
   start_time?: string;
   /** HH:mm — only set when the plan's hours are personalized per visit */
@@ -60,6 +62,7 @@ function mapContract(raw: any): ServiceContract {
           .map((v: any): ServiceContractVisit => ({
             month: Number(v?.month),
             date: String(v?.date || ''),
+            ...(Number(v?.year) ? { year: Number(v.year) } : {}),
             ...(v?.start_time ? { start_time: String(v.start_time) } : {}),
             ...(v?.end_time ? { end_time: String(v.end_time) } : {}),
             ...(Array.isArray(v?.items)

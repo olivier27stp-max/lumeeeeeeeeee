@@ -1463,49 +1463,77 @@ export default function JobDetails() {
           </div>
         </div>
 
-        {/* ═══ SERVICE PLAN CONTRACT — 12-month calendar, planned months show their visit date ═══ */}
-        {contract && (
+        {/* ═══ SERVICE PLAN CONTRACT — one 12-month calendar per planned year,
+             planned months show their visit date(s) ═══ */}
+        {contract && (() => {
+          // Group visits by year — legacy contracts carry no per-visit year.
+          const byYear = new Map<number, typeof contract.visits>();
+          for (const v of contract.visits) {
+            const y = v.year ?? contract.year;
+            if (!byYear.has(y)) byYear.set(y, []);
+            byYear.get(y)!.push(v);
+          }
+          const years = [...byYear.keys()].sort((a, b) => a - b);
+          const yearsLabel = years.length > 1 ? `${years[0]}–${years[years.length - 1]}` : String(contract.year);
+          return (
           <div className="rounded-xl border border-outline bg-surface overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
                 <div className="icon-tile icon-tile-sm icon-tile-blue">
                   <FileText size={13} strokeWidth={2} />
                 </div>
-                {language === 'fr' ? 'Contrat de service' : 'Service contract'} · {contract.year}
+                {language === 'fr' ? 'Contrat de service' : 'Service contract'} · {yearsLabel}
               </h2>
               <span className="text-[12px] text-text-tertiary">
                 {contract.visits.length} {language === 'fr' ? 'visites planifiées' : 'planned visits'}
               </span>
             </div>
-            <div className="p-5">
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
-                  const visit = contract.visits.find((v) => v.month === month);
-                  const monthName = new Date(2000, month - 1, 1)
-                    .toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long' });
-                  return (
-                    <div
-                      key={month}
-                      className={cn(
-                        'rounded-lg border p-3',
-                        visit
-                          ? 'border-primary/50 bg-primary/5'
-                          : 'border-outline-subtle bg-surface-secondary/40 opacity-60'
-                      )}
-                    >
-                      <p className={cn('text-[12px] font-semibold capitalize', visit ? 'text-primary' : 'text-text-tertiary')}>
-                        {monthName}
-                      </p>
-                      <p className={cn('text-[13px] mt-1 tabular-nums', visit ? 'text-text-primary font-semibold' : 'text-text-tertiary')}>
-                        {visit ? formatDate(`${visit.date}T12:00:00`) : '—'}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="p-5 space-y-5">
+              {years.map((year) => (
+                <div key={year}>
+                  {years.length > 1 && (
+                    <p className="text-[15px] font-bold tabular-nums text-text-primary mb-2">{year}</p>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
+                      const monthVisits = (byYear.get(year) || [])
+                        .filter((v) => v.month === month)
+                        .sort((a, b) => a.date.localeCompare(b.date));
+                      const selected = monthVisits.length > 0;
+                      const monthName = new Date(2000, month - 1, 1)
+                        .toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: 'long' });
+                      return (
+                        <div
+                          key={month}
+                          className={cn(
+                            'rounded-lg border p-3',
+                            selected
+                              ? 'border-primary/50 bg-primary/5'
+                              : 'border-outline-subtle bg-surface-secondary/40 opacity-60'
+                          )}
+                        >
+                          <p className={cn('text-[12px] font-semibold capitalize', selected ? 'text-primary' : 'text-text-tertiary')}>
+                            {monthName}
+                          </p>
+                          {selected ? (
+                            monthVisits.map((v, vi) => (
+                              <p key={vi} className="text-[13px] mt-1 tabular-nums text-text-primary font-semibold">
+                                {formatDate(`${v.date}T12:00:00`)}
+                              </p>
+                            ))
+                          ) : (
+                            <p className="text-[13px] mt-1 tabular-nums text-text-tertiary">—</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ═══ CLIENT APPROVAL — the job's contractual document is its quote
              OR a written agreement, never both. A signed quote replaces the

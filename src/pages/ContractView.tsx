@@ -34,7 +34,7 @@ interface PublicAgreementData {
     total_cents: number;
     client_name: string | null;
     property_address: string | null;
-    service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
+    service_plan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
   };
 }
 

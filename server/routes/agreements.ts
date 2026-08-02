@@ -56,7 +56,7 @@ interface ComposedAgreementDoc {
   client_name: string | null;
   property_address: string | null;
   /** 12-month calendar of service-plan jobs (jobs.job_type = 'recurring'). */
-  service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
+  service_plan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
 }
 
 /**
@@ -127,7 +127,11 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     .maybeSingle();
   if (sc && Array.isArray(sc.visits)) {
     const visits = sc.visits
-      .map((v: any) => ({ month: Number(v?.month), date: String(v?.date || '') }))
+      .map((v: any) => ({
+        month: Number(v?.month),
+        date: String(v?.date || ''),
+        ...(Number(v?.year) ? { year: Number(v.year) } : {}),
+      }))
       .filter((v: { month: number; date: string }) => v.month >= 1 && v.month <= 12 && Boolean(v.date));
     if (visits.length > 0) servicePlan = { year: Number(sc.year), visits };
   }

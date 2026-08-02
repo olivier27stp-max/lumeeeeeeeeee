@@ -25,7 +25,7 @@ export interface AgreementDraftPreviewData {
   discountCents?: number;
   discountPercent?: number | null;
   /** 12-month calendar of service-plan jobs — shown on the contract when present. */
-  servicePlan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
+  servicePlan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
 }
 
 interface AgreementDraftPreviewModalProps {

@@ -10,10 +10,14 @@ const LUME_LOGO_URL = '/lume-logo.png';
  * server endpoint (/api/agreements/public/:token). When the agreement is
  * signed this always comes from the frozen `snapshot`.
  */
-/** 12-month service-plan calendar (jobs.job_type = 'recurring') mirrored on the contract. */
+/**
+ * Service-plan calendar (jobs.job_type = 'recurring') mirrored on the contract.
+ * A plan can span several years: each visit may carry its own `year` (legacy
+ * plans have none — all their visits belong to the plan's `year`).
+ */
 export interface AgreementServicePlan {
   year: number;
-  visits: Array<{ month: number; date: string }>;
+  visits: Array<{ month: number; date: string; year?: number }>;
 }
 
 export interface AgreementDocData {
@@ -86,8 +90,29 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
   const fr = language === 'fr';
   const logoUrl = data.logoUrl || LUME_LOGO_URL;
   const plan = data.servicePlan && data.servicePlan.visits.length > 0 ? data.servicePlan : null;
-  const planByMonth: Record<number, string> = {};
-  if (plan) for (const v of plan.visits) planByMonth[v.month] = v.date;
+  // One 12-month grid per planned year (legacy visits without a year all fall
+  // in the plan's own year). A month can hold several visit dates.
+  const planYears: Array<{ year: number; datesByMonth: Record<number, string[]>; count: number }> = [];
+  const allPlanVisits = plan ? [...plan.visits].sort((a, b) => a.date.localeCompare(b.date)) : [];
+  if (plan) {
+    const byYear = new Map<number, Record<number, string[]>>();
+    for (const v of plan.visits) {
+      const y = v.year ?? plan.year;
+      if (!byYear.has(y)) byYear.set(y, {});
+      const months = byYear.get(y)!;
+      (months[v.month] = months[v.month] || []).push(v.date);
+    }
+    for (const y of [...byYear.keys()].sort((a, b) => a - b)) {
+      const datesByMonth = byYear.get(y)!;
+      for (const m of Object.keys(datesByMonth)) datesByMonth[Number(m)].sort();
+      planYears.push({
+        year: y,
+        datesByMonth,
+        count: Object.values(datesByMonth).reduce((sum, list) => sum + list.length, 0),
+      });
+    }
+  }
+  const multiYearPlan = planYears.length > 1;
 
   return (
     <div className="agreement-doc bg-white rounded-lg border border-[#e5e5e5] shadow-sm overflow-hidden text-left">
@@ -152,44 +177,55 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
 
       <div className="border-t border-[#eee]" />
 
-      {/* ── SERVICE PLAN: 12-month calendar, planned months selected ── */}
+      {/* ── SERVICE PLAN: one 12-month calendar per planned year ── */}
       {plan && (
         <>
-          <div className="px-8 py-5">
-            <div className="flex items-baseline justify-between mb-2.5">
-              <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em]">
-                {(fr ? 'Plan de service — ' : 'Service plan — ') + plan.year}
-              </p>
-              <p className="text-[11px] font-medium text-[#999]">
-                {plan.visits.length} {fr ? (plan.visits.length > 1 ? 'visites' : 'visite') : (plan.visits.length > 1 ? 'visits' : 'visit')}
-              </p>
-            </div>
-            <div className="grid grid-cols-4 gap-2">
-              {MONTH_ABBR[language].map((label, i) => {
-                const date = planByMonth[i + 1];
-                return (
-                  <div
-                    key={label}
-                    className={`rounded-lg px-2.5 py-2 border ${date ? 'border-[#111] bg-[#fafafa]' : 'border-[#e5e7eb]'}`}
-                  >
-                    <p className={`text-[9px] font-semibold uppercase tracking-wider ${date ? 'text-[#111]' : 'text-[#d1d5db]'}`}>{label}</p>
-                    <p className={`text-[11px] mt-0.5 font-medium tabular-nums ${date ? 'text-[#111]' : 'text-[#e5e7eb]'}`}>
-                      {date ? fmtVisitDate(date, language) : '—'}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-4">
-              {[...plan.visits].sort((a, b) => a.date.localeCompare(b.date)).map((v, idx) => (
+          <div className="px-8 py-5 space-y-5">
+            {planYears.map((py) => (
+              <div key={py.year}>
+                <div className="flex items-baseline justify-between mb-2.5">
+                  <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em]">
+                    {(fr ? 'Plan de service — ' : 'Service plan — ') + py.year}
+                  </p>
+                  <p className="text-[11px] font-medium text-[#999]">
+                    {py.count} {fr ? (py.count > 1 ? 'visites' : 'visite') : (py.count > 1 ? 'visits' : 'visit')}
+                  </p>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {MONTH_ABBR[language].map((label, i) => {
+                    const dates = py.datesByMonth[i + 1] || [];
+                    const selected = dates.length > 0;
+                    return (
+                      <div
+                        key={label}
+                        className={`rounded-lg px-2.5 py-2 border ${selected ? 'border-[#111] bg-[#fafafa]' : 'border-[#e5e7eb]'}`}
+                      >
+                        <p className={`text-[9px] font-semibold uppercase tracking-wider ${selected ? 'text-[#111]' : 'text-[#d1d5db]'}`}>{label}</p>
+                        {selected ? (
+                          dates.map((date, di) => (
+                            <p key={di} className="text-[11px] mt-0.5 font-medium tabular-nums text-[#111]">
+                              {fmtVisitDate(date, language)}
+                            </p>
+                          ))
+                        ) : (
+                          <p className="text-[11px] mt-0.5 font-medium tabular-nums text-[#e5e7eb]">—</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div>
+              {allPlanVisits.map((v, idx) => (
                 <div
-                  key={`${v.month}-${v.date}`}
+                  key={`${v.month}-${v.date}-${idx}`}
                   className="flex items-center justify-between gap-3 py-2 text-[12px] border-b border-[#f0f0f0] last:border-b-0"
                 >
                   <span className="font-medium text-[#222]">
                     {(fr ? 'Visite' : 'Visit') + ' ' + (idx + 1)}
                     <span className="text-[#bbb]"> · </span>
-                    {MONTH_FULL[language][v.month - 1] || ''}
+                    {(MONTH_FULL[language][v.month - 1] || '') + (multiYearPlan ? ` ${v.year ?? plan.year}` : '')}
                   </span>
                   <span className="text-[#555] tabular-nums">{fmtVisitFullDate(v.date, language)}</span>
                 </div>
