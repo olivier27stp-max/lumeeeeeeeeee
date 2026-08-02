@@ -26,6 +26,9 @@ interface Props {
   /** Catalogue de services tarifés à la mesure ($/pi lin, $/pi²). */
   services?: PredefinedService[];
   onServicesChange?: (id: string, serviceIds: string[]) => void;
+  /** Services actifs de la session : appliqués aux NOUVELLES mesures. */
+  activeServiceIds?: string[];
+  onToggleActiveService?: (id: string) => void;
   fr: boolean;
 }
 
@@ -35,7 +38,8 @@ const TYPE_ICON: Record<string, React.ElementType> = {
 
 export default function MeasureSidebar({
   shapes, selectedId, unitSystem, onSelect, onRename,
-  onToggleVisibility, onDelete, onNotesChange, services, onServicesChange, fr,
+  onToggleVisibility, onDelete, onNotesChange, services, onServicesChange,
+  activeServiceIds = [], onToggleActiveService, fr,
 }: Props) {
   const fmtLen = (ft: number) => formatLength(ft, unitSystem);
   const fmtArea = (sqft: number) => formatArea(sqft, unitSystem);
@@ -74,6 +78,35 @@ export default function MeasureSidebar({
         <h3 className="text-[13px] font-bold text-text-primary">{fr ? 'Mesures' : 'Measurements'}</h3>
         <span className="text-[11px] text-text-muted font-medium bg-surface-secondary px-2 py-0.5 rounded-md">{shapes.length}</span>
       </div>
+
+      {/* Services de la session : cochés = appliqués aux nouvelles mesures */}
+      {onToggleActiveService && measurable.length > 0 && (
+        <div className="px-4 py-2.5 border-b border-outline/20 shrink-0">
+          <p className="text-[9px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+            {fr ? 'Services (nouvelles mesures)' : 'Services (new measurements)'}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {measurable.map(svc => {
+              const on = activeServiceIds.includes(svc.id);
+              return (
+                <button
+                  key={svc.id}
+                  onClick={() => onToggleActiveService(svc.id)}
+                  title={`${(svc.default_price_cents / 100).toFixed(2)} $ ${svc.pricing_unit === 'sq_ft' ? '/pi²' : (fr ? '/pi lin' : '/lin ft')}`}
+                  className={`px-2 py-1 rounded-lg text-[10px] font-semibold transition-colors border ${
+                    on
+                      ? 'bg-text-primary text-surface border-text-primary'
+                      : 'bg-surface-secondary text-text-muted border-outline/30 hover:text-text-primary'
+                  }`}
+                >
+                  {svc.name}
+                  <span className={on ? 'opacity-70' : 'opacity-50'}> · {svc.pricing_unit === 'sq_ft' ? 'pi²' : (fr ? 'pi lin' : 'lin ft')}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">

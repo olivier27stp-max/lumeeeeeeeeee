@@ -54,6 +54,17 @@ export default function QuoteMeasure() {
   // Catalogue de services : source unique pour les services tarifés à la mesure
   // ($/pi lin, $/pi²) attachés aux formes et envoyés comme vraies lignes.
   const { data: servicesCatalog } = useQuery({ queryKey: ['servicesCatalog'], queryFn: listPredefinedServices, staleTime: 60_000 });
+  // Services ACTIFS pour cette session de mesure — choisis dans la page même
+  // (chips du panneau). Pré-cochés depuis les défauts du catalogue; chaque
+  // nouvelle forme prend les actifs correspondant à son type.
+  const [activeServiceIds, setActiveServiceIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (activeServiceIds === null && servicesCatalog) {
+      setActiveServiceIds(servicesCatalog.filter(svc => svc.measure_default).map(svc => svc.id));
+    }
+  }, [servicesCatalog, activeServiceIds]);
+  const toggleActiveService = (id: string) =>
+    setActiveServiceIds(prev => (prev || []).includes(id) ? (prev || []).filter(x => x !== id) : [...(prev || []), id]);
   const addr = quote?.lead?.address || quote?.client?.address || '';
   const contactName = quote ? `${quote.lead?.first_name || quote.client?.first_name || ''} ${quote.lead?.last_name || quote.client?.last_name || ''}`.trim() : '';
   const { data: saved } = useQuery({ queryKey: ['quoteMeasurements', quoteId], queryFn: () => listMeasurements(quoteId!), enabled: Boolean(quoteId) });
@@ -711,10 +722,11 @@ export default function QuoteMeasure() {
     const result = computeMeasurement(type, points);
     const idx = cnt.current++;
     const newId = `sh-${idx}`;
-    // Services par défaut du catalogue : zone → $/pi², chemin/ligne → $/pi lin.
-    // La forme naît déjà chiffrée; ajustable par forme dans le panneau.
+    // Services actifs de la session (chips du panneau) correspondant au type :
+    // zone → $/pi², chemin/ligne → $/pi lin. La forme naît déjà chiffrée.
+    const active = activeServiceIds || [];
     const defaultServiceIds = (servicesCatalog || [])
-      .filter(svc => svc.measure_default && svc.pricing_unit === (type === 'polygon' ? 'sq_ft' : 'linear_ft'))
+      .filter(svc => active.includes(svc.id) && svc.pricing_unit === (type === 'polygon' ? 'sq_ft' : 'linear_ft'))
       .map(svc => svc.id);
     setShapes(p => [...p, {
       id: newId,
@@ -1048,6 +1060,8 @@ export default function QuoteMeasure() {
               onNotesChange={(id, notes) => setShapes(p => p.map(s => s.id === id ? { ...s, notes } : s))}
               services={servicesCatalog}
               onServicesChange={setShapeServices}
+              activeServiceIds={activeServiceIds || []}
+              onToggleActiveService={toggleActiveService}
               fr={fr} />
           )}
         </div>
