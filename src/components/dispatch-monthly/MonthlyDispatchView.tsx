@@ -190,19 +190,25 @@ export default function MonthlyDispatchView({
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col" data-dispatch-monthly>
-      {/* ── En-tête des jours de semaine ── */}
-      <div className="flex shrink-0 border-b border-border bg-surface" style={{ height: HEADER_HEIGHT_PX }}>
-        {weekdayLabels.map((label, i) => (
-          <div key={label} className={cn('flex min-w-0 flex-1 items-center justify-center border-l border-border/50', i === 0 && 'border-l-0')}>
-            <span className="truncate text-[16px] font-bold text-black">{label}</span>
-          </div>
-        ))}
-      </div>
+    <div className="relative h-full min-h-0" data-dispatch-monthly>
+      {/* ── Conteneur défilant : l'en-tête des jours vit DEDANS (sticky) pour
+          partager exactement la même largeur que la grille — sinon la barre de
+          défilement décale les colonnes du corps par rapport à l'en-tête. ── */}
+      <div className="h-full overflow-y-auto">
+        {/* ── En-tête des jours de semaine ── */}
+        <div className="sticky top-0 z-20 grid grid-cols-7 border-b border-border bg-surface" style={{ height: HEADER_HEIGHT_PX }}>
+          {weekdayLabels.map((label, i) => (
+            <div key={label} className={cn('flex min-w-0 items-center justify-center border-l border-border/50', i === 0 && 'border-l-0')}>
+              <span className="truncate text-[16px] font-bold text-black">{label}</span>
+            </div>
+          ))}
+        </div>
 
-      {/* ── Grille du mois — les rangées s'allongent, la grille défile ── */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="grid min-h-full grid-cols-7" style={{ gridTemplateRows: `repeat(${numWeeks}, minmax(${ROW_MIN_PX}px, auto))` }}>
+        {/* ── Grille du mois — les rangées s'allongent avec les visites ── */}
+        <div
+          className="grid grid-cols-7"
+          style={{ gridTemplateRows: `repeat(${numWeeks}, minmax(${ROW_MIN_PX}px, auto))`, minHeight: `calc(100% - ${HEADER_HEIGHT_PX}px)` }}
+        >
           {days.map((day, i) => {
             const dayKey = format(day, 'yyyy-MM-dd');
             const cur = isSameMonth(day, date);
