@@ -984,6 +984,22 @@ export default function QuoteMeasure() {
 
   async function doSend() {
     if (!shapes.length) return;
+    // Garde-fou : des mesures sans service partiraient en lignes à 0 $ alors
+    // que des services tarifés existent — c'est presque toujours un oubli
+    // (chip décochée entre deux tracés). On avertit avant d'envoyer.
+    const measurableSvc = (servicesCatalog || []).filter(svc => svc.pricing_unit !== 'flat');
+    if (measurableSvc.length > 0) {
+      const unpriced = shapes.filter(sh =>
+        sh.metadata?.kind !== 'height' &&
+        !(((sh.metadata?.service_ids as string[] | undefined) || []).length));
+      if (unpriced.length > 0) {
+        const names = unpriced.map(sh => sh.label).join(', ');
+        const ok = window.confirm(fr
+          ? `${unpriced.length} mesure(s) sans service (${names}) — elles iront au devis à 0 $. Envoyer quand même ?\n\nAstuce : cochez vos services dans le panneau de droite, ils s'appliquent aussi aux mesures déjà tracées.`
+          : `${unpriced.length} measurement(s) without a service (${names}) — they will land on the quote at $0. Send anyway?\n\nTip: check your services in the right panel; they also apply to already-drawn measurements.`);
+        if (!ok) return;
+      }
+    }
     // Standalone measure (no quote yet): pick a client, the quote gets created
     // from the measured address instead of dead-ending on an error toast.
     if (!quoteId || !quote) { setQuotePickerOpen(true); return; }

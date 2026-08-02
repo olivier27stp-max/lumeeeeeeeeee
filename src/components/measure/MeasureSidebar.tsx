@@ -102,7 +102,7 @@ export default function MeasureSidebar({
       {onToggleActiveService && measurable.length > 0 && (
         <div className="px-4 py-2.5 border-b border-outline/20 shrink-0">
           <p className="text-[9px] font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-            {fr ? 'Services (nouvelles mesures)' : 'Services (new measurements)'}
+            {fr ? 'Services actifs' : 'Active services'}
           </p>
           <div className="flex flex-wrap gap-1">
             {measurable.map(svc => {
@@ -124,6 +124,11 @@ export default function MeasureSidebar({
               );
             })}
           </div>
+          <p className="text-[9px] text-text-muted/70 mt-1.5">
+            {fr
+              ? 'Une chip noire reste active pour toutes vos mesures — pas besoin de re-cliquer entre deux tracés.'
+              : 'A black chip stays active for all your measurements — no need to re-click between shapes.'}
+          </p>
         </div>
       )}
 
