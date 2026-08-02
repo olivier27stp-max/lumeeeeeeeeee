@@ -41,11 +41,18 @@ export async function getAutomationRules(): Promise<AutomationRule[]> {
 }
 
 export async function toggleAutomationRule(id: string, isActive: boolean): Promise<void> {
-  const { error } = await supabase
+  // .select() force PostgREST à retourner les lignes touchées : si la RLS
+  // filtre la ligne (0 ligne mise à jour), l'update « réussit » silencieusement
+  // et l'UI afficherait un faux succès. On vérifie que l'écriture a bien pris.
+  const { data, error } = await supabase
     .from('automation_rules')
     .update({ is_active: isActive })
-    .eq('id', id);
+    .eq('id', id)
+    .select('is_active');
   if (error) throw error;
+  if (!data?.length || data[0].is_active !== isActive) {
+    throw new Error('Automation rule update was not applied');
+  }
 }
 
 /**

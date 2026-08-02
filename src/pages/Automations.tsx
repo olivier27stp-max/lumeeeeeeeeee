@@ -354,7 +354,7 @@ export default function Automations() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [language]);
 
   useEffect(() => { load(); }, [load]);
 

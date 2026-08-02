@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { listIndustries, seedOrgFromIndustry } from '../lib/industryPresets';
+import { ensureAutomationPresets } from '../lib/automationPresetSeeder';
 import { getBaseUrl } from '../lib/config';
 
 const router = Router();
@@ -87,6 +88,18 @@ router.post('/onboarding/complete', validate(onboardingSchema), async (req, res)
       await seedOrgFromIndustry(admin, orgId, body.industry);
     } catch (err: any) {
       console.warn('[onboarding/complete] seedOrgFromIndustry:', err?.message);
+    }
+
+    // 4b. Filet de sécurité : garantit les 34 presets d'automatisation
+    // canoniques même si la fonction DB de seed a divergé (déjà arrivé
+    // en prod). Idempotent — safe au retry de l'onboarding.
+    try {
+      const r = await ensureAutomationPresets(admin, orgId, { activateAll: true });
+      if (r.inserted || r.repaired) {
+        console.log(`[onboarding/complete] automation presets: +${r.inserted} inserted, ${r.repaired} repaired`);
+      }
+    } catch (err: any) {
+      console.warn('[onboarding/complete] ensureAutomationPresets:', err?.message);
     }
 
     // 5. Process team invites — insert pending invitation rows + send Supabase magic-link.

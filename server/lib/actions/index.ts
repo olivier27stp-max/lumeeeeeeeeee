@@ -25,6 +25,7 @@ export type ActionType =
   | 'send_email'
   | 'send_sms'
   | 'create_notification'
+  | 'send_notification'
   | 'create_task'
   | 'update_status'
   | 'request_review'
@@ -568,6 +569,9 @@ export async function executeAction(
     case 'send_sms':
       return executeSendSms(config as any, vars, ctx);
     case 'create_notification':
+    // Alias : les workflows de la table `workflows` (ancien builder) ont été
+    // enregistrés avec le type 'send_notification' — même config {title, body}.
+    case 'send_notification':
       return executeCreateNotification(config as any, vars, ctx);
     case 'create_task':
       return executeCreateTask(config as any, vars, ctx);
