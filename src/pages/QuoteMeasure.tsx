@@ -1227,7 +1227,7 @@ export default function QuoteMeasure() {
         onCreated={(detail) => void onQuoteCreatedFromMeasures(detail)}
         initialClientId={quoteClientId}
         initialTitle={search.trim()}
-        initialItems={buildMeasureItems(0).map((it) => ({ name: it.name, description: it.description || '', quantity: it.quantity }))}
+        initialItems={buildMeasureItems(0).map((it) => ({ name: it.name, description: it.description || '', quantity: it.quantity, unit_price_cents: it.unit_price_cents, source_service_id: it.source_service_id ?? null }))}
         fullscreenHost
       />
     </div>

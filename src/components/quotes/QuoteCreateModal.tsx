@@ -38,7 +38,7 @@ interface QuoteCreateModalProps {
   /** Pre-fill the title (e.g. the measured address). */
   initialTitle?: string;
   /** Seed line items (e.g. measurements) — replaces the default empty line. */
-  initialItems?: Array<{ name: string; description?: string; quantity: number }> | null;
+  initialItems?: Array<{ name: string; description?: string; quantity: number; unit_price_cents?: number; source_service_id?: string | null }> | null;
   /**
    * Render fullscreen (fixed overlay) instead of portaling into the CRM
    * shell's #page-content-area. Required when the caller is itself a
@@ -206,11 +206,13 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
     if (initialItems && initialItems.length > 0) {
       setLineItems(initialItems.map(it => ({
         id: crypto.randomUUID(),
-        source_service_id: null,
+        // Le flux mesure transmet le service lié et son prix du catalogue —
+        // les jeter ici produisait des lignes à 0 $ sur le devis créé.
+        source_service_id: it.source_service_id ?? null,
         name: it.name,
         description: it.description || '',
         qtyInput: String(it.quantity),
-        unitPriceInput: '0',
+        unitPriceInput: String((it.unit_price_cents ?? 0) / 100),
         is_optional: false,
         item_type: 'service' as const,
       })));
