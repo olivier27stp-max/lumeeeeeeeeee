@@ -34,7 +34,7 @@ import { SNAP_PX } from '../lib/measurementTypes';
 import MeasureToolbar from '../components/measure/MeasureToolbar';
 import MeasureSidebar from '../components/measure/MeasureSidebar';
 import MeasureStatusBar from '../components/measure/MeasureStatusBar';
-import Viewer3D from '../components/measure/Viewer3D';
+import StreetViewer from '../components/measure/StreetViewer';
 import HeightTool3D from '../components/measure/HeightTool3D';
 import { useGMaps3D } from '../components/measure/useGMaps3D';
 import { toast } from 'sonner';
@@ -753,16 +753,14 @@ export default function QuoteMeasure() {
   // ── Visionneuse photoréaliste 3D (bouton « 3D » de la barre d'état) ──
   // Ouvre la vue Google Earth centrée où on est; si <gmp-map-3d> ne charge
   // pas (clé/API), on retombe sur l'ancienne bascule d'inclinaison 45°.
-  const [viewer3d, setViewer3d] = useState<{ lat: number; lng: number } | null>(null);
-  function open3dViewer() {
+  const [streetViewer, setStreetViewer] = useState<{ lat: number; lng: number } | null>(null);
+  function openStreetViewer() {
     const c = mapRef.current?.getCenter();
-    if (c) setViewer3d({ lat: c.lat(), lng: c.lng() });
-    else toggleTilt();
+    if (c) setStreetViewer({ lat: c.lat(), lng: c.lng() });
   }
-  function on3dUnavailable() {
-    setViewer3d(null);
-    toast.error(fr ? 'Vue 3D indisponible ici — vue inclinée activée.' : '3D view unavailable here — tilted view enabled.');
-    if (!tilt3d) toggleTilt();
+  function onStreetUnavailable() {
+    setStreetViewer(null);
+    toast.error(fr ? 'Street View n’est pas disponible ici.' : 'Street View is not available here.');
   }
 
   function getCameraStateNow(): CameraState {
@@ -1014,15 +1012,15 @@ export default function QuoteMeasure() {
 
       <MeasureStatusBar tool={tool} pointCount={pts.length} unitSystem={unitSystem}
         onUnitToggle={() => setUnitSystem(u => u === 'imperial' ? 'metric' : 'imperial')}
-        tilt3d={tilt3d} onTiltToggle={open3dViewer} fr={fr} />
+        tilt3d={tilt3d} onTiltToggle={openStreetViewer} fr={fr} />
 
-      {viewer3d && (
-        <Viewer3D
-          lat={viewer3d.lat}
-          lng={viewer3d.lng}
+      {streetViewer && (
+        <StreetViewer
+          lat={streetViewer.lat}
+          lng={streetViewer.lng}
           fr={fr}
-          onClose={() => setViewer3d(null)}
-          onUnavailable={on3dUnavailable}
+          onClose={() => setStreetViewer(null)}
+          onUnavailable={onStreetUnavailable}
         />
       )}
 

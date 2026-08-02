@@ -47,9 +47,9 @@ export default function MeasureStatusBar({
           className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
             tilt3d ? 'bg-text-primary text-surface' : 'bg-surface-secondary text-text-muted hover:text-text-primary'
           }`}
-          title={tilt3d ? '2D' : '3D'}
+          title="Street View"
         >
-          3D
+          Street
         </button>
 
         {/* Unit selector — explicit pi (ft) / m choice */}
