@@ -7,7 +7,7 @@ import { useTranslation } from '../../i18n';
 import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import { useJobTagColors } from '../../hooks/useJobTagColors';
-import { FALLBACK_TEAM_COLOR, isHexColor, toRgba } from '../../lib/colorUtils';
+import { FALLBACK_TEAM_COLOR, isHexColor } from '../../lib/colorUtils';
 import { HEADER_HEIGHT_PX } from '../dispatch-daily/dailyGeometry';
 import VisitDetailModal from '../schedule/VisitDetailModal';
 
@@ -17,21 +17,22 @@ import VisitDetailModal from '../schedule/VisitDetailModal';
  * bordures, mêmes ombres, même gabarit de carte que WeekVisitCard. Seule
  * différence structurelle : X = les 7 jours de la semaine (Lun → Dim),
  * aucune colonne ressource à gauche — chaque cellule est une journée.
- * Couleurs : la couleur de route existante (team.color_hex) — fond pastel +
- * barre gauche de la carte; si la job porte un tag, la couleur vive du
- * premier tag remplace celle de la route. Jamais de couleur par statut.
+ * Style Jobber : cartes blanches compactes à hauteur fixe, barre gauche à la
+ * couleur de route existante (team.color_hex); si la job porte un tag, son
+ * nom s'affiche en tête dans la couleur vive du tag. Jamais de couleur par
+ * statut, jamais de nouvelle couleur.
  */
 
-/** Hauteur estimée d'une carte (3 lignes compactes) — pour le calcul « +X de plus ». */
-const MONTH_CARD_EST_PX = 58;
-/** Espace vertical entre deux cartes (space-y-1). */
-const CARD_GAP_PX = 4;
-/** Rangée du numéro de jour (pastille h-7 + marge). */
-const DATE_ROW_PX = 32;
-/** Padding vertical de la cellule (pt-1.5 + pb-1). */
-const CELL_PAD_Y_PX = 10;
+/** Hauteur FIXE d'une carte (3 lignes compactes, style Jobber). */
+const MONTH_CARD_PX = 50;
+/** Espace vertical entre deux cartes (space-y-0.5). */
+const CARD_GAP_PX = 2;
+/** Rangée du numéro de jour (h-6 + marge). */
+const DATE_ROW_PX = 26;
+/** Padding vertical de la cellule (pt-1 + pb-0.5). */
+const CELL_PAD_Y_PX = 6;
 /** Hauteur réservée au bouton « +X de plus ». */
-const MORE_BTN_PX = 22;
+const MORE_BTN_PX = 18;
 /** Largeur du popover de débordement. */
 const MORE_POP_W_PX = 288;
 
@@ -47,15 +48,18 @@ interface MonthlyDispatchViewProps {
 }
 
 /* ── Carte de visite (empilée dans une cellule jour) ──
-   Même gabarit que WeekVisitCard : rayon, bordure, ombre, typographie —
-   avec le fond pastel de la couleur de route + barre gauche pleine. */
+   Style Jobber : carte blanche compacte à hauteur fixe, bordure pâle, petit
+   rayon, barre gauche pleine à la couleur de route. Le hover assombrit
+   légèrement le fond (150 ms) — mêmes jetons que le reste du calendrier. */
 const MonthVisitCard = React.memo(function MonthVisitCard({
-  ev, color, tagName, timeLabel, attention, onOpen,
+  ev, barColor, tagName, tagColor, timeLabel, attention, onOpen,
 }: {
   ev: ScheduleEventRecord;
-  color: string;
-  /** Nom du premier tag de la job — affiché en haut de la carte dans `color`. */
+  /** Couleur de la barre gauche — TOUJOURS la couleur d'équipe assignée. */
+  barColor: string;
+  /** Nom du premier tag de la job — affiché en tête dans sa couleur. */
   tagName?: string | null;
+  tagColor?: string | null;
   timeLabel: string;
   attention: boolean;
   onOpen: () => void;
@@ -69,23 +73,23 @@ const MonthVisitCard = React.memo(function MonthVisitCard({
       tabIndex={0}
       title={tooltip}
       className={cn(
-        'flex w-full cursor-pointer select-none flex-col justify-center overflow-hidden rounded-lg border border-border py-1 pl-3 pr-2 text-left',
-        'shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-shadow hover:z-10 hover:shadow-md',
+        'flex w-full cursor-pointer select-none flex-col justify-center overflow-hidden rounded-md border border-border bg-surface py-0.5 pl-2 pr-1.5 text-left',
+        'shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-colors duration-150 hover:bg-surface-secondary',
       )}
-      style={{ backgroundColor: toRgba(color, 0.12), borderLeft: `3px solid ${color}` }}
+      style={{ height: MONTH_CARD_PX, borderLeft: `3px solid ${barColor}` }}
       onClick={(e) => { e.stopPropagation(); onOpen(); }}
       onKeyDown={(e) => { if (e.key === 'Enter') onOpen(); }}
     >
-      <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 items-center gap-1">
         {tagName && (
-          <span className="truncate text-[10px] font-bold leading-[1.4]" style={{ color }}>{tagName}</span>
+          <span className="truncate text-[10px] font-bold leading-[1.3]" style={tagColor ? { color: tagColor } : undefined}>{tagName}</span>
         )}
-        <span className="shrink-0 truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</span>
+        <span className="shrink-0 truncate text-[10px] font-medium tabular-nums leading-[1.3] text-text-tertiary">{timeLabel}</span>
         {attention && <AlertTriangle size={9} className="shrink-0 text-[#c2410c]" />}
       </div>
-      <div className="truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary">{clientName}</div>
+      <div className="truncate text-[12px] font-medium leading-[1.3] text-text-primary">{clientName}</div>
       {title && title !== clientName && (
-        <div className="truncate text-[11px] leading-[1.4] text-text-secondary">{title}</div>
+        <div className="truncate text-[11px] leading-[1.3] text-text-secondary">{title}</div>
       )}
     </div>
   );
@@ -182,7 +186,7 @@ export default function MonthlyDispatchView({
   const visibleCount = useCallback((count: number): number => {
     if (!cellH) return Math.min(count, 3);
     const avail = cellH - DATE_ROW_PX - CELL_PAD_Y_PX;
-    const per = MONTH_CARD_EST_PX + CARD_GAP_PX;
+    const per = MONTH_CARD_PX + CARD_GAP_PX;
     const fitAll = Math.max(0, Math.floor((avail + CARD_GAP_PX) / per));
     if (count <= fitAll) return count;
     return Math.max(0, Math.floor((avail - MORE_BTN_PX + CARD_GAP_PX) / per));
@@ -236,29 +240,30 @@ export default function MonthlyDispatchView({
                 key={dayKey}
                 onClick={() => onDayClick(day)}
                 className={cn(
-                  'flex min-w-0 cursor-pointer flex-col overflow-hidden border-b border-border/70 border-l border-l-border/40 px-1.5 pb-1 pt-1.5 transition-colors hover:bg-surface-secondary/30',
+                  'flex min-w-0 cursor-pointer flex-col overflow-hidden border-b border-l border-border/60 px-1 pb-0.5 pt-1 transition-colors hover:bg-surface-secondary/30',
                   i % 7 === 0 && 'border-l-0',
                   !cur && 'bg-surface-secondary/10',
                   today && 'bg-primary/[0.02]',
                 )}
               >
-                <div className="mb-1 flex shrink-0">
+                <div className="mb-0.5 flex shrink-0">
                   <span className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-full text-[13px] tabular-nums',
-                    today ? 'bg-primary font-bold text-white' : cur ? 'font-medium text-text-primary' : 'text-text-tertiary/40',
+                    'flex h-6 min-w-6 items-center justify-center rounded-full px-0.5 text-[12px] font-semibold tabular-nums',
+                    today ? 'bg-primary text-white' : cur ? 'text-text-primary' : 'text-text-tertiary/50',
                   )}>
                     {format(day, 'd')}
                   </span>
                 </div>
-                <div className="min-h-0 space-y-1">
+                <div className="min-h-0 space-y-0.5">
                   {dayEvents.slice(0, shown).map((ev) => {
                     const tag = firstTagFor(ev.job?.tag_ids);
                     return (
                       <MonthVisitCard
                         key={ev.id}
                         ev={ev}
-                        color={tag?.hex || teamColorFor(ev)}
+                        barColor={teamColorFor(ev)}
                         tagName={tag?.name ?? null}
+                        tagColor={tag?.hex ?? null}
                         timeLabel={startLabelFor(ev)}
                         attention={attentionFor(ev)}
                         onOpen={() => setDetailEv(ev)}
@@ -268,7 +273,7 @@ export default function MonthlyDispatchView({
                   {hidden > 0 && (
                     <button
                       onClick={(e) => openMore(dayKey, e)}
-                      className="w-full rounded px-1.5 py-0.5 text-left text-[10px] font-semibold text-primary transition-colors hover:bg-primary/5"
+                      className="w-full rounded px-1 py-px text-left text-[10px] font-semibold text-primary transition-colors duration-150 hover:bg-primary/5"
                     >
                       + {hidden} {isFr ? 'de plus' : 'more'}
                     </button>
@@ -299,15 +304,16 @@ export default function MonthlyDispatchView({
                 </span>
                 <span className="rounded-md bg-surface-tertiary px-1.5 py-0.5 text-[10px] font-bold text-text-secondary">{dayEvents.length}</span>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-0.5">
                 {dayEvents.map((ev) => {
                   const tag = firstTagFor(ev.job?.tag_ids);
                   return (
                     <MonthVisitCard
                       key={ev.id}
                       ev={ev}
-                      color={tag?.hex || teamColorFor(ev)}
+                      barColor={teamColorFor(ev)}
                       tagName={tag?.name ?? null}
+                      tagColor={tag?.hex ?? null}
                       timeLabel={startLabelFor(ev)}
                       attention={attentionFor(ev)}
                       onOpen={() => { setMorePop(null); setDetailEv(ev); }}
