@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from 'date-fns';
-import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -25,16 +24,9 @@ import VisitDetailModal from '../schedule/VisitDetailModal';
 
 /** Hauteur FIXE d'une carte (3 lignes compactes, style Jobber). */
 const MONTH_CARD_PX = 50;
-/** Espace vertical entre deux cartes (space-y-0.5). */
-const CARD_GAP_PX = 2;
-/** Rangée du numéro de jour (h-6 + marge). */
-const DATE_ROW_PX = 26;
-/** Padding vertical de la cellule (pt-1 + pb-0.5). */
-const CELL_PAD_Y_PX = 6;
-/** Hauteur réservée au bouton « +X de plus ». */
-const MORE_BTN_PX = 18;
-/** Largeur du popover de débordement. */
-const MORE_POP_W_PX = 288;
+/** Hauteur minimale d'une rangée semaine — les rangées s'allongent avec les
+    visites (toutes les cartes sont affichées, la grille défile). */
+const ROW_MIN_PX = 112;
 
 interface MonthlyDispatchViewProps {
   date: Date;
@@ -170,39 +162,8 @@ export default function MonthlyDispatchView({
     return st === 'blocked' || st === 'late' || st === 'action_required';
   };
 
-  /* ── Débordement : nombre de cartes visibles selon la hauteur de cellule ── */
-  const bodyRef = useRef<HTMLDivElement | null>(null);
-  const [cellH, setCellH] = useState(0);
-  useEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    const measure = () => setCellH(el.clientHeight / numWeeks);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [numWeeks]);
-
-  const visibleCount = useCallback((count: number): number => {
-    if (!cellH) return Math.min(count, 3);
-    const avail = cellH - DATE_ROW_PX - CELL_PAD_Y_PX;
-    const per = MONTH_CARD_PX + CARD_GAP_PX;
-    const fitAll = Math.max(0, Math.floor((avail + CARD_GAP_PX) / per));
-    if (count <= fitAll) return count;
-    return Math.max(0, Math.floor((avail - MORE_BTN_PX + CARD_GAP_PX) / per));
-  }, [cellH]);
-
-  /* ── Popover « +X de plus » + modale de détails ── */
-  const [morePop, setMorePop] = useState<{ dayKey: string; left: number; top: number } | null>(null);
+  /* ── Modale de détails (clic sur une carte) ── */
   const [detailEv, setDetailEv] = useState<ScheduleEventRecord | null>(null);
-
-  const openMore = useCallback((dayKey: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const left = Math.min(Math.max(8, rect.left), window.innerWidth - MORE_POP_W_PX - 8);
-    const top = Math.min(rect.bottom + 6, window.innerHeight - 336);
-    setMorePop({ dayKey, left, top });
-  }, []);
 
   /* ── États particuliers ── */
   if (isError) {
@@ -225,16 +186,14 @@ export default function MonthlyDispatchView({
         ))}
       </div>
 
-      {/* ── Grille du mois ── */}
-      <div ref={bodyRef} className="min-h-0 flex-1">
-        <div className="grid h-full grid-cols-7" style={{ gridTemplateRows: `repeat(${numWeeks}, minmax(0, 1fr))` }}>
+      {/* ── Grille du mois — les rangées s'allongent, la grille défile ── */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="grid min-h-full grid-cols-7" style={{ gridTemplateRows: `repeat(${numWeeks}, minmax(${ROW_MIN_PX}px, auto))` }}>
           {days.map((day, i) => {
             const dayKey = format(day, 'yyyy-MM-dd');
             const cur = isSameMonth(day, date);
             const today = isSameDay(day, new Date());
             const dayEvents = eventsByDay.get(dayKey) || [];
-            const shown = visibleCount(dayEvents.length);
-            const hidden = dayEvents.length - shown;
             return (
               <div
                 key={dayKey}
@@ -254,8 +213,8 @@ export default function MonthlyDispatchView({
                     {format(day, 'd')}
                   </span>
                 </div>
-                <div className="min-h-0 space-y-0.5">
-                  {dayEvents.slice(0, shown).map((ev) => {
+                <div className="space-y-0.5">
+                  {dayEvents.map((ev) => {
                     const tag = firstTagFor(ev.job?.tag_ids);
                     return (
                       <MonthVisitCard
@@ -270,61 +229,12 @@ export default function MonthlyDispatchView({
                       />
                     );
                   })}
-                  {hidden > 0 && (
-                    <button
-                      onClick={(e) => openMore(dayKey, e)}
-                      className="w-full rounded px-1 py-px text-left text-[10px] font-semibold text-primary transition-colors duration-150 hover:bg-primary/5"
-                    >
-                      + {hidden} {isFr ? 'de plus' : 'more'}
-                    </button>
-                  )}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
-
-      {/* ── Popover « +X de plus » — toutes les visites de la journée ── */}
-      {morePop && (() => {
-        const day = new Date(morePop.dayKey + 'T12:00:00');
-        const dayEvents = eventsByDay.get(morePop.dayKey) || [];
-        const locale = isFr ? frCA : enCA;
-        const label = format(day, isFr ? 'EEEE d MMMM' : 'EEEE, MMMM d', { locale });
-        return (
-          <>
-            <div className="fixed inset-0 z-30" onClick={() => setMorePop(null)} />
-            <div
-              className="fixed z-40 max-h-80 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-xl"
-              style={{ left: morePop.left, top: morePop.top, width: MORE_POP_W_PX }}
-            >
-              <div className="mb-1.5 flex items-center justify-between px-1">
-                <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                  {label.charAt(0).toUpperCase() + label.slice(1)}
-                </span>
-                <span className="rounded-md bg-surface-tertiary px-1.5 py-0.5 text-[10px] font-bold text-text-secondary">{dayEvents.length}</span>
-              </div>
-              <div className="space-y-0.5">
-                {dayEvents.map((ev) => {
-                  const tag = firstTagFor(ev.job?.tag_ids);
-                  return (
-                    <MonthVisitCard
-                      key={ev.id}
-                      ev={ev}
-                      barColor={teamColorFor(ev)}
-                      tagName={tag?.name ?? null}
-                      tagColor={tag?.hex ?? null}
-                      timeLabel={startLabelFor(ev)}
-                      attention={attentionFor(ev)}
-                      onOpen={() => { setMorePop(null); setDetailEv(ev); }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        );
-      })()}
 
       {/* ── Détails de la visite — même modale que la vue Semaine ── */}
       {detailEv && (() => {
