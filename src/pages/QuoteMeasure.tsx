@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Camera, Save, Search, Send, Loader2,
   ChevronLeft, ChevronRight,
+  Trash2,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { getQuoteById, saveQuoteLineItems, type QuoteLineItemInput, type QuoteDetail } from '../lib/quotesApi';
@@ -661,6 +662,8 @@ export default function QuoteMeasure() {
             zIndex: sel ? 200 : 50, cursor: 'pointer',
           });
           marker.addListener('click', () => setSelId(s.id));
+          marker.addListener('rightclick', (e: google.maps.MapMouseEvent) => openShapeMenu(s.id, s.label, e));
+          marker.addListener('dblclick', (e: google.maps.MapMouseEvent) => openShapeMenu(s.id, s.label, e));
           shapeOv.current.push(marker);
           shapeOv.current.push(mkLabel(map, base, `↕ ${fmtLen(s.result.value)}`));
         }
@@ -671,6 +674,8 @@ export default function QuoteMeasure() {
       if (s.result.type === 'polygon' && path.length >= 3) {
         const poly = new google.maps.Polygon({ paths: path, strokeColor: s.color, strokeWeight: sel ? 4 : 2, fillColor: s.color, fillOpacity: sel ? 0.25 : 0.12, clickable: true, map });
         poly.addListener('click', () => setSelId(s.id));
+        poly.addListener('rightclick', (e: google.maps.MapMouseEvent) => openShapeMenu(s.id, s.label, e));
+        poly.addListener('dblclick', (e: google.maps.MapMouseEvent) => openShapeMenu(s.id, s.label, e));
         shapeOv.current.push(poly);
         shapeOv.current.push(mkLabel(map, centroid(s.result.points), `${s.label}: ${fmtArea(s.result.value)}`));
         for (let i = 0; i < s.result.points.length; i++) {
@@ -680,6 +685,8 @@ export default function QuoteMeasure() {
       } else if (path.length >= 2) {
         const line = new google.maps.Polyline({ path, strokeColor: s.color, strokeWeight: sel ? 5 : 3, clickable: true, map });
         line.addListener('click', () => setSelId(s.id));
+        line.addListener('rightclick', (e: google.maps.MapMouseEvent) => openShapeMenu(s.id, s.label, e));
+        line.addListener('dblclick', (e: google.maps.MapMouseEvent) => openShapeMenu(s.id, s.label, e));
         shapeOv.current.push(line);
         for (let i = 1; i < s.result.points.length; i++) shapeOv.current.push(mkLabel(map, midpoint(s.result.points[i - 1], s.result.points[i]), fmtLen(haversineDistanceFt(s.result.points[i - 1], s.result.points[i]))));
         if (s.result.type === 'path' && s.result.points.length > 2) shapeOv.current.push(mkLabel(map, s.result.points[s.result.points.length - 1], `Total: ${fmtLen(s.result.value)}`));
@@ -708,6 +715,26 @@ export default function QuoteMeasure() {
   // ════════════════════════════════════════════
   // ACTIONS
   // ════════════════════════════════════════════
+
+  // Menu contextuel d'une forme (clic droit / double-clic sur la carte)
+  const [ctxMenu, setCtxMenu] = useState<{ shapeId: string; label: string; x: number; y: number } | null>(null);
+  function openShapeMenu(shapeId: string, label: string, e: google.maps.MapMouseEvent) {
+    const de = e.domEvent as MouseEvent | undefined;
+    try { de?.preventDefault(); } catch { /* menu navigateur déjà bloqué */ }
+    try { (e as { stop?: () => void }).stop?.(); } catch { /* pas de zoom double-clic */ }
+    setSelId(shapeId);
+    setCtxMenu({
+      shapeId, label,
+      x: Math.min(de?.clientX ?? 200, window.innerWidth - 180),
+      y: Math.min(de?.clientY ?? 200, window.innerHeight - 120),
+    });
+  }
+  function deleteShapeFromMenu() {
+    if (!ctxMenu) return;
+    setShapes(p => p.filter(sh => sh.id !== ctxMenu.shapeId));
+    if (selId === ctxMenu.shapeId) setSelId(null);
+    setCtxMenu(null);
+  }
 
   function setShapeServices(shapeId: string, serviceIds: string[]) {
     setShapes(p => p.map(sh => sh.id === shapeId
@@ -1076,6 +1103,30 @@ export default function QuoteMeasure() {
       <MeasureStatusBar tool={tool} pointCount={pts.length} unitSystem={unitSystem}
         onUnitToggle={() => setUnitSystem(u => u === 'imperial' ? 'metric' : 'imperial')}
         tilt3d={tilt3d} onTiltToggle={openStreetViewer} fr={fr} />
+
+      {ctxMenu && (
+        <>
+          <div className="fixed inset-0 z-[64]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
+          <div
+            className="fixed z-[65] bg-surface-card border border-outline/40 rounded-xl shadow-2xl py-1.5 min-w-[170px]"
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          >
+            <p className="px-3 py-1 text-[10px] font-semibold text-text-muted uppercase tracking-wider truncate max-w-[220px]">{ctxMenu.label}</p>
+            <button
+              onClick={deleteShapeFromMenu}
+              className="w-full px-3 py-1.5 text-left text-[12px] text-danger hover:bg-danger-light flex items-center gap-2 transition-colors"
+            >
+              <Trash2 size={13} /> {fr ? 'Supprimer la mesure' : 'Delete measurement'}
+            </button>
+            <button
+              onClick={() => setCtxMenu(null)}
+              className="w-full px-3 py-1.5 text-left text-[12px] text-text-secondary hover:bg-surface-secondary transition-colors"
+            >
+              {fr ? 'Annuler' : 'Cancel'}
+            </button>
+          </div>
+        </>
+      )}
 
       {streetViewer && (
         <StreetViewer
