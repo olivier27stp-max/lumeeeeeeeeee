@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { isSameDay } from 'date-fns';
+import { format, isSameDay } from 'date-fns';
+import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
@@ -439,6 +440,12 @@ export default function DailyDispatchView({
               <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
                 {t.schedule.dailyResource}
               </span>
+              {/* Date du jour — box beige (mêmes couleurs que le bouton New Job) quand on regarde aujourd'hui */}
+              {isSameDay(date, new Date()) && (
+                <span className="shrink-0 whitespace-nowrap rounded-md bg-[#d8d0c2] px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums text-[#000]">
+                  {format(date, isFr ? 'd MMM' : 'MMM d', { locale: isFr ? frCA : enCA })}
+                </span>
+              )}
               <DailyCustomizePopover prefs={prefs} teams={activeTeams} onChange={updatePrefs} />
             </div>
             <div className="relative shrink-0" style={{ width: timelineWidth }}>
