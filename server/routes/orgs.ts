@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, companyOrgIds } from '../lib/supabase';
+import { ensureAutomationPresets } from '../lib/automationPresetSeeder';
 
 const router = Router();
 
@@ -119,6 +120,14 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
     await admin
       .from('company_settings')
       .insert({ org_id: newOrg.id, created_by: auth.user.id, company_name: name });
+
+    // Filet de sécurité : garantit les 34 presets d'automatisation canoniques
+    // même si la fonction DB de seed a divergé (déjà arrivé en prod).
+    try {
+      await ensureAutomationPresets(admin, newOrg.id, { activateAll: true });
+    } catch (seedErr: any) {
+      console.warn('[orgs/create-office] ensureAutomationPresets:', seedErr?.message);
+    }
 
     return res.json({ office: newOrg });
   } catch (err: any) {
