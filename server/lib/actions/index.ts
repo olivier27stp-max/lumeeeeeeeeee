@@ -205,6 +205,22 @@ export async function executeSendEmail(
       html: body,
     });
     if (!result.sent) return { success: false, error: result.error || 'Send failed' };
+
+    // Trace visible dans l'app : sans cette ligne, un courriel d'automatisation
+    // n'existait que chez le fournisseur SMTP (les SMS, eux, sont loggés dans
+    // Messages). La timeline de l'entité (ActivityTimeline) lit activity_log.
+    try {
+      await ctx.supabase.from('activity_log').insert({
+        org_id: ctx.orgId,
+        entity_type: ctx.entityType,
+        entity_id: ctx.entityId,
+        event_type: 'email_sent',
+        metadata: { to, subject, source: 'automation' },
+      });
+    } catch {
+      // Best-effort : un échec de journalisation ne doit pas faire échouer l'envoi.
+    }
+
     return { success: true, data: { to, subject } };
   } catch (err: any) {
     return { success: false, error: err.message };

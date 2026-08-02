@@ -47,6 +47,7 @@ export const EVENT_TYPE_LABELS: Record<string, { en: string; fr: string; icon: s
   invoice_overdue: { en: 'Invoice overdue', fr: 'Facture en retard', icon: 'alert-circle' },
   invoice_reminded: { en: 'Invoice reminder sent', fr: 'Rappel de facture envoyé', icon: 'bell' },
   follow_up_sent: { en: 'Follow-up sent', fr: 'Relance envoyée', icon: 'mail' },
+  email_sent: { en: 'Email sent', fr: 'Courriel envoyé', icon: 'mail' },
   feedback_received: { en: 'Feedback received', fr: 'Commentaire reçu', icon: 'message-circle' },
   review_requested: { en: 'Review requested', fr: 'Avis demandé', icon: 'star' },
 };
