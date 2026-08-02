@@ -10,6 +10,7 @@ import { addVisit, listJobVisits, rescheduleEvent, unscheduleJob, isAnytimeVisit
 import { createServiceContract } from '../lib/serviceContractsApi';
 import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
+import DatePickerInput from './ui/DatePickerInput';
 import FileUpload from './FileUpload';
 import TeamDayRoster from './TeamDayRoster';
 import TeamSelectDropdown from './TeamSelectDropdown';
@@ -2213,17 +2214,14 @@ export default function NewJobModal({
                                     {visits.map((visit) => (
                                       <div key={visit.key} className="space-y-3">
                                         <div className="flex items-center gap-2">
-                                          <div className="relative flex-1">
-                                            <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                            <input
-                                              type="date"
-                                              value={visit.date}
-                                              min={`${year}-${mm}-01`}
-                                              max={`${year}-${mm}-${lastDay}`}
-                                              onChange={(event) => setPlanVisitDate(visit.key, event.target.value)}
-                                              className="glass-input w-full pl-10"
-                                            />
-                                          </div>
+                                          <DatePickerInput
+                                            className="flex-1"
+                                            value={visit.date}
+                                            min={`${year}-${mm}-01`}
+                                            max={`${year}-${mm}-${lastDay}`}
+                                            language={language === 'fr' ? 'fr' : 'en'}
+                                            onChange={(date) => setPlanVisitDate(visit.key, date)}
+                                          />
                                           {visits.length > 1 && (
                                             <button
                                               type="button"
