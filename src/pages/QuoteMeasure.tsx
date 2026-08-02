@@ -87,12 +87,30 @@ export default function QuoteMeasure() {
       );
     }
   }, [servicesCatalog, activeServiceIds, activeServicesStorageKey]);
-  const toggleActiveService = (id: string) =>
+  const toggleActiveService = (id: string) => {
+    const turningOn = !(activeServiceIds || []).includes(id);
     setActiveServiceIds(prev => {
       const next = (prev || []).includes(id) ? (prev || []).filter(x => x !== id) : [...(prev || []), id];
       try { localStorage.setItem(activeServicesStorageKey, JSON.stringify(next)); } catch { /* stockage indisponible */ }
       return next;
     });
+    // Rétroactif : cocher attache le service aux formes DÉJÀ tracées du bon
+    // type (décocher l'enlève partout). Sinon « tracer puis cocher » finissait
+    // en ligne à 0 $ — l'ordre des gestes ne doit pas compter.
+    const svc = (servicesCatalog || []).find(x => x.id === id);
+    if (!svc) return;
+    setShapes(p => p.map(sh => {
+      if (sh.metadata?.kind === 'height') return sh;
+      const matches = svc.pricing_unit === 'sq_ft' ? sh.result.type === 'polygon' : sh.result.type !== 'polygon';
+      const ids = (sh.metadata?.service_ids as string[] | undefined) || [];
+      if (turningOn) {
+        if (!matches || ids.includes(id)) return sh;
+        return { ...sh, metadata: { ...(sh.metadata || {}), service_ids: [...ids, id] } };
+      }
+      if (!ids.includes(id)) return sh;
+      return { ...sh, metadata: { ...(sh.metadata || {}), service_ids: ids.filter(x => x !== id) } };
+    }));
+  };
   const addr = quote?.lead?.address || quote?.client?.address || '';
   const contactName = quote ? `${quote.lead?.first_name || quote.client?.first_name || ''} ${quote.lead?.last_name || quote.client?.last_name || ''}`.trim() : '';
   const { data: saved } = useQuery({ queryKey: ['quoteMeasurements', quoteId], queryFn: () => listMeasurements(quoteId!), enabled: Boolean(quoteId) });
