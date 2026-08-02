@@ -194,8 +194,8 @@ export default function MonthlyDispatchView({
       {/* ── En-tête des jours de semaine ── */}
       <div className="flex shrink-0 border-b border-border bg-surface" style={{ height: HEADER_HEIGHT_PX }}>
         {weekdayLabels.map((label, i) => (
-          <div key={label} className={cn('flex min-w-0 flex-1 items-end border-l border-border/50 pb-2 pl-2', i === 0 && 'border-l-0')}>
-            <span className="truncate text-[10.5px] font-bold text-black">{label}</span>
+          <div key={label} className={cn('flex min-w-0 flex-1 items-center justify-center border-l border-border/50', i === 0 && 'border-l-0')}>
+            <span className="truncate text-[14px] font-bold text-black">{label}</span>
           </div>
         ))}
       </div>
