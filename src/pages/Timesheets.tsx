@@ -843,7 +843,9 @@ export default function Timesheets() {
           fr={fr}
           teams={teamsQuery.data ?? []}
           members={(membersQuery.data?.members ?? [])
-            .filter(m => m.status === 'active')
+            // Les équipes sont un découpage terrain : owner/admin/technicien,
+            // jamais les sales_rep (ils vendent, ils ne sont pas dispatchés).
+            .filter(m => m.status === 'active' && m.role !== 'sales_rep')
             .map(m => ({ user_id: m.user_id, name: m.full_name?.trim() || m.email || (fr ? 'Sans nom' : 'Unnamed'), role: m.role }))
             .sort((a, b) => a.name.localeCompare(b.name))}
           canManage={canManageSchedule}

@@ -1070,8 +1070,9 @@ const MemberRow: React.FC<MemberRowProps> = ({
         </div>
       )}
 
-      {/* Équipe d'attache — tous les rôles, owner inclus */}
-      {onSaveTeam && teams && teams.length > 0 && (
+      {/* Équipe d'attache — owner/admin/technicien; pas les sales_rep (les
+          équipes sont un découpage terrain, les reps vendent) */}
+      {onSaveTeam && teams && teams.length > 0 && member.role !== 'sales_rep' && (
         <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Équipe' : 'Team'}</label>
           <select
@@ -1254,8 +1255,10 @@ function InviteForm({
   };
 
   // L'équipe d'attache est indépendante de la portée d'accès : un admin (portée
-  // compagnie) peut quand même appartenir à une équipe sur le terrain.
-  const showTeamPicker = true;
+  // compagnie) peut quand même appartenir à une équipe sur le terrain. Les
+  // sales_rep ne sont pas assignables aux équipes — leur sélecteur n'apparaît
+  // que si la portée « Équipe » (RBAC) l'exige, comme avant.
+  const showTeamPicker = role !== 'sales_rep' || scope === 'team';
 
   return (
     <div className="space-y-5">
