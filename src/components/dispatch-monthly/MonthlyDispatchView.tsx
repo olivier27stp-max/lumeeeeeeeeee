@@ -109,8 +109,8 @@ export default function MonthlyDispatchView({
   }, [date]);
   const numWeeks = Math.ceil(days.length / 7);
   const weekdayLabels = isFr
-    ? ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
-    : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    ? ['Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.', 'Dim.']
+    : ['Mon.', 'Tue.', 'Wed.', 'Thu.', 'Fri.', 'Sat.', 'Sun.'];
 
   /* ── Visites par jour — dédup par id, tri par heure de début ── */
   const eventsByDay = useMemo(() => {
@@ -195,7 +195,7 @@ export default function MonthlyDispatchView({
       <div className="flex shrink-0 border-b border-border bg-surface" style={{ height: HEADER_HEIGHT_PX }}>
         {weekdayLabels.map((label, i) => (
           <div key={label} className={cn('flex min-w-0 flex-1 items-center justify-center border-l border-border/50', i === 0 && 'border-l-0')}>
-            <span className="truncate text-[14px] font-bold text-black">{label}</span>
+            <span className="truncate text-[16px] font-bold text-black">{label}</span>
           </div>
         ))}
       </div>
