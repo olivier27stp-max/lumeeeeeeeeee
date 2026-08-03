@@ -4,7 +4,7 @@ import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
 import { useJobTagColors } from '../../hooks/useJobTagColors';
@@ -65,6 +65,8 @@ interface WeeklyDispatchViewProps {
   onReschedule: (eventId: string, startAt: string, endAt: string, teamId: string | null) => Promise<void>;
   /** Instance DnD partagée — utilisée seulement pour les drops du tiroir « Jobs non planifiés ». */
   externalDnd: CalendarDnd;
+  /** Refetch parent après un changement de statut (visite terminée / job fermé). */
+  onEventsChanged?: () => void;
 }
 
 interface CellRef {
@@ -105,7 +107,7 @@ const sameCell = (a: CellRef | null, b: CellRef | null) =>
    Même gabarit que DailyVisitCard : rayon, bordure, ombre, typographie —
    avec le fond pastel de la couleur de route + barre gauche pleine. */
 const WeekVisitCard = React.memo(function WeekVisitCard({
-  ev, color, tagName, timeLabel, attention, dimmed, onOpen, onMoveStart,
+  ev, color, tagName, timeLabel, attention, dimmed, done, onOpen, onMoveStart,
 }: {
   ev: ScheduleEventRecord;
   color: string;
@@ -114,6 +116,8 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
   timeLabel: string;
   attention: boolean;
   dimmed: boolean;
+  /** Visite complétée ou job fermé — texte barré + carte atténuée. */
+  done: boolean;
   onOpen: () => void;
   onMoveStart: (e: React.PointerEvent) => void;
 }) {
@@ -131,6 +135,7 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
         dimmed
           ? 'opacity-40 shadow-none'
           : 'shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:z-10 hover:shadow-md cursor-grab active:cursor-grabbing',
+        !dimmed && done && 'opacity-60',
       )}
       style={{ minHeight: CARD_HEIGHT_PX, backgroundColor: toRgba(color, 0.12), borderLeft: `3px solid ${color}` }}
       onClick={(e) => { e.stopPropagation(); onOpen(); }}
@@ -144,8 +149,8 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
         <span className="shrink-0 truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</span>
         {attention && <AlertTriangle size={9} className="shrink-0 text-[#c2410c]" />}
       </div>
-      <div className="truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary">{clientName}</div>
-      {address && <div className="truncate text-[11px] leading-[1.4] text-text-secondary">{address}</div>}
+      <div className={cn('truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary', done && 'line-through')}>{clientName}</div>
+      {address && <div className={cn('truncate text-[11px] leading-[1.4] text-text-secondary', done && 'line-through')}>{address}</div>}
     </div>
   );
 });
@@ -164,7 +169,7 @@ function CellDropGhost({ label }: { label: string }) {
 
 export default function WeeklyDispatchView({
   weekDays, events, teams, visibleTeamIds, orgId, unassignedMode, isError,
-  onEventClick, onSlotClick, onReschedule, externalDnd,
+  onEventClick, onSlotClick, onReschedule, externalDnd, onEventsChanged,
 }: WeeklyDispatchViewProps) {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
@@ -520,6 +525,7 @@ export default function WeeklyDispatchView({
                               timeLabel={timeLabelFor(ev)}
                               attention={st === 'blocked' || st === 'late' || st === 'action_required'}
                               dimmed={!!(drag?.moved && drag.ev.id === ev.id)}
+                              done={isClosedVisit(ev)}
                               onOpen={() => openCard(ev)}
                               onMoveStart={(e) => handleMoveStart(ev, row.key, dayKey, e)}
                             />
@@ -556,6 +562,7 @@ export default function WeeklyDispatchView({
               setDetailEv(null);
               if (jobId) onEventClick(jobId);
             }}
+            onStatusChanged={onEventsChanged}
           />
         );
       })()}

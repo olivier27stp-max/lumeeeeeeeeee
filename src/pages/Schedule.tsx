@@ -732,6 +732,7 @@ function ScheduleContent() {
               isError={evQ.isError}
               onDayClick={(d) => { setDate(d); setView('day'); }}
               onEventClick={openExisting}
+              onEventsChanged={refresh}
             />
           ) : view === 'week' ? (
             <WeeklyDispatchView
@@ -746,6 +747,7 @@ function ScheduleContent() {
               onSlotClick={(s) => openAddVisit(s)}
               onReschedule={handleDailyReschedule}
               externalDnd={dnd}
+              onEventsChanged={refresh}
             />
           ) : view === 'day' ? (
             <DailyDispatchView

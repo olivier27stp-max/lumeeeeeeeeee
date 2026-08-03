@@ -75,6 +75,15 @@ export function anytimeLabel(fr: boolean): string {
   return fr ? "Pas d'heure précise" : 'No set time';
 }
 
+/** Visite « fermée » : complétée/annulée, ou dont le job est fermé — les
+ * cartes du calendrier l'affichent barrée. */
+export function isClosedVisit(ev: Pick<ScheduleEventRecord, 'status' | 'job'>): boolean {
+  const vs = (ev.status || '').toLowerCase();
+  const js = (ev.job?.status || '').toLowerCase();
+  return ['completed', 'cancelled', 'canceled'].includes(vs)
+    || ['completed', 'cancelled', 'canceled', 'archived'].includes(js);
+}
+
 const eventsCache = new Map<string, { cachedAt: number; rows: ScheduleEventRecord[] }>();
 
 function buildCacheKey(startAt: string, endAt: string, teamIds: string[]) {
@@ -112,6 +121,7 @@ function mapScheduleRow(row: any): ScheduleEventRecord {
           longitude: row.job.longitude == null ? null : Number(row.job.longitude),
           geocode_status: row.job.geocode_status ?? null,
           total_cents: row.job.total_cents == null ? null : Number(row.job.total_cents),
+          job_number: row.job.job_number == null ? null : String(row.job.job_number),
           tag_ids: Array.isArray(row.job.tag_ids) ? row.job.tag_ids : null,
         }
       : null,
@@ -178,7 +188,7 @@ export async function listScheduleEventsRange(params: {
   if (jobIds.length > 0) {
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,tag_ids,deleted_at')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,job_number,tag_ids,deleted_at')
       .in('id', jobIds);
     for (const j of jobs || []) {
       jobMap[j.id] = j;
@@ -375,7 +385,7 @@ export async function listUnassignedScheduledEvents(params: {
   if (jobIds.length > 0) {
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,tag_ids,deleted_at')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,job_number,tag_ids,deleted_at')
       .in('id', jobIds);
     for (const j of jobs || []) {
       jobMap[j.id] = j;

@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import { getRosterForDate, fetchMemberNames, firstNameOf } from '../../lib/teamScheduleApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
@@ -568,6 +568,7 @@ export default function DailyDispatchView({
                           timeLabel={anytime ? anytimeLabel(isFr) : timeLabelFor(cardStartMin, cardStartMin + durMin)}
                           anytime={anytime}
                           dimmed={isDraggingThis}
+                          done={isClosedVisit(p.ev)}
                           tagColor={tag?.hex ?? null}
                           tagName={tag?.name ?? null}
                           onOpen={() => openEvent(p.ev.job_id)}
