@@ -4,10 +4,11 @@
  * Two measures, bucketed over a chosen period:
  *  - collected : paid invoices, by `paid_at`
  *  - scheduled : outstanding expected revenue (sent / partial invoices with a
- *                positive balance), by `due_date`. Invoices already overdue
- *                (or without a due date) are still money we expect to collect,
- *                so they are clamped into the current-time bucket instead of
- *                being dropped.
+ *                positive balance), by `due_date`. Invoices already overdue or
+ *                without a due date still count in `scheduledTotal` (and the
+ *                overdue ones in `overdueTotal`) but are NOT drawn on the
+ *                chart — stacking them on "today" made the current day look
+ *                like it had revenue scheduled when it didn't.
  *
  * Period drives both the date window and the bucket granularity:
  *  - today : 24 hourly buckets
@@ -32,6 +33,8 @@ export interface RevenueSeries {
   points: RevenuePoint[];
   collectedTotal: number;
   scheduledTotal: number;
+  /** Portion of `scheduledTotal` whose due date is already past. */
+  overdueTotal: number;
 }
 
 function ymd(d: Date): string {
@@ -116,7 +119,7 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
   const startIso = w.start.toISOString();
   const endIso = w.end.toISOString();
   const endYmd = ymd(w.end);
-  const nowIdx = w.bucketOf(now);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
   const [collectedRes, scheduledRes] = await Promise.all([
     // Collected — paid invoices by paid_at
@@ -145,6 +148,7 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
 
   let collectedTotal = 0;
   let scheduledTotal = 0;
+  let overdueTotal = 0;
 
   for (const row of collectedRes.data || []) {
     if (!row.paid_at) continue;
@@ -158,18 +162,15 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
   for (const row of scheduledRes.data || []) {
     // due_date is a YYYY-MM-DD date — parse at local midnight
     const due = row.due_date ? new Date(`${row.due_date as string}T00:00:00`) : null;
-    let idx = due ? w.bucketOf(due) : -1;
-    if (idx < 0) {
-      if (due && due.getTime() > w.end.getTime()) continue;
-      // Overdue before the window (or no due date): still expected revenue,
-      // attach it to the current bucket.
-      idx = nowIdx;
-    }
-    if (idx < 0) continue;
+    if (due && due.getTime() > w.end.getTime()) continue;
     const amount = Number(row.balance_cents || 0) / 100;
-    w.buckets[idx].scheduled += amount;
     scheduledTotal += amount;
+    if (due && due.getTime() < todayStart.getTime()) overdueTotal += amount;
+    // Only draw invoices on the day they are actually due. Overdue and
+    // undated ones stay off the chart (they're surfaced via overdueTotal).
+    const idx = due ? w.bucketOf(due) : -1;
+    if (idx >= 0) w.buckets[idx].scheduled += amount;
   }
 
-  return { points: w.buckets, collectedTotal, scheduledTotal };
+  return { points: w.buckets, collectedTotal, scheduledTotal, overdueTotal };
 }

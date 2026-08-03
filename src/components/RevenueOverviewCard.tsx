@@ -50,6 +50,7 @@ export default function RevenueOverviewCard({ className = '' }: { className?: st
   const points = data?.points ?? [];
   const collectedTotal = data?.collectedTotal ?? 0;
   const scheduledTotal = data?.scheduledTotal ?? 0;
+  const overdueTotal = data?.overdueTotal ?? 0;
 
   const periods: { key: RevenuePeriod; label: string }[] = [
     { key: 'today', label: fr ? "Aujourd'hui" : 'Today' },
@@ -101,6 +102,13 @@ export default function RevenueOverviewCard({ className = '' }: { className?: st
           <p className="text-[28px] font-bold text-text-primary tabular-nums tracking-tight mt-1 leading-none">
             {formatCurrency(scheduledTotal)}
           </p>
+          {overdueTotal > 0 && (
+            <p className="text-[12px] font-medium text-amber-600 tabular-nums mt-1.5">
+              {fr
+                ? `dont ${formatCurrency(overdueTotal)} en retard`
+                : `incl. ${formatCurrency(overdueTotal)} overdue`}
+            </p>
+          )}
         </div>
       </div>
 
