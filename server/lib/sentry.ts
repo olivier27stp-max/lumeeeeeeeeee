@@ -6,8 +6,12 @@
  */
 
 import type { Express } from 'express';
+import { createRequire } from 'node:module';
 
-// Lazy-load @sentry/node so the dependency is optional until installed
+// Lazy-load @sentry/node so the dependency is optional until installed.
+// Le serveur roule en ESM ("type": "module") : `require` n'existe pas au
+// runtime, il faut le fabriquer via createRequire.
+const nodeRequire = createRequire(import.meta.url);
 let sentryNode: any = null;
 
 export function initSentry(app: Express): void {
@@ -17,7 +21,7 @@ export function initSentry(app: Express): void {
     return;
   }
   try {
-    sentryNode = require('@sentry/node');
+    sentryNode = nodeRequire('@sentry/node');
     sentryNode.init({
       dsn,
       environment: process.env.NODE_ENV || 'development',
