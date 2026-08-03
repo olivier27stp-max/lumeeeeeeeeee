@@ -108,6 +108,11 @@ export default function MonthlyDispatchView({
     return list;
   }, [date]);
   const numWeeks = Math.ceil(days.length / 7);
+  /* Colonne d'aujourd'hui (semaine démarrant lundi) — -1 si aujourd'hui n'est pas dans la grille */
+  const todayCol = useMemo(() => {
+    const now = new Date();
+    return days.some((d) => isSameDay(d, now)) ? (now.getDay() + 6) % 7 : -1;
+  }, [days]);
   const weekdayLabels = isFr
     ? ['Lun.', 'Mar.', 'Mer.', 'Jeu.', 'Ven.', 'Sam.', 'Dim.']
     : ['Mon.', 'Tue.', 'Wed.', 'Thu.', 'Fri.', 'Sat.', 'Sun.'];
@@ -199,7 +204,7 @@ export default function MonthlyDispatchView({
         <div className="sticky top-0 z-20 grid grid-cols-7 border-b border-border bg-surface" style={{ height: HEADER_HEIGHT_PX }}>
           {weekdayLabels.map((label, i) => (
             <div key={label} className={cn('flex min-w-0 items-center justify-center border-l border-border/50', i === 0 && 'border-l-0')}>
-              <span className="truncate text-[16px] font-bold text-black">{label}</span>
+              <span className={cn('truncate text-[16px] font-bold text-black', i === todayCol && 'rounded-md bg-[#d8d0c2] px-2 py-0.5')}>{label}</span>
             </div>
           ))}
         </div>
