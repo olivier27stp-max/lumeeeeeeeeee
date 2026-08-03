@@ -311,7 +311,7 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
             onClick={onView}
             className="w-full rounded-lg bg-text-primary px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90"
           >
-            {isFr ? 'Voir la visite' : 'View Visit'}
+            {isFr ? 'Voir le job' : 'View Job'}
           </button>
         </div>
       </div>
