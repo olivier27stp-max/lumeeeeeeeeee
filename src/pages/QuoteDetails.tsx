@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
-  Eye, Printer, Trash2, Clock, CheckCircle2,
+  Eye, Printer, Trash2, Clock, CheckCircle2, XCircle,
   Pencil, FileText,
   Plus, Check, X, Save, Ruler, Package, Archive,
 } from 'lucide-react';
@@ -67,6 +67,7 @@ export default function QuoteDetails() {
   const [editLineItems, setEditLineItems] = useState<Array<{
     id: string; name: string; description: string; quantity: string;
     unit_price: string; is_optional: boolean; source_service_id?: string | null;
+    discount_type: '' | 'percentage' | 'fixed'; discount_value: string;
   }>>([]);
   // Per-line catalog picker: id of the line whose product/service is being chosen
   const [lineEditId, setLineEditId] = useState<string | null>(null);
@@ -153,6 +154,8 @@ export default function QuoteDetails() {
         id: i.id, name: i.name, description: i.description || '',
         quantity: String(i.quantity), unit_price: String(i.unit_price_cents / 100),
         is_optional: i.is_optional, source_service_id: (i as any).source_service_id ?? null,
+        discount_type: (i.discount_type as '' | 'percentage' | 'fixed') || '',
+        discount_value: Number(i.discount_value) > 0 ? String(i.discount_value) : '',
       })));
     }
   }
@@ -193,6 +196,8 @@ export default function QuoteDetails() {
             description: i.description.trim() || null,
             quantity: Math.max(0.01, parseFloat(i.quantity) || 1),
             unit_price_cents: Math.max(0, Math.round((parseFloat(i.unit_price) || 0) * 100)),
+            discount_type: i.discount_type || null,
+            discount_value: parseFloat(i.discount_value) || 0,
             sort_order: idx,
             is_optional: i.is_optional,
             item_type: 'service' as const,
@@ -317,6 +322,12 @@ export default function QuoteDetails() {
                   <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'approved'); toast.success(isFr ? 'Approuvée' : 'Approved'); loadQuote(); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <CheckCircle2 size={14} /> {isFr ? 'Approuvée' : 'Approved'}</button>
+                  <button onClick={() => {
+                    if (typeof window !== 'undefined' && !window.confirm(isFr ? 'Marquer cette soumission comme refusée?' : 'Mark this quote as declined?')) return;
+                    act(async () => { await updateQuoteStatus(quote.id, 'declined', 'Marked declined by staff'); toast.success(isFr ? 'Refusée' : 'Declined'); loadQuote(); });
+                  }}
+                    className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
+                    <XCircle size={14} /> {isFr ? 'Refusée' : 'Declined'}</button>
                   {quote.status === 'archived' ? (
                     <button onClick={() => act(async () => { await unarchiveQuote(quote.id); toast.success(language === 'fr' ? 'Devis désarchivé' : 'Quote unarchived'); loadQuote(); })}
                       className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
@@ -330,7 +341,7 @@ export default function QuoteDetails() {
                   <button onClick={() => { window.open(`/quote/${quote.view_token}`, '_blank'); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Eye size={14} /> {isFr ? 'Aperçu côté client' : 'Preview as Client'}</button>
-                  <button onClick={() => { downloadQuotePdf(detail!); setMoreOpen(false); }}
+                  <button onClick={() => { downloadQuotePdf(detail!, companySettings); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Printer size={14} /> {isFr ? 'Imprimer ou enregistrer en PDF' : 'Print or Save PDF'}</button>
                   <div className="border-t border-outline my-1" />
@@ -377,6 +388,18 @@ export default function QuoteDetails() {
                 <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
               </div>
             )}
+            <div className="flex justify-between text-[13px] border-t border-outline pt-2.5">
+              <span className="text-text-tertiary">{language === 'fr' ? 'Consultée par le client' : 'Viewed by client'}</span>
+              {quote.is_viewed && quote.last_viewed_at ? (
+                <span className="font-medium text-success flex items-center gap-1.5">
+                  <Eye size={13} />
+                  {format(new Date(quote.last_viewed_at), 'PPp', { locale: language === 'fr' ? dfFr : dfEn })}
+                  {(quote.view_count || 0) > 1 && <span className="text-text-tertiary font-normal">({quote.view_count}×)</span>}
+                </span>
+              ) : (
+                <span className="text-text-tertiary">{language === 'fr' ? 'Pas encore' : 'Not yet'}</span>
+              )}
+            </div>
           </div>
 
           {/* Plan de service — calendrier des visites (visible aussi par le client) */}
@@ -457,16 +480,37 @@ export default function QuoteDetails() {
                         className={cn(inputCls, 'py-1.5 text-right')} placeholder={isFr ? 'Prix' : 'Price'} />
                     </div>
                     <div className="col-span-2 text-right text-sm font-medium text-text-primary pt-2">
-                      {formatQuoteMoney(Math.round((parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0) * 100))}
+                      {(() => {
+                        const gross = (parseFloat(item.quantity) || 0) * (parseFloat(item.unit_price) || 0) * 100;
+                        const dv = parseFloat(item.discount_value) || 0;
+                        const disc = item.discount_type === 'percentage' ? gross * dv / 100 : item.discount_type === 'fixed' ? dv * 100 : 0;
+                        return formatQuoteMoney(Math.max(0, Math.round(gross - disc)));
+                      })()}
                     </div>
                     <div className="col-span-1 flex justify-center pt-1.5">
                       <button onClick={() => { if (editLineItems.length <= 1) { toast.error(language === 'fr' ? 'Au moins un item requis' : 'At least one item required'); return; } setEditLineItems(p => p.filter((_, i) => i !== idx)); setEditDirty(true); }}
                         disabled={editLineItems.length <= 1}
                         className={cn("p-1 hover:text-danger", editLineItems.length <= 1 ? "text-text-muted cursor-not-allowed" : "text-text-tertiary")}><Trash2 size={13} /></button>
                     </div>
+                    <div className="col-span-12 flex items-center gap-2 text-[12px] text-text-secondary">
+                      <span>{isFr ? 'Rabais' : 'Discount'}</span>
+                      <select value={item.discount_type}
+                        onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], discount_type: e.target.value as '' | 'percentage' | 'fixed' }; setEditLineItems(u); setEditDirty(true); }}
+                        className={cn(inputCls, 'py-1 w-auto text-[12px]')}>
+                        <option value="">{isFr ? 'Aucun' : 'None'}</option>
+                        <option value="percentage">%</option>
+                        <option value="fixed">$</option>
+                      </select>
+                      {item.discount_type && (
+                        <input value={item.discount_value}
+                          onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], discount_value: e.target.value.replace(',', '.').replace(/[^\d.]/g, '') }; setEditLineItems(u); setEditDirty(true); }}
+                          className={cn(inputCls, 'py-1 w-20 text-right text-[12px]')}
+                          placeholder={item.discount_type === 'percentage' ? '10' : '25.00'} />
+                      )}
+                    </div>
                   </div>
                 ))}
-                <button onClick={() => { setEditLineItems(p => [...p, { id: crypto.randomUUID(), name: '', description: '', quantity: '1', unit_price: '0', is_optional: false }]); setEditDirty(true); }}
+                <button onClick={() => { setEditLineItems(p => [...p, { id: crypto.randomUUID(), name: '', description: '', quantity: '1', unit_price: '0', is_optional: false, discount_type: '', discount_value: '' }]); setEditDirty(true); }}
                   className="glass-button text-xs flex items-center gap-1.5 px-3 py-1.5">
                   <Plus size={12} /> {language === 'fr' ? 'Ajouter une ligne' : 'Add Line Item'}
                 </button>
@@ -491,6 +535,11 @@ export default function QuoteDetails() {
                         <td className="px-5 py-3">
                           <span className="font-medium text-text-primary">{item.name}</span>
                           {item.is_optional && <span className="ml-2 text-[10px] text-text-tertiary uppercase">{isFr ? 'Optionnel' : 'Optional'}</span>}
+                          {Boolean(item.discount_type) && Number(item.discount_value) > 0 && (
+                            <span className="ml-2 text-[10px] text-success font-semibold">
+                              {isFr ? 'Rabais' : 'Discount'} −{item.discount_type === 'percentage' ? `${item.discount_value} %` : formatQuoteMoney(Math.round(Number(item.discount_value) * 100))}
+                            </span>
+                          )}
                           {item.description && <p className="text-[12px] text-text-tertiary mt-0.5">{item.description}</p>}
                         </td>
                         <td className="px-5 py-3 text-center text-primary font-medium">{item.quantity}</td>

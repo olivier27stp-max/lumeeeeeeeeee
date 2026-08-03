@@ -60,6 +60,8 @@ interface QuoteData {
     description: string | null;
     quantity: number;
     unit_price_cents: number;
+    discount_type?: 'percentage' | 'fixed' | null;
+    discount_value?: number;
     total_cents: number;
     is_optional: boolean;
     item_type: string;
@@ -194,7 +196,9 @@ export default function QuoteView() {
       const quote = result.quote;
 
       // Track view (fire-and-forget)
-      fetch(`${API_BASE}/api/quotes/${quote.id}/track-view`, { method: 'POST' }).catch(() => {});
+      // Le suivi de vue se fait par view_token (l'endpoint public refuse les
+      // UUID bruts) — avec quote.id l'ouverture n'était jamais enregistrée.
+      fetch(`${API_BASE}/api/quotes/${token}/track-view`, { method: 'POST' }).catch(() => {});
 
       setData(result);
 
@@ -671,6 +675,13 @@ export default function QuoteView() {
                           <div className="font-medium">{item.name}</div>
                           {item.description && (
                             <div className="text-[11px] text-[#999] mt-0.5 leading-relaxed">{item.description}</div>
+                          )}
+                          {Boolean(item.discount_type) && Number(item.discount_value) > 0 && (
+                            <div className="text-[11px] text-[#16a34a] mt-0.5">
+                              {isFr ? 'Rabais' : 'Discount'} −{item.discount_type === 'percentage'
+                                ? `${item.discount_value} %`
+                                : formatQuoteMoney(Math.round(Number(item.discount_value) * 100), cur)}
+                            </div>
                           )}
                         </td>
                         <td className="py-3 text-center text-[#666]">{item.quantity}</td>

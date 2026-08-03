@@ -186,7 +186,73 @@ router.post('/quotes/:id/track-view', async (req, res) => {
       .maybeSingle();
 
     if (error || !invoice) {
-      return res.status(404).json({ error: 'Invoice not found' });
+      // Pas une facture — le token peut appartenir à un devis (table quotes).
+      // Avant, ce chemin 404ait toujours: aucune ouverture de devis n'était
+      // jamais enregistrée ni notifiée.
+      const { data: quote } = await serviceClient
+        .from('quotes')
+        .select('id, quote_number, client_id, lead_id, org_id, is_viewed, view_count')
+        .is('deleted_at', null)
+        .eq('view_token', id)
+        .maybeSingle();
+
+      if (!quote) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+
+      const firstQuoteView = !quote.is_viewed;
+      const nowIso = new Date().toISOString();
+
+      await serviceClient
+        .from('quotes')
+        .update({
+          is_viewed: true,
+          viewed_at: firstQuoteView ? nowIso : undefined,
+          view_count: (quote.view_count || 0) + 1,
+          last_viewed_at: nowIso,
+        })
+        .eq('id', quote.id);
+
+      const contactId = quote.client_id || quote.lead_id;
+      await serviceClient
+        .from('quote_views')
+        .insert({
+          quote_id: quote.id,
+          client_id: contactId,
+          ip_address: req.ip || req.headers['x-forwarded-for'] || null,
+          user_agent: req.headers['user-agent'] || null,
+        });
+
+      if (contactId) void recordClientActivity(serviceClient, contactId);
+
+      if (firstQuoteView) {
+        let contactName = 'Client';
+        if (contactId) {
+          const { data: contact } = await serviceClient
+            .from('clients')
+            .select('first_name, last_name')
+            .eq('id', contactId)
+            .is('deleted_at', null)
+            .maybeSingle();
+          if (contact) {
+            contactName = `${contact.first_name || ''} ${contact.last_name || ''}`.trim() || 'Client';
+          }
+        }
+
+        await serviceClient
+          .from('notifications')
+          .insert({
+            org_id: quote.org_id,
+            type: 'quote_opened',
+            title: `${contactName} opened quote ${quote.quote_number}`,
+            body: `${contactName} has viewed their quote for the first time.`,
+            icon: 'eye',
+            link: `/quotes/${quote.id}`,
+            reference_id: quote.id,
+          });
+      }
+
+      return res.json({ tracked: true, first_view: firstQuoteView });
     }
 
     const isFirstView = !invoice.is_viewed;
@@ -725,7 +791,7 @@ router.get('/quotes/public/:token', async (req, res) => {
     // Line items
     const { data: items } = await admin
       .from('quote_line_items')
-      .select('id, name, description, quantity, unit_price_cents, total_cents, is_optional, item_type')
+      .select('id, name, description, quantity, unit_price_cents, discount_type, discount_value, total_cents, is_optional, item_type')
       .eq('quote_id', quote.id)
       .order('sort_order', { ascending: true });
 

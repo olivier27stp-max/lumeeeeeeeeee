@@ -61,6 +61,10 @@ export interface Quote {
   deposit_cents: number;
   deposit_status: 'not_required' | 'pending' | 'paid' | 'waived';
   require_payment_method: boolean;
+  is_viewed?: boolean;
+  viewed_at?: string | null;
+  last_viewed_at?: string | null;
+  view_count?: number;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -122,6 +126,8 @@ export interface QuoteLineItem {
   description: string | null;
   quantity: number;
   unit_price_cents: number;
+  discount_type?: 'percentage' | 'fixed' | null;
+  discount_value?: number;
   total_cents: number;
   sort_order: number;
   is_optional: boolean;
@@ -177,10 +183,23 @@ export interface QuoteLineItemInput {
   description?: string | null;
   quantity: number;
   unit_price_cents: number;
+  discount_type?: 'percentage' | 'fixed' | null;
+  discount_value?: number;
   sort_order: number;
   is_optional?: boolean;
   item_type?: 'service' | 'text' | 'heading';
   image_url?: string | null;
+}
+
+/** Line total net of the per-line discount (mirrors the DB trigger). */
+export function lineItemTotalCents(item: Pick<QuoteLineItemInput, 'quantity' | 'unit_price_cents' | 'discount_type' | 'discount_value'>): number {
+  const gross = item.quantity * item.unit_price_cents;
+  const disc = item.discount_type === 'percentage'
+    ? gross * (item.discount_value || 0) / 100
+    : item.discount_type === 'fixed'
+      ? (item.discount_value || 0) * 100
+      : 0;
+  return Math.max(0, Math.round(gross - disc));
 }
 
 export interface QuoteSectionInput {
@@ -315,7 +334,9 @@ export async function createQuote(payload: {
         description: item.description || null,
         quantity: item.quantity,
         unit_price_cents: item.unit_price_cents,
-        total_cents: Math.round(item.quantity * item.unit_price_cents),
+        discount_type: item.discount_type || null,
+        discount_value: item.discount_value || 0,
+        total_cents: lineItemTotalCents(item),
         sort_order: item.sort_order,
         is_optional: item.is_optional || false,
         item_type: item.item_type || 'service',
@@ -578,7 +599,9 @@ export async function saveQuoteLineItems(
       description: item.description || null,
       quantity: item.quantity,
       unit_price_cents: item.unit_price_cents,
-      total_cents: Math.round(item.quantity * item.unit_price_cents),
+      discount_type: item.discount_type || null,
+      discount_value: item.discount_value || 0,
+      total_cents: lineItemTotalCents(item),
       sort_order: item.sort_order,
       is_optional: item.is_optional || false,
       item_type: item.item_type || 'service',
@@ -611,27 +634,42 @@ export async function duplicateQuote(quoteId: string): Promise<QuoteDetail> {
   const source = await getQuoteById(quoteId);
   if (!source) throw new Error('Quote not found.');
 
+  // Même durée de validité que l'original (valid_until − created_at), pas le 30 jours par défaut.
+  const sourceValidDays = source.quote.valid_until
+    ? Math.min(365, Math.max(1, Math.round(
+        (new Date(source.quote.valid_until).getTime() - new Date(source.quote.created_at).getTime()) / 86400000,
+      )))
+    : 30;
+
   return createQuote({
     lead_id: source.quote.lead_id,
     client_id: source.quote.client_id,
+    property_id: source.quote.property_id,
     title: `${source.quote.title} (Copy)`,
     salesperson_id: source.quote.salesperson_id,
     context_type: source.quote.context_type,
     currency: source.quote.currency,
+    valid_days: sourceValidDays,
     notes: source.quote.notes,
     contract_disclaimer: source.quote.contract_disclaimer,
     deposit_required: source.quote.deposit_required,
+    deposit_type: source.quote.deposit_type,
+    deposit_value: source.quote.deposit_value,
     require_payment_method: source.quote.require_payment_method,
     tax_rate: source.quote.tax_rate,
     tax_rate_label: source.quote.tax_rate_label,
     discount_type: source.quote.discount_type,
     discount_value: source.quote.discount_value,
+    quote_type: source.quote.quote_type,
+    service_plan: source.quote.service_plan,
     line_items: source.line_items.map((item, i) => ({
       source_service_id: item.source_service_id,
       name: item.name,
       description: item.description,
       quantity: item.quantity,
       unit_price_cents: item.unit_price_cents,
+      discount_type: item.discount_type ?? null,
+      discount_value: item.discount_value ?? 0,
       sort_order: i,
       is_optional: item.is_optional,
       item_type: item.item_type,

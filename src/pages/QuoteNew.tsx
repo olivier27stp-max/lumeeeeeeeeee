@@ -97,13 +97,24 @@ interface LineItemForm {
   unitPriceInput: string;
   is_optional: boolean;
   item_type: 'service' | 'text' | 'heading';
+  discountType: '' | 'percentage' | 'fixed';
+  discountValueInput: string;
 }
 
 function emptyLine(): LineItemForm {
   return {
     id: crypto.randomUUID(), source_service_id: null, name: '', description: '',
     qtyInput: '1', unitPriceInput: '0', is_optional: false, item_type: 'service',
+    discountType: '', discountValueInput: '',
   };
+}
+
+/** Total de ligne net du rabais par ligne (miroir du trigger DB). */
+function lineNetCents(i: LineItemForm): number {
+  const gross = (parseFloat(i.qtyInput) || 0) * Math.round((parseFloat(i.unitPriceInput) || 0) * 100);
+  const dv = parseFloat(i.discountValueInput) || 0;
+  const disc = i.discountType === 'percentage' ? gross * dv / 100 : i.discountType === 'fixed' ? dv * 100 : 0;
+  return Math.max(0, Math.round(gross - disc));
 }
 
 function sanitize(v: string) { return v.replace(',', '.').replace(/[^\d.]/g, ''); }
@@ -242,6 +253,8 @@ export default function QuoteNew() {
           unitPriceInput: '0',
           is_optional: s.is_optional || false,
           item_type: 'service' as const,
+          discountType: '' as const,
+          discountValueInput: '',
         })));
       }
       if (preset.images && preset.images.length > 0) setPhotos(preset.images);
@@ -302,7 +315,7 @@ export default function QuoteNew() {
   const subtotalCents = useMemo(() =>
     lineItems.reduce((s, i) => {
       if (i.is_optional) return s;
-      return s + Math.round((parseFloat(i.qtyInput) || 0) * Math.round((parseFloat(i.unitPriceInput) || 0) * 100));
+      return s + lineNetCents(i);
     }, 0), [lineItems]);
 
   const discountCents = useMemo(() => {
@@ -367,7 +380,7 @@ export default function QuoteNew() {
       const unit = Math.round((parseFloat(i.unitPriceInput) || 0) * 100);
       return {
         id: i.id, name: i.name, description: i.description || null,
-        qty, unit_price_cents: unit, total_cents: Math.round(qty * unit),
+        qty, unit_price_cents: unit, total_cents: lineNetCents(i),
         item_type: i.item_type,
       };
     };
@@ -423,6 +436,7 @@ export default function QuoteNew() {
       description: service.description || '', qtyInput: '1',
       unitPriceInput: String(service.default_price_cents / 100),
       is_optional: false, item_type: 'service',
+      discountType: '', discountValueInput: '',
     };
     if (empty !== -1) setLineItems(p => { const u = [...p]; u[empty] = item; return u; });
     else setLineItems(p => [...p, item]);
@@ -459,6 +473,7 @@ export default function QuoteNew() {
       description: '', qtyInput: String(j.quantity),
       unitPriceInput: String(j.unit_price_cents / 100),
       is_optional: false, item_type: 'service' as const,
+      discountType: '' as const, discountValueInput: '',
     }));
     setLineItems(p => {
       const nonEmpty = p.filter(i => i.name.trim());
@@ -558,6 +573,8 @@ export default function QuoteNew() {
         description: i.description || null,
         quantity: Math.max(0.01, parseFloat(i.qtyInput) || 1),
         unit_price_cents: Math.max(0, Math.round((parseFloat(i.unitPriceInput) || 0) * 100)),
+        discount_type: i.discountType || null,
+        discount_value: parseFloat(i.discountValueInput) || 0,
         sort_order: idx,
         is_optional: i.is_optional,
         item_type: i.item_type,
@@ -1100,18 +1117,36 @@ export default function QuoteNew() {
                 <input value={item.unitPriceInput} onChange={e => updateLine(item.id, { unitPriceInput: sanitize(e.target.value) })}
                   className={cn(INPUT, 'text-right')} />
                 <p className="text-[13px] font-bold text-right text-black dark:text-white pt-2.5 tabular-nums">
-                  {formatQuoteMoney(Math.round((parseFloat(item.qtyInput) || 0) * (parseFloat(item.unitPriceInput) || 0) * 100))}
+                  {formatQuoteMoney(lineNetCents(item))}
                 </p>
                 <button type="button" onClick={() => removeLine(item.id)} disabled={lineItems.length === 1}
                   className="w-[30px] h-[30px] mt-1 rounded-lg flex items-center justify-center text-black dark:text-white hover:bg-[#f5f5f5] dark:hover:bg-[#1c1c1f] disabled:opacity-30">
                   <Trash2 size={14} />
                 </button>
-                <label className="col-span-full flex items-center gap-2 text-[11.5px] font-medium text-black dark:text-white cursor-pointer">
-                  <input type="checkbox" checked={item.is_optional}
-                    onChange={e => updateLine(item.id, { is_optional: e.target.checked })}
-                    className="h-3.5 w-3.5 rounded accent-black dark:accent-white" />
-                  {tq.markAsOptional}
-                </label>
+                <div className="col-span-full flex items-center justify-between gap-3">
+                  <label className="flex items-center gap-2 text-[11.5px] font-medium text-black dark:text-white cursor-pointer">
+                    <input type="checkbox" checked={item.is_optional}
+                      onChange={e => updateLine(item.id, { is_optional: e.target.checked })}
+                      className="h-3.5 w-3.5 rounded accent-black dark:accent-white" />
+                    {tq.markAsOptional}
+                  </label>
+                  <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-black dark:text-white">
+                    {fr ? 'Rabais' : 'Discount'}
+                    <select value={item.discountType}
+                      onChange={e => updateLine(item.id, { discountType: e.target.value as LineItemForm['discountType'] })}
+                      className={cn(INPUT, 'w-auto py-1 text-[11.5px]')}>
+                      <option value="">{fr ? 'Aucun' : 'None'}</option>
+                      <option value="percentage">%</option>
+                      <option value="fixed">$</option>
+                    </select>
+                    {item.discountType && (
+                      <input value={item.discountValueInput}
+                        onChange={e => updateLine(item.id, { discountValueInput: sanitize(e.target.value) })}
+                        className={cn(INPUT, 'w-[72px] py-1 text-right text-[11.5px]')}
+                        placeholder={item.discountType === 'percentage' ? '10' : '25.00'} />
+                    )}
+                  </span>
+                </div>
               </div>
             ))}
 
