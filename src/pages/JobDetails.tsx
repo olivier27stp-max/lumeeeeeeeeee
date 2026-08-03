@@ -43,6 +43,7 @@ import {
   saveJobBillingMilestones,
   setJobBillingSplit,
   createInvoiceForMilestone,
+  createInvoiceForVisit,
   type JobBillingMilestone,
 } from '../lib/jobBillingApi';
 import { fetchReminderSettings, fetchReminderLog, type ReminderSettings, type ReminderLogEntry } from '../lib/remindersApi';
@@ -426,6 +427,9 @@ export default function JobDetails() {
 
   // Check off a visit (→ completed) or bring it back (→ scheduled). This is
   // what clears a "Late" job: derived_status counts past NON-completed visits.
+  // Jobs en facturation par visite (billing_mode = 'per_visit') : compléter la
+  // visite crée aussi sa facture — envoyée d'emblée si « Se faire payer
+  // automatiquement » (auto_charge) est actif sur le job.
   const handleToggleVisitCompleted = async (visit: ScheduleEvent) => {
     if (visitActionBusy) return;
     const wasCompleted = (visit.status || '').toLowerCase() === 'completed';
@@ -440,6 +444,31 @@ export default function JobDetails() {
       toast.success(wasCompleted
         ? (language === 'fr' ? 'Visite remise à faire.' : 'Visit set back to scheduled.')
         : (language === 'fr' ? 'Visite complétée.' : 'Visit completed.'));
+      if (!wasCompleted && job?.id) {
+        // billing_mode/auto_charge lus sur la table jobs (la vue jobs_active a
+        // ses colonnes figées) — absents tant que la migration 20260802200000
+        // n'est pas appliquée : on saute alors sans bruit.
+        try {
+          const { data: billingRow } = await supabase
+            .from('jobs')
+            .select('*')
+            .eq('id', job.id)
+            .maybeSingle();
+          if ((billingRow as any)?.billing_mode === 'per_visit') {
+            const sendNow = Boolean((billingRow as any)?.auto_charge);
+            const result = await createInvoiceForVisit({ jobId: job.id, visitId: visit.id, sendNow });
+            if (!result.already_exists) {
+              toast.success(sendNow
+                ? (language === 'fr' ? 'Facture de la visite créée et envoyée au client.' : 'Visit invoice created and sent to the client.')
+                : (language === 'fr' ? 'Facture de la visite créée (brouillon).' : 'Visit invoice created (draft).'));
+            }
+            await loadInvoices();
+          }
+        } catch (err: any) {
+          console.error('[jobs] per-visit invoice failed', err);
+          toast.error(err?.message || (language === 'fr' ? 'La facture de la visite n’a pas pu être créée.' : 'The visit invoice could not be created.'));
+        }
+      }
       await handleVisitAdded();
     } catch (err: any) {
       toast.error(err?.message || (language === 'fr' ? 'Impossible de mettre à jour la visite.' : 'Could not update the visit.'));

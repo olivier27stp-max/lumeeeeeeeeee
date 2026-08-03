@@ -109,6 +109,40 @@ export async function setJobBillingSplit(jobId: string, split: boolean): Promise
   if (error) throw error;
 }
 
+/**
+ * Facture d'une visite terminée (jobs.billing_mode = 'per_visit') — le
+ * serveur calcule la part de la visite (total du job ÷ nb de visites, la
+ * dernière prend le reste exact). Idempotent : une visite = une facture.
+ */
+export async function createInvoiceForVisit(payload: {
+  jobId: string;
+  visitId: string;
+  sendNow?: boolean;
+}): Promise<CreateInvoiceFromJobResult> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('You need to be authenticated for this action.');
+
+  const response = await fetch('/api/invoices/from-job', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      jobId: payload.jobId,
+      visitId: payload.visitId,
+      sendNow: Boolean(payload.sendNow),
+    }),
+  });
+
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body?.error || `Request failed (${response.status}).`);
+  }
+  return body as CreateInvoiceFromJobResult;
+}
+
 export async function createInvoiceForMilestone(payload: {
   jobId: string;
   milestoneId: string;

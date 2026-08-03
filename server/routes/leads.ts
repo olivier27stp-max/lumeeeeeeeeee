@@ -377,6 +377,7 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
     const requestedOrgId = parseOrgId(req.body?.orgId) || auth.orgId;
     const jobId = String(req.body?.jobId || '').trim();
     const milestoneId = String(req.body?.milestoneId || '').trim() || null;
+    const visitId = String(req.body?.visitId || '').trim() || null;
     const sendNow = Boolean(req.body?.sendNow);
 
     if (!jobId) {
@@ -386,25 +387,38 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
     const member = await isOrgMember(auth.client, auth.user.id, requestedOrgId);
     if (!member) return res.status(403).json({ error: 'Forbidden for this organization.' });
 
-    const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, requestedOrgId);
-    if (!canManage) {
-      return res.status(403).json({ error: 'Only owner/admin can create an invoice from a job.' });
+    // Per-visit invoices (billing_mode = per_visit) are triggered by the person
+    // completing the visit in the field — membership is enough, the RPC computes
+    // the amount itself. Milestone/full-job invoices stay owner/admin only.
+    if (!visitId) {
+      const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, requestedOrgId);
+      if (!canManage) {
+        return res.status(403).json({ error: 'Only owner/admin can create an invoice from a job.' });
+      }
     }
 
     // With a milestoneId, the invoice covers a single payment-schedule
-    // milestone (billing split) instead of the whole job.
-    const { data, error } = milestoneId
-      ? await auth.client.rpc('create_invoice_from_milestone', {
+    // milestone (billing split); with a visitId, the invoice covers one
+    // completed visit (per-visit billing) — otherwise the whole job.
+    const { data, error } = visitId
+      ? await auth.client.rpc('create_invoice_from_visit', {
           p_org_id: requestedOrgId,
           p_job_id: jobId,
-          p_milestone_id: milestoneId,
+          p_visit_id: visitId,
           p_send_now: sendNow,
         })
-      : await auth.client.rpc('create_invoice_from_job', {
-          p_org_id: requestedOrgId,
-          p_job_id: jobId,
-          p_send_now: sendNow,
-        });
+      : milestoneId
+        ? await auth.client.rpc('create_invoice_from_milestone', {
+            p_org_id: requestedOrgId,
+            p_job_id: jobId,
+            p_milestone_id: milestoneId,
+            p_send_now: sendNow,
+          })
+        : await auth.client.rpc('create_invoice_from_job', {
+            p_org_id: requestedOrgId,
+            p_job_id: jobId,
+            p_send_now: sendNow,
+          });
     if (error) throw error;
 
     const payload = Array.isArray(data) ? data[0] : data;
