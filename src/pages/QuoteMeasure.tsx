@@ -37,7 +37,6 @@ import MeasureToolbar from '../components/measure/MeasureToolbar';
 import MeasureSidebar from '../components/measure/MeasureSidebar';
 import MeasureStatusBar from '../components/measure/MeasureStatusBar';
 import StreetViewer from '../components/measure/StreetViewer';
-import HeightTool3D from '../components/measure/HeightTool3D';
 import { useGMaps3D } from '../components/measure/useGMaps3D';
 import { toast } from 'sonner';
 
@@ -146,7 +145,6 @@ export default function QuoteMeasure() {
   const [unitSystem, setUnitSystem] = useState<UnitSystem>('imperial');
   const [tilt3d, setTilt3d] = useState(true);
   const [is3dMode, setIs3dMode] = useState(false);
-  const [heightOpen, setHeightOpen] = useState(false);
   const cnt = useRef(0);
   // Last 3D click, to drop duplicate gmp-click events fired in quick succession
   // (the beta 3D map sometimes emits 2 clicks for one tap → stray extra points).
@@ -1106,7 +1104,6 @@ export default function QuoteMeasure() {
       {/* ════ MAIN LAYOUT ════ */}
       <div className="flex-1 flex overflow-hidden relative">
         <MeasureToolbar tool={tool} onToolChange={handleToolChange}
-          onOpenHeight={() => setHeightOpen(true)}
           onUndo={() => setPts(p => p.slice(0, -1))}
           onClearAll={() => { setShapes([]); setPts([]); setSelId(null); clearDrawOverlays(); }}
           onDuplicateSelected={handleDuplicateSelected}
@@ -1198,17 +1195,6 @@ export default function QuoteMeasure() {
           fr={fr}
           onClose={() => setStreetViewer(null)}
           onUnavailable={onStreetUnavailable}
-        />
-      )}
-
-      {heightOpen && (
-        <HeightTool3D
-          quoteAddress={addr}
-          fr={fr}
-          unitSystem={unitSystem}
-          index={cnt.current}
-          onComplete={(shape) => { cnt.current++; setShapes(p => [...p, shape]); setSelId(shape.id); }}
-          onClose={() => setHeightOpen(false)}
         />
       )}
 
