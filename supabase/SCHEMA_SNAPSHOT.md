@@ -11,209 +11,209 @@
 > **Régénérer avec** `scripts/gen-schema-snapshot.mjs` après tout changement
 > structurel. Un référentiel périmé est pire qu'aucun référentiel.
 
-**Généré le 2026-08-02 (post nettoyage: -23 tables, index optimises, FK completes) depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
+**Généré le 2026-08-02 (post reconciliation fonctions) depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
 ## 1. Tables (197)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
-| `a2p_registrations` | ✅ | ✅ | 1 | 0 |
-| `active_sessions` | ✅ | ✅ | 2 | 101 |
-| `activity_log` | ✅ | ✅ | 2 | 696 |
-| `activity_notes` | ✅ | ✅ | 3 | 1 |
-| `agent_messages` | ✅ | ✅ | 1 | 16 |
-| `alert_rules` | ✅ | ✅ | 3 | 0 |
-| `api_keys` | ✅ | ✅ | 4 | 0 |
-| `app_connections` | ✅ | ✅ | 4 | 1 |
-| `applied_taxes` | ✅ | ✅ | 1 | 0 |
-| `audit_events` | ✅ | ✅ | 4 | 2198 |
-| `automation_execution_logs` | ✅ | ✅ | 4 | 201 |
-| `automation_rules` | ✅ | ✅ | 4 | 1451 |
-| `automation_scheduled_tasks` | ✅ | ✅ | 4 | 401 |
-| `automations` | ✅ | ✅ | 4 | 0 |
-| `billing_profiles` | ✅ | ✅ | 1 | 3 |
-| `billing_receipt_log` | ✅ | ✅ | 1 | 2 |
-| `checklist_templates` | ✅ | ✅ | 2 | 0 |
-| `client_tags` | ✅ | ✅ | 3 | 0 |
-| `clients` | ✅ | ✅ | 4 | 66 |
-| `commission_settings` | ✅ | ✅ | 2 | 0 |
-| `communication_channels` | ✅ | ✅ | 1 | 1 |
-| `communication_messages` | ✅ | ✅ | 1 | 9 |
-| `communication_settings` | ✅ | ✅ | 1 | 46 |
-| `company_operating_profile` | ✅ | ✅ | 1 | 0 |
-| `company_settings` | ✅ | ✅ | 4 | 1 |
-| `connected_accounts` | ✅ | ✅ | 4 | 3 |
-| `consents` | ✅ | ✅ | 2 | 0 |
-| `contacts` | ✅ | ✅ | 4 | 21 |
-| `conversations` | ✅ | ✅ | 4 | 7 |
-| `course_assignments` | ✅ | ✅ | 3 | 0 |
-| `course_lessons` | ✅ | ✅ | 4 | 5 |
-| `course_modules` | ✅ | ✅ | 4 | 7 |
-| `course_progress` | ✅ | ✅ | 3 | 5 |
-| `courses` | ✅ | ✅ | 4 | 16 |
-| `custom_column_values` | ✅ | ✅ | 4 | 0 |
-| `custom_columns` | ✅ | ✅ | 4 | 2 |
-| `data_export_log` | ✅ | ✅ | 4 | 0 |
-| `dead_letters` | ✅ | ✅ | 1 | 0 |
-| `demo_requests` | ✅ | ✅ | 1 | 2 |
-| `dsar_requests` | ✅ | ✅ | 3 | 0 |
-| `email_accounts` | ✅ | ✅ | 4 | 2 |
-| `email_campaigns` | ✅ | ✅ | 2 | 0 |
-| `email_messages` | ✅ | ✅ | 1 | 190 |
-| `email_oauth_states` | ✅ | ✅ | 1 | 8 |
-| `email_opt_outs` | ✅ | ✅ | 2 | 0 |
-| `email_templates` | ✅ | ✅ | 5 | 11 |
-| `email_threads` | ✅ | ✅ | 1 | 175 |
-| `failed_login_attempts` | ✅ | ✅ | 1 | 0 |
-| `field_daily_stats` | ✅ | ✅ | 4 | 15 |
-| `field_house_events` | ✅ | ✅ | 4 | 184 |
-| `field_house_profiles` | ✅ | ✅ | 4 | 161 |
-| `field_pin_entity_links` | ✅ | ✅ | 1 | 6 |
-| `field_pin_templates` | ✅ | ✅ | 4 | 0 |
-| `field_pins` | ✅ | ✅ | 4 | 115 |
-| `field_rep_performance` | ✅ | ✅ | 1 | 0 |
-| `field_sales_reps` | ✅ | ✅ | 4 | 3 |
-| `field_sales_team_members` | ✅ | ✅ | 2 | 0 |
-| `field_sales_teams` | ✅ | ✅ | 2 | 0 |
-| `field_schedule_slots` | ✅ | ✅ | 1 | 0 |
-| `field_settings` | ✅ | ✅ | 4 | 1 |
-| `field_territories` | ✅ | ✅ | 4 | 12 |
-| `field_territory_assignments` | ✅ | ✅ | 1 | 0 |
-| `form_submissions` | ✅ | ✅ | 1 | 20 |
-| `fs_badges` | ✅ | ✅ | 4 | 0 |
-| `fs_battles` | ✅ | ✅ | 4 | 0 |
-| `fs_challenge_participants` | ✅ | ✅ | 3 | 0 |
-| `fs_challenges` | ✅ | ✅ | 4 | 0 |
-| `fs_check_in_records` | ✅ | ✅ | 2 | 0 |
-| `fs_commission_entries` | ✅ | ✅ | 4 | 36 |
-| `fs_commission_rules` | ✅ | ✅ | 4 | 1 |
-| `fs_field_sessions` | ✅ | ✅ | 3 | 0 |
-| `fs_gps_points` | ✅ | ✅ | 2 | 0 |
-| `fs_rep_badges` | ✅ | ✅ | 2 | 0 |
-| `fs_rep_stat_snapshots` | ✅ | ✅ | 4 | 0 |
-| `geofences` | ✅ | ✅ | 1 | 0 |
-| `goals` | ✅ | ✅ | 3 | 0 |
-| `gps_providers` | ✅ | ✅ | 1 | 0 |
-| `incident_timeline` | ✅ | ✅ | 2 | 0 |
-| `integration_audit_logs` | ✅ | ✅ | 4 | 4 |
-| `integration_oauth_states` | ✅ | ✅ | 4 | 0 |
-| `invitations` | ✅ | ✅ | 3 | 4 |
-| `invoice_items` | ✅ | ✅ | 4 | 14 |
-| `invoice_send_events` | ✅ | ✅ | 2 | 0 |
-| `invoice_sequences` | ✅ | ✅ | 1 | 1 |
-| `invoice_templates` | ✅ | ✅ | 4 | 6 |
-| `invoices` | ✅ | ✅ | 4 | 13 |
-| `ip_blocklist` | ✅ | ✅ | 4 | 0 |
-| `job_agreements` | ✅ | ✅ | 4 | 4 |
+| `a2p_registrations` | ✅ | ✅ | 1 | ? |
+| `active_sessions` | ✅ | ✅ | 2 | ? |
+| `activity_log` | ✅ | ✅ | 2 | ? |
+| `activity_notes` | ✅ | ✅ | 3 | ? |
+| `agent_messages` | ✅ | ✅ | 1 | ? |
+| `alert_rules` | ✅ | ✅ | 3 | ? |
+| `api_keys` | ✅ | ✅ | 4 | ? |
+| `app_connections` | ✅ | ✅ | 4 | ? |
+| `applied_taxes` | ✅ | ✅ | 1 | ? |
+| `audit_events` | ✅ | ✅ | 4 | ? |
+| `automation_execution_logs` | ✅ | ✅ | 4 | ? |
+| `automation_rules` | ✅ | ✅ | 4 | ? |
+| `automation_scheduled_tasks` | ✅ | ✅ | 4 | ? |
+| `automations` | ✅ | ✅ | 4 | ? |
+| `billing_profiles` | ✅ | ✅ | 1 | ? |
+| `billing_receipt_log` | ✅ | ✅ | 1 | ? |
+| `checklist_templates` | ✅ | ✅ | 2 | ? |
+| `client_tags` | ✅ | ✅ | 3 | ? |
+| `clients` | ✅ | ✅ | 4 | ? |
+| `commission_settings` | ✅ | ✅ | 2 | ? |
+| `communication_channels` | ✅ | ✅ | 1 | ? |
+| `communication_messages` | ✅ | ✅ | 1 | ? |
+| `communication_settings` | ✅ | ✅ | 1 | ? |
+| `company_operating_profile` | ✅ | ✅ | 1 | ? |
+| `company_settings` | ✅ | ✅ | 4 | ? |
+| `connected_accounts` | ✅ | ✅ | 4 | ? |
+| `consents` | ✅ | ✅ | 2 | ? |
+| `contacts` | ✅ | ✅ | 4 | ? |
+| `conversations` | ✅ | ✅ | 4 | ? |
+| `course_assignments` | ✅ | ✅ | 3 | ? |
+| `course_lessons` | ✅ | ✅ | 4 | ? |
+| `course_modules` | ✅ | ✅ | 4 | ? |
+| `course_progress` | ✅ | ✅ | 3 | ? |
+| `courses` | ✅ | ✅ | 4 | ? |
+| `custom_column_values` | ✅ | ✅ | 4 | ? |
+| `custom_columns` | ✅ | ✅ | 4 | ? |
+| `data_export_log` | ✅ | ✅ | 4 | ? |
+| `dead_letters` | ✅ | ✅ | 1 | ? |
+| `demo_requests` | ✅ | ✅ | 1 | ? |
+| `dsar_requests` | ✅ | ✅ | 3 | ? |
+| `email_accounts` | ✅ | ✅ | 4 | ? |
+| `email_campaigns` | ✅ | ✅ | 2 | ? |
+| `email_messages` | ✅ | ✅ | 1 | ? |
+| `email_oauth_states` | ✅ | ✅ | 1 | ? |
+| `email_opt_outs` | ✅ | ✅ | 2 | ? |
+| `email_templates` | ✅ | ✅ | 5 | ? |
+| `email_threads` | ✅ | ✅ | 1 | ? |
+| `failed_login_attempts` | ✅ | ✅ | 1 | ? |
+| `field_daily_stats` | ✅ | ✅ | 4 | ? |
+| `field_house_events` | ✅ | ✅ | 4 | ? |
+| `field_house_profiles` | ✅ | ✅ | 4 | ? |
+| `field_pin_entity_links` | ✅ | ✅ | 1 | ? |
+| `field_pin_templates` | ✅ | ✅ | 4 | ? |
+| `field_pins` | ✅ | ✅ | 4 | ? |
+| `field_rep_performance` | ✅ | ✅ | 1 | ? |
+| `field_sales_reps` | ✅ | ✅ | 4 | ? |
+| `field_sales_team_members` | ✅ | ✅ | 2 | ? |
+| `field_sales_teams` | ✅ | ✅ | 2 | ? |
+| `field_schedule_slots` | ✅ | ✅ | 1 | ? |
+| `field_settings` | ✅ | ✅ | 4 | ? |
+| `field_territories` | ✅ | ✅ | 4 | ? |
+| `field_territory_assignments` | ✅ | ✅ | 1 | ? |
+| `form_submissions` | ✅ | ✅ | 1 | ? |
+| `fs_badges` | ✅ | ✅ | 4 | ? |
+| `fs_battles` | ✅ | ✅ | 4 | ? |
+| `fs_challenge_participants` | ✅ | ✅ | 3 | ? |
+| `fs_challenges` | ✅ | ✅ | 4 | ? |
+| `fs_check_in_records` | ✅ | ✅ | 2 | ? |
+| `fs_commission_entries` | ✅ | ✅ | 4 | ? |
+| `fs_commission_rules` | ✅ | ✅ | 4 | ? |
+| `fs_field_sessions` | ✅ | ✅ | 3 | ? |
+| `fs_gps_points` | ✅ | ✅ | 2 | ? |
+| `fs_rep_badges` | ✅ | ✅ | 2 | ? |
+| `fs_rep_stat_snapshots` | ✅ | ✅ | 4 | ? |
+| `geofences` | ✅ | ✅ | 1 | ? |
+| `goals` | ✅ | ✅ | 3 | ? |
+| `gps_providers` | ✅ | ✅ | 1 | ? |
+| `incident_timeline` | ✅ | ✅ | 2 | ? |
+| `integration_audit_logs` | ✅ | ✅ | 4 | ? |
+| `integration_oauth_states` | ✅ | ✅ | 4 | ? |
+| `invitations` | ✅ | ✅ | 3 | ? |
+| `invoice_items` | ✅ | ✅ | 4 | ? |
+| `invoice_send_events` | ✅ | ✅ | 2 | ? |
+| `invoice_sequences` | ✅ | ✅ | 1 | ? |
+| `invoice_templates` | ✅ | ✅ | 4 | ? |
+| `invoices` | ✅ | ✅ | 4 | ? |
+| `ip_blocklist` | ✅ | ✅ | 4 | ? |
+| `job_agreements` | ✅ | ✅ | 4 | ? |
 | `job_billing_milestones` | ✅ | ✅ | 4 | ? |
-| `job_checklists` | ✅ | ✅ | 1 | 0 |
-| `job_intents` | ✅ | ✅ | 4 | 0 |
-| `job_line_items` | ✅ | ✅ | 4 | 20 |
-| `job_recurrence_rules` | ✅ | ✅ | 1 | 0 |
+| `job_checklists` | ✅ | ✅ | 1 | ? |
+| `job_intents` | ✅ | ✅ | 4 | ? |
+| `job_line_items` | ✅ | ✅ | 4 | ? |
+| `job_recurrence_rules` | ✅ | ✅ | 1 | ? |
 | `job_tags` | ✅ | ✅ | 4 | ? |
-| `job_templates` | ✅ | ✅ | 1 | 0 |
-| `jobs` | ✅ | ✅ | 4 | 37 |
-| `lead_lists` | ✅ | ✅ | 1 | 0 |
+| `job_templates` | ✅ | ✅ | 1 | ? |
+| `jobs` | ✅ | ✅ | 4 | ? |
+| `lead_lists` | ✅ | ✅ | 1 | ? |
 | `lead_sources` | ✅ | ✅ | 4 | ? |
-| `lists` | ✅ | ✅ | 1 | 0 |
-| `location_tracking_settings` | ✅ | ✅ | 4 | 0 |
-| `login_history` | ✅ | ✅ | 4 | 63 |
-| `memberships` | ✅ | ✅ | 5 | 41 |
-| `messages` | ✅ | ✅ | 4 | 46 |
-| `mfa_phone` | ✅ | ✅ | 1 | 1 |
+| `lists` | ✅ | ✅ | 1 | ? |
+| `location_tracking_settings` | ✅ | ✅ | 4 | ? |
+| `login_history` | ✅ | ✅ | 4 | ? |
+| `memberships` | ✅ | ✅ | 5 | ? |
+| `messages` | ✅ | ✅ | 4 | ? |
+| `mfa_phone` | ✅ | ✅ | 1 | ? |
 | `mfa_sms_challenges` | ✅ | ✅ | 1 | ? |
 | `mfa_trusted_devices` | ✅ | ✅ | 1 | ? |
-| `note_history` | ✅ | ✅ | 2 | 0 |
-| `notes` | ✅ | ✅ | 4 | 0 |
-| `notifications` | ✅ | ✅ | 4 | 26 |
-| `org_billing_settings` | ✅ | ✅ | 3 | 0 |
-| `org_client_counters` | ✅ | ✅ | 1 | 21 |
-| `org_features` | ✅ | ✅ | 3 | 9 |
-| `org_invoice_sequences` | ✅ | ✅ | 1 | 12 |
-| `org_job_counters` | ✅ | ✅ | 1 | 2 |
-| `org_knowledge` | ✅ | ✅ | 1 | 0 |
-| `orgs` | ✅ | ✅ | 4 | 47 |
-| `payment_provider_secrets` | ✅ | ✅ | 4 | 1 |
-| `payment_provider_settings` | ✅ | ✅ | 4 | 1 |
-| `payment_providers` | ✅ | ✅ | 4 | 0 |
-| `payment_requests` | ✅ | ✅ | 4 | 4 |
-| `payment_requirements` | ✅ | ✅ | 3 | 1 |
-| `payments` | ✅ | ✅ | 4 | 3 |
+| `note_history` | ✅ | ✅ | 2 | ? |
+| `notes` | ✅ | ✅ | 4 | ? |
+| `notifications` | ✅ | ✅ | 4 | ? |
+| `org_billing_settings` | ✅ | ✅ | 3 | ? |
+| `org_client_counters` | ✅ | ✅ | 1 | ? |
+| `org_features` | ✅ | ✅ | 3 | ? |
+| `org_invoice_sequences` | ✅ | ✅ | 1 | ? |
+| `org_job_counters` | ✅ | ✅ | 1 | ? |
+| `org_knowledge` | ✅ | ✅ | 1 | ? |
+| `orgs` | ✅ | ✅ | 4 | ? |
+| `payment_provider_secrets` | ✅ | ✅ | 4 | ? |
+| `payment_provider_settings` | ✅ | ✅ | 4 | ? |
+| `payment_providers` | ✅ | ✅ | 4 | ? |
+| `payment_requests` | ✅ | ✅ | 4 | ? |
+| `payment_requirements` | ✅ | ✅ | 3 | ? |
+| `payments` | ✅ | ✅ | 4 | ? |
 | `payroll_adjustments` | ✅ | ✅ | 1 | ? |
 | `payroll_payments` | ✅ | ✅ | 1 | ? |
-| `payroll_settings` | ✅ | ✅ | 4 | 0 |
-| `pipeline_deals` | ✅ | ✅ | 4 | 124 |
-| `pipelines` | ✅ | ✅ | 1 | 2 |
-| `plans` | ✅ | ✅ | 1 | 3 |
-| `predefined_services` | ✅ | ✅ | 4 | 13 |
-| `processed_checkout_sessions` | ✅ | ✅ | 1 | 0 |
-| `profiles` | ✅ | ✅ | 3 | 47 |
-| `promo_codes` | ✅ | ✅ | 1 | 1 |
-| `proof_of_presence` | ✅ | ✅ | 1 | 0 |
-| `properties` | ✅ | ✅ | 4 | 50 |
-| `provisioning_events` | ✅ | ✅ | 1 | 0 |
-| `push_tokens` | ✅ | ✅ | 4 | 0 |
-| `quote_attachments` | ✅ | ✅ | 4 | 1 |
-| `quote_line_items` | ✅ | ✅ | 4 | 31 |
-| `quote_measurement_camera` | ✅ | ✅ | 4 | 3 |
-| `quote_measurements` | ✅ | ✅ | 4 | 0 |
-| `quote_sections` | ✅ | ✅ | 4 | 9 |
-| `quote_send_log` | ✅ | ✅ | 2 | 0 |
-| `quote_sequences` | ✅ | ✅ | 1 | 1 |
-| `quote_status_history` | ✅ | ✅ | 2 | 6 |
-| `quote_templates` | ✅ | ✅ | 1 | 3 |
-| `quote_views` | ✅ | ✅ | 4 | 0 |
-| `quotes` | ✅ | ✅ | 4 | 19 |
-| `rate_limits` | ✅ | ✅ | 2 | 0 |
-| `recurring_invoice_schedules` | ✅ | ✅ | 2 | 0 |
+| `payroll_settings` | ✅ | ✅ | 4 | ? |
+| `pipeline_deals` | ✅ | ✅ | 4 | ? |
+| `pipelines` | ✅ | ✅ | 1 | ? |
+| `plans` | ✅ | ✅ | 1 | ? |
+| `predefined_services` | ✅ | ✅ | 4 | ? |
+| `processed_checkout_sessions` | ✅ | ✅ | 1 | ? |
+| `profiles` | ✅ | ✅ | 3 | ? |
+| `promo_codes` | ✅ | ✅ | 1 | ? |
+| `proof_of_presence` | ✅ | ✅ | 1 | ? |
+| `properties` | ✅ | ✅ | 4 | ? |
+| `provisioning_events` | ✅ | ✅ | 1 | ? |
+| `push_tokens` | ✅ | ✅ | 4 | ? |
+| `quote_attachments` | ✅ | ✅ | 4 | ? |
+| `quote_line_items` | ✅ | ✅ | 4 | ? |
+| `quote_measurement_camera` | ✅ | ✅ | 4 | ? |
+| `quote_measurements` | ✅ | ✅ | 4 | ? |
+| `quote_sections` | ✅ | ✅ | 4 | ? |
+| `quote_send_log` | ✅ | ✅ | 2 | ? |
+| `quote_sequences` | ✅ | ✅ | 1 | ? |
+| `quote_status_history` | ✅ | ✅ | 2 | ? |
+| `quote_templates` | ✅ | ✅ | 1 | ? |
+| `quote_views` | ✅ | ✅ | 4 | ? |
+| `quotes` | ✅ | ✅ | 4 | ? |
+| `rate_limits` | ✅ | ✅ | 2 | ? |
+| `recurring_invoice_schedules` | ✅ | ✅ | 2 | ? |
 | `recurring_team_schedules` | ✅ | ✅ | 4 | ? |
-| `referrals` | ✅ | ✅ | 1 | 1 |
-| `reminder_log` | ✅ | ✅ | 1 | 0 |
-| `reminder_settings` | ✅ | ✅ | 2 | 0 |
-| `request_forms` | ✅ | ✅ | 1 | 1 |
-| `review_requests` | ✅ | ✅ | 2 | 0 |
+| `referrals` | ✅ | ✅ | 1 | ? |
+| `reminder_log` | ✅ | ✅ | 1 | ? |
+| `reminder_settings` | ✅ | ✅ | 2 | ? |
+| `request_forms` | ✅ | ✅ | 1 | ? |
+| `review_requests` | ✅ | ✅ | 2 | ? |
 | `role_templates` | ✅ | ✅ | 2 | ? |
-| `satisfaction_surveys` | ✅ | ✅ | 1 | 7 |
-| `schedule_events` | ✅ | ✅ | 4 | 37 |
-| `scheduled_reports` | ✅ | ✅ | 4 | 0 |
-| `secret_rotation_log` | ✅ | ✅ | 1 | 0 |
-| `security_alerts` | ✅ | ✅ | 4 | 0 |
-| `security_canary_runs` | ✅ | ✅ | 0 | 54 |
-| `security_events` | ✅ | ✅ | 4 | 115 |
-| `security_incidents` | ✅ | ✅ | 3 | 0 |
-| `service_contracts` | ✅ | ✅ | 4 | 1 |
-| `sms_opt_outs` | ✅ | ✅ | 2 | 0 |
-| `specific_notes` | ✅ | ✅ | 4 | 6 |
-| `subscriptions` | ✅ | ✅ | 2 | 7 |
-| `tags` | ✅ | ✅ | 4 | 0 |
-| `tasks` | ✅ | ✅ | 4 | 4 |
-| `tax_configs` | ✅ | ✅ | 1 | 2 |
-| `tax_group_items` | ✅ | ✅ | 1 | 2 |
-| `tax_groups` | ✅ | ✅ | 1 | 5 |
+| `satisfaction_surveys` | ✅ | ✅ | 1 | ? |
+| `schedule_events` | ✅ | ✅ | 4 | ? |
+| `scheduled_reports` | ✅ | ✅ | 4 | ? |
+| `secret_rotation_log` | ✅ | ✅ | 1 | ? |
+| `security_alerts` | ✅ | ✅ | 4 | ? |
+| `security_canary_runs` | ✅ | ✅ | 0 | ? |
+| `security_events` | ✅ | ✅ | 4 | ? |
+| `security_incidents` | ✅ | ✅ | 3 | ? |
+| `service_contracts` | ✅ | ✅ | 4 | ? |
+| `sms_opt_outs` | ✅ | ✅ | 2 | ? |
+| `specific_notes` | ✅ | ✅ | 4 | ? |
+| `subscriptions` | ✅ | ✅ | 2 | ? |
+| `tags` | ✅ | ✅ | 4 | ? |
+| `tasks` | ✅ | ✅ | 4 | ? |
+| `tax_configs` | ✅ | ✅ | 1 | ? |
+| `tax_group_items` | ✅ | ✅ | 1 | ? |
+| `tax_groups` | ✅ | ✅ | 1 | ? |
 | `team_assignments` | ✅ | ✅ | 2 | ? |
-| `team_availability` | ✅ | ✅ | 4 | 0 |
-| `team_capabilities` | ✅ | ✅ | 4 | 0 |
-| `team_date_slots` | ✅ | ✅ | 4 | 0 |
-| `team_members` | ✅ | ✅ | 4 | 6 |
-| `team_schedule_assignments` | ✅ | ✅ | 4 | 4 |
-| `team_schedule_audit` | ✅ | ✅ | 2 | 4 |
-| `teams` | ✅ | ✅ | 4 | 5 |
-| `technician_device_mappings` | ✅ | ✅ | 1 | 0 |
-| `technician_locations` | ✅ | ✅ | 1 | 0 |
-| `time_entries` | ✅ | ✅ | 4 | 8 |
+| `team_availability` | ✅ | ✅ | 4 | ? |
+| `team_capabilities` | ✅ | ✅ | 4 | ? |
+| `team_date_slots` | ✅ | ✅ | 4 | ? |
+| `team_members` | ✅ | ✅ | 4 | ? |
+| `team_schedule_assignments` | ✅ | ✅ | 4 | ? |
+| `team_schedule_audit` | ✅ | ✅ | 2 | ? |
+| `teams` | ✅ | ✅ | 4 | ? |
+| `technician_device_mappings` | ✅ | ✅ | 1 | ? |
+| `technician_locations` | ✅ | ✅ | 1 | ? |
+| `time_entries` | ✅ | ✅ | 4 | ? |
 | `time_off_requests` | ✅ | ✅ | 4 | ? |
-| `tracking_events` | ✅ | ✅ | 2 | 420 |
-| `tracking_live_locations` | ✅ | ✅ | 3 | 9 |
-| `tracking_points` | ✅ | ✅ | 2 | 3208 |
-| `tracking_sessions` | ✅ | ✅ | 3 | 165 |
-| `webhook_deliveries` | ✅ | ✅ | 1 | 0 |
-| `webhook_endpoints` | ✅ | ✅ | 2 | 0 |
-| `webhook_events` | ✅ | ✅ | 4 | 28 |
-| `workflow_edges` | ✅ | ✅ | 1 | 0 |
-| `workflow_logs` | ✅ | ✅ | 1 | 0 |
-| `workflow_nodes` | ✅ | ✅ | 1 | 0 |
-| `workflow_runs` | ✅ | ✅ | 4 | 0 |
-| `workflows` | ✅ | ✅ | 4 | 31 |
+| `tracking_events` | ✅ | ✅ | 2 | ? |
+| `tracking_live_locations` | ✅ | ✅ | 3 | ? |
+| `tracking_points` | ✅ | ✅ | 2 | ? |
+| `tracking_sessions` | ✅ | ✅ | 3 | ? |
+| `webhook_deliveries` | ✅ | ✅ | 1 | ? |
+| `webhook_endpoints` | ✅ | ✅ | 2 | ? |
+| `webhook_events` | ✅ | ✅ | 4 | ? |
+| `workflow_edges` | ✅ | ✅ | 1 | ? |
+| `workflow_logs` | ✅ | ✅ | 1 | ? |
+| `workflow_nodes` | ✅ | ✅ | 1 | ? |
+| `workflow_runs` | ✅ | ✅ | 4 | ? |
+| `workflows` | ✅ | ✅ | 4 | ? |
 
 ## 2. Colonnes
 
@@ -5232,7 +5232,7 @@
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 
-## 4. Fonctions (307)
+## 4. Fonctions (308)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -5241,312 +5241,313 @@ l'audit. Lire le corps réel avec :
 | Fonction | SECURITY DEFINER | search_path | Droits |
 |---|---|---|---|
 | `_point_in_zone_ring(p_lng double precision, p_lat double precision, geo jsonb)` → boolean | non | ❌ aucun | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `ac_actor_name()` → text | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `ac_client_name(p_client uuid)` → text | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `ac_actor_name()` → text | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_client_name(p_client uuid)` → text | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `ac_fmt_dollars(p_cents integer)` → text | non | ❌ aucun | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `ac_log_event(p_org uuid, p_type text, p_entity text, p_title text, p_body text, p_l)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_note_context(p_entity_type text, p_entity_id uuid)` → text | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_track_activity_notes()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_track_card_saved()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_track_invoices()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_track_payments()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_track_quotes()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_track_specific_notes()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ac_track_survey_reviews()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ai_enforce_org_scope()` → trigger | non | search_path=public | service_role=X/postgres |
-| `ai_on_message_insert()` → trigger | non | search_path=public | service_role=X/postgres |
-| `ai_set_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `anonymize_client(p_client_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `anonymize_inactive_leads(p_months integer DEFAULT 24)` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `anonymize_lead(p_lead_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `anonymize_old_soft_deleted_clients(p_days integer DEFAULT 180)` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `apply_automation_presets_fr(p_org_id uuid)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `apply_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer)` → TABLE(id uuid, paid_cents integer, balance_cents integer, status text, total_cents integer) | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `archive_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `archive_record(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_reason text DEF)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `assign_client_number()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `assign_job_number()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `assign_org_company_group()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `audit_events_append_only()` → trigger | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `audit_log_trigger()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `auto_create_comm_settings()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `auto_pipeline_deal_from_quote()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `auto_pipeline_deal_from_quote_impl(new quotes)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `auto_pipeline_deal_from_quote_update()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `automation_invoice_overdue_check()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `automation_job_completed()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `automation_lead_stage_change()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `batch_restore(p_org_id uuid, p_entity_type text, p_entity_ids uuid[])` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `batch_soft_delete(p_org_id uuid, p_entity_type text, p_entity_ids uuid[])` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `batch_soft_delete_clients(p_org_id uuid, p_client_ids uuid[])` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres | authenticated=X/postgres |
+| `ac_log_event(p_org uuid, p_type text, p_entity text, p_title text, p_body text, p_l)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_note_context(p_entity_type text, p_entity_id uuid)` → text | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_track_activity_notes()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_track_card_saved()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_track_invoices()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_track_payments()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_track_quotes()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_track_specific_notes()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ac_track_survey_reviews()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ai_enforce_org_scope()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ai_on_message_insert()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ai_set_updated_at()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `anonymize_client(p_client_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `anonymize_inactive_leads(p_months integer DEFAULT 24)` → bigint | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `anonymize_lead(p_lead_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `anonymize_old_soft_deleted_clients(p_days integer DEFAULT 180)` → bigint | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `apply_automation_presets_fr(p_org_id uuid)` → integer | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `apply_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer)` → TABLE(id uuid, paid_cents integer, balance_cents integer, status text, total_cents integer) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `archive_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `archive_record(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_reason text DEF)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `assign_client_number()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `assign_job_number()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `assign_org_company_group()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `audit_events_append_only()` → trigger | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `audit_log_trigger()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `auto_create_comm_settings()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `auto_pipeline_deal_from_quote()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `auto_pipeline_deal_from_quote_impl(new quotes)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `auto_pipeline_deal_from_quote_update()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `automation_invoice_overdue_check()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `automation_job_completed()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `automation_lead_stage_change()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `batch_restore(p_org_id uuid, p_entity_type text, p_entity_ids uuid[])` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `batch_soft_delete(p_org_id uuid, p_entity_type text, p_entity_ids uuid[])` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `batch_soft_delete_clients(p_org_id uuid, p_client_ids uuid[])` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `build_client_fts_vector(r clients)` → tsvector | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `build_invoice_fts_vector(r invoices)` → tsvector | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `build_job_fts_vector(r jobs)` → tsvector | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `bump_row_version()` → trigger | non | search_path="" | service_role=X/postgres |
+| `bump_row_version()` → trigger | non | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `business_days_between(p_start date, p_end date)` → integer | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `cancel_hard_delete_member(p_member_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `check_all_invariants()` → TABLE(check_name text, failures bigint, detail text) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_availability_overlap()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `check_cross_tenant_references()` → TABLE(relation text, violations bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_custom_field_orphans()` → TABLE(value_id uuid, org_id uuid, entity text, record_id uuid) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_exposed_trigger_functions()` → TABLE(function_name text, exposed_to text) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_failing_cron_jobs()` → TABLE(jobname text, failures_7d bigint, last_error text) | ⚠️ oui | search_path=public, pg_catalog, pg_temp | service_role=X/postgres |
-| `check_invoice_numbering_invariant()` → TABLE(org_id uuid, invoice_number text, occurrences bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_invoice_totals_balance()` → TABLE(invoice_id uuid, org_id uuid, invoice_number text, stored_subtotal_cents integer, computed_subtotal_cents bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `cancel_hard_delete_member(p_member_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_all_invariants()` → TABLE(check_name text, failures bigint, detail text) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_availability_overlap()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_cross_tenant_references()` → TABLE(relation text, violations bigint) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_custom_field_orphans()` → TABLE(value_id uuid, org_id uuid, entity text, record_id uuid) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_exposed_trigger_functions()` → TABLE(function_name text, exposed_to text) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_failing_cron_jobs()` → TABLE(jobname text, failures_7d bigint, last_error text) | ⚠️ oui | search_path=public, pg_catalog, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_invoice_numbering_invariant()` → TABLE(org_id uuid, invoice_number text, occurrences bigint) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_invoice_totals_balance()` → TABLE(invoice_id uuid, org_id uuid, invoice_number text, stored_subtotal_cents integer, computed_subtotal_cents bigint) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `check_password_strength(p_password text)` → jsonb | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `check_rate_limit(p_key text, p_max_tokens integer DEFAULT 60, p_refill_rate integer DEF)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `check_rls_coverage()` → TABLE(table_name text, rls_enabled boolean, rls_forced boolean, policy_count bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_subscription_active(p_org_id uuid)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `check_team_schedule_assignment()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `claim_next_invoice_number(p_org uuid)` → bigint | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `cleanup_expired_oauth_states()` → jsonb | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `cleanup_expired_pipeline_deals()` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `cleanup_lost_pipeline_deals()` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `cleanup_rate_limits()` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `clients_auto_property_from_address()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `clients_before_insert_set_org()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_rate_limit(p_key text, p_max_tokens integer DEFAULT 60, p_refill_rate integer DEF)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_rls_coverage()` → TABLE(table_name text, rls_enabled boolean, rls_forced boolean, policy_count bigint) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_subscription_active(p_org_id uuid)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `check_team_schedule_assignment()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `claim_next_invoice_number(p_org uuid)` → bigint | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `cleanup_expired_oauth_states()` → jsonb | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `cleanup_expired_pipeline_deals()` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `cleanup_lost_pipeline_deals()` → integer | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `cleanup_rate_limits()` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `clients_auto_property_from_address()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `clients_before_insert_set_org()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `convert_currency(p_amount_cents integer, p_from_currency text, p_to_currency text, p_da)` → integer | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `create_client_with_duplicate_handling(p_org_id uuid, p_mode text, p_payload jsonb, p_merge_duplicates boolea)` → clients | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_field_pin_for_client_row(c clients)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `create_incident(p_title text, p_type text, p_severity text, p_description text DEFAULT)` → uuid | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `create_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_invoice_from_milestone(p_org_id uuid, p_job_id uuid, p_milestone_id uuid, p_send_now boolean )` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_job_from_intent(p_intent_id uuid, p_lead_id uuid, p_title text, p_address text DEFAULT)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_or_get_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `create_pipeline_deal(p_lead_id uuid, p_title text, p_value numeric, p_stage text DEFAULT 'n)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `crm_enforce_scope()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `crm_invoices_ensure_number()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `create_client_with_duplicate_handling(p_org_id uuid, p_mode text, p_payload jsonb, p_merge_duplicates boolea)` → clients | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_field_pin_for_client_row(c clients)` → uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_incident(p_title text, p_type text, p_severity text, p_description text DEFAULT)` → uuid | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_invoice_from_milestone(p_org_id uuid, p_job_id uuid, p_milestone_id uuid, p_send_now boolean )` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_job_from_intent(p_intent_id uuid, p_lead_id uuid, p_title text, p_address text DEFAULT)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_or_get_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `create_pipeline_deal(p_lead_id uuid, p_title text, p_value numeric, p_stage text DEFAULT 'n)` → uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `crm_enforce_scope()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `crm_invoices_ensure_number()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `crm_is_org_admin(p_org_id uuid, p_user_id uuid DEFAULT auth.uid())` → boolean | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `crm_is_org_member(p_org_id uuid, p_user_id uuid DEFAULT auth.uid())` → boolean | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `crm_leads_stage_timestamps()` → trigger | non | search_path=public | service_role=X/postgres |
-| `crm_next_invoice_number(p_org_id uuid)` → text | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `crm_leads_stage_timestamps()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `crm_next_invoice_number(p_org_id uuid)` → text | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `crm_normalize_lead_stage(p_value text)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `current_org_id()` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `current_org_ids()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `custom_access_token_hook(event jsonb)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres | supabase_auth_admin=X/postgres |
-| `delete_client_cascade(p_org_id uuid, p_client_id uuid, p_deleted_by uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `delete_invoice_cascade(p_org_id uuid, p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `delete_job_cascade(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `delete_lead_and_optional_client(p_org_id uuid, p_lead_id uuid, p_also_delete_client boolean DEFAULT fa)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `delete_lead_cascade(p_org_id uuid, p_lead_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `delete_quote_cascade(p_org_id uuid, p_quote_id uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `detect_brute_force(p_user_id uuid, p_window_minutes integer DEFAULT 15, p_threshold integ)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `detect_excessive_exports(p_user_id uuid, p_org_id uuid, p_window_minutes integer DEFAULT 10, p_)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `detect_impossible_travel(p_user_id uuid, p_country text)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `detect_login_anomalies(p_minutes integer DEFAULT 15)` → TABLE(kind text, key text, count bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `detect_mass_deletion(p_user_id uuid, p_org_id uuid, p_window_minutes integer DEFAULT 5, p_t)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `enforce_invoice_immutability()` → trigger | non | search_path="" | service_role=X/postgres |
-| `enforce_membership_role_change()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `enforce_soft_delete_admin()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `enforce_tenant()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `enforce_tenant_consistency()` → trigger | non | search_path=public, app | service_role=X/postgres |
-| `enforce_zone_exclusivity()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ensure_field_pin_for_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `ensure_payment_settings_row(p_org uuid)` → payment_provider_settings | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `execute_scheduled_member_deletions()` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `export_client_data(p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `export_user_data(p_user_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
+| `current_org_id()` → uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `current_org_ids()` → SETOF uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `custom_access_token_hook(event jsonb)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres | supabase_auth_admin=X/postgres |
+| `delete_client_cascade(p_org_id uuid, p_client_id uuid, p_deleted_by uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `delete_invoice_cascade(p_org_id uuid, p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `delete_job_cascade(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `delete_lead_and_optional_client(p_org_id uuid, p_lead_id uuid, p_also_delete_client boolean DEFAULT fa)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `delete_lead_cascade(p_org_id uuid, p_lead_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `delete_quote_cascade(p_org_id uuid, p_quote_id uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `detect_brute_force(p_user_id uuid, p_window_minutes integer DEFAULT 15, p_threshold integ)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `detect_excessive_exports(p_user_id uuid, p_org_id uuid, p_window_minutes integer DEFAULT 10, p_)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `detect_impossible_travel(p_user_id uuid, p_country text)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `detect_login_anomalies(p_minutes integer DEFAULT 15)` → TABLE(kind text, key text, count bigint) | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `detect_mass_deletion(p_user_id uuid, p_org_id uuid, p_window_minutes integer DEFAULT 5, p_t)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `enforce_invoice_immutability()` → trigger | non | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `enforce_membership_role_change()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `enforce_soft_delete_admin()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `enforce_tenant()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `enforce_tenant_consistency()` → trigger | non | search_path=public, app | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `enforce_zone_exclusivity()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ensure_field_pin_for_client()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `ensure_payment_settings_row(p_org uuid)` → payment_provider_settings | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `execute_scheduled_member_deletions()` → bigint | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `export_client_data(p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `export_user_data(p_user_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `field_compute_house_score(p_house_id uuid)` → text | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `field_compute_next_action(p_house_id uuid)` → text | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `fill_property_id_from_job_or_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `find_duplicate_clients(p_org_id uuid, p_first_name text DEFAULT NULL::text, p_last_name text )` → TABLE(client_id uuid, first_name text, last_name text, email text, phone text, company text, similarity_score real) | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `finish_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `finish_job_and_prepare_invoice(p_org_id uuid, p_job_id uuid)` → TABLE(ok boolean, invoice_id uuid, already_exists boolean) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `fn_field_daily_stats_apply()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `fn_push_on_notification()` → trigger | ⚠️ oui | search_path=public, extensions, net | service_role=X/postgres |
+| `fill_property_id_from_job_or_client()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `find_duplicate_clients(p_org_id uuid, p_first_name text DEFAULT NULL::text, p_last_name text )` → TABLE(client_id uuid, first_name text, last_name text, email text, phone text, company text, similarity_score real) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `finish_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `finish_job_and_prepare_invoice(p_org_id uuid, p_job_id uuid)` → TABLE(ok boolean, invoice_id uuid, already_exists boolean) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `fn_field_daily_stats_apply()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `fn_push_on_notification()` → trigger | ⚠️ oui | search_path=public, extensions, net | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `format_montreal_date(ts timestamp with time zone, fmt text DEFAULT 'YYYY-MM-DD HH24:MI'::te)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `generate_invoice_from_template(p_org_id uuid, p_template_id uuid, p_client_id uuid, p_job_id uuid DEF)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `generate_task_public_id()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `generate_workflow_public_id()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `get_audit_log(p_org_id uuid, p_entity_type text DEFAULT NULL::text, p_entity_id uuid)` → TABLE(id uuid, actor_id uuid, action text, entity_type text, entity_id uuid, event_type text, old_values jsonb, new_values jsonb, metadata jsonb, created_at timestamp with time zone) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `get_available_slots(p_org_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_start_date date DE)` → TABLE(slot_start timestamp with time zone, slot_end timestamp with time zone, team_id uuid) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `get_entity_activity(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_limit integer D)` → TABLE(event_id uuid, action text, event_type text, actor_id uuid, metadata jsonb, created_at timestamp with time zone) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `get_invoice_next_number(p_org uuid)` → integer | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `get_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `generate_invoice_from_template(p_org_id uuid, p_template_id uuid, p_client_id uuid, p_job_id uuid DEF)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `generate_task_public_id()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `generate_workflow_public_id()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `get_audit_log(p_org_id uuid, p_entity_type text DEFAULT NULL::text, p_entity_id uuid)` → TABLE(id uuid, actor_id uuid, action text, entity_type text, entity_id uuid, event_type text, old_values jsonb, new_values jsonb, metadata jsonb, created_at timestamp with time zone) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `get_available_slots(p_org_id uuid, p_team_id uuid DEFAULT NULL::uuid, p_start_date date DE)` → TABLE(slot_start timestamp with time zone, slot_end timestamp with time zone, team_id uuid) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `get_entity_activity(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_limit integer D)` → TABLE(event_id uuid, action text, event_type text, actor_id uuid, metadata jsonb, created_at timestamp with time zone) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `get_invoice_next_number(p_org uuid)` → integer | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `get_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `get_job_kpis(p_org_id uuid, p_status text DEFAULT NULL::text, p_job_type text DEFAU)` → TABLE(ending_within_30 integer, late integer, requires_invoicing integer, action_required integer, unscheduled integer, recent_visits integer, recent_visits_prev integer, visits_scheduled integer, visits_scheduled_prev integer) | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `grant_object_permission(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_user_id uuid, p)` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `handle_new_user()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `handle_org_created_seed_automations()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `hard_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_object_permission(p_user_id uuid, p_org_id uuid, p_entity_type text, p_entity_id uuid, p)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_admin_role(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_membership(target_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_role(p_user uuid, p_org uuid, p_roles text[])` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `grant_object_permission(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_user_id uuid, p)` → uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `handle_new_user()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `handle_org_created_seed_automations()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `hard_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `has_object_permission(p_user_id uuid, p_org_id uuid, p_entity_type text, p_entity_id uuid, p)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_admin_role(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_membership(target_org uuid)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_role(p_user uuid, p_org uuid, p_roles text[])` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `haversine_distance(lat1 double precision, lng1 double precision, lat2 double precision, l)` → double precision | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `increment_unread_count(p_conversation_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `invalidate_all_sessions(p_user_id uuid, p_reason text DEFAULT 'manual'::text)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `invoice_items_recalculate_parent()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `invoice_items_set_line_total()` → trigger | non | search_path=public | service_role=X/postgres |
-| `invoice_items_sync_org()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `invoice_next_number(p_org uuid)` → text | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `invoices_apply_status_logic()` → trigger | non | search_path=public | service_role=X/postgres |
-| `is_email_opted_out(p_email text, p_org_id uuid DEFAULT NULL::uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `is_ip_blocked(check_ip inet, check_org_id uuid DEFAULT NULL::uuid)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `is_sms_opted_out(p_org uuid, p_phone text)` → boolean | non | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `is_valid_timezone(p_tz text)` → boolean | non | search_path=pg_catalog, pg_temp | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `job_agreements_enforce_job_only()` → trigger | non | search_path=public | service_role=X/postgres |
-| `job_line_items_set_totals()` → trigger | non | search_path=public | service_role=X/postgres |
-| `jobs_fill_property_id()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `jobs_sync_address()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `jobs_sync_future_events_team()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `jobs_sync_totals()` → trigger | non | search_path=public, app | service_role=X/postgres |
-| `leads_before_insert_enforce_scope()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `leads_force_org_id()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `leads_set_updated_at()` → trigger | non | search_path=public, app | service_role=X/postgres |
-| `list_archived_items(p_org_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `list_member_audit_events(p_user_id uuid, p_limit integer DEFAULT 200)` → SETOF audit_events | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `log_invoice_updated()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `log_job_created()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `log_job_updated()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `log_quote_created()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `increment_unread_count(p_conversation_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `invalidate_all_sessions(p_user_id uuid, p_reason text DEFAULT 'manual'::text)` → integer | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `invoice_items_recalculate_parent()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `invoice_items_set_line_total()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `invoice_items_sync_org()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `invoice_next_number(p_org uuid)` → text | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `invoices_apply_status_logic()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `is_email_opted_out(p_email text, p_org_id uuid DEFAULT NULL::uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `is_ip_blocked(check_ip inet, check_org_id uuid DEFAULT NULL::uuid)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `is_sms_opted_out(p_org uuid, p_phone text)` → boolean | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `is_valid_timezone(p_tz text)` → boolean | non | search_path=pg_catalog, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `job_agreements_enforce_job_only()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `job_line_items_set_totals()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `jobs_fill_property_id()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `jobs_sync_address()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `jobs_sync_future_events_team()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `jobs_sync_totals()` → trigger | non | search_path=public, app | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `leads_before_insert_enforce_scope()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `leads_force_org_id()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `leads_set_updated_at()` → trigger | non | search_path=public, app | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `list_archived_items(p_org_id uuid)` → jsonb | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `list_member_audit_events(p_user_id uuid, p_limit integer DEFAULT 200)` → SETOF audit_events | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `log_invoice_updated()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `log_job_created()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `log_job_updated()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `log_quote_created()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `lume_storage_object_org(object_name text)` → uuid | non | search_path="" | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `mark_job_geocode_pending()` → trigger | non | search_path=public | service_role=X/postgres |
-| `next_recurrence_at(p_from timestamp with time zone, p_frequency text, p_interval integer )` → timestamp with time zone | non | search_path=public, pg_temp | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `mark_job_geocode_pending()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `next_recurrence_at(p_from timestamp with time zone, p_frequency text, p_interval integer )` → timestamp with time zone | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normalize_lead_stage_value(p_value text)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normalize_phone(p_phone text)` → text | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normalize_phone_digits(p text)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `org_has_no_members(p_org uuid)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres | authenticated=X/postgres |
-| `org_is_within_bootstrap_window(p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `org_smallest_free_number(p_org uuid, p_entity text)` → bigint | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `payments_recalculate_invoice_trigger()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `payments_sync_dates_and_update()` → trigger | non | search_path=public | service_role=X/postgres |
-| `payments_sync_legacy_dates()` → trigger | non | search_path=public | service_role=X/postgres |
-| `pipeline_deals_cascade_client_soft_delete()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `pipeline_deals_emit_job_intent()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `pipeline_deals_sync_value_columns()` → trigger | non | search_path=public, app | service_role=X/postgres |
-| `pipeline_deals_sync_values()` → trigger | non | search_path=public | service_role=X/postgres |
-| `prevent_paid_invoice_edit()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `provision_sms_channel(p_org_id uuid, p_phone_number text, p_provider text DEFAULT 'twilio'::)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `purge_expired_portal_tokens()` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `purge_old_audit_events(p_retention_days integer DEFAULT 1095)` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `purge_old_failed_logins()` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `purge_old_location_data(p_days integer DEFAULT 180)` → jsonb | ⚠️ oui | search_path="" | service_role=X/postgres |
-| `purge_old_soft_deletes(p_org_id uuid, p_days integer DEFAULT 90)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `qmc_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `quote_line_items_set_total()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `quote_line_items_sync_org()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `quote_measurements_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `recalculate_invoice_from_payments(p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `recalculate_invoice_totals(p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `recalculate_job_totals_from_items()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `recompute_job_schedule(p_job_id uuid)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `record_consent(p_subject_type text, p_subject_id uuid, p_purpose text, p_granted bool)` → uuid | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `record_email_opt_out(p_email text, p_org_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT )` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `record_failed_login(p_email text, p_ip inet DEFAULT NULL::inet, p_user_agent text DEFAULT )` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `release_advisory_lock(p_key bigint)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `request_hard_delete_member(p_member_id uuid, p_reassign_to uuid)` → void | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `resolve_primary_property(p_client_id uuid)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `restore_archived_record(p_org_id uuid, p_entity_type text, p_entity_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `restore_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `restore_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `restore_lead(p_org_id uuid, p_lead_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `reverse_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer)` → TABLE(id uuid, paid_cents integer, balance_cents integer, status text) | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `revoke_object_permission(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_user_id uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_add_visit(p_job_id uuid, p_start_at timestamp with time zone, p_end_at timestamp)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_ai_recent_conversations(p_limit integer DEFAULT 20, p_offset integer DEFAULT 0)` → TABLE(id uuid, title text, model text, provider text, status text, client_id uuid, client_name text, last_message_preview text, last_message_role text, last_message_at timestamp with time zone, message_count integer, total_input_tokens integer, total_output_tokens integer, total_estimated_cost numeric, created_at timestamp with time zone) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_create_invoice_draft(p_client_id uuid, p_subject text DEFAULT NULL::text, p_due_date date D)` → TABLE(id uuid, invoice_number text, status text, subject text, due_date date, total_cents integer, balance_cents integer, created_at timestamp with time zone) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_create_job_with_optional_schedule(p_lead_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_create_quote(p_lead_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_find_free_slots(p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE, p)` → TABLE(slot_date date, team_id uuid, team_name text, team_color text, slot_start timestamp with time zone, slot_end timestamp with time zone, duration_minutes integer) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_budget_vs_actual(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(month_label text, metric text, target_value bigint, actual_value bigint, variance_pct numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_churn_risk(p_org uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 20)` → TABLE(client_id uuid, client_name text, email text, total_jobs bigint, total_revenue_cents bigint, last_activity_at timestamp with time zone, days_inactive integer, overdue_invoices bigint, overdue_amount_cents bigint, churn_risk_score numeric, risk_level text) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_client_lifetime_value(p_org uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 20)` → TABLE(client_id uuid, client_name text, first_job_at timestamp with time zone, tenure_days integer, total_jobs bigint, total_revenue_cents bigint, avg_job_value_cents bigint, last_activity_at timestamp with time zone, days_since_last_activity integer, clv_score numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_cohort_retention(p_org uuid DEFAULT NULL::uuid)` → TABLE(cohort_month text, months_after integer, cohort_size bigint, active_count bigint, retention_pct numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_invoices_summary(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(count_draft bigint, count_sent bigint, count_paid bigint, count_past_due bigint, total_outstanding_cents bigint, avg_payment_time_days numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_job_profitability(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(total_jobs bigint, total_revenue_cents bigint, total_cost_cents bigint, gross_margin_cents bigint, margin_pct numeric, avg_revenue_per_job_cents bigint, avg_cost_per_job_cents bigint, profitable_jobs bigint, unprofitable_jobs bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_lead_conversion(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(leads_created bigint, leads_closed bigint, conversion_rate numeric, breakdown jsonb) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_overview(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(new_leads_count bigint, converted_quotes_count bigint, new_oneoff_jobs_count bigint, invoiced_value_cents bigint, revenue_cents bigint, requests_count bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_period_comparison(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(metric text, current_value bigint, previous_value bigint, change_pct numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_pipeline_velocity(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(total_deals bigint, won_deals bigint, lost_deals bigint, win_rate numeric, avg_deal_value_cents bigint, avg_days_to_close numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_revenue_forecast(p_org uuid DEFAULT NULL::uuid)` → TABLE(month_start date, projected_cents bigint, source text) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_revenue_series(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(bucket_start date, revenue_cents bigint, invoiced_cents bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_insights_team_performance(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(team_id uuid, team_name text, jobs_count bigint, jobs_completed bigint, completion_rate numeric, revenue_cents bigint, avg_job_value_cents bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_invoices_kpis_30d(p_org uuid DEFAULT NULL::uuid)` → TABLE(past_due_count bigint, past_due_total_cents bigint, sent_not_due_count bigint, sent_not_due_total_cents bigint, draft_count bigint, draft_total_cents bigint, issued_30d_count bigint, issued_30d_total_cents bigint, avg_invoice_30d_cents bigint, avg_payment_time_days_30d numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_list_invoices(p_status text DEFAULT 'all'::text, p_range text DEFAULT 'all'::text, p)` → TABLE(id uuid, client_id uuid, client_name text, invoice_number text, status text, subject text, issued_at timestamp with time zone, due_date date, total_cents integer, balance_cents integer, paid_cents integer, created_at timestamp with time zone, updated_at timestamp with time zone, property_id uuid, job_id uuid, site text, quote_number text, payer_name text, payment_method text, provider text, card_last4 text, card_brand text, payment_id uuid, total_count bigint) | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_list_payments(p_status text DEFAULT 'all'::text, p_method text DEFAULT 'all'::text, )` → TABLE(id uuid, client_id uuid, client_name text, invoice_id uuid, invoice_number text, payment_date timestamp with time zone, payout_date timestamp with time zone, status text, method text, amount_cents integer, currency text, total_count bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_payments_overview(p_org uuid DEFAULT NULL::uuid)` → TABLE(available_funds_cents bigint, invoice_payment_time_days_30d numeric, paid_on_time_global_pct_60d numeric, paid_on_time_residential_pct_60d numeric, paid_on_time_commercial_pct_60d numeric, has_property_split boolean) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_payments_overview_kpis(p_org uuid DEFAULT NULL::uuid, p_now timestamp with time zone DEFAULT )` → TABLE(available_funds_cents bigint, invoice_payment_time_days_30d numeric, paid_on_time_global_pct_60d numeric, paid_on_time_residential_pct_60d numeric, paid_on_time_commercial_pct_60d numeric, has_segment_split boolean) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_peek_next_numbers()` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_recalculate_quote(p_quote_id uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_reschedule_event(p_event_id uuid, p_start_at timestamp with time zone, p_end_at timesta)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_revenue_by_currency(p_org_id uuid, p_from date DEFAULT (CURRENT_DATE - '30 days'::interval)` → TABLE(currency text, total_cents bigint, payment_count integer, cad_equivalent_cents bigint) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_save_invoice_draft(p_invoice_id uuid, p_subject text DEFAULT NULL::text, p_due_date date )` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_schedule_job(p_job_id uuid, p_start_at timestamp with time zone, p_end_at timestamp)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_team_workload(p_org_id uuid, p_from date DEFAULT CURRENT_DATE, p_to date DEFAULT (CU)` → TABLE(team_id uuid, team_name text, team_color text, scheduled_jobs integer, total_hours numeric, utilization_pct numeric) | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_unschedule_job(p_job_id uuid, p_event_id uuid DEFAULT NULL::uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `rpc_update_entity_number(p_entity text, p_id uuid, p_number text)` → text | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `run_invariant_checks()` → integer | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `run_retention_job()` → jsonb | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `run_security_canary()` → void | ⚠️ oui | search_path="" | service_role=X/postgres |
-| `same_company_orgs(p_user uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `org_has_no_members(p_org uuid)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `org_is_within_bootstrap_window(p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `org_smallest_free_number(p_org uuid, p_entity text)` → bigint | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `payments_recalculate_invoice_trigger()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `payments_sync_dates_and_update()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `payments_sync_legacy_dates()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_deals_cascade_client_soft_delete()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_deals_emit_job_intent()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_deals_sync_value_columns()` → trigger | non | search_path=public, app | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_deals_sync_values()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `prevent_paid_invoice_edit()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `provision_sms_channel(p_org_id uuid, p_phone_number text, p_provider text DEFAULT 'twilio'::)` → uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `purge_expired_portal_tokens()` → bigint | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `purge_old_audit_events(p_retention_days integer DEFAULT 1095)` → bigint | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `purge_old_failed_logins()` → bigint | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `purge_old_location_data(p_days integer DEFAULT 180)` → jsonb | ⚠️ oui | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `purge_old_soft_deletes(p_org_id uuid, p_days integer DEFAULT 90)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `qmc_updated_at()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `quote_line_items_set_total()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `quote_line_items_sync_org()` → trigger | ⚠️ oui | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `quote_measurements_updated_at()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `recalculate_invoice_from_payments(p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `recalculate_invoice_totals(p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `recalculate_job_totals_from_items()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `recompute_job_schedule(p_job_id uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `record_consent(p_subject_type text, p_subject_id uuid, p_purpose text, p_granted bool)` → uuid | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `record_email_opt_out(p_email text, p_org_id uuid DEFAULT NULL::uuid, p_reason text DEFAULT )` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `record_failed_login(p_email text, p_ip inet DEFAULT NULL::inet, p_user_agent text DEFAULT )` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `release_advisory_lock(p_key bigint)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `request_hard_delete_member(p_member_id uuid, p_reassign_to uuid)` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `resolve_primary_property(p_client_id uuid)` → uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `restore_archived_record(p_org_id uuid, p_entity_type text, p_entity_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `restore_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `restore_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `restore_lead(p_org_id uuid, p_lead_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `reverse_invoice_payment(p_invoice_id uuid, p_org_id uuid, p_amount_cents integer)` → TABLE(id uuid, paid_cents integer, balance_cents integer, status text) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `revoke_object_permission(p_org_id uuid, p_entity_type text, p_entity_id uuid, p_user_id uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rls_auto_enable()` → event_trigger | ⚠️ oui | search_path=pg_catalog | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_add_visit(p_job_id uuid, p_start_at timestamp with time zone, p_end_at timestamp)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_ai_recent_conversations(p_limit integer DEFAULT 20, p_offset integer DEFAULT 0)` → TABLE(id uuid, title text, model text, provider text, status text, client_id uuid, client_name text, last_message_preview text, last_message_role text, last_message_at timestamp with time zone, message_count integer, total_input_tokens integer, total_output_tokens integer, total_estimated_cost numeric, created_at timestamp with time zone) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_create_invoice_draft(p_client_id uuid, p_subject text DEFAULT NULL::text, p_due_date date D)` → TABLE(id uuid, invoice_number text, status text, subject text, due_date date, total_cents integer, balance_cents integer, created_at timestamp with time zone) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_create_job_with_optional_schedule(p_lead_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_create_quote(p_lead_id uuid DEFAULT NULL::uuid, p_client_id uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_find_free_slots(p_team_id uuid DEFAULT NULL::uuid, p_date date DEFAULT CURRENT_DATE, p)` → TABLE(slot_date date, team_id uuid, team_name text, team_color text, slot_start timestamp with time zone, slot_end timestamp with time zone, duration_minutes integer) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_budget_vs_actual(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(month_label text, metric text, target_value bigint, actual_value bigint, variance_pct numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_churn_risk(p_org uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 20)` → TABLE(client_id uuid, client_name text, email text, total_jobs bigint, total_revenue_cents bigint, last_activity_at timestamp with time zone, days_inactive integer, overdue_invoices bigint, overdue_amount_cents bigint, churn_risk_score numeric, risk_level text) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_client_lifetime_value(p_org uuid DEFAULT NULL::uuid, p_limit integer DEFAULT 20)` → TABLE(client_id uuid, client_name text, first_job_at timestamp with time zone, tenure_days integer, total_jobs bigint, total_revenue_cents bigint, avg_job_value_cents bigint, last_activity_at timestamp with time zone, days_since_last_activity integer, clv_score numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_cohort_retention(p_org uuid DEFAULT NULL::uuid)` → TABLE(cohort_month text, months_after integer, cohort_size bigint, active_count bigint, retention_pct numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_invoices_summary(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(count_draft bigint, count_sent bigint, count_paid bigint, count_past_due bigint, total_outstanding_cents bigint, avg_payment_time_days numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_job_profitability(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(total_jobs bigint, total_revenue_cents bigint, total_cost_cents bigint, gross_margin_cents bigint, margin_pct numeric, avg_revenue_per_job_cents bigint, avg_cost_per_job_cents bigint, profitable_jobs bigint, unprofitable_jobs bigint) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_lead_conversion(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(leads_created bigint, leads_closed bigint, conversion_rate numeric, breakdown jsonb) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_overview(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(new_leads_count bigint, converted_quotes_count bigint, new_oneoff_jobs_count bigint, invoiced_value_cents bigint, revenue_cents bigint, requests_count bigint) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_period_comparison(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(metric text, current_value bigint, previous_value bigint, change_pct numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_pipeline_velocity(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(total_deals bigint, won_deals bigint, lost_deals bigint, win_rate numeric, avg_deal_value_cents bigint, avg_days_to_close numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_revenue_forecast(p_org uuid DEFAULT NULL::uuid)` → TABLE(month_start date, projected_cents bigint, source text) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_revenue_series(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(bucket_start date, revenue_cents bigint, invoiced_cents bigint) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_insights_team_performance(p_org uuid DEFAULT NULL::uuid, p_from date DEFAULT NULL::date, p_to da)` → TABLE(team_id uuid, team_name text, jobs_count bigint, jobs_completed bigint, completion_rate numeric, revenue_cents bigint, avg_job_value_cents bigint) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_invoices_kpis_30d(p_org uuid DEFAULT NULL::uuid)` → TABLE(past_due_count bigint, past_due_total_cents bigint, sent_not_due_count bigint, sent_not_due_total_cents bigint, draft_count bigint, draft_total_cents bigint, issued_30d_count bigint, issued_30d_total_cents bigint, avg_invoice_30d_cents bigint, avg_payment_time_days_30d numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_list_invoices(p_status text DEFAULT 'all'::text, p_range text DEFAULT 'all'::text, p)` → TABLE(id uuid, client_id uuid, client_name text, invoice_number text, status text, subject text, issued_at timestamp with time zone, due_date date, total_cents integer, balance_cents integer, paid_cents integer, created_at timestamp with time zone, updated_at timestamp with time zone, property_id uuid, job_id uuid, site text, quote_number text, payer_name text, payment_method text, provider text, card_last4 text, card_brand text, payment_id uuid, total_count bigint) | ⚠️ oui | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_list_payments(p_status text DEFAULT 'all'::text, p_method text DEFAULT 'all'::text, )` → TABLE(id uuid, client_id uuid, client_name text, invoice_id uuid, invoice_number text, payment_date timestamp with time zone, payout_date timestamp with time zone, status text, method text, amount_cents integer, currency text, total_count bigint) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_payments_overview(p_org uuid DEFAULT NULL::uuid)` → TABLE(available_funds_cents bigint, invoice_payment_time_days_30d numeric, paid_on_time_global_pct_60d numeric, paid_on_time_residential_pct_60d numeric, paid_on_time_commercial_pct_60d numeric, has_property_split boolean) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_payments_overview_kpis(p_org uuid DEFAULT NULL::uuid, p_now timestamp with time zone DEFAULT )` → TABLE(available_funds_cents bigint, invoice_payment_time_days_30d numeric, paid_on_time_global_pct_60d numeric, paid_on_time_residential_pct_60d numeric, paid_on_time_commercial_pct_60d numeric, has_segment_split boolean) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_peek_next_numbers()` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_recalculate_quote(p_quote_id uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_reschedule_event(p_event_id uuid, p_start_at timestamp with time zone, p_end_at timesta)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_revenue_by_currency(p_org_id uuid, p_from date DEFAULT (CURRENT_DATE - '30 days'::interval)` → TABLE(currency text, total_cents bigint, payment_count integer, cad_equivalent_cents bigint) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_save_invoice_draft(p_invoice_id uuid, p_subject text DEFAULT NULL::text, p_due_date date )` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_schedule_job(p_job_id uuid, p_start_at timestamp with time zone, p_end_at timestamp)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_team_workload(p_org_id uuid, p_from date DEFAULT CURRENT_DATE, p_to date DEFAULT (CU)` → TABLE(team_id uuid, team_name text, team_color text, scheduled_jobs integer, total_hours numeric, utilization_pct numeric) | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_unschedule_job(p_job_id uuid, p_event_id uuid DEFAULT NULL::uuid)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `rpc_update_entity_number(p_entity text, p_id uuid, p_number text)` → text | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `run_invariant_checks()` → integer | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `run_retention_job()` → jsonb | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `run_security_canary()` → void | ⚠️ oui | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `same_company_orgs(p_user uuid)` → SETOF uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `sanitize_text(p_input text)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `save_note_history()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `schedule_events_apply_job_team_default()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `schedule_events_sync_time_columns()` → trigger | non | search_path=public | service_role=X/postgres |
-| `search_global(p_org uuid, p_q text, p_limit integer DEFAULT 20, p_offset integer DEF)` → TABLE(entity_type text, entity_id uuid, title text, subtitle text, extra_status text, extra_amount_cents bigint, extra_currency text, extra_date timestamp with time zone, extra_client_id uuid, extra_client_name text, created_at timestamp with time zone, rank integer) | ⚠️ oui | search_path="" | service_role=X/postgres |
-| `search_global_by_type(p_org uuid, p_q text, p_entity_type text, p_limit integer DEFAULT 20, )` → TABLE(entity_type text, entity_id uuid, title text, subtitle text, extra_status text, extra_amount_cents integer, extra_currency text, extra_date text, extra_client_id uuid, extra_client_name text, created_at timestamp with time zone, rank double precision) | ⚠️ oui | search_path=public, extensions | service_role=X/postgres |
-| `search_global_counts(p_org uuid, p_q text)` → TABLE(entity_type text, total bigint) | ⚠️ oui | search_path=public, extensions | service_role=X/postgres |
-| `search_global_source(p_org uuid, p_q text)` → TABLE(entity_type text, entity_id uuid, title text, subtitle text, extra_status text, extra_amount_cents integer, extra_currency text, extra_date text, extra_client_id uuid, extra_client_name text, created_at timestamp with time zone, rank double precision) | ⚠️ oui | search_path=public, extensions | authenticated=X/postgres | service_role=X/postgres |
-| `security_maintenance()` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `seed_automation_presets(p_org_id uuid)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `send_invoice(p_org_id uuid, p_invoice_id uuid, p_channel text, p_to text)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `set_activity_notes_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
-| `set_app_connections_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
-| `set_automation_rules_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `set_connected_accounts_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `set_deal_stage(p_deal_id uuid, p_stage text)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `set_email_accounts_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
-| `set_email_templates_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `set_email_threads_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
-| `set_invoice_client_snapshot()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `set_invoice_next_number(p_org uuid, p_next integer)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `set_jobs_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `set_member_mfa_required(p_member_id uuid, p_required boolean)` → void | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `set_note_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `set_notes_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `set_payment_requests_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `set_team_date_slots_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `set_team_schedule_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `set_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `soft_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `soft_delete_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `sync_auth_telemetry()` → TABLE(nouvelles_connexions integer, sessions_suivies integer, sessions_expirees integer) | ⚠️ oui | search_path=public, auth, pg_temp | service_role=X/postgres |
-| `sync_field_pin_from_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `sync_job_leaderboard_deal()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `sync_lead_or_client_contact()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `sync_lead_stage_from_deal()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `sync_legacy_money_columns()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `sync_notification_is_read()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `sync_schedule_event_time_columns()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `tasks_update_timestamp()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `touch_org_billing_settings_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `trg_agent_messages_after_insert()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `trg_agent_sessions_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `trg_auto_invoice_on_job_completed()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `trg_clients_fts_update()` → trigger | non | search_path=public | service_role=X/postgres |
-| `trg_invoices_fts_update()` → trigger | non | search_path=public | service_role=X/postgres |
-| `trg_jobs_fts_update()` → trigger | non | search_path=public | service_role=X/postgres |
-| `trg_leads_fts_update()` → trigger | non | search_path=public | service_role=X/postgres |
-| `trg_membership_change_audit()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `trg_memory_entities_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `trg_normalize_lead_stage()` → trigger | non | search_path=public | service_role=X/postgres |
-| `trg_org_features_updated_at()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `trg_payment_to_invoice_paid()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `trigger_sms_number_release()` → void | ⚠️ oui | search_path=public, vault, net | service_role=X/postgres |
-| `try_advisory_lock(p_key bigint)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `save_note_history()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `schedule_events_apply_job_team_default()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `schedule_events_sync_time_columns()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `search_global(p_org uuid, p_q text, p_limit integer DEFAULT 20, p_offset integer DEF)` → TABLE(entity_type text, entity_id uuid, title text, subtitle text, extra_status text, extra_amount_cents bigint, extra_currency text, extra_date timestamp with time zone, extra_client_id uuid, extra_client_name text, created_at timestamp with time zone, rank integer) | ⚠️ oui | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `search_global_by_type(p_org uuid, p_q text, p_entity_type text, p_limit integer DEFAULT 20, )` → TABLE(entity_type text, entity_id uuid, title text, subtitle text, extra_status text, extra_amount_cents integer, extra_currency text, extra_date text, extra_client_id uuid, extra_client_name text, created_at timestamp with time zone, rank double precision) | ⚠️ oui | search_path=public, extensions | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `search_global_counts(p_org uuid, p_q text)` → TABLE(entity_type text, total bigint) | ⚠️ oui | search_path=public, extensions | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `search_global_source(p_org uuid, p_q text)` → TABLE(entity_type text, entity_id uuid, title text, subtitle text, extra_status text, extra_amount_cents integer, extra_currency text, extra_date text, extra_client_id uuid, extra_client_name text, created_at timestamp with time zone, rank double precision) | ⚠️ oui | search_path=public, extensions | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `security_maintenance()` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `seed_automation_presets(p_org_id uuid)` → integer | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `send_invoice(p_org_id uuid, p_invoice_id uuid, p_channel text, p_to text)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_activity_notes_updated_at()` → trigger | ⚠️ oui | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_app_connections_updated_at()` → trigger | ⚠️ oui | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_automation_rules_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_connected_accounts_updated_at()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_deal_stage(p_deal_id uuid, p_stage text)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_email_accounts_updated_at()` → trigger | ⚠️ oui | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_email_templates_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_email_threads_updated_at()` → trigger | ⚠️ oui | search_path="" | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_invoice_client_snapshot()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_invoice_next_number(p_org uuid, p_next integer)` → void | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_jobs_updated_at()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_member_mfa_required(p_member_id uuid, p_required boolean)` → void | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_note_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_notes_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_payment_requests_updated_at()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_team_date_slots_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_team_schedule_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `set_updated_at()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `soft_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `soft_delete_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_auth_telemetry()` → TABLE(nouvelles_connexions integer, sessions_suivies integer, sessions_expirees integer) | ⚠️ oui | search_path=public, auth, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_field_pin_from_client()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_job_leaderboard_deal()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_lead_or_client_contact()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_lead_stage_from_deal()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_legacy_money_columns()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_notification_is_read()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `sync_schedule_event_time_columns()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `tasks_update_timestamp()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `touch_org_billing_settings_updated_at()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_agent_messages_after_insert()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_agent_sessions_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_auto_invoice_on_job_completed()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_clients_fts_update()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_invoices_fts_update()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_jobs_fts_update()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_leads_fts_update()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_membership_change_audit()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_memory_entities_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_normalize_lead_stage()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_org_features_updated_at()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trg_payment_to_invoice_paid()` → trigger | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `trigger_sms_number_release()` → void | ⚠️ oui | search_path=public, vault, net | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `try_advisory_lock(p_key bigint)` → boolean | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `unaccent(text)` → text | non | search_path=extensions | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `update_comm_updated_at()` → trigger | non | search_path=public | service_role=X/postgres |
-| `update_conversation_on_message()` → trigger | non | search_path=public | service_role=X/postgres |
-| `update_org_knowledge_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `update_specific_notes_updated_at()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `upsert_job(p_org_id uuid, p_job_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `user_org_ids(p_user_id uuid)` → SETOF uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `update_comm_updated_at()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `update_conversation_on_message()` → trigger | non | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `update_org_knowledge_updated_at()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `update_specific_notes_updated_at()` → trigger | non | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `upsert_job(p_org_id uuid, p_job_id uuid, p_payload jsonb)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `user_org_ids(p_user_id uuid)` → SETOF uuid | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `validate_e164(p_phone text)` → boolean | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `verify_org_access(p_user_id uuid, p_org_id uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `webhook_payment_received(p_org_id uuid, p_invoice_id uuid, p_provider text, p_provider_payment_)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `verify_org_access(p_user_id uuid, p_org_id uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `webhook_payment_received(p_org_id uuid, p_invoice_id uuid, p_provider text, p_provider_payment_)` → jsonb | ⚠️ oui | search_path=public | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 
 ## 5. Vues (11)
 
@@ -7383,7 +7384,7 @@ CASE
 - `lume_purge_audit_events` — `15 3 * * *` — actif
 - `lume_purge_location_data` — `30 4 * * *` — actif
 - `lume_purge_oauth_states` — `25 * * * *` — actif
-- `lume_release_sms_numbers` — `10 8 * * *` — ⚠️ INACTIF
+- `lume_release_sms_numbers` — `10 8 * * *` — actif
 - `lume_retention_job` — `0 4 * * *` — actif
 - `lume_sync_auth_telemetry` — `*/15 * * * *` — actif
 - `security-canary-nightly` — `17 4 * * *` — actif
