@@ -38,6 +38,20 @@ const queryClient = new QueryClient({
   },
 });
 
+// Auto-guérison après déploiement : les chunks lazy de l'ancien index.html
+// n'existent plus sur le serveur (« Failed to fetch dynamically imported
+// module ») — on recharge la page une fois pour reprendre le nouvel index.
+// Garde anti-boucle : au plus un reload par 30 s.
+window.addEventListener('vite:preloadError', (event) => {
+  const KEY = 'lume-chunk-reload-at';
+  const last = Number(sessionStorage.getItem(KEY) || 0);
+  if (Date.now() - last > 30_000) {
+    sessionStorage.setItem(KEY, String(Date.now()));
+    event.preventDefault();
+    window.location.reload();
+  }
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary labels={rootErrorLabels}>
