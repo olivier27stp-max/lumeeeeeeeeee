@@ -8,6 +8,7 @@ import { listClients, createClient } from '../lib/clientsApi';
 import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
 import { addVisit, listJobVisits, rescheduleEvent, unscheduleJob, isAnytimeVisit, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { createServiceContract } from '../lib/serviceContractsApi';
+import { listJobTags, createJobTag, setJobTagIds } from '../lib/jobTagsApi';
 import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
 import DatePickerInput from './ui/DatePickerInput';
@@ -389,6 +390,15 @@ export default function NewJobModal({
   // Visit whose list the catalog picker is currently feeding (null = the
   // job-level list used when items apply to all visits).
   const [pickerVisitKey, setPickerVisitKey] = useState<string | null>(null);
+  // ── Règle de récurrence du plan de service ──
+  // La règle génère les visites (chaque semaine / aux 2 semaines / chaque
+  // mois) depuis la date de début jusqu'à l'horizon « Se termine après » ;
+  // « Personnalisé » laisse la sélection manuelle des mois intacte.
+  const [ruleStartDate, setRuleStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [ruleAnytime, setRuleAnytime] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<'weekly' | 'biweekly' | 'monthly' | 'custom'>('weekly');
+  const [endsAfterCount, setEndsAfterCount] = useState('');
+  const [endsAfterUnit, setEndsAfterUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months');
   // Written agreement (job contract) — optional, created after the job insert
   const [createAgreement, setCreateAgreement] = useState(false);
   const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
@@ -607,6 +617,97 @@ export default function NewJobModal({
       dropVisitPersonalization(keys);
     }
   };
+
+  // ── Règle de récurrence : labels dynamiques + génération des visites ──
+  const ruleStartParts = useMemo(() => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ruleStartDate || '');
+    return m ? { y: Number(m[1]), mo: Number(m[2]), d: Number(m[3]) } : null;
+  }, [ruleStartDate]);
+  const ruleWeekday = useMemo(() => {
+    if (!ruleStartParts) return '';
+    return new Date(ruleStartParts.y, ruleStartParts.mo - 1, ruleStartParts.d)
+      .toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'long' });
+  }, [ruleStartParts, language]);
+  const ordinalEn = (n: number) => {
+    const s = ['th', 'st', 'nd', 'rd'];
+    const v = n % 100;
+    return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+  };
+  const ruleMonthDayLabel = ruleStartParts
+    ? (language === 'fr' ? (ruleStartParts.d === 1 ? '1er' : String(ruleStartParts.d)) : ordinalEn(ruleStartParts.d))
+    : '';
+  const repeatOptions: Array<{ key: typeof repeatMode; label: string }> = [
+    {
+      key: 'weekly',
+      label: language === 'fr' ? `Chaque semaine le ${ruleWeekday}` : `Weekly on ${ruleWeekday}s`,
+    },
+    {
+      key: 'biweekly',
+      label: language === 'fr' ? `Aux 2 semaines le ${ruleWeekday}` : `Every 2 weeks on ${ruleWeekday}s`,
+    },
+    {
+      key: 'monthly',
+      label: language === 'fr' ? `Chaque mois le ${ruleMonthDayLabel}` : `Monthly on the ${ruleMonthDayLabel}`,
+    },
+    { key: 'custom', label: language === 'fr' ? 'Personnalisé' : 'Custom' },
+  ];
+  // « N'importe quand » de la règle : mêmes conventions que les visites
+  // ponctuelles (fenêtre 00:00–23:59, jamais gardée au décochage).
+  const toggleRuleAnytime = (checked: boolean) => {
+    setDirty(true);
+    setRuleAnytime(checked);
+    if (checked) {
+      setStartTime(ANYTIME_START_TIME);
+      setEndTime(ANYTIME_END_TIME);
+    } else {
+      setStartTime('09:00');
+      setEndTime('10:00');
+    }
+  };
+  // Génère les visites du plan depuis la règle (les modes non-« Personnalisé »
+  // remplacent la sélection manuelle à chaque changement de la règle).
+  useEffect(() => {
+    if (!isServicePlan || repeatMode === 'custom' || !ruleStartParts) return;
+    const count = parseInt(endsAfterCount, 10);
+    if (!Number.isFinite(count) || count <= 0) return;
+    const start = new Date(ruleStartParts.y, ruleStartParts.mo - 1, ruleStartParts.d);
+    const end = new Date(start);
+    if (endsAfterUnit === 'days') end.setDate(end.getDate() + count);
+    else if (endsAfterUnit === 'weeks') end.setDate(end.getDate() + count * 7);
+    else if (endsAfterUnit === 'months') end.setMonth(end.getMonth() + count);
+    else end.setFullYear(end.getFullYear() + count);
+    const toYmd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const out: PlanVisitDraft[] = [];
+    if (repeatMode === 'monthly') {
+      // Même jour chaque mois, borné à la longueur du mois (31 → 28 en février).
+      for (let i = 0; out.length < 366; i++) {
+        const anchorY = ruleStartParts.y + Math.floor((ruleStartParts.mo - 1 + i) / 12);
+        const anchorM = ((ruleStartParts.mo - 1 + i) % 12) + 1;
+        const day = Math.min(ruleStartParts.d, new Date(anchorY, anchorM, 0).getDate());
+        const dte = new Date(anchorY, anchorM - 1, day);
+        if (dte > end) break;
+        out.push(newPlanVisit(anchorY, anchorM, toYmd(dte)));
+      }
+    } else {
+      const step = repeatMode === 'weekly' ? 7 : 14;
+      for (const dte = new Date(start); dte <= end && out.length < 366; dte.setDate(dte.getDate() + step)) {
+        out.push(newPlanVisit(dte.getFullYear(), dte.getMonth() + 1, toYmd(dte)));
+      }
+    }
+    setPlanVisits(out);
+    setServiceYears(out.length > 0
+      ? [...new Set(out.map((v) => v.year))].sort((a, b) => a - b)
+      : [ruleStartParts.y]);
+    // La personnalisation par visite suit les nouvelles clés.
+    setServiceVisitTimes(applyTimesToAllVisits
+      ? {}
+      : Object.fromEntries(out.map((v) => [v.key, { startTime: startTime || '09:00', endTime: endTime || '10:00' }])));
+    setServiceVisitItems(applyItemsToAllVisits
+      ? {}
+      : Object.fromEntries(out.map((v) => [v.key, cloneLineItems(lineItems)])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isServicePlan, repeatMode, ruleStartDate, endsAfterCount, endsAfterUnit]);
   // Keep startDate aligned with the first planned visit so team suggestions
   // and conflict checks target the right day.
   useEffect(() => {
@@ -697,6 +798,11 @@ export default function NewJobModal({
     setShowOnLeaderboard(initialValues?.show_on_leaderboard !== false);
     setServiceYears([new Date().getFullYear()]);
     setPlanVisits([]);
+    setRuleStartDate(new Date().toISOString().slice(0, 10));
+    setRuleAnytime(false);
+    setRepeatMode('weekly');
+    setEndsAfterCount('');
+    setEndsAfterUnit('months');
     setCreateContract(false);
     setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
@@ -1055,6 +1161,11 @@ export default function NewJobModal({
     setJobType('one_off');
     setServiceYears([new Date().getFullYear()]);
     setPlanVisits([]);
+    setRuleStartDate(new Date().toISOString().slice(0, 10));
+    setRuleAnytime(false);
+    setRepeatMode('weekly');
+    setEndsAfterCount('');
+    setEndsAfterUnit('months');
     setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
@@ -1703,6 +1814,25 @@ export default function NewJobModal({
             try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The contract could not be created.'); } catch {}
           }
         }
+        // Équipe assignée (même sans horaire créé ni disponibilité) : étiquette
+        // bleue par défaut « Not scheduled yet » sur le job — elle teinte les
+        // cartes de visite du calendrier. Créée dans l'org au premier usage.
+        // Best-effort : ne bloque jamais la création du job.
+        if (teamIdPayload) {
+          try {
+            const tags = await listJobTags();
+            const tag = tags.find((tg) => tg.name.trim().toLowerCase() === 'not scheduled yet')
+              || await createJobTag('Not scheduled yet', '#3b82f6');
+            const currentIds = Array.isArray((createdJob as any).tag_ids)
+              ? ((createdJob as any).tag_ids as string[])
+              : [];
+            if (!currentIds.includes(tag.id)) {
+              await setJobTagIds(createdJob.id, [...currentIds, tag.id]);
+            }
+          } catch (err) {
+            console.warn('[jobs] failed to attach "Not scheduled yet" tag', err);
+          }
+        }
       }
 
       // Written agreement (contract) — best-effort, like the service contract
@@ -2126,6 +2256,146 @@ export default function NewJobModal({
                 title={t.modals.servicePlanSchedule}
                 subtitle={t.modals.servicePlanScheduleHint}
               >
+                  {/* ── RÈGLE : date de début, heures, répétition, fin, assignation ── */}
+                  <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      {language === 'fr' ? 'Règle' : 'Rule'}
+                    </p>
+
+                    {/* Date de début — défaut aujourd'hui */}
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.startDate}</label>
+                      <DatePickerInput
+                        value={ruleStartDate}
+                        language={language === 'fr' ? 'fr' : 'en'}
+                        onChange={(date) => { setDirty(true); setRuleStartDate(date); }}
+                      />
+                    </div>
+
+                    {/* Heures — mêmes contrôles que les visites ponctuelles */}
+                    {!ruleAnytime && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
+                          <div className="relative">
+                            <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                            <input
+                              type="time"
+                              value={startTime}
+                              onChange={(event) => setStartTime(event.target.value)}
+                              className="glass-input w-full pl-10"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                          <div className="relative">
+                            <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                            <input
+                              type="time"
+                              value={endTime}
+                              onChange={(event) => setEndTime(event.target.value)}
+                              className="glass-input w-full pl-10"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
+                      <input
+                        type="checkbox"
+                        checked={ruleAnytime}
+                        onChange={(event) => toggleRuleAnytime(event.target.checked)}
+                        className="h-3.5 w-3.5 rounded"
+                      />
+                      <span className="text-xs text-text-secondary">
+                        {language === 'fr' ? "Pas d'heure précise" : 'No set time'}
+                      </span>
+                    </label>
+
+                    {/* Répétition — les libellés suivent la date de début */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-text-tertiary">
+                        {language === 'fr' ? 'Se répète' : 'Repeats on'}
+                      </label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {repeatOptions.map((opt) => (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => { setDirty(true); setRepeatMode(opt.key); }}
+                            className={cn(
+                              'px-3 py-2 rounded-lg border text-sm font-medium text-left transition-colors',
+                              repeatMode === opt.key
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-outline-subtle bg-surface-secondary/30 text-text-tertiary hover:text-text-secondary'
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Fin de la récurrence */}
+                    {repeatMode !== 'custom' && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-text-tertiary">
+                          {language === 'fr' ? 'Se termine après' : 'Ends after'}
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            value={endsAfterCount}
+                            onChange={(event) => { setDirty(true); setEndsAfterCount(event.target.value); }}
+                            placeholder="12"
+                            className="glass-input w-24 tabular-nums"
+                          />
+                          <select
+                            value={endsAfterUnit}
+                            onChange={(event) => { setDirty(true); setEndsAfterUnit(event.target.value as typeof endsAfterUnit); }}
+                            className="glass-input"
+                          >
+                            <option value="days">{language === 'fr' ? 'jours' : 'days'}</option>
+                            <option value="weeks">{language === 'fr' ? 'semaines' : 'weeks'}</option>
+                            <option value="months">{language === 'fr' ? 'mois' : 'months'}</option>
+                            <option value="years">{language === 'fr' ? 'années' : 'years'}</option>
+                          </select>
+                        </div>
+                        {sortedPlanVisits.length > 0 && (
+                          <p className="text-[11px] text-text-tertiary tabular-nums">
+                            {sortedPlanVisits.length} {language === 'fr'
+                              ? (sortedPlanVisits.length > 1 ? 'visites générées' : 'visite générée')
+                              : (sortedPlanVisits.length > 1 ? 'visits generated' : 'visit generated')}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Assignation — l'équipe peut être assignée même sans
+                        horaire créé ni disponibilité vérifiée */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
+                      <TeamSelectDropdown
+                        teams={teams}
+                        value={teamSelection}
+                        onChange={setTeamSelection}
+                        date={ruleStartDate || startDate}
+                        fr={language === 'fr'}
+                        suggestions={teamSuggestions}
+                        placeholder={t.modals.selectTeam}
+                        unassignedLabel={t.modals.unassignedOption}
+                        unassignedValue={UNASSIGNED_TEAM_VALUE}
+                      />
+                      <p className="text-[11px] text-text-tertiary">
+                        {language === 'fr'
+                          ? 'L’équipe peut être assignée même si elle n’est pas disponible ou que son horaire n’a pas encore été créé — le job portera l’étiquette « Not scheduled yet ».'
+                          : 'The team can be assigned even if unavailable or without a schedule yet — the job will carry the “Not scheduled yet” tag.'}
+                      </p>
+                    </div>
+                  </div>
+
                   {serviceYears.map((year, yearIdx) => {
                     const yearMonths = Array.from(
                       new Set(planVisits.filter((v) => v.year === year).map((v) => v.month))
@@ -2283,51 +2553,22 @@ export default function NewJobModal({
                     {language === 'fr' ? 'Ajouter année suivante' : 'Add next year'}
                   </button>
 
-                  {/* Visit time window — same for every visit, or per visit */}
-                  <div className="space-y-3">
-                    <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                      <input
-                        type="checkbox"
-                        checked={applyTimesToAllVisits}
-                        onChange={(event) => toggleApplyTimesToAllVisits(event.target.checked)}
-                        className="h-4 w-4 mt-0.5"
-                      />
-                      <span>
-                        <span className="block text-sm text-text-primary">{t.modals.servicePlanApplyAllLabel}</span>
-                        <span className="block text-xs text-text-tertiary mt-0.5">
-                          {applyTimesToAllVisits ? t.modals.servicePlanTimesApplyAllHint : t.modals.servicePlanTimesCustomHint}
-                        </span>
+                  {/* Fenêtre horaire des visites : celle de la Règle ci-dessus
+                      pour toutes, ou personnalisée visite par visite */}
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={applyTimesToAllVisits}
+                      onChange={(event) => toggleApplyTimesToAllVisits(event.target.checked)}
+                      className="h-4 w-4 mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm text-text-primary">{t.modals.servicePlanApplyAllLabel}</span>
+                      <span className="block text-xs text-text-tertiary mt-0.5">
+                        {applyTimesToAllVisits ? t.modals.servicePlanTimesApplyAllHint : t.modals.servicePlanTimesCustomHint}
                       </span>
-                    </label>
-                    {applyTimesToAllVisits && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime} — {t.modals.servicePlanVisitTimeHint}</label>
-                          <div className="relative">
-                            <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                            <input
-                              type="time"
-                              value={startTime}
-                              onChange={(event) => setStartTime(event.target.value)}
-                              className="glass-input w-full pl-10"
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
-                          <div className="relative">
-                            <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                            <input
-                              type="time"
-                              value={endTime}
-                              onChange={(event) => setEndTime(event.target.value)}
-                              className="glass-input w-full pl-10"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    </span>
+                  </label>
 
                   {/* Optional contract */}
                   <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
