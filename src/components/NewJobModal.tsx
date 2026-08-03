@@ -1850,7 +1850,7 @@ export default function NewJobModal({
                     id="job-title-input"
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
-                    className="glass-input job-title-input w-full text-lg text-center"
+                    className="glass-input job-title-input w-full text-lg text-left"
                     placeholder=" "
                     required
                   />

@@ -572,7 +572,7 @@ body.dark .job-title-input {
 }
 
 /* New Job title: floating label.
-   Empty (even when focused) → big & centered like a placeholder.
+   Empty (even when focused) → big, left-aligned like a placeholder.
    As soon as text is entered → shrinks and rises to the top of the bar. */
 .job-title-float {
   position: absolute;
@@ -580,7 +580,7 @@ body.dark .job-title-input {
   right: 0;
   top: 50%;
   transform: translateY(-50%);
-  text-align: center;
+  text-align: left;
   padding: 0 0.875rem;
   font-size: 1.125rem;
   line-height: 1.4;
