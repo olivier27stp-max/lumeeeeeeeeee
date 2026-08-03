@@ -18,7 +18,7 @@ import {
 } from '../lib/insightsApi';
 import { fetchQuoteKpis } from '../lib/quotesApi';
 import { fetchPayoutSummary } from '../lib/paymentsApi';
-import { fetchAvgJobValueSeries, fetchMrrSeries, fetchLoyalty } from '../lib/statsExtraApi';
+import { fetchAvgJobValueSeries, fetchLoyalty } from '../lib/statsExtraApi';
 import { periodRange, periodLabel, DEFAULT_INSIGHTS_PERIOD, type InsightsPeriod } from '../lib/insightsPeriod';
 import PeriodSelector from '../components/insights/PeriodSelector';
 import RevenueTrendCard from '../components/insights/RevenueTrendCard';
@@ -104,10 +104,9 @@ export default function Statistiques() {
   const convQ = useQuery({ queryKey: ['stats-conv', from, to], queryFn: () => fetchInsightsLeadConversion({ from, to }), staleTime: 60_000, enabled: isAdmin });
   const teamQ = useQuery({ queryKey: ['stats-team', from, to], queryFn: () => fetchTeamPerformance({ from, to }), staleTime: 60_000, enabled: isAdmin });
   const veloQ = useQuery({ queryKey: ['stats-velo', from, to], queryFn: () => fetchPipelineVelocity({ from, to }), staleTime: 60_000, enabled: isAdmin });
-  const quoteQ = useQuery({ queryKey: ['stats-quote'], queryFn: () => fetchQuoteKpis(), staleTime: 60_000, enabled: isAdmin });
+  const quoteQ = useQuery({ queryKey: ['stats-quote', from, to], queryFn: () => fetchQuoteKpis({ from, to }), staleTime: 60_000, enabled: isAdmin });
   const payoutQ = useQuery({ queryKey: ['stats-payout', currentOrgId], queryFn: () => fetchPayoutSummary({ orgId: currentOrgId as string, provider: 'stripe' }), enabled: isAdmin && !!currentOrgId, retry: false, staleTime: 60_000 });
   const avgQ = useQuery({ queryKey: ['stats-ajv', from, to, fr], queryFn: () => fetchAvgJobValueSeries({ from, to, fr }), staleTime: 60_000, enabled: isAdmin });
-  const mrrQ = useQuery({ queryKey: ['stats-mrr', from, to, fr], queryFn: () => fetchMrrSeries({ from, to, fr }), staleTime: 60_000, enabled: isAdmin });
   const loyQ = useQuery({ queryKey: ['stats-loy', from, to], queryFn: () => fetchLoyalty({ from, to }), staleTime: 60_000, enabled: isAdmin });
 
   if (!isAdmin) {
@@ -129,7 +128,7 @@ export default function Statistiques() {
     .map((t) => ({ name: t.team_name, primary: kc(t.revenue_cents), secondary: `${t.jobs_count} jobs · ${kc(t.avg_job_value_cents)} ${fr ? 'moy.' : 'avg'}`, weight: t.revenue_cents }));
   const teamsByCompletion = teams.slice().sort((a, b) => ratePct(b.completion_rate) - ratePct(a.completion_rate)).slice(0, 5)
     .map((t) => ({ name: t.team_name, primary: `${ratePct(t.completion_rate)} %`, secondary: `${t.jobs_completed}/${t.jobs_count} jobs`, weight: ratePct(t.completion_rate) }));
-  const clientRows = (clientQ.data || []).slice(0, 5).map((c) => ({ name: c.client_name, primary: kc(c.total_revenue_cents), secondary: `${c.total_jobs} jobs`, weight: c.total_revenue_cents }));
+  const clientRows = (clientQ.data || []).slice().sort((a, b) => b.total_revenue_cents - a.total_revenue_cents).slice(0, 5).map((c) => ({ name: c.client_name, primary: kc(c.total_revenue_cents), secondary: `${c.total_jobs} jobs`, weight: c.total_revenue_cents }));
 
   const loy = loyQ.data || { recurringPct: 0, ltvAvgCents: 0, retentionPct: 0 };
   const conv = convQ.data;
@@ -151,12 +150,6 @@ export default function Statistiques() {
     const first = nz[0]; const last = nz[nz.length - 1];
     const p = first > 0 ? Math.round(((last - first) / first) * 100) : 0;
     return { hero: kc(Math.round(mean(nz))), delta: nz.length > 1 ? `${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% ${fr ? 'sur la période' : 'over period'}` : '', sub: `${fr ? 'moyenne par job' : 'avg per job'} · ${periodLabel(period, fr)}` };
-  };
-  const mrrDerive = (vals: number[]) => {
-    if (!vals.length) return { hero: '—', delta: '', sub: periodLabel(period, fr) };
-    const last = vals[vals.length - 1]; const prev = vals[vals.length - 2] ?? last;
-    const p = prev > 0 ? Math.round(((last - prev) / prev) * 100) : 0;
-    return { hero: kc(last), delta: `${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% ${fr ? 'ce mois' : 'this month'}`, sub: `≈ ${kc(last * 12)} ${fr ? 'annualisé' : 'annualized'} · ${periodLabel(period, fr)}` };
   };
 
   return (
@@ -184,7 +177,6 @@ export default function Statistiques() {
       <SectionHead title={fr ? 'Valeur & récurrence' : 'Value & recurring'} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <LinkCard to="/jobs"><MiniTrendCard title={fr ? "Valeur moyenne d'un job" : 'Average job value'} series={avgQ.data || EMPTY_SERIES} loading={avgQ.isLoading} period={period} onPeriod={setPeriod} derive={ajvDerive} fmt={kc} /></LinkCard>
-        <LinkCard to="/finances"><MiniTrendCard title={fr ? 'Revenu récurrent mensuel' : 'Monthly recurring revenue'} series={mrrQ.data || EMPTY_SERIES} loading={mrrQ.isLoading} period={period} onPeriod={setPeriod} derive={mrrDerive} fmt={kc} /></LinkCard>
       </div>
 
       {/* Équipes */}
@@ -242,11 +234,6 @@ export default function Statistiques() {
           <CardHead title={fr ? 'Taux de conversion' : 'Conversion rate'} right={<PeriodSelector value={period} onChange={setPeriod} />} />
           <div className="text-[30px] font-bold tracking-tight leading-none tabular-nums text-text-primary px-6 mt-3">{ratePct(conv?.conversion_rate)} %</div>
           <div className="text-[12.5px] text-text-tertiary px-6 mt-2">{fr ? 'leads convertis / créés' : 'leads converted / created'}</div>
-          <svg viewBox="0 0 200 56" preserveAspectRatio="none" className="w-[calc(100%-48px)] h-14 block mx-6 mt-3.5">
-            <defs><linearGradient id="convspark" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--color-text-primary)" stopOpacity="0.13" /><stop offset="100%" stopColor="var(--color-text-primary)" stopOpacity="0" /></linearGradient></defs>
-            <path d="M0,46 L40,42 L80,44 L120,30 L160,26 L200,18 L200,56 L0,56 Z" fill="url(#convspark)" />
-            <path d="M0,46 L40,42 L80,44 L120,30 L160,26 L200,18" fill="none" stroke="var(--color-text-primary)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-          </svg>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">

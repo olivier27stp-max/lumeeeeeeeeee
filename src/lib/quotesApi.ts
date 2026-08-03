@@ -819,7 +819,7 @@ export async function countPendingQuotes(orgId: string): Promise<number> {
   return count || 0;
 }
 
-export async function fetchQuoteKpis(): Promise<{
+export async function fetchQuoteKpis(range?: { from?: string; to?: string }): Promise<{
   total_count: number;
   pending_count: number;
   approved_count: number;
@@ -828,10 +828,18 @@ export async function fetchQuoteKpis(): Promise<{
   approved_value_cents: number;
 }> {
   const orgId = await getCurrentOrgIdOrThrow();
+  // Un devis converti en job a d'abord été approuvé — l'exclure sous-comptait
+  // les approbations dès la conversion.
+  const withRange = (q: any) => {
+    let out = q;
+    if (range?.from) out = out.gte('created_at', range.from);
+    if (range?.to) out = out.lte('created_at', `${range.to}T23:59:59.999Z`);
+    return out;
+  };
   const [allRes, pendingRes, approvedRes] = await Promise.all([
-    supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null),
-    supabase.from('quotes').select('total_cents, lead_id, client_id').eq('org_id', orgId).is('deleted_at', null).in('status', PENDING_QUOTE_STATUSES),
-    supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null).eq('status', 'approved'),
+    withRange(supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null)),
+    withRange(supabase.from('quotes').select('total_cents, lead_id, client_id').eq('org_id', orgId).is('deleted_at', null).in('status', PENDING_QUOTE_STATUSES)),
+    withRange(supabase.from('quotes').select('total_cents', { count: 'exact' }).eq('org_id', orgId).is('deleted_at', null).in('status', ['approved', 'converted'])),
   ]);
 
   const sumCents = (rows: any[]) => rows.reduce((s, r) => s + Number(r.total_cents || 0), 0);

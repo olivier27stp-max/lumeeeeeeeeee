@@ -248,6 +248,7 @@ export async function fetchTopServices(params: { from: string; to: string }): Pr
     .select('title,total_cents')
     .eq('org_id', orgId)
     .is('deleted_at', null)
+    .not('status', 'in', '(draft,cancelled)')
     .gte('created_at', fromIso)
     .lt('created_at', toIsoExclusive);
   if (error) throw error;

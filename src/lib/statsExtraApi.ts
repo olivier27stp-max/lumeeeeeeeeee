@@ -7,7 +7,6 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { listPayments, paymentMethodLabel } from './paymentsApi';
-import { listRecurringSchedules, type RecurringFrequency } from './recurringInvoicesApi';
 import { fetchClientLifetimeValue, fetchCohortRetention } from './insightsApi';
 
 const MONTHS_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -33,22 +32,19 @@ function monthLabel(key: string, fr: boolean): string {
   return (fr ? MONTHS_FR : MONTHS_EN)[m] || key;
 }
 
-const FREQ_TO_MONTHLY: Record<RecurringFrequency, number> = {
-  weekly: 52 / 12,
-  biweekly: 26 / 12,
-  monthly: 1,
-  quarterly: 1 / 3,
-  yearly: 1 / 12,
-};
-
 /** Revenue by payment method over the period (top 4). */
 export async function fetchPaymentMix(params: { from: string; to: string }): Promise<Array<{ name: string; value: number }>> {
   try {
-    const res = await listPayments({ status: 'all', method: 'all', date: 'custom', q: '', page: 1, pageSize: 1000, fromDate: params.from, toDate: params.to });
+    // Paiements aboutis seulement — pending/failed/refunded ne sont pas du
+    // revenu. Paginé: la version précédente tronquait silencieusement à 1000.
     const map = new Map<string, number>();
-    for (const r of res.rows) {
-      const label = paymentMethodLabel(r.method) || (r.method || 'Autre');
-      map.set(label, (map.get(label) || 0) + (r.amount_cents || 0));
+    for (let page = 1; page <= 5; page++) {
+      const res = await listPayments({ status: 'succeeded', method: 'all', date: 'custom', q: '', page, pageSize: 1000, fromDate: params.from, toDate: params.to });
+      for (const r of res.rows) {
+        const label = paymentMethodLabel(r.method) || (r.method || 'Autre');
+        map.set(label, (map.get(label) || 0) + (r.amount_cents || 0));
+      }
+      if (res.rows.length < 1000) break;
     }
     const sorted = Array.from(map.entries()).map(([name, value]) => ({ name, value })).filter((s) => s.value > 0).sort((a, b) => b.value - a.value);
     if (sorted.length <= 4) return sorted;
@@ -92,32 +88,6 @@ export async function fetchAvgJobValueSeries(params: { from: string; to: string;
   }
 }
 
-/** Monthly recurring revenue series (cents) + current MRR, from recurring schedules. */
-export async function fetchMrrSeries(params: { from: string; to: string; fr: boolean }): Promise<Series & { currentCents: number }> {
-  try {
-    const schedules = await listRecurringSchedules();
-    const monthlyOf = (s: (typeof schedules)[number]) => {
-      const amount = (s.items || []).reduce((x, it) => x + (it.qty || 0) * (it.unit_price_cents || 0), 0);
-      return amount * (FREQ_TO_MONTHLY[s.frequency] || 1);
-    };
-    const keys = monthKeys(params.from, params.to);
-    const vals = keys.map((k) => {
-      const first = `${k}-01`;
-      const last = `${k}-31`;
-      return Math.round(schedules.reduce((sum, s) => {
-        const start = (s.start_date || '').slice(0, 10);
-        const end = (s.end_date || '').slice(0, 10);
-        const activeThen = (!start || start <= last) && (!end || end >= first) && s.is_active !== false;
-        return activeThen ? sum + monthlyOf(s) : sum;
-      }, 0));
-    });
-    const currentCents = Math.round(schedules.filter((s) => s.is_active).reduce((sum, s) => sum + monthlyOf(s), 0));
-    return { labels: keys.map((k) => monthLabel(k, params.fr)), vals, currentCents };
-  } catch {
-    return { labels: [], vals: [], currentCents: 0 };
-  }
-}
-
 /** Loyalty metrics: recurring-revenue share, average lifetime value, retention. */
 export async function fetchLoyalty(params: { from: string; to: string }): Promise<{ recurringPct: number; ltvAvgCents: number; retentionPct: number }> {
   try {
@@ -142,7 +112,9 @@ export async function fetchLoyalty(params: { from: string; to: string }): Promis
     const ltvAvgCents = clv.length ? Math.round(clv.reduce((s, c) => s + c.total_revenue_cents, 0) / clv.length) : 0;
 
     const cohorts = await fetchCohortRetention();
-    const rets = cohorts.map((c) => { const r = c.retention_pct || 0; return r > 0 && r <= 1 ? r * 100 : r; });
+    // months_after = 0 vaut 100 % par définition — l'inclure gonflait la moyenne.
+    const rets = cohorts.filter((c) => Number(c.months_after) >= 1)
+      .map((c) => { const r = c.retention_pct || 0; return r > 0 && r <= 1 ? r * 100 : r; });
     const retentionPct = rets.length ? Math.round(rets.reduce((s, r) => s + r, 0) / rets.length) : 0;
 
     return { recurringPct, ltvAvgCents, retentionPct };

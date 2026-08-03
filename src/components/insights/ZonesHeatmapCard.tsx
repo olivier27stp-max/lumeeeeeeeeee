@@ -109,7 +109,14 @@ export default function ZonesHeatmapCard({
     const center: L.LatLngTuple = valid.length
       ? [valid.reduce((s, p) => s + p.latitude, 0) / valid.length, valid.reduce((s, p) => s + p.longitude, 0) / valid.length]
       : DEFAULT_CENTER;
-    const done = valid.filter((p) => isDone(p.status));
+    // Un pin par schedule_event : un job multi-visites ajoutait son total à
+    // chaque visite. On ne garde qu'un pin par job.
+    const seenJobs = new Set<string>();
+    const done = valid.filter((p) => isDone(p.status)).filter((p) => {
+      if (seenJobs.has(p.jobId)) return false;
+      seenJobs.add(p.jobId);
+      return true;
+    });
     const agg = new Map<string, { rev: number; jobs: number; lat: number; lng: number }>();
     for (const p of done) {
       const name = cityFromAddress(p.address) || (fr ? 'Autres' : 'Other');
