@@ -47,6 +47,16 @@ supabase/
 - Sensitive operations use `SECURITY DEFINER` RPCs or `service_role` client
 - **`getServiceClient()`** in `server/lib/supabase.ts` bypasses RLS — use for admin ops
 
+## Environments & Migration Workflow
+- **Two Supabase projects**: prod `bbzcuzqfgsdvjsymfwmr` (CRM) + staging `boylnjjlhexljmddmjyg` (schema mirror, fake data only). Local dev (`.env.local`) points to **staging** — never point local at prod.
+- **Every schema change** = a SQL file in `supabase/migrations/`, applied **staging first, prod second**:
+  1. `npm run db:apply -- supabase/migrations/<file>.sql` → applies to staging
+  2. Test locally against staging
+  3. `npm run db:apply:prod -- supabase/migrations/<file>.sql` → applies to prod
+- **Never** change schema via the Supabase dashboard on either project — it silently desyncs the two.
+- `npm run db:diff` compares prod vs staging schemas (needs Docker) and reports any drift. Run it when in doubt, or after someone else deployed.
+- Known accepted delta: staging has an `rls_auto_enable()` event trigger (auto-RLS safety net); `db:diff` ignores it.
+
 ## Coding Rules
 - Read the file before editing it
 - Return minimal patches — never rewrite full files

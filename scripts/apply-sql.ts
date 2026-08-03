@@ -2,12 +2,14 @@
  * apply-sql.ts — Apply SQL files to Supabase via the Management API.
  *
  * Usage:
- *   tsx scripts/apply-sql.ts <path-to-sql-file> [more-files...]
+ *   tsx scripts/apply-sql.ts <path-to-sql-file> [more-files...]   → staging (SUPABASE_PROJECT_REF)
+ *   tsx scripts/apply-sql.ts --prod <path-to-sql-file>            → prod (SUPABASE_PROJECT_REF_PROD)
  *   tsx scripts/apply-sql.ts --dry-run <path-to-sql-file>
  *
  * Env (in .env.local, NEVER commit):
  *   SUPABASE_ACCESS_TOKEN=sbp_xxx         (https://supabase.com/dashboard/account/tokens)
- *   SUPABASE_PROJECT_REF=bbzcuzqfgsdvjsymfwmr
+ *   SUPABASE_PROJECT_REF=xxx              (staging — cible par défaut)
+ *   SUPABASE_PROJECT_REF_PROD=xxx         (prod — cible de --prod)
  */
 import { config } from 'dotenv';
 config({ path: '.env.local' });
@@ -15,18 +17,25 @@ config({ path: '.env.local' });
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+const args = process.argv.slice(2);
+const dryRun = args.includes('--dry-run');
+const isProd = args.includes('--prod');
+const files = args.filter(a => a !== '--dry-run' && a !== '--prod');
+
 const token = process.env.SUPABASE_ACCESS_TOKEN;
-const projectRef = process.env.SUPABASE_PROJECT_REF;
+const projectRef = isProd
+  ? process.env.SUPABASE_PROJECT_REF_PROD
+  : process.env.SUPABASE_PROJECT_REF;
 
 if (!token || !projectRef) {
-  console.error('ERROR: SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_REF are required in .env.local');
+  console.error(`ERROR: SUPABASE_ACCESS_TOKEN and ${isProd ? 'SUPABASE_PROJECT_REF_PROD' : 'SUPABASE_PROJECT_REF'} are required in .env.local`);
   console.error('  Generate a token: https://supabase.com/dashboard/account/tokens');
   process.exit(1);
 }
 
-const args = process.argv.slice(2);
-const dryRun = args.includes('--dry-run');
-const files = args.filter(a => a !== '--dry-run');
+console.log(isProd
+  ? `⚠️  CIBLE: PRODUCTION (${projectRef})`
+  : `Cible: staging (${projectRef})`);
 
 if (files.length === 0) {
   console.error('Usage: tsx scripts/apply-sql.ts [--dry-run] <path-to-sql-file> [more-files...]');

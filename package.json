@@ -20,6 +20,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:apply": "tsx scripts/apply-sql.ts",
+    "db:apply:prod": "tsx scripts/apply-sql.ts --prod",
+    "db:diff": "python3 scripts/db-diff.py",
     "test:rls": "tsx scripts/test-rls-isolation.ts",
     "check:db-coherence": "node --env-file=.env.local scripts/check-db-coherence.mjs",
     "check:silent-mutations": "node scripts/check-silent-mutations.mjs",
