@@ -198,7 +198,9 @@ export default function QuoteView() {
       // Track view (fire-and-forget)
       // Le suivi de vue se fait par view_token (l'endpoint public refuse les
       // UUID bruts) — avec quote.id l'ouverture n'était jamais enregistrée.
-      fetch(`${API_BASE}/api/quotes/${token}/track-view`, { method: 'POST' }).catch(() => {});
+      // Content-Type JSON requis : le garde CSRF du serveur (server/index.ts)
+      // rejette tout POST sans Authorization / X-Requested-With / JSON.
+      fetch(`${API_BASE}/api/quotes/${token}/track-view`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).catch(() => {});
 
       setData(result);
 
