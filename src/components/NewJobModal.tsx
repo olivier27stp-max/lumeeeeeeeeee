@@ -360,7 +360,7 @@ export default function NewJobModal({
   const [showOnLeaderboard, setShowOnLeaderboard] = useState(true);
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
   // "Ask for a review" setup
-  const [askForReview, setAskForReview] = useState(false);
+  const [askForReview, setAskForReview] = useState(true);
   // startDate/startTime/endTime are DERIVED from the first visit (see the sync
   // effect below) and only feed TeamSuggestions/conflict checks + the service
   // plan's own time inputs. The source of truth for scheduling is `visitDrafts`.
@@ -802,7 +802,7 @@ export default function NewJobModal({
     setJobType(initialValues?.job_type || 'one_off');
     // Review (best-effort field — may be absent on the draft)
     const iv = initialValues as any;
-    setAskForReview(Boolean(iv?.ask_for_review));
+    setAskForReview(iv?.ask_for_review == null ? true : Boolean(iv.ask_for_review));
     setSaleDate(initialValues?.sale_date || new Date().toISOString().slice(0, 10));
     setShowOnLeaderboard(initialValues?.show_on_leaderboard !== false);
     setServiceYears([new Date().getFullYear()]);
@@ -2386,23 +2386,17 @@ export default function NewJobModal({
                       <label className="text-xs font-medium text-text-tertiary">
                         {language === 'fr' ? 'Se répète' : 'Repeats on'}
                       </label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <select
+                        value={repeatMode}
+                        onChange={(event) => { setDirty(true); setRepeatMode(event.target.value as typeof repeatMode); }}
+                        className="glass-input w-full"
+                      >
                         {repeatOptions.map((opt) => (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            onClick={() => { setDirty(true); setRepeatMode(opt.key); }}
-                            className={cn(
-                              'px-3 py-2 rounded-lg border text-sm font-medium text-left transition-colors',
-                              repeatMode === opt.key
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-outline-subtle bg-surface-secondary/30 text-text-tertiary hover:text-text-secondary'
-                            )}
-                          >
+                          <option key={opt.key} value={opt.key}>
                             {opt.label}
-                          </button>
+                          </option>
                         ))}
-                      </div>
+                      </select>
                     </div>
 
                     {/* Fin de la récurrence */}
