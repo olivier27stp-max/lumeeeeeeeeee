@@ -441,11 +441,12 @@ export default function DailyDispatchView({
                 {t.schedule.dailyResource}
               </span>
               {/* Date du jour — box beige (mêmes couleurs que le bouton New Job) quand on regarde aujourd'hui */}
-              {isSameDay(date, new Date()) && (
-                <span className="shrink-0 whitespace-nowrap rounded-md bg-[#d8d0c2] px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums text-[#000]">
-                  {format(date, isFr ? 'd MMM' : 'MMM d', { locale: isFr ? frCA : enCA })}
-                </span>
-              )}
+              <span className={cn(
+                'shrink-0 whitespace-nowrap text-[16px] font-bold tabular-nums text-black',
+                isSameDay(date, new Date()) && 'rounded-md bg-[#d8d0c2] px-2 py-0.5',
+              )}>
+                {format(date, isFr ? 'd MMM' : 'MMM d', { locale: isFr ? frCA : enCA })}
+              </span>
               <DailyCustomizePopover prefs={prefs} teams={activeTeams} onChange={updatePrefs} />
             </div>
             <div className="relative shrink-0" style={{ width: timelineWidth }}>

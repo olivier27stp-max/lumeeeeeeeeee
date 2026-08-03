@@ -443,8 +443,8 @@ export default function WeeklyDispatchView({
                   style={{ minWidth: DAY_COL_MIN_PX }}
                 >
                   <span className={cn(
-                    'truncate text-[10.5px] tabular-nums',
-                    today ? 'rounded-md bg-[#d8d0c2] px-1.5 py-0.5 font-bold text-[#000]' : 'font-medium text-text-tertiary',
+                    'truncate text-[16px] font-bold tabular-nums text-black',
+                    today && 'rounded-md bg-[#d8d0c2] px-2 py-0.5',
                   )}>
                     {cap(format(d, 'EEEE d', { locale }))}
                   </span>
