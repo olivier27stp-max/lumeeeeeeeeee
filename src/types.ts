@@ -118,6 +118,11 @@ export interface Job {
   show_on_leaderboard?: boolean;
   requires_invoicing?: boolean;
   billing_split?: boolean;
+  deposit_required?: boolean;
+  deposit_type?: 'percentage' | 'fixed' | null;
+  deposit_value?: number;
+  deposit_cents?: number;
+  require_payment_method?: boolean;
   notes?: string | null;
   latitude?: number | null;
   longitude?: number | null;

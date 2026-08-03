@@ -35,6 +35,13 @@ interface PublicAgreementData {
     client_name: string | null;
     property_address: string | null;
     service_plan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
+    payment_terms?: {
+      deposit_required: boolean;
+      deposit_type: 'percentage' | 'fixed' | null;
+      deposit_value: number;
+      deposit_cents: number;
+      require_payment_method: boolean;
+    } | null;
   };
 }
 
@@ -221,6 +228,7 @@ export default function ContractView() {
     taxLines: data.doc.tax_lines,
     totalCents: data.doc.total_cents,
     servicePlan: data.doc.service_plan ?? null,
+    paymentTerms: data.doc.payment_terms ?? null,
     signature: data.agreement.signature_data && data.agreement.signer_name
       ? { signerName: data.agreement.signer_name, signatureData: data.agreement.signature_data, signedAt: data.agreement.signed_at }
       : null,

@@ -26,6 +26,8 @@ export interface AgreementDraftPreviewData {
   discountPercent?: number | null;
   /** 12-month calendar of service-plan jobs — shown on the contract when present. */
   servicePlan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
+  /** Deposit + payment-method-on-file requirements — shown under the totals when present. */
+  paymentTerms?: AgreementDocData['paymentTerms'];
 }
 
 interface AgreementDraftPreviewModalProps {
@@ -94,6 +96,7 @@ export default function AgreementDraftPreviewModal({
       taxLines,
       totalCents: taxBaseCents + taxLines.reduce((sum, tx) => sum + tx.amount_cents, 0),
       servicePlan: data.servicePlan ?? null,
+      paymentTerms: data.paymentTerms ?? null,
       signature: null,
     };
   }, [company, data, requireSignature, terms, logoUrl]);

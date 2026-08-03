@@ -303,6 +303,48 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
   doc.text(formatCents(data.totalCents), totalsX, y + 4, { align: 'right' });
   y += 26;
 
+  // ── PAYMENT TERMS ──
+  if (data.paymentTerms && (data.paymentTerms.deposit_required || data.paymentTerms.require_payment_method)) {
+    const pt = data.paymentTerms;
+    y += 6;
+    if (y > pageH - 120) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.setDrawColor(238, 238, 238);
+    doc.line(marginL, y - 6, pageW - marginR, y - 6);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...lightGray);
+    doc.text(L('PAYMENT TERMS', 'MODALITÉS DE PAIEMENT'), marginL, y);
+    y += 12;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...darkGray);
+    if (pt.deposit_required) {
+      const pct = pt.deposit_type === 'percentage' ? L(` (${pt.deposit_value}% of the total)`, ` (${pt.deposit_value} % du total)`) : '';
+      doc.text(
+        L(
+          `A deposit of ${formatCents(pt.deposit_cents)}${pct} is required to confirm this contract.`,
+          `Un dépôt de ${formatCents(pt.deposit_cents)}${pct} est requis pour confirmer ce contrat.`,
+        ),
+        marginL,
+        y,
+      );
+      y += 12;
+    }
+    if (pt.require_payment_method) {
+      doc.text(
+        L('A payment method on file is required.', 'Une méthode de paiement au dossier est requise.'),
+        marginL,
+        y,
+      );
+      y += 12;
+    }
+    y += 4;
+  }
+
   // ── TERMS & CONDITIONS ──
   if (data.terms) {
     y += 6;

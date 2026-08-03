@@ -1138,11 +1138,25 @@ export default function NewJobModal({
           visits: sortedPlanVisits.map((v) => ({ month: v.month, date: v.date, year: v.year })),
         }
       : null,
+    paymentTerms: (jobDepositRequired || jobRequirePaymentMethod)
+      ? {
+          deposit_required: jobDepositRequired,
+          deposit_type: jobDepositRequired ? jobDepositType : null,
+          deposit_value: jobDepositRequired ? (parseFloat(jobDepositValue) || 0) : 0,
+          deposit_cents: !jobDepositRequired
+            ? 0
+            : jobDepositType === 'percentage'
+              ? Math.round(grandTotalCents * ((parseFloat(jobDepositValue) || 0) / 100))
+              : Math.round((parseFloat(jobDepositValue) || 0) * 100),
+          require_payment_method: jobRequirePaymentMethod,
+        }
+      : null,
   }), [
     jobNumber, nextJobNumber, isCreatingNewClient, newClientFirst, newClientLast, newClientCompany,
     newClientEmail, newClientPhone, selectedClient, addressLine1, addressLine2, addressCity,
     addressProvince, addressPostalCode, prefilledAddress, billableLineItems, taxLines, effectiveSubtotalCents,
     isServicePlan, sortedPlanVisits, monthNames,
+    jobDepositRequired, jobDepositType, jobDepositValue, jobRequirePaymentMethod, grandTotalCents,
   ]);
 
   const resetForm = () => {
@@ -2810,6 +2824,38 @@ export default function NewJobModal({
                   />
                   <span className="text-sm">{t.modals.splitInvoices}</span>
                 </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
+                  <span className="text-sm">{t.modals.requireDeposit}</span>
+                </label>
+                {jobDepositRequired && (
+                  <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
+                    <div className="flex items-center gap-3">
+                      <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
+                        className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
+                        <option value="percentage">{t.modals.percentageOption}</option>
+                        <option value="fixed">{t.modals.fixedAmountOption}</option>
+                      </select>
+                      <input value={jobDepositValue} onChange={e => setJobDepositValue(e.target.value.replace(/[^\d.]/g, ''))}
+                        className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
+                        placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
+                      {jobDepositType === 'percentage' && (
+                        <span className="text-xs text-text-tertiary">
+                          = {formatCurrency(grandTotalCents / 100 * (parseFloat(jobDepositValue) || 0) / 100)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-text-tertiary">
+                      {jobDepositType === 'percentage'
+                        ? (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} %` : `Client must pay ${jobDepositValue || 0}% deposit`)
+                        : (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} $` : `Client must pay $${jobDepositValue || 0} deposit`)}
+                    </p>
+                  </div>
+                )}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
+                  <span className="text-sm">{language === 'fr' ? 'Exiger une méthode de paiement au dossier' : 'Require payment method on file'}</span>
+                </label>
               </Box>
 
               <Box
@@ -3271,42 +3317,6 @@ export default function NewJobModal({
                   )}
                 </Box>
               )}
-
-              {/* ── Deposit & Payment Settings ── */}
-              <Box title={t.modals.depositSettings}>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="text-[13px] text-text-primary">{t.modals.requireDeposit}</span>
-                </label>
-                {jobDepositRequired && (
-                  <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
-                    <div className="flex items-center gap-3">
-                      <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
-                        className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
-                        <option value="percentage">{t.modals.percentageOption}</option>
-                        <option value="fixed">{t.modals.fixedAmountOption}</option>
-                      </select>
-                      <input value={jobDepositValue} onChange={e => setJobDepositValue(e.target.value.replace(/[^\d.]/g, ''))}
-                        className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
-                        placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
-                      {jobDepositType === 'percentage' && (
-                        <span className="text-xs text-text-tertiary">
-                          = {formatCurrency(grandTotalCents / 100 * (parseFloat(jobDepositValue) || 0) / 100)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[12px] text-text-tertiary">
-                      {jobDepositType === 'percentage'
-                        ? (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} %` : `Client must pay ${jobDepositValue || 0}% deposit`)
-                        : (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} $` : `Client must pay $${jobDepositValue || 0} deposit`)}
-                    </p>
-                  </div>
-                )}
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="text-[13px] text-text-primary">{language === 'fr' ? 'Exiger une méthode de paiement au dossier' : 'Require payment method on file'}</span>
-                </label>
-              </Box>
 
               {/* ── Notes ── */}
               <Box

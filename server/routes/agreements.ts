@@ -57,6 +57,14 @@ interface ComposedAgreementDoc {
   property_address: string | null;
   /** 12-month calendar of service-plan jobs (jobs.job_type = 'recurring'). */
   service_plan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
+  /** Deposit + payment-method-on-file requirements of the job, shown on the contract. */
+  payment_terms?: {
+    deposit_required: boolean;
+    deposit_type: 'percentage' | 'fixed' | null;
+    deposit_value: number;
+    deposit_cents: number;
+    require_payment_method: boolean;
+  } | null;
 }
 
 /**
@@ -70,7 +78,7 @@ interface ComposedAgreementDoc {
 async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgreementDoc> {
   const { data: job } = await admin
     .from('jobs')
-    .select('id, job_number, subtotal_cents, tax_lines, property_address, client_id')
+    .select('id, job_number, subtotal_cents, tax_lines, property_address, client_id, deposit_required, deposit_type, deposit_value, require_payment_method')
     .eq('id', agreement.job_id)
     .maybeSingle();
 
@@ -136,6 +144,29 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     if (visits.length > 0) servicePlan = { year: Number(sc.year), visits };
   }
 
+  // Payment terms — the deposit amount is recomputed from the composed total
+  // so the contract always matches the amounts printed above it.
+  const depositRequired = job?.deposit_required === true;
+  const depositType = depositRequired && (job?.deposit_type === 'percentage' || job?.deposit_type === 'fixed')
+    ? job.deposit_type
+    : null;
+  const depositValue = depositRequired ? Number(job?.deposit_value || 0) : 0;
+  const depositCents = !depositRequired
+    ? 0
+    : depositType === 'percentage'
+      ? Math.round(totalCents * (depositValue / 100))
+      : Math.round(depositValue * 100);
+  const requirePaymentMethod = job?.require_payment_method === true;
+  const paymentTerms = (depositRequired || requirePaymentMethod)
+    ? {
+        deposit_required: depositRequired,
+        deposit_type: depositType,
+        deposit_value: depositValue,
+        deposit_cents: depositCents,
+        require_payment_method: requirePaymentMethod,
+      }
+    : null;
+
   return {
     items,
     subtotal_cents: subtotalCents,
@@ -144,6 +175,7 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     client_name: clientName,
     property_address: job?.property_address || null,
     service_plan: servicePlan,
+    payment_terms: paymentTerms,
   };
 }
 

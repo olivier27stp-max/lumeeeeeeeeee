@@ -46,6 +46,14 @@ export interface AgreementDocData {
   totalCents: number;
   signature: { signerName: string; signatureData: string; signedAt: string | null } | null;
   servicePlan?: AgreementServicePlan | null;
+  /** Deposit + payment-method-on-file requirements of the job — shown under the totals. */
+  paymentTerms?: {
+    deposit_required: boolean;
+    deposit_type: 'percentage' | 'fixed' | null;
+    deposit_value: number;
+    deposit_cents: number;
+    require_payment_method: boolean;
+  } | null;
 }
 
 function fmtDate(iso: string | null | undefined, language: 'en' | 'fr'): string {
@@ -302,6 +310,34 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
           </div>
         </div>
       </div>
+
+      {/* ── PAYMENT TERMS ── */}
+      {data.paymentTerms && (data.paymentTerms.deposit_required || data.paymentTerms.require_payment_method) && (
+        <>
+          <div className="border-t border-[#eee]" />
+          <div className="px-8 py-5">
+            <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">
+              {fr ? 'Modalités de paiement' : 'Payment terms'}
+            </p>
+            <div className="space-y-1">
+              {data.paymentTerms.deposit_required && (
+                <p className="text-[12px] text-[#555] leading-relaxed">
+                  {fr
+                    ? `Un dépôt de ${formatCents(data.paymentTerms.deposit_cents)}${data.paymentTerms.deposit_type === 'percentage' ? ` (${data.paymentTerms.deposit_value} % du total)` : ''} est requis pour confirmer ce contrat.`
+                    : `A deposit of ${formatCents(data.paymentTerms.deposit_cents)}${data.paymentTerms.deposit_type === 'percentage' ? ` (${data.paymentTerms.deposit_value}% of the total)` : ''} is required to confirm this contract.`}
+                </p>
+              )}
+              {data.paymentTerms.require_payment_method && (
+                <p className="text-[12px] text-[#555] leading-relaxed">
+                  {fr
+                    ? 'Une méthode de paiement au dossier est requise.'
+                    : 'A payment method on file is required.'}
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── TERMS & CONDITIONS ── */}
       {data.terms && (
