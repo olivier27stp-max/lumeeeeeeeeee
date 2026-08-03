@@ -2427,8 +2427,6 @@ export default function JobDetails() {
           open={!!finalVisitPromptOpen}
           fr={language === 'fr'}
           busy={finalVisitBusy}
-          title={finalVisitPromptOpen === 'complete' ? (language === 'fr' ? 'Compléter le job' : 'Complete Job') : undefined}
-          subtitle={finalVisitPromptOpen === 'complete' ? (language === 'fr' ? 'Que voulez-vous faire ?' : 'What would you like to do?') : undefined}
           onCloseJob={() => {
             void (async () => {
               if (finalVisitBusy) return;
