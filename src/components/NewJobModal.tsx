@@ -9,6 +9,7 @@ import { listSalespeople, applyJobExtras } from '../lib/jobsApi';
 import { addVisit, listJobVisits, rescheduleEvent, unscheduleJob, isAnytimeVisit, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { createServiceContract } from '../lib/serviceContractsApi';
 import { listJobTags, createJobTag, setJobTagIds } from '../lib/jobTagsApi';
+import { saveJobBillingMilestones, type JobBillingMilestoneDraft } from '../lib/jobBillingApi';
 import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '../lib/jobAgreementsApi';
 import AgreementDraftPreviewModal, { type AgreementDraftPreviewData } from './agreements/AgreementDraftPreviewModal';
 import DatePickerInput from './ui/DatePickerInput';
@@ -399,6 +400,14 @@ export default function NewJobModal({
   const [repeatMode, setRepeatMode] = useState<'weekly' | 'biweekly' | 'monthly' | 'custom'>('weekly');
   const [endsAfterCount, setEndsAfterCount] = useState('');
   const [endsAfterUnit, setEndsAfterUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months');
+  // ── Billing & payments du plan de service ──
+  // per_visit : une facture par visite (créée quand la visite est terminée) ;
+  // single : une facture pour tout le plan ; installments : échéancier de
+  // N paiements d'un montant fixe + solde (job_billing_milestones).
+  const [planBillingMode, setPlanBillingMode] = useState<'per_visit' | 'single' | 'installments'>('per_visit');
+  const [installmentsCount, setInstallmentsCount] = useState('');
+  const [installmentAmount, setInstallmentAmount] = useState('');
+  const [autoCharge, setAutoCharge] = useState(false);
   // Written agreement (job contract) — optional, created after the job insert
   const [createAgreement, setCreateAgreement] = useState(false);
   const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
@@ -803,6 +812,10 @@ export default function NewJobModal({
     setRepeatMode('weekly');
     setEndsAfterCount('');
     setEndsAfterUnit('months');
+    setPlanBillingMode('per_visit');
+    setInstallmentsCount('');
+    setInstallmentAmount('');
+    setAutoCharge(false);
     setCreateContract(false);
     setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
@@ -1099,6 +1112,16 @@ export default function NewJobModal({
 
   const grandTotalCents = effectiveSubtotalCents + taxTotalCents;
 
+  // Échéancier du plan de service : N paiements × montant, comparés au total
+  // du job pour afficher la balance restant à facturer (rien n'est oublié).
+  const installmentsPlan = useMemo(() => {
+    const count = parseInt(installmentsCount, 10);
+    const amountCents = Math.round((Number.parseFloat(installmentAmount) || 0) * 100);
+    if (!Number.isFinite(count) || count <= 0 || amountCents <= 0) return null;
+    const coveredCents = count * amountCents;
+    return { count, amountCents, coveredCents, remainderCents: grandTotalCents - coveredCents };
+  }, [installmentsCount, installmentAmount, grandTotalCents]);
+
   // Draft contract preview — same document the client will see on /contract/:token
   const agreementPreviewData: AgreementDraftPreviewData = useMemo(() => ({
     numberLabel: `CTR-${jobNumber.trim() || nextJobNumber || '—'}`,
@@ -1166,6 +1189,10 @@ export default function NewJobModal({
     setRepeatMode('weekly');
     setEndsAfterCount('');
     setEndsAfterUnit('months');
+    setPlanBillingMode('per_visit');
+    setInstallmentsCount('');
+    setInstallmentAmount('');
+    setAutoCharge(false);
     setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
@@ -1709,7 +1736,9 @@ export default function NewJobModal({
         total_cents: grandTotalCents,
         currency: orgCurrency,
         requires_invoicing: requiresInvoicing,
-        billing_split: billingSplit,
+        // Plan de service en « plusieurs paiements » : le job se facture par
+        // l'échéancier (job_billing_milestones créés juste après).
+        billing_split: (isServicePlan && planBillingMode === 'installments') ? true : billingSplit,
         line_items: filteredItems,
         deposit_required: jobDepositRequired,
         deposit_type: jobDepositRequired ? jobDepositType : null,
@@ -1812,6 +1841,45 @@ export default function NewJobModal({
           } catch (err) {
             console.error('[jobs] failed to create service contract', err);
             try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The contract could not be created.'); } catch {}
+          }
+        }
+        // Billing & payments du plan : mode + paiement automatique, écrits en
+        // best-effort (la migration 20260753000000 peut être pending — l'update
+        // échoue alors silencieusement sans bloquer la création).
+        {
+          const { error: billingModeError } = await supabase
+            .from('jobs')
+            .update({ billing_mode: planBillingMode, auto_charge: autoCharge })
+            .eq('id', createdJob.id);
+          if (billingModeError) {
+            console.warn('[jobs] failed to persist billing_mode/auto_charge (migration pending?)', billingModeError);
+          }
+        }
+        // « Plusieurs paiements » : échéancier de N versements + un « Solde »
+        // couvrant le reste — la balance affichée au form garantit que le
+        // total du job se fait payer au complet.
+        if (planBillingMode === 'installments' && installmentsPlan) {
+          try {
+            const drafts: JobBillingMilestoneDraft[] = Array.from({ length: installmentsPlan.count }, (_, i) => ({
+              position: i + 1,
+              label: (language === 'fr' ? 'Paiement ' : 'Payment ') + (i + 1),
+              percent: null,
+              amount_cents: installmentsPlan.amountCents,
+              due_date: null,
+            }));
+            if (installmentsPlan.remainderCents > 0) {
+              drafts.push({
+                position: drafts.length + 1,
+                label: language === 'fr' ? 'Solde' : 'Balance',
+                percent: null,
+                amount_cents: installmentsPlan.remainderCents,
+                due_date: null,
+              });
+            }
+            await saveJobBillingMilestones(createdJob.id, drafts);
+          } catch (err) {
+            console.error('[jobs] failed to create billing installments', err);
+            try { toast.error(language === 'fr' ? 'L’échéancier n’a pas pu être créé.' : 'The payment schedule could not be created.'); } catch {}
           }
         }
         // Équipe assignée (même sans horaire créé ni disponibilité) : étiquette
@@ -2251,7 +2319,7 @@ export default function NewJobModal({
                   </div>
               </Box>
 
-              {isServicePlan ? (
+              {isServicePlan && (
               <Box
                 title={t.modals.servicePlanSchedule}
                 subtitle={t.modals.servicePlanScheduleHint}
@@ -2589,7 +2657,152 @@ export default function NewJobModal({
                     </span>
                   </label>
               </Box>
-              ) : (
+              )}
+
+              {/* ═══ BILLING AND PAYMENTS — comment le plan de service se facture ═══ */}
+              {isServicePlan && (
+              <Box
+                title={language === 'fr' ? 'Facturation et paiements' : 'Billing and Payments'}
+                subtitle={language === 'fr'
+                  ? 'Choisissez comment les visites du plan se facturent.'
+                  : 'Choose how the plan’s visits get billed.'}
+              >
+                  <div className="space-y-2">
+                    {([
+                      {
+                        key: 'per_visit' as const,
+                        label: language === 'fr' ? 'Une facture par visite' : 'One invoice per visit',
+                        hint: language === 'fr'
+                          ? 'Chaque visite a sa propre facture, créée quand la visite est terminée — comme des jobs individuelles.'
+                          : 'Each visit gets its own invoice, created when the visit is completed — like individual jobs.',
+                      },
+                      {
+                        key: 'single' as const,
+                        label: language === 'fr' ? 'Une facture pour toutes les visites' : 'One invoice for all visits',
+                        hint: language === 'fr'
+                          ? 'Une seule facture couvre l’ensemble du plan.'
+                          : 'A single invoice covers the whole plan.',
+                      },
+                      {
+                        key: 'installments' as const,
+                        label: language === 'fr' ? 'Plusieurs paiements' : 'Multiple payments',
+                        hint: language === 'fr'
+                          ? 'Choisissez le nombre de paiements et le montant de chacun.'
+                          : 'Choose the number of payments and the amount of each.',
+                      },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => { setDirty(true); setPlanBillingMode(opt.key); }}
+                        className={cn(
+                          'w-full px-3 py-2.5 rounded-lg border text-left transition-colors',
+                          planBillingMode === opt.key
+                            ? 'border-primary bg-primary/10'
+                            : 'border-outline-subtle bg-surface-secondary/30 hover:border-outline-strong'
+                        )}
+                      >
+                        <span className={cn(
+                          'block text-sm font-medium',
+                          planBillingMode === opt.key ? 'text-primary' : 'text-text-primary'
+                        )}>
+                          {opt.label}
+                        </span>
+                        <span className="block text-xs text-text-tertiary mt-0.5">{opt.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Échéancier : N paiements × montant + balance vs total du job */}
+                  {planBillingMode === 'installments' && (
+                    <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">
+                            {language === 'fr' ? 'Nombre de paiements' : 'Number of payments'}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={installmentsCount}
+                            onChange={(event) => { setDirty(true); setInstallmentsCount(event.target.value); }}
+                            placeholder="4"
+                            className="glass-input w-full tabular-nums"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">
+                            {language === 'fr' ? 'Montant par paiement' : 'Amount per payment'}
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">$</span>
+                            <input
+                              inputMode="decimal"
+                              value={installmentAmount}
+                              onChange={(event) => { setDirty(true); setInstallmentAmount(event.target.value.replace(/[^\d.]/g, '')); }}
+                              placeholder="500"
+                              className="glass-input w-full pl-7 tabular-nums"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      {installmentsPlan && (
+                        <div className="space-y-1 text-[12px] tabular-nums">
+                          <p className="text-text-secondary">
+                            {installmentsPlan.count} {language === 'fr' ? 'paiements de' : 'payments of'} {formatCurrency(installmentsPlan.amountCents / 100)}
+                            {' = '}{formatCurrency(installmentsPlan.coveredCents / 100)}
+                            <span className="text-text-tertiary"> · {language === 'fr' ? 'total du job' : 'job total'} {formatCurrency(grandTotalCents / 100)}</span>
+                          </p>
+                          {installmentsPlan.remainderCents > 0 ? (
+                            <p className="font-semibold text-warning">
+                              {language === 'fr'
+                                ? `Balance : il reste ${formatCurrency(installmentsPlan.remainderCents / 100)} à faire payer — un paiement « Solde » sera ajouté pour couvrir le reste.`
+                                : `Balance: ${formatCurrency(installmentsPlan.remainderCents / 100)} left to collect — a “Balance” payment will be added to cover it.`}
+                            </p>
+                          ) : installmentsPlan.remainderCents < 0 ? (
+                            <p className="font-semibold text-danger">
+                              {language === 'fr'
+                                ? `Les paiements dépassent le total du job de ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`
+                                : `Payments exceed the job total by ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`}
+                            </p>
+                          ) : (
+                            <p className="font-semibold text-success">
+                              {language === 'fr' ? 'Le total du job est entièrement couvert.' : 'The job total is fully covered.'}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Paiement automatique sur la carte au dossier */}
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={autoCharge}
+                      onChange={(event) => { setDirty(true); setAutoCharge(event.target.checked); }}
+                      className="h-4 w-4 mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm text-text-primary">
+                        {language === 'fr' ? 'Se faire payer automatiquement' : 'Get paid automatically'}
+                      </span>
+                      {autoCharge && (
+                        <span className="block text-xs text-primary font-medium mt-1">
+                          {language === 'fr' ? 'Request a payment on file' : 'Request a payment on file'}
+                          <span className="block text-text-tertiary font-normal mt-0.5">
+                            {language === 'fr'
+                              ? 'Le paiement sera demandé automatiquement sur la carte au dossier du client à chaque facture émise.'
+                              : 'Payment will be requested automatically on the client’s card on file each time an invoice is issued.'}
+                          </span>
+                        </span>
+                      )}
+                    </span>
+                  </label>
+              </Box>
+              )}
+
+              {!isServicePlan && (
               <Box
                 title={language === 'fr' ? 'Visites' : 'Visits'}
                 subtitle={language === 'fr'
