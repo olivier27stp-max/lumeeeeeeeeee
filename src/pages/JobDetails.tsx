@@ -35,6 +35,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { getJobById, getJobLineItems, updateJob, type JobLineItem } from '../lib/jobsApi';
 import AddVisitModal from '../components/AddVisitModal';
+import FinalVisitDialog from '../components/schedule/FinalVisitDialog';
 import { invalidateScheduleCache, rescheduleEvent, unscheduleJob, isAnytimeVisit, anytimeLabel, ANYTIME_START_TIME, ANYTIME_END_TIME } from '../lib/scheduleApi';
 import { listTeams, type TeamRecord } from '../lib/teamsApi';
 import { createInvoiceFromJob, getInvoiceRowUiStatus } from '../lib/invoicesApi';
@@ -157,6 +158,10 @@ export default function JobDetails() {
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
   const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [showAddVisit, setShowAddVisit] = useState(false);
+  // « Dernière visite complétée » — proposé quand on vient de compléter la
+  // dernière visite active du job (fermer / nouvelle visite / laisser actif).
+  const [finalVisitPromptOpen, setFinalVisitPromptOpen] = useState(false);
+  const [finalVisitBusy, setFinalVisitBusy] = useState(false);
   // Visit mini-popup ("visit hub"): opened by clicking a visit row.
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null);
   const [visitMoreOpen, setVisitMoreOpen] = useState(false);
@@ -467,6 +472,17 @@ export default function JobDetails() {
         } catch (err: any) {
           console.error('[jobs] per-visit invoice failed', err);
           toast.error(err?.message || (language === 'fr' ? 'La facture de la visite n’a pas pu être créée.' : 'The visit invoice could not be created.'));
+        }
+        // Dernière visite active du job ? → proposer la suite (fermer le job,
+        // planifier une nouvelle visite, ou laisser en « Action requise »).
+        const othersDone = visits
+          .filter((v) => v.id !== visit.id)
+          .every((v) => ['completed', 'cancelled'].includes((v.status || '').toLowerCase()));
+        if (othersDone) {
+          setSelectedVisitId(null);
+          setEditingVisitId(null);
+          setVisitMoreOpen(false);
+          setFinalVisitPromptOpen(true);
         }
       }
       await handleVisitAdded();
@@ -2426,6 +2442,35 @@ export default function JobDetails() {
           onClose={() => setShowAddVisit(false)}
           onAdded={() => void handleVisitAdded()}
           job={{ id: job.id, label: [job.title, job.client_name].filter(Boolean).join(' — ') || (language === 'fr' ? 'Job' : 'Job') }}
+        />
+      )}
+
+      {job && (
+        <FinalVisitDialog
+          open={finalVisitPromptOpen}
+          fr={language === 'fr'}
+          busy={finalVisitBusy}
+          onCloseJob={() => {
+            void (async () => {
+              if (finalVisitBusy) return;
+              setFinalVisitBusy(true);
+              try {
+                const updated = await updateJob(job.id, { status: 'completed' });
+                setJob(updated);
+                toast.success(language === 'fr' ? 'Job fermé.' : 'Job closed.');
+                setFinalVisitPromptOpen(false);
+              } catch (err: any) {
+                toast.error(err?.message || (language === 'fr' ? 'Impossible de fermer le job.' : 'Could not close the job.'));
+              } finally {
+                setFinalVisitBusy(false);
+              }
+            })();
+          }}
+          onScheduleNewVisit={() => {
+            setFinalVisitPromptOpen(false);
+            setShowAddVisit(true);
+          }}
+          onLeave={() => setFinalVisitPromptOpen(false)}
         />
       )}
 

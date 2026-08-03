@@ -8,7 +8,10 @@ import { useTranslation } from '../../i18n';
 import { supabase } from '../../lib/supabase';
 import { invalidateScheduleCache, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import { createInvoiceForVisit } from '../../lib/jobBillingApi';
+import { updateJob } from '../../lib/jobsApi';
 import { toRgba } from '../../lib/colorUtils';
+import FinalVisitDialog from './FinalVisitDialog';
+import AddVisitModal from '../AddVisitModal';
 
 /**
  * Modale « Voir la visite » — partagée par les vues Semaine et Mois.
@@ -40,6 +43,10 @@ export default function VisitDetailModal({ ev, color, teamName, timeLabel, onClo
   const [completed, setCompleted] = useState((ev.status || '').toLowerCase() === 'completed');
   const [busy, setBusy] = useState(false);
   const isCancelled = (ev.status || '').toLowerCase() === 'cancelled';
+  // « Dernière visite complétée » : fermer le job / nouvelle visite / laisser.
+  const [finalPromptOpen, setFinalPromptOpen] = useState(false);
+  const [finalBusy, setFinalBusy] = useState(false);
+  const [addVisitOpen, setAddVisitOpen] = useState(false);
 
   const toggleCompleted = async () => {
     if (busy) return;
@@ -79,6 +86,18 @@ export default function VisitDetailModal({ ev, color, teamName, timeLabel, onClo
           console.error('[schedule] per-visit invoice failed', err);
           toast.error(err?.message || (isFr ? 'La facture de la visite n’a pas pu être créée.' : 'The visit invoice could not be created.'));
         }
+        // Dernière visite active du job ? → proposer la suite.
+        try {
+          const { data: others } = await supabase
+            .from('schedule_events')
+            .select('id,status')
+            .eq('job_id', ev.job_id)
+            .is('deleted_at', null)
+            .neq('id', ev.id);
+          const allDone = (others || []).every((o: any) =>
+            ['completed', 'cancelled'].includes(String(o.status || '').toLowerCase()));
+          if (allDone) setFinalPromptOpen(true);
+        } catch { /* best-effort */ }
       }
       onStatusChanged?.();
     } catch (err: any) {
@@ -89,6 +108,7 @@ export default function VisitDetailModal({ ev, color, teamName, timeLabel, onClo
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
       <div
         className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl"
@@ -166,5 +186,44 @@ export default function VisitDetailModal({ ev, color, teamName, timeLabel, onClo
         </div>
       </div>
     </div>
+
+      <FinalVisitDialog
+        open={finalPromptOpen}
+        fr={isFr}
+        busy={finalBusy}
+        onCloseJob={() => {
+          void (async () => {
+            if (finalBusy) return;
+            setFinalBusy(true);
+            try {
+              await updateJob(ev.job_id, { status: 'completed' });
+              toast.success(isFr ? 'Job fermé.' : 'Job closed.');
+              invalidateScheduleCache();
+              setFinalPromptOpen(false);
+              onStatusChanged?.();
+            } catch (err: any) {
+              toast.error(err?.message || (isFr ? 'Impossible de fermer le job.' : 'Could not close the job.'));
+            } finally {
+              setFinalBusy(false);
+            }
+          })();
+        }}
+        onScheduleNewVisit={() => {
+          setFinalPromptOpen(false);
+          setAddVisitOpen(true);
+        }}
+        onLeave={() => setFinalPromptOpen(false)}
+      />
+
+      <AddVisitModal
+        open={addVisitOpen}
+        onClose={() => setAddVisitOpen(false)}
+        onAdded={() => {
+          invalidateScheduleCache();
+          onStatusChanged?.();
+        }}
+        job={{ id: ev.job_id, label: clientName }}
+      />
+    </>
   );
 }
