@@ -6,6 +6,7 @@ import {
   Image as ImageIcon, Mail, MapPin, Package, Phone, Plus, Trash2, X,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { SignedImg } from '../components/ui/SignedMedia';
 import { listSalespeople } from '../lib/jobsApi';
 import { listClients } from '../lib/clientsApi';
 import {
@@ -1007,7 +1008,7 @@ export default function QuoteNew() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {photos.map((url) => (
                 <div key={url} className={cn('relative aspect-[4/3] rounded-[10px] overflow-hidden border', OUTLINE)}>
-                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <SignedImg url={url} alt="" className="w-full h-full object-cover" />
                   <button
                     type="button"
                     onClick={() => { setPhotos(p => p.filter(u => u !== url)); setDirty(true); }}

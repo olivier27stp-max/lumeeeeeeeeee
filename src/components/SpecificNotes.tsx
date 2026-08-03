@@ -28,6 +28,8 @@ import {
 } from '../lib/specificNotesApi';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
+import { SignedImg, SignedVideo, SignedLink } from './ui/SignedMedia';
+import { useStorageUrl } from '../hooks/useStorageUrl';
 
 // ── Props ──
 
@@ -102,6 +104,8 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
 
   // Lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Bucket privé : l'URL publique stockée doit être signée avant affichage.
+  const lightboxSrc = useStorageUrl(lightboxUrl);
 
   // Drag state
   const [dragOver, setDragOver] = useState(false);
@@ -276,8 +280,8 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {images.map((f) => (
               <div key={f.path} className="relative group rounded-lg overflow-hidden border border-outline-subtle bg-surface-secondary aspect-square">
-                <img
-                  src={f.url}
+                <SignedImg
+                  url={f.url}
                   alt={f.name}
                   className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
                   onClick={() => setLightboxUrl(f.url)}
@@ -315,8 +319,8 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {videos.map((f) => (
               <div key={f.path} className="relative group rounded-lg overflow-hidden border border-outline-subtle bg-black">
-                <video
-                  src={f.url}
+                <SignedVideo
+                  url={f.url}
                   controls
                   preload="metadata"
                   className="w-full max-h-[240px] object-contain"
@@ -355,15 +359,15 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                   <p className="text-[10px] text-text-tertiary">{formatFileSize(f.size)}</p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <a
-                    href={f.url}
+                  <SignedLink
+                    url={f.url}
                     target="_blank"
                     rel="noreferrer"
                     className="p-1 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors"
                     title={fr ? 'Télécharger' : 'Download'}
                   >
                     <Download size={13} />
-                  </a>
+                  </SignedLink>
                   {noteId && (
                     <button
                       onClick={() => handleRemoveFile(noteId, f.path)}
@@ -670,7 +674,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              src={lightboxUrl}
+              src={lightboxSrc || undefined}
               alt={fr ? 'Aperçu' : 'Preview'}
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
               onClick={(e) => e.stopPropagation()}

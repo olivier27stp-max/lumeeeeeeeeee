@@ -137,11 +137,16 @@ export async function fetchPlans(): Promise<Plan[]> {
 export async function fetchCurrentBilling(): Promise<{
   subscription: Subscription | null;
   billing_profile: BillingProfile | null;
+  restricted?: boolean;
 }> {
   const res = await fetch(`${API_BASE}/billing/current`, {
     headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to load billing info.');
+  if (!res.ok) {
+    const err = new Error('Failed to load billing info.') as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }
 

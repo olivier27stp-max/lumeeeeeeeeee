@@ -9,6 +9,7 @@ import {
   Upload, X, FileText, Film, Image as ImageIcon, Paperclip, Plus,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { SignedImg } from './ui/SignedMedia';
 import {
   uploadSpecificNoteFile,
   createSpecificNote,
@@ -163,7 +164,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
                   {fileIcon(f.file_type)}
                 </div>
                 {f.file_type === 'image' && (
-                  <img src={f.url} alt={f.name} className="w-8 h-8 rounded object-cover shrink-0" />
+                  <SignedImg url={f.url} alt={f.name} className="w-8 h-8 rounded object-cover shrink-0" />
                 )}
                 <span className="text-[12px] text-text-primary truncate flex-1">{f.name}</span>
                 <span className="text-[10px] text-text-tertiary shrink-0">{formatFileSize(f.size)}</span>

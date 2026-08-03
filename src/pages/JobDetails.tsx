@@ -80,6 +80,7 @@ import EntityNumberEditor from '../components/EntityNumberEditor';
 import TeamDayRoster from '../components/TeamDayRoster';
 import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
 import { getPins } from '../lib/fieldSalesApi';
+import { SignedLink } from '../components/ui/SignedMedia';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -2210,16 +2211,16 @@ export default function JobDetails() {
             </div>
             <div className="p-5 space-y-2">
               {job.attachments.map((file) => (
-                <a
+                <SignedLink
                   key={file.url}
-                  href={file.url}
+                  url={file.url}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 text-[13px] text-text-primary hover:underline"
                 >
                   <LinkIcon size={13} className="text-text-tertiary" />
                   {file.name}
-                </a>
+                </SignedLink>
               ))}
             </div>
           </div>

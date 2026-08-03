@@ -9,6 +9,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { SignedImg } from './ui/SignedMedia';
 import {
   listChecklistTemplates,
   listJobChecklists,
@@ -154,7 +155,7 @@ function PhotoResponse({
     <div className="space-y-1.5">
       {value ? (
         <div className="relative inline-block">
-          <img src={value} alt="" className="max-h-40 rounded-lg border border-outline" />
+          <SignedImg url={value} alt="" className="max-h-40 rounded-lg border border-outline" />
           {!disabled && (
             <button type="button" onClick={() => onChange(null)}
               className="absolute -top-2 -right-2 bg-surface border border-outline rounded-full p-1">
