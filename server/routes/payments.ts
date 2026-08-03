@@ -57,6 +57,9 @@ import {
   logWebhookEvent,
   markWebhookEventProcessed,
   updatePaymentRequestStatus as updatePayReqStatus,
+  saveCardOnFileFromIntent,
+  chargeInvoiceOnFile,
+  getPlatformStripe,
 } from '../lib/stripe-connect';
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
@@ -206,6 +209,31 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             await updatePayReqStatus(paymentRequestId, 'paid', {
               stripe_payment_intent_id: intent.id,
             });
+          }
+
+          // Carte au dossier : le payeur a coché « Sauvegarder ma carte »
+          // (consentement explicite Loi 25 — save_card + horodatage posés par
+          // /pay/:token/save-card). Best-effort : n'échoue jamais le webhook.
+          if (String((intent.metadata as any)?.save_card || '') === '1' && metadata.clientId) {
+            const pmId = typeof intent.payment_method === 'string'
+              ? intent.payment_method
+              : (intent.payment_method as any)?.id || null;
+            const customerId = typeof intent.customer === 'string'
+              ? intent.customer
+              : (intent.customer as any)?.id || null;
+            if (pmId && customerId) {
+              try {
+                await saveCardOnFileFromIntent({
+                  orgId: metadata.orgId,
+                  clientId: metadata.clientId,
+                  stripeCustomerId: customerId,
+                  paymentMethodId: pmId,
+                  consentedAtIso: String((intent.metadata as any)?.save_card_consented_at || '') || null,
+                });
+              } catch (cofErr: any) {
+                console.error('[webhook/stripe] card-on-file save failed:', cofErr?.message);
+              }
+            }
           }
 
           // Update invoice paid_cents and status
@@ -1901,5 +1929,84 @@ async function provisionSmsForNewSubscription(params: {
     throw err;
   }
 }
+
+// ── Carte au dossier (payment on file) ────────────────────────────────────
+
+// Retrait de la carte au dossier d'un client — droit de retrait (Loi 25) :
+// détache le payment method chez Stripe puis soft-delete le profil local.
+router.post('/payments/card-on-file/remove', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const requestedOrgId = parseOrgId(req.body?.orgId) || auth.orgId;
+    const clientId = String(req.body?.clientId || '').trim();
+    if (!clientId) return res.status(400).json({ error: 'Missing clientId.' });
+
+    const member = await isOrgMember(auth.client, auth.user.id, requestedOrgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden for this organization.' });
+
+    const admin = getServiceClient();
+    const { data: profile } = await admin
+      .from('client_payment_profiles')
+      .select('id, payment_method_id')
+      .eq('org_id', requestedOrgId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (!profile) return res.status(404).json({ error: 'No card on file for this client.' });
+
+    if (profile.payment_method_id) {
+      try {
+        await getPlatformStripe().paymentMethods.detach(profile.payment_method_id);
+      } catch (err: any) {
+        // Déjà détachée / introuvable : le retrait local reste valable.
+        console.error('[card-on-file] detach failed:', err?.message);
+      }
+    }
+
+    const { error } = await admin
+      .from('client_payment_profiles')
+      .update({
+        payment_method_id: null,
+        card_brand: null,
+        card_last4: null,
+        card_exp_month: null,
+        card_exp_year: null,
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', profile.id);
+    if (error) throw error;
+
+    return res.json({ ok: true });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to remove the card on file.', '[card-on-file/remove]');
+  }
+});
+
+// Charger la carte au dossier pour une facture (owner/admin). Le webhook
+// payment_intent.succeeded applique ensuite le paiement comme un paiement
+// public normal.
+router.post('/payments/card-on-file/charge', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const requestedOrgId = parseOrgId(req.body?.orgId) || auth.orgId;
+    const invoiceId = String(req.body?.invoiceId || '').trim();
+    if (!invoiceId) return res.status(400).json({ error: 'Missing invoiceId.' });
+
+    const member = await isOrgMember(auth.client, auth.user.id, requestedOrgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden for this organization.' });
+    const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, requestedOrgId);
+    if (!canManage) return res.status(403).json({ error: 'Only owner/admin can charge a card on file.' });
+
+    const result = await chargeInvoiceOnFile({ orgId: requestedOrgId, invoiceId });
+    return res.status(result.ok ? 200 : 402).json(result);
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to charge the card on file.', '[card-on-file/charge]');
+  }
+});
 
 export default router;

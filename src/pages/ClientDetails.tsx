@@ -39,6 +39,7 @@ import { clientDisplayName, getClientById, updateClient, listClientJobs, softDel
 import { exportClientData, eraseClient } from '../lib/consentApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { BillingAddressSection } from '../components/BillingAddressSection';
+import ClientCardOnFile from '../components/ClientCardOnFile';
 import PropertiesSection from '../components/PropertiesSection';
 import EventsPanel from '../components/events/EventsPanel';
 import { supabase } from '../lib/supabase';
@@ -1310,6 +1311,9 @@ export default function ClientDetails() {
               </button>
             </div>
           )}
+
+          {/* Payment on file — carte sauvegardée avec consentement (Loi 25) */}
+          <ClientCardOnFile clientId={client.id} fr={isFr} />
 
           {/* Billing History */}
           <div className="section-card">

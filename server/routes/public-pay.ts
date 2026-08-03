@@ -6,6 +6,7 @@ import {
   getConnectedAccount,
   createDestinationPaymentIntent,
   updatePaymentRequestStatus,
+  getOrCreatePlatformCustomerForClient,
 } from '../lib/stripe-connect';
 import { getPlatformStripe } from '../lib/stripe-connect';
 
@@ -244,6 +245,67 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
     });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to create payment intent.', '[public-pay/create-pi]');
+  }
+});
+
+// ── POST /pay/:publicToken/save-card — opt-in « sauvegarder ma carte » (NO AUTH) ──
+// Loi 25 : le customer Stripe n'est créé et le PaymentIntent n'est marqué
+// setup_future_usage=off_session QUE lorsque le payeur coche explicitement
+// l'option sur la page publique. Décocher retire l'intention de sauvegarde.
+router.post('/pay/:publicToken/save-card', async (req, res) => {
+  try {
+    const publicToken = String(req.params.publicToken || '').trim();
+    if (!publicToken || !/^[a-f0-9]{48}$/.test(publicToken)) {
+      return res.status(400).json({ error: 'Invalid payment link.' });
+    }
+    const save = Boolean(req.body?.save);
+
+    const paymentRequest = await getPaymentRequestByToken(publicToken);
+    if (!paymentRequest || !paymentRequest.stripe_payment_intent_id) {
+      return res.status(404).json({ error: 'Payment not found.' });
+    }
+    if (paymentRequest.status === 'paid') {
+      return res.status(400).json({ error: 'This invoice has already been paid.' });
+    }
+
+    const admin = getServiceClient();
+    const { data: invoice } = await admin
+      .from('invoices')
+      .select('id, client_id, org_id')
+      .eq('id', paymentRequest.invoice_id)
+      .maybeSingle();
+    if (!invoice || invoice.org_id !== paymentRequest.org_id || !invoice.client_id) {
+      return res.status(400).json({ error: 'This invoice cannot save a card on file.' });
+    }
+
+    const stripe = getPlatformStripe();
+    const intent = await stripe.paymentIntents.retrieve(paymentRequest.stripe_payment_intent_id);
+    if (!['requires_payment_method', 'requires_confirmation', 'requires_action'].includes(intent.status)) {
+      return res.status(400).json({ error: 'Payment can no longer be updated.' });
+    }
+
+    if (save) {
+      const customerId = await getOrCreatePlatformCustomerForClient(paymentRequest.org_id, invoice.client_id);
+      await stripe.paymentIntents.update(intent.id, {
+        customer: customerId,
+        setup_future_usage: 'off_session',
+        metadata: {
+          ...intent.metadata,
+          save_card: '1',
+          // Horodatage du consentement (Loi 25) — repris par le webhook.
+          save_card_consented_at: new Date().toISOString(),
+        },
+      });
+    } else {
+      await stripe.paymentIntents.update(intent.id, {
+        setup_future_usage: '',
+        metadata: { ...intent.metadata, save_card: '', save_card_consented_at: '' },
+      } as any);
+    }
+
+    return res.json({ ok: true, save });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to update card saving.', '[public-pay/save-card]');
   }
 });
 

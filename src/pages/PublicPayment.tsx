@@ -189,6 +189,7 @@ export default function PublicPayment() {
           amountCents={paymentData.amount_cents}
           currency={paymentData.currency}
           publicToken={token!}
+          businessName={paymentData.business?.name || null}
         />
       </Elements>
     </PublicPageShell>
@@ -197,16 +198,33 @@ export default function PublicPayment() {
 
 // ── Stripe Checkout Form ──
 
-function CheckoutForm({ amountCents, currency, publicToken }: {
+function CheckoutForm({ amountCents, currency, publicToken, businessName }: {
   amountCents: number;
   currency: string;
   publicToken: string;
+  businessName?: string | null;
 }) {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
   const [succeeded, setSucceeded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Loi 25 : consentement explicite, jamais pré-coché. Le choix est poussé au
+  // serveur (le PaymentIntent n'enregistre la carte que si save = true).
+  const [saveCard, setSaveCard] = useState(false);
+
+  async function syncSaveCard(save: boolean): Promise<void> {
+    try {
+      await fetch(`/api/pay/${publicToken}/save-card`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ save }),
+      });
+    } catch {
+      // Best-effort — un échec ici ne bloque pas le paiement (la carte ne
+      // sera simplement pas sauvegardée).
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -214,6 +232,9 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
 
     setProcessing(true);
     setError(null);
+
+    // Aligner le PaymentIntent sur le choix final avant de confirmer.
+    await syncSaveCard(saveCard);
 
     const { error: submitError } = await elements.submit();
     if (submitError) {
@@ -256,6 +277,24 @@ function CheckoutForm({ amountCents, currency, publicToken }: {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <PaymentElement />
+
+      {/* Consentement explicite (Loi 25) : opt-in, finalité claire, retrait possible. */}
+      <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800/60 p-3">
+        <input
+          type="checkbox"
+          checked={saveCard}
+          onChange={(e) => { setSaveCard(e.target.checked); void syncSaveCard(e.target.checked); }}
+          className="h-4 w-4 mt-0.5 rounded"
+        />
+        <span className="text-xs text-neutral-600 dark:text-neutral-300 leading-relaxed">
+          <span className="font-semibold block text-neutral-800 dark:text-neutral-100">
+            {isFr ? 'Sauvegarder ma carte pour les paiements futurs' : 'Save my card for future payments'}
+          </span>
+          {isFr
+            ? `Je consens à ce que ma carte soit conservée de façon sécurisée par Stripe afin que ${businessName || 'cette entreprise'} puisse encaisser mes prochaines factures automatiquement. Aucun numéro de carte n'est conservé par l'entreprise. Je peux retirer ma carte en tout temps sur demande.`
+            : `I consent to my card being stored securely by Stripe so ${businessName || 'this business'} can charge my future invoices automatically. The business never stores my card number. I can withdraw my card at any time upon request.`}
+        </span>
+      </label>
 
       {error && (
         <div className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30 p-3">

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
+import { chargeInvoiceOnFile } from '../lib/stripe-connect';
 import { parseOrgId, ensureLeadInPipeline } from '../lib/helpers';
 import { validate, createLeadSchema, softDeleteLeadSchema, softDeleteClientSchema, softDeleteDealSchema, invoiceFromJobSchema, updateLeadStatusSchema, convertLeadToJobSchema } from '../lib/validation';
 import { eventBus } from '../lib/eventBus';
@@ -456,11 +457,38 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
       }
     }
 
+    // « Se faire payer automatiquement » (jobs.auto_charge) : la facture vient
+    // d'être émise → tenter le charge hors-session sur la carte au dossier du
+    // client. Best-effort : sans carte (ou migration pending), la facture
+    // reste simplement payable par le lien public.
+    let cardCharge: { attempted: boolean; ok?: boolean; status?: string } = { attempted: false };
+    if (!alreadyExists && sendNow) {
+      try {
+        const admin = getServiceClient();
+        const { data: jobRow } = await admin
+          .from('jobs')
+          .select('*')
+          .eq('id', jobId)
+          .maybeSingle();
+        if ((jobRow as any)?.auto_charge) {
+          const result = await chargeInvoiceOnFile({ orgId: requestedOrgId, invoiceId });
+          cardCharge = { attempted: true, ok: result.ok, status: result.status };
+          if (!result.ok && result.status !== 'no_card_on_file') {
+            console.error('[invoices/from-job] auto-charge failed:', result.status, result.reason);
+          }
+        }
+      } catch (chargeErr: any) {
+        console.error('[invoices/from-job] auto-charge error:', chargeErr?.message);
+        cardCharge = { attempted: true, ok: false, status: 'error' };
+      }
+    }
+
     return res.json({
       invoice: invoiceRow || { id: invoiceId, status },
       invoice_id: invoiceId,
       already_exists: alreadyExists,
       status,
+      card_charge: cardCharge,
     });
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to create invoice from job.', '[invoices/from-job]');

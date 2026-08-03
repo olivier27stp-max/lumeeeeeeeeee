@@ -184,6 +184,185 @@ export async function createDestinationPaymentIntent(params: {
   };
 }
 
+// ── Carte au dossier (payment on file) ──
+// Les charges étant des destination charges sur le compte plateforme, le
+// customer Stripe d'un client de CRM vit côté plateforme. Le customer n'est
+// créé QUE lorsque le client consent à sauvegarder sa carte (Loi 25 —
+// minimisation : pas de données chez Stripe sans consentement).
+
+export async function getClientPaymentProfile(orgId: string, clientId: string) {
+  const admin = getServiceClient();
+  const { data, error } = await admin
+    .from('client_payment_profiles')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('client_id', clientId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) {
+    // Table absente tant que la migration 20260802400000 n'est pas appliquée.
+    if (error.code === '42P01' || error.code === 'PGRST205') return null;
+    throw error;
+  }
+  return data;
+}
+
+export async function getOrCreatePlatformCustomerForClient(orgId: string, clientId: string) {
+  const admin = getServiceClient();
+  const existing = await getClientPaymentProfile(orgId, clientId);
+  if (existing?.stripe_customer_id) return existing.stripe_customer_id as string;
+
+  const { data: client } = await admin
+    .from('clients')
+    .select('id, first_name, last_name, email, phone')
+    .eq('id', clientId)
+    .maybeSingle();
+
+  const stripe = getPlatformStripe();
+  const customer = await stripe.customers.create({
+    name: [client?.first_name, client?.last_name].filter(Boolean).join(' ') || undefined,
+    email: client?.email || undefined,
+    metadata: { org_id: orgId, client_id: clientId, platform: 'lume_crm' },
+  });
+
+  const { error } = await admin
+    .from('client_payment_profiles')
+    .insert({ org_id: orgId, client_id: clientId, stripe_customer_id: customer.id });
+  if (error && error.code !== '23505') {
+    // 42P01/PGRST205 = migration pending : le customer existe chez Stripe mais
+    // ne sera pas retrouvé — le webhook re-tentera l'upsert à la sauvegarde.
+    if (error.code !== '42P01' && error.code !== 'PGRST205') throw error;
+  }
+  return customer.id;
+}
+
+/**
+ * Sauvegarde la carte d'un paiement réussi comme carte au dossier du client.
+ * Appelé par le webhook payment_intent.succeeded quand le payeur a coché
+ * l'option (metadata.save_card = '1'). consented_at = preuve Loi 25.
+ */
+export async function saveCardOnFileFromIntent(params: {
+  orgId: string;
+  clientId: string;
+  stripeCustomerId: string;
+  paymentMethodId: string;
+  consentedAtIso?: string | null;
+}) {
+  const admin = getServiceClient();
+  const stripe = getPlatformStripe();
+
+  let brand: string | null = null;
+  let last4: string | null = null;
+  let expMonth: number | null = null;
+  let expYear: number | null = null;
+  try {
+    const pm = await stripe.paymentMethods.retrieve(params.paymentMethodId);
+    brand = pm.card?.brand || null;
+    last4 = pm.card?.last4 || null;
+    expMonth = pm.card?.exp_month || null;
+    expYear = pm.card?.exp_year || null;
+  } catch (err: any) {
+    console.error('[card-on-file] payment method retrieve failed:', err?.message);
+  }
+
+  const fields = {
+    stripe_customer_id: params.stripeCustomerId,
+    payment_method_id: params.paymentMethodId,
+    card_brand: brand,
+    card_last4: last4,
+    card_exp_month: expMonth,
+    card_exp_year: expYear,
+    consented_at: params.consentedAtIso || new Date().toISOString(),
+    consent_source: 'public_pay',
+    updated_at: new Date().toISOString(),
+    deleted_at: null,
+  };
+
+  const { data: existing } = await admin
+    .from('client_payment_profiles')
+    .select('id')
+    .eq('org_id', params.orgId)
+    .eq('client_id', params.clientId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (existing?.id) {
+    const { error } = await admin.from('client_payment_profiles').update(fields).eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await admin
+      .from('client_payment_profiles')
+      .insert({ org_id: params.orgId, client_id: params.clientId, ...fields });
+    if (error) throw error;
+  }
+}
+
+/**
+ * Charge hors-session la carte au dossier d'un client pour une facture
+ * (destination charge identique au flux public : mêmes frais de plateforme,
+ * même webhook payment_intent.succeeded qui applique le paiement).
+ */
+export async function chargeInvoiceOnFile(params: {
+  orgId: string;
+  invoiceId: string;
+}): Promise<{ ok: boolean; status: string; paymentIntentId?: string; reason?: string }> {
+  const admin = getServiceClient();
+
+  const { data: invoice } = await admin
+    .from('invoices')
+    .select('id, org_id, client_id, job_id, balance_cents, currency, status, deleted_at')
+    .eq('id', params.invoiceId)
+    .eq('org_id', params.orgId)
+    .maybeSingle();
+  if (!invoice || invoice.deleted_at) return { ok: false, status: 'not_found', reason: 'Invoice not found.' };
+  const balance = Number(invoice.balance_cents || 0);
+  if (balance <= 0) return { ok: false, status: 'nothing_due', reason: 'Invoice has no remaining balance.' };
+  if (!invoice.client_id) return { ok: false, status: 'no_client', reason: 'Invoice has no client.' };
+
+  const profile = await getClientPaymentProfile(params.orgId, invoice.client_id);
+  if (!profile?.payment_method_id || !profile?.stripe_customer_id) {
+    return { ok: false, status: 'no_card_on_file', reason: 'No card on file for this client.' };
+  }
+
+  const connectedAccount = await getConnectedAccount(params.orgId);
+  if (!connectedAccount || !connectedAccount.charges_enabled) {
+    return { ok: false, status: 'not_ready', reason: 'Connected account cannot accept charges.' };
+  }
+
+  const stripe = getPlatformStripe();
+  const applicationFee = calculateApplicationFee(balance);
+  try {
+    const intent = await stripe.paymentIntents.create({
+      amount: balance,
+      currency: String(invoice.currency || 'CAD').toLowerCase(),
+      customer: profile.stripe_customer_id,
+      payment_method: profile.payment_method_id,
+      off_session: true,
+      confirm: true,
+      payment_method_types: ['card'],
+      application_fee_amount: applicationFee,
+      transfer_data: { destination: connectedAccount.stripe_account_id },
+      metadata: {
+        org_id: params.orgId,
+        invoice_id: params.invoiceId,
+        client_id: invoice.client_id,
+        job_id: invoice.job_id || '',
+        charged_from: 'card_on_file',
+      },
+    }, {
+      // Une tentative par facture+solde par heure — évite les doubles charges.
+      idempotencyKey: `cof-${params.invoiceId}-${balance}-${Math.floor(Date.now() / 3_600_000)}`,
+    });
+    return { ok: intent.status === 'succeeded', status: intent.status, paymentIntentId: intent.id };
+  } catch (err: any) {
+    // authentication_required / carte refusée : le paiement au dossier échoue
+    // proprement — la facture reste payable par le lien public.
+    const code = err?.code || err?.raw?.code || 'charge_failed';
+    console.error('[card-on-file] off-session charge failed:', code, err?.message);
+    return { ok: false, status: String(code), reason: err?.message || 'Charge failed.' };
+  }
+}
+
 // ── Webhook event logging ──
 
 export async function logWebhookEvent(params: {
