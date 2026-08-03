@@ -1119,7 +1119,7 @@ export default function JobDetails() {
                 });
                 navigate(`/messages?${params.toString()}`);
               }}
-              className="glass-button-primary inline-flex items-center gap-1.5"
+              className="glass-button inline-flex items-center gap-1.5"
             >
               <MessageSquare size={14} /> {language === 'fr' ? 'Texter le client' : 'Text Client'}
             </button>
@@ -1132,9 +1132,9 @@ export default function JobDetails() {
               <button
                 onClick={() => setFinalVisitPromptOpen('complete')}
                 disabled={isClosing}
-                className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
+                className="glass-button inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                <CheckCircle2 size={13} /> {language === 'fr' ? 'Compléter' : 'Complete'}
+                <CheckCircle2 size={14} /> {language === 'fr' ? 'Compléter' : 'Complete'}
               </button>
             )}
 
