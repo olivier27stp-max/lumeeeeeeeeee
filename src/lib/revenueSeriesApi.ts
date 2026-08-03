@@ -3,12 +3,10 @@
  *
  * Two measures, bucketed over a chosen period:
  *  - collected : paid invoices, by `paid_at`
- *  - scheduled : outstanding expected revenue (sent / partial invoices with a
- *                positive balance), by `due_date`. Invoices already overdue or
- *                without a due date still count in `scheduledTotal` (and the
- *                overdue ones in `overdueTotal`) but are NOT drawn on the
- *                chart — stacking them on "today" made the current day look
- *                like it had revenue scheduled when it didn't.
+ *  - scheduled : work booked on the calendar — visits (schedule_events) in
+ *                the window, by `start_at`. Each visit is worth its share of
+ *                its job's total (job total ÷ number of visits, the same rule
+ *                as per-visit billing). Cancelled visits are ignored.
  *
  * Period drives both the date window and the bucket granularity:
  *  - today : 24 hourly buckets
@@ -33,8 +31,6 @@ export interface RevenueSeries {
   points: RevenuePoint[];
   collectedTotal: number;
   scheduledTotal: number;
-  /** Portion of `scheduledTotal` whose due date is already past. */
-  overdueTotal: number;
 }
 
 function ymd(d: Date): string {
@@ -118,10 +114,7 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
   const w = buildWindow(period, now);
   const startIso = w.start.toISOString();
   const endIso = w.end.toISOString();
-  const endYmd = ymd(w.end);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-
-  const [collectedRes, scheduledRes] = await Promise.all([
+  const [collectedRes, visitsRes] = await Promise.all([
     // Collected — paid invoices by paid_at
     supabase
       .from('invoices')
@@ -131,24 +124,22 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
       .eq('status', 'paid')
       .gte('paid_at', startIso)
       .lte('paid_at', endIso),
-    // Scheduled — outstanding (sent / partial) invoices due by the end of the
-    // window. Overdue and undated invoices are kept (clamped to "now" below).
+    // Scheduled — visits booked in the window
     supabase
-      .from('invoices')
-      .select('balance_cents, due_date')
+      .from('schedule_events')
+      .select('id, job_id, start_at, status')
       .eq('org_id', orgId)
       .is('deleted_at', null)
-      .in('status', ['sent', 'partial'])
-      .gt('balance_cents', 0)
-      .or(`due_date.is.null,due_date.lte.${endYmd}`),
+      .not('job_id', 'is', null)
+      .gte('start_at', startIso)
+      .lte('start_at', endIso),
   ]);
 
   if (collectedRes.error) throw collectedRes.error;
-  if (scheduledRes.error) throw scheduledRes.error;
+  if (visitsRes.error) throw visitsRes.error;
 
   let collectedTotal = 0;
   let scheduledTotal = 0;
-  let overdueTotal = 0;
 
   for (const row of collectedRes.data || []) {
     if (!row.paid_at) continue;
@@ -159,18 +150,58 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
     collectedTotal += amount;
   }
 
-  for (const row of scheduledRes.data || []) {
-    // due_date is a YYYY-MM-DD date — parse at local midnight
-    const due = row.due_date ? new Date(`${row.due_date as string}T00:00:00`) : null;
-    if (due && due.getTime() > w.end.getTime()) continue;
-    const amount = Number(row.balance_cents || 0) / 100;
-    scheduledTotal += amount;
-    if (due && due.getTime() < todayStart.getTime()) overdueTotal += amount;
-    // Only draw invoices on the day they are actually due. Overdue and
-    // undated ones stay off the chart (they're surfaced via overdueTotal).
-    const idx = due ? w.bucketOf(due) : -1;
-    if (idx >= 0) w.buckets[idx].scheduled += amount;
+  const isCancelled = (s: unknown) =>
+    ['cancelled', 'canceled'].includes(String(s || '').toLowerCase());
+  const visits = (visitsRes.data || []).filter(
+    (v) => v.job_id && v.start_at && !isCancelled(v.status),
+  );
+
+  if (visits.length > 0) {
+    const jobIds = Array.from(new Set(visits.map((v) => v.job_id as string)));
+    const [jobsRes, allVisitsRes] = await Promise.all([
+      supabase
+        .from('jobs_active')
+        .select('id, total_cents, total_amount')
+        .eq('org_id', orgId)
+        .in('id', jobIds),
+      // All visits of those jobs (not just the window) — needed to split the
+      // job total across its visits, per-visit-billing style.
+      supabase
+        .from('schedule_events')
+        .select('id, job_id, status')
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .in('job_id', jobIds),
+    ]);
+    if (jobsRes.error) throw jobsRes.error;
+    if (allVisitsRes.error) throw allVisitsRes.error;
+
+    // total_cents est la source de vérité; total_amount = colonne héritée
+    const jobTotal = new Map<string, number>();
+    for (const j of jobsRes.data || []) {
+      const dollars =
+        typeof j.total_cents === 'number'
+          ? j.total_cents / 100
+          : Number(j.total_amount || 0);
+      jobTotal.set(j.id as string, dollars);
+    }
+
+    const visitCount = new Map<string, number>();
+    for (const v of allVisitsRes.data || []) {
+      if (isCancelled(v.status)) continue;
+      const jobId = v.job_id as string;
+      visitCount.set(jobId, (visitCount.get(jobId) || 0) + 1);
+    }
+
+    for (const v of visits) {
+      const jobId = v.job_id as string;
+      const amount = (jobTotal.get(jobId) || 0) / Math.max(visitCount.get(jobId) || 1, 1);
+      if (amount <= 0) continue;
+      scheduledTotal += amount;
+      const idx = w.bucketOf(new Date(v.start_at as string));
+      if (idx >= 0) w.buckets[idx].scheduled += amount;
+    }
   }
 
-  return { points: w.buckets, collectedTotal, scheduledTotal, overdueTotal };
+  return { points: w.buckets, collectedTotal, scheduledTotal };
 }
