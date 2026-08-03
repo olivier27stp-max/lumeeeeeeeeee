@@ -8,13 +8,12 @@ import type { Locale } from 'date-fns';
 import {
   AlertTriangle, Briefcase, CalendarDays, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, Clock, GripVertical, List,
-  Map as MapIcon, MapPin, Plus, SlidersHorizontal, UserCheck, UserPlus,
+  MapPin, Plus, SlidersHorizontal, UserCheck, UserPlus,
   Users, X as XIcon, PanelRightOpen, PanelRightClose,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
-import CalendarMapModal from '../components/CalendarMapModal';
 import AddVisitModal from '../components/AddVisitModal';
 import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
 import WeeklyDispatchView from '../components/dispatch-weekly/WeeklyDispatchView';
@@ -288,7 +287,6 @@ function ScheduleContent() {
   const [calPop, setCalPop] = useState(false);
   const [teamPop, setTeamPop] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [mapOpen, setMapOpen] = useState(false);
   const hydratedRef = useRef(false);
 
   const dateKey = format(selectedDate, 'yyyy-MM-dd');
@@ -648,11 +646,6 @@ function ScheduleContent() {
           {viewDrop && (<><div className="fixed inset-0 z-30" onClick={() => setViewDrop(false)} /><div className="absolute right-0 top-full z-40 mt-1 w-44 rounded-xl border border-border bg-surface py-1 shadow-xl">{viewOpts.map((v) => (<button key={v.id} onClick={() => { setView(v.id); setViewDrop(false); }} className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-[13px] transition-colors', view === v.id ? 'bg-primary/5 font-semibold text-primary' : 'text-text-primary hover:bg-surface-secondary')}>{v.icon}{v.label}</button>))}</div></>)}
         </div>
 
-        {/* Map button — shows the period's jobs on a map with completion pins */}
-        <button onClick={() => setMapOpen(true)} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-[5px] text-[13px] font-medium text-text-primary hover:bg-surface-secondary transition-colors" title={t.schedule.mapTitle}>
-          <MapIcon size={14} />{t.schedule.map}
-        </button>
-
         {/* Drawer toggle */}
         <button onClick={() => setDrawerOpen(!drawerOpen)} className={cn('relative rounded-lg border p-[5px] transition-colors', drawerOpen ? 'border-primary/30 bg-primary/5 text-primary' : 'border-border text-text-secondary hover:bg-surface-secondary')} title={t.schedule.unscheduledJobs}>
           {drawerOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
@@ -846,9 +839,6 @@ function ScheduleContent() {
 
       {/* ASSIGN MODAL */}
       {assignModalJob && <AssignModal job={assignModalJob} teams={teams} events={events} tcMap={tcMap} onAssign={(tid) => assignMut.mutate({ jobId: 'id' in assignModalJob ? assignModalJob.id : '', teamId: tid })} onClose={() => setAssignModalJob(null)} loading={assignMut.isPending} t={t} />}
-
-      {/* MAP MODAL — jobs of the selected period with completion pins */}
-      {mapOpen && <CalendarMapModal start={range.start} end={range.end} periodLabel={label} onClose={() => setMapOpen(false)} onOpenJob={openExisting} />}
 
       {/* ADD VISIT — clicking an empty slot adds a visit to an existing job */}
       <AddVisitModal
