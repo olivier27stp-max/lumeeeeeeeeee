@@ -381,10 +381,11 @@ export default function NewJobModal({
   const [serviceYears, setServiceYears] = useState<number[]>([new Date().getFullYear()]);
   const [planVisits, setPlanVisits] = useState<PlanVisitDraft[]>([]);
   const [createContract, setCreateContract] = useState(false);
-  // Per-visit customization of the service plan. Both boxes are checked by
-  // default ("apply to all visits"); unchecking one lets each planned visit
-  // carry its own time window / its own products & services (keyed by visit key).
-  const [applyTimesToAllVisits, setApplyTimesToAllVisits] = useState(true);
+  // Per-visit customization of the service plan. Hours: the Rule's time window
+  // is the default for every visit; editing a visit's hours stores an override
+  // in serviceVisitTimes (keyed by visit key). Items: the box is checked by
+  // default ("apply to all visits"); unchecking it lets each planned visit
+  // carry its own products & services.
   const [applyItemsToAllVisits, setApplyItemsToAllVisits] = useState(true);
   const [serviceVisitTimes, setServiceVisitTimes] = useState<Record<string, { startTime: string; endTime: string }>>({});
   const [serviceVisitItems, setServiceVisitItems] = useState<Record<string, LineItemForm[]>>({});
@@ -499,15 +500,6 @@ export default function NewJobModal({
   // list (or another month's) — updates would otherwise cross lists.
   const cloneLineItems = (items: LineItemForm[]): LineItemForm[] =>
     items.map((item) => ({ ...item, id: crypto.randomUUID() }));
-  const seedVisitTimes = (keys: string[]) => {
-    setServiceVisitTimes((prev) => {
-      const next = { ...prev };
-      for (const k of keys) {
-        if (!next[k]) next[k] = { startTime: startTime || '09:00', endTime: endTime || '10:00' };
-      }
-      return next;
-    });
-  };
   const seedVisitItems = (keys: string[]) => {
     setServiceVisitItems((prev) => {
       const next = { ...prev };
@@ -526,7 +518,6 @@ export default function NewJobModal({
     setDirty(true);
     const visit = newPlanVisit(year, month);
     setPlanVisits((prev) => [...prev, visit]);
-    if (!applyTimesToAllVisits) seedVisitTimes([visit.key]);
     if (!applyItemsToAllVisits) seedVisitItems([visit.key]);
   };
   const toggleServiceMonth = (year: number, month: number) => {
@@ -549,10 +540,6 @@ export default function NewJobModal({
   const setPlanVisitDate = (key: string, date: string) => {
     if (!date) return;
     setPlanVisits((prev) => prev.map((v) => (v.key === key ? { ...v, date } : v)));
-  };
-  const toggleApplyTimesToAllVisits = (checked: boolean) => {
-    setApplyTimesToAllVisits(checked);
-    if (!checked) seedVisitTimes(planVisits.map((v) => v.key));
   };
   const toggleApplyItemsToAllVisits = (checked: boolean) => {
     setApplyItemsToAllVisits(checked);
@@ -588,9 +575,10 @@ export default function NewJobModal({
       [key]: [...(prev[key] || []), { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }],
     }));
   };
-  // Effective time window of one planned visit (personalized or global).
+  // Effective time window of one planned visit: its own override if the user
+  // edited it, otherwise the Rule's hours.
   const visitTimeFor = (key: string) => {
-    const custom = !applyTimesToAllVisits ? serviceVisitTimes[key] : null;
+    const custom = serviceVisitTimes[key];
     return {
       start: custom?.startTime || startTime || '09:00',
       end: custom?.endTime || endTime || '10:00',
@@ -708,10 +696,9 @@ export default function NewJobModal({
     setServiceYears(out.length > 0
       ? [...new Set(out.map((v) => v.year))].sort((a, b) => a - b)
       : [ruleStartParts.y]);
-    // La personnalisation par visite suit les nouvelles clés.
-    setServiceVisitTimes(applyTimesToAllVisits
-      ? {}
-      : Object.fromEntries(out.map((v) => [v.key, { startTime: startTime || '09:00', endTime: endTime || '10:00' }])));
+    // La personnalisation par visite suit les nouvelles clés : les heures
+    // repartent sur celles de la Règle (aucun override conservé).
+    setServiceVisitTimes({});
     setServiceVisitItems(applyItemsToAllVisits
       ? {}
       : Object.fromEntries(out.map((v) => [v.key, cloneLineItems(lineItems)])));
@@ -817,7 +804,6 @@ export default function NewJobModal({
     setInstallmentAmount('');
     setAutoCharge(false);
     setCreateContract(false);
-    setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
     setServiceVisitItems({});
@@ -1193,7 +1179,6 @@ export default function NewJobModal({
     setInstallmentsCount('');
     setInstallmentAmount('');
     setAutoCharge(false);
-    setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
     setServiceVisitItems({});
@@ -1824,7 +1809,8 @@ export default function NewJobModal({
                 month: visit.month,
                 date: visit.date,
                 year: visit.year,
-                ...(applyTimesToAllVisits ? {} : { start_time: visitTimeFor(visit.key).start, end_time: visitTimeFor(visit.key).end }),
+                start_time: visitTimeFor(visit.key).start,
+                end_time: visitTimeFor(visit.key).end,
                 ...(personalizedItems
                   ? {
                       items: (serviceVisitItems[visit.key] || [])
@@ -2519,8 +2505,8 @@ export default function NewJobModal({
                         </div>
 
                         {/* Exact visit date(s) inside each planned month — "+" adds
-                            another visit in the same month (+ each visit's own hours
-                            when the time window is personalized per visit) */}
+                            another visit in the same month. Each visit shows its
+                            hours (Rule's hours by default, editable per visit). */}
                         {yearMonths.length > 0 && (
                           <div className="space-y-2">
                             <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanDates}</label>
@@ -2565,34 +2551,32 @@ export default function NewJobModal({
                                             </button>
                                           )}
                                         </div>
-                                        {!applyTimesToAllVisits && (
-                                          <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                              <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
-                                              <div className="relative">
-                                                <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                                <input
-                                                  type="time"
-                                                  value={serviceVisitTimes[visit.key]?.startTime || startTime || '09:00'}
-                                                  onChange={(event) => setVisitTime(visit.key, { startTime: event.target.value })}
-                                                  className="glass-input w-full pl-10"
-                                                />
-                                              </div>
-                                            </div>
-                                            <div className="space-y-1">
-                                              <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
-                                              <div className="relative">
-                                                <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                                <input
-                                                  type="time"
-                                                  value={serviceVisitTimes[visit.key]?.endTime || endTime || '10:00'}
-                                                  onChange={(event) => setVisitTime(visit.key, { endTime: event.target.value })}
-                                                  className="glass-input w-full pl-10"
-                                                />
-                                              </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                          <div className="space-y-1">
+                                            <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
+                                            <div className="relative">
+                                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                              <input
+                                                type="time"
+                                                value={visitTimeFor(visit.key).start}
+                                                onChange={(event) => setVisitTime(visit.key, { startTime: event.target.value })}
+                                                className="glass-input w-full pl-10"
+                                              />
                                             </div>
                                           </div>
-                                        )}
+                                          <div className="space-y-1">
+                                            <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                                            <div className="relative">
+                                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                                              <input
+                                                type="time"
+                                                value={visitTimeFor(visit.key).end}
+                                                onChange={(event) => setVisitTime(visit.key, { endTime: event.target.value })}
+                                                className="glass-input w-full pl-10"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>
@@ -2614,23 +2598,6 @@ export default function NewJobModal({
                     <Plus size={14} />
                     {language === 'fr' ? 'Ajouter année suivante' : 'Add next year'}
                   </button>
-
-                  {/* Fenêtre horaire des visites : celle de la Règle ci-dessus
-                      pour toutes, ou personnalisée visite par visite */}
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                    <input
-                      type="checkbox"
-                      checked={applyTimesToAllVisits}
-                      onChange={(event) => toggleApplyTimesToAllVisits(event.target.checked)}
-                      className="h-4 w-4 mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-sm text-text-primary">{t.modals.servicePlanApplyAllLabel}</span>
-                      <span className="block text-xs text-text-tertiary mt-0.5">
-                        {applyTimesToAllVisits ? t.modals.servicePlanTimesApplyAllHint : t.modals.servicePlanTimesCustomHint}
-                      </span>
-                    </span>
-                  </label>
 
                   {/* Optional contract */}
                   <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">

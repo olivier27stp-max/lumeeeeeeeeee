@@ -1381,8 +1381,6 @@ const en = {
     servicePlanCreateContract: 'Create a contract for this service plan',
     servicePlanCreateContractHint: 'The contract shows all 12 months, with the visit date inside each planned month.',
     servicePlanApplyAllLabel: 'Add to all visits',
-    servicePlanTimesApplyAllHint: 'The same hours apply to every visit of the plan.',
-    servicePlanTimesCustomHint: 'Set each visit’s hours in “Visit dates” above.',
     servicePlanItemsApplyAllHint: 'The same products and services apply to every visit of the plan.',
     servicePlanItemsCustomHint: 'Customize each visit’s products and services below.',
     servicePlanItemsNoMonths: 'Select the visit months in “Service plan schedule” first.',

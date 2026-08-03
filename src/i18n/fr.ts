@@ -1379,8 +1379,6 @@ const fr: TranslationKeys = {
     servicePlanCreateContract: 'Créer un contrat pour ce plan de service',
     servicePlanCreateContractHint: 'Le contrat affiche les 12 mois, avec la date de visite dans chaque mois planifié.',
     servicePlanApplyAllLabel: 'Ajouter à toutes les visites',
-    servicePlanTimesApplyAllHint: 'Les mêmes heures s’appliquent à chaque visite du plan.',
-    servicePlanTimesCustomHint: 'Réglez les heures de chaque visite dans « Dates de passage » ci-dessus.',
     servicePlanItemsApplyAllHint: 'Les mêmes produits et services s’appliquent à chaque visite du plan.',
     servicePlanItemsCustomHint: 'Personnalisez les produits et services de chaque visite ci-dessous.',
     servicePlanItemsNoMonths: 'Sélectionnez d’abord les mois de passage dans « Calendrier du plan de service ».',
