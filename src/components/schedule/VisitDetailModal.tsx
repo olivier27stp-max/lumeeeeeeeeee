@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { frCA, enCA } from 'date-fns/locale';
-import { CheckCircle2, Clock, MapPin, X as XIcon } from 'lucide-react';
+import { CheckCircle2, X as XIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { supabase } from '../../lib/supabase';
-import { invalidateScheduleCache, type ScheduleEventRecord } from '../../lib/scheduleApi';
+import { invalidateScheduleCache, isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import { createInvoiceForVisit } from '../../lib/jobBillingApi';
 import { updateJob } from '../../lib/jobsApi';
 import { toRgba } from '../../lib/colorUtils';
@@ -23,7 +23,14 @@ import AddVisitModal from '../AddVisitModal';
 
 const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-export default function VisitDetailModal({ ev, color, teamName, timeLabel, onClose, onView, onStatusChanged }: {
+interface VisitLineItem {
+  id: string;
+  name: string;
+  qty: number;
+  total_cents: number;
+}
+
+export default function VisitDetailModal({ ev, color, teamName, onClose, onView, onStatusChanged }: {
   ev: ScheduleEventRecord;
   color: string;
   teamName: string | null;
@@ -37,10 +44,69 @@ export default function VisitDetailModal({ ev, color, teamName, timeLabel, onClo
   const isFr = language === 'fr';
   const locale = isFr ? frCA : enCA;
   const s = new Date(ev.start_at);
+  const end = new Date(ev.end_at);
+  const anytime = isAnytimeVisit(ev.start_at, ev.end_at);
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
+  const jobTitle = ev.job?.title && ev.job.title !== clientName ? ev.job.title : null;
   const address = (ev.job?.property_address || '').trim() || null;
   const jobNumber = ev.job?.job_number ? `#${ev.job.job_number}` : null;
   const [completed, setCompleted] = useState((ev.status || '').toLowerCase() === 'completed');
+  const [lineItems, setLineItems] = useState<VisitLineItem[] | null>(null);
+  const [memberNames, setMemberNames] = useState<string[] | null>(null);
+
+  // Détails Jobber-style : line items du job + membres de l'équipe assignée.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('job_line_items')
+          .select('id,name,qty,total_cents')
+          .eq('job_id', ev.job_id)
+          .is('deleted_at', null)
+          .eq('included', true)
+          .order('created_at', { ascending: true });
+        if (!cancelled) {
+          setLineItems(((data || []) as any[]).map((r) => ({
+            id: r.id, name: r.name, qty: Number(r.qty) || 1, total_cents: Number(r.total_cents) || 0,
+          })));
+        }
+      } catch { if (!cancelled) setLineItems([]); }
+    })();
+    void (async () => {
+      const teamId = ev.team_id || ev.job?.team_id || null;
+      if (!teamId) { setMemberNames([]); return; }
+      try {
+        // Équipe permanente = memberships.team_id ∪ team_assignments (N→N).
+        const [m1, m2] = await Promise.all([
+          supabase.from('memberships').select('user_id').eq('team_id', teamId),
+          supabase.from('team_assignments').select('user_id').eq('team_id', teamId),
+        ]);
+        const ids = [...new Set([...(m1.data || []), ...(m2.data || [])]
+          .map((r: any) => r.user_id).filter(Boolean))] as string[];
+        if (!ids.length) { if (!cancelled) setMemberNames([]); return; }
+        const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+        if (!cancelled) {
+          setMemberNames(ids.map((id) => {
+            const p = ((profiles || []) as any[]).find((x) => x.id === id);
+            return (p?.full_name || '').trim() || (isFr ? 'Membre' : 'Member');
+          }));
+        }
+      } catch { if (!cancelled) setMemberNames([]); }
+    })();
+    return () => { cancelled = true; };
+  }, [ev.id, ev.job_id]);
+
+  const itemsTotalCents = (lineItems || []).reduce((sum, it) => sum + it.total_cents, 0);
+  const totalCents = lineItems && lineItems.length ? itemsTotalCents : (ev.job?.total_cents || 0);
+  const fmtTime = (d: Date) => {
+    const h = d.getHours(); const m = d.getMinutes();
+    if (isFr) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  };
+  const fmtDate = (d: Date) => cap(format(d, isFr ? 'EEE d MMM yyyy' : 'EEE, MMM d, yyyy', { locale }));
   const [busy, setBusy] = useState(false);
   const isCancelled = (ev.status || '').toLowerCase() === 'cancelled';
   // « Dernière visite complétée » : fermer le job / nouvelle visite / laisser.
@@ -111,55 +177,119 @@ export default function VisitDetailModal({ ev, color, teamName, timeLabel, onClo
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
       <div
-        className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl"
+        className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-              <h2 className="truncate text-[15px] font-bold text-text-primary">{clientName}</h2>
+              <h2 className="truncate text-[15px] font-bold text-text-primary">
+                {clientName}{jobTitle ? ` – ${jobTitle}` : ''}
+              </h2>
               {completed && (
                 <span className="text-[10px] font-bold uppercase tracking-wide text-success bg-success/10 border border-success/30 rounded-full px-2 py-0.5 shrink-0">
                   {isFr ? 'Complétée' : 'Completed'}
                 </span>
               )}
             </div>
-            {ev.job?.title && ev.job.title !== clientName && (
-              <p className="mt-0.5 truncate text-[12px] text-text-secondary">
-                {ev.job.title}{jobNumber ? ` · ${jobNumber}` : ''}
-              </p>
-            )}
+            <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+              {isFr ? 'Visite' : 'Visit'}
+            </p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary">
             <XIcon size={16} />
           </button>
         </div>
-        <div className="space-y-2 rounded-xl bg-surface-secondary p-3">
-          <p className="flex items-center gap-2 text-[12px] font-medium text-text-primary">
-            <Clock size={12} className="shrink-0 text-text-tertiary" />
-            <span>{cap(format(s, isFr ? 'EEEE d MMMM' : 'EEEE, MMMM d', { locale }))} · {timeLabel}</span>
+
+        <div className="rounded-xl bg-surface-secondary p-3">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-text-tertiary">
+            {isFr ? 'Détails' : 'Details'}
           </p>
-          {address && (
-            <p className="flex items-center gap-2 text-[12px] text-text-secondary">
-              <MapPin size={12} className="shrink-0 text-text-tertiary" />
-              <span className="truncate">{address}</span>
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-2 pt-0.5">
-            <span
-              className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-              style={{ backgroundColor: toRgba(color, 0.12), color }}
-            >
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-              {teamName || t.schedule.unassigned}
-            </span>
-            {ev.job?.total_cents ? (
-              <span className="text-[12px] font-bold text-text-primary">{formatCurrency((ev.job.total_cents || 0) / 100)}</span>
-            ) : null}
+          <div className="space-y-2.5">
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-[12px] text-text-tertiary">Client</span>
+              <span className="min-w-0 truncate text-right text-[12px] font-semibold text-text-primary">{clientName}</span>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-[12px] text-text-tertiary">Job</span>
+              <span className="text-right text-[12px] font-semibold text-text-primary">{jobNumber || '—'}</span>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-[12px] text-text-tertiary">{isFr ? 'Équipe' : 'Team'}</span>
+              <span className="min-w-0 text-right">
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                  style={{ backgroundColor: toRgba(color, 0.12), color }}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
+                  {teamName || t.schedule.unassigned}
+                </span>
+                {memberNames && memberNames.length > 0 && (
+                  <span className="mt-0.5 block text-[11px] leading-snug text-text-secondary">
+                    {memberNames.length} {isFr ? (memberNames.length > 1 ? 'membres' : 'membre') : (memberNames.length > 1 ? 'members' : 'member')} · {memberNames.join(', ')}
+                  </span>
+                )}
+              </span>
+            </div>
+            {address && (
+              <div className="flex items-start justify-between gap-3">
+                <span className="shrink-0 text-[12px] text-text-tertiary">{isFr ? 'Emplacement' : 'Location'}</span>
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="min-w-0 text-right text-[12px] font-medium text-text-primary underline-offset-2 hover:underline"
+                >
+                  {address}
+                </a>
+              </div>
+            )}
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-[12px] text-text-tertiary">{isFr ? 'Début' : 'Start'}</span>
+              <span className="text-right text-[12px] font-semibold text-text-primary">
+                {fmtDate(s)}
+                <span className="block text-[11px] font-medium text-text-secondary">{anytime ? anytimeLabel(isFr) : fmtTime(s)}</span>
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-3">
+              <span className="shrink-0 text-[12px] text-text-tertiary">{isFr ? 'Fin' : 'End'}</span>
+              <span className="text-right text-[12px] font-semibold text-text-primary">
+                {fmtDate(end)}
+                <span className="block text-[11px] font-medium text-text-secondary">{anytime ? anytimeLabel(isFr) : fmtTime(end)}</span>
+              </span>
+            </div>
           </div>
-          {ev.notes && <p className="text-[11px] leading-relaxed text-text-tertiary">{ev.notes}</p>}
+          {ev.notes && <p className="mt-2.5 border-t border-border pt-2 text-[11px] leading-relaxed text-text-tertiary">{ev.notes}</p>}
         </div>
+
+        {(lineItems === null || lineItems.length > 0 || totalCents > 0) && (
+          <div className="mt-2.5 rounded-xl bg-surface-secondary p-3">
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-text-tertiary">
+              {isFr ? 'Produits et services' : 'Line items'}
+            </p>
+            {lineItems === null ? (
+              <p className="text-[11px] text-text-tertiary">{isFr ? 'Chargement…' : 'Loading…'}</p>
+            ) : (
+              <div className="space-y-1.5">
+                {lineItems.map((it) => (
+                  <div key={it.id} className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 text-[12px] text-text-primary">
+                      <span className="font-semibold tabular-nums">{it.qty}×</span> {it.name}
+                    </span>
+                    <span className="shrink-0 text-[12px] font-medium tabular-nums text-text-primary">
+                      {formatCurrency(it.total_cents / 100)}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between gap-3 border-t border-border pt-1.5">
+                  <span className="text-[12px] font-bold text-text-primary">Total</span>
+                  <span className="text-[12px] font-bold tabular-nums text-text-primary">{formatCurrency(totalCents / 100)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div className="mt-4 space-y-2">
           {!isCancelled && (
             <button
