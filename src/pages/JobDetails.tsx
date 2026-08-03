@@ -160,7 +160,8 @@ export default function JobDetails() {
   const [showAddVisit, setShowAddVisit] = useState(false);
   // « Dernière visite complétée » — proposé quand on vient de compléter la
   // dernière visite active du job (fermer / nouvelle visite / laisser actif).
-  const [finalVisitPromptOpen, setFinalVisitPromptOpen] = useState(false);
+  // 'complete' = ouvert via le bouton « Compléter » du header (titre neutre).
+  const [finalVisitPromptOpen, setFinalVisitPromptOpen] = useState<false | 'visit' | 'complete'>(false);
   const [finalVisitBusy, setFinalVisitBusy] = useState(false);
   // Visit mini-popup ("visit hub"): opened by clicking a visit row.
   const [selectedVisitId, setSelectedVisitId] = useState<string | null>(null);
@@ -482,7 +483,7 @@ export default function JobDetails() {
           setSelectedVisitId(null);
           setEditingVisitId(null);
           setVisitMoreOpen(false);
-          setFinalVisitPromptOpen(true);
+          setFinalVisitPromptOpen('visit');
         }
       }
       await handleVisitAdded();
@@ -1126,38 +1127,14 @@ export default function JobDetails() {
               <Edit3 size={14} /> {language === 'fr' ? 'Modifier' : 'Edit'}
             </button>
 
-            {/* 1-click Complete & Invoice — primary CTA when job is active */}
+            {/* Compléter — ouvre le dialogue fermer / nouvelle visite / laisser actif */}
             {job.status !== 'completed' && job.status !== 'cancelled' && (
               <button
-                onClick={async () => {
-                  setIsClosing(true);
-                  try {
-                    const updated = await updateJob(job.id, { status: 'completed' });
-                    setJob(updated);
-                    // Auto-create invoice immediately — no confirmation needed
-                    // (split jobs are billed through their payment schedule instead)
-                    if (invoices.length === 0 && !job.billing_split) {
-                      const result = await createInvoiceFromJob({ jobId: job.id, sendNow: false });
-                      const invoiceId = String(result.invoice_id || result.invoice?.id || '').trim();
-                      if (invoiceId) {
-                        toast.success(language === 'fr' ? 'Job complété et facture créée' : 'Job completed & invoice created', {
-                          action: { label: language === 'fr' ? 'Voir la facture' : 'View Invoice', onClick: () => navigate(`/invoices/${invoiceId}`) },
-                        });
-                        navigate(`/invoices/${invoiceId}/edit`);
-                        return;
-                      }
-                    }
-                    toast.success(language === 'fr' ? 'Job complété' : 'Job completed');
-                  } catch (err: any) {
-                    toast.error(err?.message || (language === 'fr' ? 'Échec' : 'Failed'));
-                  } finally {
-                    setIsClosing(false);
-                  }
-                }}
+                onClick={() => setFinalVisitPromptOpen('complete')}
                 disabled={isClosing}
                 className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                <CheckCircle2 size={13} /> {isClosing ? (language === 'fr' ? 'Traitement...' : 'Processing...') : (canSeeInvoices ? (language === 'fr' ? 'Compléter et facturer' : 'Complete & Invoice') : (language === 'fr' ? 'Compléter' : 'Complete'))}
+                <CheckCircle2 size={13} /> {language === 'fr' ? 'Compléter' : 'Complete'}
               </button>
             )}
 
@@ -2447,9 +2424,11 @@ export default function JobDetails() {
 
       {job && (
         <FinalVisitDialog
-          open={finalVisitPromptOpen}
+          open={!!finalVisitPromptOpen}
           fr={language === 'fr'}
           busy={finalVisitBusy}
+          title={finalVisitPromptOpen === 'complete' ? (language === 'fr' ? 'Compléter le job' : 'Complete Job') : undefined}
+          subtitle={finalVisitPromptOpen === 'complete' ? (language === 'fr' ? 'Que voulez-vous faire ?' : 'What would you like to do?') : undefined}
           onCloseJob={() => {
             void (async () => {
               if (finalVisitBusy) return;

@@ -7,10 +7,12 @@ import { CheckCircle2, CalendarPlus, Archive, CircleDot } from 'lucide-react';
  * fermer le job, planifier une nouvelle visite, ou le laisser en
  * « Action requise » (actif sans visite à venir).
  */
-export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onScheduleNewVisit, onLeave }: {
+export default function FinalVisitDialog({ open, fr, busy, title, subtitle, onCloseJob, onScheduleNewVisit, onLeave }: {
   open: boolean;
   fr: boolean;
   busy?: boolean;
+  title?: string;
+  subtitle?: string;
   onCloseJob: () => void;
   onScheduleNewVisit: () => void;
   onLeave: () => void;
@@ -27,13 +29,13 @@ export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onSchedul
             <CheckCircle2 size={16} className="text-success" />
           </span>
           <h2 className="text-[15px] font-bold text-text-primary">
-            {fr ? 'Dernière visite complétée' : 'Final visit completed'}
+            {title ?? (fr ? 'Dernière visite complétée' : 'Final visit completed')}
           </h2>
         </div>
         <p className="text-[12px] text-text-tertiary mb-4">
-          {fr
+          {subtitle ?? (fr
             ? 'Toutes les visites de ce job sont complétées. Que voulez-vous faire ?'
-            : 'All of this job’s visits are completed. What would you like to do?'}
+            : 'All of this job’s visits are completed. What would you like to do?')}
         </p>
         <div className="space-y-2">
           <button
