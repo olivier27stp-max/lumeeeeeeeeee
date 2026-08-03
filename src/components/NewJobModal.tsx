@@ -2544,53 +2544,41 @@ export default function NewJobModal({
                                       </button>
                                     </div>
                                     {visits.map((visit) => (
-                                      <div key={visit.key} className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                          <DatePickerInput
-                                            className="flex-1"
-                                            value={visit.date}
-                                            min={`${year}-${mm}-01`}
-                                            max={`${year}-${mm}-${lastDay}`}
-                                            language={language === 'fr' ? 'fr' : 'en'}
-                                            onChange={(date) => setPlanVisitDate(visit.key, date)}
-                                          />
-                                          {visits.length > 1 && (
-                                            <button
-                                              type="button"
-                                              onClick={() => removePlanVisit(visit.key)}
-                                              className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-danger-light transition-colors"
-                                              aria-label={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
-                                            >
-                                              <X size={14} />
-                                            </button>
-                                          )}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                          <div className="space-y-1">
-                                            <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
-                                            <div className="relative">
-                                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                              <input
-                                                type="time"
-                                                value={visitTimeFor(visit.key).start}
-                                                onChange={(event) => setVisitTime(visit.key, { startTime: event.target.value })}
-                                                className="glass-input w-full pl-10"
-                                              />
-                                            </div>
-                                          </div>
-                                          <div className="space-y-1">
-                                            <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
-                                            <div className="relative">
-                                              <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                              <input
-                                                type="time"
-                                                value={visitTimeFor(visit.key).end}
-                                                onChange={(event) => setVisitTime(visit.key, { endTime: event.target.value })}
-                                                className="glass-input w-full pl-10"
-                                              />
-                                            </div>
-                                          </div>
-                                        </div>
+                                      <div key={visit.key} className="flex items-center gap-2">
+                                        <DatePickerInput
+                                          className="flex-1 min-w-0"
+                                          value={visit.date}
+                                          min={`${year}-${mm}-01`}
+                                          max={`${year}-${mm}-${lastDay}`}
+                                          language={language === 'fr' ? 'fr' : 'en'}
+                                          onChange={(date) => setPlanVisitDate(visit.key, date)}
+                                        />
+                                        {/* Heures compactes dans la même barre que la date */}
+                                        <input
+                                          type="time"
+                                          value={visitTimeFor(visit.key).start}
+                                          onChange={(event) => setVisitTime(visit.key, { startTime: event.target.value })}
+                                          className="glass-input shrink-0 w-[86px] px-2 py-1.5 text-xs"
+                                          aria-label={t.modals.startTime}
+                                        />
+                                        <span className="shrink-0 text-xs text-text-tertiary">–</span>
+                                        <input
+                                          type="time"
+                                          value={visitTimeFor(visit.key).end}
+                                          onChange={(event) => setVisitTime(visit.key, { endTime: event.target.value })}
+                                          className="glass-input shrink-0 w-[86px] px-2 py-1.5 text-xs"
+                                          aria-label={t.modals.endTime}
+                                        />
+                                        {visits.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => removePlanVisit(visit.key)}
+                                            className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-danger-light transition-colors"
+                                            aria-label={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
+                                          >
+                                            <X size={14} />
+                                          </button>
+                                        )}
                                       </div>
                                     ))}
                                   </div>
