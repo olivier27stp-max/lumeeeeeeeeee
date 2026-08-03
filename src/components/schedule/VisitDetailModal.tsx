@@ -58,11 +58,11 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
   // de cet event; jobs.team_id et les autres visites du job (service plan
   // inclus) ne bougent jamais.
   const [teams, setTeams] = useState<TeamRecord[]>([]);
-  const [teamId, setTeamId] = useState<string | null>(ev.team_id || ev.job?.team_id || null);
+  const [teamId, setTeamId] = useState<string | null>(ev.team_id || null);
   const [teamBusy, setTeamBusy] = useState(false);
 
   useEffect(() => {
-    setTeamId(ev.team_id || ev.job?.team_id || null);
+    setTeamId(ev.team_id || null);
   }, [ev.id]);
 
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
   }, []);
 
   const changeTeam = async (nextId: string | null) => {
-    if (teamBusy || !nextId || nextId === teamId) return;
+    if (teamBusy || nextId === teamId) return;
     const prev = teamId;
     setTeamBusy(true);
     setTeamId(nextId);
@@ -83,9 +83,13 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
         .eq('id', ev.id);
       if (error) throw error;
       invalidateScheduleCache();
-      toast.success(isFr
-        ? 'Équipe de la visite mise à jour — les autres visites du job ne changent pas.'
-        : "Visit team updated — the job's other visits are unchanged.");
+      toast.success(nextId
+        ? (isFr
+          ? 'Équipe de la visite mise à jour — les autres visites du job ne changent pas.'
+          : "Visit team updated — the job's other visits are unchanged.")
+        : (isFr
+          ? 'Visite désassignée — les autres visites du job ne changent pas.'
+          : "Visit unassigned — the job's other visits are unchanged."));
       onStatusChanged?.();
     } catch (err: any) {
       setTeamId(prev);
@@ -282,7 +286,7 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
                       style={{ color: teamColor, background: 'transparent' }}
                       title={isFr ? "Changer l'équipe de cette visite seulement" : 'Change the team for this visit only'}
                     >
-                      {!teamId && <option value="">{t.schedule.unassigned}</option>}
+                      <option value="">{t.schedule.unassigned}</option>
                       {teams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
                     </select>
                   </span>

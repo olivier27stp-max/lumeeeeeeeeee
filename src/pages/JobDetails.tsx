@@ -185,14 +185,13 @@ export default function JobDetails() {
 
   const teamById = useMemo(() => new Map(teams.map((tm) => [tm.id, tm])), [teams]);
 
-  // Who's on a visit: the visit's own team first, else the job's team.
+  // Who's on a visit: the visit's own team only — NULL means the visit is
+  // explicitly unassigned (no fallback on the job's team, so per-visit
+  // unassignment from the calendar reads the same here).
   const getVisitAssignment = (visit: ScheduleEvent): { team: TeamRecord | undefined; label: string } => {
-    const visitTeam = visit.team_id ? teamById.get(visit.team_id) : undefined;
-    const jobTeam = !visit.team_id && job?.team_id ? teamById.get(job.team_id) : undefined;
-    const team = visitTeam || jobTeam;
-    const label = visitTeam?.name
+    const team = visit.team_id ? teamById.get(visit.team_id) : undefined;
+    const label = team?.name
       || (visit.team_id ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned') : null)
-      || jobTeam?.name
       || (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet');
     return { team, label };
   };

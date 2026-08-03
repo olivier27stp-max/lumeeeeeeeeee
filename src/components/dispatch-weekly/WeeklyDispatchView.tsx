@@ -78,7 +78,6 @@ interface WeeklyDrag {
   ev: ScheduleEventRecord;
   originRowKey: string;
   originDayKey: string;
-  hasTeam: boolean;
   startClientX: number;
   startClientY: number;
   moved: boolean;
@@ -208,6 +207,11 @@ export default function WeeklyDispatchView({
     [activeTeams, visibleTeamIds],
   );
 
+  /* ── Drags actifs — pendant un drag (carte ou tiroir), la ligne « Non
+     assigné » apparaît comme cible de dépôt même si elle est vide. ── */
+  const extActive = externalDnd.dragState.active?.type === 'unscheduled';
+  const [dragLive, setDragLive] = useState(false);
+
   const { rows, cellMap } = useMemo(() => {
     const teamIdSet = new Set(rowTeams.map((tm) => tm.id));
     // Dédup par id : le filtre serveur peut renvoyer un même event deux fois.
@@ -220,7 +224,7 @@ export default function WeeklyDispatchView({
       // Comparer sur la date LOCALE de l'event (start_at est en UTC).
       const dayKey = format(new Date(ev.start_at), 'yyyy-MM-dd');
       if (!dayByKey.has(dayKey)) continue;
-      const tid = ev.team_id || ev.job?.team_id || null;
+      const tid = ev.team_id || null;
       // Sans équipe, équipe désactivée ou hors filtre : jamais masquée
       // silencieusement — regroupée dans la ligne « Non assigné ».
       const rowKey = tid && teamIdSet.has(tid) ? tid : UNASSIGNED_KEY;
@@ -235,7 +239,7 @@ export default function WeeklyDispatchView({
     const list: WeeklyRow[] = unassignedMode
       ? []
       : rowTeams.map((tm) => ({ key: tm.id, teamId: tm.id, team: tm }));
-    if (unassignedMode || hasUnassigned) {
+    if (unassignedMode || hasUnassigned || dragLive || extActive) {
       list.push({ key: UNASSIGNED_KEY, teamId: null, team: null });
     }
     // Semaine entièrement vide : la grille reste complètement dessinée,
@@ -246,7 +250,7 @@ export default function WeeklyDispatchView({
       }
     }
     return { rows: list, cellMap: cells };
-  }, [effEvents, rowTeams, unassignedMode, dayByKey]);
+  }, [effEvents, rowTeams, unassignedMode, dayByKey, dragLive, extActive]);
 
   const rowByKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
 
@@ -276,6 +280,7 @@ export default function WeeklyDispatchView({
   const finishDrag = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
+    setDragLive(false);
     bump();
     if (!d || !d.moved) return;
     // Le pointerup précède le click : on libère le flag juste après.
@@ -285,7 +290,7 @@ export default function WeeklyDispatchView({
     const targetRow = rowByKey.get(target.rowKey);
     const day = dayByKey.get(target.dayKey);
     if (!day) return;
-    const originTeam = d.ev.team_id || d.ev.job?.team_id || null;
+    const originTeam = d.ev.team_id || null;
     const targetTeam = targetRow && !targetRow.placeholderIndex ? targetRow.teamId : originTeam;
     if (target.dayKey === d.originDayKey && targetTeam === originTeam) return;
     // La carte garde son heure : seuls le jour et la route changent.
@@ -303,9 +308,9 @@ export default function WeeklyDispatchView({
     e.preventDefault();
     dragRef.current = {
       ev, originRowKey: rowKey, originDayKey: dayKey,
-      hasTeam: !!(ev.team_id || ev.job?.team_id),
       startClientX: e.clientX, startClientY: e.clientY, moved: false, target: null,
     };
+    setDragLive(true);
     const onMove = (pe: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
@@ -315,12 +320,9 @@ export default function WeeklyDispatchView({
         d.moved = true;
         suppressClickRef.current = true;
       }
-      let next = cellFromPoint(pe.clientX, pe.clientY);
-      // Le RPC ne peut pas désassigner : une visite avec équipe ne se dépose
-      // pas sur la ligne « Non assigné » (elle reste sur sa route).
-      if (next && d.hasTeam && next.rowKey === UNASSIGNED_KEY) {
-        next = { rowKey: d.originRowKey, dayKey: next.dayKey };
-      }
+      // Déposer sur la ligne « Non assigné » désassigne cette visite (la
+      // désassignation passe par un update direct — voir rescheduleEvent).
+      const next = cellFromPoint(pe.clientX, pe.clientY);
       if (!sameCell(d.target, next)) { d.target = next; bump(); } else bump();
     };
     const cleanup = () => {
@@ -330,7 +332,7 @@ export default function WeeklyDispatchView({
       dragCleanupRef.current = null;
     };
     const onUp = () => { cleanup(); finishDrag(); };
-    const onCancel = () => { cleanup(); dragRef.current = null; bump(); };
+    const onCancel = () => { cleanup(); dragRef.current = null; setDragLive(false); bump(); };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
@@ -338,7 +340,6 @@ export default function WeeklyDispatchView({
   }, [finishDrag]);
 
   /* ── Drop externe : jobs non planifiés glissés depuis le tiroir ── */
-  const extActive = externalDnd.dragState.active?.type === 'unscheduled';
   const extTargetRef = useRef<CellRef | null>(null);
   useEffect(() => {
     if (!extActive) { extTargetRef.current = null; return; }
@@ -547,7 +548,7 @@ export default function WeeklyDispatchView({
 
       {/* ── Détails de la visite — modale partagée avec la vue Mois ── */}
       {detailEv && (() => {
-        const tid = detailEv.team_id || detailEv.job?.team_id || null;
+        const tid = detailEv.team_id || null;
         const team = tid ? activeTeams.find((tm) => tm.id === tid) || teams.find((tm) => tm.id === tid) || null : null;
         const color = team && isHexColor(team.color_hex) ? team.color_hex : FALLBACK_TEAM_COLOR;
         return (

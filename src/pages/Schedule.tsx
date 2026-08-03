@@ -416,7 +416,9 @@ function ScheduleContent() {
   // Semaine, exposées en callbacks pour le drag/resize horizontal dédié.
   const handleDailyReschedule = useCallback(async (eventId: string, startAt: string, endAt: string, teamId: string | null) => {
     try {
-      const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, timezone: DEFAULT_TIMEZONE });
+      // teamId null = déposé sur la ligne « Non assigné » → désassignation
+      // explicite de CETTE visite (les autres visites du job ne bougent pas).
+      const result = await rescheduleMut.mutateAsync({ eventId, startAt, endAt, teamId, clearTeam: teamId === null, timezone: DEFAULT_TIMEZONE });
       if (result.overlaps > 0) toast.warning(t.schedule.overlapping);
       else toast.success(t.schedule.eventRescheduled);
       warnRoster(teamId, startAt, endAt);

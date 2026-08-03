@@ -127,7 +127,7 @@ export function useCalendarDnd(options: UseCalendarDndOptions) {
         originalEvent: event,
         originalStartAt: event.start_at,
         originalEndAt: event.end_at,
-        teamId: event.team_id || event.job?.team_id || null,
+        teamId: event.team_id || null,
       },
       ghostTop: topPx,
       ghostDate: null,

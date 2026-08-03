@@ -142,7 +142,7 @@ export default function MonthlyDispatchView({
 
   /* ── Couleurs — couleur de route, remplacée par le 1er tag de la job ── */
   const teamColorFor = useCallback((ev: ScheduleEventRecord): string => {
-    const tid = ev.team_id || ev.job?.team_id || null;
+    const tid = ev.team_id || null;
     const team = tid ? teams.find((tm) => tm.id === tid) : null;
     return team && isHexColor(team.color_hex) ? team.color_hex : FALLBACK_TEAM_COLOR;
   }, [teams]);
@@ -319,7 +319,7 @@ export default function MonthlyDispatchView({
 
       {/* ── Détails de la visite — même modale que la vue Semaine ── */}
       {detailEv && (() => {
-        const tid = detailEv.team_id || detailEv.job?.team_id || null;
+        const tid = detailEv.team_id || null;
         const team = tid ? teams.find((tm) => tm.id === tid) || null : null;
         return (
           <VisitDetailModal
