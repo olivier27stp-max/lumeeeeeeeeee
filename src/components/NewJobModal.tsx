@@ -2653,149 +2653,6 @@ export default function NewJobModal({
               </Box>
               )}
 
-              {/* ═══ BILLING AND PAYMENTS — comment le plan de service se facture ═══ */}
-              {isServicePlan && (
-              <Box
-                title={language === 'fr' ? 'Facturation et paiements' : 'Billing and Payments'}
-                subtitle={language === 'fr'
-                  ? 'Choisissez comment les visites du plan se facturent.'
-                  : 'Choose how the plan’s visits get billed.'}
-              >
-                  <div className="space-y-2">
-                    {([
-                      {
-                        key: 'per_visit' as const,
-                        label: language === 'fr' ? 'Une facture par visite' : 'One invoice per visit',
-                        hint: language === 'fr'
-                          ? 'Chaque visite a sa propre facture, créée quand la visite est terminée — comme des jobs individuelles.'
-                          : 'Each visit gets its own invoice, created when the visit is completed — like individual jobs.',
-                      },
-                      {
-                        key: 'single' as const,
-                        label: language === 'fr' ? 'Une facture pour toutes les visites' : 'One invoice for all visits',
-                        hint: language === 'fr'
-                          ? 'Une seule facture couvre l’ensemble du plan.'
-                          : 'A single invoice covers the whole plan.',
-                      },
-                      {
-                        key: 'installments' as const,
-                        label: language === 'fr' ? 'Plusieurs paiements' : 'Multiple payments',
-                        hint: language === 'fr'
-                          ? 'Choisissez le nombre de paiements et le montant de chacun.'
-                          : 'Choose the number of payments and the amount of each.',
-                      },
-                    ]).map((opt) => (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => { setDirty(true); setPlanBillingMode(opt.key); }}
-                        className={cn(
-                          'w-full px-3 py-2.5 rounded-lg border text-left transition-colors',
-                          planBillingMode === opt.key
-                            ? 'border-primary bg-primary/10'
-                            : 'border-outline-subtle bg-surface-secondary/30 hover:border-outline-strong'
-                        )}
-                      >
-                        <span className={cn(
-                          'block text-sm font-medium',
-                          planBillingMode === opt.key ? 'text-primary' : 'text-text-primary'
-                        )}>
-                          {opt.label}
-                        </span>
-                        <span className="block text-xs text-text-tertiary mt-0.5">{opt.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Échéancier : N paiements × montant + balance vs total du job */}
-                  {planBillingMode === 'installments' && (
-                    <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">
-                            {language === 'fr' ? 'Nombre de paiements' : 'Number of payments'}
-                          </label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={installmentsCount}
-                            onChange={(event) => { setDirty(true); setInstallmentsCount(event.target.value); }}
-                            placeholder="4"
-                            className="glass-input w-full tabular-nums"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">
-                            {language === 'fr' ? 'Montant par paiement' : 'Amount per payment'}
-                          </label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">$</span>
-                            <input
-                              inputMode="decimal"
-                              value={installmentAmount}
-                              onChange={(event) => { setDirty(true); setInstallmentAmount(event.target.value.replace(/[^\d.]/g, '')); }}
-                              placeholder="500"
-                              className="glass-input w-full pl-7 tabular-nums"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      {installmentsPlan && (
-                        <div className="space-y-1 text-[12px] tabular-nums">
-                          <p className="text-text-secondary">
-                            {installmentsPlan.count} {language === 'fr' ? 'paiements de' : 'payments of'} {formatCurrency(installmentsPlan.amountCents / 100)}
-                            {' = '}{formatCurrency(installmentsPlan.coveredCents / 100)}
-                            <span className="text-text-tertiary"> · {language === 'fr' ? 'total du job' : 'job total'} {formatCurrency(grandTotalCents / 100)}</span>
-                          </p>
-                          {installmentsPlan.remainderCents > 0 ? (
-                            <p className="font-semibold text-warning">
-                              {language === 'fr'
-                                ? `Balance : il reste ${formatCurrency(installmentsPlan.remainderCents / 100)} à faire payer — un paiement « Solde » sera ajouté pour couvrir le reste.`
-                                : `Balance: ${formatCurrency(installmentsPlan.remainderCents / 100)} left to collect — a “Balance” payment will be added to cover it.`}
-                            </p>
-                          ) : installmentsPlan.remainderCents < 0 ? (
-                            <p className="font-semibold text-danger">
-                              {language === 'fr'
-                                ? `Les paiements dépassent le total du job de ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`
-                                : `Payments exceed the job total by ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`}
-                            </p>
-                          ) : (
-                            <p className="font-semibold text-success">
-                              {language === 'fr' ? 'Le total du job est entièrement couvert.' : 'The job total is fully covered.'}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Paiement automatique sur la carte au dossier */}
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                    <input
-                      type="checkbox"
-                      checked={autoCharge}
-                      onChange={(event) => { setDirty(true); setAutoCharge(event.target.checked); }}
-                      className="h-4 w-4 mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-sm text-text-primary">
-                        {language === 'fr' ? 'Se faire payer automatiquement' : 'Get paid automatically'}
-                      </span>
-                      {autoCharge && (
-                        <span className="block text-xs text-primary font-medium mt-1">
-                          {language === 'fr' ? 'Request a payment on file' : 'Request a payment on file'}
-                          <span className="block text-text-tertiary font-normal mt-0.5">
-                            {language === 'fr'
-                              ? 'Le paiement sera demandé automatiquement sur la carte au dossier du client à chaque facture émise.'
-                              : 'Payment will be requested automatically on the client’s card on file each time an invoice is issued.'}
-                          </span>
-                        </span>
-                      )}
-                    </span>
-                  </label>
-              </Box>
-              )}
-
               {!isServicePlan && (
               <Box
                 title={language === 'fr' ? 'Visites' : 'Visits'}
@@ -3107,6 +2964,149 @@ export default function NewJobModal({
                 </>
                 )}
               </Box>
+
+              {/* ═══ BILLING AND PAYMENTS — comment le plan de service se facture ═══ */}
+              {isServicePlan && (
+              <Box
+                title={language === 'fr' ? 'Facturation et paiements' : 'Billing and Payments'}
+                subtitle={language === 'fr'
+                  ? 'Choisissez comment les visites du plan se facturent.'
+                  : 'Choose how the plan’s visits get billed.'}
+              >
+                  <div className="space-y-2">
+                    {([
+                      {
+                        key: 'per_visit' as const,
+                        label: language === 'fr' ? 'Une facture par visite' : 'One invoice per visit',
+                        hint: language === 'fr'
+                          ? 'Chaque visite a sa propre facture, créée quand la visite est terminée — comme des jobs individuelles.'
+                          : 'Each visit gets its own invoice, created when the visit is completed — like individual jobs.',
+                      },
+                      {
+                        key: 'single' as const,
+                        label: language === 'fr' ? 'Une facture pour toutes les visites' : 'One invoice for all visits',
+                        hint: language === 'fr'
+                          ? 'Une seule facture couvre l’ensemble du plan.'
+                          : 'A single invoice covers the whole plan.',
+                      },
+                      {
+                        key: 'installments' as const,
+                        label: language === 'fr' ? 'Plusieurs paiements' : 'Multiple payments',
+                        hint: language === 'fr'
+                          ? 'Choisissez le nombre de paiements et le montant de chacun.'
+                          : 'Choose the number of payments and the amount of each.',
+                      },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => { setDirty(true); setPlanBillingMode(opt.key); }}
+                        className={cn(
+                          'w-full px-3 py-2.5 rounded-lg border text-left transition-colors',
+                          planBillingMode === opt.key
+                            ? 'border-primary bg-primary/10'
+                            : 'border-outline-subtle bg-surface-secondary/30 hover:border-outline-strong'
+                        )}
+                      >
+                        <span className={cn(
+                          'block text-sm font-medium',
+                          planBillingMode === opt.key ? 'text-primary' : 'text-text-primary'
+                        )}>
+                          {opt.label}
+                        </span>
+                        <span className="block text-xs text-text-tertiary mt-0.5">{opt.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Échéancier : N paiements × montant + balance vs total du job */}
+                  {planBillingMode === 'installments' && (
+                    <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">
+                            {language === 'fr' ? 'Nombre de paiements' : 'Number of payments'}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={installmentsCount}
+                            onChange={(event) => { setDirty(true); setInstallmentsCount(event.target.value); }}
+                            placeholder="4"
+                            className="glass-input w-full tabular-nums"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">
+                            {language === 'fr' ? 'Montant par paiement' : 'Amount per payment'}
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">$</span>
+                            <input
+                              inputMode="decimal"
+                              value={installmentAmount}
+                              onChange={(event) => { setDirty(true); setInstallmentAmount(event.target.value.replace(/[^\d.]/g, '')); }}
+                              placeholder="500"
+                              className="glass-input w-full pl-7 tabular-nums"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      {installmentsPlan && (
+                        <div className="space-y-1 text-[12px] tabular-nums">
+                          <p className="text-text-secondary">
+                            {installmentsPlan.count} {language === 'fr' ? 'paiements de' : 'payments of'} {formatCurrency(installmentsPlan.amountCents / 100)}
+                            {' = '}{formatCurrency(installmentsPlan.coveredCents / 100)}
+                            <span className="text-text-tertiary"> · {language === 'fr' ? 'total du job' : 'job total'} {formatCurrency(grandTotalCents / 100)}</span>
+                          </p>
+                          {installmentsPlan.remainderCents > 0 ? (
+                            <p className="font-semibold text-warning">
+                              {language === 'fr'
+                                ? `Balance : il reste ${formatCurrency(installmentsPlan.remainderCents / 100)} à faire payer — un paiement « Solde » sera ajouté pour couvrir le reste.`
+                                : `Balance: ${formatCurrency(installmentsPlan.remainderCents / 100)} left to collect — a “Balance” payment will be added to cover it.`}
+                            </p>
+                          ) : installmentsPlan.remainderCents < 0 ? (
+                            <p className="font-semibold text-danger">
+                              {language === 'fr'
+                                ? `Les paiements dépassent le total du job de ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`
+                                : `Payments exceed the job total by ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`}
+                            </p>
+                          ) : (
+                            <p className="font-semibold text-success">
+                              {language === 'fr' ? 'Le total du job est entièrement couvert.' : 'The job total is fully covered.'}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Paiement automatique sur la carte au dossier */}
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={autoCharge}
+                      onChange={(event) => { setDirty(true); setAutoCharge(event.target.checked); }}
+                      className="h-4 w-4 mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm text-text-primary">
+                        {language === 'fr' ? 'Se faire payer automatiquement' : 'Get paid automatically'}
+                      </span>
+                      {autoCharge && (
+                        <span className="block text-xs text-primary font-medium mt-1">
+                          {language === 'fr' ? 'Request a payment on file' : 'Request a payment on file'}
+                          <span className="block text-text-tertiary font-normal mt-0.5">
+                            {language === 'fr'
+                              ? 'Le paiement sera demandé automatiquement sur la carte au dossier du client à chaque facture émise.'
+                              : 'Payment will be requested automatically on the client’s card on file each time an invoice is issued.'}
+                          </span>
+                        </span>
+                      )}
+                    </span>
+                  </label>
+              </Box>
+              )}
 
               <Box title={t.modals.taxes}>
                 {taxConfigured === null ? (
