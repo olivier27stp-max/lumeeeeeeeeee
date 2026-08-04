@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "db:apply": "tsx scripts/apply-sql.ts",
     "db:apply:prod": "tsx scripts/apply-sql.ts --prod",
+    "db:bootstrap": "tsx scripts/apply-sql.ts supabase/baseline/01_schema.sql supabase/baseline/02_post_schema.sql",
     "db:diff": "python3 scripts/db-diff.py",
     "test:rls": "tsx scripts/test-rls-isolation.ts",
     "check:schema-refs": "python3 scripts/check-schema-refs.py",

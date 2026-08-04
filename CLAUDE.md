@@ -54,7 +54,8 @@ supabase/
   2. Test locally against staging
   3. `npm run db:apply:prod -- supabase/migrations/<file>.sql` → applies to prod
 - **Never** change schema via the Supabase dashboard on either project — it silently desyncs the two.
-- `npm run db:diff` compares prod vs staging schemas (needs Docker) and reports any drift. Run it when in doubt, or after someone else deployed.
+- `npm run db:diff` compares prod vs staging schemas (needs Docker) and reports any drift.
+- **`supabase/baseline/`** is the source of truth to create a NEW environment — the 400 files in `supabase/migrations/` do **not** rebuild the DB from scratch (incomplete history; replaying them on an empty DB fails at the 2nd file). `npm run db:bootstrap` applies the baseline. Validated 2026-08-03 by replaying it on a virgin PostgreSQL 17: 199 tables, 11 views, 306 functions, 537 policies, zero errors. Regenerate it after any structural change — see `supabase/baseline/README.md`. Run it when in doubt, or after someone else deployed.
 - **Zero accepted delta**: staging is the development reference, so prod and staging must be STRICTLY identical — schema, function bodies, policies, triggers, event triggers, buckets, realtime publication, cron jobs, extensions. `db:diff` tolerates nothing.
 
 ## Coding Rules
