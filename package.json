@@ -23,6 +23,7 @@
     "db:apply:prod": "tsx scripts/apply-sql.ts --prod",
     "db:diff": "python3 scripts/db-diff.py",
     "test:rls": "tsx scripts/test-rls-isolation.ts",
+    "check:schema-refs": "python3 scripts/check-schema-refs.py",
     "check:db-coherence": "node --env-file=.env.local scripts/check-db-coherence.mjs",
     "check:silent-mutations": "node scripts/check-silent-mutations.mjs",
     "check:missing-migrations": "node --env-file=.env.local scripts/check-missing-migrations.mjs",
