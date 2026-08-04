@@ -246,6 +246,9 @@ export default function CompanySettings() {
       setForm((prev) => ({ ...prev, website, email }));
       queryClient.invalidateQueries({ queryKey: ['crm-revenue-goal'] });
       queryClient.invalidateQueries({ queryKey: ['org-revenue-goal'] });
+      // La météo de l'accueil dépend de la ville — sinon elle reste en cache
+      // (staleTime 30 min) et le changement de ville semble sans effet.
+      queryClient.invalidateQueries({ queryKey: ['home-weather'] });
       toast.success(language === 'fr' ? 'Paramètres de l\'entreprise enregistrés.' : 'Company settings saved.');
       setTimeout(() => setSaved(false), 2000);
     } catch (error: any) {
