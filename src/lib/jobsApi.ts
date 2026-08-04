@@ -848,6 +848,9 @@ export async function createJob(payload: {
       .filter((item) => item.name.trim())
       .map((item) => ({
         job_id: data.id,
+        // Explicite plutôt que via le trigger crm_enforce_scope : garantit
+        // l'org résolue par ce module (cohérence multi-org).
+        org_id: orgId,
         name: item.name.trim(),
         qty: item.qty,
         unit_price_cents: item.unit_price_cents,

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { getCurrentOrgIdOrThrow } from './orgApi';
 
 export interface EmailTemplate {
   id: string;
@@ -49,9 +50,11 @@ export async function getEmailTemplate(id: string): Promise<EmailTemplate> {
 }
 
 export async function createEmailTemplate(input: EmailTemplateInput): Promise<EmailTemplate> {
+  const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('email_templates')
     .insert({
+      org_id: orgId,
       name: input.name,
       type: input.type,
       subject: input.subject,
@@ -81,10 +84,12 @@ export async function updateEmailTemplate(
 
 export async function duplicateEmailTemplate(id: string): Promise<EmailTemplate> {
   const source = await getEmailTemplate(id);
+  const orgId = await getCurrentOrgIdOrThrow();
 
   const { data, error } = await supabase
     .from('email_templates')
     .insert({
+      org_id: (source as any).org_id ?? orgId,
       name: `${source.name} (Copy)`,
       type: source.type,
       subject: source.subject,

@@ -1006,6 +1006,7 @@ router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (re
     } else {
       const { error: errBill997 } = await admin.from('subscriptions').insert({
         org_id: auth.orgId,
+        user_id: auth.user.id,
         plan_id: targetPlan.id,
         interval,
         currency,

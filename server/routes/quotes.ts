@@ -681,6 +681,7 @@ router.post('/quotes/convert-to-job', async (req, res) => {
         .filter((item: any) => !item.is_optional)
         .map((item: any) => ({
           job_id: jobId,
+          org_id: auth.orgId,
           name: item.name,
           qty: item.quantity,
           unit_price_cents: item.unit_price_cents,

@@ -733,6 +733,7 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
       await admin.from('field_pins').insert({
         org_id: auth.orgId,
         house_id: req.params.id,
+        user_id: auth.user.id,
         lat: house.lat,
         lng: house.lng,
         status: newStatus,

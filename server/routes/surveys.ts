@@ -151,15 +151,26 @@ router.post('/survey/:token', async (req, res) => {
       // satisfaction_surveys (migration 20260747000000) — couvre toutes les
       // notes, la basse comme la bonne. On garde la tâche de suivi ici.
 
-      // Create follow-up task
-      await supabase.from('tasks').insert({
-        org_id: survey.org_id,
-        title: `Follow up on low satisfaction rating (${rating}/5)`,
-        description: `Client gave ${rating}/5 stars. Feedback: ${feedback || 'None'}`,
-        status: 'pending',
-        entity_type: survey.client_id ? 'client' : 'job',
-        entity_id: survey.client_id || survey.job_id || null,
-      });
+      // Create follow-up task — tasks.created_by est NOT NULL et cette route
+      // est publique (aucun user) : on attribue la tâche à l'owner de l'org.
+      const { data: taskOwner } = await supabase
+        .from('memberships')
+        .select('user_id')
+        .eq('org_id', survey.org_id)
+        .eq('role', 'owner')
+        .limit(1)
+        .maybeSingle();
+      if (taskOwner?.user_id) {
+        await supabase.from('tasks').insert({
+          org_id: survey.org_id,
+          created_by: taskOwner.user_id,
+          title: `Follow up on low satisfaction rating (${rating}/5)`,
+          description: `Client gave ${rating}/5 stars. Feedback: ${feedback || 'None'}`,
+          status: 'pending',
+          entity_type: survey.client_id ? 'client' : 'job',
+          entity_id: survey.client_id || survey.job_id || null,
+        });
+      }
 
       return res.json({
         success: true,
