@@ -30,6 +30,7 @@ import { ROLE_LABELS, normalizeRole, hasPermission, type TeamRole } from '../../
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { uploadViaServer } from '../../lib/storage';
 import { getRepRealStats, getTechRealStats, type RepRealStats, type TechRealStats } from '../../lib/repStatsApi';
+import AddressAutocomplete from '../../components/AddressAutocomplete';
 import { getCommissionEntries } from '../../lib/commissionsApi';
 import { Avatar } from '../../components/d2d/avatar';
 
@@ -439,10 +440,14 @@ export default function ProfileSettings() {
           </div>
           <div>
             <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Ville' : 'City'}</label>
-            <div className="relative mt-1.5">
-              <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-              <input type="text" value={city} onChange={(e) => setCity(e.target.value)} className="glass-input w-full !pl-9" placeholder={isFr ? 'Drummondville' : 'Montreal'} />
-            </div>
+            <AddressAutocomplete
+              value={city}
+              onChange={(v) => setCity(v)}
+              onSelect={(addr) => setCity(addr.city || addr.formatted_address)}
+              primaryTypes={['locality']}
+              className="mt-1.5"
+              placeholder={isFr ? 'Drummondville' : 'Montreal'}
+            />
           </div>
           {hasBirthCol && (
             <div>
