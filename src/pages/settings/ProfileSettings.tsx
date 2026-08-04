@@ -31,6 +31,7 @@ import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import { uploadViaServer } from '../../lib/storage';
 import { getRepRealStats, getTechRealStats, type RepRealStats, type TechRealStats } from '../../lib/repStatsApi';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
+import { useQueryClient } from '@tanstack/react-query';
 import { getCommissionEntries } from '../../lib/commissionsApi';
 import { Avatar } from '../../components/d2d/avatar';
 
@@ -79,6 +80,7 @@ export default function ProfileSettings() {
   const [city, setCity] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [savedInfo, setSavedInfo] = useState({ firstName: '', lastName: '', phone: '', city: '', birthDate: '' });
+  const queryClient = useQueryClient();
   // team_members.birth_date ships behind a migration — feature-detect on the
   // loaded row so the page works before AND after the column exists.
   const [hasBirthCol, setHasBirthCol] = useState(false);
@@ -262,6 +264,8 @@ export default function ProfileSettings() {
       }
       setSavedInfo({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim(), city: city.trim(), birthDate });
       setSaved(true);
+      // La météo de l'accueil suit la ville du profil — la rafraîchir tout de suite.
+      queryClient.invalidateQueries({ queryKey: ['home-weather'] });
       setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
       toast.error(e.message || (isFr ? 'Échec de la sauvegarde' : 'Save failed'));
