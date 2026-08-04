@@ -484,11 +484,21 @@ export default function CompanySettings() {
               <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.city}
               </label>
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={form.city}
-                onChange={(e) => update('city', e.target.value)}
-                className="glass-input w-full mt-1"
+                onChange={(v) => update('city', v)}
+                onSelect={(addr: StructuredAddress) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    city: addr.city || prev.city,
+                    province: addr.province || prev.province,
+                    country: addr.country || prev.country,
+                  }));
+                  setDirty(true);
+                }}
+                primaryTypes={['locality']}
+                className="mt-1"
+                placeholder="Drummondville"
               />
             </div>
             <div>

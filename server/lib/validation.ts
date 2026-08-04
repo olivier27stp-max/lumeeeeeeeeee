@@ -107,6 +107,8 @@ export const placesAutocompleteSchema = z.object({
   countries: z.array(z.string().trim().toLowerCase().length(2)).max(5).optional(),
   language: z.string().trim().max(10).optional(),
   sessionToken: z.string().trim().max(64).optional(),
+  // Types de lieux Google (ex.: ['locality'] pour suggérer des villes).
+  primaryTypes: z.array(z.string().trim().max(40)).max(5).optional(),
 });
 
 export const placesDetailsSchema = z.object({

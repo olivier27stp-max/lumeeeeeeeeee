@@ -26,6 +26,8 @@ interface AddressAutocompleteProps {
   className?: string;
   placeholder?: string;
   restrictCountries?: string[];
+  /** Types de lieux Google à suggérer (ex.: ['locality'] pour des villes). */
+  primaryTypes?: string[];
   /** Hide the missing-key / load-error hints (public-facing forms). */
   hideStatusHint?: boolean;
 }
@@ -92,11 +94,12 @@ async function fetchSuggestions(
   countries: string[] | undefined,
   sessionToken: string,
   language: string,
+  primaryTypes?: string[],
 ): Promise<SuggestionItem[] | null> {
   const res = await fetch('/api/places/autocomplete', {
     method: 'POST',
     headers: await apiHeaders(),
-    body: JSON.stringify({ input, countries, sessionToken, language }),
+    body: JSON.stringify({ input, countries, sessionToken, language, primaryTypes }),
   });
   if (!res.ok) return null;
   const data = await res.json().catch(() => null);
@@ -120,7 +123,7 @@ async function resolvePlace(
 
 // ── Main component ──
 function AddressAutocompleteInner({
-  value, onChange, onSelect, duplicateWarning, className, placeholder, restrictCountries, hideStatusHint,
+  value, onChange, onSelect, duplicateWarning, className, placeholder, restrictCountries, primaryTypes, hideStatusHint,
 }: AddressAutocompleteProps) {
   const { t, language } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -142,6 +145,8 @@ function AddressAutocompleteInner({
   const suppressFetchRef = useRef(false);
   const countriesRef = useRef(restrictCountries);
   countriesRef.current = restrictCountries;
+  const primaryTypesRef = useRef(primaryTypes);
+  primaryTypesRef.current = primaryTypes;
 
   // Debounced suggestion fetch on user input
   useEffect(() => {
@@ -157,7 +162,7 @@ function AddressAutocompleteInner({
       try {
         if (!tokenRef.current) tokenRef.current = crypto.randomUUID();
         setFetching(true);
-        const items = await fetchSuggestions(query, countriesRef.current, tokenRef.current, language);
+        const items = await fetchSuggestions(query, countriesRef.current, tokenRef.current, language, primaryTypesRef.current);
         if (seq !== requestSeqRef.current) return; // stale response
         if (items === null) {
           // Server refused (not configured / not authed) — degrade to manual input

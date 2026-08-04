@@ -69,8 +69,8 @@ router.post('/places/autocomplete', validate(placesAutocompleteSchema), async (r
       return res.status(429).json({ error: 'Too many requests.' });
     }
 
-    const { input, countries, language, sessionToken } = req.body as {
-      input: string; countries?: string[]; language?: string; sessionToken?: string;
+    const { input, countries, language, sessionToken, primaryTypes } = req.body as {
+      input: string; countries?: string[]; language?: string; sessionToken?: string; primaryTypes?: string[];
     };
     const bias = await getOrgBias(auth.client, auth.orgId);
 
@@ -79,6 +79,7 @@ router.post('/places/autocomplete', validate(placesAutocompleteSchema), async (r
       includedRegionCodes: countries?.length ? countries : ['ca'],
       languageCode: language || 'fr',
     };
+    if (primaryTypes?.length) body.includedPrimaryTypes = primaryTypes;
     if (sessionToken) body.sessionToken = sessionToken;
     if (bias) {
       body.locationBias = {
