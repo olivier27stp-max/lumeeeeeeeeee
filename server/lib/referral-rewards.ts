@@ -135,11 +135,18 @@ export async function ensureStripeCustomerForOrg(
 
   const { data: org } = await admin
     .from('orgs')
-    .select('name, email')
+    .select('name')
     .eq('id', orgId)
     .maybeSingle();
 
-  const email = profile?.billing_email || org?.email || undefined;
+  // `orgs` ne porte pas de courriel : il vit dans company_settings (clé org_id).
+  const { data: companySettings } = await admin
+    .from('company_settings')
+    .select('email')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  const email = profile?.billing_email || companySettings?.email || undefined;
   const name = profile?.company_name || org?.name || undefined;
 
   try {

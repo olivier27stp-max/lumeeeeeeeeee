@@ -519,7 +519,7 @@ const anomalyChecks: AnomalyCheck[] = [
       const { count } = await admin
         .from('audit_events')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('actor_id', userId)
         .eq('org_id', orgId)
         .in('action', ['export', 'bulk_export', 'download'])
         .gte('created_at', new Date(Date.now() - 10 * 60_000).toISOString());
@@ -536,7 +536,7 @@ const anomalyChecks: AnomalyCheck[] = [
       const { count } = await admin
         .from('audit_events')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('actor_id', userId)
         .eq('org_id', orgId)
         .eq('action', 'delete')
         .gte('created_at', new Date(Date.now() - 5 * 60_000).toISOString());
@@ -557,7 +557,7 @@ const anomalyChecks: AnomalyCheck[] = [
       const { count } = await admin
         .from('audit_events')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('actor_id', userId)
         .in('action', ['role_change', 'member_invite', 'settings_update', 'delete'])
         .gte('created_at', new Date(Date.now() - 30 * 60_000).toISOString());
       return (count ?? 0) >= 3;

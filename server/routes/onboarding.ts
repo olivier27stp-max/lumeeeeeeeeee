@@ -211,7 +211,7 @@ router.get('/me/setup-status', async (req, res) => {
           .eq('status', 'active'),
         admin
           .from('company_settings')
-          .select('setup_completed, setup_dismissed')
+          .select('setup_completed')
           .eq('org_id', orgId)
           .maybeSingle(),
       ]);

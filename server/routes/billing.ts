@@ -154,20 +154,29 @@ router.post('/billing/onboarding', validate(onboardingSchema), async (req, res) 
     const { full_name, company_name, email, phone, address, city, region, country, postal_code, industry, company_size, currency } = req.body;
 
     // Run the 3 independent writes in parallel
-    const [orgWriteRes, billingProfileWriteRes, profileWriteRes] = await Promise.all([
+    const [orgWriteRes, settingsWriteRes, billingProfileWriteRes, profileWriteRes] = await Promise.all([
+      // `orgs` ne contient QUE name / employee_count / logo_url : les coordonnées
+      // de l'entreprise vivent dans company_settings. Écrire phone/email/address/
+      // city/region/country/postal_code/industry/company_size/currency sur `orgs`
+      // faisait échouer la requête entière (colonnes inexistantes) — toutes les
+      // infos saisies à l'onboarding étaient perdues.
       admin.from('orgs').update({
         name: company_name,
+        employee_count: company_size || undefined,
+      }).eq('id', auth.orgId),
+      admin.from('company_settings').upsert({
+        org_id: auth.orgId,
+        company_name,
         phone: phone || undefined,
         email: email || undefined,
-        address: address || undefined,
+        street1: address || undefined,
         city: city || undefined,
-        region: region || undefined,
+        province: region || undefined,
         country: country || undefined,
         postal_code: postal_code || undefined,
         industry: industry || undefined,
-        company_size: company_size || undefined,
         currency: currency || undefined,
-      }).eq('id', auth.orgId),
+      }, { onConflict: 'org_id' }),
       admin.from('billing_profiles').upsert({
         org_id: auth.orgId,
         billing_email: email,
@@ -180,7 +189,7 @@ router.post('/billing/onboarding', validate(onboardingSchema), async (req, res) 
       admin.from('profiles').update({ full_name }).eq('id', auth.user.id),
     ]);
 
-    const writeErr = orgWriteRes.error || billingProfileWriteRes.error || profileWriteRes.error;
+    const writeErr = orgWriteRes.error || settingsWriteRes.error || billingProfileWriteRes.error || profileWriteRes.error;
     if (writeErr) {
       console.error('[billing/onboarding] write failed:', writeErr.message);
       return res.status(500).json({ error: 'Failed to save billing info.' });
@@ -1020,7 +1029,8 @@ router.post('/billing/dev-switch-plan', validate(devSwitchPlanSchema), async (re
         status: 'active',
         current_period_start: now.toISOString(),
         current_period_end: periodEnd.toISOString(),
-        updated_at: now.toISOString(),
+        // pas de colonne updated_at sur subscriptions : l'inclure faisait
+        // échouer toute la requête (colonne inexistante).
       }).eq('id', subRow.id);
       if (errBill987) console.error('[billing:L987] écriture subscriptions échouée:', errBill987.message, errBill987.code || '');
     } else {

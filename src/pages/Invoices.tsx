@@ -368,7 +368,11 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       if (row.job_id) {
         const orgId = await getCurrentOrgIdOrThrow();
         const { error: jobErr } = await supabase.from('jobs')
-          .update({ status: 'billed', updated_at: new Date().toISOString() })
+          // CHECK de jobs.status : cancelled | completed | draft | in_progress |
+          // scheduled. 'billed' n'existe pas — la requete echouait, le job
+          // restait marque « a facturer » apres paiement. On ferme le job et
+          // on retire l'indicateur de facturation requise.
+          .update({ status: 'completed', requires_invoicing: false, updated_at: new Date().toISOString() })
           .eq('id', row.job_id)
           .eq('org_id', orgId)
           .in('status', ['completed', 'in_progress']);

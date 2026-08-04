@@ -784,8 +784,9 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
         org_id: auth.orgId,
         house_id: req.params.id,
         user_id: auth.user.id,
-        lat: house.lat,
-        lng: house.lng,
+        // field_pins ne porte pas lat/lng : les coordonnees vivent sur
+        // field_house_profiles (jointure par house_id). Les inclure faisait
+        // echouer l'insertion — le pin n'apparaissait jamais sur la carte.
         status: newStatus,
         pin_color: pinColor,
         has_note: !!(note_text || note_voice_url),
@@ -795,9 +796,13 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
 
     // Upsert daily_stats
     const today = now.slice(0, 10); // YYYY-MM-DD
+    // `field_daily_stats` ne compte ni les « pas intéressé » ni les notes :
+    // aucune colonne `not_interested` / `notes` n'existe (ni `updated_at`).
+    // Ces deux événements restent tracés dans field_events, seul le compteur
+    // quotidien correspondant est absent.
     const { data: existingStats } = await admin
       .from('field_daily_stats')
-      .select('id, knocks, leads, sales, callbacks, no_answers, not_interested, notes')
+      .select('id, knocks, leads, sales, callbacks, no_answers')
       .eq('org_id', auth.orgId)
       .eq('user_id', auth.user.id)
       .eq('date', today)
@@ -809,8 +814,6 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
       sales: event_type === 'sale' ? 1 : 0,
       callbacks: event_type === 'callback' ? 1 : 0,
       no_answers: event_type === 'no_answer' ? 1 : 0,
-      not_interested: event_type === 'not_interested' ? 1 : 0,
-      notes: note_text || note_voice_url ? 1 : 0,
     };
 
     if (existingStats) {
@@ -822,9 +825,6 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
           sales: (existingStats.sales ?? 0) + statsIncrement.sales,
           callbacks: (existingStats.callbacks ?? 0) + statsIncrement.callbacks,
           no_answers: (existingStats.no_answers ?? 0) + statsIncrement.no_answers,
-          not_interested: (existingStats.not_interested ?? 0) + statsIncrement.not_interested,
-          notes: (existingStats.notes ?? 0) + statsIncrement.notes,
-          updated_at: now,
         })
         .eq('id', existingStats.id);
       if (statsUpdErr) console.error('[field-sales/events] daily stats update failed:', { orgId: auth.orgId, userId: auth.user.id, date: today }, statsUpdErr.message);

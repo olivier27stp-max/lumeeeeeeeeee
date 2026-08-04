@@ -100,18 +100,24 @@ async function checkClientInactive(sb: ReturnType<typeof getServiceClient>, rule
 
   const { data: clients } = await sb
     .from('clients')
-    .select('id, name')
+    .select('id, first_name, last_name, company, display_as_company')
     .eq('org_id', rule.org_id)
     .lt('updated_at', cutoff.toISOString());
 
   if (!clients || clients.length === 0) return;
 
   for (const client of clients) {
+    // `clients` n'a pas de colonne `name` : le nom affiché se compose comme
+    // dans clientsApi.toClientDisplayName (société prioritaire si demandé).
+    const person = [client.first_name, client.last_name].filter(Boolean).join(' ').trim();
+    const displayName =
+      (client.display_as_company && client.company ? client.company : person) || client.company || 'Client';
+
     await createNotificationIfNotExists(sb, {
       org_id: rule.org_id,
       type: 'alert',
       category: 'client_inactive',
-      title: `Client "${client.name}" inactive`,
+      title: `Client "${displayName}" inactive`,
       body: `No activity for more than ${days} days.`,
       entity_type: 'client',
       entity_id: client.id,
@@ -134,7 +140,7 @@ async function checkTeamOverload(sb: ReturnType<typeof getServiceClient>, rule: 
       .from('jobs')
       .select('id', { count: 'exact', head: true })
       .eq('org_id', rule.org_id)
-      .eq('assigned_to', member.user_id)
+      .eq('assigned_user_id', member.user_id)
       .in('status', ['in_progress', 'scheduled', 'pending']);
 
     if (count && count >= maxJobs) {

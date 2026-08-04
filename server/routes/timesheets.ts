@@ -225,7 +225,9 @@ router.post('/timesheets/break/start', validate(breakSchema), async (req, res) =
 
     const admin = getServiceClient();
     const { data, error } = await admin
-      .from('time_entries').update({ breaks, status: 'on_break', updated_at: iso })
+      // CHECK de time_entries.status : active | completed | paused.
+      // 'on_break' n'en fait pas partie — demarrer une pause echouait.
+      .from('time_entries').update({ breaks, status: 'paused', updated_at: iso })
       .eq('id', entry_id).eq('org_id', auth.orgId).select('*').single();
     if (error) return sendSafeError(res, error, 'Failed to start break.', '[timesheets]');
     return res.json({ ok: true, entry: data });

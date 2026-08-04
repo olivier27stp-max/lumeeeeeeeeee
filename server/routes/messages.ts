@@ -466,11 +466,11 @@ router.post('/messages/inbound', (req, res) => {
             ref_id: conversation.id,
             title: `New SMS from ${senderName}`,
             body: Body.length > 100 ? Body.substring(0, 100) + '...' : Body,
-            metadata: {
-              conversation_id: conversation.id,
-              phone_number: normalizedPhone,
-              message_sid: MessageSid,
-            },
+            // `notifications` n'a pas de colonne metadata : l'inclure faisait
+            // echouer l'insertion (aucune notification de SMS entrant). La
+            // conversation reste identifiable par ref_id/entity_id.
+            entity_type: 'conversation',
+            entity_id: conversation.id,
           });
         if (notifError) {
           console.error(`[SMS Inbound] Failed to create notification (org ${effectiveOrgId}, conversation ${conversation.id}):`, notifError.message);

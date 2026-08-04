@@ -39,13 +39,15 @@ async function getCompanyInfo(orgId: string): Promise<CompanyInfo> {
       .maybeSingle();
     if (data) return { company_name: data.company_name, company_logo_url: data.logo_url, email: data.email, phone: data.phone };
 
-    // Fallback to org_billing_settings
+    // Fallback to org_billing_settings — cette table ne porte ni logo ni
+    // téléphone, et son courriel s'appelle `email_from`.
     const { data: billing } = await admin
       .from('org_billing_settings')
-      .select('company_name, logo_url, email, phone')
+      .select('company_name, email_from')
       .eq('org_id', orgId)
       .maybeSingle();
-    return billing || {};
+    if (!billing) return {};
+    return { company_name: billing.company_name, email: billing.email_from };
   } catch {
     return {};
   }

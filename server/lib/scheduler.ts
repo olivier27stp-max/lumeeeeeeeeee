@@ -94,9 +94,10 @@ async function handleDaysBeforeAppointment(
   // schedule_events where start_time - delay = now (today)
   const today = todayDateString();
 
+  // `schedule_events` n'a pas de client_id : le client se rejoint via le job.
   const { data: events, error } = await supabase
     .from('schedule_events')
-    .select('id, title, start_time, client_id')
+    .select('id, title, start_time, job:jobs(client_id)')
     .eq('org_id', automation.org_id);
 
   if (error || !events) return;
@@ -106,8 +107,10 @@ async function handleDaysBeforeAppointment(
     const target = subtractDelay(new Date(evt.start_time), automation.delay_value, automation.delay_unit);
     if (target !== today) continue;
 
-    const { data: client } = evt.client_id
-      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', evt.client_id).maybeSingle()
+    const job = Array.isArray(evt.job) ? evt.job[0] : evt.job;
+    const clientId = job?.client_id || null;
+    const { data: client } = clientId
+      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', clientId).maybeSingle()
       : { data: null };
     const clientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client'

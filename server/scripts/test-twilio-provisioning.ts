@@ -6,7 +6,7 @@
  *
  * What it does:
  *   1. Reads TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN from process.env (.env.local)
- *   2. Loads the org's address (country/city/region/postal_code) from Supabase
+ *   2. Loads the org's address (country/city/province/postal_code) from company_settings
  *   3. Resolves the area code from that address (Montréal → 514, NYC → 212, etc.)
  *   4. Searches Twilio for an available SMS-capable number matching the area code
  *   5. Purchases it and writes a row to communication_channels
@@ -41,10 +41,12 @@ async function main() {
   console.log('✅ Twilio client initialized');
 
   // ── 2. Load org info
+  // L'adresse vit dans company_settings (`orgs` n'a aucune colonne d'adresse),
+  // et la colonne s'appelle `province`, pas `region`.
   const admin = getServiceClient();
   const { data: org, error } = await admin
     .from('orgs')
-    .select('id, name, country, region, city, postal_code')
+    .select('id, name')
     .eq('id', orgId)
     .maybeSingle();
 
@@ -57,13 +59,24 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`✅ Org loaded: ${org.name}`);
-  console.log(`   Country: ${org.country || '(empty)'}`);
-  console.log(`   Region:  ${org.region || '(empty)'}`);
-  console.log(`   City:    ${org.city || '(empty)'}`);
-  console.log(`   Postal:  ${org.postal_code || '(empty)'}`);
+  const { data: settings, error: settingsError } = await admin
+    .from('company_settings')
+    .select('country, province, city, postal_code')
+    .eq('org_id', orgId)
+    .maybeSingle();
 
-  if (!org.country && !org.city && !org.postal_code) {
+  if (settingsError) {
+    console.error('❌ Failed to load company settings:', settingsError.message);
+    process.exit(1);
+  }
+
+  console.log(`✅ Org loaded: ${org.name}`);
+  console.log(`   Country: ${settings?.country || '(empty)'}`);
+  console.log(`   Region:  ${settings?.province || '(empty)'}`);
+  console.log(`   City:    ${settings?.city || '(empty)'}`);
+  console.log(`   Postal:  ${settings?.postal_code || '(empty)'}`);
+
+  if (!settings?.country && !settings?.city && !settings?.postal_code) {
     console.warn('⚠️  Org has no address data — Twilio will pick a number anywhere in the default country (CA).');
   }
 

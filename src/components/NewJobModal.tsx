@@ -988,16 +988,17 @@ export default function NewJobModal({
       .catch(() => setSalespeople([]));
 
     // Fetch org currency (scoped to current org)
+    // La devise vit dans company_settings — org_billing_settings n'a pas de colonne currency.
     import('../lib/orgApi').then(({ getCurrentOrgIdOrThrow }) =>
       getCurrentOrgIdOrThrow().then(oid =>
         supabase
-          .from('org_billing_settings')
+          .from('company_settings')
           .select('currency')
           .eq('org_id', oid)
           .limit(1)
           .maybeSingle()
-          .then(({ data: billing }) => {
-            if (billing?.currency) setOrgCurrency(billing.currency);
+          .then(({ data: settings }) => {
+            if (settings?.currency) setOrgCurrency(settings.currency);
           })
       )
     ).catch(() => {});

@@ -65,7 +65,9 @@ router.get('/platform-admin/business', async (req, res) => {
       admin.from('orgs').select('id', { count: 'exact', head: true }),
       admin.from('orgs').select('id', { count: 'exact', head: true }).gte('created_at', thirtyDaysAgo.toISOString()),
       // All subscriptions (not just active) for breakdown
-      admin.from('subscriptions').select('id, org_id, plan_id, status, interval, amount_cents, current_period_end, trial_end, canceled_at, created_at, plans!subscriptions_plan_id_fkey(slug, name)'),
+      // `subscriptions` n'a pas de colonne `trial_end` : pour un abonnement en
+      // essai, la fin de période courante fait office de fin d'essai.
+      admin.from('subscriptions').select('id, org_id, plan_id, status, interval, amount_cents, current_period_end, canceled_at, created_at, plans!subscriptions_plan_id_fkey(slug, name)'),
       // Canceled in last 30d
       admin.from('subscriptions').select('id', { count: 'exact', head: true }).eq('status', 'canceled').gte('canceled_at', thirtyDaysAgo.toISOString()),
       // New subscriptions in last 30d
@@ -240,9 +242,10 @@ router.get('/platform-admin/operations', async (req, res) => {
       // Past due subscriptions
       admin.from('subscriptions').select('id, org_id, amount_cents, interval, status, current_period_end, plans!subscriptions_plan_id_fkey(slug, name)')
         .eq('status', 'past_due'),
-      // Trials ending in next 7 days
-      admin.from('subscriptions').select('id, org_id, amount_cents, trial_end, status, plans!subscriptions_plan_id_fkey(slug, name)')
-        .eq('status', 'trialing').lte('trial_end', sevenDaysFromNow.toISOString()).gte('trial_end', now.toISOString()),
+      // Trials ending in next 7 days — pas de colonne `trial_end` : pour un
+      // abonnement `trialing`, current_period_end est la date de fin d'essai.
+      admin.from('subscriptions').select('id, org_id, amount_cents, current_period_end, status, plans!subscriptions_plan_id_fkey(slug, name)')
+        .eq('status', 'trialing').lte('current_period_end', sevenDaysFromNow.toISOString()).gte('current_period_end', now.toISOString()),
       // Webhook errors (7d)
       admin.from('webhook_events').select('id, provider, event_type, error_message, created_at')
         .eq('status', 'failed').gte('created_at', sevenDaysAgo.toISOString())
@@ -281,7 +284,9 @@ router.get('/platform-admin/operations', async (req, res) => {
       healthStatus,
       failedPayments: (failedPaymentsResult.data || []).map(enrichOrg),
       pastDueSubscriptions: (pastDueSubsResult.data || []).map(enrichOrg),
-      trialsEndingSoon: (trialEndingSoonResult.data || []).map(enrichOrg),
+      trialsEndingSoon: (trialEndingSoonResult.data || [])
+        .map((s: any) => ({ ...s, trial_end: s.current_period_end }))
+        .map(enrichOrg),
       webhookErrors: webhookErrorsResult.data || [],
       inactiveOrgs,
       counts: {
@@ -465,7 +470,8 @@ router.get('/platform-admin/billing', async (req, res) => {
         amount_cents: s.amount_cents,
         currency: s.currency || 'CAD',
         current_period_end: s.current_period_end,
-        trial_end: s.trial_end,
+        // Pas de colonne `trial_end` : la fin d'essai = fin de période courante.
+        trial_end: s.status === 'trialing' ? s.current_period_end : null,
         cancel_at_period_end: s.cancel_at_period_end,
         canceled_at: s.canceled_at,
         created_at: s.created_at,
@@ -541,7 +547,8 @@ router.get('/platform-admin/org/:orgId', async (req, res) => {
         interval: subResult.data.interval,
         amount_cents: subResult.data.amount_cents,
         current_period_end: subResult.data.current_period_end,
-        trial_end: subResult.data.trial_end,
+        // Pas de colonne `trial_end` : la fin d'essai = fin de période courante.
+        trial_end: subResult.data.status === 'trialing' ? subResult.data.current_period_end : null,
       } : null,
       stats: {
         total_jobs: jobsResult.count || 0,

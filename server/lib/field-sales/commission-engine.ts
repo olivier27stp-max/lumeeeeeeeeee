@@ -5,7 +5,7 @@
  * to the sales rep, applying base + product overrides + performance tiers
  * + conditional bonuses + attribution splits.
  *
- * Inputs come from invoices.line_items + the sales rep on the source
+ * Inputs come from the invoice total + the sales rep on the source
  * lead/quote. Stores `calc_breakdown` jsonb on the entry so the UI can
  * explain how each dollar was computed.
  */
@@ -284,24 +284,29 @@ export async function generateCommissionsForInvoice(
   }
   if (existing && existing.length > 0) return { created: 0, skipped: 'already_generated' };
 
-  // 2. Load invoice + line items
+  // 2. Load invoice
+  //    `invoices` n'a ni colonne `line_items` ni `quote_id` : les lignes vivent
+  //    dans la table `invoice_items` et le lien vers le devis passe par `job_id`.
   const { data: invoice, error: invErr } = await supabase
     .from('invoices')
-    .select('id, org_id, total_cents, paid_at, status, client_id, quote_id, job_id, line_items')
+    .select('id, org_id, total_cents, paid_at, status, client_id, job_id')
     .eq('id', invoiceId)
     .eq('org_id', orgId)
     .single();
   if (invErr || !invoice) return { created: 0, skipped: 'invoice_not_found' };
   if (invoice.status !== 'paid' || !invoice.paid_at) return { created: 0, skipped: 'not_paid' };
 
-  // 3. Identify rep: from quote.assigned_to / lead.assigned_to
+  // 3. Identify rep: from the quote attached to the same job → lead → job
   let repUserId: string | null = null;
-  if (invoice.quote_id) {
+  if (invoice.job_id) {
     const { data: q, error: qErr } = await supabase.from('quotes')
-      .select('assigned_to, lead_id, client_id')
-      .eq('id', invoice.quote_id).eq('org_id', orgId).maybeSingle();
-    if (qErr) console.error(`[commissions] quote load failed (org ${orgId}, quote ${invoice.quote_id}):`, qErr.message);
-    repUserId = q?.assigned_to || null;
+      .select('id, salesperson_id, lead_id, client_id')
+      .eq('job_id', invoice.job_id).eq('org_id', orgId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1).maybeSingle();
+    if (qErr) console.error(`[commissions] quote load failed (org ${orgId}, job ${invoice.job_id}):`, qErr.message);
+    repUserId = q?.salesperson_id || null;
     if (!repUserId && q?.lead_id) {
       const { data: l, error: lErr } = await supabase.from('clients')
         .select('assigned_to').eq('id', q.lead_id).eq('org_id', orgId).maybeSingle();
@@ -353,10 +358,16 @@ export async function generateCommissionsForInvoice(
   const repPeriodSaleCount = (priorEntries ?? []).length;
 
   // 6. Calculate
+  // Les surcharges par catégorie (rule.product_overrides) sont neutralisées :
+  // `invoice_items` ne porte aucune colonne `category`, donc aucune ligne ne
+  // peut être rattachée à une catégorie. On passe une liste vide, ce qui fait
+  // retomber le calcul sur le taux de base appliqué au total de la facture
+  // (cohérent avec `base_amount` ci-dessous). À rétablir le jour où les lignes
+  // de facture porteront une catégorie.
   const calc = calculateCommissionAmount(rule, {
     invoiceTotalCents: Number(invoice.total_cents || 0),
     invoicePaidAt: invoice.paid_at,
-    lineItems: Array.isArray(invoice.line_items) ? invoice.line_items : [],
+    lineItems: [],
     repPeriodRevenueCents,
     repPeriodSaleCount,
   });

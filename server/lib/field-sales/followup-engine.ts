@@ -44,17 +44,23 @@ export async function getFollowUpRecommendations(
   const now = new Date();
 
   // 1. Unclosed quotes (sent but not accepted/declined for > 2 days)
+  // `quotes` n'a pas de colonne `sent_at` : l'envoi est horodaté par canal
+  // (`sent_via_email_at` / `sent_via_sms_at`). On retient le plus récent des deux.
   const { data: quotes } = await admin
     .from('quotes')
-    .select('id, title, client_id, status, sent_at, total_cents, clients!quotes_client_id_fkey!inner(first_name, last_name, address)')
+    .select('id, title, client_id, status, sent_via_email_at, sent_via_sms_at, total_cents, clients!quotes_client_id_fkey!inner(first_name, last_name, address)')
     .eq('org_id', orgId)
     .in('status', ['awaiting_response', 'changes_requested'])
     .is('deleted_at', null)
-    .order('sent_at', { ascending: true })
+    .order('created_at', { ascending: true })
     .limit(20);
 
   for (const q of quotes ?? []) {
-    const sentDate = q.sent_at ? new Date(q.sent_at) : now;
+    const sentAt = [q.sent_via_email_at, q.sent_via_sms_at]
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const sentDate = sentAt ? new Date(sentAt) : now;
     const daysSince = Math.floor((now.getTime() - sentDate.getTime()) / 86400000);
     if (daysSince < 1) continue; // too fresh
 

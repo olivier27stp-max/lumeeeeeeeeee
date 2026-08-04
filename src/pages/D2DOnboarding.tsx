@@ -105,18 +105,18 @@ export default function D2DOnboarding() {
       const userEmail = (await supabase.auth.getUser()).data.user?.email ?? '';
       const { error: profileError } = await supabase
         .from('profiles')
+        // `profiles` ne contient que : id, full_name, company_name, avatar_url,
+        // onboarding_done, push_token, location_consent*. Les 8 autres champs
+        // (company_id, email, first_name, last_name, phone, role, bio,
+        // is_active, hire_date) n'existent pas : l'upsert echouait en entier et
+        // l'inscription D2D s'arretait sur une erreur. Le role et le statut du
+        // representant vivent dans field_sales_reps (ecrit par ailleurs).
         .upsert({
           id: userId,
-          company_id: companyId,
-          email: userEmail,
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-          phone: phone.trim(),
+          full_name: [firstName.trim(), lastName.trim()].filter(Boolean).join(' '),
+          company_name: companyName.trim(),
           avatar_url: avatarUrl,
-          role,
-          bio: bio.trim(),
-          is_active: true,
-          hire_date: new Date().toISOString().split('T')[0],
+          onboarding_done: true,
         } as any);
 
       if (profileError) {

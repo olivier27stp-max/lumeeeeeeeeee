@@ -170,9 +170,12 @@ router.post('/survey/:token', async (req, res) => {
           created_by: taskOwner.user_id,
           title: `Follow up on low satisfaction rating (${rating}/5)`,
           description: `Client gave ${rating}/5 stars. Feedback: ${feedback || 'None'}`,
-          status: 'pending',
-          entity_type: survey.client_id ? 'client' : 'job',
-          entity_id: survey.client_id || survey.job_id || null,
+          // Colonnes reelles : linked_entity_* (pas entity_*), et le CHECK de
+          // tasks.status n'accepte que 'open' | 'done' — 'pending' faisait
+          // echouer l'insertion, donc aucune tache de suivi n'etait creee.
+          status: 'open',
+          linked_entity_type: survey.client_id ? 'client' : 'job',
+          linked_entity_id: survey.client_id || survey.job_id || null,
         });
         // Sans cette tâche, un client mécontent n'est relancé par personne : le
         // sondage est déjà enregistré (rejouer donnerait un 409), donc on trace.

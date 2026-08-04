@@ -98,7 +98,10 @@ async function processRecurringJobs(supabase: SupabaseClient) {
             created_by: job.created_by,
             status: 'scheduled',
             scheduled_at: scheduledAt,
-            source_job_id: job.id,
+            // `jobs` n'a pas de colonne source_job_id : l'inclure faisait
+            // echouer l'insertion, donc AUCUN job recurrent n'etait jamais
+            // cree. Le lien vers l'occurrence source vit dans
+            // job_recurrence_rules.job_id.
           })
           .select('id')
           .single();
@@ -113,7 +116,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
           const { error: evtErr } = await supabase.from('schedule_events').insert({
             org_id: job.org_id,
             job_id: newJob.id,
-            client_id: job.client_id,
+            // schedule_events n'a pas de client_id : le client se resout via le job.
             team_id: job.team_id,
             start_at: scheduledAt,
             end_at: new Date(nextDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2h default

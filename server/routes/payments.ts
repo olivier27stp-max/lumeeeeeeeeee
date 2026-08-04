@@ -376,7 +376,8 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           canceled_at: canceledAt,
           current_period_start: periodStart,
           current_period_end: periodEnd,
-          updated_at: new Date().toISOString(),
+          // pas d'updated_at sur subscriptions : l'inclure faisait echouer la
+          // requete, donc le webhook levait une erreur -> rejeu Stripe en boucle.
         };
 
         if (firstItem?.price) {
@@ -453,7 +454,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           .update({
             status: 'canceled',
             canceled_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            // idem : subscriptions n'a pas de colonne updated_at.
           })
           .eq('stripe_subscription_id', sub.id)
           .select('org_id')
@@ -488,8 +489,10 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const { error: invPaidErr } = await admin
             .from('subscriptions')
             .update({
+              // pas d'updated_at sur subscriptions (colonne inexistante) :
+              // l'inclure faisait echouer la requete et, depuis le durcissement
+              // des erreurs, partir le webhook en boucle de rejeu Stripe.
               status: 'active',
-              updated_at: new Date().toISOString(),
             })
             .eq('stripe_subscription_id', stripeSubId);
           if (invPaidErr) throw new Error('invoice.paid subscription sync failed: ' + invPaidErr.message);
@@ -533,8 +536,8 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const { error: pastDueErr } = await admin
             .from('subscriptions')
             .update({
+              // subscriptions n'a pas de colonne updated_at.
               status: 'past_due',
-              updated_at: new Date().toISOString(),
             })
             .eq('stripe_subscription_id', stripeSubId);
           if (pastDueErr) throw new Error('invoice.payment_failed subscription sync failed: ' + pastDueErr.message);
@@ -584,7 +587,10 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           await admin
             .from('payments')
             .update({
-              status: 'disputed',
+              // CHECK de payments.status : failed | pending | refunded | succeeded.
+              // 'disputed' n'en fait pas partie — le litige n'etait jamais
+              // consigne. Le motif reste tracable via failure_reason.
+              status: 'failed',
               failure_reason: `dispute:${dispute.reason || 'unknown'}`,
               updated_at: new Date().toISOString(),
             })
@@ -926,7 +932,8 @@ router.get('/payments/payouts/detail', async (req, res) => {
 });
 
 // Single-payment detail — used by the Facturation tab payment-detail drawer.
-// Card brand/last4 come from the stored row; receipt_url is fetched live from Stripe.
+// `payments` ne stocke ni la marque ni les 4 derniers chiffres de la carte :
+// ces champs sont renvoyés à null. receipt_url est lu en direct chez Stripe.
 router.get('/payments/:id/detail', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
@@ -942,7 +949,7 @@ router.get('/payments/:id/detail', async (req, res) => {
     const admin = getServiceClient();
     const { data: payment, error } = await admin
       .from('payments')
-      .select('id, status, method, provider, card_last4, card_brand, amount_cents, currency, payment_date, paid_at, stripe_charge_id')
+      .select('id, status, method, provider, amount_cents, currency, payment_date, paid_at, stripe_charge_id')
       .eq('id', paymentId)
       .eq('org_id', requestedOrgId)
       .is('deleted_at', null)
@@ -970,8 +977,8 @@ router.get('/payments/:id/detail', async (req, res) => {
       status: payment.status,
       method: payment.method,
       provider: payment.provider,
-      card_last4: payment.card_last4,
-      card_brand: payment.card_brand,
+      card_last4: null,
+      card_brand: null,
       amount_cents: payment.amount_cents,
       currency: payment.currency,
       payment_date: payment.paid_at || payment.payment_date,
@@ -1723,9 +1730,10 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
-  // ── 7. Update billing profile + propagate billing address to org ──
+  // ── 7. Update billing profile + propagate billing address to company_settings ──
   // Stripe populates customer_details.address when checkout collects billing info.
-  // We copy it into orgs so the Twilio auto-provisioning step below picks the right
+  // We copy it into company_settings (l'adresse de l'org y vit — `orgs` n'a aucune
+  // colonne d'adresse) so the Twilio auto-provisioning step below picks the right
   // area code (Montréal → 514, NYC → 212, etc.) from the address the customer paid with.
   const stripeAddr = session.customer_details?.address || null;
   const billingCountry = (stripeAddr?.country || '').toUpperCase() || null;
@@ -1750,26 +1758,30 @@ async function handleCheckoutSessionCompleted(
     }, { onConflict: 'org_id' });
   } catch (err) { console.error('[webhook/checkout] billing_profiles upsert failed:', err); }
 
-  // Propagate address to org only if org fields are empty — never overwrite what the user set during onboarding.
+  // Propagate address only if the org's fields are empty — never overwrite what the user
+  // set during onboarding. Lecture ET écriture sur company_settings (colonne `province`,
+  // pas `region` ; rue = `street1`). Upsert : la ligne peut ne pas encore exister.
   if (billingCountry || billingCity || billingPostal) {
     try {
-      const { data: currentOrg } = await admin
-        .from('orgs')
-        .select('country, city, region, postal_code, address')
-        .eq('id', orgId)
+      const { data: currentSettings } = await admin
+        .from('company_settings')
+        .select('country, city, province, postal_code, street1')
+        .eq('org_id', orgId)
         .maybeSingle();
 
       const patch: Record<string, any> = {};
-      if (!currentOrg?.country && billingCountry) patch.country = billingCountry;
-      if (!currentOrg?.city && billingCity) patch.city = billingCity;
-      if (!currentOrg?.region && billingRegion) patch.region = billingRegion;
-      if (!currentOrg?.postal_code && billingPostal) patch.postal_code = billingPostal;
-      if (!currentOrg?.address && billingStreet) patch.address = billingStreet;
+      if (!currentSettings?.country && billingCountry) patch.country = billingCountry;
+      if (!currentSettings?.city && billingCity) patch.city = billingCity;
+      if (!currentSettings?.province && billingRegion) patch.province = billingRegion;
+      if (!currentSettings?.postal_code && billingPostal) patch.postal_code = billingPostal;
+      if (!currentSettings?.street1 && billingStreet) patch.street1 = billingStreet;
 
       if (Object.keys(patch).length > 0) {
-        await admin.from('orgs').update(patch).eq('id', orgId);
+        await admin
+          .from('company_settings')
+          .upsert({ org_id: orgId, ...patch }, { onConflict: 'org_id' });
       }
-    } catch (err) { console.error('[webhook/checkout] propagate billing address to org failed:', err); }
+    } catch (err) { console.error('[webhook/checkout] propagate billing address to company_settings failed:', err); }
   }
 
   // ── 8. Mark onboarding done ──
