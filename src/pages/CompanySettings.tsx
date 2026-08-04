@@ -500,6 +500,11 @@ export default function CompanySettings() {
                 className="mt-1"
                 placeholder="Drummondville"
               />
+              <p className="text-[11px] text-text-tertiary mt-1">
+                {language === 'fr'
+                  ? 'Ville par défaut de toute l\'équipe — la météo de l\'accueil l\'utilise quand un profil n\'a pas de ville.'
+                  : 'Default city for the whole team — home weather uses it when a profile has no city.'}
+              </p>
             </div>
             <div>
               <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">

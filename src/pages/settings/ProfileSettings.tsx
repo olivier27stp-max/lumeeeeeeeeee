@@ -84,6 +84,8 @@ export default function ProfileSettings() {
   // team_members.birth_date ships behind a migration — feature-detect on the
   // loaded row so the page works before AND after the column exists.
   const [hasBirthCol, setHasBirthCol] = useState(false);
+  // Ville de l'entreprise — valeur par défaut quand le profil n'en a pas.
+  const [companyCity, setCompanyCity] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -128,7 +130,7 @@ export default function ProfileSettings() {
 
         const currentOrgId = await getCurrentOrgIdOrThrow().catch(() => null);
         setOrgId(currentOrgId);
-        const [profileRes, memberRes, birthColRes] = await Promise.all([
+        const [profileRes, memberRes, birthColRes, companyRes] = await Promise.all([
           supabase.from('profiles').select('full_name, avatar_url').eq('id', user.id).maybeSingle(),
           currentOrgId
             ? supabase.from('team_members').select('*').eq('user_id', user.id).eq('org_id', currentOrgId).maybeSingle()
@@ -136,8 +138,12 @@ export default function ProfileSettings() {
           // Feature-detect the birth_date column (ships behind a migration)
           // independently of whether this user has a team_members row yet.
           supabase.from('team_members').select('birth_date').limit(1),
+          currentOrgId
+            ? supabase.from('company_settings').select('city').eq('org_id', currentOrgId).limit(1).maybeSingle()
+            : Promise.resolve({ data: null } as any),
         ]);
         setHasBirthCol(!birthColRes.error);
+        setCompanyCity(String(companyRes?.data?.city || '').trim());
 
         const p = profileRes.data;
         const m = memberRes.data;
@@ -450,8 +456,13 @@ export default function ProfileSettings() {
               onSelect={(addr) => setCity(addr.city || addr.formatted_address)}
               primaryTypes={['locality']}
               className="mt-1.5"
-              placeholder={isFr ? 'Drummondville' : 'Montreal'}
+              placeholder={companyCity || (isFr ? 'Drummondville' : 'Montreal')}
             />
+            <p className="text-[11px] text-text-tertiary mt-1">
+              {isFr
+                ? `La météo de ton accueil suit cette ville. Vide = ville de l'entreprise${companyCity ? ` (${companyCity})` : ''}.`
+                : `Your home weather follows this city. Empty = company city${companyCity ? ` (${companyCity})` : ''}.`}
+            </p>
           </div>
           {hasBirthCol && (
             <div>
