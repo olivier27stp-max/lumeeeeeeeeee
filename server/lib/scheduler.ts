@@ -346,7 +346,11 @@ async function handleRecurringInvoices(supabase: SupabaseClient) {
           unit_price_cents: item.unit_price_cents,
           line_total_cents: item.line_total_cents,
         }));
-        await supabase.from('invoice_items').insert(clonedItems);
+        const { error: itemsError } = await supabase.from('invoice_items').insert(clonedItems);
+        if (itemsError) {
+          // Le brouillon existe déjà mais SANS lignes — intervention manuelle requise.
+          console.error(`[scheduler] RECURRING INVOICE ${inv.id}: line items insert FAILED for cloned draft ${cloned.id} (${newInvoiceNumber}) — the draft is EMPTY and must be fixed manually:`, itemsError.message);
+        }
       }
 
       // Update the original invoice's next_recurrence_date
@@ -354,10 +358,15 @@ async function handleRecurringInvoices(supabase: SupabaseClient) {
         inv.next_recurrence_date,
         inv.recurrence_interval,
       );
-      await supabase
+      const { error: nextDateError } = await supabase
         .from('invoices')
         .update({ next_recurrence_date: nextDate })
         .eq('id', inv.id);
+      if (nextDateError) {
+        // Sans cette mise à jour, la facture serait re-clonée à CHAQUE passage du scheduler.
+        console.error(`[scheduler] RECURRING INVOICE ${inv.id}: next_recurrence_date update FAILED (draft ${cloned.id} already created) — risk of duplicate clones on next run:`, nextDateError.message);
+        continue;
+      }
 
       // Create a notification
       await createNotification(

@@ -104,13 +104,15 @@ export async function startSmsChallenge(
 
   const code = generateCode();
   const expiresAt = new Date(Date.now() + CODE_TTL_MINUTES * 60 * 1000).toISOString();
-  await admin.from('mfa_sms_challenges').insert({
+  const { error: insertErr } = await admin.from('mfa_sms_challenges').insert({
     user_id: userId,
     phone,
     code_hash: sha256(code),
     purpose,
     expires_at: expiresAt,
   });
+  // Never send an SMS whose code was not persisted — it would be unverifiable.
+  if (insertErr) throw new Error('mfa_sms_challenges insert failed: ' + insertErr.message);
 
   try {
     await twilioClient!.messages.create({
@@ -149,10 +151,16 @@ export async function verifySmsChallenge(
 
   const matches = sha256(String(code || '').trim()) === challenge.code_hash;
   if (!matches) {
-    await admin.from('mfa_sms_challenges').update({ attempts: (challenge.attempts ?? 0) + 1 }).eq('id', challenge.id);
+    const { error: attemptsErr } = await admin.from('mfa_sms_challenges').update({ attempts: (challenge.attempts ?? 0) + 1 }).eq('id', challenge.id);
+    // If the attempt counter cannot be persisted, refuse further verification
+    // rather than allowing an unbounded bruteforce window.
+    if (attemptsErr) throw new Error('mfa_sms_challenges attempts update failed: ' + attemptsErr.message);
     return { ok: false, error: 'invalid_code' };
   }
 
-  await admin.from('mfa_sms_challenges').update({ consumed_at: new Date().toISOString() }).eq('id', challenge.id);
+  const { error: consumeErr } = await admin.from('mfa_sms_challenges').update({ consumed_at: new Date().toISOString() }).eq('id', challenge.id);
+  // A code that cannot be marked consumed must not be treated as verified,
+  // otherwise the same code stays replayable.
+  if (consumeErr) throw new Error('mfa_sms_challenges consume update failed: ' + consumeErr.message);
   return { ok: true, phone: challenge.phone as string };
 }

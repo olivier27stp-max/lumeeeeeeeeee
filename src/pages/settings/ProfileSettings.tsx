@@ -236,9 +236,9 @@ export default function ProfileSettings() {
       const memberPayload: Record<string, any> = {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
-        // team_members.phone est NOT NULL — chaîne vide, jamais null
+        // team_members.phone et city sont NOT NULL — chaîne vide, jamais null
         phone: phone.trim(),
-        city: city.trim() || null,
+        city: city.trim(),
         updated_at: new Date().toISOString(),
       };
       if (hasBirthCol) memberPayload.birth_date = birthDate || null;

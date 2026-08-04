@@ -60,11 +60,13 @@ router.put('/scheduled-reports/:id', async (req, res) => {
 
     const { data, error } = await admin.from('scheduled_reports')
       .update({
-        ...(recipient_email !== undefined && { recipient_email }),
-        ...(frequency !== undefined && { frequency }),
+        // `!= null` (et non `!== undefined`) sur les colonnes NOT NULL :
+        // un null explicite du client partait sinon en 23502.
+        ...(recipient_email != null && { recipient_email }),
+        ...(frequency != null && { frequency }),
         ...(day_of_week !== undefined && { day_of_week }),
         ...(day_of_month !== undefined && { day_of_month }),
-        ...(enabled !== undefined && { enabled }),
+        ...(enabled != null && { enabled }),
         updated_at: new Date().toISOString(),
       })
       .eq('id', req.params.id)

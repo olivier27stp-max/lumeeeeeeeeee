@@ -223,8 +223,10 @@ router.put('/commissions/rules/:id', async (req, res) => {
     'attribution', 'assigned_user_ids',
   ];
   const payload: Record<string, any> = {};
+  // `!= null` : un null explicite du client atteignait sinon des colonnes
+  // NOT NULL (name, is_active, priority) → 23502.
   for (const key of ALLOWED) {
-    if (req.body[key] !== undefined) payload[key] = req.body[key];
+    if (req.body[key] != null) payload[key] = req.body[key];
   }
   if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No editable fields provided.' });
 

@@ -264,17 +264,26 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
       targetOrgId = req.body.org_id;
     }
 
-    // Check if user is already a member
+    // Check if user is already a member.
+    // Le résultat était calculé puis jeté : un membre actif pouvait être
+    // ré-invité. On cible targetOrgId (et non auth.orgId) pour ne pas bloquer
+    // une invitation vers un autre bureau, et on ne bloque que sur une
+    // membership ACTIVE — une personne retirée doit pouvoir être ré-invitée.
     const { data: existingMember } = await admin
       .from('memberships')
       .select('user_id')
-      .eq('org_id', auth.orgId)
+      .eq('org_id', targetOrgId)
+      .eq('status', 'active')
       .eq('user_id', (
         await admin.from('profiles').select('id').eq('id',
           (await admin.rpc('get_user_id_by_email', { p_email: email }))?.data
         ).maybeSingle()
       )?.data?.id || '00000000-0000-0000-0000-000000000000')
       .maybeSingle();
+
+    if (existingMember) {
+      return res.status(409).json({ error: 'Already a member of this organization.' });
+    }
 
     // Simpler check: look for existing pending invitation
     const { data: existingInvite } = await admin
@@ -483,10 +492,15 @@ router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchem
         .maybeSingle();
 
       if (existingMem) {
-        await admin
+        const { error: consumeErr } = await admin
           .from('invitations')
           .update({ status: 'accepted', accepted_at: new Date().toISOString() })
           .eq('id', invitation.id);
+        if (consumeErr) {
+          // Le jeton resterait réutilisable si l'invitation n'est pas consommée.
+          console.error('[invitations/accept] consume error:', consumeErr.message);
+          return res.status(500).json({ error: 'Failed to accept invitation.' });
+        }
         return res.json({ message: 'You are already a member of this organization.' });
       }
 
@@ -508,10 +522,15 @@ router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchem
         return res.status(500).json({ error: 'Failed to add membership.' });
       }
 
-      await admin
+      const { error: acceptErr } = await admin
         .from('invitations')
         .update({ status: 'accepted', accepted_at: new Date().toISOString() })
         .eq('id', invitation.id);
+      if (acceptErr) {
+        // Le jeton resterait réutilisable si l'invitation n'est pas consommée.
+        console.error('[invitations/accept] consume error:', acceptErr.message);
+        return res.status(500).json({ error: 'Failed to accept invitation.' });
+      }
 
       return res.json({ message: 'Invitation accepted. You have been added to the organization.' });
     }
@@ -558,10 +577,15 @@ router.post('/invitations/accept', invitationLimiter, validate(acceptInviteSchem
     }
 
     // Mark invitation as accepted
-    await admin
+    const { error: acceptErr } = await admin
       .from('invitations')
       .update({ status: 'accepted', accepted_at: new Date().toISOString() })
       .eq('id', invitation.id);
+    if (acceptErr) {
+      // Le jeton resterait réutilisable si l'invitation n'est pas consommée.
+      console.error('[invitations/accept] consume error:', acceptErr.message);
+      return res.status(500).json({ error: 'Failed to accept invitation.' });
+    }
 
     return res.json({
       message: 'Invitation accepted. Welcome to the team!',

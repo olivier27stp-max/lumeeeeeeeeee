@@ -276,7 +276,7 @@ export async function awardReferrerReward(args: AwardReferrerRewardArgs): Promis
   }
 
   // ── Record the referral outcome (one row per converted referred org) ──
-  await admin.from('referrals').insert({
+  const { error: recordErr } = await admin.from('referrals').insert({
     referrer_user_id: referral.referrer_user_id,
     referrer_org_id: referral.referrer_org_id,
     code: referralCode,
@@ -289,6 +289,17 @@ export async function awardReferrerReward(args: AwardReferrerRewardArgs): Promis
     converted_at: now.toISOString(),
     rewarded_at: creditApplied ? now.toISOString() : null,
   });
+  if (recordErr) {
+    // CRITICAL: la ligne d'idempotence n'a pas été écrite — un webhook rejoué
+    // re-créditerait le parrain. Suivi manuel requis.
+    console.error(
+      `[referral-rewards] CRITICAL: referrals insert failed — idempotency row missing (code=${referralCode}, referrer_org=${referral.referrer_org_id}, referrer_user=${referral.referrer_user_id}, referred_org=${referredOrgId}, referred_user=${referredUserId}, credit_applied=${creditApplied}):`,
+      recordErr.message,
+    );
+    return creditApplied
+      ? { awarded: true, pending: true }
+      : { awarded: false, reason: 'credit_failed', pending: true };
+  }
 
   // Flag any pre-existing signed_up row for this referred email (link tracking).
   await admin

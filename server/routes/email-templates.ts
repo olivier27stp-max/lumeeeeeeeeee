@@ -92,7 +92,8 @@ router.post('/email-templates', validate(emailTemplateSchema), async (req, res) 
         type,
         subject,
         body,
-        variables: variables || null,
+        // colonne NOT NULL DEFAULT '[]' — jamais null
+        variables: variables ?? [],
         is_active: is_active ?? true,
         is_default: is_default || false,
       })
@@ -134,7 +135,8 @@ router.put('/email-templates/:id', validate(emailTemplateSchema), async (req, re
         type,
         subject,
         body,
-        variables: variables || null,
+        // colonne NOT NULL DEFAULT '[]' — jamais null
+        variables: variables ?? [],
         is_active: is_active ?? undefined,
         is_default: is_default ?? undefined,
         updated_at: new Date().toISOString(),

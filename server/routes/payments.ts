@@ -240,11 +240,12 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const admin = getServiceClient();
           const amountPaid = Math.max(0, Math.round(intent.amount_received || intent.amount || 0));
 
-          const { data: applied } = await admin.rpc('apply_invoice_payment', {
+          const { data: applied, error: applyErr } = await admin.rpc('apply_invoice_payment', {
             p_invoice_id: metadata.invoiceId,
             p_org_id: metadata.orgId,
             p_amount_cents: amountPaid,
           });
+          if (applyErr) throw new Error('apply_invoice_payment failed: ' + applyErr.message);
           const invoiceRow = Array.isArray(applied) ? applied[0] : applied;
 
           if (invoiceRow) {
@@ -288,16 +289,18 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const quoteUpdate: Record<string, any> = { deposit_status: 'paid', updated_at: new Date().toISOString() };
           let qb = admin.from('quotes').update(quoteUpdate).eq('id', quoteId);
           if (webhookOrgId) qb = qb.eq('org_id', webhookOrgId);
-          await qb;
+          const { error: quoteDepErr } = await qb;
+          if (quoteDepErr) throw new Error('quote deposit_status update failed: ' + quoteDepErr.message);
 
           // Mark payment_requirement as paid
           const payReqId = String((intent.metadata as any)?.payment_requirement_id || '').trim();
           if (payReqId) {
-            await admin.from('payment_requirements').update({
+            const { error: payReqErr } = await admin.from('payment_requirements').update({
               status: 'paid',
               payment_id: null,
               updated_at: new Date().toISOString(),
             }).eq('id', payReqId);
+            if (payReqErr) throw new Error('payment_requirements paid update failed: ' + payReqErr.message);
           }
         }
       }
@@ -407,10 +410,11 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         }
 
         // Cross-validate via stripe_subscription_id only — never trust metadata blindly.
-        await admin
+        const { error: subSyncErr } = await admin
           .from('subscriptions')
           .update(updateRow)
           .eq('stripe_subscription_id', sub.id);
+        if (subSyncErr) throw new Error('subscription.updated sync failed: ' + subSyncErr.message);
 
         // ── Sync the org's SMS number with its new entitlement ──
         // A downgrade to a plan without SMS must not leave the number running:
@@ -481,13 +485,14 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const admin = getServiceClient();
         if (stripeSubId) {
           // Cross-validate: only touch the subscription row owned by the matching stripe sub id.
-          await admin
+          const { error: invPaidErr } = await admin
             .from('subscriptions')
             .update({
               status: 'active',
               updated_at: new Date().toISOString(),
             })
             .eq('stripe_subscription_id', stripeSubId);
+          if (invPaidErr) throw new Error('invoice.paid subscription sync failed: ' + invPaidErr.message);
         }
         // If the invoice is on our internal invoices table (org-level), reconcile paid_cents.
         const internalInvoiceId = String((inv.metadata as any)?.invoice_id || '').trim();
@@ -503,7 +508,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           if (row) {
             const newPaid = Math.min(Number(row.total_cents || 0), Number(row.paid_cents || 0) + amountPaid);
             const newBal = Math.max(0, Number(row.total_cents || 0) - newPaid);
-            await admin
+            const { error: invReconcileErr } = await admin
               .from('invoices')
               .update({
                 paid_cents: newPaid,
@@ -513,6 +518,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               })
               .eq('id', internalInvoiceId)
               .eq('org_id', metaOrgId);
+            if (invReconcileErr) throw new Error('invoice.paid reconcile failed: ' + invReconcileErr.message);
           }
         }
       }
@@ -524,13 +530,14 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const stripeSubId = typeof invAny.subscription === 'string' ? invAny.subscription : invAny.subscription?.id;
         const admin = getServiceClient();
         if (stripeSubId) {
-          await admin
+          const { error: pastDueErr } = await admin
             .from('subscriptions')
             .update({
               status: 'past_due',
               updated_at: new Date().toISOString(),
             })
             .eq('stripe_subscription_id', stripeSubId);
+          if (pastDueErr) throw new Error('invoice.payment_failed subscription sync failed: ' + pastDueErr.message);
         }
         // Hook point for dunning emails — kept as a log entry for now to avoid
         // sending unverified PII through unrelated mailer paths.
@@ -1513,11 +1520,19 @@ router.post('/payments/refund', async (req, res) => {
 
     // If full refund, atomically reverse paid_cents
     if (isFullRefund && payment.invoice_id) {
-      await admin.rpc('reverse_invoice_payment', {
+      const { error: reverseErr } = await admin.rpc('reverse_invoice_payment', {
         p_invoice_id: payment.invoice_id,
         p_org_id: orgId,
         p_amount_cents: payment.amount_cents,
       });
+      if (reverseErr) {
+        console.error('[payments/refund] reverse_invoice_payment failed:', reverseErr.message);
+        return res.status(500).json({
+          error: 'Refund issued but DB sync failed — manual reconciliation required.',
+          refund_id: refund.id,
+          code: 'DB_SYNC_FAILED',
+        });
+      }
       // Apply commission reversal policy
       handleInvoiceReversal(admin, orgId, payment.invoice_id, `Refund: ${refund.id}`)
         .catch((err) => console.error('[commissions] reversal failed:', err?.message));
@@ -1525,10 +1540,18 @@ router.post('/payments/refund', async (req, res) => {
 
     // Update associated payment_request status if full refund
     if (isFullRefund && payment.payment_request_id) {
-      await admin
+      const { error: payReqCancelErr } = await admin
         .from('payment_requests')
         .update({ status: 'cancelled' })
         .eq('id', payment.payment_request_id);
+      if (payReqCancelErr) {
+        console.error('[payments/refund] payment_request cancel failed:', payReqCancelErr.message);
+        return res.status(500).json({
+          error: 'Refund issued but DB sync failed — manual reconciliation required.',
+          refund_id: refund.id,
+          code: 'DB_SYNC_FAILED',
+        });
+      }
     }
 
     return res.json({
@@ -1650,18 +1673,18 @@ async function handleCheckoutSessionCompleted(
     orgId = newOrg.id;
     // status:'active' is REQUIRED — CompanyContext only surfaces active memberships,
     // so omitting it left payment-link buyers with "Aucune compagnie".
-    await admin.from('memberships').insert({ user_id: userId, org_id: orgId, role: 'owner', status: 'active', full_name: fullName || null });
+    const { error: memErr } = await admin.from('memberships').insert({ user_id: userId, org_id: orgId, role: 'owner', status: 'active', full_name: fullName || null });
+    if (memErr) throw new Error('[webhook/checkout] Failed to create owner membership: ' + memErr.message);
   }
 
   // ── 5. Cancel any existing active subscriptions for this org ──
   const now = new Date();
-  try {
-    await admin
-      .from('subscriptions')
-      .update({ status: 'canceled', canceled_at: now.toISOString() })
-      .eq('org_id', orgId)
-      .eq('status', 'active');
-  } catch (err) { console.error('[webhook/checkout] cancel previous active subscription failed:', err); }
+  const { error: cancelPrevErr } = await admin
+    .from('subscriptions')
+    .update({ status: 'canceled', canceled_at: now.toISOString() })
+    .eq('org_id', orgId)
+    .eq('status', 'active');
+  if (cancelPrevErr) throw new Error('[webhook/checkout] cancel previous active subscription failed: ' + cancelPrevErr.message);
 
   // ── 6. Create subscription ──
   const periodEnd = new Date(now);
@@ -1755,18 +1778,33 @@ async function handleCheckoutSessionCompleted(
   } catch (err) { console.error('[webhook/checkout] mark onboarding_done failed:', err); }
 
   // ── 9. Record processed session (idempotency) ──
-  try {
-    await admin.from('processed_checkout_sessions').insert({
-      stripe_checkout_session_id: sessionId,
-      org_id: orgId,
-      user_id: userId,
-      subscription_id: subscription.id,
-      status: 'processed',
-    });
-  } catch (dedupErr: any) {
+  // NE JAMAIS throw ici : à ce stade l'org, la membership, l'abonnement, le
+  // numéro Twilio et le crédit de parrainage existent déjà. Un throw renverrait
+  // un non-2xx à Stripe, qui rejouerait l'événement — et la garde d'idempotence
+  // en tête de fonction lit précisément cette table : elle ne verrait rien et
+  // tout serait refait (2e abonnement, 2e numéro payant, 2e crédit).
+  // On réessaie, puis on crie très fort sans faire échouer le webhook.
+  const dedupRow = {
+    stripe_checkout_session_id: sessionId,
+    org_id: orgId,
+    user_id: userId,
+    subscription_id: subscription.id,
+    status: 'processed',
+  };
+  let { error: dedupErr } = await admin.from('processed_checkout_sessions').insert(dedupRow);
+  if (dedupErr && dedupErr.code !== '23505') {
+    ({ error: dedupErr } = await admin.from('processed_checkout_sessions').insert(dedupRow));
+  }
+  if (dedupErr) {
     // Unique constraint = already processed concurrently — safe to ignore
-    if (dedupErr?.code === '23505') return;
-    console.error('[webhook/checkout] Failed to record processed session:', dedupErr.message);
+    if (dedupErr.code === '23505') return;
+    console.error(
+      '[webhook/checkout] CRITIQUE — session traitée mais NON marquée. ' +
+        'L\'acheteur restera bloqué sur la création de mot de passe et un rejeu ' +
+        'Stripe dupliquerait le provisioning. Réconciliation manuelle requise. ' +
+        `session=${sessionId} org=${orgId} user=${userId} sub=${subscription.id}`,
+      dedupErr.message,
+    );
   }
 
   // ── 9b. Referral reward: the referrer earns a free month ──

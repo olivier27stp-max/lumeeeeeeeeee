@@ -947,12 +947,16 @@ router.post('/quotes/public/accept', async (req, res) => {
 
     // Update quote status
     const depositStatus = quote.deposit_required ? 'pending' : 'not_required';
-    await admin.from('quotes').update({
+    const { error: acceptErr } = await admin.from('quotes').update({
       status: 'approved',
       approved_at: now,
       updated_at: now,
       deposit_status: depositStatus,
     }).eq('id', quote.id);
+    if (acceptErr) {
+      console.error('[quotes/public/accept] status update failed:', acceptErr.message);
+      return res.status(500).json({ error: 'Could not record acceptance. Please retry.' });
+    }
 
     // Create payment requirement if deposit is required
     if (quote.deposit_required && quote.deposit_value > 0) {
@@ -960,7 +964,7 @@ router.post('/quotes/public/accept', async (req, res) => {
         ? Math.round(quote.total_cents * Number(quote.deposit_value) / 100)
         : Math.round(Number(quote.deposit_value) * 100);
 
-      await admin.from('payment_requirements').insert({
+      const { error: depReqErr } = await admin.from('payment_requirements').insert({
         org_id: quote.org_id,
         entity_type: 'quote',
         entity_id: quote.id,
@@ -971,6 +975,7 @@ router.post('/quotes/public/accept', async (req, res) => {
         payment_method_required: quote.require_payment_method || false,
         notes: `Deposit for Quote #${quote.quote_number}`,
       });
+      if (depReqErr) console.error('[quotes/public/accept] deposit payment_requirement insert failed:', depReqErr.message);
 
       // Update deposit_cents on the quote
       await admin.from('quotes').update({ deposit_cents: depositCents }).eq('id', quote.id);
@@ -978,7 +983,7 @@ router.post('/quotes/public/accept', async (req, res) => {
 
     // Create payment method requirement if needed
     if (quote.require_payment_method && !quote.deposit_required) {
-      await admin.from('payment_requirements').insert({
+      const { error: pmReqErr } = await admin.from('payment_requirements').insert({
         org_id: quote.org_id,
         entity_type: 'quote',
         entity_id: quote.id,
@@ -989,6 +994,7 @@ router.post('/quotes/public/accept', async (req, res) => {
         payment_method_required: true,
         notes: `Payment method required for Quote #${quote.quote_number}`,
       });
+      if (pmReqErr) console.error('[quotes/public/accept] payment_method requirement insert failed:', pmReqErr.message);
     }
 
     // Log status change
@@ -1001,7 +1007,7 @@ router.post('/quotes/public/accept', async (req, res) => {
     });
 
     // Store signature in quote_attachments
-    await admin.from('quote_attachments').insert({
+    const { error: sigErr } = await admin.from('quote_attachments').insert({
       quote_id: quote.id,
       file_url: signature_data,
       file_name: `signature_${signer_name.replace(/\s+/g, '_')}.png`,
@@ -1009,6 +1015,10 @@ router.post('/quotes/public/accept', async (req, res) => {
       uploaded_by: null,
       source_type: 'signature',
     });
+    if (sigErr) {
+      console.error('[quotes/public/accept] signature insert failed:', sigErr.message);
+      return res.status(500).json({ error: 'Could not record acceptance. Please retry.' });
+    }
 
     // Notification « Devis approuvé » : émise par le trigger DB sur le
     // changement de statut (migration 20260747000000).
