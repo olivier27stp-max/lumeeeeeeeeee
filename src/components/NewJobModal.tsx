@@ -387,6 +387,9 @@ export default function NewJobModal({
   // default ("apply to all visits"); unchecking it lets each planned visit
   // carry its own products & services.
   const [applyItemsToAllVisits, setApplyItemsToAllVisits] = useState(true);
+  // Visit currently shown in the items editor when personalization is on —
+  // driven by the "Applies to" droplist above Products / Services.
+  const [itemsVisitKey, setItemsVisitKey] = useState<string | null>(null);
   const [serviceVisitTimes, setServiceVisitTimes] = useState<Record<string, { startTime: string; endTime: string }>>({});
   const [serviceVisitItems, setServiceVisitItems] = useState<Record<string, LineItemForm[]>>({});
   // Visit whose list the catalog picker is currently feeding (null = the
@@ -541,9 +544,20 @@ export default function NewJobModal({
     if (!date) return;
     setPlanVisits((prev) => prev.map((v) => (v.key === key ? { ...v, date } : v)));
   };
-  const toggleApplyItemsToAllVisits = (checked: boolean) => {
-    setApplyItemsToAllVisits(checked);
-    if (!checked) seedVisitItems(planVisits.map((v) => v.key));
+  // "Applies to" droplist: 'all' = one shared list for every visit; a visit
+  // key = per-visit lists (all visits get seeded, the chosen one is edited).
+  const selectItemsScope = (value: string) => {
+    setDirty(true);
+    if (value === 'all') {
+      setApplyItemsToAllVisits(true);
+      setItemsVisitKey(null);
+    } else {
+      if (applyItemsToAllVisits) {
+        setApplyItemsToAllVisits(false);
+        seedVisitItems(planVisits.map((v) => v.key));
+      }
+      setItemsVisitKey(value);
+    }
   };
   const setVisitTime = (key: string, patch: Partial<{ startTime: string; endTime: string }>) => {
     setServiceVisitTimes((prev) => ({
@@ -1040,6 +1054,12 @@ export default function NewJobModal({
   // Items that actually bill: the job-level list, or — when the service plan's
   // products/services are personalized — every planned visit's own list.
   const personalizedItems = isServicePlan && !applyItemsToAllVisits;
+  // Visit whose list is being edited (stale/absent key falls back to the
+  // first planned visit — e.g. after the Rule regenerated the plan).
+  const selectedItemsVisit = personalizedItems
+    ? (sortedPlanVisits.find((v) => v.key === itemsVisitKey) ?? sortedPlanVisits[0] ?? null)
+    : null;
+  const selectedItemsVisitList = selectedItemsVisit ? (serviceVisitItems[selectedItemsVisit.key] || []) : [];
   const billableLineItems = useMemo<Array<LineItemForm & { visitKey?: string }>>(() => {
     if (!personalizedItems) return lineItems;
     return sortedPlanVisits.flatMap((visit) =>
@@ -2861,20 +2881,26 @@ export default function NewJobModal({
               >
                 {/* Service plan: same services on every visit, or per visit */}
                 {isServicePlan && (
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                    <input
-                      type="checkbox"
-                      checked={applyItemsToAllVisits}
-                      onChange={(event) => toggleApplyItemsToAllVisits(event.target.checked)}
-                      className="h-4 w-4 mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-sm text-text-primary">{t.modals.servicePlanApplyAllLabel}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <div className="min-w-0">
+                      <span className="block text-sm text-text-primary">{t.modals.servicePlanAppliesToLabel}</span>
                       <span className="block text-xs text-text-tertiary mt-0.5">
-                        {applyItemsToAllVisits ? t.modals.servicePlanItemsApplyAllHint : t.modals.servicePlanItemsCustomHint}
+                        {personalizedItems ? t.modals.servicePlanItemsCustomHint : t.modals.servicePlanItemsApplyAllHint}
                       </span>
-                    </span>
-                  </label>
+                    </div>
+                    <select
+                      value={selectedItemsVisit?.key ?? 'all'}
+                      onChange={(event) => selectItemsScope(event.target.value)}
+                      className="glass-input !w-auto capitalize"
+                    >
+                      <option value="all">{t.modals.servicePlanAllVisitsOption}</option>
+                      {sortedPlanVisits.map((visit) => (
+                        <option key={visit.key} value={visit.key}>
+                          {monthNames[visit.month - 1]} {visit.year} — {visit.date}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 {personalizedItems ? (
@@ -2883,44 +2909,37 @@ export default function NewJobModal({
                       <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
                       <p className="text-sm text-text-secondary">{t.modals.servicePlanItemsNoMonths}</p>
                     </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {sortedPlanVisits.map((visit) => {
-                        const visitItems = serviceVisitItems[visit.key] || [];
-                        return (
-                          <div key={visit.key} className="rounded-xl border border-outline-subtle/40 p-3 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold capitalize text-text-primary">
-                                {monthNames[visit.month - 1]} {visit.year}
-                                <span className="ml-2 text-xs font-normal tabular-nums text-text-tertiary">{visit.date}</span>
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => { setPickerVisitKey(visit.key); setServicePickerOpen(true); }}
-                                className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
-                              >
-                                <Package size={13} />
-                                {t.modals.addFromCatalog}
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {visitItems.map((item) => renderLineItemRow(item, {
-                                update: (patch) => updateVisitItem(visit.key, item.id, patch),
-                                remove: () => removeVisitItem(visit.key, item.id),
-                                removeDisabled: visitItems.length <= 1,
-                              }))}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => addVisitItemRow(visit.key)}
-                              className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
-                            >
-                              <Plus size={13} />
-                              {t.modals.addLineItem}
-                            </button>
-                          </div>
-                        );
-                      })}
+                  ) : selectedItemsVisit && (
+                    <div key={selectedItemsVisit.key} className="rounded-xl border border-outline-subtle/40 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold capitalize text-text-primary">
+                          {monthNames[selectedItemsVisit.month - 1]} {selectedItemsVisit.year}
+                          <span className="ml-2 text-xs font-normal tabular-nums text-text-tertiary">{selectedItemsVisit.date}</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { setPickerVisitKey(selectedItemsVisit.key); setServicePickerOpen(true); }}
+                          className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
+                        >
+                          <Package size={13} />
+                          {t.modals.addFromCatalog}
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {selectedItemsVisitList.map((item) => renderLineItemRow(item, {
+                          update: (patch) => updateVisitItem(selectedItemsVisit.key, item.id, patch),
+                          remove: () => removeVisitItem(selectedItemsVisit.key, item.id),
+                          removeDisabled: selectedItemsVisitList.length <= 1,
+                        }))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => addVisitItemRow(selectedItemsVisit.key)}
+                        className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
+                      >
+                        <Plus size={13} />
+                        {t.modals.addLineItem}
+                      </button>
                     </div>
                   )
                 ) : (
