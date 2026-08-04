@@ -55,7 +55,7 @@ supabase/
   3. `npm run db:apply:prod -- supabase/migrations/<file>.sql` → applies to prod
 - **Never** change schema via the Supabase dashboard on either project — it silently desyncs the two.
 - `npm run db:diff` compares prod vs staging schemas (needs Docker) and reports any drift. Run it when in doubt, or after someone else deployed.
-- Known accepted delta: staging has an `rls_auto_enable()` event trigger (auto-RLS safety net); `db:diff` ignores it.
+- **Zero accepted delta**: staging is the development reference, so prod and staging must be STRICTLY identical — schema, function bodies, policies, triggers, event triggers, buckets, realtime publication, cron jobs, extensions. `db:diff` tolerates nothing.
 
 ## Coding Rules
 - Read the file before editing it

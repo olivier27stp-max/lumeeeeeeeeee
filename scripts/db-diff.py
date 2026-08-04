@@ -8,8 +8,9 @@ Prérequis: Docker démarré, et dans .env.local :
   SUPABASE_DB_PASSWORD=...        (mot de passe Postgres, identique prod/staging)
 
 Sort avec code 0 si identique, 1 si dérive détectée.
-Deltas assumés (ignorés) : fonction rls_auto_enable() côté staging (filet auto-RLS),
-et l'ordre d'affichage des rôles dans les policies (artefact pg_dump non déterministe).
+Aucun delta assumé : les deux bases doivent être STRICTEMENT identiques (staging
+est la référence de développement). Seul l'ordre d'affichage des rôles dans les
+policies est normalisé — artefact pg_dump non déterministe, pas un écart réel.
 """
 import os, re, subprocess, sys, tempfile
 
@@ -17,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PROD = {"ref": "bbzcuzqfgsdvjsymfwmr", "host": "aws-1-ca-central-1.pooler.supabase.com"}
 STAGING = {"ref": "boylnjjlhexljmddmjyg", "host": "aws-0-ca-central-1.pooler.supabase.com"}
-IGNORED_STAGING_ONLY = {"rls_auto_enable()", "FUNCTION rls_auto_enable()"}
+IGNORED_STAGING_ONLY: set[str] = set()  # aucun écart toléré
 
 
 def env_password():
