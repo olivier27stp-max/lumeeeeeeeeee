@@ -107,10 +107,14 @@ router.post('/leads/create', validate(createLeadSchema), async (req, res) => {
 
       if (dealError) {
         // Roll back the lead-client to prevent partial state (lead exists but has no pipeline card).
-        await admin
+        const { error: rollbackError } = await admin
           .from('clients')
           .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq('id', leadId);
+        if (rollbackError) {
+          // eslint-disable-next-line no-console
+          console.error('lead_rollback_failed', { leadId, orgId: requestedOrgId, message: rollbackError.message });
+        }
         // eslint-disable-next-line no-console
         console.error('pipeline_deal_insert_failed', {
           code: String(dealError?.code || ''),
@@ -227,21 +231,26 @@ router.post('/leads/soft-delete', validate(softDeleteLeadSchema), async (req, re
       .is('deleted_at', null);
     if (leadErr) throw leadErr;
 
-    // Soft-delete associated pipeline deals
-    await admin
+    // Soft-delete associated pipeline deals.
+    // Le lead est déjà supprimé : on ne rejoue pas la requête (elle répondrait
+    // 404 « déjà supprimé »), mais une cascade ratée laisse une carte fantôme
+    // dans le pipeline — ça doit se voir dans les journaux.
+    const { error: dealsErr } = await admin
       .from('pipeline_deals')
       .update({ deleted_at: now, updated_at: now })
       .eq('lead_id', leadId)
       .eq('org_id', leadOrgId)
       .is('deleted_at', null);
+    if (dealsErr) console.error('[leads/soft-delete] pipeline_deals cascade failed:', { leadId, orgId: leadOrgId, error: dealsErr.message });
 
     // Soft-delete associated quotes linked to this lead
-    await admin
+    const { error: quotesErr } = await admin
       .from('quotes')
       .update({ deleted_at: now, updated_at: now })
       .eq('lead_id', leadId)
       .eq('org_id', leadOrgId)
       .is('deleted_at', null);
+    if (quotesErr) console.error('[leads/soft-delete] quotes cascade failed:', { leadId, orgId: leadOrgId, error: quotesErr.message });
 
     return res.status(200).json({ ok: true });
   } catch (error: any) {
@@ -288,7 +297,8 @@ router.post('/deals/soft-delete', validate(softDeleteDealSchema), async (req, re
         .update({ deleted_at: now, updated_at: now })
         .eq('id', deal.lead_id)
         .is('deleted_at', null);
-      if (!leadErr) leadDeleted = true;
+      if (leadErr) console.error('[deals/soft-delete] lead cascade failed:', { dealId, leadId: deal.lead_id, error: leadErr.message });
+      else leadDeleted = true;
     }
 
     return res.status(200).json({ ok: true, deal_deleted: true, lead_deleted: leadDeleted });
@@ -331,12 +341,26 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
     if (clientErr) throw clientErr;
 
     // Cascade: soft-delete related entities (leads are clients now — nothing extra)
+    // `.select('id')` est indispensable : sans lui supabase-js renvoie data:null,
+    // donc `deletedJobIds` restait vide et la cascade sur schedule_events ne
+    // s'executait JAMAIS (creneaux orphelins au calendrier), en plus de faire
+    // repondre 0 partout dans le decompte.
     const [jobsRes, dealsRes, invoicesRes, quotesRes] = await Promise.all([
-      admin.from('jobs').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
-      admin.from('pipeline_deals').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
-      admin.from('invoices').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
-      admin.from('quotes').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null),
+      admin.from('jobs').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
+      admin.from('pipeline_deals').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
+      admin.from('invoices').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
+      admin.from('quotes').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
     ]);
+
+    // Le client est déjà supprimé : une cascade ratée laisse des jobs/factures
+    // orphelins visibles, mais rejouer la route répondrait 404. On trace.
+    const logCascade = (label: string, err: { message: string } | null) => {
+      if (err) console.error(`[clients/soft-delete] ${label} cascade failed:`, { clientId, orgId: clientOrgId, error: err.message });
+    };
+    logCascade('jobs', jobsRes.error);
+    logCascade('pipeline_deals', dealsRes.error);
+    logCascade('invoices', invoicesRes.error);
+    logCascade('quotes', quotesRes.error);
 
     // Cascade: schedule events (if any deleted jobs) + tag cleanup — parallel
     const deletedJobIds = (jobsRes.data ?? []).map((j: any) => j.id).filter(Boolean);
@@ -355,7 +379,11 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
         )
       );
     }
-    await Promise.all(cleanupTasks);
+    const cleanupResults = await Promise.all(cleanupTasks);
+    for (const result of cleanupResults) {
+      const cleanupErr = (result as any)?.error;
+      if (cleanupErr) console.error('[clients/soft-delete] cleanup failed:', { clientId, orgId: clientOrgId, error: cleanupErr.message });
+    }
 
     return res.status(200).json({
       ok: true,
@@ -541,12 +569,15 @@ router.post('/leads/update-status', validate(updateLeadStatusSchema), async (req
       await promoteClientFromLead(getServiceClient(), leadId);
     }
 
-    // Sync pipeline deal stage (status and stage use the same slugs)
-    await auth.client
+    // Sync pipeline deal stage (status and stage use the same slugs).
+    // Le statut du lead est déjà écrit ; si la carte ne suit pas, le kanban et
+    // la fiche divergent silencieusement — au minimum, ça se journalise.
+    const { error: stageErr } = await auth.client
       .from('pipeline_deals')
       .update({ stage: newStatus })
       .eq('lead_id', leadId)
       .is('deleted_at', null);
+    if (stageErr) console.error('[leads/update-status] pipeline stage sync failed:', { leadId, newStatus, error: stageErr.message });
 
     // Emit event
     await eventBus.emit('lead.status_changed', {
@@ -626,8 +657,11 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
       .single();
     if (jobFetchError) throw jobFetchError;
 
-    // Mark lead as converted: promote the client to active
-    await auth.client
+    // Mark lead as converted: promote the client to active.
+    // Le job est créé : on ne renvoie pas d'erreur (l'utilisateur relancerait
+    // et créerait un job en double), mais un lead resté ouvert après une
+    // conversion réussie doit apparaître dans les journaux.
+    const { error: promoteErr } = await auth.client
       .from('clients')
       .update({
         status: 'active',
@@ -635,13 +669,15 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
         updated_at: new Date().toISOString(),
       })
       .eq('id', leadId);
+    if (promoteErr) console.error('[leads/convert-to-job] lead status stamp failed:', { leadId, jobId: job.id, error: promoteErr.message });
 
     // Update pipeline deal
-    await auth.client
+    const { error: dealErr } = await auth.client
       .from('pipeline_deals')
       .update({ stage: 'closed_won', won_at: new Date().toISOString(), job_id: job.id })
       .eq('lead_id', leadId)
       .is('deleted_at', null);
+    if (dealErr) console.error('[leads/convert-to-job] pipeline deal close failed:', { leadId, jobId: job.id, error: dealErr.message });
 
     // Emit lead converted event
     await eventBus.emit('lead.converted', {
@@ -672,13 +708,14 @@ router.post('/leads/convert-to-job', validate(convertLeadToJobSchema), async (re
 
     // Create notification for admin
     const leadName = `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Unknown';
-    await auth.client.from('notifications').insert({
+    const { error: notifErr } = await auth.client.from('notifications').insert({
       org_id: requestedOrgId,
       type: 'success',
       title: 'Lead converted to job',
       body: `${leadName} — ${job.title}`,
       reference_id: job.id,
     });
+    if (notifErr) console.error('[leads/convert-to-job] notification insert failed:', { leadId, jobId: job.id, error: notifErr.message });
 
     return res.json({
       ok: true,

@@ -442,16 +442,18 @@ export default function App() {
           // No membership — this is a brand new user who signed up via email/password or Google.
           // Create an org + membership for them so the rest of the app works.
           try {
-            const { data: newOrg } = await supabase
+            const { data: newOrg, error: orgErr } = await supabase
               .from('orgs')
               .insert({ name: user.email?.split('@')[0] || 'My Workspace', created_by: user.id })
               .select('id')
               .single();
+            if (orgErr) throw orgErr;
 
             if (newOrg) {
-              await supabase
+              const { error: memErr } = await supabase
                 .from('memberships')
                 .insert({ user_id: user.id, org_id: newOrg.id, role: 'owner' });
+              if (memErr) throw memErr;
               console.log('[App] Auto-provisioned org', newOrg.id, 'for user', user.id);
             }
           } catch (provErr: any) {

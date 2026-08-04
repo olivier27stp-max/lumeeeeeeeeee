@@ -296,9 +296,10 @@ router.delete('/commissions/rules/:id', async (req, res) => {
   if (!auth) return;
   try {
     const sc = getServiceClient();
-    await sc.from('fs_commission_rules')
+    const { error } = await sc.from('fs_commission_rules')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', req.params.id).eq('org_id', auth.orgId);
+    if (error) throw new Error(error.message);
     res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');

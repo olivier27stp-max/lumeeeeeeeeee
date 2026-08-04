@@ -1808,7 +1808,8 @@ export default function NewJobModal({
           try {
             const visits = await listJobVisits(createdJob.id);
             if (visits[0]) {
-              await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
+              const { error } = await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
+              if (error) console.error('[jobs] failed to stamp first visit services', error.message);
             }
           } catch (err) {
             console.error('[jobs] failed to stamp first visit services', err);

@@ -86,7 +86,10 @@ export async function sendGmail(params: SendParams): Promise<{ id: string; threa
   // Record the outbound message locally so it appears in the thread immediately.
   try {
     await recordOutbound(params, json.id, json.threadId);
-  } catch { /* non-critical */ }
+  } catch (err: any) {
+    // Non-critical (le courriel est parti), mais l'échec doit être traçable.
+    console.error(`[gmail-send] local record failed (account ${params.accountId}, message ${json.id}):`, err?.message);
+  }
 
   return { id: json.id, threadId: json.threadId };
 }
@@ -111,7 +114,7 @@ async function recordOutbound(params: SendParams, messageId: string, gmailThread
   if (!thread) return; // new-conversation threads get picked up on next sync
 
   const now = new Date().toISOString();
-  await db.from('email_messages').insert({
+  const { error: insertError } = await db.from('email_messages').insert({
     thread_id: thread.id,
     account_id: params.accountId,
     user_id: account.user_id,
@@ -130,6 +133,16 @@ async function recordOutbound(params: SendParams, messageId: string, gmailThread
     attachments: [],
     sent_at: now,
   });
+  if (insertError) {
+    console.error(`[gmail-send] email_messages insert failed (account ${params.accountId}, message ${messageId}):`, insertError.message);
+    return;
+  }
 
-  await db.from('email_threads').update({ last_message_at: now, snippet: 'Vous: …' }).eq('id', thread.id);
+  const { error: threadError } = await db
+    .from('email_threads')
+    .update({ last_message_at: now, snippet: 'Vous: …' })
+    .eq('id', thread.id);
+  if (threadError) {
+    console.error(`[gmail-send] email_threads update failed (thread ${thread.id}):`, threadError.message);
+  }
 }

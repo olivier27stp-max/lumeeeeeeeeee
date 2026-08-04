@@ -194,12 +194,16 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
 
       // Create notification for all owner/admin members
       try {
-        const { data: admins } = await admin
+        const { data: admins, error: adminsError } = await admin
           .from('memberships')
           .select('user_id')
           .eq('org_id', auth.orgId)
           .eq('status', 'active')
           .in('role', ['owner', 'admin']);
+
+        if (adminsError) {
+          console.error(`[automation-events] failed to list admins (org ${auth.orgId}):`, adminsError.message);
+        }
 
         if (admins && admins.length > 0) {
           const notifications = admins.map((m: { user_id: string }) => ({
@@ -212,7 +216,10 @@ router.post('/automations/events/job-completed', validate(automationEventSchema)
             entity_id: jobId,
             is_read: false,
           }));
-          await admin.from('notifications').insert(notifications);
+          const { error: notifError } = await admin.from('notifications').insert(notifications);
+          if (notifError) {
+            console.error(`[automation-events] notification insert failed (org ${auth.orgId}, job ${jobId}):`, notifError.message);
+          }
         }
       } catch (notifErr: any) {
         console.error('[automation-events] notification insert failed:', notifErr.message);

@@ -538,7 +538,13 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
 
       if (dealError) {
         // Roll back lead-client on deal failure
-        await admin.from('clients').update({ deleted_at: new Date().toISOString() }).eq('id', leadIdStr);
+        const { error: rollbackErr } = await admin.from('clients')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', leadIdStr);
+        // Rollback rate = un client orphelin sans carte pipeline reste en base.
+        if (rollbackErr) {
+          console.error('[public/form] lead rollback failed:', { clientId: leadIdStr, orgId, error: rollbackErr.message });
+        }
         throw dealError;
       }
       dealId = dealInsert?.id ? String(dealInsert.id) : null;

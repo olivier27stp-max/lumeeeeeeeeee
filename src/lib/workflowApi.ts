@@ -235,12 +235,13 @@ export async function clonePreset(preset: WorkflowPreset): Promise<Workflow> {
     const targetId = nodeIdMap.get(pEdge.target);
     if (!sourceId || !targetId) continue;
 
-    await supabase.from('workflow_edges').insert({
+    const { error: edgeErr } = await supabase.from('workflow_edges').insert({
       workflow_id: wf.id,
       source_id: sourceId,
       target_id: targetId,
       label: pEdge.label || null,
     });
+    if (edgeErr) throw edgeErr;
   }
 
   return wf;
@@ -403,19 +404,21 @@ export async function executeWorkflow(workflowId: string, triggerData: Record<st
     }
 
     const durationMs = Date.now() - startTime;
-    await supabase
+    const { error: doneErr } = await supabase
       .from('workflow_runs')
       .update({ status: 'completed', completed_at: new Date().toISOString(), duration_ms: durationMs, nodes_executed: nodesExecuted })
       .eq('id', run.id);
+    if (doneErr) console.error('[workflow] run status "completed" not persisted', run.id, doneErr.message);
 
     await logEntry(run.id, null, 'info', `Workflow completed in ${durationMs}ms`, { nodes_executed: nodesExecuted });
     return { ...run, status: 'completed', duration_ms: durationMs, nodes_executed: nodesExecuted };
   } catch (e: any) {
     const durationMs = Date.now() - startTime;
-    await supabase
+    const { error: failErr } = await supabase
       .from('workflow_runs')
       .update({ status: 'failed', completed_at: new Date().toISOString(), duration_ms: durationMs, error_msg: e.message })
       .eq('id', run.id);
+    if (failErr) console.error('[workflow] run status "failed" not persisted', run.id, failErr.message);
     await logEntry(run.id, null, 'error', `Workflow failed: ${e.message}`);
     return { ...run, status: 'failed', duration_ms: durationMs, error_msg: e.message };
   }
@@ -509,11 +512,12 @@ async function executeAction(node: WorkflowNode, data: Record<string, any>): Pro
 // ─── Log helper ─────────────────────────────────────────────────
 
 async function logEntry(runId: string, nodeId: string | null, level: LogLevel, message: string, data?: Record<string, any>): Promise<void> {
-  await supabase.from('workflow_logs').insert({
+  const { error } = await supabase.from('workflow_logs').insert({
     run_id: runId,
     node_id: nodeId,
     level,
     message,
     data: data || null,
   });
+  if (error) console.error('[workflow] log entry insert failed', runId, error.message);
 }

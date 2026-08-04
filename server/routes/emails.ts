@@ -273,27 +273,33 @@ ${viewUrl ? `
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
     // Update invoice status to sent (also set issued_at if not already set)
+    // Le courriel est déjà parti : on ne peut plus répondre en erreur sans
+    // pousser l'utilisateur à renvoyer, donc on journalise fort.
     const now = new Date().toISOString();
-    await client.from('invoices').update({
+    const { error: stampError } = await client.from('invoices').update({
       issued_at: invoice.status === 'draft' ? now : undefined,
       sent_at: now,
     }).eq('id', invoiceId);
+    if (stampError) {
+      console.error(`[emails/send-invoice] invoice ${invoiceId} sent but sent_at not saved (org ${orgId}):`, stampError.message);
+    }
 
     // Log send event for audit trail
     const serviceClient = getServiceClient();
-    try {
-      await serviceClient.from('invoice_send_events').insert({
-        invoice_id: invoiceId,
-        org_id: orgId,
-        event_type: invoice.status === 'draft' ? 'sent' : 'resent',
-        recipient_email: clientData.email,
-        channel: 'email',
-        metadata: { subject: emailSubject, email_template_id: emailTemplateId },
-      });
-    } catch { /* non-critical */ }
+    const { error: sendEventError } = await serviceClient.from('invoice_send_events').insert({
+      invoice_id: invoiceId,
+      org_id: orgId,
+      event_type: invoice.status === 'draft' ? 'sent' : 'resent',
+      recipient_email: clientData.email,
+      channel: 'email',
+      metadata: { subject: emailSubject, email_template_id: emailTemplateId },
+    });
+    if (sendEventError) {
+      console.error(`[emails/send-invoice] invoice_send_events insert failed (invoice ${invoiceId}, org ${orgId}):`, sendEventError.message);
+    }
 
     // Log to activity_log with template & subject info
-    await serviceClient.from('activity_log').insert({
+    const { error: activityError } = await serviceClient.from('activity_log').insert({
       org_id: orgId,
       entity_type: 'invoice',
       entity_id: invoiceId,
@@ -307,6 +313,9 @@ ${viewUrl ? `
         to_email: clientData.email,
       },
     });
+    if (activityError) {
+      console.error(`[emails/send-invoice] activity_log insert failed (invoice ${invoiceId}, org ${orgId}):`, activityError.message);
+    }
 
     // Emit event
     eventBus.emit('invoice.sent', {
@@ -410,7 +419,13 @@ ${viewUrl ? `
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
     // Update status to sent
-    await client.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', invoiceId);
+    const { error: statusError } = await client
+      .from('invoices')
+      .update({ status: 'sent', sent_at: new Date().toISOString() })
+      .eq('id', invoiceId);
+    if (statusError) {
+      console.error(`[emails/send-quote] quote ${invoiceId} sent but status not saved (org ${orgId}):`, statusError.message);
+    }
 
     // Emit estimate.sent event
     eventBus.emit('estimate.sent', {
@@ -489,11 +504,14 @@ ${viewUrl ? `<div style="text-align:center;margin-bottom:16px;"><a href="${viewU
     });
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
-    await client
+    const { error: statusError } = await client
       .from('quotes')
       .update({ status: 'awaiting_response' })
       .eq('id', quoteId)
       .in('status', ['draft', 'changes_requested']);
+    if (statusError) {
+      console.error(`[emails/send-mobile-quote] quote ${quoteId} sent but status not saved (org ${orgId}):`, statusError.message);
+    }
 
     return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {

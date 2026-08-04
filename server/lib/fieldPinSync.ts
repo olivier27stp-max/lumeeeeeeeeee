@@ -128,11 +128,16 @@ export async function upsertLeadPinForClient(
           geocoded_at: now,
         };
 
-        const { data: nearby } = await admin
+        const { data: nearby, error: nearbyErr } = await admin
           .from('field_house_profiles')
           .select('id, lat, lng, client_id, lead_id, metadata, current_status')
           .eq('org_id', input.orgId)
           .is('deleted_at', null);
+        // Lecture ratée = dédoublonnage aveugle → une 2e maison à 5 m de la
+        // première. On le signale au lieu de le subir en silence.
+        if (nearbyErr) {
+          console.error('[field-pin] nearby houses load failed:', { orgId: input.orgId, clientId: input.clientId }, nearbyErr.message);
+        }
         // Merge into a nearby house only when identities are compatible: 50 m
         // can span two neighbours, and absorbing a new client's request into
         // another client's house leaves the new client with no visible pin.
@@ -188,7 +193,11 @@ export async function upsertLeadPinForClient(
           };
         }
       }
-      await admin.from('field_house_profiles').update(patch).eq('id', houseId);
+      const { error: mergeErr } = await admin.from('field_house_profiles').update(patch).eq('id', houseId);
+      if (mergeErr) {
+        console.error('[field-pin] house merge failed:', { orgId: input.orgId, houseId, clientId: input.clientId }, mergeErr.message);
+        return null;
+      }
     } else {
       const { data: house, error: hErr } = await admin
         .from('field_house_profiles')
@@ -246,7 +255,7 @@ export async function upsertLeadPinForClient(
     }
 
     // 4. Timeline event + entity link (best-effort)
-    await admin.from('field_house_events').insert({
+    const { error: eventErr } = await admin.from('field_house_events').insert({
       org_id: input.orgId,
       house_id: houseId,
       user_id: input.actorId,
@@ -254,8 +263,11 @@ export async function upsertLeadPinForClient(
       note_text: input.noteText || `Inbound request${input.customerName ? ` — ${input.customerName}` : ''}`,
       metadata: { source: 'request_form', client_id: input.clientId },
     });
+    if (eventErr) {
+      console.error('[field-pin] event insert failed:', { orgId: input.orgId, houseId, clientId: input.clientId }, eventErr.message);
+    }
 
-    await admin.from('field_pin_entity_links').upsert(
+    const { error: linkErr } = await admin.from('field_pin_entity_links').upsert(
       {
         org_id: input.orgId,
         house_id: houseId,
@@ -265,6 +277,9 @@ export async function upsertLeadPinForClient(
       },
       { onConflict: 'org_id,house_id,entity_type,entity_id' },
     );
+    if (linkErr) {
+      console.error('[field-pin] entity link failed:', { orgId: input.orgId, houseId, clientId: input.clientId }, linkErr.message);
+    }
 
     return { houseId: houseId!, created };
   } catch (err: any) {
@@ -335,13 +350,16 @@ export async function repairMissingPinCoords(admin: SupabaseClient): Promise<num
         .eq('house_id', house.id)
         .maybeSingle();
       if (!pin?.id && house.assigned_user_id) {
-        await admin.from('field_pins').insert({
+        const { error: pinErr } = await admin.from('field_pins').insert({
           org_id: house.org_id,
           house_id: house.id,
           user_id: house.assigned_user_id,
           status: 'lead',
           pin_color: STATUS_COLORS.lead,
         });
+        if (pinErr) {
+          console.error('[field-pin-repair] pin insert failed:', house.id, pinErr.message);
+        }
       }
 
       repaired++;

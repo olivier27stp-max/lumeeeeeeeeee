@@ -907,7 +907,7 @@ export async function createJob(payload: {
       const depositCents = payload.deposit_type === 'percentage'
         ? Math.round(financials.total_cents * (payload.deposit_value || 0) / 100)
         : Math.round((payload.deposit_value || 0) * 100);
-      await supabase.from('jobs').update({
+      const { error: depErr } = await supabase.from('jobs').update({
         deposit_required: payload.deposit_required || false,
         deposit_type: payload.deposit_required ? (payload.deposit_type || null) : null,
         deposit_value: payload.deposit_required ? (payload.deposit_value || 0) : 0,
@@ -915,6 +915,7 @@ export async function createJob(payload: {
         require_payment_method: payload.require_payment_method || false,
         deposit_status: payload.deposit_required ? 'pending' : 'not_required',
       }).eq('id', data.id).eq('org_id', orgId);
+      if (depErr) throw depErr;
     }
 
     // Refresh data so returned job has correct values
@@ -1252,11 +1253,12 @@ export async function softDeleteJob(jobId: string): Promise<SoftDeleteJobResult>
 
   // Soft-delete associated schedule_events first
   const nowIso = new Date().toISOString();
-  await supabase
+  const { error: evErr } = await supabase
     .from('schedule_events')
     .update({ deleted_at: nowIso, updated_at: nowIso })
     .eq('job_id', jobId)
     .is('deleted_at', null);
+  if (evErr) throw evErr;
 
   const { data, error } = await supabase.rpc('soft_delete_job', {
     p_org_id: orgId,

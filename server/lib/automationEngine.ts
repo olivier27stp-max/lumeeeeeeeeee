@@ -125,20 +125,24 @@ async function executeRuleActions(
 
     // Defer immediate SMS fired during quiet hours to the next send window.
     if (action.type === 'send_sms' && isQuietHours()) {
-      try {
-        await config.supabase.from('automation_scheduled_tasks').insert({
-          org_id: event.orgId,
-          automation_rule_id: rule.id,
-          entity_type: event.entityType,
-          entity_id: event.entityId,
-          action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-          execute_at: nextSendTime().toISOString(),
-          status: 'pending',
-          execution_key: executionKey,
-        });
+      // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
+      // dans la réponse, pas dans un catch.
+      const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
+        org_id: event.orgId,
+        automation_rule_id: rule.id,
+        entity_type: event.entityType,
+        entity_id: event.entityId,
+        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+        execute_at: nextSendTime().toISOString(),
+        status: 'pending',
+        execution_key: executionKey,
+      });
+      if (deferError) {
+        if (deferError.code !== '23505') {
+          console.error(`[automationEngine] failed to defer quiet-hours SMS (rule ${rule.id}, org ${event.orgId}):`, deferError.message);
+        }
+      } else {
         console.log(`[automationEngine] SMS deferred to send window (quiet hours) for rule "${rule.name}"`);
-      } catch (err: any) {
-        if (err?.code !== '23505') console.error('[automationEngine] failed to defer quiet-hours SMS:', err.message);
       }
       continue;
     }
@@ -150,7 +154,7 @@ async function executeRuleActions(
       const durationMs = Date.now() - startTime;
 
       // Log execution
-      await config.supabase.from('automation_execution_logs').insert({
+      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
         org_id: event.orgId,
         automation_rule_id: rule.id,
         trigger_event: event.type,
@@ -163,6 +167,9 @@ async function executeRuleActions(
         result_error: result.error || null,
         duration_ms: durationMs,
       });
+      if (logError) {
+        console.error(`[automationEngine] failed to write execution log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
+      }
 
       if (!result.success) {
         console.error(`[automationEngine] action ${action.type} failed for rule "${rule.name}":`, result.error);
@@ -171,7 +178,7 @@ async function executeRuleActions(
       const durationMs = Date.now() - startTime;
       console.error(`[automationEngine] action ${action.type} threw for rule "${rule.name}":`, err.message);
 
-      await config.supabase.from('automation_execution_logs').insert({
+      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
         org_id: event.orgId,
         automation_rule_id: rule.id,
         trigger_event: event.type,
@@ -183,6 +190,9 @@ async function executeRuleActions(
         result_error: err.message,
         duration_ms: durationMs,
       });
+      if (logError) {
+        console.error(`[automationEngine] failed to write failure log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
+      }
     }
   }
 }
@@ -232,23 +242,24 @@ async function scheduleDelayedActions(
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i);
 
-    try {
-      await config.supabase.from('automation_scheduled_tasks').insert({
-        org_id: event.orgId,
-        automation_rule_id: rule.id,
-        entity_type: event.entityType,
-        entity_id: event.entityId,
-        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-        execute_at: executeAt.toISOString(),
-        status: 'pending',
-        execution_key: executionKey,
-      });
-    } catch (err: any) {
+    // supabase-js ne lève jamais : le doublon (23505) comme toute autre erreur
+    // se lit dans la réponse — un catch ici n'aurait jamais rien attrapé.
+    const { error: insertError } = await config.supabase.from('automation_scheduled_tasks').insert({
+      org_id: event.orgId,
+      automation_rule_id: rule.id,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+      execute_at: executeAt.toISOString(),
+      status: 'pending',
+      execution_key: executionKey,
+    });
+    if (insertError) {
       // Unique constraint violation = duplicate, skip
-      if (err?.code === '23505') {
+      if (insertError.code === '23505') {
         console.log(`[automationEngine] skipped duplicate scheduled task: ${executionKey}`);
       } else {
-        console.error(`[automationEngine] failed to schedule task:`, err.message);
+        console.error(`[automationEngine] failed to schedule task (rule ${rule.id}, org ${event.orgId}):`, insertError.message);
       }
     }
   }
@@ -407,18 +418,27 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // Quiet hours: push due SMS tasks to the next send window without
     // consuming an attempt — the client shouldn't be texted at night.
     if (task.action_config?.type === 'send_sms' && isQuietHours()) {
-      await supabase
+      const { error: pushError } = await supabase
         .from('automation_scheduled_tasks')
         .update({ execute_at: nextSendTime().toISOString() })
         .eq('id', task.id);
+      if (pushError) {
+        console.error(`[automationEngine] failed to push task ${task.id} out of quiet hours:`, pushError.message);
+      }
       continue;
     }
 
-    // Mark as running
-    await supabase
+    // Mark as running. Si la prise n'est pas persistée, la tâche reste
+    // 'pending' et serait ré-exécutée au tour suivant — on la saute plutôt
+    // que d'envoyer deux fois la même action.
+    const { error: claimError } = await supabase
       .from('automation_scheduled_tasks')
       .update({ status: 'running', attempts: task.attempts + 1 })
       .eq('id', task.id);
+    if (claimError) {
+      console.error(`[automationEngine] failed to claim scheduled task ${task.id}:`, claimError.message);
+      continue;
+    }
 
     try {
       const actionConfig = task.action_config;
@@ -434,10 +454,13 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       );
 
       if (shouldStop) {
-        await supabase
+        const { error: cancelError } = await supabase
           .from('automation_scheduled_tasks')
           .update({ status: 'cancelled', completed_at: now })
           .eq('id', task.id);
+        if (cancelError) {
+          console.error(`[automationEngine] failed to cancel scheduled task ${task.id}:`, cancelError.message);
+        }
         continue;
       }
 
@@ -463,7 +486,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       const durationMs = Date.now() - startTime;
 
       // Log execution
-      await supabase.from('automation_execution_logs').insert({
+      const { error: logError } = await supabase.from('automation_execution_logs').insert({
         org_id: task.org_id,
         automation_rule_id: task.automation_rule_id,
         scheduled_task_id: task.id,
@@ -477,9 +500,12 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         result_error: result.error || null,
         duration_ms: durationMs,
       });
+      if (logError) {
+        console.error(`[automationEngine] failed to write execution log for task ${task.id} (org ${task.org_id}):`, logError.message);
+      }
 
       // Update task status
-      await supabase
+      const { error: statusError } = await supabase
         .from('automation_scheduled_tasks')
         .update({
           status: result.success ? 'completed' : 'failed',
@@ -487,9 +513,13 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           last_error: result.error || null,
         })
         .eq('id', task.id);
+      if (statusError) {
+        // La tâche resterait 'running' pour toujours : personne ne la reprend.
+        console.error(`[automationEngine] failed to close scheduled task ${task.id}:`, statusError.message);
+      }
     } catch (err: any) {
       console.error(`[automationEngine] scheduled task ${task.id} failed:`, err.message);
-      await supabase
+      const { error: statusError } = await supabase
         .from('automation_scheduled_tasks')
         .update({
           status: 'failed',
@@ -497,6 +527,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           last_error: err.message,
         })
         .eq('id', task.id);
+      if (statusError) {
+        console.error(`[automationEngine] failed to mark task ${task.id} as failed:`, statusError.message);
+      }
     }
   }
 }

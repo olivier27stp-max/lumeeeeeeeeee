@@ -53,15 +53,23 @@ function haversineMetres(lat1: number, lng1: number, lat2: number, lng2: number)
 // ---------------------------------------------------------------------------
 // Event-type → status mapping
 // ---------------------------------------------------------------------------
+// Les valeurs doivent appartenir au CHECK de field_house_profiles.current_status
+// (et field_pins.status) : unknown, not_interested, no_answer, lead, quote_sent,
+// sale, callback, do_not_knock, revisit.
+// 'sold', 'knocked', 'follow_up' et 'cancelled' n'en font PAS partie : la mise à
+// jour du statut partait en 23514 et, l'erreur n'étant pas lue, une VENTE
+// enregistrée sur une porte ne changeait jamais le statut de la maison.
+// 'knock' et 'note' ne déterminent aucun résultat : le statut reste inchangé.
 const EVENT_STATUS_MAP: Record<string, string> = {
-  knock: 'knocked',
   no_answer: 'no_answer',
   not_interested: 'not_interested',
   callback: 'callback',
   lead: 'lead',
-  sale: 'sold',
-  follow_up: 'follow_up',
-  cancel: 'cancelled',
+  quote_sent: 'quote_sent',
+  revisit: 'revisit',
+  sale: 'sale',
+  follow_up: 'revisit',
+  cancel: 'not_interested',
 };
 
 // ---------------------------------------------------------------------------
@@ -236,12 +244,16 @@ router.post('/houses', async (req: Request, res: Response) => {
   try {
     const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
     if (!isAdmin) {
-      const { data: territories } = await admin
+      const { data: territories, error: terErr } = await admin
         .from('field_territories')
         .select('id, name, assigned_user_id, polygon_geojson')
         .eq('org_id', auth.orgId)
         .not('assigned_user_id', 'is', null)
         .is('deleted_at', null);
+      // Le contrôle reste « fail open » (voir catch plus bas) mais une panne
+      // répétée doit être visible : sinon l'exclusivité de zone est désactivée
+      // en silence.
+      if (terErr) console.error('[field-sales] zone exclusivity check skipped:', { orgId: auth.orgId }, terErr.message);
       const blocked = (territories ?? []).find((z: any) => {
         if (!z.assigned_user_id || z.assigned_user_id === auth.user.id) return false;
         const ring = z.polygon_geojson?.coordinates?.[0];
@@ -290,7 +302,7 @@ router.post('/houses', async (req: Request, res: Response) => {
       if (existingClient) {
         clientId = existingClient.id;
       } else {
-        const { data: newClient } = await admin.from('clients').insert({
+        const { data: newClient, error: cErr } = await admin.from('clients').insert({
           org_id: auth.orgId,
           created_by: auth.user.id,
           first_name: firstName,
@@ -302,7 +314,13 @@ router.post('/houses', async (req: Request, res: Response) => {
           longitude: lng,
           status: 'lead',
         }).select('id').single();
-        clientId = newClient?.id ?? null;
+        // Le rep a saisi un client : le pin ne doit pas être créé « orphelin »
+        // en faisant croire que la fiche client existe.
+        if (cErr || !newClient) {
+          console.error('[field-sales] client auto-create failed:', { orgId: auth.orgId, address }, cErr?.message);
+          return sendSafeError(res, cErr ?? new Error('client insert returned no row'), 'Failed to create the client for this pin.', '[field-sales]');
+        }
+        clientId = newClient.id;
       }
     }
 
@@ -311,11 +329,17 @@ router.post('/houses', async (req: Request, res: Response) => {
     // address. Match by normalized address in addition to the 50 m radius,
     // because trigger/backfill houses can still be waiting for geocoding
     // (lat/lng null) and would slip past the distance check.
-    const { data: nearby } = await admin
+    const { data: nearby, error: nearbyErr } = await admin
       .from('field_house_profiles')
       .select('id, address, address_normalized, lat, lng, client_id, metadata, current_status')
       .eq('org_id', auth.orgId)
       .is('deleted_at', null);
+
+    // Sans cette liste la détection de doublon est aveugle : seul l'index
+    // unique sur l'adresse normalisée rattraperait le cas (pas le rayon 50 m).
+    if (nearbyErr) {
+      return sendSafeError(res, nearbyErr, 'Field sales operation failed.', '[field-sales]');
+    }
 
     const duplicate = (nearby ?? []).find(
       (h: any) =>
@@ -342,23 +366,27 @@ router.post('/houses', async (req: Request, res: Response) => {
       }
       updates.last_activity_at = new Date().toISOString();
 
-      await admin.from('field_house_profiles').update(updates).eq('id', existing.id);
+      const { error: mergeErr } = await admin.from('field_house_profiles').update(updates).eq('id', existing.id);
+      if (mergeErr) return sendSafeError(res, mergeErr, 'Field sales operation failed.', '[field-sales]');
 
       // Update pin visual (never repaint a sold pin to a lower status)
       const pinStatus = keepSale ? 'sale' : (status || 'unknown');
-      await admin.from('field_pins')
+      const { error: pinErr } = await admin.from('field_pins')
         .update({ status: pinStatus, pin_color: STATUS_COLORS[pinStatus] || '#9CA3AF', has_note: !!note_text, updated_at: new Date().toISOString() })
         .eq('house_id', existing.id);
+      if (pinErr) console.error('[field-sales] merge pin update failed:', { orgId: auth.orgId, houseId: existing.id }, pinErr.message);
 
       // Add merge event
-      await admin.from('field_house_events').insert({
+      const { error: evErr } = await admin.from('field_house_events').insert({
         org_id: auth.orgId, house_id: existing.id, user_id: auth.user.id,
         event_type: status || 'note',
         note_text: note_text || `Pin updated${customer_name ? ` — ${customer_name}` : ''}`,
         metadata: { merged: true, customer_name, customer_phone, customer_email },
       });
+      if (evErr) console.error('[field-sales] merge event insert failed:', { orgId: auth.orgId, houseId: existing.id }, evErr.message);
 
-      const { data: merged } = await admin.from('field_house_profiles').select('*').eq('id', existing.id).single();
+      const { data: merged, error: readErr } = await admin.from('field_house_profiles').select('*').eq('id', existing.id).single();
+      if (readErr || !merged) return sendSafeError(res, readErr ?? new Error('merged house not found'), 'Field sales operation failed.', '[field-sales]');
       return res.status(200).json({ ...merged, merged: true, client_id: clientId });
     };
 
@@ -402,7 +430,7 @@ router.post('/houses', async (req: Request, res: Response) => {
     // Create initial pin
     const pinStatus = status || 'unknown';
     const pinColor = STATUS_COLORS[pinStatus] || '#9CA3AF';
-    const { data: pin } = await admin
+    const { data: pin, error: pinErr } = await admin
       .from('field_pins')
       .insert({
         org_id: auth.orgId,
@@ -414,6 +442,13 @@ router.post('/houses', async (req: Request, res: Response) => {
       })
       .select()
       .single();
+
+    // Sans ligne field_pins la maison n'apparaît jamais sur la carte : la
+    // création est un échec, même si la maison, elle, est bien enregistrée.
+    if (pinErr || !pin) {
+      console.error('[field-sales] pin insert failed:', { orgId: auth.orgId, houseId: house.id }, pinErr?.message);
+      return sendSafeError(res, pinErr ?? new Error('pin insert returned no row'), 'Pin created but could not be placed on the map.', '[field-sales]');
+    }
 
     // Create events for creation + note
     const events: any[] = [{
@@ -435,14 +470,16 @@ router.post('/houses', async (req: Request, res: Response) => {
         metadata: { auto_linked: true, entity_type: 'client', entity_id: clientId },
       });
     }
-    await admin.from('field_house_events').insert(events);
+    const { error: evErr } = await admin.from('field_house_events').insert(events);
+    if (evErr) console.error('[field-sales] creation events insert failed:', { orgId: auth.orgId, houseId: house.id }, evErr.message);
 
     // Link client to pin entity links
     if (clientId) {
-      await admin.from('field_pin_entity_links').upsert({
+      const { error: linkErr } = await admin.from('field_pin_entity_links').upsert({
         org_id: auth.orgId, house_id: house.id,
         entity_type: 'client', entity_id: clientId, linked_at: new Date().toISOString(),
       }, { onConflict: 'org_id,house_id,entity_type,entity_id' });
+      if (linkErr) console.error('[field-sales] client link failed:', { orgId: auth.orgId, houseId: house.id, clientId }, linkErr.message);
     }
 
     // Async: trigger AI recalculation (non-blocking)
@@ -591,20 +628,22 @@ router.post('/houses/:id/link', async (req: Request, res: Response) => {
     if (entity_type === 'quote') updates.quote_id = entity_id;
     if (entity_type === 'job') updates.job_id = entity_id;
 
-    await admin.from('field_house_profiles').update(updates).eq('id', req.params.id).eq('org_id', auth.orgId);
+    const { error: upErr } = await admin.from('field_house_profiles').update(updates).eq('id', req.params.id).eq('org_id', auth.orgId);
+    if (upErr) return sendSafeError(res, upErr, 'Field sales operation failed.', '[field-sales]');
     cacheDelete(`pins:${auth.orgId}`);
 
     // Also create link record
-    await admin.from('field_pin_entity_links').upsert({
+    const { error: linkErr } = await admin.from('field_pin_entity_links').upsert({
       org_id: auth.orgId,
       house_id: req.params.id,
       entity_type,
       entity_id,
       linked_at: new Date().toISOString(),
     }, { onConflict: 'org_id,house_id,entity_type,entity_id' });
+    if (linkErr) return sendSafeError(res, linkErr, 'Field sales operation failed.', '[field-sales]');
 
     // Create event
-    await admin.from('field_house_events').insert({
+    const { error: evErr } = await admin.from('field_house_events').insert({
       org_id: auth.orgId,
       house_id: req.params.id,
       user_id: auth.user.id,
@@ -612,6 +651,7 @@ router.post('/houses/:id/link', async (req: Request, res: Response) => {
       note_text: `Linked to ${entity_type} ${entity_id}`,
       metadata: { auto_linked: true, entity_type, entity_id },
     });
+    if (evErr) console.error('[field-sales] link event insert failed:', { orgId: auth.orgId, houseId: req.params.id, entity_type, entity_id }, evErr.message);
 
     return res.json({ success: true, entity_type, entity_id });
   } catch (err: any) {
@@ -670,14 +710,15 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
 
     // Pin colour mapping
     const PIN_COLOURS: Record<string, string> = {
-      sold: '#10B981',
+      sale: '#10B981',
       lead: '#3B82F6',
       callback: '#F59E0B',
-      follow_up: '#8B5CF6',
-      knocked: '#6B7280',
+      revisit: '#8B5CF6',
+      quote_sent: '#8B5CF6',
+      unknown: '#6B7280',
       no_answer: '#D1D5DB',
       not_interested: '#EF4444',
-      cancelled: '#1F2937',
+      do_not_knock: '#1F2937',
       new: '#9CA3AF',
     };
     const pinColor = PIN_COLOURS[newStatus] ?? '#9CA3AF';
@@ -707,20 +748,28 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
       houseUpdate.closed_by_role = (membership?.role === 'owner' || membership?.role === 'admin') ? 'admin' : 'rep';
     }
 
-    await admin
+    // Le statut de la maison est ce que le rep vient d'enregistrer : si la
+    // mise à jour échoue, l'événement seul ne suffit pas — on le dit.
+    const { error: houseUpdErr } = await admin
       .from('field_house_profiles')
       .update(houseUpdate)
       .eq('id', req.params.id);
 
+    if (houseUpdErr) {
+      console.error('[field-sales/events] house status update failed:', { orgId: auth.orgId, houseId: req.params.id, event_type }, houseUpdErr.message);
+      return sendSafeError(res, houseUpdErr, 'Event recorded but the pin status could not be updated.', '[field-sales/events]');
+    }
+
     // Upsert pin
-    const { data: existingPin } = await admin
+    const { data: existingPin, error: pinReadErr } = await admin
       .from('field_pins')
       .select('id')
       .eq('house_id', req.params.id)
       .maybeSingle();
+    if (pinReadErr) console.error('[field-sales/events] pin lookup failed:', { orgId: auth.orgId, houseId: req.params.id }, pinReadErr.message);
 
     if (existingPin) {
-      await admin
+      const { error: pinUpdErr } = await admin
         .from('field_pins')
         .update({
           status: newStatus,
@@ -729,8 +778,9 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
           updated_at: now,
         })
         .eq('id', existingPin.id);
+      if (pinUpdErr) console.error('[field-sales/events] pin update failed:', { orgId: auth.orgId, houseId: req.params.id, pinId: existingPin.id }, pinUpdErr.message);
     } else {
-      await admin.from('field_pins').insert({
+      const { error: pinInsErr } = await admin.from('field_pins').insert({
         org_id: auth.orgId,
         house_id: req.params.id,
         user_id: auth.user.id,
@@ -740,6 +790,7 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
         pin_color: pinColor,
         has_note: !!(note_text || note_voice_url),
       });
+      if (pinInsErr) console.error('[field-sales/events] pin insert failed:', { orgId: auth.orgId, houseId: req.params.id }, pinInsErr.message);
     }
 
     // Upsert daily_stats
@@ -763,7 +814,7 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
     };
 
     if (existingStats) {
-      await admin
+      const { error: statsUpdErr } = await admin
         .from('field_daily_stats')
         .update({
           knocks: (existingStats.knocks ?? 0) + statsIncrement.knocks,
@@ -776,13 +827,15 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
           updated_at: now,
         })
         .eq('id', existingStats.id);
+      if (statsUpdErr) console.error('[field-sales/events] daily stats update failed:', { orgId: auth.orgId, userId: auth.user.id, date: today }, statsUpdErr.message);
     } else {
-      await admin.from('field_daily_stats').insert({
+      const { error: statsInsErr } = await admin.from('field_daily_stats').insert({
         org_id: auth.orgId,
         user_id: auth.user.id,
         date: today,
         ...statsIncrement,
       });
+      if (statsInsErr) console.error('[field-sales/events] daily stats insert failed:', { orgId: auth.orgId, userId: auth.user.id, date: today }, statsInsErr.message);
     }
 
     // Async: trigger AI recalculation (non-blocking)
@@ -819,7 +872,8 @@ router.delete('/events/:eventId', async (req: Request, res: Response) => {
 
     if (eErr || !event) return res.status(404).json({ error: 'Event not found' });
 
-    await admin.from('field_house_events').delete().eq('id', event.id).eq('org_id', auth.orgId);
+    const { error: delErr } = await admin.from('field_house_events').delete().eq('id', event.id).eq('org_id', auth.orgId);
+    if (delErr) return sendSafeError(res, delErr, 'Field sales operation failed.', '[field-sales]');
 
     return res.status(200).json({ success: true });
   } catch (err: any) {
@@ -1338,9 +1392,10 @@ router.delete('/reps/:id', async (req: Request, res: Response) => {
   if (!auth) return;
   const admin = getServiceClient();
   try {
-    await admin.from('field_sales_reps')
+    const { error } = await admin.from('field_sales_reps')
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', req.params.id).eq('org_id', auth.orgId);
+    if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     return res.json({ ok: true });
   } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }
 });
@@ -1373,8 +1428,11 @@ router.post('/teams', async (req: Request, res: Response) => {
     if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
     // Add members
     if (member_ids?.length) {
-      await admin.from('field_sales_team_members')
+      const { error: memErr } = await admin.from('field_sales_team_members')
         .insert(member_ids.map((rid: string) => ({ team_id: team.id, rep_id: rid })));
+      // L'équipe est créée : on la renvoie quand même, mais un échec ici
+      // donnerait une équipe vide sans que personne ne le sache.
+      if (memErr) console.error('[field-sales] team members insert failed:', { orgId: auth.orgId, teamId: team.id, member_ids }, memErr.message);
     }
     return res.status(201).json(team);
   } catch (err: any) { return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]'); }

@@ -303,7 +303,8 @@ export default function JobDetails() {
           // Append to job attachments
           const current = job.attachments || [];
           const updated = [...current, { name: file.name, url: publicUrl }];
-          await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id).eq('org_id', orgId);
+          const { error: linkErr } = await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id).eq('org_id', orgId);
+          if (linkErr) throw linkErr;
           setJob((prev) => prev ? { ...prev, attachments: updated } : prev);
           toast.success(language === 'fr' ? `${file.name} téléversé` : `${file.name} uploaded`);
         } catch (err: any) {

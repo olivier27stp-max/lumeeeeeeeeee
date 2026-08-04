@@ -162,7 +162,9 @@ export async function reorderColumns(entity: EntityType, orderedIds: string[]): 
   const updates = orderedIds.map((id, idx) =>
     supabase.from('custom_columns').update({ position: idx }).eq('id', id)
   );
-  await Promise.all(updates);
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
 }
 
 // ─── Values CRUD ────────────────────────────────────────────────

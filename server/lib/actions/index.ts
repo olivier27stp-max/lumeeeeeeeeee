@@ -209,16 +209,17 @@ export async function executeSendEmail(
     // Trace visible dans l'app : sans cette ligne, un courriel d'automatisation
     // n'existait que chez le fournisseur SMTP (les SMS, eux, sont loggés dans
     // Messages). La timeline de l'entité (ActivityTimeline) lit activity_log.
-    try {
-      await ctx.supabase.from('activity_log').insert({
-        org_id: ctx.orgId,
-        entity_type: ctx.entityType,
-        entity_id: ctx.entityId,
-        event_type: 'email_sent',
-        metadata: { to, subject, source: 'automation' },
-      });
-    } catch {
-      // Best-effort : un échec de journalisation ne doit pas faire échouer l'envoi.
+    // Best-effort : un échec de journalisation ne doit pas faire échouer
+    // l'envoi, mais il doit être visible dans les logs serveur.
+    const { error: logError } = await ctx.supabase.from('activity_log').insert({
+      org_id: ctx.orgId,
+      entity_type: ctx.entityType,
+      entity_id: ctx.entityId,
+      event_type: 'email_sent',
+      metadata: { to, subject, source: 'automation' },
+    });
+    if (logError) {
+      console.error(`[actions/send_email] activity_log insert failed (org ${ctx.orgId}, ${ctx.entityType} ${ctx.entityId}):`, logError.message);
     }
 
     return { success: true, data: { to, subject } };
@@ -284,7 +285,7 @@ export async function executeSendSms(
     try {
       const normalized = normalizeE164(to);
       const conversation = await findOrCreateConversation(ctx.supabase, ctx.orgId, normalized);
-      await ctx.supabase.from('messages').insert({
+      const { error: logError } = await ctx.supabase.from('messages').insert({
         conversation_id: conversation.id,
         org_id: ctx.orgId,
         client_id: conversation.client_id || null,
@@ -294,8 +295,12 @@ export async function executeSendSms(
         status: 'sent',
         provider_message_id: sent?.sid || null,
       });
-    } catch {
+      if (logError) {
+        console.error(`[actions/send_sms] messages insert failed (org ${ctx.orgId}, sid ${sent?.sid || 'n/a'}):`, logError.message);
+      }
+    } catch (logErr: any) {
       // Best-effort: a logging failure must not fail the send itself.
+      console.error(`[actions/send_sms] conversation logging failed (org ${ctx.orgId}):`, logErr?.message);
     }
 
     return { success: true, data: { to, body } };
@@ -366,17 +371,40 @@ export async function executeCreateTask(
 
 // ── Action: Update Status ───────────────────────────────────
 
+// Le nom de table vient de la configuration d'une règle et l'écriture passe par
+// le client service_role : sans liste blanche ni filtre d'org, une règle pouvait
+// viser n'importe quelle table et n'importe quelle ligne, RLS contournée.
+const UPDATE_STATUS_TABLES = new Set([
+  'jobs',
+  'quotes',
+  'invoices',
+  'clients',
+  'tasks',
+  'schedule_events',
+]);
+
 export async function executeUpdateStatus(
   config: { table: string; status: string },
   _vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const { error } = await ctx.supabase
+  if (!UPDATE_STATUS_TABLES.has(config.table)) {
+    return { success: false, error: `Table not allowed for update_status: ${config.table}` };
+  }
+
+  const { data, error } = await ctx.supabase
     .from(config.table)
     .update({ status: config.status })
-    .eq('id', ctx.entityId);
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  // 0 ligne = l'entité n'appartient pas à cette org (ou n'existe plus) :
+  // ne pas rapporter un succès pour une écriture qui n'a rien touché.
+  if (!data || data.length === 0) {
+    return { success: false, error: `No ${config.table} row matched for this organization.` };
+  }
   return { success: true, data: { table: config.table, status: config.status } };
 }
 
@@ -521,7 +549,9 @@ export async function executeRequestReview(
   );
 
   // 10. Log review request for tracking
-  await ctx.supabase.from('review_requests').insert({
+  // C'est aussi ce que lit l'anti-doublon de l'étape 5 : si la ligne n'est pas
+  // écrite, la même demande peut repartir chaque jour.
+  const { error: trackError } = await ctx.supabase.from('review_requests').insert({
     org_id: ctx.orgId,
     client_id: clientId,
     job_id: jobId,
@@ -530,9 +560,12 @@ export async function executeRequestReview(
     status: emailResult.success ? 'sent' : 'failed',
     sent_at: emailResult.success ? new Date().toISOString() : null,
   });
+  if (trackError) {
+    console.error(`[actions/request_review] review_requests insert failed (org ${ctx.orgId}, client ${clientId || 'n/a'}):`, trackError.message);
+  }
 
   // 11. Log activity
-  await ctx.supabase.from('activity_log').insert({
+  const { error: activityError } = await ctx.supabase.from('activity_log').insert({
     org_id: ctx.orgId,
     entity_type: ctx.entityType,
     entity_id: ctx.entityId,
@@ -545,10 +578,23 @@ export async function executeRequestReview(
       email_sent: emailResult.success,
     },
   });
+  if (activityError) {
+    console.error(`[actions/request_review] activity_log insert failed (org ${ctx.orgId}, ${ctx.entityType} ${ctx.entityId}):`, activityError.message);
+  }
+
+  // L'action ne vaut que par le courriel : si l'envoi a échoué, la journaliser
+  // comme réussie afficherait « exécutée » pour une demande jamais partie.
+  if (!emailResult.success) {
+    return {
+      success: false,
+      error: emailResult.error || 'Review request email could not be sent',
+      data: { token, surveyUrl, emailSent: false },
+    };
+  }
 
   return {
     success: true,
-    data: { token, surveyUrl, emailSent: emailResult.success },
+    data: { token, surveyUrl, emailSent: true },
   };
 }
 

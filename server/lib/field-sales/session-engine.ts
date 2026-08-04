@@ -25,13 +25,20 @@ export async function startSession(
   const { userId, territoryId, latitude, longitude } = options;
 
   // Ensure no active session already exists
-  const { data: existing } = await supabase
+  const { data: existing, error: existingErr } = await supabase
     .from('fs_field_sessions')
     .select('id')
     .eq('org_id', orgId)
     .eq('user_id', userId)
     .in('status', ['active', 'paused'])
     .maybeSingle();
+
+  // maybeSingle() renvoie aussi une erreur quand PLUSIEURS sessions ouvertes
+  // existent déjà : ignorer l'erreur en ouvrirait une de plus.
+  if (existingErr) {
+    console.error(`[field-session] active session check failed (org ${orgId}, user ${userId}):`, existingErr.message);
+    throw new Error('Could not verify existing field sessions. Try again.');
+  }
 
   if (existing) {
     throw new Error('An active field session already exists. End it before starting a new one.');
@@ -51,7 +58,7 @@ export async function startSession(
   if (error) throw new Error(error.message);
 
   // Create check-in record
-  await supabase.from('fs_check_in_records').insert({
+  const { error: checkInErr } = await supabase.from('fs_check_in_records').insert({
     org_id: orgId,
     user_id: userId,
     session_id: session.id,
@@ -59,6 +66,9 @@ export async function startSession(
     lat: latitude,
     lng: longitude,
   });
+  if (checkInErr) {
+    console.error(`[field-session] check-in record failed (org ${orgId}, user ${userId}, session ${session.id}):`, checkInErr.message);
+  }
 
   return session;
 }
@@ -101,7 +111,7 @@ export async function endSession(
   if (error) throw new Error(error.message);
 
   // Create check-out record
-  await supabase.from('fs_check_in_records').insert({
+  const { error: checkOutErr } = await supabase.from('fs_check_in_records').insert({
     org_id: orgId,
     user_id: session.user_id,
     session_id: sessionId,
@@ -109,6 +119,9 @@ export async function endSession(
     lat: latitude,
     lng: longitude,
   });
+  if (checkOutErr) {
+    console.error(`[field-session] check-out record failed (org ${orgId}, session ${sessionId}):`, checkOutErr.message);
+  }
 
   return updated;
 }

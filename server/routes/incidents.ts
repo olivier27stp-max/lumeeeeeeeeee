@@ -135,13 +135,17 @@ router.patch('/incidents/:id', async (req, res) => {
     .from('security_incidents').update(patch).eq('id', id).select().single();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Timeline entry
-  await svc.from('incident_timeline').insert({
+  // Timeline entry — registre exige par la Loi 25 / RGPD art. 33 : un trou
+  // dans la chronologie n'est pas rattrapable apres coup, il doit se voir.
+  const { error: timelineErr } = await svc.from('incident_timeline').insert({
     incident_id: id,
     actor_id: auth.user.id,
     event_type: patch.status && patch.status !== existing.status ? 'status_change' : 'update',
     payload: patch,
   });
+  if (timelineErr) {
+    console.error('[incidents] timeline entry insert failed:', { incidentId: id, actorId: auth.user.id, error: timelineErr.message });
+  }
 
   return res.status(200).json({ incident: data });
 });
@@ -211,12 +215,16 @@ router.post('/incidents/failed-login', async (req, res) => {
   const ip = typeof fwd === 'string' ? fwd.split(',')[0]?.trim() : (req.ip || null);
 
   const svc = getServiceClient();
-  await svc.rpc('record_failed_login', {
+  // La reponse reste 204 (route publique, on ne renseigne pas l'attaquant),
+  // mais un echec silencieux ici aveugle detect_login_anomalies : plus aucune
+  // detection de force brute.
+  const { error } = await svc.rpc('record_failed_login', {
     p_email: email,
     p_ip: ip,
     p_user_agent: (req.headers['user-agent'] || '').toString().slice(0, 500),
     p_reason: reason ? String(reason).slice(0, 120) : 'invalid_credentials',
   });
+  if (error) console.error('[incidents] record_failed_login failed:', error.message);
   return res.status(204).end();
 });
 

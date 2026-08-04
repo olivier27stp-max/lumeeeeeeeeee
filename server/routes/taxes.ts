@@ -363,8 +363,9 @@ router.post('/taxes/setup', validate(setupTaxSchema), async (req, res) => {
 
     // Clear existing default if setting new one
     if (make_default) {
-      await admin.from('tax_groups').update({ is_default: false })
+      const { error: clearErr } = await admin.from('tax_groups').update({ is_default: false })
         .eq('org_id', auth.orgId).eq('is_default', true);
+      if (clearErr) throw clearErr;
     }
 
     // Create tax group
@@ -379,13 +380,17 @@ router.post('/taxes/setup', validate(setupTaxSchema), async (req, res) => {
       const linkRows = configIds.map((cid, idx) => ({
         tax_group_id: group.id, tax_config_id: cid, sort_order: idx,
       }));
-      await admin.from('tax_group_items').insert(linkRows);
+      // Sans ces liens le groupe existe mais ne taxe RIEN : les factures
+      // partiraient hors taxes alors que l'UI affiche la region configuree.
+      const { error: linkErr } = await admin.from('tax_group_items').insert(linkRows);
+      if (linkErr) throw linkErr;
     }
 
     // Set as company default if requested
     if (make_default) {
-      await admin.from('company_settings').update({ default_tax_group_id: group.id })
+      const { error: defErr } = await admin.from('company_settings').update({ default_tax_group_id: group.id })
         .eq('org_id', auth.orgId);
+      if (defErr) throw defErr;
     }
 
     return res.json({ group, config_count: configIds.length });
@@ -421,17 +426,20 @@ router.post('/taxes/config', validate(createTaxConfigSchema), async (req, res) =
 
     if (!defaultGroup) {
       // Create a custom group
-      const { data: newGroup } = await admin.from('tax_groups').insert({
+      const { data: newGroup, error: groupErr } = await admin.from('tax_groups').insert({
         org_id: auth.orgId, name: 'Custom Taxes', region: '', country: '', is_default: true,
       }).select('id').single();
+      if (groupErr) throw groupErr;
       defaultGroup = newGroup;
     }
 
     // Add tax to the default group
     if (defaultGroup) {
-      await admin.from('tax_group_items').insert({
+      // Une taxe non rattachee au groupe par defaut n'est jamais appliquee.
+      const { error: linkErr } = await admin.from('tax_group_items').insert({
         tax_group_id: defaultGroup.id, tax_config_id: config.id, sort_order: 99,
       });
+      if (linkErr) throw linkErr;
     }
 
     return res.json({ config });
@@ -509,7 +517,8 @@ router.delete('/taxes/group/:id', async (req, res) => {
     if (!group) return res.status(404).json({ error: 'Tax group not found.' });
 
     // Delete group items first (cascade), then group
-    await admin.from('tax_group_items').delete().eq('tax_group_id', req.params.id);
+    const { error: itemsErr } = await admin.from('tax_group_items').delete().eq('tax_group_id', req.params.id);
+    if (itemsErr) throw itemsErr;
     const { error } = await admin.from('tax_groups').delete()
       .eq('id', req.params.id).eq('org_id', auth.orgId);
 
@@ -531,8 +540,11 @@ router.patch('/taxes/group/:id/default', async (req, res) => {
       return res.status(403).json({ error: 'Admin or owner role required.' });
     }
 
-    await admin.from('tax_groups').update({ is_default: false })
+    // Sans ce démarquage, deux groupes restent `is_default` et le calcul de
+    // taxe applique le premier trouvé — au hasard.
+    const { error: clearErr } = await admin.from('tax_groups').update({ is_default: false })
       .eq('org_id', auth.orgId).eq('is_default', true);
+    if (clearErr) throw clearErr;
 
     const { data, error } = await admin.from('tax_groups')
       .update({ is_default: true }).eq('id', req.params.id).eq('org_id', auth.orgId)
@@ -540,8 +552,10 @@ router.patch('/taxes/group/:id/default', async (req, res) => {
 
     if (error) throw error;
 
-    await admin.from('company_settings').update({ default_tax_group_id: data.id })
+    const { error: settingsErr } = await admin.from('company_settings')
+      .update({ default_tax_group_id: data.id })
       .eq('org_id', auth.orgId);
+    if (settingsErr) throw settingsErr;
 
     return res.json({ group: data });
   } catch (err: any) {

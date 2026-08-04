@@ -315,7 +315,8 @@ export default function ProfileSettings() {
       const { error: profErr } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', userId);
       if (profErr) throw profErr;
       if (memberRowId) {
-        await supabase.from('team_members').update({ avatar_url: url }).eq('id', memberRowId);
+        const { error: memberErr } = await supabase.from('team_members').update({ avatar_url: url }).eq('id', memberRowId);
+        if (memberErr) throw memberErr;
       }
       setAvatarUrl(url);
       toast.success(isFr ? 'Photo mise à jour' : 'Photo updated');

@@ -365,7 +365,8 @@ export default function ClientDetails() {
     setNotesSaving(true);
     try {
       const orgId = await getCurrentOrgIdOrThrow();
-      await supabase.from('clients').update({ notes }).eq('id', client.id).eq('org_id', orgId);
+      const { error } = await supabase.from('clients').update({ notes }).eq('id', client.id).eq('org_id', orgId);
+      if (error) throw error;
       toast.success(language === 'fr' ? 'Notes enregistrées' : 'Notes saved');
       setNotesEdited(false);
     } catch {
@@ -437,9 +438,11 @@ export default function ClientDetails() {
     const trimmed = newTag.trim();
     if (!trimmed || !client) return;
     if (tags.includes(trimmed)) { setNewTag(''); setShowTagInput(false); return; }
-    try {
-      await supabase.from('client_tags').insert({ client_id: client.id, tag: trimmed });
-    } catch { /* table may not exist */ }
+    const { error } = await supabase.from('client_tags').insert({ client_id: client.id, tag: trimmed });
+    if (error) {
+      toast.error(language === 'fr' ? "Échec de l'ajout de l'étiquette" : 'Failed to add tag');
+      return;
+    }
     setTags((prev) => [...prev, trimmed]);
     setNewTag('');
     setShowTagInput(false);
@@ -449,9 +452,8 @@ export default function ClientDetails() {
     if (!client) return;
     const previous = tags;
     setTags((prev) => prev.filter((tg) => tg !== tag));
-    try {
-      await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
-    } catch {
+    const { error } = await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
+    if (error) {
       setTags(previous);
       toast.error(t.clientDetails.failedToRemoveTag);
     }

@@ -58,7 +58,7 @@ async function auditLog(params: {
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   try {
-    await getDb().from('integration_audit_logs').insert({
+    const { error } = await getDb().from('integration_audit_logs').insert({
       org_id: params.orgId,
       app_id: params.appId,
       user_id: params.userId,
@@ -68,8 +68,13 @@ async function auditLog(params: {
       message: params.message || null,
       metadata: params.metadata || {},
     });
-  } catch {
-    // Audit logging should never break the flow
+    // Audit logging should never break the flow, but a silent audit gap must
+    // still be visible in the server logs.
+    if (error) {
+      console.error(`[integrations] audit log insert failed (org ${params.orgId}, app ${params.appId}, action ${params.action}):`, error.message);
+    }
+  } catch (err: any) {
+    console.error('[integrations] audit log insert threw:', err?.message);
   }
 }
 
@@ -175,7 +180,7 @@ export async function startOAuth(params: {
   });
 
   // Upsert connection as pending
-  await getDb()
+  const { error: pendingError } = await getDb()
     .from('app_connections')
     .upsert({
       org_id: params.orgId,
@@ -184,6 +189,10 @@ export async function startOAuth(params: {
       auth_type: 'oauth',
       connected_by: params.userId,
     }, { onConflict: 'org_id,app_id' });
+
+  if (pendingError) {
+    console.error(`[integrations] failed to mark ${params.appId} pending (org ${params.orgId}):`, pendingError.message);
+  }
 
   return { authorize_url: authorizeUrl };
 }
@@ -222,11 +231,16 @@ export async function handleOAuthCallback(params: {
     return { success: false, orgId: stateRecord.org_id, error: 'OAuth state expired. Please try again.' };
   }
 
-  // Mark state as consumed
-  await db
+  // Mark state as consumed. Si l'écriture échoue, le state reste réutilisable
+  // (rejeu du callback) : ça doit crier dans les logs.
+  const { error: consumeError } = await db
     .from('integration_oauth_states')
     .update({ consumed_at: new Date().toISOString() })
     .eq('id', stateRecord.id);
+
+  if (consumeError) {
+    console.error(`[integrations] failed to consume OAuth state ${stateRecord.id} (org ${stateRecord.org_id}, app ${params.appId}):`, consumeError.message);
+  }
 
   // 2. Get provider
   const provider = getProvider(params.appId);
@@ -308,7 +322,7 @@ export async function handleOAuthCallback(params: {
     // Test failure shouldn't prevent storage — token is valid from OAuth
   }
 
-  await db
+  const { error: saveError } = await db
     .from('app_connections')
     .upsert({
       org_id: stateRecord.org_id,
@@ -316,6 +330,22 @@ export async function handleOAuthCallback(params: {
       connected_by: stateRecord.user_id,
       ...updatePayload,
     }, { onConflict: 'org_id,app_id' });
+
+  // Sans jetons stockés il n'y a pas de connexion : annoncer « connecté »
+  // laisserait l'org devant une intégration qui ne peut rien appeler.
+  if (saveError) {
+    const msg = `Failed to save connection: ${saveError.message}`;
+    console.error(`[integrations] ${msg} (org ${stateRecord.org_id}, app ${params.appId})`);
+    await auditLog({
+      orgId: stateRecord.org_id,
+      appId: params.appId,
+      userId: stateRecord.user_id,
+      action: 'oauth_callback',
+      status: 'error',
+      message: msg,
+    });
+    return { success: false, orgId: stateRecord.org_id, error: msg };
+  }
 
   await auditLog({
     orgId: stateRecord.org_id,
@@ -475,7 +505,7 @@ export async function testConnection(orgId: string, appId: string): Promise<Test
   }
 
   // Update test result in DB
-  await db
+  const { error: updateError } = await db
     .from('app_connections')
     .update({
       last_tested: new Date().toISOString(),
@@ -485,6 +515,10 @@ export async function testConnection(orgId: string, appId: string): Promise<Test
     })
     .eq('org_id', orgId)
     .eq('app_id', appId);
+
+  if (updateError) {
+    console.error(`[integrations] failed to store test result (org ${orgId}, app ${appId}):`, updateError.message);
+  }
 
   return result;
 }
@@ -518,8 +552,9 @@ export async function disconnect(params: {
     }
   }
 
-  // Clear secrets and mark disconnected
-  await db
+  // Clear secrets and mark disconnected. Si ça rate, les jetons restent en
+  // base : la route doit répondre en erreur plutôt qu'afficher « déconnecté ».
+  const { error: clearError } = await db
     .from('app_connections')
     .update({
       status: 'not_connected',
@@ -533,6 +568,11 @@ export async function disconnect(params: {
     })
     .eq('org_id', params.orgId)
     .eq('app_id', params.appId);
+
+  if (clearError) {
+    console.error(`[integrations] failed to disconnect (org ${params.orgId}, app ${params.appId}):`, clearError.message);
+    throw new Error(`Failed to disconnect: ${clearError.message}`);
+  }
 
   await auditLog({
     orgId: params.orgId,
@@ -579,7 +619,7 @@ export async function refreshOAuthToken(orgId: string, appId: string): Promise<b
       ? new Date(Date.now() + tokens.expires_in * 1000).toISOString()
       : null;
 
-    await db
+    const { error: saveError } = await db
       .from('app_connections')
       .update({
         status: 'connected',
@@ -592,6 +632,13 @@ export async function refreshOAuthToken(orgId: string, appId: string): Promise<b
       .eq('org_id', orgId)
       .eq('app_id', appId);
 
+    // Jeton non persisté = les appelants reliront l'ancien (expiré) : mieux
+    // vaut signaler l'échec du refresh que de laisser tourner en boucle.
+    if (saveError) {
+      console.error(`[integrations] failed to persist refreshed token (org ${orgId}, app ${appId}):`, saveError.message);
+      return false;
+    }
+
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Token refresh failed';
@@ -602,7 +649,7 @@ export async function refreshOAuthToken(orgId: string, appId: string): Promise<b
     // sitting in a state that looks recoverable.
     const unrecoverable = /invalid_grant|invalid_request|unauthorized_client/i.test(message);
 
-    await db
+    const { error: markError } = await db
       .from('app_connections')
       .update({
         status: unrecoverable ? 'reconnect_required' : 'token_expired',
@@ -612,6 +659,10 @@ export async function refreshOAuthToken(orgId: string, appId: string): Promise<b
       })
       .eq('org_id', orgId)
       .eq('app_id', appId);
+
+    if (markError) {
+      console.error(`[integrations] failed to flag refresh failure (org ${orgId}, app ${appId}):`, markError.message, '| original:', message);
+    }
 
     return false;
   }
@@ -671,7 +722,7 @@ export async function getValidAccessToken(
 // ── Internal helpers ──────────────────────────────────────────
 
 async function updateConnectionError(db: SupabaseClient, orgId: string, appId: string, error: string) {
-  await db
+  const { error: writeError } = await db
     .from('app_connections')
     .upsert({
       org_id: orgId,
@@ -680,4 +731,8 @@ async function updateConnectionError(db: SupabaseClient, orgId: string, appId: s
       last_error: error,
       error_message: error,
     }, { onConflict: 'org_id,app_id' });
+
+  if (writeError) {
+    console.error(`[integrations] failed to record connection error (org ${orgId}, app ${appId}):`, writeError.message, '| original:', error);
+  }
 }

@@ -81,22 +81,47 @@ export async function updateChallengeProgress(
 
   if (pErr) throw new Error(pErr.message);
 
+  // Le comptage ignorait metric_slug : un defi « portes cognees » comptait
+  // aussi les notes et les ventes. Les types listes ici sont ceux reellement
+  // presents dans field_house_events.event_type.
+  const METRIC_EVENT_TYPES: Record<string, string[]> = {
+    doors_knocked: ['knock'],
+    knocks: ['knock'],
+    leads: ['lead'],
+    sales: ['sale'],
+    closes: ['sale'],
+    quotes_sent: ['quote_sent'],
+    callbacks: ['callback'],
+  };
+
   for (const participant of participants ?? []) {
     // Count events matching the metric slug within the challenge period
-    const { data: events } = await supabase
+    const metricTypes = METRIC_EVENT_TYPES[String(challenge.metric_slug || '')] ?? null;
+    let evQuery = supabase
       .from('field_house_events')
       .select('id')
       .eq('org_id', orgId)
-      .eq('created_by', participant.user_id)
+      .eq('user_id', participant.user_id)
       .gte('created_at', challenge.start_date)
       .lte('created_at', challenge.end_date);
+    if (metricTypes) evQuery = evQuery.in('event_type', metricTypes);
+    const { data: events, error: evErr } = await evQuery;
+
+    // Lecture ratée → 0 événement : on écrirait une progression fausse.
+    if (evErr) {
+      console.error(`[gamification] event count failed (org ${orgId}, challenge ${challengeId}, user ${participant.user_id}):`, evErr.message);
+      continue;
+    }
 
     const score = events?.length ?? 0;
 
-    await supabase
+    const { error: upErr } = await supabase
       .from('fs_challenge_participants')
       .update({ current_value: score, updated_at: new Date().toISOString() })
       .eq('id', participant.id);
+    if (upErr) {
+      console.error(`[gamification] progress update failed (org ${orgId}, challenge ${challengeId}, participant ${participant.id}):`, upErr.message);
+    }
   }
 }
 
@@ -107,13 +132,15 @@ export async function evaluateChallenge(
 ) {
   await updateChallengeProgress(supabase, orgId, challengeId);
 
-  const { data: participants } = await supabase
+  const { data: participants, error: pErr } = await supabase
     .from('fs_challenge_participants')
     .select('*')
     .eq('challenge_id', challengeId)
     .order('current_value', { ascending: false });
 
-  await supabase
+  if (pErr) throw new Error(pErr.message);
+
+  const { error: closeErr } = await supabase
     .from('fs_challenges')
     .update({
       status: 'completed',
@@ -121,6 +148,8 @@ export async function evaluateChallenge(
     })
     .eq('id', challengeId)
     .eq('org_id', orgId);
+
+  if (closeErr) throw new Error(closeErr.message);
 
   if (participants && participants.length > 0) {
     const winner = participants[0];
@@ -257,20 +286,22 @@ export async function updateBattleScores(
 
   const countEvents = async (userId: string | null) => {
     if (!userId) return 0;
-    const { count } = await supabase
+    const { count, error: cErr } = await supabase
       .from('field_house_events')
       .select('*', { count: 'exact', head: true })
       .eq('org_id', orgId)
-      .eq('created_by', userId)
+      .eq('user_id', userId)
       .gte('created_at', battle.start_date)
       .lte('created_at', battle.end_date);
+    // Un comptage raté écrirait un score de 0 dans la battle.
+    if (cErr) throw new Error(`Battle score count failed (org ${orgId}, battle ${battleId}, user ${userId}): ${cErr.message}`);
     return count ?? 0;
   };
 
   const challengerScore = await countEvents(battle.challenger_user_id);
   const opponentScore = await countEvents(battle.opponent_user_id);
 
-  await supabase
+  const { error: scoreErr } = await supabase
     .from('fs_battles')
     .update({
       challenger_score: challengerScore,
@@ -278,6 +309,8 @@ export async function updateBattleScores(
       updated_at: new Date().toISOString(),
     })
     .eq('id', battleId);
+
+  if (scoreErr) throw new Error(scoreErr.message);
 
   return { challengerScore, opponentScore };
 }
@@ -291,18 +324,27 @@ export async function checkAndAwardBadges(
   orgId: string,
   userId: string
 ) {
-  const { data: badges } = await supabase
+  const { data: badges, error: badgesErr } = await supabase
     .from('fs_badges')
     .select('*')
     .eq('org_id', orgId)
     .eq('is_active', true)
     .is('deleted_at', null);
+  if (badgesErr) {
+    console.error(`[gamification] badge catalogue load failed (org ${orgId}, user ${userId}):`, badgesErr.message);
+    return;
+  }
 
-  const { data: earned } = await supabase
+  const { data: earned, error: earnedErr } = await supabase
     .from('fs_rep_badges')
     .select('badge_id')
     .eq('org_id', orgId)
     .eq('user_id', userId);
+  // Sans la liste des badges déjà gagnés on ré-attribuerait les mêmes badges.
+  if (earnedErr) {
+    console.error(`[gamification] earned badges load failed (org ${orgId}, user ${userId}):`, earnedErr.message);
+    return;
+  }
 
   const earnedIds = new Set((earned ?? []).map((e) => e.badge_id));
 
@@ -316,31 +358,42 @@ export async function checkAndAwardBadges(
     let qualified = true;
 
     if (criteria.doors_knocked) {
-      const { count } = await supabase
+      const { count, error: knockErr } = await supabase
         .from('field_house_events')
         .select('*', { count: 'exact', head: true })
         .eq('org_id', orgId)
-        .eq('created_by', userId)
-        .in('status', ['knock', 'door_knock']);
+        .eq('user_id', userId)
+        .in('event_type', ['knock', 'door_knock']);
+      if (knockErr) {
+        console.error(`[gamification] doors_knocked count failed (org ${orgId}, user ${userId}, badge ${badge.id}):`, knockErr.message);
+        continue;
+      }
       if ((count ?? 0) < (criteria.doors_knocked as number)) qualified = false;
     }
 
     if (criteria.closes) {
-      const { count } = await supabase
+      const { count, error: closeErr } = await supabase
         .from('field_house_events')
         .select('*', { count: 'exact', head: true })
         .eq('org_id', orgId)
-        .eq('created_by', userId)
-        .in('status', ['sale', 'lead', 'closed_won']);
+        .eq('user_id', userId)
+        .in('event_type', ['sale', 'lead', 'closed_won']);
+      if (closeErr) {
+        console.error(`[gamification] closes count failed (org ${orgId}, user ${userId}, badge ${badge.id}):`, closeErr.message);
+        continue;
+      }
       if ((count ?? 0) < (criteria.closes as number)) qualified = false;
     }
 
     if (qualified) {
-      await supabase.from('fs_rep_badges').insert({
+      const { error: awardErr } = await supabase.from('fs_rep_badges').insert({
         org_id: orgId,
         user_id: userId,
         badge_id: badge.id,
       });
+      if (awardErr) {
+        console.error(`[gamification] badge award failed (org ${orgId}, user ${userId}, badge ${badge.id}):`, awardErr.message);
+      }
     }
   }
 }

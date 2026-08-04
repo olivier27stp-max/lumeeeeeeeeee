@@ -72,11 +72,12 @@ export async function applyOptimizedSchedule(
     if (jobErr) throw jobErr;
 
     // Best-effort: update any open schedule_event rows for this job.
-    await supabase
+    const { error: evErr } = await supabase
       .from('schedule_events')
       .update({ start_at: startIso, end_at: endIso })
       .eq('job_id', s.job_id)
       .is('deleted_at', null);
+    if (evErr) console.error('[routeOptimization] schedule_events sync failed for job', s.job_id, evErr.message);
 
     clock += s.duration_minutes * 60 * 1000;
     updated++;

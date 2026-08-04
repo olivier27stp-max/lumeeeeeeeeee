@@ -301,15 +301,14 @@ export async function setTeamHoursForDate(teamId: string, dateStr: string, start
 
   // Les lignes de présence du jour suivent les heures de l'équipe (elles ne
   // portent pas d'heures individuelles). Best-effort si la migration manque.
-  try {
-    await supabase
-      .from('team_schedule_assignments')
-      .update({ start_time: start, end_time: end })
-      .eq('org_id', orgId)
-      .eq('team_id', teamId)
-      .eq('work_date', dateStr)
-      .eq('availability_status', 'available');
-  } catch { /* tables absentes — ignoré */ }
+  const { error: alignErr } = await supabase
+    .from('team_schedule_assignments')
+    .update({ start_time: start, end_time: end })
+    .eq('org_id', orgId)
+    .eq('team_id', teamId)
+    .eq('work_date', dateStr)
+    .eq('availability_status', 'available');
+  if (alignErr) console.error('[teamSchedule] alignement des assignations échoué', dateStr, alignErr.message);
 
   void audit('team_hours_updated', {
     team_id: teamId, work_date: dateStr, new_value: { start, end },
@@ -521,7 +520,7 @@ async function audit(
   try {
     const orgId = await getCurrentOrgIdOrThrow();
     const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('team_schedule_audit').insert({
+    const { error } = await supabase.from('team_schedule_audit').insert({
       org_id: orgId,
       actor_id: user?.id ?? null,
       action,
@@ -531,6 +530,7 @@ async function audit(
       old_value: payload.old_value ?? null,
       new_value: payload.new_value ?? null,
     });
+    if (error) console.error('[teamSchedule] audit insert échoué', action, error.message);
   } catch {
     /* silencieux */
   }
@@ -560,13 +560,14 @@ export async function createAssignment(input: AssignmentInput): Promise<Schedule
   // Ré-assigner quelqu'un qu'on avait retiré ce jour-là : la ligne `removed`
   // occupe le créneau (contrainte d'unicité) — on la lève d'abord.
   if ((input.availability_status || 'available') === 'available') {
-    await supabase
+    const { error: freeErr } = await supabase
       .from('team_schedule_assignments')
       .delete()
       .eq('team_id', input.team_id)
       .eq('user_id', input.user_id)
       .eq('work_date', input.work_date)
       .eq('availability_status', 'removed');
+    if (freeErr) throw freeErr;
   }
   const { data, error } = await supabase
     .from('team_schedule_assignments')

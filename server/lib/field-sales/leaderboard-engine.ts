@@ -118,6 +118,16 @@ export async function getLeaderboard(
       .lte('created_at', range.end),
   ]);
 
+  // Le roster EST le leaderboard : sans lui la réponse serait un tableau vide
+  // indiscernable d'une org sans membres.
+  if (membersRes.error) throw new Error(membersRes.error.message);
+  if (prevJobsRes.error) {
+    console.error(`[leaderboard] previous-window jobs load failed (orgs ${orgIds.join(',')}):`, prevJobsRes.error.message);
+  }
+  if (leadsRes.error) {
+    console.error(`[leaderboard] leads load failed (orgs ${orgIds.join(',')}):`, leadsRes.error.message);
+  }
+
   const roster = (membersRes.data ?? []).filter((m: any) => !EXCLUDED_ROLES.has(m.role));
   const userIds = Array.from(new Set(roster.map((m: any) => m.user_id as string)));
   if (userIds.length === 0) return [];
@@ -270,6 +280,13 @@ export async function getRepPerformance(
       .lte('created_at', toIso),
   ]);
 
+  // Une lecture ratée donnerait un rapport « 0 partout » indiscernable d'un rep
+  // sans activité — et snapshotDailyStats l'écrirait tel quel en base.
+  const readErr = leadsRes.error || quotesRes.error || dealsRes.error || jobsRes.error;
+  if (readErr) {
+    throw new Error(`Rep performance load failed (orgs ${orgIds.join(',')}, user ${userId}): ${readErr.message}`);
+  }
+
   const matchLead = (l: any) => (l.assigned_to || l.user_id || l.created_by) === userId;
   const matchQuote = (q: any) => (q.salesperson_id || q.created_by) === userId;
   const matchDeal = (d: any) => repIdOf(d) === userId;
@@ -355,8 +372,11 @@ export async function snapshotDailyStats(
   );
 
   if (results.length > 0) {
-    await supabase.from('fs_rep_stat_snapshots').upsert(results, {
+    const { error: snapErr } = await supabase.from('fs_rep_stat_snapshots').upsert(results, {
       onConflict: 'user_id,period,period_start',
     });
+    if (snapErr) {
+      console.error(`[leaderboard] daily snapshot upsert failed (org ${orgId}, ${results.length} rep(s), ${dayStart}):`, snapErr.message);
+    }
   }
 }

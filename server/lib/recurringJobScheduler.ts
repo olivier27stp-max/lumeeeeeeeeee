@@ -59,19 +59,23 @@ async function processRecurringJobs(supabase: SupabaseClient) {
 
         // Check max occurrences
         if (rule.max_occurrences && rule.occurrences_created >= rule.max_occurrences) {
-          await supabase
+          const { error: deactErr } = await supabase
             .from('job_recurrence_rules')
             .update({ is_active: false, updated_at: now })
             .eq('id', rule.id);
+          // Sans cette desactivation la regle reste due et sera reexaminee a
+          // chaque passage (toutes les 5 min) — bruit permanent, jamais visible.
+          if (deactErr) console.error(`[recurring-jobs] failed to deactivate rule ${rule.id} (max occurrences):`, deactErr.message);
           continue;
         }
 
         // Check end_date
         if (rule.end_date && new Date(rule.end_date) < new Date()) {
-          await supabase
+          const { error: deactErr } = await supabase
             .from('job_recurrence_rules')
             .update({ is_active: false, updated_at: now })
             .eq('id', rule.id);
+          if (deactErr) console.error(`[recurring-jobs] failed to deactivate rule ${rule.id} (end date):`, deactErr.message);
           continue;
         }
 
@@ -106,7 +110,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
 
         // Create schedule event for the new job
         if (newJob?.id) {
-          await supabase.from('schedule_events').insert({
+          const { error: evtErr } = await supabase.from('schedule_events').insert({
             org_id: job.org_id,
             job_id: newJob.id,
             client_id: job.client_id,
@@ -115,6 +119,8 @@ async function processRecurringJobs(supabase: SupabaseClient) {
             end_at: new Date(nextDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2h default
             status: 'scheduled',
           });
+          // Job cree mais absent du calendrier : l'equipe ne le voit pas.
+          if (evtErr) console.error(`[recurring-jobs] schedule_event insert failed for job ${newJob.id} (rule ${rule.id}):`, evtErr.message);
         }
 
         // Calculate next occurrence.
@@ -133,7 +139,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
         );
 
         // Update rule
-        await supabase
+        const { error: ruleErr } = await supabase
           .from('job_recurrence_rules')
           .update({
             occurrences_created: (rule.occurrences_created || 0) + 1,
@@ -141,6 +147,17 @@ async function processRecurringJobs(supabase: SupabaseClient) {
             updated_at: now,
           })
           .eq('id', rule.id);
+
+        if (ruleErr) {
+          // ALERTE : next_run_at reste dans le passe, donc la regle sera de
+          // nouveau « due » dans 5 minutes et CREERA UN JOB EN DOUBLE, puis un
+          // autre, indefiniment. Il faut corriger la regle a la main.
+          console.error(
+            `[recurring-jobs] CRITICAL: rule ${rule.id} not advanced after creating job ${newJob?.id} — duplicate jobs will be created every run:`,
+            ruleErr.message,
+          );
+          continue;
+        }
 
         console.log(`[recurring-jobs] created job ${newJob?.id} from rule ${rule.id}, next: ${nextRunAt.toISOString()}`);
       } catch (err: any) {

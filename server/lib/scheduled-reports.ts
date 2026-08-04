@@ -29,23 +29,34 @@ async function gatherReportData(orgId: string, from: string, to: string): Promis
   // Org name
   const { data: org } = await admin.from('orgs').select('name').eq('id', orgId).maybeSingle();
 
+  // Une RPC en echec ne leve pas : sans ce log, le rapport partirait chez le
+  // client avec des zeros partout, indiscernables d'une periode sans activite.
+  const logRpc = (name: string, error: { message: string } | null) => {
+    if (error) console.error(`[scheduled-reports] ${name} failed for org ${orgId}:`, error.message);
+  };
+
   // Overview via RPC
-  const { data: overview } = await admin.rpc('rpc_insights_overview', { p_org: orgId, p_from: from, p_to: to });
+  const { data: overview, error: ovErr } = await admin.rpc('rpc_insights_overview', { p_org: orgId, p_from: from, p_to: to });
+  logRpc('rpc_insights_overview', ovErr);
   const ov = Array.isArray(overview) ? overview[0] : overview;
 
   // Lead conversion
-  const { data: conv } = await admin.rpc('rpc_insights_lead_conversion', { p_org: orgId, p_from: from, p_to: to });
+  const { data: conv, error: cvErr } = await admin.rpc('rpc_insights_lead_conversion', { p_org: orgId, p_from: from, p_to: to });
+  logRpc('rpc_insights_lead_conversion', cvErr);
   const cv = Array.isArray(conv) ? conv[0] : conv;
 
   // Invoices summary
-  const { data: inv } = await admin.rpc('rpc_insights_invoices_summary', { p_org: orgId, p_from: from, p_to: to });
+  const { data: inv, error: ivErr } = await admin.rpc('rpc_insights_invoices_summary', { p_org: orgId, p_from: from, p_to: to });
+  logRpc('rpc_insights_invoices_summary', ivErr);
   const iv = Array.isArray(inv) ? inv[0] : inv;
 
   // Top clients by revenue
-  const { data: topClients } = await admin.rpc('rpc_insights_client_lifetime_value', { p_org: orgId, p_limit: 5 });
+  const { data: topClients, error: tcErr } = await admin.rpc('rpc_insights_client_lifetime_value', { p_org: orgId, p_limit: 5 });
+  logRpc('rpc_insights_client_lifetime_value', tcErr);
 
   // Churn alerts
-  const { data: churn } = await admin.rpc('rpc_insights_churn_risk', { p_org: orgId, p_limit: 100 });
+  const { data: churn, error: chErr } = await admin.rpc('rpc_insights_churn_risk', { p_org: orgId, p_limit: 100 });
+  logRpc('rpc_insights_churn_risk', chErr);
   const highRisk = (churn || []).filter((c: any) => c.risk_level === 'high').length;
 
   return {
@@ -169,9 +180,14 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
   });
 
   // Update last_sent_at
-  await admin.from('scheduled_reports')
+  const { error: stampErr } = await admin.from('scheduled_reports')
     .update({ last_sent_at: new Date().toISOString() })
     .eq('id', reportId);
+  if (stampErr) {
+    // Sans last_sent_at, processScheduledReports() croit que le rapport n'est
+    // jamais parti et le RENVERRA a chaque passage du cron.
+    console.error(`[scheduled-reports] CRITICAL: last_sent_at not written for report ${reportId} (org ${report.org_id}) — the report will be re-sent on every run:`, stampErr.message);
+  }
 
   console.log(`[scheduled-reports] Sent ${report.frequency} report to ${report.recipient_email} for org ${report.org_id}`);
 }

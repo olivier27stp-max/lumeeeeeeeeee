@@ -92,8 +92,10 @@ class CRMEventBus extends EventEmitter {
 
     // Write to activity_log
     if (this.supabase) {
+      // supabase-js retourne l'erreur, il ne la lève pas : le try/catch seul
+      // laissait passer toute écriture refusée sans une ligne de log.
       try {
-        await this.supabase.from('activity_log').insert({
+        const { error } = await this.supabase.from('activity_log').insert({
           org_id: fullEvent.orgId,
           entity_type: fullEvent.entityType,
           entity_id: fullEvent.entityId,
@@ -103,8 +105,11 @@ class CRMEventBus extends EventEmitter {
           actor_id: fullEvent.actorId || null,
           metadata: fullEvent.metadata,
         });
+        if (error) {
+          console.error(`[eventBus] activity_log insert failed for ${event} (org ${fullEvent.orgId}, ${fullEvent.entityType} ${fullEvent.entityId}):`, error.message);
+        }
       } catch (err: any) {
-        console.error('[eventBus] activity_log insert failed:', err.message);
+        console.error('[eventBus] activity_log insert threw:', err.message);
       }
     }
 

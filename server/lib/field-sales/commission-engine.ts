@@ -155,23 +155,34 @@ export async function projectCommissionForJob(
   if (!repUserId) return { created: 0, skipped: 'no_rep' };
 
   // 3. Skip if any entry already exists for this job (avoid duplicates)
-  const { data: dup } = await supabase
+  const { data: dup, error: dupErr } = await supabase
     .from('fs_commission_entries')
     .select('id')
     .eq('org_id', orgId)
     .eq('job_id', jobId)
     .is('deleted_at', null)
     .limit(1);
+  // Lecture ratée = on ne sait pas s'il existe déjà une entrée : mieux vaut
+  // s'abstenir que de projeter une commission en double.
+  if (dupErr) {
+    console.error(`[commissions] duplicate check failed (org ${orgId}, job ${jobId}):`, dupErr.message);
+    return { created: 0, skipped: 'dup_check_failed' };
+  }
   if (dup && dup.length > 0) return { created: 0, skipped: 'already_projected' };
 
   // 4. Resolve rule (same logic as the invoice flow)
-  const { data: rules } = await supabase.from('fs_commission_rules')
+  const { data: rules, error: rulesErr } = await supabase.from('fs_commission_rules')
     .select('*').eq('org_id', orgId).eq('is_active', true).is('deleted_at', null)
     .order('priority', { ascending: false });
+  if (rulesErr) {
+    console.error(`[commissions] rules load failed (org ${orgId}, job ${jobId}):`, rulesErr.message);
+    return { created: 0, skipped: 'rules_load_failed' };
+  }
   let rule = (rules ?? []).find((r: any) => Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(repUserId));
   if (!rule) {
-    const { data: settings } = await supabase.from('commission_settings')
+    const { data: settings, error: setErr } = await supabase.from('commission_settings')
       .select('default_rule_id').eq('org_id', orgId).maybeSingle();
+    if (setErr) console.error(`[commissions] settings load failed (org ${orgId}):`, setErr.message);
     if (settings?.default_rule_id) rule = (rules ?? []).find((r: any) => r.id === settings.default_rule_id);
   }
   if (!rule) return { created: 0, skipped: 'no_rule' };
@@ -184,9 +195,15 @@ export async function projectCommissionForJob(
   const now = new Date();
   const nowIso = now.toISOString();
   const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const { data: priorEntries } = await supabase.from('fs_commission_entries')
+  const { data: priorEntries, error: priorErr } = await supabase.from('fs_commission_entries')
     .select('base_amount').eq('org_id', orgId).eq('user_id', repUserId)
     .is('deleted_at', null).gte('triggered_at', periodStart).lt('triggered_at', nowIso);
+  // Les paliers de performance se calculent sur ce cumul : une lecture ratée
+  // sous-évaluerait la commission sans rien signaler.
+  if (priorErr) {
+    console.error(`[commissions] period stats load failed (org ${orgId}, rep ${repUserId}, job ${jobId}):`, priorErr.message);
+    return { created: 0, skipped: 'period_stats_failed' };
+  }
   const repPeriodRevenueCents = (priorEntries ?? []).reduce((s: number, e: any) => s + Number(e.base_amount || 0), 0);
   const repPeriodSaleCount = (priorEntries ?? []).length;
 
@@ -208,7 +225,10 @@ export async function projectCommissionForJob(
     description: 'Estimation — en attente du paiement de la facture', triggered_at: nowIso,
     calc_breakdown: { ...calc.breakdown, projected: true, total_calculated_cents: calc.amountCents },
   });
-  if (error) return { created: 0, skipped: 'insert_failed' };
+  if (error) {
+    console.error(`[commissions] projected entry insert failed (org ${orgId}, rep ${repUserId}, job ${jobId}):`, error.message);
+    return { created: 0, skipped: 'insert_failed' };
+  }
   return { created: 1, skipped: null };
 }
 
@@ -232,7 +252,10 @@ export async function voidProjectedCommissionForJob(
     .is('invoice_id', null)
     .is('deleted_at', null)
     .select('id');
-  if (error) return { voided: 0 };
+  if (error) {
+    console.error(`[commissions] void projected entries failed (org ${orgId}, job ${jobId}):`, error.message);
+    return { voided: 0 };
+  }
   return { voided: (data ?? []).length };
 }
 
@@ -246,13 +269,19 @@ export async function generateCommissionsForInvoice(
   invoiceId: string
 ): Promise<{ created: number; skipped: string | null }> {
   // 1. Skip if already generated
-  const { data: existing } = await supabase
+  const { data: existing, error: existingErr } = await supabase
     .from('fs_commission_entries')
     .select('id')
     .eq('org_id', orgId)
     .eq('invoice_id', invoiceId)
     .is('deleted_at', null)
     .limit(1);
+  // Lecture ratée = on ne sait pas si les commissions existent déjà : on
+  // s'abstient plutôt que de les générer une seconde fois.
+  if (existingErr) {
+    console.error(`[commissions] duplicate check failed (org ${orgId}, invoice ${invoiceId}):`, existingErr.message);
+    return { created: 0, skipped: 'dup_check_failed' };
+  }
   if (existing && existing.length > 0) return { created: 0, skipped: 'already_generated' };
 
   // 2. Load invoice + line items
@@ -268,34 +297,42 @@ export async function generateCommissionsForInvoice(
   // 3. Identify rep: from quote.assigned_to / lead.assigned_to
   let repUserId: string | null = null;
   if (invoice.quote_id) {
-    const { data: q } = await supabase.from('quotes')
+    const { data: q, error: qErr } = await supabase.from('quotes')
       .select('assigned_to, lead_id, client_id')
       .eq('id', invoice.quote_id).eq('org_id', orgId).maybeSingle();
+    if (qErr) console.error(`[commissions] quote load failed (org ${orgId}, quote ${invoice.quote_id}):`, qErr.message);
     repUserId = q?.assigned_to || null;
     if (!repUserId && q?.lead_id) {
-      const { data: l } = await supabase.from('clients')
+      const { data: l, error: lErr } = await supabase.from('clients')
         .select('assigned_to').eq('id', q.lead_id).eq('org_id', orgId).maybeSingle();
+      if (lErr) console.error(`[commissions] lead load failed (org ${orgId}, lead ${q.lead_id}):`, lErr.message);
       repUserId = l?.assigned_to || null;
     }
   }
   // Fallback: attribute to the job's salesperson (or its creator) when no
   // quote/lead rep was found.
   if (!repUserId && invoice.job_id) {
-    const { data: j } = await supabase.from('jobs')
+    const { data: j, error: jErr } = await supabase.from('jobs')
       .select('salesperson_id, created_by')
       .eq('id', invoice.job_id).eq('org_id', orgId).maybeSingle();
+    if (jErr) console.error(`[commissions] job load failed (org ${orgId}, job ${invoice.job_id}):`, jErr.message);
     repUserId = j?.salesperson_id || j?.created_by || null;
   }
   if (!repUserId) return { created: 0, skipped: 'no_rep' };
 
   // 4. Find rule: assigned_user_ids contains rep → else default rule from settings
-  const { data: rules } = await supabase.from('fs_commission_rules')
+  const { data: rules, error: rulesErr } = await supabase.from('fs_commission_rules')
     .select('*').eq('org_id', orgId).eq('is_active', true).is('deleted_at', null)
     .order('priority', { ascending: false });
+  if (rulesErr) {
+    console.error(`[commissions] rules load failed (org ${orgId}, invoice ${invoiceId}):`, rulesErr.message);
+    return { created: 0, skipped: 'rules_load_failed' };
+  }
   let rule = (rules ?? []).find((r: any) => Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(repUserId));
   if (!rule) {
-    const { data: settings } = await supabase.from('commission_settings')
+    const { data: settings, error: setErr } = await supabase.from('commission_settings')
       .select('default_rule_id').eq('org_id', orgId).maybeSingle();
+    if (setErr) console.error(`[commissions] settings load failed (org ${orgId}):`, setErr.message);
     if (settings?.default_rule_id) rule = (rules ?? []).find((r: any) => r.id === settings.default_rule_id);
   }
   if (!rule) return { created: 0, skipped: 'no_rule' };
@@ -303,9 +340,15 @@ export async function generateCommissionsForInvoice(
   // 5. Compute rep's period stats (calendar month) BEFORE this invoice
   const paidDate = new Date(invoice.paid_at);
   const periodStart = new Date(paidDate.getFullYear(), paidDate.getMonth(), 1).toISOString();
-  const { data: priorEntries } = await supabase.from('fs_commission_entries')
+  const { data: priorEntries, error: priorErr } = await supabase.from('fs_commission_entries')
     .select('base_amount').eq('org_id', orgId).eq('user_id', repUserId)
     .is('deleted_at', null).gte('triggered_at', periodStart).lt('triggered_at', invoice.paid_at);
+  // Les paliers de performance dépendent de ce cumul : une lecture ratée
+  // fausserait silencieusement le montant versé au rep.
+  if (priorErr) {
+    console.error(`[commissions] period stats load failed (org ${orgId}, rep ${repUserId}, invoice ${invoiceId}):`, priorErr.message);
+    return { created: 0, skipped: 'period_stats_failed' };
+  }
   const repPeriodRevenueCents = (priorEntries ?? []).reduce((s: number, e: any) => s + Number(e.base_amount || 0), 0);
   const repPeriodSaleCount = (priorEntries ?? []).length;
 
@@ -350,21 +393,28 @@ export async function generateCommissionsForInvoice(
     // Confirm an existing projected (pending, no invoice) entry for this rep+job.
     let confirmed = false;
     if (invoice.job_id) {
-      const { data: projected } = await supabase.from('fs_commission_entries')
+      const { data: projected, error: projErr } = await supabase.from('fs_commission_entries')
         .select('id')
         .eq('org_id', orgId).eq('job_id', invoice.job_id).eq('user_id', r.user_id)
         .is('invoice_id', null).is('deleted_at', null).limit(1);
+      if (projErr) {
+        console.error(`[commissions] projected entry lookup failed (org ${orgId}, rep ${r.user_id}, job ${invoice.job_id}):`, projErr.message);
+      }
       if (projected && projected.length > 0) {
         const { error } = await supabase.from('fs_commission_entries')
           .update(entryFields).eq('id', projected[0].id);
-        if (!error) { created++; confirmed = true; }
+        if (error) {
+          console.error(`[commissions] entry confirm failed (org ${orgId}, rep ${r.user_id}, invoice ${invoiceId}, entry ${projected[0].id}):`, error.message);
+        } else { created++; confirmed = true; }
       }
     }
 
     if (!confirmed) {
       const { error } = await supabase.from('fs_commission_entries')
         .insert({ org_id: orgId, user_id: r.user_id, lead_id: null, ...entryFields });
-      if (!error) created++;
+      if (error) {
+        console.error(`[commissions] entry insert failed (org ${orgId}, rep ${r.user_id}, invoice ${invoiceId}):`, error.message);
+      } else created++;
     }
   }
   return { created, skipped: null };
@@ -380,13 +430,17 @@ export async function handleInvoiceReversal(
   invoiceId: string,
   reason: string
 ): Promise<{ action: 'auto_reversed' | 'kept' | 'alert'; affected: number }> {
-  const { data: settings } = await supabase.from('commission_settings')
+  const { data: settings, error: setErr } = await supabase.from('commission_settings')
     .select('reversal_policy').eq('org_id', orgId).maybeSingle();
+  if (setErr) console.error(`[commissions] reversal settings load failed (org ${orgId}):`, setErr.message);
   const policy = settings?.reversal_policy || 'alert';
 
-  const { data: entries } = await supabase.from('fs_commission_entries')
+  const { data: entries, error: entriesErr } = await supabase.from('fs_commission_entries')
     .select('id, status').eq('org_id', orgId).eq('invoice_id', invoiceId)
     .is('deleted_at', null);
+  if (entriesErr) {
+    console.error(`[commissions] reversal entries load failed (org ${orgId}, invoice ${invoiceId}):`, entriesErr.message);
+  }
 
   const affected = (entries ?? []).length;
   if (affected === 0) return { action: policy as any, affected: 0 };
@@ -396,17 +450,25 @@ export async function handleInvoiceReversal(
   if (policy === 'auto') {
     const ids = (entries ?? []).filter((e: any) => e.status !== 'paid').map((e: any) => e.id);
     if (ids.length > 0) {
-      await supabase.from('fs_commission_entries')
+      const { error: revErr } = await supabase.from('fs_commission_entries')
         .update({ status: 'reversed', auto_reversed: true, reverse_reason: reason, updated_at: new Date().toISOString() })
         .in('id', ids);
+      // Sans ça, une commission déjà annulée côté facture resterait due au rep.
+      if (revErr) {
+        console.error(`[commissions] auto-reversal failed (org ${orgId}, invoice ${invoiceId}, entries ${ids.join(',')}):`, revErr.message);
+        throw new Error(`Commission auto-reversal failed for invoice ${invoiceId}: ${revErr.message}`);
+      }
     }
     return { action: 'auto_reversed', affected: ids.length };
   }
 
   // alert: mark reverse_reason but keep status; UI will surface
-  await supabase.from('fs_commission_entries')
+  const { error: alertErr } = await supabase.from('fs_commission_entries')
     .update({ reverse_reason: reason, updated_at: new Date().toISOString() })
     .eq('org_id', orgId).eq('invoice_id', invoiceId).is('deleted_at', null);
+  if (alertErr) {
+    console.error(`[commissions] reversal alert flag failed (org ${orgId}, invoice ${invoiceId}):`, alertErr.message);
+  }
   return { action: 'alert', affected };
 }
 

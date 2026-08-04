@@ -180,44 +180,50 @@ export async function seedOrgFromIndustry(
   const preset = getIndustryPreset(industry);
 
   // 1. Upsert company_settings (industry + default_unit)
-  try {
-    await serviceClient
-      .from('company_settings')
-      .upsert(
-        {
-          org_id: orgId,
-          industry,
-          default_unit: preset.defaultUnit,
-        },
-        { onConflict: 'org_id' },
-      );
-  } catch (err: any) {
-    console.warn('[industryPresets] company_settings upsert failed:', err?.message);
+  // supabase-js ne leve pas : l'erreur est dans la reponse, pas dans un throw.
+  const { error: settingsErr } = await serviceClient
+    .from('company_settings')
+    .upsert(
+      {
+        org_id: orgId,
+        industry,
+        default_unit: preset.defaultUnit,
+      },
+      { onConflict: 'org_id' },
+    );
+  if (settingsErr) {
+    console.warn(`[industryPresets] company_settings upsert failed for org ${orgId}:`, settingsErr.message);
   }
 
   // 2. Insert predefined_services — one row per quote line item.
   //    Skip if the org already has predefined services (don't double-seed).
   if (preset.quoteLineItems.length === 0) return;
-  try {
-    const { data: existing } = await serviceClient
-      .from('predefined_services')
-      .select('id')
-      .eq('org_id', orgId)
-      .limit(1);
-    if (existing && existing.length > 0) return;
 
-    const rows = preset.quoteLineItems.map((item, idx) => ({
-      org_id: orgId,
-      name: item.description,
-      description: item.description,
-      default_price_cents: Math.round((item.defaultPrice || 0) * 100),
-      category: industry,
-      default_duration_minutes: 60,
-      is_active: true,
-      sort_order: idx,
-    }));
-    await serviceClient.from('predefined_services').insert(rows);
-  } catch (err: any) {
-    console.warn('[industryPresets] predefined_services seed failed:', err?.message);
+  const { data: existing, error: existingErr } = await serviceClient
+    .from('predefined_services')
+    .select('id')
+    .eq('org_id', orgId)
+    .limit(1);
+  if (existingErr) {
+    // Lecture en echec : impossible de savoir si l'org est deja semee — mieux
+    // vaut ne rien inserer que de doubler le catalogue de services.
+    console.warn(`[industryPresets] predefined_services lookup failed for org ${orgId}:`, existingErr.message);
+    return;
+  }
+  if (existing && existing.length > 0) return;
+
+  const rows = preset.quoteLineItems.map((item, idx) => ({
+    org_id: orgId,
+    name: item.description,
+    description: item.description,
+    default_price_cents: Math.round((item.defaultPrice || 0) * 100),
+    category: industry,
+    default_duration_minutes: 60,
+    is_active: true,
+    sort_order: idx,
+  }));
+  const { error: seedErr } = await serviceClient.from('predefined_services').insert(rows);
+  if (seedErr) {
+    console.warn(`[industryPresets] predefined_services seed failed for org ${orgId}:`, seedErr.message);
   }
 }

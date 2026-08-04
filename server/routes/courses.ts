@@ -583,22 +583,27 @@ router.post('/courses/:id/duplicate', async (req, res) => {
       .eq('course_id', original.id)
       .order('sort_order');
 
+    // Un module ou une leçon perdu en silence donne une copie incomplète que
+    // l'utilisateur croit fidèle — on remonte l'erreur (500) plutôt que de
+    // laisser passer un cours amputé.
     for (const mod of modules || []) {
-      const { data: newMod } = await admin
+      const { data: newMod, error: modErr } = await admin
         .from('course_modules')
         .insert({ course_id: newCourse.id, title: mod.title, sort_order: mod.sort_order })
         .select()
         .single();
+      if (modErr) throw modErr;
       if (!newMod) continue;
 
-      const { data: lessons } = await admin
+      const { data: lessons, error: lessonsErr } = await admin
         .from('course_lessons')
         .select('*')
         .eq('module_id', mod.id)
         .order('sort_order');
+      if (lessonsErr) throw lessonsErr;
 
       for (const lesson of lessons || []) {
-        await admin.from('course_lessons').insert({
+        const { error: lessonErr } = await admin.from('course_lessons').insert({
           module_id: newMod.id,
           title: lesson.title,
           content_type: lesson.content_type,
@@ -609,6 +614,7 @@ router.post('/courses/:id/duplicate', async (req, res) => {
           duration_min: lesson.duration_min,
           sort_order: lesson.sort_order,
         });
+        if (lessonErr) throw lessonErr;
       }
     }
 
@@ -718,7 +724,9 @@ router.put('/courses/:courseId/modules/reorder', validate(courseReorderSchema), 
     // Scope each update to the course we validated edit rights on, so a caller
     // can't slip another course's/org's module ids into `order`.
     for (let i = 0; i < order.length; i++) {
-      await admin.from('course_modules').update({ sort_order: i }).eq('id', order[i]).eq('course_id', req.params.courseId);
+      const { error } = await admin.from('course_modules').update({ sort_order: i }).eq('id', order[i]).eq('course_id', req.params.courseId);
+      // Sinon la route répond ok et l'ordre repart à l'ancien au rechargement.
+      if (error) throw error;
     }
     return res.json({ ok: true });
   } catch (err: any) {
@@ -901,7 +909,8 @@ router.put('/courses/modules/:moduleId/lessons/reorder', validate(courseReorderS
     // Scope each update to this module (whose course we validated), so a caller
     // can't slip another module's/org's lesson ids into `order`.
     for (let i = 0; i < order.length; i++) {
-      await admin.from('course_lessons').update({ sort_order: i }).eq('id', order[i]).eq('module_id', req.params.moduleId);
+      const { error } = await admin.from('course_lessons').update({ sort_order: i }).eq('id', order[i]).eq('module_id', req.params.moduleId);
+      if (error) throw error;
     }
     return res.json({ ok: true });
   } catch (err: any) {

@@ -437,10 +437,11 @@ export async function createInvoiceDraft(payload: {
     const link: Record<string, any> = {};
     if (payload.jobId) link.job_id = payload.jobId;
     if (payload.propertyId) link.property_id = payload.propertyId;
-    await supabase
+    const { error: linkErr } = await supabase
       .from('invoices')
       .update(link)
       .eq('id', invoiceId);
+    if (linkErr) throw linkErr;
   }
 
   return {

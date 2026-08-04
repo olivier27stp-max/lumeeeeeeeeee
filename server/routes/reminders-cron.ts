@@ -90,6 +90,35 @@ function bodyToHtml(text: string) {
   return htmlEscape(text).replace(/\n/g, '<br/>');
 }
 
+/**
+ * Écrit la ligne de journal du rappel.
+ *
+ * C'est elle qui porte l'idempotence : le passage suivant du cron cherche
+ * (invoice_id, days_after_due, channel) dans `reminder_log` pour savoir s'il
+ * doit relancer. Si l'insert échoue et que l'erreur est avalée, le client
+ * reçoit la MÊME relance à chaque exécution du cron — l'échec doit donc être
+ * visible dans le rapport de la tâche.
+ */
+async function insertReminderLog(
+  svc: ReturnType<typeof getServiceClient>,
+  row: Record<string, unknown>,
+  errors: Array<{ invoice_id?: string; error: string }>,
+): Promise<void> {
+  const { error } = await svc.from('reminder_log').insert(row);
+  if (error) {
+    console.error('[cron/reminders] reminder_log insert failed — reminder will be re-sent:', {
+      invoice_id: row.invoice_id,
+      days_after_due: row.days_after_due,
+      channel: row.channel,
+      error: error.message,
+    });
+    errors.push({
+      invoice_id: String(row.invoice_id || ''),
+      error: `reminder_log insert failed (duplicate sends ahead): ${error.message}`,
+    });
+  }
+}
+
 router.post('/cron/payment-reminders', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   const svc = getServiceClient();
@@ -210,7 +239,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
               if (channel === 'both') {
                 // For 'both', defer logging until SMS attempted (single row with channel='both').
               } else {
-                await svc.from('reminder_log').insert({
+                await insertReminderLog(svc, {
                   org_id: orgId,
                   invoice_id: inv.id,
                   days_after_due: daysAfter,
@@ -218,7 +247,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
                   sent_to: toEmail,
                   status: result.sent ? 'sent' : 'failed',
                   error_message: result.sent ? null : (result.error || 'send failed'),
-                });
+                }, errors);
                 if (result.sent) sent++;
                 else failed++;
               }
@@ -253,7 +282,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
                 smsErr = e?.message || 'sms failed';
               }
               if (channel === 'sms') {
-                await svc.from('reminder_log').insert({
+                await insertReminderLog(svc, {
                   org_id: orgId,
                   invoice_id: inv.id,
                   days_after_due: daysAfter,
@@ -261,14 +290,14 @@ router.post('/cron/payment-reminders', async (req, res) => {
                   sent_to: toPhone,
                   status: smsOk ? 'sent' : 'failed',
                   error_message: smsErr,
-                });
+                }, errors);
                 if (smsOk) sent++; else failed++;
               } else {
                 // 'both' — combine results, single row
                 const emailRes = (inv as any)._email_result;
                 const ok = (emailRes?.sent ?? false) || smsOk;
                 const sentTo = [toEmail, toPhone].filter(Boolean).join(' / ');
-                await svc.from('reminder_log').insert({
+                await insertReminderLog(svc, {
                   org_id: orgId,
                   invoice_id: inv.id,
                   days_after_due: daysAfter,
@@ -276,13 +305,13 @@ router.post('/cron/payment-reminders', async (req, res) => {
                   sent_to: sentTo || 'unknown',
                   status: ok ? 'sent' : 'failed',
                   error_message: ok ? null : (smsErr || emailRes?.error || 'both channels failed'),
-                });
+                }, errors);
                 if (ok) sent++; else failed++;
               }
             } else if (channel === 'both' && (inv as any)._email_result) {
               // SMS was unavailable; record what email did
               const emailRes = (inv as any)._email_result;
-              await svc.from('reminder_log').insert({
+              await insertReminderLog(svc, {
                 org_id: orgId,
                 invoice_id: inv.id,
                 days_after_due: daysAfter,
@@ -290,7 +319,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
                 sent_to: toEmail || 'unknown',
                 status: emailRes?.sent ? 'sent' : 'failed',
                 error_message: emailRes?.sent ? null : (emailRes?.error || 'sms unavailable'),
-              });
+              }, errors);
               if (emailRes?.sent) sent++; else failed++;
             }
           } catch (e: any) {
