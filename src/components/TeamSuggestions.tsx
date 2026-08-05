@@ -15,6 +15,8 @@ interface TeamSuggestionsProps {
   onSuggestionsLoaded?: (suggestions: TeamSuggestion[]) => void;
   selectedTeamId?: string | null;
   compact?: boolean;
+  /** Nombre de visites du job — >1 (plan de service) met les raisons au pluriel. */
+  visitCount?: number;
 }
 
 const STATUS_CLASSNAMES: Record<string, string> = {
@@ -36,8 +38,20 @@ export default function TeamSuggestions({
   onSuggestionsLoaded,
   selectedTeamId,
   compact = false,
+  visitCount = 1,
 }: TeamSuggestionsProps) {
   const { t } = useTranslation();
+  const plural = visitCount > 1;
+  // Les raisons fixes du serveur (/api/team-suggestions) arrivent en anglais
+  // singulier — on les localise (et pluralise) côté client.
+  const localizeReason = (reason: string): string => {
+    if (reason === 'Day off / blocked') return t.teamSuggestions.reasonDayOff;
+    if (reason === 'No availability or scheduled members for this day')
+      return plural ? t.teamSuggestions.reasonNoMembersPlural : t.teamSuggestions.reasonNoMembers;
+    if (reason === 'No availability configured for this day')
+      return plural ? t.teamSuggestions.reasonNoConfigPlural : t.teamSuggestions.reasonNoConfig;
+    return reason;
+  };
   const STATUS_LABELS: Record<string, { label: string; className: string }> = {
     available: { label: t.teamSuggestions.available, className: STATUS_CLASSNAMES.available },
     partially_available: { label: t.teamSuggestions.partial, className: STATUS_CLASSNAMES.partially_available },
@@ -195,7 +209,7 @@ export default function TeamSuggestions({
 
                 {/* Primary reason */}
                 {team.reasons.length > 0 && (
-                  <p className="mt-1 text-[11px] text-text-secondary italic">{team.reasons[0]}</p>
+                  <p className="mt-1 text-[11px] text-text-secondary italic">{localizeReason(team.reasons[0])}</p>
                 )}
               </button>
 
@@ -209,7 +223,7 @@ export default function TeamSuggestions({
                       <ul className="space-y-0.5">
                         {team.reasons.map((r, i) => (
                           <li key={i} className="text-text-secondary flex items-start gap-1.5">
-                            <span className="text-brand mt-0.5">-</span> {r}
+                            <span className="text-brand mt-0.5">-</span> {localizeReason(r)}
                           </li>
                         ))}
                       </ul>

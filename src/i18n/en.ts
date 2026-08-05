@@ -900,8 +900,15 @@ const en = {
     skillsMatched: 'Skills matched',
     skillGap: 'Skill gap',
     teamUnavailableDay: 'This team is not working on this day.',
+    teamUnavailableDays: 'This team is not working on those days.',
     teamFullyBooked: 'This team is fully booked for this day.',
+    teamFullyBookedDays: 'This team is fully booked for those days.',
     teamConflictSlot: 'The selected time conflicts with existing jobs.',
+    reasonDayOff: 'Day off / blocked',
+    reasonNoMembers: 'No availability or scheduled members for this day',
+    reasonNoMembersPlural: 'No availability or scheduled members for those days',
+    reasonNoConfig: 'No availability configured for this day',
+    reasonNoConfigPlural: 'No availability configured for those days',
   },
 
   // Module Lock

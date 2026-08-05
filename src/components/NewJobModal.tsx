@@ -1406,15 +1406,19 @@ export default function NewJobModal({
     return teamSuggestions.find(s => s.team_id === teamSelection) || null;
   }, [teamSelection, teamSuggestions]);
 
+  // Job multi-visites (plan de service ou plusieurs visites ponctuelles) —
+  // les libellés de disponibilité passent au pluriel.
+  const multiVisit = isServicePlan ? serviceVisitDates.length > 1 : visitDrafts.length > 1;
+
   const teamConflictWarning = useMemo((): string | null => {
     if (!selectedTeamSuggestion) return null;
     const { status, availability_windows, reasons } = selectedTeamSuggestion;
 
     if (status === 'unavailable') {
-      return t.teamSuggestions.teamUnavailableDay;
+      return multiVisit ? t.teamSuggestions.teamUnavailableDays : t.teamSuggestions.teamUnavailableDay;
     }
     if (status === 'busy') {
-      return t.teamSuggestions.teamFullyBooked;
+      return multiVisit ? t.teamSuggestions.teamFullyBookedDays : t.teamSuggestions.teamFullyBooked;
     }
     if (status === 'partially_available' && startTime && endTime) {
       // Check if the selected time fits in any available window
@@ -1431,7 +1435,7 @@ export default function NewJobModal({
       }
     }
     return null;
-  }, [selectedTeamSuggestion, startTime, endTime, t]);
+  }, [selectedTeamSuggestion, startTime, endTime, t, multiVisit]);
 
   // Agreement section: prefill default T&C on first enable + resolve the
   // company logo (Settings → Company details) used as the contract default.
@@ -1516,11 +1520,11 @@ export default function NewJobModal({
     if (selectedTeamSuggestion && teamSelection !== UNASSIGNED_TEAM_VALUE) {
       const { status } = selectedTeamSuggestion;
       if (status === 'unavailable') {
-        setInlineError(t.teamSuggestions.teamUnavailableDay);
+        setInlineError(multiVisit ? t.teamSuggestions.teamUnavailableDays : t.teamSuggestions.teamUnavailableDay);
         return;
       }
       if (status === 'busy') {
-        setInlineError(t.teamSuggestions.teamFullyBooked);
+        setInlineError(multiVisit ? t.teamSuggestions.teamFullyBookedDays : t.teamSuggestions.teamFullyBooked);
         return;
       }
       if (teamConflictWarning && status === 'partially_available') {
@@ -2527,6 +2531,7 @@ export default function NewJobModal({
                         onChange={setTeamSelection}
                         date={ruleStartDate || startDate}
                         fr={language === 'fr'}
+                        plural={multiVisit}
                         suggestions={teamSuggestions}
                         placeholder={t.modals.selectTeam}
                         unassignedLabel={t.modals.unassignedOption}
@@ -2839,6 +2844,7 @@ export default function NewJobModal({
                     onChange={setTeamSelection}
                     date={startDate}
                     fr={language === 'fr'}
+                    plural={multiVisit}
                     suggestions={teamSuggestions}
                     placeholder={t.modals.selectTeam}
                     unassignedLabel={t.modals.unassignedOption}
@@ -2852,7 +2858,7 @@ export default function NewJobModal({
                   ) : null}
                   {/* Membres de l'équipe choisie pour la journée de la 1re visite */}
                   {teamSelection && teamSelection !== UNASSIGNED_TEAM_VALUE && (
-                    <TeamDayRoster teamId={teamSelection} date={startDate} fr={language === 'fr'} />
+                    <TeamDayRoster teamId={teamSelection} date={startDate} fr={language === 'fr'} plural={multiVisit} />
                   )}
                   {/* Team availability — always visible when a date is set */}
                   <TeamSuggestions
@@ -2864,6 +2870,7 @@ export default function NewJobModal({
                     onSuggestionsLoaded={setTeamSuggestions}
                     selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
                     compact
+                    visitCount={isServicePlan ? serviceVisitDates.length : visitDrafts.length}
                   />
                   {/* Conflict warning */}
                   {teamConflictWarning && (

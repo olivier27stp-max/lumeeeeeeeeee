@@ -899,8 +899,15 @@ const fr: TranslationKeys = {
     skillsMatched: 'Compétences correspondantes',
     skillGap: 'Compétences manquantes',
     teamUnavailableDay: 'Cette équipe ne travaille pas cette journée.',
+    teamUnavailableDays: 'Cette équipe ne travaille pas ces journées.',
     teamFullyBooked: 'Cette équipe est complètement bookée pour cette journée.',
+    teamFullyBookedDays: 'Cette équipe est complètement bookée pour ces journées.',
     teamConflictSlot: 'Le créneau sélectionné entre en conflit avec des jobs existants.',
+    reasonDayOff: 'Congé / journée bloquée',
+    reasonNoMembers: 'Aucune disponibilité ni membre à l’horaire ce jour-là',
+    reasonNoMembersPlural: 'Aucune disponibilité ni membre à l’horaire ces jours-là',
+    reasonNoConfig: 'Aucune disponibilité configurée pour cette journée',
+    reasonNoConfigPlural: 'Aucune disponibilité configurée pour ces journées',
   },
 
   // Module Lock

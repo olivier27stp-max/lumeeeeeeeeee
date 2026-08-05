@@ -25,13 +25,15 @@ interface Props {
   date: string | null;
   fr: boolean;
   suggestions?: TeamSuggestion[] | null;
+  /** Job multi-visites (plan de service) — libellés au pluriel. */
+  plural?: boolean;
   placeholder: string;
   unassignedLabel: string;
   unassignedValue: string;
 }
 
 export default function TeamSelectDropdown({
-  teams, value, onChange, date, fr, suggestions, placeholder, unassignedLabel, unassignedValue,
+  teams, value, onChange, date, fr, suggestions, plural, placeholder, unassignedLabel, unassignedValue,
 }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -151,7 +153,9 @@ export default function TeamSelectDropdown({
                   <span className="ml-auto flex items-center gap-2 shrink-0">
                     {sug && (
                       unavailable ? (
-                        <span className="text-[11px] font-medium text-text-tertiary">{fr ? 'Indisponible ce jour-là' : 'Unavailable that day'}</span>
+                        <span className="text-[11px] font-medium text-text-tertiary">{fr
+                          ? (plural ? 'Indisponible ces jours-là' : 'Indisponible ce jour-là')
+                          : (plural ? 'Unavailable those days' : 'Unavailable that day')}</span>
                       ) : windows.length > 0 ? (
                         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-[2px] text-[11px] font-semibold tabular-nums text-emerald-700">
                           {windows[0].start}–{windows[0].end}
@@ -178,7 +182,9 @@ export default function TeamSelectDropdown({
                   ) : (
                     <span className="flex items-center gap-1.5 pl-[22px] text-[11px] font-medium text-[#c2410c]">
                       <AlertTriangle size={10} className="shrink-0" />
-                      {fr ? 'Aucun membre assigné ce jour-là' : 'No members assigned that day'}
+                      {fr
+                        ? (plural ? 'Aucun membre assigné ces jours-là' : 'Aucun membre assigné ce jour-là')
+                        : (plural ? 'No members assigned those days' : 'No members assigned that day')}
                     </span>
                   )
                 )}

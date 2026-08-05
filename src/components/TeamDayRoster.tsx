@@ -17,10 +17,12 @@ interface Props {
   /** Date de la visite au format YYYY-MM-DD. */
   date: string | null | undefined;
   fr: boolean;
+  /** Job multi-visites (plan de service) — libellés au pluriel. */
+  plural?: boolean;
   className?: string;
 }
 
-export default function TeamDayRoster({ teamId, date, fr, className }: Props) {
+export default function TeamDayRoster({ teamId, date, fr, plural, className }: Props) {
   const { currentOrgId } = useCompany();
   const validDate = !!date && /^\d{4}-\d{2}-\d{2}$/.test(date);
 
@@ -57,7 +59,9 @@ export default function TeamDayRoster({ teamId, date, fr, className }: Props) {
     return (
       <p className={cn('flex items-center gap-1.5 text-[11px] font-medium text-[#c2410c]', className)}>
         <AlertTriangle size={11} className="shrink-0" />
-        {fr ? 'Aucun membre assigné à cette équipe ce jour-là' : 'No members assigned to this team that day'}
+        {fr
+          ? (plural ? 'Aucun membre assigné à cette équipe ces jours-là' : 'Aucun membre assigné à cette équipe ce jour-là')
+          : (plural ? 'No members assigned to this team those days' : 'No members assigned to this team that day')}
       </p>
     );
   }
@@ -68,7 +72,9 @@ export default function TeamDayRoster({ teamId, date, fr, className }: Props) {
 
   return (
     <p className={cn('text-[11px] text-text-tertiary leading-relaxed', className)}>
-      <span className="mr-1">{fr ? 'Ce jour-là :' : 'That day:'}</span>
+      <span className="mr-1">{fr
+        ? (plural ? 'Ces jours-là :' : 'Ce jour-là :')
+        : (plural ? 'Those days:' : 'That day:')}</span>
       {names.map((name, i) => (
         <span key={name + i}>
           {i > 0 && <span className="mx-1 text-text-tertiary/50">·</span>}
