@@ -24,6 +24,8 @@
     "db:bootstrap": "tsx scripts/apply-sql.ts supabase/baseline/01_schema.sql supabase/baseline/02_post_schema.sql",
     "db:clone-staging": "bash scripts/clone-prod-to-staging.sh",
     "db:sync-acl": "python3 scripts/sync-acl-from-prod.py",
+    "db:refresh-local": "bash scripts/refresh-local-clone.sh",
+    "db:anonymize-local": "python3 scripts/anonymize-local.py",
     "db:diff": "python3 scripts/db-diff.py",
     "test:rls": "tsx scripts/test-rls-isolation.ts",
     "check:schema-refs": "python3 scripts/check-schema-refs.py",

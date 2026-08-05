@@ -29,6 +29,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DRY = '--dry-run' in sys.argv
+EMIT = '--emit-only' in sys.argv   # écrit le SQL sur la sortie standard, n'applique rien
 
 PRIV = {'a': 'INSERT', 'r': 'SELECT', 'w': 'UPDATE', 'd': 'DELETE', 'D': 'TRUNCATE',
         'x': 'REFERENCES', 't': 'TRIGGER', 'X': 'EXECUTE', 'U': 'USAGE',
@@ -92,7 +93,7 @@ def main():
     if not (staging and prod and password):
         sys.exit('ERREUR: SUPABASE_PROJECT_REF, SUPABASE_PROJECT_REF_PROD et '
                  'SUPABASE_DB_PASSWORD requis dans .env.local')
-    if staging == prod:
+    if staging == prod and not EMIT:
         sys.exit('REFUS: la cible est la PROD. Remets SUPABASE_PROJECT_REF sur le staging.')
 
     d = query(prod, ACL_SQL)[0]['acl']
@@ -112,6 +113,9 @@ def main():
             lines.append(f"grant {', '.join(p)} on function {f['sig']} to {g};")
 
     sql = '\n'.join(lines) + '\n'
+    if EMIT:
+        sys.stdout.write(sql)
+        return 0
     print(f'{len(lines) - 1} instructions générées depuis la prod ({prod}).')
     if DRY:
         print('[dry-run] rien appliqué.')
