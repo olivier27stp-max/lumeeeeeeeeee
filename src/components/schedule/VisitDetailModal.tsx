@@ -218,6 +218,21 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
             ['completed', 'cancelled'].includes(String(o.status || '').toLowerCase()));
           if (allDone) setFinalPromptOpen(true);
         } catch { /* best-effort */ }
+      } else if (!next && ev.job_id) {
+        // Remise à faire : si le job a été fermé (prompt « dernière visite »),
+        // le rouvrir — sinon isClosedVisit garde la carte barrée au calendrier.
+        try {
+          const { data: jobRow } = await supabase
+            .from('jobs')
+            .select('status')
+            .eq('id', ev.job_id)
+            .maybeSingle();
+          const js = String((jobRow as any)?.status || '').toLowerCase();
+          if (['completed', 'cancelled', 'canceled', 'archived'].includes(js)) {
+            await updateJob(ev.job_id, { status: 'scheduled' });
+            toast.success(isFr ? 'Job rouvert.' : 'Job reopened.');
+          }
+        } catch { /* best-effort */ }
       }
       onStatusChanged?.();
     } catch (err: any) {

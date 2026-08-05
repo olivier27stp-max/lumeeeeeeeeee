@@ -486,6 +486,16 @@ export default function JobDetails() {
           setVisitMoreOpen(false);
           setFinalVisitPromptOpen('visit');
         }
+      } else if (wasCompleted && job?.id) {
+        // Remise à faire : si le job a été fermé (prompt « dernière visite »),
+        // le rouvrir — sinon isClosedVisit garde la carte barrée au calendrier.
+        const js = (job.status || '').toLowerCase();
+        if (['completed', 'cancelled', 'canceled', 'archived'].includes(js)) {
+          try {
+            await updateJob(job.id, { status: 'scheduled' });
+            toast.success(language === 'fr' ? 'Job rouvert.' : 'Job reopened.');
+          } catch { /* best-effort */ }
+        }
       }
       await handleVisitAdded();
     } catch (err: any) {
