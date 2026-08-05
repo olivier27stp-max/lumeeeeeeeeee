@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Calendar, ChevronDown, Clock3, Eye, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronDown, Clock3, Eye, EyeOff, MapPin, MoreVertical, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
@@ -44,6 +44,11 @@ interface LineItemForm {
   unitPriceInput: string;
   included: boolean;
   source_service_id?: string | null;
+  // Métadonnées héritées du catalogue (non éditables sur la ligne) — servent
+  // aux calculs futurs (marge, taxes par item) sans changer la sauvegarde.
+  item_type?: 'product' | 'service';
+  unit_cost_cents?: number | null;
+  taxable?: boolean;
 }
 
 // One visit row in the form. Jobs have no date of their own — the calendar
@@ -444,6 +449,8 @@ export default function NewJobModal({
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
   // Per-line catalog picker: id of the line whose product/service is being chosen
   const [lineEditId, setLineEditId] = useState<string | null>(null);
+  // Line whose "⋮" actions menu is open (one at a time)
+  const [lineMenuId, setLineMenuId] = useState<string | null>(null);
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const [orgCurrency, setOrgCurrency] = useState('CAD');
   const [resolvedTaxConfigs, setResolvedTaxConfigs] = useState<TaxConfig[]>([]);
@@ -1323,6 +1330,9 @@ export default function NewJobModal({
       unitPriceInput: String(service.default_price_cents / 100),
       included: true,
       source_service_id: service.id,
+      item_type: service.item_type || 'service',
+      unit_cost_cents: service.default_cost_cents ?? null,
+      taxable: service.taxable ?? true,
     };
     if (emptyIdx !== -1) {
       const updated = [...prev];
@@ -1354,6 +1364,9 @@ export default function NewJobModal({
       source_service_id: service.id,
       name: service.name,
       unitPriceInput: String(service.default_price_cents / 100),
+      item_type: service.item_type || 'service',
+      unit_cost_cents: service.default_cost_cents ?? null,
+      taxable: service.taxable ?? true,
     } : item;
     // Row ids are unique across the job-level list and every visit's list, so
     // mapping them all only ever fills the targeted line.
@@ -1974,6 +1987,18 @@ export default function NewJobModal({
 
   // One product/service row — shared between the job-level list and each
   // visit's own list when the service plan is personalized per visit.
+  // Column header shared by every line-item list (md+; mobile rows are self-explanatory)
+  const renderLineItemsHeader = () => (
+    <div className="hidden md:flex items-center gap-2 px-2.5 pb-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wide">
+      <span className="flex-1 min-w-0">{t.modals.nameCol}</span>
+      <span className="w-[64px] text-center">{t.modals.qtyCol}</span>
+      <span className="w-[104px] text-right">{t.modals.unitPriceCol}</span>
+      <span className="w-[88px] text-right">{t.modals.totalCol}</span>
+      <span className="w-[60px]" />
+    </div>
+  );
+
+  // One compact row: name · qty · unit price · total · "⋮" menu · delete
   const renderLineItemRow = (
     item: LineItemForm,
     handlers: { update: (patch: Partial<LineItemForm>) => void; remove: () => void },
@@ -1981,72 +2006,94 @@ export default function NewJobModal({
     <div
       key={item.id}
       className={cn(
-        'grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-lg border p-3 transition-all',
+        'flex flex-wrap md:flex-nowrap items-center gap-2 rounded-lg border px-2.5 py-2 transition-all',
         item.included
           ? 'border-outline-subtle/40 bg-surface-secondary/20'
-          : 'border-outline-subtle/20 bg-surface-secondary/5 opacity-50'
+          : 'border-outline-subtle/20 bg-surface-secondary/5 opacity-60'
       )}
     >
-      <div className="md:col-span-5 space-y-1">
-        <label className="text-xs font-medium text-text-tertiary">{t.modals.nameCol}</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={item.included}
-            onChange={() => handlers.update({ included: !item.included })}
-            className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
-            title={item.included
-              ? (language === 'fr' ? 'Cliquez pour exclure du total' : 'Click to exclude from total')
-              : (language === 'fr' ? 'Cliquez pour inclure dans le total' : 'Click to include in total')}
-          />
+      <button
+        type="button"
+        onClick={() => setLineEditId(item.id)}
+        className={cn('glass-input !py-1.5 !px-2.5 w-full md:w-auto md:flex-1 min-w-0 text-left flex items-center justify-between gap-2',
+          !item.included && 'line-through',
+          !item.name.trim() && 'text-text-tertiary')}
+      >
+        <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
+        <Package size={12} className="text-text-tertiary shrink-0" />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={item.qtyInput}
+        onChange={(event) => handlers.update({ qtyInput: sanitizeIntegerInput(event.target.value) })}
+        onBlur={(event) => {
+          const normalized = sanitizeIntegerInput(event.target.value);
+          handlers.update({ qtyInput: normalized || '1' });
+        }}
+        aria-label={t.modals.qtyCol}
+        title={t.modals.qtyCol}
+        className="glass-input !py-1.5 !px-2 w-[52px] md:w-[64px] text-center tabular-nums"
+      />
+      <input
+        type="text"
+        inputMode="decimal"
+        value={item.unitPriceInput}
+        onChange={(event) =>
+          handlers.update({ unitPriceInput: sanitizeDecimalInput(event.target.value) })
+        }
+        onBlur={(event) =>
+          handlers.update({ unitPriceInput: normalizeDecimalInput(event.target.value) || '0' })
+        }
+        aria-label={t.modals.unitPriceCol}
+        title={t.modals.unitPriceCol}
+        className="glass-input !py-1.5 !px-2 w-[84px] md:w-[104px] text-right tabular-nums"
+      />
+      <span className={cn('flex-1 md:flex-none md:w-[88px] text-right text-[13px] font-semibold tabular-nums', item.included ? 'text-text-primary' : 'text-text-tertiary line-through')}>
+        {formatCurrency(Math.round((parseFloat(item.qtyInput || '0') || 0) * (parseFloat(item.unitPriceInput || '0') || 0)))}
+      </span>
+      <div className="flex items-center gap-0.5 shrink-0 w-[60px] justify-end">
+        <div className="relative">
           <button
             type="button"
-            onClick={() => setLineEditId(item.id)}
-            className={cn('glass-input w-full text-left flex items-center justify-between gap-2',
-              !item.included && 'line-through',
-              !item.name.trim() && 'text-text-tertiary')}
+            onClick={() => setLineMenuId((prev) => (prev === item.id ? null : item.id))}
+            title={language === 'fr' ? 'Actions' : 'Actions'}
+            className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
           >
-            <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
-            <Package size={13} className="text-text-tertiary shrink-0" />
+            <MoreVertical size={14} />
           </button>
+          {lineMenuId === item.id && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setLineMenuId(null)} />
+              <div className="absolute right-0 top-full mt-1 z-50 w-60 rounded-lg border border-outline bg-surface shadow-lg py-1">
+                <button
+                  type="button"
+                  onClick={() => { setLineMenuId(null); setLineEditId(item.id); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors text-left"
+                >
+                  <Package size={13} className="text-text-tertiary" />
+                  {language === 'fr' ? 'Choisir du catalogue' : 'Choose from catalog'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setLineMenuId(null); handlers.update({ included: !item.included }); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors text-left"
+                >
+                  {item.included
+                    ? <EyeOff size={13} className="text-text-tertiary" />
+                    : <Eye size={13} className="text-text-tertiary" />}
+                  {item.included
+                    ? (language === 'fr' ? 'Exclure du total' : 'Exclude from total')
+                    : (language === 'fr' ? 'Inclure dans le total' : 'Include in total')}
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      </div>
-      <div className="md:col-span-2 space-y-1">
-        <label className="text-xs font-medium text-text-tertiary">{t.modals.qtyCol}</label>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={item.qtyInput}
-          onChange={(event) => handlers.update({ qtyInput: sanitizeIntegerInput(event.target.value) })}
-          onBlur={(event) => {
-            const normalized = sanitizeIntegerInput(event.target.value);
-            handlers.update({ qtyInput: normalized || '1' });
-          }}
-          className="glass-input w-full"
-        />
-      </div>
-      <div className="md:col-span-3 space-y-1">
-        <label className="text-xs font-medium text-text-tertiary">{t.modals.unitPriceCol}</label>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={item.unitPriceInput}
-          onChange={(event) =>
-            handlers.update({ unitPriceInput: sanitizeDecimalInput(event.target.value) })
-          }
-          onBlur={(event) =>
-            handlers.update({ unitPriceInput: normalizeDecimalInput(event.target.value) || '0' })
-          }
-          className="glass-input w-full"
-        />
-      </div>
-      <div className="md:col-span-2 flex justify-end items-center gap-1">
-        <span className={cn('text-[13px] font-semibold tabular-nums mr-1 hidden md:block', item.included ? 'text-text-primary' : 'text-text-tertiary line-through')}>
-          {formatCurrency(Math.round((parseFloat(item.qtyInput || '0') || 0) * (parseFloat(item.unitPriceInput || '0') || 0)))}
-        </span>
         <button
           type="button"
           onClick={handlers.remove}
+          title={language === 'fr' ? 'Supprimer la ligne' : 'Remove line'}
           className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
         >
           <Trash2 size={13} />
@@ -2996,11 +3043,14 @@ export default function NewJobModal({
                           {t.modals.addFromCatalog}
                         </button>
                       </div>
-                      <div className="space-y-2">
-                        {selectedItemsVisitList.map((item) => renderLineItemRow(item, {
-                          update: (patch) => updateVisitItem(selectedItemsVisit.key, item.id, patch),
-                          remove: () => removeVisitItem(selectedItemsVisit.key, item.id),
-                        }))}
+                      <div>
+                        {renderLineItemsHeader()}
+                        <div className="space-y-1.5">
+                          {selectedItemsVisitList.map((item) => renderLineItemRow(item, {
+                            update: (patch) => updateVisitItem(selectedItemsVisit.key, item.id, patch),
+                            remove: () => removeVisitItem(selectedItemsVisit.key, item.id),
+                          }))}
+                        </div>
                       </div>
                       <button
                         type="button"
@@ -3014,42 +3064,27 @@ export default function NewJobModal({
                   )
                 ) : (
                 <>
-                {/* Line items list */}
-                {lineItems.length === 1 && !lineItems[0].name.trim() ? (
-                  <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
-                    <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
-                    <p className="text-sm text-text-secondary">{t.modals.noLineItemsYet}</p>
-                    <p className="text-xs text-text-tertiary mt-1">{t.modals.addFromCatalogHint}</p>
-                    <button
-                      type="button"
-                      onClick={() => { setPickerVisitKey(null); setServicePickerOpen(true); }}
-                      className="mt-3 text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      <Plus size={11} /> {t.modals.browseServices}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
+                {/* Line items — compact single-line rows (an empty first line shows by default) */}
+                <div>
+                  {renderLineItemsHeader()}
+                  <div className="space-y-1.5">
                     {lineItems.map((item) => renderLineItemRow(item, {
                       update: (patch) => updateLineItem(item.id, patch),
                       remove: () => removeLineItem(item.id),
                     }))}
                   </div>
-                )}
-
-                {/* Action buttons */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setLineItems((prev) => [...prev, { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }])
-                    }
-                    className="glass-button !py-2 !px-4 inline-flex items-center gap-2 text-sm"
-                  >
-                    <Plus size={14} />
-                    {t.modals.addLineItem}
-                  </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLineItems((prev) => [...prev, { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }])
+                  }
+                  className="glass-button !py-1.5 !px-3 inline-flex items-center gap-1.5 text-[13px]"
+                >
+                  <Plus size={13} />
+                  {t.modals.addLineItem}
+                </button>
                 </>
                 )}
 
