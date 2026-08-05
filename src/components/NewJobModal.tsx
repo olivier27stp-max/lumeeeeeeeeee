@@ -2882,6 +2882,7 @@ export default function NewJobModal({
                 </div>
               </Box>
 
+              {!isServicePlan && (
               <Box title={t.modals.billing}>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -2934,6 +2935,7 @@ export default function NewJobModal({
                   <span className="text-sm">{language === 'fr' ? 'Exiger une méthode de paiement au dossier' : 'Require payment method on file'}</span>
                 </label>
               </Box>
+              )}
 
               <Box
                 title={language === 'fr' ? 'Produits / Services' : 'Products / Services'}
@@ -3050,6 +3052,53 @@ export default function NewJobModal({
                 </div>
                 </>
                 )}
+
+                {/* ── Taxes et totaux ── */}
+                <div className="border-t border-outline-subtle/40 pt-4 space-y-3">
+                  {taxConfigured === null ? (
+                    <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Chargement des taxes...' : 'Loading taxes...'}</p>
+                  ) : taxConfigured === false ? (
+                    <div className="rounded-lg border border-danger/30 bg-danger-light p-4">
+                      <p className="text-[13px] font-semibold text-danger">{language === 'fr' ? 'Aucune taxe configurée' : 'No taxes configured'}</p>
+                      <p className="text-[12px] text-text-secondary mt-1">{language === 'fr' ? 'Vous devez configurer votre région de taxes dans les Paramètres avant de créer des jobs.' : 'You need to configure your tax region in Settings before creating jobs.'}</p>
+                      <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">{language === 'fr' ? 'Aller aux paramètres de taxes' : 'Go to Tax Settings'}</a>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                      {resolvedTaxConfigs.map((tax, idx) => (
+                        <label key={tax.id} className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox"
+                            checked={idx === 0 ? tpsEnabled : idx === 1 ? tvqEnabled : customTaxEnabled}
+                            onChange={(e) => {
+                              if (idx === 0) setTpsEnabled(e.target.checked);
+                              else if (idx === 1) setTvqEnabled(e.target.checked);
+                              else setCustomTaxEnabled(e.target.checked);
+                            }}
+                            className="h-4 w-4" />
+                          <span className="text-[13px] font-medium text-text-primary">{tax.name} <span className="font-normal text-text-tertiary tabular-nums">{tax.rate}%</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-border bg-surface/70 p-4 text-sm">
+                    <label className="mb-2 block space-y-1">
+                      <span className="text-xs font-medium text-text-tertiary">{t.modals.totalBeforeTaxes}</span>
+                      <input
+                        value={totalInput}
+                        onChange={(event) => setTotalInput(sanitizeMoneyInput(event.target.value))}
+                        onBlur={(event) => setTotalInput(normalizeMoneyInput(event.target.value))}
+                        inputMode="decimal"
+                        className="glass-input w-full"
+                        placeholder={lineItemsSubtotalValue.toFixed(2)}
+                      />
+                    </label>
+                    <p className="flex items-center justify-between"><span>{t.modals.subtotalLabel}</span><span>{formatCurrency(effectiveSubtotalValue)}</span></p>
+                    <p className="mt-1 flex items-center justify-between"><span>{t.modals.taxesLabel}</span><span>{formatCurrency(taxTotalCents / 100)}</span></p>
+                    <p className="mt-2 border-t border-border pt-2 flex items-center justify-between font-semibold text-base">
+                      <span>{t.modals.totalLabel}</span><span>{formatCurrency(grandTotalCents / 100)}</span>
+                    </p>
+                  </div>
+                </div>
               </Box>
 
               {/* ═══ BILLING AND PAYMENTS — comment le plan de service se facture ═══ */}
@@ -3192,58 +3241,40 @@ export default function NewJobModal({
                       )}
                     </span>
                   </label>
+
+                  {/* Dépôt initial */}
+                  <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={jobDepositRequired} onChange={e => { setDirty(true); setJobDepositRequired(e.target.checked); }} className="h-4 w-4 rounded" />
+                      <span className="text-sm text-text-primary">{t.modals.requireDeposit}</span>
+                    </label>
+                    {jobDepositRequired && (
+                      <div className="ml-7 space-y-2">
+                        <div className="flex items-center gap-3">
+                          <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
+                            className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
+                            <option value="percentage">{t.modals.percentageOption}</option>
+                            <option value="fixed">{t.modals.fixedAmountOption}</option>
+                          </select>
+                          <input value={jobDepositValue} onChange={e => { setDirty(true); setJobDepositValue(e.target.value.replace(/[^\d.]/g, '')); }}
+                            className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
+                            placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
+                          {jobDepositType === 'percentage' && (
+                            <span className="text-xs text-text-tertiary">
+                              = {formatCurrency(grandTotalCents / 100 * (parseFloat(jobDepositValue) || 0) / 100)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[12px] text-text-tertiary">
+                          {jobDepositType === 'percentage'
+                            ? (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} %` : `Client must pay ${jobDepositValue || 0}% deposit`)
+                            : (language === 'fr' ? `Le client doit payer un dépôt de $${jobDepositValue || 0}` : `Client must pay $${jobDepositValue || 0} deposit`)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
               </Box>
               )}
-
-              <Box title={t.modals.taxes}>
-                {taxConfigured === null ? (
-                  <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Chargement des taxes...' : 'Loading taxes...'}</p>
-                ) : taxConfigured === false ? (
-                  <div className="rounded-lg border border-danger/30 bg-danger-light p-4">
-                    <p className="text-[13px] font-semibold text-danger">{language === 'fr' ? 'Aucune taxe configurée' : 'No taxes configured'}</p>
-                    <p className="text-[12px] text-text-secondary mt-1">{language === 'fr' ? 'Vous devez configurer votre région de taxes dans les Paramètres avant de créer des jobs.' : 'You need to configure your tax region in Settings before creating jobs.'}</p>
-                    <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">{language === 'fr' ? 'Aller aux paramètres de taxes' : 'Go to Tax Settings'}</a>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {resolvedTaxConfigs.map((tax, idx) => (
-                      <div key={tax.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface-secondary">
-                        <div className="flex items-center gap-2">
-                          <input type="checkbox"
-                            checked={idx === 0 ? tpsEnabled : idx === 1 ? tvqEnabled : customTaxEnabled}
-                            onChange={(e) => {
-                              if (idx === 0) setTpsEnabled(e.target.checked);
-                              else if (idx === 1) setTvqEnabled(e.target.checked);
-                              else setCustomTaxEnabled(e.target.checked);
-                            }}
-                            className="h-4 w-4" />
-                          <span className="text-[13px] font-medium text-text-primary">{tax.name}</span>
-                        </div>
-                        <span className="text-[13px] text-text-secondary tabular-nums">{tax.rate}%</span>
-                      </div>
-                    ))}
-                    <p className="text-[10px] text-text-tertiary">{language === 'fr' ? <>Taxes provenant de vos <a href="/settings/taxes" className="text-primary hover:underline">paramètres de taxes</a></> : <>Taxes from your <a href="/settings/taxes" className="text-primary hover:underline">Tax Settings</a></>}</p>
-                  </div>
-                )}
-                <div className="rounded-xl border border-border bg-surface/70 p-4 text-sm">
-                  <label className="mb-2 block space-y-1">
-                    <span className="text-xs font-medium text-text-tertiary">{t.modals.totalBeforeTaxes}</span>
-                    <input
-                      value={totalInput}
-                      onChange={(event) => setTotalInput(sanitizeMoneyInput(event.target.value))}
-                      onBlur={(event) => setTotalInput(normalizeMoneyInput(event.target.value))}
-                      inputMode="decimal"
-                      className="glass-input w-full"
-                      placeholder={lineItemsSubtotalValue.toFixed(2)}
-                    />
-                  </label>
-                  <p className="flex items-center justify-between"><span>{t.modals.subtotalLabel}</span><span>{formatCurrency(effectiveSubtotalValue)}</span></p>
-                  <p className="mt-1 flex items-center justify-between"><span>{t.modals.taxesLabel}</span><span>{formatCurrency(taxTotalCents / 100)}</span></p>
-                  <p className="mt-2 border-t border-border pt-2 flex items-center justify-between font-semibold text-base">
-                    <span>{t.modals.totalLabel}</span><span>{formatCurrency(grandTotalCents / 100)}</span>
-                  </p>
-                </div>
-              </Box>
 
               {/* ── Agreement (written contract) — new jobs only ── */}
               {!isEditMode && (
