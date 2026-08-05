@@ -580,8 +580,13 @@ export default function NewJobModal({
   const removeVisitItem = (key: string, id: string) => {
     setServiceVisitItems((prev) => {
       const list = prev[key] || [];
-      if (list.length <= 1) return prev;
-      return { ...prev, [key]: list.filter((item) => item.id !== id) };
+      const next = list.filter((item) => item.id !== id);
+      return {
+        ...prev,
+        [key]: next.length > 0
+          ? next
+          : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }],
+      };
     });
   };
   const addVisitItemRow = (key: string) => {
@@ -1301,7 +1306,10 @@ export default function NewJobModal({
       if (item?.source_service_id) {
         setAddedServiceIds((s) => { const n = new Set(s); n.delete(item.source_service_id!); return n; });
       }
-      return prev.length > 1 ? prev.filter((i) => i.id !== id) : prev;
+      const next = prev.filter((i) => i.id !== id);
+      return next.length > 0
+        ? next
+        : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }];
     });
   };
 
@@ -1964,7 +1972,7 @@ export default function NewJobModal({
   // visit's own list when the service plan is personalized per visit.
   const renderLineItemRow = (
     item: LineItemForm,
-    handlers: { update: (patch: Partial<LineItemForm>) => void; remove: () => void; removeDisabled: boolean },
+    handlers: { update: (patch: Partial<LineItemForm>) => void; remove: () => void },
   ) => (
     <div
       key={item.id}
@@ -2036,7 +2044,6 @@ export default function NewJobModal({
           type="button"
           onClick={handlers.remove}
           className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
-          disabled={handlers.removeDisabled}
         >
           <Trash2 size={13} />
         </button>
@@ -2984,7 +2991,6 @@ export default function NewJobModal({
                         {selectedItemsVisitList.map((item) => renderLineItemRow(item, {
                           update: (patch) => updateVisitItem(selectedItemsVisit.key, item.id, patch),
                           remove: () => removeVisitItem(selectedItemsVisit.key, item.id),
-                          removeDisabled: selectedItemsVisitList.length <= 1,
                         }))}
                       </div>
                       <button
@@ -3018,7 +3024,6 @@ export default function NewJobModal({
                     {lineItems.map((item) => renderLineItemRow(item, {
                       update: (patch) => updateLineItem(item.id, patch),
                       remove: () => removeLineItem(item.id),
-                      removeDisabled: lineItems.length === 1,
                     }))}
                   </div>
                 )}
