@@ -11,7 +11,7 @@ import {
   Clock,
   FileText,
   Briefcase,
-  DollarSign,
+  Banknote,
   ReceiptText,
   Plus,
   ChevronDown,
@@ -1205,7 +1205,7 @@ export default function ClientDetails() {
           <div className="section-card">
             <div className="px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <DollarSign size={15} className="text-text-secondary" />
+                <Wallet size={15} className="text-text-secondary" />
                 {t.clientDetails.billingHistory}
               </h2>
             </div>
@@ -1259,7 +1259,7 @@ export default function ClientDetails() {
                       >
                         <div>
                           <p className="text-[13px] font-medium text-text-primary flex items-center gap-1.5">
-                            <DollarSign size={12} className="text-success" /> {isFr ? 'Paiement' : 'Payment'}
+                            <Banknote size={12} className="text-success" /> {isFr ? 'Paiement' : 'Payment'}
                             {(item.data as PaymentRecord).method && (
                               <span className="text-[11px] text-text-tertiary font-normal">({(item.data as PaymentRecord).method})</span>
                             )}
