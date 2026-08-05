@@ -30,7 +30,7 @@ export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onSchedul
             type="button"
             disabled={busy}
             onClick={onCloseJob}
-            className="w-full rounded-lg bg-text-primary px-3.5 py-2.5 text-[13px] font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+            className="w-full rounded-lg border border-outline-subtle bg-surface-secondary px-3.5 py-2.5 text-[13px] font-semibold text-text-primary transition-colors hover:border-primary/40 disabled:opacity-50 inline-flex items-center justify-center gap-2"
           >
             <Archive size={14} />
             {fr ? 'Fermer le job' : 'Close Job'}
@@ -48,7 +48,7 @@ export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onSchedul
             type="button"
             disabled={busy}
             onClick={onLeave}
-            className="w-full rounded-lg px-3.5 py-2.5 text-[13px] font-medium text-text-tertiary transition-colors hover:text-text-primary hover:bg-surface-secondary disabled:opacity-50 inline-flex items-center justify-center gap-2"
+            className="w-full rounded-lg border border-outline-subtle bg-surface-secondary px-3.5 py-2.5 text-[13px] font-semibold text-text-primary transition-colors hover:border-primary/40 disabled:opacity-50 inline-flex items-center justify-center gap-2"
           >
             <CircleDot size={14} />
             {fr ? 'Laisser en « Action requise »' : 'Leave as Action Required'}
