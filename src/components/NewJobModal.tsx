@@ -334,6 +334,8 @@ export default function NewJobModal({
   // the address fields below.
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
   const [propertyId, setPropertyId] = useState('');
+  const [propertySearch, setPropertySearch] = useState('');
+  const [propertyDropdownOpen, setPropertyDropdownOpen] = useState(false);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
   const [isCreatingNewClient, setIsCreatingNewClient] = useState(false);
@@ -988,17 +990,16 @@ export default function NewJobModal({
       .catch(() => setSalespeople([]));
 
     // Fetch org currency (scoped to current org)
-    // La devise vit dans company_settings — org_billing_settings n'a pas de colonne currency.
     import('../lib/orgApi').then(({ getCurrentOrgIdOrThrow }) =>
       getCurrentOrgIdOrThrow().then(oid =>
         supabase
-          .from('company_settings')
+          .from('org_billing_settings')
           .select('currency')
           .eq('org_id', oid)
           .limit(1)
           .maybeSingle()
-          .then(({ data: settings }) => {
-            if (settings?.currency) setOrgCurrency(settings.currency);
+          .then(({ data: billing }) => {
+            if (billing?.currency) setOrgCurrency(billing.currency);
           })
       )
     ).catch(() => {});
@@ -1020,6 +1021,7 @@ export default function NewJobModal({
     if (!clientId) {
       setProperties([]);
       setPropertyId('');
+      setPropertySearch('');
       return;
     }
     setPropertiesLoading(true);
@@ -1027,6 +1029,7 @@ export default function NewJobModal({
       .then((list) => {
         if (!active) return;
         setProperties(list);
+        setPropertySearch('');
         setPropertyId((prev) => {
           if (prev && list.some((p) => p.id === prev)) return prev;
           const fallback = list.find((p) => p.is_primary) || (list.length === 1 ? list[0] : null);
@@ -1187,6 +1190,8 @@ export default function NewJobModal({
     setClientId('');
     setProperties([]);
     setPropertyId('');
+    setPropertySearch('');
+    setPropertyDropdownOpen(false);
     setNewPropertyName('');
     setClientSearch('');
     setClientDropdownOpen(false);
@@ -1809,8 +1814,7 @@ export default function NewJobModal({
           try {
             const visits = await listJobVisits(createdJob.id);
             if (visits[0]) {
-              const { error } = await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
-              if (error) console.error('[jobs] failed to stamp first visit services', error.message);
+              await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
             }
           } catch (err) {
             console.error('[jobs] failed to stamp first visit services', err);
@@ -2256,65 +2260,114 @@ export default function NewJobModal({
                     )}
                   </div>
                 )}
-              </Box>
 
-              {/* Property — a job must be assigned to one of the client's properties */}
-              {(clientId || isCreatingNewClient) && (
-                <Box title={t.modals.property} subtitle={language === 'fr' ? 'Requis' : 'Required'}>
-                  {!isCreatingNewClient && properties.length > 0 ? (
-                    <select
-                      value={propertyId}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setPropertyId(v);
-                        if (!v) {
-                          setNewPropertyName('');
-                          setAddressLine1(''); setAddressCity(''); setAddressProvince('');
-                          setAddressPostalCode(''); setAddressSearch(''); setAddressPlaceId(null);
-                        }
-                      }}
-                      className="glass-input w-full"
-                      disabled={propertiesLoading}
-                    >
-                      {properties.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}{p.address ? ` — ${p.address}` : ''}
-                        </option>
-                      ))}
-                      <option value="">＋ {t.modals.addPropertyInline}</option>
-                    </select>
-                  ) : (
-                    <p className="text-[11px] text-text-tertiary">{t.modals.noPropertiesForClient}</p>
-                  )}
-                  {!propertyId && (
-                    <input
-                      value={newPropertyName}
-                      onChange={(e) => setNewPropertyName(e.target.value)}
-                      className="glass-input w-full"
-                      placeholder={t.modals.propertyNamePlaceholder}
-                    />
-                  )}
-                  {/* New property needs an address; when creating a new client
-                      the address field already lives in the client box above. */}
-                  {!propertyId && !isCreatingNewClient && (
-                    <AddressAutocomplete
-                      value={addressSearch}
-                      onChange={setAddressSearch}
-                      onSelect={(addr: StructuredAddress) => {
-                        const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
-                        setAddressLine1(line1 || addr.formatted_address);
-                        setAddressCity(addr.city);
-                        setAddressProvince(addr.province);
-                        setAddressPostalCode(addr.postal_code);
-                        setAddressCountry(addr.country || 'Canada');
-                        setAddressPlaceId(addr.place_id || null);
-                        setAddressSearch(addr.formatted_address);
-                      }}
-                      placeholder={language === 'fr' ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
-                    />
-                  )}
-                </Box>
-              )}
+                {/* Property — a job must be assigned to one of the client's properties */}
+                {(clientId || isCreatingNewClient) && (
+                  <div className="space-y-3 pt-4 border-t border-border">
+                    <div>
+                      <h4 className="text-[13px] font-bold tracking-tight text-text-primary">{t.modals.property}</h4>
+                      <p className="text-[11px] text-text-tertiary mt-0.5">{language === 'fr' ? 'Requis' : 'Required'}</p>
+                    </div>
+                    {!isCreatingNewClient && properties.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={propertySearch || (propertyId ? properties.find((p) => p.id === propertyId)?.name || '' : '')}
+                            onChange={(e) => {
+                              setPropertySearch(e.target.value);
+                              setPropertyDropdownOpen(true);
+                              if (!e.target.value) {
+                                setPropertyId('');
+                                setNewPropertyName('');
+                                setAddressLine1(''); setAddressCity(''); setAddressProvince('');
+                                setAddressPostalCode(''); setAddressSearch(''); setAddressPlaceId(null);
+                              }
+                            }}
+                            onFocus={() => setPropertyDropdownOpen(true)}
+                            className="glass-input w-full"
+                            placeholder={t.modals.selectProperty}
+                            autoComplete="off"
+                            disabled={propertiesLoading}
+                          />
+                          {propertyDropdownOpen && (
+                            <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-outline bg-surface shadow-lg">
+                              {properties
+                                .filter((p) => {
+                                  const q = propertySearch.trim().toLowerCase();
+                                  if (!q) return true;
+                                  return p.name.toLowerCase().includes(q) || (p.address || '').toLowerCase().includes(q);
+                                })
+                                .map((p) => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => { setPropertyId(p.id); setPropertySearch(p.name); setPropertyDropdownOpen(false); }}
+                                    className={cn(
+                                      'w-full text-left px-3 py-2 hover:bg-surface-secondary transition-colors',
+                                      p.id === propertyId && 'bg-surface-tertiary'
+                                    )}
+                                  >
+                                    <div className="text-sm font-bold text-text-primary">{p.name}</div>
+                                    {p.address && (
+                                      <div className="text-xs text-text-tertiary">{p.address}</div>
+                                    )}
+                                  </button>
+                                ))}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPropertyDropdownOpen(false);
+                                  setPropertyId('');
+                                  setPropertySearch('');
+                                  setNewPropertyName('');
+                                  setAddressLine1(''); setAddressCity(''); setAddressProvince('');
+                                  setAddressPostalCode(''); setAddressSearch(''); setAddressPlaceId(null);
+                                }}
+                                className="w-full text-left px-3 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors border-t border-outline"
+                              >
+                                ＋ {t.modals.addPropertyInline}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {propertyDropdownOpen && (
+                          <div className="fixed inset-0 z-40" onClick={() => setPropertyDropdownOpen(false)} />
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-text-tertiary">{t.modals.noPropertiesForClient}</p>
+                    )}
+                    {!propertyId && (
+                      <input
+                        value={newPropertyName}
+                        onChange={(e) => setNewPropertyName(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder={t.modals.propertyNamePlaceholder}
+                      />
+                    )}
+                    {/* New property needs an address; when creating a new client
+                        the address field already lives in the client fields above. */}
+                    {!propertyId && !isCreatingNewClient && (
+                      <AddressAutocomplete
+                        value={addressSearch}
+                        onChange={setAddressSearch}
+                        onSelect={(addr: StructuredAddress) => {
+                          const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
+                          setAddressLine1(line1 || addr.formatted_address);
+                          setAddressCity(addr.city);
+                          setAddressProvince(addr.province);
+                          setAddressPostalCode(addr.postal_code);
+                          setAddressCountry(addr.country || 'Canada');
+                          setAddressPlaceId(addr.place_id || null);
+                          setAddressSearch(addr.formatted_address);
+                        }}
+                        placeholder={language === 'fr' ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
+                      />
+                    )}
+                  </div>
+                )}
+              </Box>
 
               <Box title={t.modals.jobType}>
                   <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
