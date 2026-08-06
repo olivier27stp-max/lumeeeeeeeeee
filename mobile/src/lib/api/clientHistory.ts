@@ -85,7 +85,8 @@ export async function getClientHistory(
     convIds.length
       ? supabase
           .from('messages')
-          .select('id, direction, body, created_at, conversation_id')
+          .select('id, direction, message_text, created_at, conversation_id')
+          .eq('org_id', orgId)
           .in('conversation_id', convIds)
           .order('created_at', { ascending: false })
           .limit(30)
@@ -183,7 +184,7 @@ export async function getClientHistory(
       kind: out ? 'message_out' : 'message_in',
       date: m.created_at,
       title: out ? (fr ? 'SMS envoyé' : 'SMS sent') : fr ? 'SMS reçu' : 'SMS received',
-      subtitle: typeof m.body === 'string' ? m.body.slice(0, 80) : undefined,
+      subtitle: typeof m.message_text === 'string' ? m.message_text.slice(0, 80) : undefined,
       route: `/(app)/conversation/${m.conversation_id}`,
     });
   }

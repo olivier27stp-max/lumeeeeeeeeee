@@ -32,6 +32,20 @@ export interface JobChecklist {
   completed_by: string | null;
 }
 
+// job_checklists has no `name` column — the label lives on the template it was
+// created from. We embed it. Two foreign keys point at checklist_templates
+// (id, and the composite org_id+template_id), so the relationship has to be
+// named explicitly or PostgREST refuses the embed as ambiguous.
+const CHECKLIST_COLS =
+  'id, job_id, template_id, items, responses, completed_at, completed_by, ' +
+  'checklist_templates!job_checklists_template_id_fkey(name)';
+
+function toChecklist(row: any): JobChecklist {
+  const { checklist_templates, ...rest } = row ?? {};
+  const tpl = Array.isArray(checklist_templates) ? checklist_templates[0] : checklist_templates;
+  return { ...rest, name: (tpl?.name as string | undefined) ?? null } as JobChecklist;
+}
+
 /** Active templates for the org (optionally filtered to a job_type). */
 export async function listChecklistTemplates(
   orgId: string,
@@ -55,11 +69,11 @@ export async function listChecklistTemplates(
 export async function listJobChecklists(jobId: string): Promise<JobChecklist[]> {
   const { data, error } = await supabase
     .from('job_checklists')
-    .select('id, job_id, template_id, name, items, responses, completed_at, completed_by')
+    .select(CHECKLIST_COLS)
     .eq('job_id', jobId)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as JobChecklist[];
+  return (data ?? []).map(toChecklist);
 }
 
 /** Attach a template to a job (snapshots the template's items). */
@@ -74,24 +88,23 @@ export async function attachChecklist(input: {
       org_id: input.orgId,
       job_id: input.jobId,
       template_id: input.template.id,
-      name: input.template.name,
       items: input.template.items,
       responses: {},
     })
-    .select('id, job_id, template_id, name, items, responses, completed_at, completed_by')
+    .select(CHECKLIST_COLS)
     .single();
   if (error) throw new Error(error.message);
-  return data as JobChecklist;
+  return toChecklist(data);
 }
 
 export async function getJobChecklist(id: string): Promise<JobChecklist | null> {
   const { data, error } = await supabase
     .from('job_checklists')
-    .select('id, job_id, template_id, name, items, responses, completed_at, completed_by')
+    .select(CHECKLIST_COLS)
     .eq('id', id)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return (data as JobChecklist | null) ?? null;
+  return data ? toChecklist(data) : null;
 }
 
 /** Save in-progress responses (no completion). */

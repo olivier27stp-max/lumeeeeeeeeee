@@ -108,15 +108,21 @@ export interface TeamMemberDetails {
   created_at: string | null;
 }
 
+// team_members stores the address in flat columns (street1/street2/city/…),
+// there is no `address` column. We keep the nested shape the UI expects.
 export async function getTeamMemberDetails(userId: string, orgId: string): Promise<TeamMemberDetails | null> {
   const { data, error } = await supabase
     .from('team_members')
-    .select('id, first_name, last_name, role, phone, email, avatar_url, address, created_at')
+    .select('id, first_name, last_name, role, phone, email, avatar_url, city, province, created_at')
     .eq('user_id', userId)
     .eq('org_id', orgId)
     .maybeSingle();
-  if (error) return null;
-  return (data as TeamMemberDetails | null) ?? null;
+  if (error || !data) return null;
+
+  const { city, province, ...rest } = data as any;
+  // The columns default to '' rather than null, so blank means "not set".
+  const address = city || province ? { city: city || undefined, province: province || undefined } : null;
+  return { ...rest, address } as TeamMemberDetails;
 }
 
 // ── Closes (pipeline_deals auto-linked via rep_id, like the web) ────────────

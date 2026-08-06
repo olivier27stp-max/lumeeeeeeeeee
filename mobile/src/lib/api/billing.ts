@@ -234,16 +234,21 @@ export function quoteShareLink(viewToken: string): string {
 
 /** Mark a quote as sent (org members can update under RLS; never downgrades). */
 export async function markQuoteSent(quoteId: string): Promise<void> {
-  await supabase
+  const { error: stampError } = await supabase
     .from('quotes')
     .update({ sent_via_sms_at: new Date().toISOString(), last_sent_channel: 'sms' })
     .eq('id', quoteId);
-  // Only flip to 'sent' from a pre-send status, so an approved quote isn't reset.
-  await supabase
+  if (stampError) throw new Error(stampError.message);
+
+  // 'awaiting_response' is what the web sets on send (server/routes/quotes.ts).
+  // There is no 'sent' status — the CHECK constraint rejects it.
+  // Only advance from a pre-send status, so an approved quote isn't reset.
+  const { error: statusError } = await supabase
     .from('quotes')
-    .update({ status: 'sent' })
+    .update({ status: 'awaiting_response' })
     .eq('id', quoteId)
-    .in('status', ['draft', 'action_required']);
+    .in('status', ['draft', 'changes_requested']);
+  if (statusError) throw new Error(statusError.message);
 }
 
 /** Next document number for the org (max existing numeric + 1). */

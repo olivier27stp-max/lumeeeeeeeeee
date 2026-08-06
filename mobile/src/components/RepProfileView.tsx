@@ -154,7 +154,8 @@ export function RepProfileView({ userId, name }: { userId: string; name?: string
   const real = realStatsQ.data ?? EMPTY_REAL_STATS;
   const commissionTotal = (commQ.data ?? []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const deals = dealsQ.data ?? [];
-  const realCloses = deals.filter((d) => d.stage === 'won').length;
+  // pipeline_deals.stage only ever holds the canonical slugs; 'won' matched nothing.
+  const realCloses = deals.filter((d) => d.stage === 'closed_won').length;
 
   const stats = {
     revenue: real.totalRevenue || lb.revenue,

@@ -82,7 +82,7 @@ export default function Leads() {
   // Group leads by stage in stage order.
   const byStage = LEAD_STAGES.map((s) => ({
     ...s,
-    leads: (leads ?? []).filter((l) => (l.status || 'new') === s.key),
+    leads: (leads ?? []).filter((l) => (l.status || 'new_prospect') === s.key),
   })).filter((g) => g.leads.length > 0);
 
   // Same gate as the web (`permission="leads.read"`): technicians can't view the

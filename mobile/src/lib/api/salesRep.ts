@@ -3,6 +3,7 @@
 // scoped by date so the row counts stay small. All reads are defensive.
 
 import { supabase } from '../supabase';
+import { normalizeStage } from './leads';
 
 export interface DoorStats {
   knocks: number;
@@ -39,16 +40,23 @@ export interface PipelineBucket {
   count: number;
 }
 
-/** Lead counts by status (rep's own if userId set, else whole org). */
+/** Lead counts by stage (rep's own if userId set, else whole org).
+ *  A lead is a client with status='lead'; the stage lives in lead_status. */
 export async function getLeadPipeline(orgId: string, userId: string | null): Promise<PipelineBucket[]> {
-  let q = supabase.from('leads').select('status, assigned_to').eq('org_id', orgId).limit(3000);
+  let q = supabase
+    .from('clients')
+    .select('lead_status, assigned_to')
+    .eq('org_id', orgId)
+    .eq('status', 'lead')
+    .is('deleted_at', null)
+    .limit(3000);
   if (userId) q = q.eq('assigned_to', userId);
   const { data, error } = await q;
   if (error) return [];
 
   const m = new Map<string, number>();
   for (const r of (data ?? []) as any[]) {
-    const s = (r.status ?? 'new') as string;
+    const s = normalizeStage(r.lead_status);
     m.set(s, (m.get(s) ?? 0) + 1);
   }
   return [...m.entries()].map(([status, count]) => ({ status, count })).sort((a, b) => b.count - a.count);
