@@ -18,6 +18,7 @@ import { findOrCreateConversation } from '@/lib/api/messaging';
 import { sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
 import { resolveTaxes } from '@/lib/api/taxes';
+import { createServiceContract } from '@/lib/api/serviceContracts';
 import { bookingNiceMessage, packTemplate, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
@@ -80,8 +81,6 @@ export default function NewJob() {
   const [endsAfterUnit, setEndsAfterUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months');
   // « Pas d'heure précise » : même convention que le web (00:00 → 23:59).
   const [anytime, setAnytime] = useState(false);
-  // Mode « Personnalisé » : la date qu'on s'apprête à ajouter à la main.
-  const [customDate, setCustomDate] = useState<Date>(() => new Date());
   const [startDate, setStartDate] = useState<Date>(() => {
     const d = new Date();
     d.setMinutes(0, 0, 0);
@@ -142,21 +141,38 @@ export default function NewJob() {
     };
   }, [startDate, language, t]);
 
-  // Les dates du plan, générées depuis la règle — portage direct de la logique
-  // du web (NewJobModal) : mensuel garde le même quantième borné à la longueur
-  // du mois, hebdo/bimensuel avancent d'un pas fixe. Comme sur le web, changer
-  // la règle REMPLACE la sélection; entre deux changements l'utilisateur peut
-  // retirer des dates à la main.
-  const [planDates, setPlanDates] = useState<string[]>([]);
+  // ── Plan de service : même modèle de données que le web (NewJobModal) ──
+  // Chaque visite porte son année, son mois et sa date exacte, plus des heures
+  // qui héritent de la Règle et peuvent être personnalisées visite par visite.
+  type PlanVisit = { key: string; year: number; month: number; date: string };
+  const [planVisits, setPlanVisits] = useState<PlanVisit[]>([]);
+  const [serviceYears, setServiceYears] = useState<number[]>([new Date().getFullYear()]);
+  const [visitTimes, setVisitTimes] = useState<Record<string, { start: string; end: string }>>({});
+  const [createContract, setCreateContract] = useState(false);
+
   const ymd = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const hhmm = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const dernierJour = (y: number, m: number) => new Date(y, m, 0).getDate();
+  const nomMois = (m: number, style: 'short' | 'long') =>
+    new Date(2000, m - 1, 1).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', { month: style });
+  let compteurCle = 0;
+  const nouvelleVisite = (y: number, m: number, date: string): PlanVisit => ({
+    key: `${y}-${m}-${date}-${Date.now()}-${compteurCle++}`,
+    year: y, month: m, date,
+  });
 
+  // Heures d'une visite : celles de la Règle, sauf personnalisation.
+  const heuresDe = (key: string) =>
+    visitTimes[key] ?? { start: hhmm(startDate), end: hhmm(endDate) };
+
+  // Génération depuis la Règle. Comme sur le web, les modes non-« Personnalisé »
+  // REMPLACENT la sélection à chaque changement de la Règle.
   useEffect(() => {
-    if (jobType !== 'recurring') return;
-    // « Personnalisé » : aucune génération, les dates sont posées à la main.
-    if (repeatMode === 'custom') return;
+    if (jobType !== 'recurring' || repeatMode === 'custom') return;
     const count = parseInt(endsAfterCount, 10);
-    if (!Number.isFinite(count) || count <= 0) { setPlanDates([]); return; }
+    if (!Number.isFinite(count) || count <= 0) { setPlanVisits([]); return; }
 
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
@@ -166,39 +182,71 @@ export default function NewJob() {
     else if (endsAfterUnit === 'months') end.setMonth(end.getMonth() + count);
     else end.setFullYear(end.getFullYear() + count);
 
-    const jours: string[] = [];
+    const out: PlanVisit[] = [];
     if (repeatMode === 'monthly') {
       const y0 = start.getFullYear();
       const m0 = start.getMonth();
       const d0 = startDate.getDate();
-      for (let i = 0; jours.length < 366; i++) {
+      for (let i = 0; out.length < 366; i++) {
         const y = y0 + Math.floor((m0 + i) / 12);
         const m = (m0 + i) % 12;
-        const dernier = new Date(y, m + 1, 0).getDate();
-        const d = new Date(y, m, Math.min(d0, dernier));
+        const d = new Date(y, m, Math.min(d0, dernierJour(y, m + 1)));
         if (d > end) break;
-        jours.push(ymd(d));
+        out.push(nouvelleVisite(y, m + 1, ymd(d)));
       }
     } else {
       const pas = repeatMode === 'weekly' ? 7 : 14;
-      for (const d = new Date(start); d <= end && jours.length < 366; d.setDate(d.getDate() + pas)) {
-        jours.push(ymd(d));
+      for (const d = new Date(start); d <= end && out.length < 366; d.setDate(d.getDate() + pas)) {
+        out.push(nouvelleVisite(d.getFullYear(), d.getMonth() + 1, ymd(d)));
       }
     }
-    setPlanDates(jours);
+    setPlanVisits(out);
+    setServiceYears(out.length > 0
+      ? [...new Set(out.map((v) => v.year))].sort((a, b) => a - b)
+      : [startDate.getFullYear()]);
+    setVisitTimes({}); // la personnalisation repart des heures de la Règle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobType, repeatMode, endsAfterCount, endsAfterUnit, startDate]);
 
-  // Les rendez-vous eux-mêmes : toutes les dates retenues, aux heures de la règle.
-  const planVisits = useMemo(() => {
-    if (jobType !== 'recurring') return [];
-    const dureeMs = Math.max(endDate.getTime() - startDate.getTime(), 0);
-    return planDates.map((j) => {
-      const [y, m, d] = j.split('-').map(Number);
-      const debut = new Date(y, m - 1, d, startDate.getHours(), startDate.getMinutes(), 0, 0);
-      return { startISO: debut.toISOString(), endISO: new Date(debut.getTime() + dureeMs).toISOString() };
+  const visitesDuMois = (y: number, m: number) =>
+    planVisits.filter((v) => v.year === y && v.month === m).sort((a, b) => a.date.localeCompare(b.date));
+
+  const basculerMois = (y: number, m: number) => {
+    setPlanVisits((prev) => {
+      const dedans = prev.filter((v) => v.year === y && v.month === m);
+      if (dedans.length > 0) return prev.filter((v) => !(v.year === y && v.month === m));
+      const jour = Math.min(startDate.getDate(), dernierJour(y, m));
+      return [...prev, nouvelleVisite(y, m, `${y}-${String(m).padStart(2, '0')}-${String(jour).padStart(2, '0')}`)];
     });
-  }, [jobType, planDates, startDate, endDate]);
+  };
+  const ajouterVisite = (y: number, m: number) => {
+    const jour = Math.min(startDate.getDate(), dernierJour(y, m));
+    setPlanVisits((prev) => [...prev, nouvelleVisite(y, m, `${y}-${String(m).padStart(2, '0')}-${String(jour).padStart(2, '0')}`)]);
+  };
+  const retirerVisite = (key: string) => setPlanVisits((prev) => prev.filter((v) => v.key !== key));
+  const ajouterAnneeSuivante = () =>
+    setServiceYears((prev) => [...prev, Math.max(...prev) + 1]);
+  const retirerAnnee = (y: number) => {
+    setServiceYears((prev) => prev.filter((x) => x !== y));
+    setPlanVisits((prev) => prev.filter((v) => v.year !== y));
+  };
+
+  // Ce qui part réellement en base : une visite = un rendez-vous à l'agenda.
+  const planPayload = useMemo(() => {
+    if (jobType !== 'recurring') return [];
+    return [...planVisits]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((v) => {
+        const { start, end } = heuresDe(v.key);
+        const [y, m, d] = v.date.split('-').map(Number);
+        const [hs, ms] = start.split(':').map(Number);
+        const [he, me] = end.split(':').map(Number);
+        const debut = new Date(y, m - 1, d, hs, ms, 0, 0);
+        const fin = new Date(y, m - 1, d, he, me, 0, 0);
+        return { startISO: debut.toISOString(), endISO: (fin > debut ? fin : debut).toISOString() };
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobType, planVisits, visitTimes, startDate, endDate]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
@@ -238,8 +286,8 @@ export default function NewJob() {
   };
 
   const saveMut = useMutation({
-    mutationFn: () => {
-      return createJob(orgId ?? '', {
+    mutationFn: async () => {
+      const job = await createJob(orgId ?? '', {
         title: title.trim(),
         client_id: client?.id ?? null,
         client_name: client?.name ?? null,
@@ -254,8 +302,31 @@ export default function NewJob() {
         taxRatePct: parseFloat(taxRate) || 0,
         // Le plan matérialise ses rendez-vous : pas de règle de récurrence en
         // parallèle, elle en générerait des doublons.
-        planVisits: jobType === 'recurring' && planVisits.length > 0 ? planVisits : null,
+        planVisits: jobType === 'recurring' && planPayload.length > 0 ? planPayload : null,
       });
+
+      // Contrat de service optionnel — comme le web, il fige la liste des
+      // visites telle qu'elle vient d'être planifiée.
+      if (jobType === 'recurring' && createContract && planVisits.length > 0) {
+        const triees = [...planVisits].sort((a, b) => a.date.localeCompare(b.date));
+        await createServiceContract({
+          orgId: orgId ?? '',
+          job_id: job.id,
+          client_id: client?.id ?? null,
+          title: title.trim(),
+          year: triees[0].year,
+          visits: triees.map((v) => {
+            const h = heuresDe(v.key);
+            return {
+              month: v.month,
+              date: v.date,
+              year: v.year,
+              ...(visitTimes[v.key] ? { start_time: h.start, end_time: h.end } : {}),
+            };
+          }),
+        });
+      }
+      return job;
     },
     onSuccess: async (job) => {
       qc.invalidateQueries({ queryKey: ['jobs'] });
@@ -383,7 +454,7 @@ export default function NewJob() {
               {(['weekly', 'biweekly', 'monthly', 'custom'] as const).map((rm) => (
                 <Pressable
                   key={rm}
-                  onPress={() => { setRepeatMode(rm); if (rm === 'custom') setPlanDates([]); }}
+                  onPress={() => setRepeatMode(rm)}
                   className={`rounded-full border px-3.5 py-1.5 ${repeatMode === rm ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
                 >
                   <Text className={`text-xs font-semibold ${repeatMode === rm ? 'text-white' : 'text-ink'}`}>
@@ -412,28 +483,7 @@ export default function NewJob() {
               <Text className="text-xs text-ink-muted">{t.mobilePlan.anytime}</Text>
             </Pressable>
 
-            {repeatMode === 'custom' ? (
-              /* Personnalisé : on pose les dates une par une */
-              <View className="flex-row items-center justify-between gap-2 pt-1">
-                <DateTimePicker
-                  value={customDate}
-                  mode="date"
-                  display="compact"
-                  themeVariant="light"
-                  accentColor="#171717"
-                  onChange={(_, d) => { if (d) setCustomDate(d); }}
-                />
-                <Pressable
-                  onPress={() =>
-                    setPlanDates((prev) =>
-                      prev.includes(ymd(customDate)) ? prev : [...prev, ymd(customDate)].sort())
-                  }
-                  className="rounded-full border border-ink bg-ink px-3.5 py-1.5"
-                >
-                  <Text className="text-xs font-semibold text-white">{t.mobilePlan.addDate}</Text>
-                </Pressable>
-              </View>
-            ) : (
+            {repeatMode === 'custom' ? null : (
               <>
                 {/* Se termine après N jours / semaines / mois / années */}
                 <Text className="px-1 pt-1 text-[11px] font-semibold uppercase text-ink-subtle">
@@ -465,49 +515,151 @@ export default function NewJob() {
               </>
             )}
 
-            {/* Les rendez-vous, un par un — comme le web, on les voit et on
-                peut en retirer avant d'enregistrer. */}
-            <View className="mt-1 rounded-xl border border-surface-border bg-surface-sunken px-4 py-3">
-              {planDates.length === 0 ? (
-                <Text className="text-xs text-ink-muted">{t.mobilePlan.none}</Text>
-              ) : (
-                <>
-                  <Text className="text-sm font-bold text-ink">
-                    {planDates.length === 1
-                      ? t.mobilePlan.generatedOne
-                      : t.mobilePlan.generated.replace('{count}', String(planDates.length))}
-                  </Text>
-                  <Text className="pt-0.5 text-xs text-ink-muted">
-                    {formatTime(startDate.toISOString())} – {formatTime(endDate.toISOString())} ·{' '}
-                    {t.mobilePlan.sameTimeHint}
-                  </Text>
-                  <View className="mt-2 gap-1">
-                    {planDates.map((j) => {
-                      const [y, m, d] = j.split('-').map(Number);
-                      const dte = new Date(y, m - 1, d);
+            {/* Nombre de visites générées, comme le web */}
+            {planVisits.length > 0 ? (
+              <Text className="px-1 text-[11px] text-ink-subtle">
+                {planVisits.length === 1
+                  ? t.mobilePlan.generatedOne
+                  : t.mobilePlan.generated.replace('{count}', String(planVisits.length))}
+              </Text>
+            ) : (
+              <Text className="px-1 text-xs text-ink-muted">{t.mobilePlan.none}</Text>
+            )}
+
+            {/* Une section par année : grille des 12 mois, puis les dates
+                exactes dans chaque mois retenu — structure du web. */}
+            {serviceYears.map((year) => {
+              const moisRetenus = Array.from(
+                new Set(planVisits.filter((v) => v.year === year).map((v) => v.month)),
+              ).sort((a, b) => a - b);
+              return (
+                <View key={year} className="gap-2 pt-2">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-2xl font-bold text-ink">{year}</Text>
+                    {serviceYears.length > 1 ? (
+                      <Pressable hitSlop={10} onPress={() => retirerAnnee(year)}>
+                        <Text className="px-1 text-sm font-bold text-ink-subtle">🗑</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
+                  <View className="flex-row flex-wrap gap-2">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+                      const n = visitesDuMois(year, m).length;
+                      const actif = n > 0;
                       return (
-                        <View
-                          key={j}
-                          className="flex-row items-center justify-between rounded-lg bg-white px-3 py-2"
+                        <Pressable
+                          key={m}
+                          onPress={() => basculerMois(year, m)}
+                          className={`rounded-lg border px-3 py-2 ${actif ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
                         >
-                          <Text className="text-xs font-semibold text-ink">
-                            {dte.toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', {
-                              weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
-                            })}
+                          <Text className={`text-xs font-semibold capitalize ${actif ? 'text-white' : 'text-ink-muted'}`}>
+                            {nomMois(m, 'short')}{n > 1 ? ` ×${n}` : ''}
                           </Text>
-                          <Pressable
-                            hitSlop={10}
-                            onPress={() => setPlanDates((prev) => prev.filter((x) => x !== j))}
-                          >
-                            <Text className="px-1 text-sm font-bold text-ink-subtle">✕</Text>
-                          </Pressable>
-                        </View>
+                        </Pressable>
                       );
                     })}
                   </View>
-                </>
-              )}
-            </View>
+
+                  {moisRetenus.length > 0 ? (
+                    <>
+                      <Text className="px-1 pt-1 text-[11px] font-semibold uppercase text-ink-subtle">
+                        {t.mobilePlan.visitDates}
+                      </Text>
+                      {moisRetenus.map((m) => {
+                        const visites = visitesDuMois(year, m);
+                        return (
+                          <View key={m} className="gap-2 rounded-xl border border-surface-border bg-surface-sunken p-3">
+                            <View className="flex-row items-center justify-between">
+                              <Text className="text-sm font-semibold capitalize text-ink">
+                                {nomMois(m, 'long')} {year}
+                              </Text>
+                              <Pressable hitSlop={10} onPress={() => ajouterVisite(year, m)}>
+                                <Text className="px-1 text-base font-bold text-ink">＋</Text>
+                              </Pressable>
+                            </View>
+                            {visites.map((v) => {
+                              const [vy, vm, vd] = v.date.split('-').map(Number);
+                              const h = heuresDe(v.key);
+                              const [hs, ms] = h.start.split(':').map(Number);
+                              const [he, me] = h.end.split(':').map(Number);
+                              return (
+                                <View key={v.key} className="flex-row flex-wrap items-center gap-2 rounded-lg bg-white px-2 py-2">
+                                  <DateTimePicker
+                                    value={new Date(vy, vm - 1, vd)}
+                                    mode="date"
+                                    display="compact"
+                                    themeVariant="light"
+                                    accentColor="#171717"
+                                    minimumDate={new Date(year, m - 1, 1)}
+                                    maximumDate={new Date(year, m - 1, dernierJour(year, m))}
+                                    onChange={(_, d) => {
+                                      if (!d) return;
+                                      setPlanVisits((prev) =>
+                                        prev.map((x) => (x.key === v.key ? { ...x, date: ymd(d) } : x)));
+                                    }}
+                                  />
+                                  <DateTimePicker
+                                    value={new Date(vy, vm - 1, vd, hs, ms)}
+                                    mode="time"
+                                    display="compact"
+                                    themeVariant="light"
+                                    accentColor="#171717"
+                                    onChange={(_, d) => {
+                                      if (!d) return;
+                                      setVisitTimes((prev) => ({ ...prev, [v.key]: { start: hhmm(d), end: h.end } }));
+                                    }}
+                                  />
+                                  <Text className="text-xs text-ink-subtle">–</Text>
+                                  <DateTimePicker
+                                    value={new Date(vy, vm - 1, vd, he, me)}
+                                    mode="time"
+                                    display="compact"
+                                    themeVariant="light"
+                                    accentColor="#171717"
+                                    onChange={(_, d) => {
+                                      if (!d) return;
+                                      setVisitTimes((prev) => ({ ...prev, [v.key]: { start: h.start, end: hhmm(d) } }));
+                                    }}
+                                  />
+                                  {visites.length > 1 ? (
+                                    <Pressable hitSlop={10} onPress={() => retirerVisite(v.key)}>
+                                      <Text className="px-1 text-sm font-bold text-ink-subtle">✕</Text>
+                                    </Pressable>
+                                  ) : null}
+                                </View>
+                              );
+                            })}
+                          </View>
+                        );
+                      })}
+                    </>
+                  ) : null}
+                </View>
+              );
+            })}
+
+            {/* Ajouter année suivante */}
+            <Pressable
+              onPress={ajouterAnneeSuivante}
+              className="mt-1 items-center rounded-xl border border-dashed border-surface-border py-2.5"
+            >
+              <Text className="text-sm font-semibold text-ink-muted">＋ {t.mobilePlan.addNextYear}</Text>
+            </Pressable>
+
+            {/* Contrat optionnel */}
+            <Pressable
+              onPress={() => setCreateContract((v) => !v)}
+              className="mt-1 flex-row items-start gap-3 rounded-xl border border-surface-border bg-surface-sunken p-3"
+            >
+              <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${createContract ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {createContract ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm text-ink">{t.mobilePlan.createContract}</Text>
+                <Text className="pt-0.5 text-xs text-ink-muted">{t.mobilePlan.createContractHint}</Text>
+              </View>
+            </Pressable>
           </View>
         ) : null}
       </View>
