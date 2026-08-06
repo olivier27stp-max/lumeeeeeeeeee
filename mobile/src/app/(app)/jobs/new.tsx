@@ -138,13 +138,19 @@ export default function NewJob() {
     };
   }, [startDate, language, t]);
 
-  // Les rendez-vous du plan, générés depuis la règle — portage direct de la
-  // logique du web (NewJobModal) : mensuel garde le même quantième borné à la
-  // longueur du mois, hebdo/bimensuel avancent d'un pas fixe.
-  const planVisits = useMemo(() => {
-    if (jobType !== 'recurring') return [];
+  // Les dates du plan, générées depuis la règle — portage direct de la logique
+  // du web (NewJobModal) : mensuel garde le même quantième borné à la longueur
+  // du mois, hebdo/bimensuel avancent d'un pas fixe. Comme sur le web, changer
+  // la règle REMPLACE la sélection; entre deux changements l'utilisateur peut
+  // retirer des dates à la main.
+  const [planDates, setPlanDates] = useState<string[]>([]);
+  const ymd = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  useEffect(() => {
+    if (jobType !== 'recurring') return;
     const count = parseInt(endsAfterCount, 10);
-    if (!Number.isFinite(count) || count <= 0) return [];
+    if (!Number.isFinite(count) || count <= 0) { setPlanDates([]); return; }
 
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
@@ -153,7 +159,7 @@ export default function NewJob() {
     else if (endsAfterUnit === 'months') end.setMonth(end.getMonth() + count);
     else end.setFullYear(end.getFullYear() + count);
 
-    const jours: Date[] = [];
+    const jours: string[] = [];
     if (repeatMode === 'monthly') {
       const y0 = start.getFullYear();
       const m0 = start.getMonth();
@@ -164,23 +170,28 @@ export default function NewJob() {
         const dernier = new Date(y, m + 1, 0).getDate();
         const d = new Date(y, m, Math.min(d0, dernier));
         if (d > end) break;
-        jours.push(d);
+        jours.push(ymd(d));
       }
     } else {
       const pas = repeatMode === 'weekly' ? 7 : 14;
       for (const d = new Date(start); d <= end && jours.length < 366; d.setDate(d.getDate() + pas)) {
-        jours.push(new Date(d));
+        jours.push(ymd(d));
       }
     }
+    setPlanDates(jours);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobType, repeatMode, endsAfterCount, endsAfterUnit, startDate]);
 
-    // Toutes les visites reprennent les heures de la règle.
+  // Les rendez-vous eux-mêmes : toutes les dates retenues, aux heures de la règle.
+  const planVisits = useMemo(() => {
+    if (jobType !== 'recurring') return [];
     const dureeMs = Math.max(endDate.getTime() - startDate.getTime(), 0);
-    return jours.map((j) => {
-      const debut = new Date(j);
-      debut.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+    return planDates.map((j) => {
+      const [y, m, d] = j.split('-').map(Number);
+      const debut = new Date(y, m - 1, d, startDate.getHours(), startDate.getMinutes(), 0, 0);
       return { startISO: debut.toISOString(), endISO: new Date(debut.getTime() + dureeMs).toISOString() };
     });
-  }, [jobType, repeatMode, endsAfterCount, endsAfterUnit, startDate, endDate]);
+  }, [jobType, planDates, startDate, endDate]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
@@ -399,23 +410,46 @@ export default function NewJob() {
               ))}
             </View>
 
-            {/* Aperçu : ce qui sera réellement créé */}
+            {/* Les rendez-vous, un par un — comme le web, on les voit et on
+                peut en retirer avant d'enregistrer. */}
             <View className="mt-1 rounded-xl border border-surface-border bg-surface-sunken px-4 py-3">
-              {planVisits.length === 0 ? (
+              {planDates.length === 0 ? (
                 <Text className="text-xs text-ink-muted">{t.mobilePlan.none}</Text>
               ) : (
                 <>
                   <Text className="text-sm font-bold text-ink">
-                    {planVisits.length === 1
+                    {planDates.length === 1
                       ? t.mobilePlan.oneAppointment
-                      : t.mobilePlan.appointments.replace('{count}', String(planVisits.length))}
+                      : t.mobilePlan.appointments.replace('{count}', String(planDates.length))}
                   </Text>
                   <Text className="pt-0.5 text-xs text-ink-muted">
-                    {t.mobilePlan.range
-                      .replace('{from}', new Date(planVisits[0].startISO).toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short', year: 'numeric' }))
-                      .replace('{to}', new Date(planVisits[planVisits.length - 1].startISO).toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short', year: 'numeric' }))}
+                    {formatTime(startDate.toISOString())} – {formatTime(endDate.toISOString())} ·{' '}
+                    {t.mobilePlan.sameTimeHint}
                   </Text>
-                  <Text className="pt-1 text-[11px] text-ink-subtle">{t.mobilePlan.sameTimeHint}</Text>
+                  <View className="mt-2 gap-1">
+                    {planDates.map((j) => {
+                      const [y, m, d] = j.split('-').map(Number);
+                      const dte = new Date(y, m - 1, d);
+                      return (
+                        <View
+                          key={j}
+                          className="flex-row items-center justify-between rounded-lg bg-white px-3 py-2"
+                        >
+                          <Text className="text-xs font-semibold text-ink">
+                            {dte.toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', {
+                              weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+                            })}
+                          </Text>
+                          <Pressable
+                            hitSlop={10}
+                            onPress={() => setPlanDates((prev) => prev.filter((x) => x !== j))}
+                          >
+                            <Text className="px-1 text-sm font-bold text-ink-subtle">✕</Text>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </>
               )}
             </View>
