@@ -75,9 +75,13 @@ export default function NewJob() {
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
   // Plan de service, même principe que le web : la règle (répétition + durée)
   // génère les vrais rendez-vous, tous aux heures choisies plus bas.
-  const [repeatMode, setRepeatMode] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
-  const [endsAfterCount, setEndsAfterCount] = useState('12');
-  const [endsAfterUnit, setEndsAfterUnit] = useState<'weeks' | 'months' | 'years'>('months');
+  const [repeatMode, setRepeatMode] = useState<'weekly' | 'biweekly' | 'monthly' | 'custom'>('weekly');
+  const [endsAfterCount, setEndsAfterCount] = useState('');
+  const [endsAfterUnit, setEndsAfterUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months');
+  // « Pas d'heure précise » : même convention que le web (00:00 → 23:59).
+  const [anytime, setAnytime] = useState(false);
+  // Mode « Personnalisé » : la date qu'on s'apprête à ajouter à la main.
+  const [customDate, setCustomDate] = useState<Date>(() => new Date());
   const [startDate, setStartDate] = useState<Date>(() => {
     const d = new Date();
     d.setMinutes(0, 0, 0);
@@ -149,13 +153,16 @@ export default function NewJob() {
 
   useEffect(() => {
     if (jobType !== 'recurring') return;
+    // « Personnalisé » : aucune génération, les dates sont posées à la main.
+    if (repeatMode === 'custom') return;
     const count = parseInt(endsAfterCount, 10);
     if (!Number.isFinite(count) || count <= 0) { setPlanDates([]); return; }
 
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
-    if (endsAfterUnit === 'weeks') end.setDate(end.getDate() + count * 7);
+    if (endsAfterUnit === 'days') end.setDate(end.getDate() + count);
+    else if (endsAfterUnit === 'weeks') end.setDate(end.getDate() + count * 7);
     else if (endsAfterUnit === 'months') end.setMonth(end.getMonth() + count);
     else end.setFullYear(end.getFullYear() + count);
 
@@ -373,42 +380,90 @@ export default function NewJob() {
               {t.mobilePlan.repeats}
             </Text>
             <View className="flex-row flex-wrap gap-2">
-              {(['weekly', 'biweekly', 'monthly'] as const).map((rm) => (
+              {(['weekly', 'biweekly', 'monthly', 'custom'] as const).map((rm) => (
                 <Pressable
                   key={rm}
-                  onPress={() => setRepeatMode(rm)}
+                  onPress={() => { setRepeatMode(rm); if (rm === 'custom') setPlanDates([]); }}
                   className={`rounded-full border px-3.5 py-1.5 ${repeatMode === rm ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
                 >
                   <Text className={`text-xs font-semibold ${repeatMode === rm ? 'text-white' : 'text-ink'}`}>
-                    {repeatLabels[rm]}
+                    {rm === 'custom' ? t.mobilePlan.custom : repeatLabels[rm]}
                   </Text>
                 </Pressable>
               ))}
             </View>
 
-            {/* Se termine après N semaines / mois / ans */}
-            <Text className="px-1 pt-1 text-[11px] font-semibold uppercase text-ink-subtle">
-              {t.mobilePlan.endsAfter}
-            </Text>
-            <View className="flex-row items-center gap-2">
-              <TextInput
-                value={endsAfterCount}
-                onChangeText={(v) => setEndsAfterCount(v.replace(/[^0-9]/g, '').slice(0, 3))}
-                keyboardType="number-pad"
-                className="w-16 rounded-xl border border-surface-border bg-white px-3 py-2 text-center text-sm font-semibold text-ink"
-              />
-              {(['weeks', 'months', 'years'] as const).map((u) => (
+            {/* Pas d'heure précise — même convention que le web */}
+            <Pressable
+              onPress={() => {
+                const on = !anytime;
+                setAnytime(on);
+                const s = new Date(startDate);
+                const e = new Date(startDate);
+                if (on) { s.setHours(0, 0, 0, 0); e.setHours(23, 59, 0, 0); }
+                else { s.setHours(9, 0, 0, 0); e.setHours(10, 0, 0, 0); }
+                setStartDate(s); setEndDate(e);
+              }}
+              className="flex-row items-center gap-2 px-1 pt-1"
+            >
+              <View className={`h-4 w-4 items-center justify-center rounded border ${anytime ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {anytime ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <Text className="text-xs text-ink-muted">{t.mobilePlan.anytime}</Text>
+            </Pressable>
+
+            {repeatMode === 'custom' ? (
+              /* Personnalisé : on pose les dates une par une */
+              <View className="flex-row items-center justify-between gap-2 pt-1">
+                <DateTimePicker
+                  value={customDate}
+                  mode="date"
+                  display="compact"
+                  themeVariant="light"
+                  accentColor="#171717"
+                  onChange={(_, d) => { if (d) setCustomDate(d); }}
+                />
                 <Pressable
-                  key={u}
-                  onPress={() => setEndsAfterUnit(u)}
-                  className={`rounded-full border px-3.5 py-1.5 ${endsAfterUnit === u ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                  onPress={() =>
+                    setPlanDates((prev) =>
+                      prev.includes(ymd(customDate)) ? prev : [...prev, ymd(customDate)].sort())
+                  }
+                  className="rounded-full border border-ink bg-ink px-3.5 py-1.5"
                 >
-                  <Text className={`text-xs font-semibold ${endsAfterUnit === u ? 'text-white' : 'text-ink'}`}>
-                    {u === 'weeks' ? t.mobilePlan.unitWeeks : u === 'months' ? t.mobilePlan.unitMonths : t.mobilePlan.unitYears}
-                  </Text>
+                  <Text className="text-xs font-semibold text-white">{t.mobilePlan.addDate}</Text>
                 </Pressable>
-              ))}
-            </View>
+              </View>
+            ) : (
+              <>
+                {/* Se termine après N jours / semaines / mois / années */}
+                <Text className="px-1 pt-1 text-[11px] font-semibold uppercase text-ink-subtle">
+                  {t.mobilePlan.endsAfter}
+                </Text>
+                <View className="flex-row items-center gap-2">
+                  <TextInput
+                    value={endsAfterCount}
+                    onChangeText={(v) => setEndsAfterCount(v.replace(/[^0-9]/g, '').slice(0, 3))}
+                    keyboardType="number-pad"
+                    placeholder="12"
+                    className="w-14 rounded-xl border border-surface-border bg-white px-2 py-2 text-center text-sm font-semibold text-ink"
+                  />
+                  {(['days', 'weeks', 'months', 'years'] as const).map((u) => (
+                    <Pressable
+                      key={u}
+                      onPress={() => setEndsAfterUnit(u)}
+                      className={`rounded-full border px-3 py-1.5 ${endsAfterUnit === u ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                    >
+                      <Text className={`text-xs font-semibold ${endsAfterUnit === u ? 'text-white' : 'text-ink'}`}>
+                        {u === 'days' ? t.mobilePlan.unitDays
+                          : u === 'weeks' ? t.mobilePlan.unitWeeks
+                          : u === 'months' ? t.mobilePlan.unitMonths
+                          : t.mobilePlan.unitYears}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
 
             {/* Les rendez-vous, un par un — comme le web, on les voit et on
                 peut en retirer avant d'enregistrer. */}
@@ -419,8 +474,8 @@ export default function NewJob() {
                 <>
                   <Text className="text-sm font-bold text-ink">
                     {planDates.length === 1
-                      ? t.mobilePlan.oneAppointment
-                      : t.mobilePlan.appointments.replace('{count}', String(planDates.length))}
+                      ? t.mobilePlan.generatedOne
+                      : t.mobilePlan.generated.replace('{count}', String(planDates.length))}
                   </Text>
                   <Text className="pt-0.5 text-xs text-ink-muted">
                     {formatTime(startDate.toISOString())} – {formatTime(endDate.toISOString())} ·{' '}
