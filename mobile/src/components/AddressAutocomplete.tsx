@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { Input } from '@/components/ui/Input';
+import { useTranslation } from '@/lib/i18n';
 
 export type PickedAddress = {
   address: string;
@@ -23,7 +24,7 @@ type Suggestion = {
 
 /** Free address autocomplete via OpenStreetMap (Nominatim) — no API key. */
 export function AddressAutocomplete({
-  label = 'Address',
+  label,
   value,
   onChangeText,
   onSelect,
@@ -33,6 +34,7 @@ export function AddressAutocomplete({
   onChangeText: (v: string) => void;
   onSelect: (a: PickedAddress) => void;
 }) {
+  const { t } = useTranslation();
   const [results, setResults] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -118,13 +120,13 @@ export function AddressAutocomplete({
   return (
     <View className="gap-1">
       <Input
-        label={label}
+        label={label ?? t.mobileUi.addressLabel}
         value={value}
         onChangeText={(v) => {
           onChangeText(v);
           setOpen(true);
         }}
-        placeholder="Start typing an address…"
+        placeholder={t.mobileUi.addressPlaceholder}
         autoCapitalize="words"
       />
       {loading ? <ActivityIndicator color="#A3A3A3" style={{ alignSelf: 'flex-start' }} /> : null}

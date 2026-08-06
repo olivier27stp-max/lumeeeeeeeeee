@@ -90,9 +90,11 @@ export function ClientPicker({
 
   return (
     <View className="gap-2">
-      <Input value={search} onChangeText={setSearch} placeholder="Rechercher un client (2+ lettres)…" autoCapitalize="none" />
+      <Input value={search} onChangeText={setSearch} placeholder={t.mobileUi.searchClient} autoCapitalize="none" />
       {error ? (
-        <Text className="px-1 text-xs text-status-late">Erreur de recherche : {(error as Error).message}</Text>
+        <Text className="px-1 text-xs text-status-late">
+          {t.mobileUi.searchError} : {(error as Error).message}
+        </Text>
       ) : null}
       {isFetching ? <Text className="px-1 text-xs text-ink-muted">Recherche…</Text> : null}
       {!isFetching && !error && term.length >= 2 && (data?.length ?? 0) === 0 ? (

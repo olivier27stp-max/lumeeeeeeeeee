@@ -23,6 +23,17 @@ export type { TranslationKeys };
 const translations: Record<Language, TranslationKeys> = { en, fr };
 const STORAGE_KEY = 'lume-language';
 
+// Langue courante lisible HORS React. Les modules d'API (lib/api/*) lèvent des
+// erreurs qui finissent dans une alerte : sans ça leurs messages restaient
+// écrits en dur dans une seule langue, quel que soit le réglage.
+let langueCourante: Language = 'fr';
+
+/** Le dictionnaire courant, pour le code non-React. Dans un composant, garder
+ *  useTranslation() : lui redessine l'écran quand la langue change. */
+export function tr(): TranslationKeys {
+  return translations[langueCourante];
+}
+
 interface LanguageContextValue {
   language: Language;
   setLanguage: (lang: Language) => void;
@@ -77,6 +88,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     // signed out).
     supabase.auth.updateUser({ data: { language: lang } }).catch(() => {});
   }, []);
+
+  // Garde le dictionnaire hors-React aligné sur l'état du contexte.
+  langueCourante = language;
 
   const value = useMemo(
     () => ({ language, setLanguage, t: translations[language] }),

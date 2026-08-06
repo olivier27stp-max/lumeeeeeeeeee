@@ -4,6 +4,7 @@
 // "one active session per employee", so a duplicate punch-in throws.
 
 import { supabase } from '../supabase';
+import { tr } from '@/lib/i18n';
 
 export interface TimeEntryRow {
   id: string;
@@ -119,7 +120,7 @@ export async function punchIn(params: {
     .single();
   if (error) {
     // Unique index → already punched in elsewhere.
-    if (error.code === '23505') throw new Error('You are already punched in.');
+    if (error.code === '23505') throw new Error(tr().mobileErrors.alreadyPunchedIn);
     throw new Error(error.message);
   }
   return data as TimeEntryRow;

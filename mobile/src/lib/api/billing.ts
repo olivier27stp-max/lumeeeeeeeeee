@@ -5,6 +5,7 @@
 import { supabase } from '../supabase';
 import { getOrgCurrency } from './org';
 import { breakdownFor, resolveTaxes, saveAppliedTaxes } from './taxes';
+import { tr } from '@/lib/i18n';
 
 export interface InvoiceRow {
   id: string;
@@ -155,7 +156,7 @@ export async function getOrCreatePaymentToken(params: {
   currency: string;
 }): Promise<string> {
   if (!params.amountCents || params.amountCents <= 0) {
-    throw new Error('This invoice has nothing left to pay.');
+    throw new Error(tr().mobileErrors.nothingLeftToPay);
   }
 
   // Reuse an existing open request for this invoice if there is one.
@@ -205,7 +206,7 @@ export async function finishJobAndPrepareInvoice(params: {
   if (error) throw new Error(error.message);
   const row = Array.isArray(data) ? data[0] : data;
   const invoiceId = String(row?.invoice_id ?? '').trim();
-  if (!invoiceId) throw new Error('Invoice preparation succeeded but invoice_id is missing.');
+  if (!invoiceId) throw new Error(tr().mobileErrors.invoiceIdMissing);
   return { invoiceId, alreadyExists: Boolean(row?.already_exists) };
 }
 
@@ -233,7 +234,7 @@ export async function getOrCreatePaymentLink(params: {
 export function quoteShareLink(viewToken: string): string {
   const webUrl = process.env.EXPO_PUBLIC_WEB_URL;
   if (!webUrl) {
-    throw new Error('Set EXPO_PUBLIC_WEB_URL (your deployed Lume web app URL) to send quotes.');
+    throw new Error(tr().mobileErrors.webUrlMissing);
   }
   return `${webUrl.replace(/\/$/, '')}/quote/${viewToken}`;
 }

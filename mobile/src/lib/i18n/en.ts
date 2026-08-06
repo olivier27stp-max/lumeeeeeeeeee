@@ -4699,6 +4699,52 @@ const en = {
     daySat: 'Sat',
     daySun: 'Sun',
   },
+
+  // Strings that used to be hardcoded in the screens and in lib/api/*, so they
+  // showed in one language whatever the setting. Errors thrown by API modules
+  // surface in an Alert — read them with tr() from lib/i18n.
+  mobileErrors: {
+    recurrenceFailed: 'The job was created but its recurrence could not be saved',
+    noPhoneOnFile: 'This client has no phone number on file. Use Share instead.',
+    noEmailOnFile: 'This client has no email on file.',
+    nothingLeftToPay: 'This invoice has nothing left to pay.',
+    alreadyPunchedIn: 'You are already punched in.',
+    cameraDenied: 'Camera access denied.',
+    photoLibraryDenied: 'Photo library access denied.',
+    imageFailed: 'The image could not be processed.',
+    routeFailed: 'No route could be calculated.',
+    invoiceIdMissing: 'The invoice was prepared but its identifier is missing.',
+    webUrlMissing: 'Set EXPO_PUBLIC_WEB_URL (your deployed Lume web app URL) to send quotes.',
+    sessionExpired: 'Session expired — sign in again.',
+    noJobsToReschedule: 'No existing job to reschedule.',
+  },
+
+  mobileUi: {
+    searchClient: 'Search a client (2+ letters)…',
+    viewClient: 'View client',
+    callClient: 'Call client',
+    viewJob: 'View job',
+    clientSignature: 'Client signature',
+    confirmSignature: 'Confirm signature',
+    addressPlaceholder: 'Start typing an address…',
+    noLineItems: 'No line items.',
+    resetLinkInfo: "We'll send a reset link to your email.",
+    emailPlaceholder: 'you@company.com',
+    backToSignIn: 'Back to sign in',
+    recurrenceEnds: 'Recurrence ends',
+    recurrenceNoEnd: 'No end date',
+    searchError: 'Search error',
+    directions: 'Directions',
+    demoClientTitle: 'Sample client',
+    demoClientBody:
+      'This client is a sample and has no record. Tap “Create real clients” on Home to generate real ones.',
+    signatureHint: 'Ask the client to sign below to confirm the work.',
+    resetPasswordTitle: 'Reset password',
+    sendResetLink: 'Send reset link',
+    checkInbox: 'Check your inbox for a reset link.',
+    emailLabel: 'Email',
+    addressLabel: 'Address',
+  },
 } as const;
 
 // Deep structure type that preserves shape but allows any string values

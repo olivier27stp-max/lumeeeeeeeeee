@@ -3,6 +3,7 @@ import { Job } from '@/types/db';
 import { createNotification } from './notifications';
 import { getOrgCurrency } from './org';
 import { endOfToday, startOfToday } from '../format';
+import { tr } from '@/lib/i18n';
 import {
   PermissionsMap,
   Scope,
@@ -113,7 +114,7 @@ export async function spreadJobsAcrossTodayTomorrow(
     .limit(8);
   if (error) throw new Error(error.message);
   const ids = (data ?? []).map((r) => r.id as string);
-  if (ids.length === 0) throw new Error('Aucun job existant à replanifier.');
+  if (ids.length === 0) throw new Error(tr().mobileErrors.noJobsToReschedule);
 
   let today = 0;
   let tomorrow = 0;
@@ -377,14 +378,18 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
   }
 
   // Recurring job → create the recurrence rule so the server cron generates
-  // future occurrences. Best effort: the job itself is already saved.
+  // future occurrences.
+  //
+  // L'erreur était auparavant avalée dans un console.warn : le job était créé,
+  // la récurrence non, et rien ne le signalait. Sans récurrence le job n'est
+  // pas ce que l'utilisateur a demandé, donc on remonte l'échec.
   if (rest.job_type === 'recurring' && input.recurrence) {
     const row = buildRecurrenceRow(job.id, orgId, {
       ...input.recurrence,
       startISO: input.recurrence.startISO || rest.scheduled_at || new Date().toISOString(),
     });
     const { error: recErr } = await supabase.from('job_recurrence_rules').insert(row);
-    if (recErr) console.warn('[createJob] recurrence rule not saved:', recErr.message);
+    if (recErr) throw new Error(`${tr().mobileErrors.recurrenceFailed} : ${recErr.message}`);
   }
 
   // Auto-add to the schedule (schedule_events) so it shows in the calendar,

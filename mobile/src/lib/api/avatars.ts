@@ -11,13 +11,14 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { supabase } from '../supabase';
 import { STORAGE_BUCKETS, getPublicUrl, uploadBase64 } from '../storage';
+import { tr } from '@/lib/i18n';
 
 const AVATAR_BUCKET = STORAGE_BUCKETS.JOB_PHOTOS;
 
 /** Camera capture with square (1:1) crop — clean profile photo. Null if cancelled. */
 export async function captureAvatar(): Promise<string | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
-  if (!perm.granted) throw new Error('Camera permission denied');
+  if (!perm.granted) throw new Error(tr().mobileErrors.cameraDenied);
   const res = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 1, exif: false });
   if (res.canceled || !res.assets?.[0]) return null;
   return res.assets[0].uri;
@@ -26,7 +27,7 @@ export async function captureAvatar(): Promise<string | null> {
 /** Library pick with square (1:1) crop. Null if cancelled. */
 export async function pickAvatar(): Promise<string | null> {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) throw new Error('Photo library permission denied');
+  if (!perm.granted) throw new Error(tr().mobileErrors.photoLibraryDenied);
   const res = await ImagePicker.launchImageLibraryAsync({
     allowsEditing: true,
     aspect: [1, 1],
@@ -44,7 +45,7 @@ async function compressSquare(uri: string): Promise<string> {
     format: ImageManipulator.SaveFormat.JPEG,
     base64: true,
   });
-  if (!out.base64) throw new Error('Image compression failed');
+  if (!out.base64) throw new Error(tr().mobileErrors.imageFailed);
   return out.base64;
 }
 

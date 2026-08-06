@@ -10,6 +10,7 @@
 // second one the lead is invisible in the desktop pipeline.
 
 import { supabase } from '../supabase';
+import { tr } from '@/lib/i18n';
 
 export interface Lead {
   id: string;
@@ -107,7 +108,7 @@ export async function createLead(input: {
   // Both clients and pipeline_deals require created_by = auth.uid() (RLS).
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
-  if (!userId) throw new Error('Session expirée — reconnecte-toi pour créer un lead.');
+  if (!userId) throw new Error(tr().mobileErrors.sessionExpired);
 
   const stage = normalizeStage(input.status);
   const value = Number.isFinite(input.value) ? Number(input.value) : 0;

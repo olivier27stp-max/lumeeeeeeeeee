@@ -12,6 +12,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { getClient } from '@/lib/api/clients';
 import { listJobLineItems } from '@/lib/api/jobs';
 import { callNumber, openDirections, promptCall } from '@/lib/contact';
+import { useTranslation } from '@/lib/i18n';
 import { clientFullName, formatCurrencyCents, formatDateTime } from '@/lib/format';
 import { usePermissions } from '@/lib/usePermissions';
 import { Job } from '@/types/db';
@@ -27,6 +28,7 @@ function Field({ label, value, onPress }: { label: string; value: string; onPres
 }
 
 export function JobInfoSheet({ job, onClose }: { job: Job | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const { canSeePricing, can } = usePermissions();
   const isDemo = !!job && (job.org_id === 'demo' || String(job.id).startsWith('demo'));
 
@@ -166,31 +168,27 @@ export function JobInfoSheet({ job, onClose }: { job: Job | null; onClose: () =>
             <View className="gap-2">
               {job.client_name || job.client_id || client ? (
                 <Button
-                  title="Voir le client"
+                  title={t.mobileUi.viewClient}
                   onPress={() => {
                     const cid = client?.id ?? job.client_id;
                     if (cid) go(`/(app)/clients/${cid}`);
-                    else
-                      Alert.alert(
-                        'Client d’exemple',
-                        'Ce client est un exemple, il n’a pas de fiche. Tape « Créer de vrais clients » sur l’accueil pour générer de vraies fiches.',
-                      );
+                    else Alert.alert(t.mobileUi.demoClientTitle, t.mobileUi.demoClientBody);
                   }}
                 />
               ) : null}
               {address ? (
                 <Button
-                  title="Itinéraire"
+                  title={t.mobileUi.directions}
                   variant="secondary"
                   onPress={() => openDirections({ latitude: job.latitude, longitude: job.longitude, address })}
                 />
               ) : null}
               {phone ? (
-                <Button title="Appeler le client" variant="secondary" onPress={() => callNumber(phone)} />
+                <Button title={t.mobileUi.callClient} variant="secondary" onPress={() => callNumber(phone)} />
               ) : null}
               {!isDemo ? (
                 <Button
-                  title="Voir la fiche de la job"
+                  title={t.mobileUi.viewJob}
                   variant="secondary"
                   onPress={() => go(`/(app)/jobs/${job.id}`)}
                 />

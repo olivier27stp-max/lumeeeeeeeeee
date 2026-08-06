@@ -97,7 +97,7 @@ export default function SendInvoice() {
   const sendText = useMutation({
     mutationFn: async () => {
       const phone = client?.phone;
-      if (!phone) throw new Error('This client has no phone number on file. Use Share instead.');
+      if (!phone) throw new Error(t.mobileErrors.noPhoneOnFile);
       const body = buildBody();
       const name = client ? clientFullName(client) : null;
       // Send through Lume (the org's number via the server) so it lands in the
@@ -149,7 +149,7 @@ export default function SendInvoice() {
 
   const sendEmail = useMutation({
     mutationFn: async () => {
-      if (!client?.email) throw new Error('This client has no email on file.');
+      if (!client?.email) throw new Error(t.mobileErrors.noEmailOnFile);
       await sendInvoiceEmailViaServer({ invoiceId: String(id) });
     },
     onSuccess: markSent,

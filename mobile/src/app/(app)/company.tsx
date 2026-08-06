@@ -136,7 +136,7 @@ export default function Company() {
         format: ImageManipulator.SaveFormat.PNG,
         base64: true,
       });
-      if (!out.base64) throw new Error('No image data');
+      if (!out.base64) throw new Error(t.mobileErrors.imageFailed);
       const path = newLogoPath(String(orgId));
       await uploadBase64(STORAGE_BUCKETS.COMPANY_LOGOS, path, out.base64, 'image/png');
       const url = getPublicUrl(STORAGE_BUCKETS.COMPANY_LOGOS, path);

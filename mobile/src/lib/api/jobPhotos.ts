@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../supabase';
 import { getPublicUrl, getSignedUrl, STORAGE_BUCKETS, uploadBase64 } from '../storage';
 import { JobAttachment } from '@/types/db';
+import { tr } from '@/lib/i18n';
 
 const MAX_WIDTH = 1600;
 const THUMB_WIDTH = 320;
@@ -20,7 +21,7 @@ export type PickedImage = { uri: string };
 /** Ask for camera permission and capture a photo. Returns null if cancelled. */
 export async function capturePhoto(): Promise<PickedImage | null> {
   const perm = await ImagePicker.requestCameraPermissionsAsync();
-  if (!perm.granted) throw new Error('Camera permission denied');
+  if (!perm.granted) throw new Error(tr().mobileErrors.cameraDenied);
   const res = await ImagePicker.launchCameraAsync({ quality: 1, exif: false });
   if (res.canceled || !res.assets?.[0]) return null;
   return { uri: res.assets[0].uri };
@@ -29,7 +30,7 @@ export async function capturePhoto(): Promise<PickedImage | null> {
 /** Pick a photo from the library. Returns null if cancelled. */
 export async function pickPhoto(): Promise<PickedImage | null> {
   const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) throw new Error('Photo library permission denied');
+  if (!perm.granted) throw new Error(tr().mobileErrors.photoLibraryDenied);
   const res = await ImagePicker.launchImageLibraryAsync({
     quality: 1,
     mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -45,7 +46,7 @@ async function compress(uri: string, width: number): Promise<string> {
     [{ resize: { width } }],
     { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true },
   );
-  if (!out.base64) throw new Error('Image compression failed');
+  if (!out.base64) throw new Error(tr().mobileErrors.imageFailed);
   return out.base64;
 }
 

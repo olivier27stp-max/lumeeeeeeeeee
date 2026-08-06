@@ -10,6 +10,7 @@
 
 import type { InvoiceRow, InvoiceItemRow } from './api/billing';
 import type { CompanySettings } from './api/org';
+import { tr } from './i18n';
 import { formatCurrencyCents } from './format';
 import type { ClientRecord } from '@/types/db';
 
@@ -236,7 +237,7 @@ export function buildInvoicePreviewHtml(args: {
         </tr>`,
         )
         .join('')
-    : `<tr><td class="empty" colspan="4">No line items.</td></tr>`;
+    : `<tr><td class="empty" colspan="4">${tr().mobileUi.noLineItems}</td></tr>`;
 
   const totalsRows = `
     <tr><td class="k">Subtotal</td><td class="v">${money(subtotal)}</td></tr>
@@ -294,7 +295,7 @@ export function buildQuotePreviewHtml(args: {
         </tr>`,
         )
         .join('')
-    : `<tr><td class="empty" colspan="4">No line items.</td></tr>`;
+    : `<tr><td class="empty" colspan="4">${tr().mobileUi.noLineItems}</td></tr>`;
 
   const discount = args.discountCents ?? 0;
   const deposit = args.depositCents ?? 0;

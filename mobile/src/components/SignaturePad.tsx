@@ -3,6 +3,7 @@ import { Modal, Text, View } from 'react-native';
 import Signature, { SignatureViewRef } from 'react-native-signature-canvas';
 
 import { Button } from '@/components/ui/Button';
+import { useTranslation } from '@/lib/i18n';
 
 type Props = {
   visible: boolean;
@@ -13,6 +14,7 @@ type Props = {
 
 export function SignaturePad({ visible, onClose, onSave }: Props) {
   const ref = useRef<SignatureViewRef>(null);
+  const { t } = useTranslation();
 
   const handleOK = (dataUrl: string) => {
     const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
@@ -24,10 +26,8 @@ export function SignaturePad({ visible, onClose, onSave }: Props) {
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View className="flex-1 bg-white">
         <View className="px-5 pt-14 pb-2">
-          <Text className="text-xl font-bold text-ink">Signature du client</Text>
-          <Text className="text-sm text-ink-muted">
-            Demandez au client de signer ci-dessous pour confirmer le travail.
-          </Text>
+          <Text className="text-xl font-bold text-ink">{t.mobileUi.clientSignature}</Text>
+          <Text className="text-sm text-ink-muted">{t.mobileUi.signatureHint}</Text>
         </View>
 
         {/* The canvas. Its own footer buttons are hidden (unreliable on device);
@@ -51,13 +51,13 @@ export function SignaturePad({ visible, onClose, onSave }: Props) {
 
         {/* Native action buttons — always visible, reliable. */}
         <View className="gap-2 px-5 pb-10 pt-2">
-          <Button title="Confirmer la signature" onPress={() => ref.current?.readSignature()} />
+          <Button title={t.mobileUi.confirmSignature} onPress={() => ref.current?.readSignature()} />
           <View className="flex-row gap-2">
             <View className="flex-1">
-              <Button title="Effacer" variant="secondary" onPress={() => ref.current?.clearSignature()} />
+              <Button title={t.common.clear} variant="secondary" onPress={() => ref.current?.clearSignature()} />
             </View>
             <View className="flex-1">
-              <Button title="Annuler" variant="secondary" onPress={onClose} />
+              <Button title={t.common.cancel} variant="secondary" onPress={onClose} />
             </View>
           </View>
         </View>

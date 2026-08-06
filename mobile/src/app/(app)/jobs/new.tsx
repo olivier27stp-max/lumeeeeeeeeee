@@ -25,7 +25,9 @@ import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 import { useTranslation } from '@/lib/i18n';
 
-const FREQUENCY_KEYS = ['daily', 'weekly', 'biweekly', 'monthly', 'annual', 'custom'] as const;
+// « custom » a été retiré : l'option n'ouvrait aucun réglage et enregistrait
+// silencieusement « tous les 7 jours », soit exactement « hebdomadaire ».
+const FREQUENCY_KEYS = ['daily', 'weekly', 'biweekly', 'monthly', 'annual'] as const;
 const DEFAULT_TAX = '14.975';
 
 function SectionLabel({ children }: { children: string }) {
@@ -46,7 +48,6 @@ export default function NewJob() {
     biweekly: t.mobileJobs.freqBiweekly,
     monthly: t.mobileJobs.freqMonthly,
     annual: t.mobileJobs.freqAnnual,
-    custom: t.mobileJobs.freqCustom,
   };
 
   // Booking-confirmation popup (after Save): send the client the appointment
@@ -83,6 +84,9 @@ export default function NewJob() {
   const [description, setDescription] = useState(typeof prefill.note === 'string' ? prefill.note : '');
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
   const [frequency, setFrequency] = useState('weekly');
+  // Fin de la récurrence. Sans elle la règle est infinie et ne peut être
+  // arrêtée que depuis le web — le mobile n'a pas d'écran de récurrence.
+  const [recurrenceEnd, setRecurrenceEnd] = useState<Date | null>(null);
   const [startDate, setStartDate] = useState<Date>(() => {
     const d = new Date();
     d.setMinutes(0, 0, 0);
@@ -183,7 +187,11 @@ export default function NewJob() {
         taxRatePct: parseFloat(taxRate) || 0,
         recurrence:
           jobType === 'recurring'
-            ? { frequency: frequency as any, startISO: startDate.toISOString() }
+            ? {
+                frequency: frequency as any,
+                startISO: startDate.toISOString(),
+                endDate: recurrenceEnd ? recurrenceEnd.toISOString().slice(0, 10) : null,
+              }
             : null,
       });
     },
@@ -314,6 +322,37 @@ export default function NewJob() {
                 <Text className={`text-xs font-semibold ${frequency === fk ? 'text-white' : 'text-ink'}`}>{freqLabels[fk]}</Text>
               </Pressable>
             ))}
+            <View className="mt-1 w-full flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
+              <Text className="text-[11px] font-semibold uppercase text-ink-subtle">
+                {t.mobileUi.recurrenceEnds}
+              </Text>
+              {recurrenceEnd ? (
+                <View className="flex-row items-center gap-2">
+                  <DateTimePicker
+                    value={recurrenceEnd}
+                    mode="date"
+                    display="compact"
+                    themeVariant="light"
+                    accentColor="#171717"
+                    minimumDate={startDate}
+                    onChange={(_, d) => { if (d) setRecurrenceEnd(d); }}
+                  />
+                  <Pressable onPress={() => setRecurrenceEnd(null)}>
+                    <Text className="text-xs font-semibold text-ink-muted">{t.common.clear}</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    const d = new Date(startDate);
+                    d.setFullYear(d.getFullYear() + 1);
+                    setRecurrenceEnd(d);
+                  }}
+                >
+                  <Text className="text-xs font-semibold text-ink-muted">{t.mobileUi.recurrenceNoEnd}</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         ) : null}
       </View>
