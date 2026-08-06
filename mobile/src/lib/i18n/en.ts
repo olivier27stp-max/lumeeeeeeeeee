@@ -4744,6 +4744,8 @@ const en = {
     createContract: 'Create a contract for this service plan',
     createContractHint: 'Freezes the planned visits — the client can sign it.',
     removeYear: 'Remove this year',
+    rule: 'Rule',
+    startDate: 'Start date',
     range: 'from {from} to {to}',
     sameTimeHint: 'Every appointment uses the times set above.',
     none: 'Set a start date to plan the appointments.',

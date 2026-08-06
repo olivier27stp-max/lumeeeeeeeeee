@@ -4737,6 +4737,8 @@ const fr: TranslationKeys = {
     createContract: 'Créer un contrat pour ce plan de service',
     createContractHint: 'Fige les visites planifiées — le client peut le signer.',
     removeYear: 'Retirer cette année',
+    rule: 'Règle',
+    startDate: 'Date de début',
     range: 'du {from} au {to}',
     sameTimeHint: 'Chaque rendez-vous reprend les heures choisies ci-dessus.',
     none: 'Choisis une date de début pour planifier les rendez-vous.',

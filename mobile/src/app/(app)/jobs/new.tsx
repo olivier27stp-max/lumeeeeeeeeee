@@ -32,6 +32,57 @@ function SectionLabel({ children }: { children: string }) {
   return <Text className="px-1 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">{children}</Text>;
 }
 
+/** Ligne de réglage à menu déroulant — l'équivalent mobile du <select> que le
+ *  web utilise dans la carte « Règle » du plan de service. */
+function SelectRow<T extends string>({
+  label, value, options, onSelect,
+}: {
+  label: string;
+  value: T;
+  options: { key: T; label: string }[];
+  onSelect: (k: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const courant = options.find((o) => o.key === value);
+  return (
+    <>
+      <Pressable
+        onPress={() => setOpen(true)}
+        className="flex-row items-center justify-between gap-3 py-2.5"
+      >
+        <Text className="shrink-0 text-xs font-medium text-ink-muted">{label}</Text>
+        <View className="flex-1 flex-row items-center justify-end gap-1">
+          <Text className="text-right text-sm font-semibold text-ink" numberOfLines={1}>
+            {courant?.label ?? ''}
+          </Text>
+          <Text className="text-sm text-ink-subtle">›</Text>
+        </View>
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable className="flex-1 justify-end bg-black/30" onPress={() => setOpen(false)}>
+          <View className="rounded-t-3xl bg-white px-4 pb-10 pt-3">
+            <Text className="px-1 pb-2 text-[11px] font-bold uppercase tracking-widest text-ink-subtle">
+              {label}
+            </Text>
+            {options.map((o) => (
+              <Pressable
+                key={o.key}
+                onPress={() => { onSelect(o.key); setOpen(false); }}
+                className="flex-row items-center justify-between border-t border-surface-border py-3"
+              >
+                <Text className={`text-base ${o.key === value ? 'font-bold text-ink' : 'text-ink-muted'}`}>
+                  {o.label}
+                </Text>
+                {o.key === value ? <Text className="text-base font-bold text-ink">✓</Text> : null}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
 export default function NewJob() {
   const qc = useQueryClient();
   const { orgId, teamId, scope, permissions, role, canCreateJobs, canSeePricing } = usePermissions();
@@ -446,74 +497,106 @@ export default function NewJob() {
         </View>
         {jobType === 'recurring' ? (
           <View className="gap-2 pt-1">
-            {/* Se répète — les libellés suivent la date de début, comme le web */}
-            <Text className="px-1 text-[11px] font-semibold uppercase text-ink-subtle">
-              {t.mobilePlan.repeats}
-            </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {(['weekly', 'biweekly', 'monthly', 'custom'] as const).map((rm) => (
-                <Pressable
-                  key={rm}
-                  onPress={() => setRepeatMode(rm)}
-                  className={`rounded-full border px-3.5 py-1.5 ${repeatMode === rm ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
-                >
-                  <Text className={`text-xs font-semibold ${repeatMode === rm ? 'text-white' : 'text-ink'}`}>
-                    {rm === 'custom' ? t.mobilePlan.custom : repeatLabels[rm]}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            {/* ── Carte « Règle », comme le web : champs étiquetés et menus
+                   déroulants, pas une rangée de pastilles. ── */}
+            <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4 py-1">
+              <Text className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+                {t.mobilePlan.rule}
+              </Text>
 
-            {/* Pas d'heure précise — même convention que le web */}
-            <Pressable
-              onPress={() => {
-                const on = !anytime;
-                setAnytime(on);
-                const s = new Date(startDate);
-                const e = new Date(startDate);
-                if (on) { s.setHours(0, 0, 0, 0); e.setHours(23, 59, 0, 0); }
-                else { s.setHours(9, 0, 0, 0); e.setHours(10, 0, 0, 0); }
-                setStartDate(s); setEndDate(e);
-              }}
-              className="flex-row items-center gap-2 px-1 pt-1"
-            >
-              <View className={`h-4 w-4 items-center justify-center rounded border ${anytime ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {anytime ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              <View className="flex-row items-center justify-between gap-3 border-t border-surface-border py-2">
+                <Text className="text-xs font-medium text-ink-muted">{t.mobilePlan.startDate}</Text>
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="compact"
+                  themeVariant="light"
+                  accentColor="#171717"
+                  onChange={(_, d) => { if (d) pickDay(d); }}
+                />
               </View>
-              <Text className="text-xs text-ink-muted">{t.mobilePlan.anytime}</Text>
-            </Pressable>
 
-            {repeatMode === 'custom' ? null : (
-              <>
-                {/* Se termine après N jours / semaines / mois / années */}
-                <Text className="px-1 pt-1 text-[11px] font-semibold uppercase text-ink-subtle">
-                  {t.mobilePlan.endsAfter}
-                </Text>
-                <View className="flex-row items-center gap-2">
+              {!anytime ? (
+                <View className="flex-row items-center justify-between gap-2 border-t border-surface-border py-2">
+                  <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.mobileJobs.start}</Text>
+                  <DateTimePicker
+                    value={startDate}
+                    mode="time"
+                    display="compact"
+                    themeVariant="light"
+                    accentColor="#171717"
+                    onChange={(_, d) => { if (d) setStartDate((p) => setTimeOn(p, d)); }}
+                  />
+                  <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.mobileJobs.end}</Text>
+                  <DateTimePicker
+                    value={endDate}
+                    mode="time"
+                    display="compact"
+                    themeVariant="light"
+                    accentColor="#171717"
+                    onChange={(_, d) => { if (d) setEndDate((p) => setTimeOn(p, d)); }}
+                  />
+                </View>
+              ) : null}
+
+              <Pressable
+                onPress={() => {
+                  const on = !anytime;
+                  setAnytime(on);
+                  const s = new Date(startDate);
+                  const e = new Date(startDate);
+                  if (on) { s.setHours(0, 0, 0, 0); e.setHours(23, 59, 0, 0); }
+                  else { s.setHours(9, 0, 0, 0); e.setHours(10, 0, 0, 0); }
+                  setStartDate(s); setEndDate(e);
+                }}
+                className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+              >
+                <View className={`h-4 w-4 items-center justify-center rounded border ${anytime ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                  {anytime ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                </View>
+                <Text className="text-xs text-ink-muted">{t.mobilePlan.anytime}</Text>
+              </Pressable>
+
+              <View className="border-t border-surface-border">
+                <SelectRow
+                  label={t.mobilePlan.repeats}
+                  value={repeatMode}
+                  onSelect={setRepeatMode}
+                  options={[
+                    { key: 'weekly' as const, label: repeatLabels.weekly },
+                    { key: 'biweekly' as const, label: repeatLabels.biweekly },
+                    { key: 'monthly' as const, label: repeatLabels.monthly },
+                    { key: 'custom' as const, label: t.mobilePlan.custom },
+                  ]}
+                />
+              </View>
+
+              {repeatMode === 'custom' ? null : (
+                <View className="flex-row items-center justify-between gap-2 border-t border-surface-border py-2">
+                  <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.mobilePlan.endsAfter}</Text>
                   <TextInput
                     value={endsAfterCount}
                     onChangeText={(v) => setEndsAfterCount(v.replace(/[^0-9]/g, '').slice(0, 3))}
                     keyboardType="number-pad"
                     placeholder="12"
-                    className="w-14 rounded-xl border border-surface-border bg-white px-2 py-2 text-center text-sm font-semibold text-ink"
+                    className="w-14 rounded-lg border border-surface-border bg-white px-2 py-1.5 text-center text-sm font-semibold text-ink"
                   />
-                  {(['days', 'weeks', 'months', 'years'] as const).map((u) => (
-                    <Pressable
-                      key={u}
-                      onPress={() => setEndsAfterUnit(u)}
-                      className={`rounded-full border px-3 py-1.5 ${endsAfterUnit === u ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
-                    >
-                      <Text className={`text-xs font-semibold ${endsAfterUnit === u ? 'text-white' : 'text-ink'}`}>
-                        {u === 'days' ? t.mobilePlan.unitDays
-                          : u === 'weeks' ? t.mobilePlan.unitWeeks
-                          : u === 'months' ? t.mobilePlan.unitMonths
-                          : t.mobilePlan.unitYears}
-                      </Text>
-                    </Pressable>
-                  ))}
+                  <View className="flex-1">
+                    <SelectRow
+                      label=""
+                      value={endsAfterUnit}
+                      onSelect={setEndsAfterUnit}
+                      options={[
+                        { key: 'days' as const, label: t.mobilePlan.unitDays },
+                        { key: 'weeks' as const, label: t.mobilePlan.unitWeeks },
+                        { key: 'months' as const, label: t.mobilePlan.unitMonths },
+                        { key: 'years' as const, label: t.mobilePlan.unitYears },
+                      ]}
+                    />
+                  </View>
                 </View>
-              </>
-            )}
+              )}
+            </View>
 
             {/* Nombre de visites générées, comme le web */}
             {planVisits.length > 0 ? (
