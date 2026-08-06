@@ -1001,11 +1001,13 @@ export default function NewJobModal({
       .then(setSalespeople)
       .catch(() => setSalespeople([]));
 
-    // Fetch org currency (scoped to current org)
+    // Fetch org currency (scoped to current org). It lives on company_settings —
+    // org_billing_settings has no currency column, so that read always failed
+    // and the modal silently kept the default currency.
     import('../lib/orgApi').then(({ getCurrentOrgIdOrThrow }) =>
       getCurrentOrgIdOrThrow().then(oid =>
         supabase
-          .from('org_billing_settings')
+          .from('company_settings')
           .select('currency')
           .eq('org_id', oid)
           .limit(1)
