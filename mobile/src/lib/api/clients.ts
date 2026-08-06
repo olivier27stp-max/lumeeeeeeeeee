@@ -45,6 +45,10 @@ export interface ClientInput {
   city?: string;
   province?: string;
   postal_code?: string;
+  country?: string;
+  /** Needed by the map and route optimization — a client without them is invisible there. */
+  latitude?: number | null;
+  longitude?: number | null;
   notes?: string;
 }
 

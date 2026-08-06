@@ -77,6 +77,11 @@ export default function NewClient() {
                   city: a.city ?? f.city,
                   province: a.province ?? f.province,
                   postal_code: a.postal_code ?? f.postal_code,
+                  country: a.country ?? f.country,
+                  // Without coordinates the client can't be placed on the map
+                  // nor routed to — the picker resolves them, keep them.
+                  latitude: a.lat ?? f.latitude,
+                  longitude: a.lng ?? f.longitude,
                 }))
               }
             />

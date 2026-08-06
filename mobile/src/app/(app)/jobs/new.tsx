@@ -17,6 +17,7 @@ import { listTeams } from '@/lib/api/org';
 import { findOrCreateConversation } from '@/lib/api/messaging';
 import { sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
+import { resolveTaxes } from '@/lib/api/taxes';
 import { bookingNiceMessage, packTemplate, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
@@ -94,6 +95,18 @@ export default function NewJob() {
   });
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
+
+  // Taxes configured on the desktop (Settings → Taxes), resolved for this
+  // client. This screen used to keep the hardcoded Quebec rate, so every job
+  // created on mobile from another province was taxed wrong.
+  const { data: orgTax } = useQuery({
+    queryKey: ['org-tax', orgId, client?.id ?? null],
+    queryFn: () => resolveTaxes(String(orgId), client?.id ?? null),
+    enabled: !!orgId,
+  });
+  useEffect(() => {
+    if (orgTax) setTaxRate(String(orgTax.totalRatePct));
+  }, [orgTax]);
 
   // When a client is chosen, prefill the job's service address from their address
   // (only when the user hasn't typed one yet) so the job and client stay connected.

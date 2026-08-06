@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
 import { LineItemsEditor } from '@/components/LineItemsEditor';
-import { createQuote, getOrgTaxRatePct, markQuoteSent, quoteShareLink, LineItemInput } from '@/lib/api/billing';
+import { createQuote, markQuoteSent, quoteShareLink, LineItemInput } from '@/lib/api/billing';
+import { resolveTaxes } from '@/lib/api/taxes';
 import { getClient } from '@/lib/api/clients';
 import { getCompany } from '@/lib/api/org';
 import { findOrCreateConversation } from '@/lib/api/messaging';
@@ -60,14 +61,15 @@ export default function NewQuote() {
   const [validDays, setValidDays] = useState('30');
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
-  // Org's tax rate from the desktop (Settings → Taxes) — same as the web.
+  // Taxes from the desktop (Settings → Taxes), resolved for THIS client: an
+  // exempt client pays none, and the province picks the tax group.
   const { data: orgTax } = useQuery({
-    queryKey: ['org-tax', orgId],
-    queryFn: () => getOrgTaxRatePct(String(orgId)),
+    queryKey: ['org-tax', orgId, client?.id ?? null],
+    queryFn: () => resolveTaxes(String(orgId), client?.id ?? null),
     enabled: !!orgId,
   });
   useEffect(() => {
-    if (orgTax != null) setTaxRate(String(orgTax));
+    if (orgTax) setTaxRate(String(orgTax.totalRatePct));
   }, [orgTax]);
   const [discountOn, setDiscountOn] = useState(false);
   const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');

@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { Job } from '@/types/db';
 import { createNotification } from './notifications';
+import { getOrgCurrency } from './org';
 import { endOfToday, startOfToday } from '../format';
 import {
   PermissionsMap,
@@ -340,7 +341,7 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       end_at: rest.end_at ?? null,
       latitude: rest.latitude ?? null,
       longitude: rest.longitude ?? null,
-      currency: 'CAD',
+      currency: await getOrgCurrency(orgId),
       total_cents: total,
     })
     .select('*')

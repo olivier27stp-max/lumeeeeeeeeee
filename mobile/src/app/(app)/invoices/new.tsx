@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { ClientPicker, PickedClient } from '@/components/ClientPicker';
 import { LineItemsEditor } from '@/components/LineItemsEditor';
-import { createInvoice, getOrgTaxRatePct, LineItemInput } from '@/lib/api/billing';
+import { createInvoice, LineItemInput } from '@/lib/api/billing';
+import { resolveTaxes } from '@/lib/api/taxes';
 import { getJob, listJobLineItems, listJobsInRange } from '@/lib/api/jobs';
 import { Job } from '@/types/db';
 import { formatCurrencyCents, formatTime } from '@/lib/format';
@@ -42,15 +43,15 @@ export default function NewInvoice() {
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
 
-  // Use the org's tax rate configured on the desktop (Settings → Taxes) instead
-  // of a hardcoded value, so mobile invoices match the web.
+  // Taxes configured on the desktop (Settings → Taxes), resolved for THIS
+  // client: an exempt client pays none, and the province picks the tax group.
   const { data: orgTax } = useQuery({
-    queryKey: ['org-tax', orgId],
-    queryFn: () => getOrgTaxRatePct(String(orgId)),
+    queryKey: ['org-tax', orgId, client?.id ?? null],
+    queryFn: () => resolveTaxes(String(orgId), client?.id ?? null),
     enabled: !!orgId,
   });
   useEffect(() => {
-    if (orgTax != null) setTaxRate(String(orgTax));
+    if (orgTax) setTaxRate(String(orgTax.totalRatePct));
   }, [orgTax]);
 
   // From-job mode: list recent jobs to pick from.

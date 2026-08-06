@@ -123,6 +123,31 @@ export async function getCompany(orgId: string): Promise<CompanySettings | null>
   return (data as CompanySettings | null) ?? null;
 }
 
+// The org currency, cached for the session. Jobs, quotes and invoices used to
+// hardcode 'CAD', which stamped the wrong currency on every document of an org
+// that bills in anything else.
+const currencyCache = new Map<string, string>();
+
+export async function getOrgCurrency(orgId: string): Promise<string> {
+  if (!orgId) return 'CAD';
+  const cached = currencyCache.get(orgId);
+  if (cached) return cached;
+  const { data } = await supabase
+    .from('company_settings')
+    .select('currency')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  const currency = (data?.currency as string | null)?.trim() || 'CAD';
+  currencyCache.set(orgId, currency);
+  return currency;
+}
+
+/** Drop the cached currency — call after the setting is changed. */
+export function clearOrgCurrencyCache(orgId?: string): void {
+  if (orgId) currencyCache.delete(orgId);
+  else currencyCache.clear();
+}
+
 export async function updateCompany(
   orgId: string,
   input: Partial<Omit<CompanySettings, 'org_id'>>,
@@ -148,6 +173,8 @@ export async function updateCompany(
   if (input.company_name && input.company_name.trim()) {
     await supabase.from('orgs').update({ name: input.company_name.trim() }).eq('id', orgId);
   }
+  // The currency is cached; a stale entry would keep stamping the old one.
+  if ('currency' in input) clearOrgCurrencyCache(orgId);
 }
 
 export interface ReferralSummary {

@@ -3,6 +3,8 @@
 // on-device Stripe payment collection is a v2 follow-up.
 
 import { supabase } from '../supabase';
+import { getOrgCurrency } from './org';
+import { breakdownFor, resolveTaxes, saveAppliedTaxes } from './taxes';
 
 export interface InvoiceRow {
   id: string;
@@ -314,7 +316,7 @@ export async function createQuote(params: {
       title: params.title,
       status: 'draft',
       context_type: 'client',
-      currency: 'CAD',
+      currency: await getOrgCurrency(params.orgId),
       subtotal_cents: subtotal,
       discount_cents: discount,
       discount_type: params.discountType ?? null,
@@ -348,6 +350,14 @@ export async function createQuote(params: {
     const { error: liErr } = await supabase.from('quote_line_items').insert(rows);
     if (liErr) throw new Error(liErr.message);
   }
+
+  // Per-tax breakdown (TPS/TVQ…), like the web. Without it the document only
+  // carries a lump sum and the tax owed can't be reported per tax.
+  if (tax > 0) {
+    const resolved = await resolveTaxes(params.orgId, params.clientId);
+    await saveAppliedTaxes('quote', quoteId, breakdownFor(resolved.taxes, subtotal - discount));
+  }
+
   return { id: quoteId, viewToken: quoteRow.view_token };
 }
 
@@ -372,7 +382,7 @@ export async function createInvoice(params: {
       status: 'draft',
       subject: params.subject || null,
       due_date: params.dueDate,
-      currency: 'CAD',
+      currency: await getOrgCurrency(params.orgId),
       subtotal_cents: subtotal,
       tax_cents: tax,
       total_cents: total,
@@ -396,6 +406,13 @@ export async function createInvoice(params: {
     const { error: liErr } = await supabase.from('invoice_items').insert(rows);
     if (liErr) throw new Error(liErr.message);
   }
+
+  // Per-tax breakdown — what the web writes from InvoiceEdit.
+  if (tax > 0) {
+    const resolved = await resolveTaxes(params.orgId, params.clientId);
+    await saveAppliedTaxes('invoice', invoiceId, breakdownFor(resolved.taxes, subtotal));
+  }
+
   return { id: invoiceId };
 }
 
