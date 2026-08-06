@@ -355,7 +355,8 @@ export async function createQuote(params: {
   // carries a lump sum and the tax owed can't be reported per tax.
   if (tax > 0) {
     const resolved = await resolveTaxes(params.orgId, params.clientId);
-    await saveAppliedTaxes('quote', quoteId, breakdownFor(resolved.taxes, subtotal - discount));
+    const lines = breakdownFor(resolved.taxes, subtotal - discount, tax, params.taxRatePct);
+    await saveAppliedTaxes('quote', quoteId, lines);
   }
 
   return { id: quoteId, viewToken: quoteRow.view_token };
@@ -410,7 +411,8 @@ export async function createInvoice(params: {
   // Per-tax breakdown — what the web writes from InvoiceEdit.
   if (tax > 0) {
     const resolved = await resolveTaxes(params.orgId, params.clientId);
-    await saveAppliedTaxes('invoice', invoiceId, breakdownFor(resolved.taxes, subtotal));
+    const lines = breakdownFor(resolved.taxes, subtotal, tax, params.taxRatePct);
+    await saveAppliedTaxes('invoice', invoiceId, lines);
   }
 
   return { id: invoiceId };

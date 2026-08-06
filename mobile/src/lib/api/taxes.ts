@@ -134,18 +134,51 @@ export async function resolveTaxes(orgId: string, clientId?: string | null): Pro
   return { taxes, exempt: false, region, totalRatePct: sumRates(taxes) };
 }
 
-/** Split a tax total across the resolved taxes, proportionally to their rate.
- *  Rounding drift is absorbed by the last line so the parts always add up. */
-export function breakdownFor(taxes: ResolvedTax[], subtotalCents: number): {
+export interface TaxLine {
   name: string; rate: number; amount_cents: number; tax_config_id: string | null; is_compound: boolean;
-}[] {
-  return taxes.map((t) => ({
+}
+
+/** Split a tax total across the resolved taxes.
+ *
+ *  `taxCents` is what the document actually records. The parts MUST add up to
+ *  it — a breakdown that doesn't reconcile with the invoice is worse than none
+ *  for remittance. Rounding drift lands on the last line.
+ *
+ *  If the user overrode the rate by hand (it no longer matches the configured
+ *  taxes), the split would be a lie: a single line carrying the real rate is
+ *  returned instead. */
+export function breakdownFor(
+  taxes: ResolvedTax[],
+  baseCents: number,
+  taxCents: number,
+  appliedRatePct?: number,
+): TaxLine[] {
+  if (taxCents <= 0) return [];
+
+  const configured = taxes.reduce((s, t) => s + t.rate, 0);
+  const overridden =
+    appliedRatePct != null && Math.abs(appliedRatePct - configured) > 0.001;
+
+  if (taxes.length === 0 || overridden) {
+    return [{
+      name: 'Taxe',
+      rate: appliedRatePct ?? configured,
+      amount_cents: taxCents,
+      tax_config_id: null,
+      is_compound: false,
+    }];
+  }
+
+  const lines: TaxLine[] = taxes.map((t) => ({
     name: t.name,
     rate: t.rate,
-    amount_cents: Math.round(subtotalCents * (t.rate / 100)),
+    amount_cents: Math.round(baseCents * (t.rate / 100)),
     tax_config_id: t.id,
     is_compound: t.is_compound,
   }));
+  const drift = taxCents - lines.reduce((s, l) => s + l.amount_cents, 0);
+  if (drift !== 0) lines[lines.length - 1].amount_cents += drift;
+  return lines;
 }
 
 /** Persist the breakdown of a quote or invoice. Best effort by design: the
@@ -153,7 +186,7 @@ export function breakdownFor(taxes: ResolvedTax[], subtotalCents: number): {
 export async function saveAppliedTaxes(
   documentType: 'quote' | 'invoice',
   documentId: string,
-  breakdown: ReturnType<typeof breakdownFor>,
+  breakdown: TaxLine[],
 ): Promise<void> {
   if (!documentId) return;
   await supabase.from('applied_taxes').delete().eq('document_type', documentType).eq('document_id', documentId);
