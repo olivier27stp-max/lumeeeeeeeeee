@@ -276,12 +276,17 @@ export async function getRepRealStats(userId: string, orgId: string): Promise<Re
       .eq('org_id', orgId)
       .eq('salesperson_id', userId)
       .is('deleted_at', null),
+    // 'accepted' / 'signed' / 'won' ne figurent pas dans la contrainte CHECK de
+    // quotes.status : le filtre ne renvoyait jamais rien et « contrats signés »
+    // affichait toujours 0. Une soumission signée est 'approved', puis
+    // 'converted' une fois transformée en job. Même correction plus bas.
     supabase
       .from('quotes')
       .select('id, status')
       .eq('org_id', orgId)
       .eq('created_by', userId)
-      .in('status', ['accepted', 'signed', 'won']),
+      .is('deleted_at', null)
+      .in('status', ['approved', 'converted']),
     supabase
       .from('time_entries')
       .select('punch_in_at, punch_out_at, breaks, date')
@@ -337,7 +342,8 @@ export async function getTeamStats(orgId: string, userIds: string[]): Promise<Re
       .select('created_by')
       .eq('org_id', orgId)
       .in('created_by', userIds)
-      .in('status', ['accepted', 'signed', 'won']),
+      .is('deleted_at', null)
+      .in('status', ['approved', 'converted']),
     supabase
       .from('time_entries')
       .select('punch_in_at, punch_out_at, breaks, employee_id')
