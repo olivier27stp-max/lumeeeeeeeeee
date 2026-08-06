@@ -15,10 +15,13 @@ export interface DashboardStats {
 }
 
 export async function getDashboard(orgId: string, periodStartISO: string): Promise<DashboardStats> {
+  // Sans `.is('deleted_at', null)` les chiffres de l'accueil comptent les
+  // documents supprimés depuis le bureau.
   const { data: inv, error } = await supabase
     .from('invoices')
     .select('total_cents, balance_cents, issued_at, created_at')
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .is('deleted_at', null);
   if (error) throw new Error(error.message);
 
   const rows = (inv ?? []) as any[];
@@ -53,7 +56,8 @@ export async function getDashboard(orgId: string, periodStartISO: string): Promi
   const { data: quotes } = await supabase
     .from('quotes')
     .select('status')
-    .eq('org_id', orgId);
+    .eq('org_id', orgId)
+    .is('deleted_at', null);
   const closed = ['approved', 'declined', 'converted', 'expired'];
   const quotesPending = (quotes ?? []).filter((q: any) => !closed.includes(q.status ?? '')).length;
 
@@ -90,7 +94,11 @@ export async function getActionItems(orgId: string): Promise<ActionItem[]> {
   const items: ActionItem[] = [];
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: invRows } = await supabase.from('invoices').select('*').eq('org_id', orgId);
+  const { data: invRows } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('org_id', orgId)
+    .is('deleted_at', null);
   const invoices = (invRows ?? []) as any[];
   for (const r of invoices) {
     if ((r.balance_cents ?? 0) > 0) {
@@ -110,6 +118,7 @@ export async function getActionItems(orgId: string): Promise<ActionItem[]> {
     .from('quotes')
     .select('*')
     .eq('org_id', orgId)
+    .is('deleted_at', null)
     .eq('status', 'approved');
   for (const r of (quoteRows ?? []) as any[]) {
     items.push({

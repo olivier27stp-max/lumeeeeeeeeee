@@ -57,12 +57,17 @@ export async function getRepRealStats(userId: string, orgId: string): Promise<Re
       .eq('org_id', orgId)
       .eq('salesperson_id', userId)
       .is('deleted_at', null),
+    // 'accepted' / 'signed' / 'won' n'existent pas dans la contrainte de
+    // quotes.status — le filtre ne renvoyait jamais rien et le compteur de
+    // contrats affichait toujours zéro. Une soumission signée est 'approved',
+    // et 'converted' une fois transformée en job.
     supabase
       .from('quotes')
       .select('id, status')
       .eq('org_id', orgId)
       .eq('created_by', userId)
-      .in('status', ['accepted', 'signed', 'won']),
+      .is('deleted_at', null)
+      .in('status', ['approved', 'converted']),
     supabase
       .from('time_entries')
       .select('punch_in_at, punch_out_at, breaks, date')
@@ -213,6 +218,7 @@ export async function getRepPeriodStats(
       .select('id, status')
       .eq('org_id', orgId)
       .eq('created_by', userId)
+      .is('deleted_at', null)
       .gte('created_at', fromISO)
       .lte('created_at', toISO),
     supabase

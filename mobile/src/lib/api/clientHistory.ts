@@ -56,7 +56,8 @@ export async function getClientHistory(
       .from('invoices')
       .select('id, invoice_number, status, total_cents, balance_cents, created_at')
       .eq('org_id', orgId)
-      .eq('client_id', clientId),
+      .eq('client_id', clientId)
+      .is('deleted_at', null),
     supabase.from('conversations').select('id').eq('org_id', orgId).eq('client_id', clientId),
     listActivityLog(orgId, 'client', clientId, 50).catch(() => [] as ActivityLogEntry[]),
   ]);

@@ -46,11 +46,14 @@ const INVOICE_COLS =
 const QUOTE_COLS =
   'id, quote_number, status, total_cents, job_id, client_id, view_token, created_at';
 
+// Les suppressions sont douces (`deleted_at`) : sans ce filtre les listes
+// montrent des documents que l'utilisateur a supprimés depuis le bureau.
 export async function listInvoicesForJob(jobId: string): Promise<InvoiceRow[]> {
   const { data, error } = await supabase
     .from('invoices')
     .select(INVOICE_COLS)
     .eq('job_id', jobId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as InvoiceRow[];
@@ -133,6 +136,7 @@ export async function listQuotesForJob(jobId: string): Promise<QuoteRow[]> {
     .from('quotes')
     .select(QUOTE_COLS)
     .eq('job_id', jobId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as QuoteRow[];
@@ -463,6 +467,7 @@ export async function listQuotesForClient(clientId: string): Promise<QuoteRow[]>
     .from('quotes')
     .select(QUOTE_COLS)
     .eq('client_id', clientId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as QuoteRow[];
@@ -473,6 +478,7 @@ export async function listInvoicesForClient(clientId: string): Promise<InvoiceRo
     .from('invoices')
     .select(INVOICE_COLS)
     .eq('client_id', clientId)
+    .is('deleted_at', null)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []) as InvoiceRow[];
