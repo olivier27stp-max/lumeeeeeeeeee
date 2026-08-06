@@ -4717,6 +4717,26 @@ const en = {
     webUrlMissing: 'Set EXPO_PUBLIC_WEB_URL (your deployed Lume web app URL) to send quotes.',
     sessionExpired: 'Session expired — sign in again.',
     noJobsToReschedule: 'No existing job to reschedule.',
+    appointmentsFailed: 'The job was created but its appointments could not be scheduled',
+  },
+
+  // Service plan — same principle as the web: a rule generates the actual
+  // appointments, all at the same time, written to the schedule.
+  mobilePlan: {
+    tab: 'Service plan',
+    repeats: 'Repeats',
+    weekly: 'Weekly on {day}',
+    biweekly: 'Every 2 weeks on {day}',
+    monthly: 'Monthly on the {day}',
+    endsAfter: 'Ends after',
+    unitWeeks: 'weeks',
+    unitMonths: 'months',
+    unitYears: 'years',
+    appointments: '{count} appointments',
+    oneAppointment: '1 appointment',
+    range: 'from {from} to {to}',
+    sameTimeHint: 'Every appointment uses the times set above.',
+    none: 'Set a start date to plan the appointments.',
   },
 
   mobileUi: {

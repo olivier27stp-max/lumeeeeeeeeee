@@ -250,6 +250,11 @@ export interface JobInput {
   /** When set (job_type 'recurring'), a job_recurrence_rules row is created so
    * the server cron generates future occurrences. */
   recurrence?: { frequency: RecurrenceFrequencyKey; startISO: string; endDate?: string | null } | null;
+  /** Plan de service : les rendez-vous planifiés, écrits tels quels dans
+   *  schedule_events — même principe que le web (NewJobModal), qui matérialise
+   *  chaque visite au lieu de laisser un cron les générer. Exclusif avec
+   *  `recurrence` : les deux ensemble créeraient des doublons. */
+  planVisits?: { startISO: string; endISO: string }[] | null;
 }
 
 /** Build the job_recurrence_rules payload from a UI frequency key + start date.
@@ -390,6 +395,25 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
     });
     const { error: recErr } = await supabase.from('job_recurrence_rules').insert(row);
     if (recErr) throw new Error(`${tr().mobileErrors.recurrenceFailed} : ${recErr.message}`);
+  }
+
+  // Plan de service : un événement d'agenda par rendez-vous planifié. C'est LE
+  // livrable demandé, donc l'échec remonte — perdre les rendez-vous en silence
+  // laisserait un job seul là où l'utilisateur en attendait douze.
+  if (input.planVisits && input.planVisits.length > 0) {
+    const rows = input.planVisits.map((v) => ({
+      org_id: orgId,
+      job_id: job.id,
+      team_id: rest.team_id ?? null,
+      start_at: v.startISO,
+      end_at: v.endISO,
+      start_time: v.startISO,
+      end_time: v.endISO,
+      status: 'scheduled',
+    }));
+    const { error: evErr } = await supabase.from('schedule_events').insert(rows);
+    if (evErr) throw new Error(`${tr().mobileErrors.appointmentsFailed} : ${evErr.message}`);
+    return job;
   }
 
   // Auto-add to the schedule (schedule_events) so it shows in the calendar,

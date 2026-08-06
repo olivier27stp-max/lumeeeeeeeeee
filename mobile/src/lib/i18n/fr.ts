@@ -4710,6 +4710,26 @@ const fr: TranslationKeys = {
     webUrlMissing: "Définis EXPO_PUBLIC_WEB_URL (l'adresse de ton app web Lume) pour envoyer des soumissions.",
     sessionExpired: 'Session expirée — reconnecte-toi.',
     noJobsToReschedule: 'Aucun job existant à replanifier.',
+    appointmentsFailed: "Le job a été créé, mais ses rendez-vous n'ont pas pu être planifiés",
+  },
+
+  // Plan de service — même principe que le web : une règle génère les vrais
+  // rendez-vous, tous à la même heure, écrits dans l'agenda.
+  mobilePlan: {
+    tab: 'Plan de service',
+    repeats: 'Se répète',
+    weekly: 'Chaque semaine le {day}',
+    biweekly: 'Aux 2 semaines le {day}',
+    monthly: 'Chaque mois le {day}',
+    endsAfter: 'Se termine après',
+    unitWeeks: 'semaines',
+    unitMonths: 'mois',
+    unitYears: 'ans',
+    appointments: '{count} rendez-vous',
+    oneAppointment: '1 rendez-vous',
+    range: 'du {from} au {to}',
+    sameTimeHint: 'Chaque rendez-vous reprend les heures choisies ci-dessus.',
+    none: 'Choisis une date de début pour planifier les rendez-vous.',
   },
 
   mobileUi: {

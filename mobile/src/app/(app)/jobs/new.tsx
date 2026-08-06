@@ -25,9 +25,6 @@ import { useMembership } from '@/lib/membership-context';
 import { usePermissions } from '@/lib/usePermissions';
 import { useTranslation } from '@/lib/i18n';
 
-// « custom » a été retiré : l'option n'ouvrait aucun réglage et enregistrait
-// silencieusement « tous les 7 jours », soit exactement « hebdomadaire ».
-const FREQUENCY_KEYS = ['daily', 'weekly', 'biweekly', 'monthly', 'annual'] as const;
 const DEFAULT_TAX = '14.975';
 
 function SectionLabel({ children }: { children: string }) {
@@ -42,13 +39,6 @@ export default function NewJob() {
   const { t, language } = useTranslation();
   const isManager = role === 'owner' || role === 'admin';
 
-  const freqLabels: Record<(typeof FREQUENCY_KEYS)[number], string> = {
-    daily: t.mobileJobs.freqDaily,
-    weekly: t.mobileJobs.freqWeekly,
-    biweekly: t.mobileJobs.freqBiweekly,
-    monthly: t.mobileJobs.freqMonthly,
-    annual: t.mobileJobs.freqAnnual,
-  };
 
   // Booking-confirmation popup (after Save): send the client the appointment
   // details (time / amount / address) + an editable, persisted nice message.
@@ -83,10 +73,11 @@ export default function NewJob() {
   const [address, setAddress] = useState(typeof prefill.address === 'string' ? prefill.address : '');
   const [description, setDescription] = useState(typeof prefill.note === 'string' ? prefill.note : '');
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
-  const [frequency, setFrequency] = useState('weekly');
-  // Fin de la récurrence. Sans elle la règle est infinie et ne peut être
-  // arrêtée que depuis le web — le mobile n'a pas d'écran de récurrence.
-  const [recurrenceEnd, setRecurrenceEnd] = useState<Date | null>(null);
+  // Plan de service, même principe que le web : la règle (répétition + durée)
+  // génère les vrais rendez-vous, tous aux heures choisies plus bas.
+  const [repeatMode, setRepeatMode] = useState<'weekly' | 'biweekly' | 'monthly'>('weekly');
+  const [endsAfterCount, setEndsAfterCount] = useState('12');
+  const [endsAfterUnit, setEndsAfterUnit] = useState<'weeks' | 'months' | 'years'>('months');
   const [startDate, setStartDate] = useState<Date>(() => {
     const d = new Date();
     d.setMinutes(0, 0, 0);
@@ -132,6 +123,64 @@ export default function NewJob() {
     if (addr) setAddress(addr);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickedClientFull]);
+
+  // Libellés de répétition calés sur la date de début, comme le web
+  // (« Chaque semaine le mardi », « Chaque mois le 5 »).
+  const repeatLabels = useMemo(() => {
+    const loc = language === 'fr' ? 'fr-CA' : 'en-CA';
+    const jour = startDate.toLocaleDateString(loc, { weekday: 'long' });
+    const quantieme =
+      language === 'fr' && startDate.getDate() === 1 ? '1er' : String(startDate.getDate());
+    return {
+      weekly: t.mobilePlan.weekly.replace('{day}', jour),
+      biweekly: t.mobilePlan.biweekly.replace('{day}', jour),
+      monthly: t.mobilePlan.monthly.replace('{day}', quantieme),
+    };
+  }, [startDate, language, t]);
+
+  // Les rendez-vous du plan, générés depuis la règle — portage direct de la
+  // logique du web (NewJobModal) : mensuel garde le même quantième borné à la
+  // longueur du mois, hebdo/bimensuel avancent d'un pas fixe.
+  const planVisits = useMemo(() => {
+    if (jobType !== 'recurring') return [];
+    const count = parseInt(endsAfterCount, 10);
+    if (!Number.isFinite(count) || count <= 0) return [];
+
+    const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    if (endsAfterUnit === 'weeks') end.setDate(end.getDate() + count * 7);
+    else if (endsAfterUnit === 'months') end.setMonth(end.getMonth() + count);
+    else end.setFullYear(end.getFullYear() + count);
+
+    const jours: Date[] = [];
+    if (repeatMode === 'monthly') {
+      const y0 = start.getFullYear();
+      const m0 = start.getMonth();
+      const d0 = startDate.getDate();
+      for (let i = 0; jours.length < 366; i++) {
+        const y = y0 + Math.floor((m0 + i) / 12);
+        const m = (m0 + i) % 12;
+        const dernier = new Date(y, m + 1, 0).getDate();
+        const d = new Date(y, m, Math.min(d0, dernier));
+        if (d > end) break;
+        jours.push(d);
+      }
+    } else {
+      const pas = repeatMode === 'weekly' ? 7 : 14;
+      for (const d = new Date(start); d <= end && jours.length < 366; d.setDate(d.getDate() + pas)) {
+        jours.push(new Date(d));
+      }
+    }
+
+    // Toutes les visites reprennent les heures de la règle.
+    const dureeMs = Math.max(endDate.getTime() - startDate.getTime(), 0);
+    return jours.map((j) => {
+      const debut = new Date(j);
+      debut.setHours(startDate.getHours(), startDate.getMinutes(), 0, 0);
+      return { startISO: debut.toISOString(), endISO: new Date(debut.getTime() + dureeMs).toISOString() };
+    });
+  }, [jobType, repeatMode, endsAfterCount, endsAfterUnit, startDate, endDate]);
 
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
@@ -185,14 +234,9 @@ export default function NewJob() {
         end_at: endDate.toISOString(),
         items: canSeePricing ? items : [],
         taxRatePct: parseFloat(taxRate) || 0,
-        recurrence:
-          jobType === 'recurring'
-            ? {
-                frequency: frequency as any,
-                startISO: startDate.toISOString(),
-                endDate: recurrenceEnd ? recurrenceEnd.toISOString().slice(0, 10) : null,
-              }
-            : null,
+        // Le plan matérialise ses rendez-vous : pas de règle de récurrence en
+        // parallèle, elle en générerait des doublons.
+        planVisits: jobType === 'recurring' && planVisits.length > 0 ? planVisits : null,
       });
     },
     onSuccess: async (job) => {
@@ -306,51 +350,73 @@ export default function NewJob() {
           {(['one_off', 'recurring'] as const).map((jt) => (
             <Pressable key={jt} onPress={() => setJobType(jt)} className={`flex-1 items-center rounded-xl py-2 ${jobType === jt ? 'bg-white' : ''}`}>
               <Text className={`text-sm font-semibold ${jobType === jt ? 'text-ink' : 'text-ink-muted'}`}>
-                {jt === 'one_off' ? t.mobileJobs.oneOffTab : t.mobileJobs.recurringTab}
+                {jt === 'one_off' ? t.mobileJobs.oneOffTab : t.mobilePlan.tab}
               </Text>
             </Pressable>
           ))}
         </View>
         {jobType === 'recurring' ? (
-          <View className="flex-row flex-wrap gap-2 pt-1">
-            {FREQUENCY_KEYS.map((fk) => (
-              <Pressable
-                key={fk}
-                onPress={() => setFrequency(fk)}
-                className={`rounded-full border px-3.5 py-1.5 ${frequency === fk ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
-              >
-                <Text className={`text-xs font-semibold ${frequency === fk ? 'text-white' : 'text-ink'}`}>{freqLabels[fk]}</Text>
-              </Pressable>
-            ))}
-            <View className="mt-1 w-full flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-              <Text className="text-[11px] font-semibold uppercase text-ink-subtle">
-                {t.mobileUi.recurrenceEnds}
-              </Text>
-              {recurrenceEnd ? (
-                <View className="flex-row items-center gap-2">
-                  <DateTimePicker
-                    value={recurrenceEnd}
-                    mode="date"
-                    display="compact"
-                    themeVariant="light"
-                    accentColor="#171717"
-                    minimumDate={startDate}
-                    onChange={(_, d) => { if (d) setRecurrenceEnd(d); }}
-                  />
-                  <Pressable onPress={() => setRecurrenceEnd(null)}>
-                    <Text className="text-xs font-semibold text-ink-muted">{t.common.clear}</Text>
-                  </Pressable>
-                </View>
-              ) : (
+          <View className="gap-2 pt-1">
+            {/* Se répète — les libellés suivent la date de début, comme le web */}
+            <Text className="px-1 text-[11px] font-semibold uppercase text-ink-subtle">
+              {t.mobilePlan.repeats}
+            </Text>
+            <View className="flex-row flex-wrap gap-2">
+              {(['weekly', 'biweekly', 'monthly'] as const).map((rm) => (
                 <Pressable
-                  onPress={() => {
-                    const d = new Date(startDate);
-                    d.setFullYear(d.getFullYear() + 1);
-                    setRecurrenceEnd(d);
-                  }}
+                  key={rm}
+                  onPress={() => setRepeatMode(rm)}
+                  className={`rounded-full border px-3.5 py-1.5 ${repeatMode === rm ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
                 >
-                  <Text className="text-xs font-semibold text-ink-muted">{t.mobileUi.recurrenceNoEnd}</Text>
+                  <Text className={`text-xs font-semibold ${repeatMode === rm ? 'text-white' : 'text-ink'}`}>
+                    {repeatLabels[rm]}
+                  </Text>
                 </Pressable>
+              ))}
+            </View>
+
+            {/* Se termine après N semaines / mois / ans */}
+            <Text className="px-1 pt-1 text-[11px] font-semibold uppercase text-ink-subtle">
+              {t.mobilePlan.endsAfter}
+            </Text>
+            <View className="flex-row items-center gap-2">
+              <TextInput
+                value={endsAfterCount}
+                onChangeText={(v) => setEndsAfterCount(v.replace(/[^0-9]/g, '').slice(0, 3))}
+                keyboardType="number-pad"
+                className="w-16 rounded-xl border border-surface-border bg-white px-3 py-2 text-center text-sm font-semibold text-ink"
+              />
+              {(['weeks', 'months', 'years'] as const).map((u) => (
+                <Pressable
+                  key={u}
+                  onPress={() => setEndsAfterUnit(u)}
+                  className={`rounded-full border px-3.5 py-1.5 ${endsAfterUnit === u ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                >
+                  <Text className={`text-xs font-semibold ${endsAfterUnit === u ? 'text-white' : 'text-ink'}`}>
+                    {u === 'weeks' ? t.mobilePlan.unitWeeks : u === 'months' ? t.mobilePlan.unitMonths : t.mobilePlan.unitYears}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Aperçu : ce qui sera réellement créé */}
+            <View className="mt-1 rounded-xl border border-surface-border bg-surface-sunken px-4 py-3">
+              {planVisits.length === 0 ? (
+                <Text className="text-xs text-ink-muted">{t.mobilePlan.none}</Text>
+              ) : (
+                <>
+                  <Text className="text-sm font-bold text-ink">
+                    {planVisits.length === 1
+                      ? t.mobilePlan.oneAppointment
+                      : t.mobilePlan.appointments.replace('{count}', String(planVisits.length))}
+                  </Text>
+                  <Text className="pt-0.5 text-xs text-ink-muted">
+                    {t.mobilePlan.range
+                      .replace('{from}', new Date(planVisits[0].startISO).toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short', year: 'numeric' }))
+                      .replace('{to}', new Date(planVisits[planVisits.length - 1].startISO).toLocaleDateString(lang === 'fr' ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short', year: 'numeric' }))}
+                  </Text>
+                  <Text className="pt-1 text-[11px] text-ink-subtle">{t.mobilePlan.sameTimeHint}</Text>
+                </>
               )}
             </View>
           </View>
