@@ -1512,6 +1512,11 @@ const fr: TranslationKeys = {
     propertyLabel: 'Propriété',
     companyLogoOnContract: 'Logo de l’entreprise sur le contrat',
     convertToJob: 'Créer un job',
+    agreementToSign: 'Contrat à signer',
+    agreementGateHint: 'Un contrat doit être signé par le client. Envoie-le d’abord — la confirmation te sera proposée une fois le contrat signé.',
+    agreementBySms: 'Contrat par texto',
+    agreementByEmail: 'Contrat par courriel',
+    sendAnyway: 'Envoyer la confirmation quand même',
     percentageOption: 'Pourcentage (%)',
     fixedAmountOption: 'Montant fixe ($)',
     // Libellés du bloc « Détails » du web, repris tels quels.

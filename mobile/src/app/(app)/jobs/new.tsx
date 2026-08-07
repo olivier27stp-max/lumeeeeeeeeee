@@ -16,11 +16,11 @@ import { getClient } from '@/lib/api/clients';
 import { getCompany, listMembers, listTeams } from '@/lib/api/org';
 import { libelleProperty, listClientProperties } from '@/lib/api/properties';
 import { findOrCreateConversation } from '@/lib/api/messaging';
-import { sendSmsViaServer } from '@/lib/api/server';
+import { sendAgreementEmailViaServer, sendAgreementSmsViaServer, sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
 import { resolveTaxes } from '@/lib/api/taxes';
 import { createServiceContract } from '@/lib/api/serviceContracts';
-import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '@/lib/api/jobAgreements';
+import { createJobAgreement, getJobAgreement, DEFAULT_AGREEMENT_TERMS } from '@/lib/api/jobAgreements';
 import { bookingNiceMessage, packTemplate, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
@@ -102,6 +102,11 @@ export default function NewJob() {
   const [showBooking, setShowBooking] = useState(false);
   const [bookingNice, setBookingNice] = useState('');
   const [sendingBooking, setSendingBooking] = useState(false);
+  // Garde-fou du web : tant qu'un contrat attend la signature du client, on
+  // propose de l'envoyer AVANT la confirmation de rendez-vous.
+  const [contratEnAttente, setContratEnAttente] = useState<{ id: string } | null>(null);
+  const [envoiContrat, setEnvoiContrat] = useState<'sms' | 'email' | null>(null);
+  const [ignorerGarde, setIgnorerGarde] = useState(false);
 
   // Owner/admin can assign the job to any team; others default to their own.
   const [assignedTeam, setAssignedTeam] = useState<string | null>(teamId ?? null);
@@ -651,6 +656,13 @@ export default function NewJob() {
       qc.invalidateQueries({ queryKey: ['jobs'] });
       // Open the booking-confirmation popup instead of navigating right away.
       setCreatedJobId(job.id);
+      // Le contrat vient d'être créé le cas échéant : on le relit pour savoir
+      // s'il attend une signature.
+      try {
+        const ent = await getJobAgreement(job.id);
+        setContratEnAttente(ent && ent.status !== 'signed' && ent.require_signature ? { id: ent.id } : null);
+      } catch { setContratEnAttente(null); }
+      setIgnorerGarde(false);
       const saved = await AsyncStorage.getItem(bookingKey).catch(() => null);
       setBookingNice(
         unpackTemplate(saved, current?.companyName, lang, client?.name ?? '') ??
@@ -703,6 +715,22 @@ export default function NewJob() {
       Alert.alert(t.mobileJobs.confirmation, (e as Error).message);
     } finally {
       setSendingBooking(false);
+    }
+  };
+
+  const envoyerContrat = async (canal: 'sms' | 'email') => {
+    if (!contratEnAttente) return;
+    setEnvoiContrat(canal);
+    try {
+      if (canal === 'sms') await sendAgreementSmsViaServer(contratEnAttente.id);
+      else await sendAgreementEmailViaServer(contratEnAttente.id);
+      // Envoyé : on laisse la confirmation pour quand il sera signé, comme le web.
+      setShowBooking(false);
+      goToJob();
+    } catch (e) {
+      Alert.alert(t.modals.agreementToSign, (e as Error).message);
+    } finally {
+      setEnvoiContrat(null);
     }
   };
 
@@ -1531,10 +1559,45 @@ export default function NewJob() {
         >
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
           <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
+            {contratEnAttente && !ignorerGarde ? (
+              <>
+                <View className="gap-0.5">
+                  <Text className="text-lg font-bold text-ink">{t.modals.agreementToSign}</Text>
+                  <Text className="text-xs text-ink-muted">{t.modals.agreementGateHint}</Text>
+                </View>
+                <View className="flex-row gap-2">
+                  <Pressable
+                    onPress={() => envoyerContrat('sms')}
+                    disabled={envoiContrat !== null}
+                    className="flex-1 items-center rounded-xl bg-ink py-3"
+                  >
+                    <Text className="text-sm font-semibold text-white">
+                      {envoiContrat === 'sms' ? t.mobileAgreement.saving : t.modals.agreementBySms}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => envoyerContrat('email')}
+                    disabled={envoiContrat !== null}
+                    className="flex-1 items-center rounded-xl border border-surface-border bg-white py-3"
+                  >
+                    <Text className="text-sm font-semibold text-ink">
+                      {envoiContrat === 'email' ? t.mobileAgreement.saving : t.modals.agreementByEmail}
+                    </Text>
+                  </Pressable>
+                </View>
+                <Pressable onPress={() => setIgnorerGarde(true)} className="items-center py-1">
+                  <Text className="text-xs font-semibold text-ink-muted">{t.modals.sendAnyway}</Text>
+                </Pressable>
+              </>
+            ) : (
             <View className="gap-0.5">
               <Text className="text-lg font-bold text-ink">{t.mobileJobs.sendBookingInfo}</Text>
               <Text className="text-xs text-ink-muted">{t.mobileJobs.confirmAppointmentByMessage}</Text>
             </View>
+            )}
+
+            {contratEnAttente && !ignorerGarde ? null : (
+            <>
 
             <View className="gap-1.5">
               <Text className="text-xs uppercase text-ink-muted">{t.mobileJobs.message}</Text>
@@ -1577,6 +1640,8 @@ export default function NewJob() {
                 <Button title={t.mobileJobs.send} onPress={sendBooking} loading={sendingBooking} />
               </View>
             </View>
+            </>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>

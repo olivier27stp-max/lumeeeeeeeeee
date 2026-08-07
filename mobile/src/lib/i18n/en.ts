@@ -1520,6 +1520,11 @@ const en = {
     propertyLabel: 'Property',
     companyLogoOnContract: 'Company logo on the contract',
     convertToJob: 'Create a job',
+    agreementToSign: 'Agreement to sign',
+    agreementGateHint: 'An agreement needs the client’s signature. Send it first — you’ll be prompted to send the confirmation once it’s signed.',
+    agreementBySms: 'Agreement by text',
+    agreementByEmail: 'Agreement by email',
+    sendAnyway: 'Send the confirmation anyway',
     percentageOption: 'Percentage (%)',
     fixedAmountOption: 'Fixed Amount ($)',
     // Labels from the web's "Details" block, taken as-is.
