@@ -14,6 +14,7 @@ import { CustomFieldsCard } from '@/components/CustomFieldsCard';
 import { JobMaterialsCard } from '@/components/JobMaterialsCard';
 import { JobVisitsCard } from '@/components/JobVisitsCard';
 import { JobBillingCard } from '@/components/JobBillingCard';
+import { JobAgreementCard } from '@/components/JobAgreementCard';
 import { SignaturePad } from '@/components/SignaturePad';
 import { deleteJob, getJob, listJobLineItems, reopenJob, updateJob } from '@/lib/api/jobs';
 import { finishJobAndPrepareInvoice } from '@/lib/api/billing';
@@ -555,6 +556,10 @@ export default function JobDetail() {
             clientName={job.client_name}
             clientPhone={phone}
           />
+        ) : null}
+
+        {orgId ? (
+          <JobAgreementCard jobId={job.id} orgId={orgId} clientId={job.client_id} />
         ) : null}
 
         {orgId ? <SpecificNotesCard jobId={job.id} orgId={orgId} /> : null}

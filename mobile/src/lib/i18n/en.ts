@@ -4718,6 +4718,24 @@ const en = {
     sessionExpired: 'Session expired — sign in again.',
     noJobsToReschedule: 'No existing job to reschedule.',
     appointmentsFailed: 'The job was created but its appointments could not be scheduled',
+    agreementBlockedByQuote:
+      'This job already has a quote — the approved quote is the contract, no separate agreement is needed.',
+  },
+
+  // Ententes de travail (job_agreements) — accès, garantie, annulation…
+  mobileAgreement: {
+    title: 'Work agreement',
+    hint: 'Property access, 7-day warranty, cancellation and liability.',
+    none: 'No agreement on this job yet.',
+    create: 'Create the agreement',
+    statusDraft: 'Draft',
+    statusSent: 'Sent',
+    statusSigned: 'Signed',
+    sign: 'Get it signed',
+    signerName: 'Signer name',
+    signerPlaceholder: 'First and last name',
+    signedBy: 'Signed by {name}',
+    saving: 'Saving…',
   },
 
   // Service plan — same principle as the web: a rule generates the actual

@@ -19,6 +19,7 @@ import { sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
 import { resolveTaxes } from '@/lib/api/taxes';
 import { createServiceContract } from '@/lib/api/serviceContracts';
+import { createJobAgreement } from '@/lib/api/jobAgreements';
 import { bookingNiceMessage, packTemplate, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
@@ -277,6 +278,27 @@ export default function NewJob() {
   const retirerVisite = (key: string) => setPlanVisits((prev) => prev.filter((v) => v.key !== key));
   const ajouterAnneeSuivante = () =>
     setServiceYears((prev) => [...prev, Math.max(...prev) + 1]);
+
+  /** Déplace une année planifiée — et les visites qu'elle porte — vers une
+   *  autre. Refuse une année hors bornes ou déjà présente. */
+  const changerAnnee = (ancienne: number, nouvelle: number) => {
+    if (!Number.isFinite(nouvelle) || nouvelle < 2000 || nouvelle > 2100) return;
+    if (nouvelle === ancienne || serviceYears.includes(nouvelle)) return;
+    setServiceYears((prev) => [...prev.filter((y) => y !== ancienne), nouvelle].sort((a, b) => a - b));
+    setPlanVisits((prev) =>
+      prev.map((v) => {
+        if (v.year !== ancienne) return v;
+        // Le quantième est borné à la longueur du mois dans la nouvelle année
+        // (29 février d'une année bissextile → 28).
+        const jour = Math.min(Number(v.date.slice(8, 10)), dernierJour(nouvelle, v.month));
+        return {
+          ...v,
+          year: nouvelle,
+          date: `${nouvelle}-${String(v.month).padStart(2, '0')}-${String(jour).padStart(2, '0')}`,
+        };
+      }),
+    );
+  };
   const retirerAnnee = (y: number) => {
     setServiceYears((prev) => prev.filter((x) => x !== y));
     setPlanVisits((prev) => prev.filter((v) => v.year !== y));
@@ -355,6 +377,22 @@ export default function NewJob() {
         // parallèle, elle en générerait des doublons.
         planVisits: jobType === 'recurring' && planPayload.length > 0 ? planPayload : null,
       });
+
+      // Sur le web, cocher « créer un contrat » crée AUSSI l'entente écrite —
+      // les deux cases y sont synchronisées. Au pire du best-effort : le job et
+      // ses rendez-vous sont déjà enregistrés.
+      if (jobType === 'recurring' && createContract) {
+        try {
+          await createJobAgreement({
+            orgId: orgId ?? '',
+            jobId: job.id,
+            clientId: client?.id ?? null,
+            language: lang === 'fr' ? 'fr' : 'en',
+          });
+        } catch (e) {
+          console.warn('[plan] entente non créée:', (e as Error).message);
+        }
+      }
 
       // Contrat de service optionnel — comme le web, il fige la liste des
       // visites telle qu'elle vient d'être planifiée.
@@ -618,7 +656,17 @@ export default function NewJob() {
               return (
                 <View key={year} className="gap-2 pt-2">
                   <View className="flex-row items-center justify-between">
-                    <Text className="text-2xl font-bold text-ink">{year}</Text>
+                    {/* Année modifiable, comme le web : on valide à la sortie du
+                        champ. Une valeur invalide ou déjà planifiée est refusée
+                        et l'affichage revient à l'année d'origine. */}
+                    <TextInput
+                      key={`an-${year}`}
+                      defaultValue={String(year)}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      onEndEditing={(e) => changerAnnee(year, parseInt(e.nativeEvent.text, 10))}
+                      className="w-24 p-0 text-2xl font-bold text-ink"
+                    />
                     {serviceYears.length > 1 ? (
                       <Pressable hitSlop={10} onPress={() => retirerAnnee(year)}>
                         <Text className="px-1 text-sm font-bold text-ink-subtle">🗑</Text>

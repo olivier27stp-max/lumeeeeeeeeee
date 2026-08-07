@@ -1516,7 +1516,7 @@ const fr: TranslationKeys = {
     addInternalNotes: 'Ajouter des notes internes...',
     company: 'Entreprise',
     contactInformation: 'Informations de contact',
-    createANewJob: 'Créer une nouvelle job',
+    createANewJob: 'Créer un nouveau job',
     fillInTheProspectInformation: 'Remplissez les informations du prospect',
     firstAndLastNameAreRequired: 'Le prenom et le nom sont requis.',
     jobDetails: 'Détails de la job',
@@ -2104,7 +2104,7 @@ const fr: TranslationKeys = {
     createClient: 'Créer un client',
     createDeal: 'Créer un deal',
     createInvoice: 'Créer une facture',
-    createJob: 'Créer une job',
+    createJob: 'Créer un job',
     createQuote: 'Créer un devis',
     dashboard: 'Accueil',
     invoices: 'Factures',
@@ -3502,7 +3502,7 @@ const fr: TranslationKeys = {
   mobileNav: {
     job: 'Job',
     done: 'Terminé',
-    newJob: 'Nouvelle job',
+    newJob: 'Nouveau job',
     checklist: 'Checklist',
     tasks: 'Tâches',
     commissions: 'Commissions',
@@ -3582,7 +3582,7 @@ const fr: TranslationKeys = {
 
   // Mobile app — home / today screen
   mobileHome: {
-    newJob: 'Nouvelle job',
+    newJob: 'Nouveau job',
     newClient: 'Nouveau client',
     newQuote: 'Nouvelle soumission',
     newInvoice: 'Nouvelle facture',
@@ -3597,7 +3597,7 @@ const fr: TranslationKeys = {
     finish: 'Terminer',
     clockIn: 'Pointer l’arrivée',
     todaysJobs: 'Jobs du jour',
-    noJobsToday: 'Aucune job aujourd’hui.',
+    noJobsToday: 'Aucun job aujourd’hui.',
     jobCompletedTitle: 'Job complétée',
     jobCompletedMsg: 'Beau travail !',
     error: 'Erreur',
@@ -3609,7 +3609,7 @@ const fr: TranslationKeys = {
     endShiftConfirm: 'Terminer votre quart de travail ?',
     cancel: 'Annuler',
     completeJobTitle: 'Compléter la job',
-    completeJobMsg: 'Marquer cette job comme complétée ?',
+    completeJobMsg: 'Marquer ce job comme complété ?',
     complete: 'Compléter',
     client: 'Client',
   },
@@ -4711,6 +4711,24 @@ const fr: TranslationKeys = {
     sessionExpired: 'Session expirée — reconnecte-toi.',
     noJobsToReschedule: 'Aucun job existant à replanifier.',
     appointmentsFailed: "Le job a été créé, mais ses rendez-vous n'ont pas pu être planifiés",
+    agreementBlockedByQuote:
+      "Ce job porte déjà une soumission — c'est elle qui fait office de contrat, pas besoin d'entente séparée.",
+  },
+
+  // Ententes de travail (job_agreements) — accès, garantie, annulation…
+  mobileAgreement: {
+    title: 'Entente de travail',
+    hint: 'Accès à la propriété, garantie de 7 jours, annulation et responsabilité.',
+    none: 'Aucune entente sur ce job.',
+    create: "Créer l'entente",
+    statusDraft: 'Brouillon',
+    statusSent: 'Envoyée',
+    statusSigned: 'Signée',
+    sign: 'Faire signer',
+    signerName: 'Nom du signataire',
+    signerPlaceholder: 'Prénom et nom',
+    signedBy: 'Signée par {name}',
+    saving: 'Enregistrement…',
   },
 
   // Plan de service — même principe que le web : une règle génère les vrais
