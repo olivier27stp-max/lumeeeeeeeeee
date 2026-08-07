@@ -1491,6 +1491,9 @@ const fr: TranslationKeys = {
     requireDeposit: 'Exiger un dépôt pour cette job',
     percentageOption: 'Pourcentage (%)',
     fixedAmountOption: 'Montant fixe ($)',
+    // Libellés du bloc « Détails » du web, repris tels quels.
+    saleDate: 'Date de création',
+    showOnLeaderboard: 'Afficher sur le leaderboard',
     deleteJobQuestion: 'Supprimer cette job ?',
     deletingBtn: 'Suppression...',
     confirmBtn: 'Confirmer',

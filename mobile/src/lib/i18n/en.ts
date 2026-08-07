@@ -1499,6 +1499,9 @@ const en = {
     requireDeposit: 'Require deposit for this job',
     percentageOption: 'Percentage (%)',
     fixedAmountOption: 'Fixed Amount ($)',
+    // Labels from the web's "Details" block, taken as-is.
+    saleDate: 'Creation date',
+    showOnLeaderboard: 'Show on leaderboard',
     deleteJobQuestion: 'Delete this job?',
     deletingBtn: 'Deleting...',
     confirmBtn: 'Confirm',

@@ -263,6 +263,16 @@ export interface JobInput {
   autoCharge?: boolean;
   /** « Plusieurs paiements » : N versements d'un montant fixe, plus le solde. */
   installments?: { count: number; amountCents: number } | null;
+  /** Champs que le formulaire web envoie et qui manquaient au mobile. */
+  jobNumber?: string | null;
+  salespersonId?: string | null;
+  saleDate?: string | null;
+  showOnLeaderboard?: boolean;
+  depositRequired?: boolean;
+  depositType?: 'percentage' | 'fixed' | null;
+  depositValue?: number;
+  requirePaymentMethod?: boolean;
+  billingSplit?: boolean;
 }
 
 /** Build the job_recurrence_rules payload from a UI frequency key + start date.
@@ -355,6 +365,18 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       billing_mode: rest.billingMode ?? null,
       auto_charge: rest.autoCharge ?? false,
       requires_invoicing: rest.requires_invoicing ?? false,
+      job_number: rest.jobNumber?.trim() || null,
+      salesperson_id: rest.salespersonId ?? null,
+      sale_date: rest.saleDate ?? null,
+      show_on_leaderboard: rest.showOnLeaderboard ?? true,
+      deposit_required: rest.depositRequired ?? false,
+      deposit_type: rest.depositRequired ? rest.depositType ?? null : null,
+      deposit_value: rest.depositRequired ? rest.depositValue ?? 0 : 0,
+      require_payment_method: rest.requirePaymentMethod ?? false,
+      // Un plan « plusieurs paiements » implique la facturation par étapes,
+      // exactement comme le web.
+      billing_split:
+        rest.billingMode === 'installments' ? true : rest.billingSplit ?? false,
       property_address: rest.property_address ?? '',
       scheduled_at: rest.scheduled_at ?? null,
       end_at: rest.end_at ?? null,

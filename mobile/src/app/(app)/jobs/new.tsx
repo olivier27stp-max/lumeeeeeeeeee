@@ -13,7 +13,7 @@ import { LineItemsEditor } from '@/components/LineItemsEditor';
 import { MiniWeekCalendar, sameDay } from '@/components/MiniWeekCalendar';
 import { createJob, listJobsInRange } from '@/lib/api/jobs';
 import { getClient } from '@/lib/api/clients';
-import { listTeams } from '@/lib/api/org';
+import { listMembers, listTeams } from '@/lib/api/org';
 import { findOrCreateConversation } from '@/lib/api/messaging';
 import { sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
@@ -145,6 +145,23 @@ export default function NewJob() {
   });
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
+  // Champs du formulaire web qui manquaient au mobile.
+  const [jobNumber, setJobNumber] = useState('');
+  const [salespersonId, setSalespersonId] = useState<string | null>(null);
+  const [saleDate, setSaleDate] = useState<Date | null>(null);
+  const [showOnLeaderboard, setShowOnLeaderboard] = useState(true);
+  const [depositRequired, setDepositRequired] = useState(false);
+  const [depositType, setDepositType] = useState<'percentage' | 'fixed'>('percentage');
+  const [depositValue, setDepositValue] = useState('');
+  const [requirePaymentMethod, setRequirePaymentMethod] = useState(false);
+  const [billingSplit, setBillingSplit] = useState(false);
+
+  // Les vendeurs à qui attribuer la job (bloc « Vendeur » du web).
+  const { data: membres } = useQuery({
+    queryKey: ['members', orgId],
+    queryFn: () => listMembers(orgId ?? ''),
+    enabled: !!orgId,
+  });
 
   // Taxes configured on the desktop (Settings → Taxes), resolved for this
   // client. This screen used to keep the hardcoded Quebec rate, so every job
@@ -463,6 +480,15 @@ export default function NewJob() {
         // Le plan matérialise ses rendez-vous : pas de règle de récurrence en
         // parallèle, elle en générerait des doublons.
         planVisits: jobType === 'recurring' && planPayload.length > 0 ? planPayload : null,
+        jobNumber,
+        salespersonId,
+        saleDate: saleDate ? ymd(saleDate) : null,
+        showOnLeaderboard,
+        depositRequired,
+        depositType,
+        depositValue: parseFloat(depositValue) || 0,
+        requirePaymentMethod,
+        billingSplit,
         billingMode: jobType === 'recurring' ? billingMode : null,
         autoCharge: jobType === 'recurring' ? autoCharge : false,
         installments:
@@ -585,6 +611,65 @@ export default function NewJob() {
   return (
     <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
       <Input label={t.mobileJobs.jobTitle} value={title} onChangeText={setTitle} placeholder={t.mobileJobs.jobTitlePlaceholder} />
+
+      {/* Détails — numéro, vendeur, date de vente, classement. Le formulaire
+          web les porte dans son bloc « Détails »; ils manquaient au mobile. */}
+      <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4">
+        <View className="flex-row items-center justify-between gap-3 py-2.5">
+          <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.jobs.jobNumber}</Text>
+          <TextInput
+            value={jobNumber}
+            onChangeText={setJobNumber}
+            placeholder="—"
+            className="flex-1 text-right text-sm font-semibold text-ink"
+          />
+        </View>
+
+        <View className="border-t border-surface-border">
+          <SelectRow
+            label={t.modals.salesperson}
+            value={salespersonId ?? ''}
+            onSelect={(v) => setSalespersonId(v || null)}
+            options={[
+              { key: '', label: '—' },
+              ...(membres ?? []).map((m) => ({ key: m.user_id, label: m.full_name || m.user_id.slice(0, 8) })),
+            ]}
+          />
+        </View>
+
+        <View className="flex-row items-center justify-between gap-3 border-t border-surface-border py-2">
+          <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.modals.saleDate}</Text>
+          {saleDate ? (
+            <View className="flex-row items-center gap-2">
+              <DateTimePicker
+                value={saleDate}
+                mode="date"
+                display="compact"
+                themeVariant="light"
+                accentColor="#171717"
+                onChange={(_, d) => { if (d) setSaleDate(d); }}
+              />
+              <Pressable hitSlop={8} onPress={() => setSaleDate(null)}>
+                <Text className="text-xs font-semibold text-ink-muted">{t.common.clear}</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable onPress={() => setSaleDate(new Date())}>
+              <Text className="text-sm font-semibold text-ink-muted">—</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <Pressable
+          onPress={() => setShowOnLeaderboard((v) => !v)}
+          className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+        >
+          <View className={`h-4 w-4 items-center justify-center rounded border ${showOnLeaderboard ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+            {showOnLeaderboard ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+          </View>
+          <Text className="text-xs text-ink-muted">{t.modals.showOnLeaderboard}</Text>
+        </Pressable>
+      </View>
 
       <View className="gap-2">
         <SectionLabel>{t.mobileJobs.client}</SectionLabel>
@@ -966,6 +1051,69 @@ export default function NewJob() {
       {/* Pricing (admin) */}
       {canSeePricing ? (
         <>
+          {/* Facturation — dépôt, moyen de paiement, échéancier. Bloc du web
+              (« Facturation »), placé comme lui avant les produits et services. */}
+          <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4">
+            <Text className="pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+              {t.modals.billing}
+            </Text>
+
+            <Pressable
+              onPress={() => setDepositRequired((v) => !v)}
+              className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+            >
+              <View className={`h-4 w-4 items-center justify-center rounded border ${depositRequired ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {depositRequired ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <Text className="flex-1 text-xs text-ink">{t.modals.requireDeposit}</Text>
+            </Pressable>
+
+            {depositRequired ? (
+              <View className="flex-row items-center gap-2 border-t border-surface-border py-2">
+                {(['percentage', 'fixed'] as const).map((dt) => (
+                  <Pressable
+                    key={dt}
+                    onPress={() => setDepositType(dt)}
+                    className={`rounded-full border px-3 py-1.5 ${depositType === dt ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}
+                  >
+                    <Text className={`text-xs font-semibold ${depositType === dt ? 'text-white' : 'text-ink'}`}>
+                      {dt === 'percentage' ? t.modals.percentageOption : t.modals.fixedAmountOption}
+                    </Text>
+                  </Pressable>
+                ))}
+                <TextInput
+                  value={depositValue}
+                  onChangeText={(v) => setDepositValue(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+                  keyboardType="decimal-pad"
+                  placeholder={depositType === 'percentage' ? '25' : '100'}
+                  className="flex-1 rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                />
+              </View>
+            ) : null}
+
+            <Pressable
+              onPress={() => setRequirePaymentMethod((v) => !v)}
+              className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+            >
+              <View className={`h-4 w-4 items-center justify-center rounded border ${requirePaymentMethod ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {requirePaymentMethod ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <Text className="flex-1 text-xs text-ink">{t.quotes.requirePaymentMethod}</Text>
+            </Pressable>
+
+            {jobType === 'recurring' ? null : (
+              <Pressable
+                onPress={() => setBillingSplit((v) => !v)}
+                className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+              >
+                <View className={`h-4 w-4 items-center justify-center rounded border ${billingSplit ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                  {billingSplit ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                </View>
+                <Text className="flex-1 text-xs text-ink">{t.modals.splitInvoices}</Text>
+              </Pressable>
+            )}
+          </View>
+
           {/* Plan de service — « S'applique à » : un seul menu, comme le web.
               Choisir une visite bascule d'office en services personnalisés. */}
           {jobType === 'recurring' && planVisits.length > 0 ? (
