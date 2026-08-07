@@ -4758,6 +4758,8 @@ const fr: TranslationKeys = {
     removeYear: 'Retirer cette année',
     rule: 'Règle',
     startDate: 'Date de début',
+    sameItems: 'Mêmes produits et services pour chaque visite',
+    visitBeingEdited: 'Visite',
     billing: 'Facturation',
     modePerVisit: 'Une facture par visite',
     modePerVisitHint: 'Chaque visite a sa propre facture, créée quand elle est complétée.',

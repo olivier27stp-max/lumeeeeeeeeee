@@ -254,7 +254,7 @@ export interface JobInput {
    *  schedule_events — même principe que le web (NewJobModal), qui matérialise
    *  chaque visite au lieu de laisser un cron les générer. Exclusif avec
    *  `recurrence` : les deux ensemble créeraient des doublons. */
-  planVisits?: { startISO: string; endISO: string }[] | null;
+  planVisits?: { startISO: string; endISO: string; notes?: string | null }[] | null;
   /** Mode de facturation d'un plan de service (jobs.billing_mode) :
    *  'per_visit' facture chaque visite complétée, 'single' une seule fois,
    *  'installments' suit l'échéancier de job_billing_milestones. */
@@ -452,6 +452,9 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       start_time: v.startISO,
       end_time: v.endISO,
       status: 'scheduled',
+      // Services propres à cette visite, en clair sur son rendez-vous — même
+      // convention que le web quand les produits sont personnalisés.
+      notes: v.notes ?? null,
     }));
     const { error: evErr } = await supabase.from('schedule_events').insert(rows);
     if (evErr) throw new Error(`${tr().mobileErrors.appointmentsFailed} : ${evErr.message}`);

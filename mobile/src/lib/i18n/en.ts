@@ -4765,6 +4765,8 @@ const en = {
     removeYear: 'Remove this year',
     rule: 'Rule',
     startDate: 'Start date',
+    sameItems: 'Same products & services for every visit',
+    visitBeingEdited: 'Visit',
     billing: 'Billing',
     modePerVisit: 'One invoice per visit',
     modePerVisitHint: 'Each visit gets its own invoice when it is completed.',

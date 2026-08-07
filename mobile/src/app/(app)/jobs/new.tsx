@@ -201,6 +201,11 @@ export default function NewJob() {
   const [serviceYears, setServiceYears] = useState<number[]>([new Date().getFullYear()]);
   const [visitTimes, setVisitTimes] = useState<Record<string, { start: string; end: string }>>({});
   const [createContract, setCreateContract] = useState(false);
+  // Produits/services : communs à tout le plan, ou propres à chaque visite —
+  // comme le web (case « appliquer à toutes les visites », cochée par défaut).
+  const [applyItemsToAll, setApplyItemsToAll] = useState(true);
+  const [visitItems, setVisitItems] = useState<Record<string, LineItemInput[]>>({});
+  const [itemsVisitKey, setItemsVisitKey] = useState<string | null>(null);
   // Facturation du plan — mêmes trois modes que le web.
   const [billingMode, setBillingMode] = useState<'per_visit' | 'single' | 'installments'>('per_visit');
   const [autoCharge, setAutoCharge] = useState(false);
@@ -262,6 +267,8 @@ export default function NewJob() {
       ? [...new Set(out.map((v) => v.year))].sort((a, b) => a - b)
       : [startDate.getFullYear()]);
     setVisitTimes({}); // la personnalisation repart des heures de la Règle
+    setVisitItems({});
+    setItemsVisitKey(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobType, repeatMode, endsAfterCount, endsAfterUnit, startDate]);
 
@@ -309,6 +316,43 @@ export default function NewJob() {
     setPlanVisits((prev) => prev.filter((v) => v.year !== y));
   };
 
+  // ── Produits/services par visite ──
+  const itemsPersonnalises = jobType === 'recurring' && !applyItemsToAll;
+  const itemsDeVisite = (key: string) => visitItems[key] ?? items;
+  /** « Lavage — août 2026 » : une fois les lignes aplaties au niveau du job, on
+   *  doit encore savoir de quelle visite chacune provient (convention du web). */
+  const etiquetteVisite = (v: PlanVisit) => `${nomMois(v.month, 'long')} ${v.year}`;
+  /** « 5 août 2026 » à partir d'un AAAA-MM-JJ. */
+  const dateLisible = (ymdStr: string) => {
+    const [y, m, d] = ymdStr.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-CA', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
+  };
+
+  /** Ce qui est réellement facturé : les lignes du plan, ou la somme de toutes
+   *  les visites quand les services sont personnalisés. */
+  const billableItems = useMemo<LineItemInput[]>(() => {
+    if (!itemsPersonnalises) return items;
+    return [...planVisits]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .flatMap((v) =>
+        itemsDeVisite(v.key)
+          .filter((it) => (it.name?.trim() || it.unit_price_cents > 0))
+          .map((it) => ({ ...it, name: `${it.name?.trim() || 'Service'} — ${etiquetteVisite(v)}` })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsPersonnalises, items, planVisits, visitItems, language]);
+
+  /** Liste lisible des services, inscrite sur le rendez-vous de la visite. */
+  const notesDeVisite = (key: string): string | null => {
+    if (!itemsPersonnalises) return null;
+    const parts = itemsDeVisite(key)
+      .filter((it) => it.name?.trim())
+      .map((it) => (it.qty > 1 ? `${it.name.trim()} ×${it.qty}` : it.name.trim()));
+    if (parts.length === 0) return null;
+    return `${lang === 'fr' ? 'Services : ' : 'Services: '}${parts.join(' · ')}`;
+  };
+
   // Ce qui part réellement en base : une visite = un rendez-vous à l'agenda.
   const planPayload = useMemo(() => {
     if (jobType !== 'recurring') return [];
@@ -321,10 +365,14 @@ export default function NewJob() {
         const [he, me] = end.split(':').map(Number);
         const debut = new Date(y, m - 1, d, hs, ms, 0, 0);
         const fin = new Date(y, m - 1, d, he, me, 0, 0);
-        return { startISO: debut.toISOString(), endISO: (fin > debut ? fin : debut).toISOString() };
+        return {
+          startISO: debut.toISOString(),
+          endISO: (fin > debut ? fin : debut).toISOString(),
+          notes: notesDeVisite(v.key),
+        };
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobType, planVisits, visitTimes, startDate, endDate]);
+  }, [jobType, planVisits, visitTimes, startDate, endDate, visitItems, applyItemsToAll, items]);
 
   // N versements du montant choisi; ce qui reste devient le « Solde ».
   const installmentsPlan = useMemo(() => {
@@ -335,10 +383,10 @@ export default function NewJob() {
   }, [installmentsCount, installmentAmount]);
 
   const totals = useMemo(() => {
-    const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
+    const subtotal = billableItems.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
     const tax = Math.round((subtotal * (parseFloat(taxRate) || 0)) / 100);
     return { subtotal, tax, total: subtotal + tax };
-  }, [items, taxRate]);
+  }, [billableItems, taxRate]);
 
   // Existing jobs around now → availability dots + the selected day's bookings.
   const calRange = useMemo(() => {
@@ -384,7 +432,7 @@ export default function NewJob() {
         requires_invoicing: true,
         scheduled_at: startDate.toISOString(),
         end_at: endDate.toISOString(),
-        items: canSeePricing ? items : [],
+        items: canSeePricing ? billableItems : [],
         taxRatePct: parseFloat(taxRate) || 0,
         // Le plan matérialise ses rendez-vous : pas de règle de récurrence en
         // parallèle, elle en générerait des doublons.
@@ -428,6 +476,19 @@ export default function NewJob() {
               date: v.date,
               year: v.year,
               ...(visitTimes[v.key] ? { start_time: h.start, end_time: h.end } : {}),
+              // Les services ne sont figés au contrat que s'ils diffèrent d'une
+              // visite à l'autre — même convention que le web.
+              ...(itemsPersonnalises
+                ? {
+                    items: itemsDeVisite(v.key)
+                      .filter((it) => it.name?.trim() || it.unit_price_cents > 0)
+                      .map((it) => ({
+                        name: it.name?.trim() || 'Service',
+                        qty: it.qty,
+                        unit_price_cents: it.unit_price_cents,
+                      })),
+                  }
+                : {}),
             };
           }),
         });
@@ -950,7 +1011,57 @@ export default function NewJob() {
       {/* Pricing (admin) */}
       {canSeePricing ? (
         <>
-          <LineItemsEditor onChange={setItems} />
+          {/* Plan de service : services communs, ou propres à chaque visite */}
+          {jobType === 'recurring' && planVisits.length > 0 ? (
+            <Pressable
+              onPress={() => {
+                const on = !applyItemsToAll;
+                setApplyItemsToAll(on);
+                if (on) { setVisitItems({}); setItemsVisitKey(null); }
+                else {
+                  // Chaque visite part d'une copie des services du plan.
+                  const trie = [...planVisits].sort((a, b) => a.date.localeCompare(b.date));
+                  setVisitItems(Object.fromEntries(trie.map((v) => [v.key, items.map((i) => ({ ...i }))])));
+                  setItemsVisitKey(trie[0]?.key ?? null);
+                }
+              }}
+              className="flex-row items-center gap-2 px-1"
+            >
+              <View className={`h-4 w-4 items-center justify-center rounded border ${applyItemsToAll ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {applyItemsToAll ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <Text className="text-xs text-ink-muted">{t.mobilePlan.sameItems}</Text>
+            </Pressable>
+          ) : null}
+
+          {itemsPersonnalises && planVisits.length > 0 ? (
+            <>
+              {/* Quelle visite on est en train de garnir */}
+              <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4">
+                <SelectRow
+                  label={t.mobilePlan.visitBeingEdited}
+                  value={itemsVisitKey ?? [...planVisits].sort((a, b) => a.date.localeCompare(b.date))[0].key}
+                  onSelect={setItemsVisitKey}
+                  options={[...planVisits]
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .map((v) => ({ key: v.key, label: dateLisible(v.date) }))}
+                />
+              </View>
+              {(() => {
+                const cle = itemsVisitKey ?? [...planVisits].sort((a, b) => a.date.localeCompare(b.date))[0].key;
+                return (
+                  <LineItemsEditor
+                    key={cle}
+                    seedKey={cle}
+                    seed={visitItems[cle] ?? items}
+                    onChange={(lignes) => setVisitItems((prev) => ({ ...prev, [cle]: lignes }))}
+                  />
+                );
+              })()}
+            </>
+          ) : (
+            <LineItemsEditor onChange={setItems} />
+          )}
           <Input label={t.mobileJobs.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
           <View className="gap-1 rounded-2xl bg-white p-4">
             <Row label={t.mobileJobs.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />

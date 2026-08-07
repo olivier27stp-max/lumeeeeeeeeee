@@ -14,6 +14,8 @@ export interface ServiceContractVisit {
   start_time?: string;
   /** HH:mm — idem */
   end_time?: string;
+  /** Seulement quand les produits/services sont personnalisés par visite. */
+  items?: { name: string; qty: number; unit_price_cents: number }[];
 }
 
 export async function createServiceContract(payload: {
