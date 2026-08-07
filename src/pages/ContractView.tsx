@@ -140,6 +140,7 @@ export default function ContractView() {
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositError, setDepositError] = useState('');
+  const [depositUnavailable, setDepositUnavailable] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -237,7 +238,11 @@ export default function ContractView() {
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok || !(result as any).client_secret) {
-        setDepositError((result as any)?.error || (fr ? 'Impossible de charger le paiement.' : 'Unable to load payment.'));
+        // 503 = le commerçant n'a pas fini de brancher son fournisseur de
+        // paiement. Ce n'est pas au client de lire ça : son contrat est
+        // signé, on lui dit simplement que le dépôt suivra.
+        if (res.status === 503) setDepositUnavailable(true);
+        else setDepositError((result as any)?.error || (fr ? 'Impossible de charger le paiement.' : 'Unable to load payment.'));
         return;
       }
       setDepositIntent(result as DepositIntentData);
@@ -391,6 +396,20 @@ export default function ContractView() {
                     {fr ? 'Merci ! Un reçu vous a été envoyé.' : 'Thank you! A receipt has been sent to you.'}
                   </p>
                 </div>
+              </div>
+            ) : depositUnavailable ? (
+              <div className="flex items-baseline justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-[#111] text-[14px]">{fr ? 'Dépôt à verser' : 'Deposit due'}</p>
+                  <p className="text-[13px] text-[#666] mt-0.5">
+                    {fr
+                      ? 'Nous vous contacterons pour le règlement.'
+                      : 'We will contact you to arrange payment.'}
+                  </p>
+                </div>
+                <p className="font-semibold text-[#111] text-[18px] shrink-0">
+                  {centsFr(depositCents, 'CAD', fr)}
+                </p>
               </div>
             ) : (
               <>
