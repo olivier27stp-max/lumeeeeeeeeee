@@ -4758,6 +4758,10 @@ const en = {
 
   // Ententes de travail (job_agreements) — accès, garantie, annulation…
   mobileAgreement: {
+    depositLabel: 'Deposit',
+    depositPaid: 'Paid',
+    depositPending: 'Pending',
+    depositHint: 'The client can pay the deposit on the contract page, right after signing it. Send the link again if they haven’t.',
     // Same wording as the web (JobDetails calls it « Agreement »).
     title: 'Agreement',
     hint: 'Written contract attached to this job: access, 7-day warranty, cancellation.',

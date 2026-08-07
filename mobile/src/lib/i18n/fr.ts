@@ -4751,6 +4751,10 @@ const fr: TranslationKeys = {
 
   // Ententes de travail (job_agreements) — accès, garantie, annulation…
   mobileAgreement: {
+    depositLabel: 'Dépôt',
+    depositPaid: 'Payé',
+    depositPending: 'En attente',
+    depositHint: 'Le client peut payer le dépôt sur la page du contrat, juste après l’avoir signé. Renvoie-lui le lien s’il ne l’a pas fait.',
     // Le web appelle ça « Contrat » (JobDetails, AgreementCreateModal) — on
     // garde exactement son vocabulaire, sinon on cherche la même chose sous
     // deux noms.

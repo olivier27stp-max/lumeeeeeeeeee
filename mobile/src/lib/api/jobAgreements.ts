@@ -108,3 +108,43 @@ export async function updateAgreementTerms(id: string, terms: string): Promise<v
   const { error } = await supabase.from('job_agreements').update({ terms }).eq('id', id);
   if (error) throw new Error(error.message);
 }
+
+// ── Dépôt lié au contrat ─────────────────────────────────────────────
+//
+// Le client paie sur la page publique du contrat (/contract/:token). Le
+// mobile ne l'encaisse pas lui-même : il montre où ça en est, pour qu'un
+// représentant sache s'il doit relancer.
+
+export interface JobDeposit {
+  required: boolean;
+  status: string | null;
+  cents: number;
+}
+
+/** Le dépôt attendu sur une job, recalculé comme le fait le contrat. */
+export async function getJobDeposit(jobId: string): Promise<JobDeposit> {
+  const vide: JobDeposit = { required: false, status: null, cents: 0 };
+  if (!jobId) return vide;
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('deposit_required, deposit_type, deposit_value, deposit_cents, deposit_status, subtotal_cents, tax_lines')
+    .eq('id', jobId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.deposit_required) return vide;
+
+  let cents = Math.round(Number(data.deposit_cents || 0));
+  if (cents <= 0) {
+    // Même calcul que server/routes/agreements.ts : le pourcentage porte sur
+    // le total taxes comprises, pas sur le sous-total.
+    const sousTotal = Number(data.subtotal_cents || 0);
+    const taxes = (Array.isArray(data.tax_lines) ? data.tax_lines : [])
+      .filter((t: { enabled?: boolean; rate?: number }) => t?.enabled && Number(t.rate) > 0)
+      .reduce((s: number, t: { rate?: number }) => s + Math.round(sousTotal * (Number(t.rate) / 100)), 0);
+    const total = sousTotal + taxes;
+    cents = data.deposit_type === 'percentage'
+      ? Math.round(total * (Number(data.deposit_value || 0) / 100))
+      : Math.round(Number(data.deposit_value || 0) * 100);
+  }
+  return { required: true, status: data.deposit_status ?? null, cents };
+}

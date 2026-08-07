@@ -378,6 +378,10 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       deposit_required: rest.depositRequired ?? false,
       deposit_type: rest.depositRequired ? rest.depositType ?? null : null,
       deposit_value: rest.depositRequired ? rest.depositValue ?? 0 : 0,
+      // Sans ça la colonne retombe sur son défaut 'not_required' : la job
+      // exigeait un dépôt que rien ne comptait comme dû (le web, lui, le
+      // met à 'pending' — jobsApi.ts).
+      deposit_status: rest.depositRequired ? 'pending' : 'not_required',
       require_payment_method: rest.requirePaymentMethod ?? false,
       ask_for_review: rest.askForReview ?? false,
       property_id: rest.propertyId ?? null,

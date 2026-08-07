@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
-import { createJobAgreement, getJobAgreement } from '@/lib/api/jobAgreements';
+import { createJobAgreement, getJobAgreement, getJobDeposit } from '@/lib/api/jobAgreements';
+import { formatCurrencyCents } from '@/lib/format';
 import { sendAgreementEmailViaServer, sendAgreementSmsViaServer } from '@/lib/api/server';
 import { useTranslation } from '@/lib/i18n';
 
@@ -34,6 +35,14 @@ export function JobAgreementCard({
   const { data: contrat, isLoading } = useQuery({
     queryKey: ['job-agreement', jobId],
     queryFn: () => getJobAgreement(jobId),
+    enabled: !!jobId,
+  });
+
+  // Le dépôt se paie sur la page publique du contrat. Ici on montre seulement
+  // où ça en est, pour qu'un représentant sache s'il doit relancer.
+  const { data: depot } = useQuery({
+    queryKey: ['job-deposit', jobId],
+    queryFn: () => getJobDeposit(jobId),
     enabled: !!jobId,
   });
 
@@ -115,6 +124,25 @@ export function JobAgreementCard({
           </Pressable>
           {conditionsOuvertes ? (
             <Text className="text-xs leading-5 text-ink-muted">{contrat.terms}</Text>
+          ) : null}
+
+          {depot?.required ? (
+            <View className="flex-row items-center justify-between gap-2 rounded-xl bg-surface-sunken px-3 py-2.5">
+              <Text className="text-xs font-semibold text-ink-muted">{a.depositLabel}</Text>
+              <View className="flex-row items-center gap-2">
+                <Text className="text-sm font-bold text-ink">
+                  {formatCurrencyCents(depot.cents, 'CAD')}
+                </Text>
+                <Text
+                  className={`text-[11px] font-bold uppercase ${depot.status === 'paid' ? 'text-emerald-700' : 'text-ink-subtle'}`}
+                >
+                  {depot.status === 'paid' ? a.depositPaid : a.depositPending}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {depot?.required && depot.status !== 'paid' && contrat.status === 'signed' ? (
+            <Text className="text-xs leading-5 text-ink-subtle">{a.depositHint}</Text>
           ) : null}
 
           {contrat.status !== 'signed' ? (
