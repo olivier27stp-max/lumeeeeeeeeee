@@ -34,7 +34,7 @@ export default function TrustSection() {
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
-          className="flex flex-wrap items-center justify-center gap-x-14 gap-y-8 md:justify-between"
+          className="flex flex-wrap items-center justify-center gap-x-12 gap-y-10"
         >
           <TrustLogo>
             <img src="/vision-lavage.png" alt="Vision Lavage" className="h-8 w-auto" />
@@ -84,6 +84,40 @@ export default function TrustSection() {
               </span>
               <span className="text-[15px] font-black uppercase tracking-tighter text-[#d4b43b]">
                 Dubreuil
+              </span>
+            </div>
+          </TrustLogo>
+
+          {/* Services Everest — real mark from serviceseverest.com */}
+          <TrustLogo>
+            <img
+              src="/services-everest.png"
+              alt="Services Everest"
+              className="h-9 w-auto"
+            />
+            <div className="flex flex-col leading-none">
+              <span className="text-[19px] font-semibold tracking-tight text-[#3b5169]">
+                Services
+              </span>
+              <span className="text-[19px] font-bold tracking-[0.08em] uppercase text-[#3b5169]">
+                Everest
+              </span>
+            </div>
+          </TrustLogo>
+
+          {/* Les Fondations Michel Carpentier — concrete forming, St-Cyrille-de-Wendover */}
+          <TrustLogo>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" className="shrink-0" aria-hidden="true">
+              <path d="M3 9.5 12 5l9 4.5" stroke="#4a4a4a" strokeWidth="1.8" strokeLinejoin="round" />
+              <rect x="3.4" y="11.4" width="17.2" height="3.4" rx="0.5" stroke="#4a4a4a" strokeWidth="1.6" />
+              <rect x="3.4" y="16.2" width="17.2" height="3.4" rx="0.5" stroke="#4a4a4a" strokeWidth="1.6" />
+            </svg>
+            <div className="flex flex-col leading-none">
+              <span className="text-[11px] font-medium tracking-[0.16em] uppercase text-[#4a4a4a]">
+                Fondations
+              </span>
+              <span className="text-[19px] font-bold tracking-tight text-black">
+                Michel Carpentier
               </span>
             </div>
           </TrustLogo>
