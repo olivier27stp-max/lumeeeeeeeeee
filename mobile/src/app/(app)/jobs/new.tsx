@@ -913,52 +913,71 @@ export default function NewJob() {
 
               {billingMode === 'installments' ? (
                 <View className="gap-2 border-t border-surface-border py-2">
-                  <View className="flex-row items-center gap-2">
-                    <Text className="shrink-0 text-xs font-medium text-ink-muted">
-                      {t.mobilePlan.paymentCount}
-                    </Text>
-                    <TextInput
-                      value={installmentsCount}
-                      onChangeText={(v) => setInstallmentsCount(v.replace(/[^0-9]/g, '').slice(0, 2))}
-                      keyboardType="number-pad"
-                      placeholder="3"
-                      className="w-14 rounded-lg border border-surface-border bg-white px-2 py-1.5 text-center text-sm font-semibold text-ink"
-                    />
-                    <Text className="shrink-0 text-xs font-medium text-ink-muted">
-                      {t.mobilePlan.paymentAmount}
-                    </Text>
-                    <TextInput
-                      value={installmentAmount}
-                      onChangeText={(v) => setInstallmentAmount(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
-                      keyboardType="decimal-pad"
-                      placeholder="100"
-                      className="w-20 rounded-lg border border-surface-border bg-white px-2 py-1.5 text-center text-sm font-semibold text-ink"
-                    />
+                  {/* Deux champs étiquetés, comme le web */}
+                  <View className="flex-row gap-3">
+                    <View className="flex-1 gap-1">
+                      <Text className="text-[11px] font-medium text-ink-muted">
+                        {t.mobilePlan.paymentCount}
+                      </Text>
+                      <TextInput
+                        value={installmentsCount}
+                        onChangeText={(v) => setInstallmentsCount(v.replace(/[^0-9]/g, '').slice(0, 2))}
+                        keyboardType="number-pad"
+                        placeholder="3"
+                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                      />
+                    </View>
+                    <View className="flex-1 gap-1">
+                      <Text className="text-[11px] font-medium text-ink-muted">
+                        {t.mobilePlan.paymentAmount}
+                      </Text>
+                      <TextInput
+                        value={installmentAmount}
+                        onChangeText={(v) => setInstallmentAmount(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+                        keyboardType="decimal-pad"
+                        placeholder="100"
+                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                      />
+                    </View>
                   </View>
+                  {/* Récapitulatif au format du web : N paiements de X = Y · total de la job Z */}
                   {installmentsPlan ? (
-                    <Text
-                      className={`text-[11px] ${totals.total - installmentsPlan.coveredCents < 0 ? 'text-status-late' : 'text-ink-subtle'}`}
-                    >
-                      {totals.total - installmentsPlan.coveredCents >= 0
-                        ? t.mobilePlan.balance.replace(
-                            '{amount}',
-                            formatCurrencyCents(totals.total - installmentsPlan.coveredCents, 'CAD'))
-                        : t.mobilePlan.overTotal.replace(
+                    <View>
+                      <Text className="text-[11px] text-ink-muted">
+                        {t.mobilePlan.installmentsRecap
+                          .replace('{count}', String(installmentsPlan.count))
+                          .replace('{each}', formatCurrencyCents(installmentsPlan.amountCents, 'CAD'))
+                          .replace('{covered}', formatCurrencyCents(installmentsPlan.coveredCents, 'CAD'))}
+                        <Text className="text-ink-subtle">
+                          {' · '}
+                          {t.mobilePlan.jobTotal.replace('{total}', formatCurrencyCents(totals.total, 'CAD'))}
+                        </Text>
+                      </Text>
+                      {installmentsPlan.coveredCents > totals.total ? (
+                        <Text className="pt-0.5 text-[11px] text-status-late">
+                          {t.mobilePlan.overTotal.replace(
                             '{amount}',
                             formatCurrencyCents(installmentsPlan.coveredCents - totals.total, 'CAD'))}
-                    </Text>
+                        </Text>
+                      ) : null}
+                    </View>
                   ) : null}
                 </View>
               ) : null}
 
               <Pressable
                 onPress={() => setAutoCharge((v) => !v)}
-                className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+                className="flex-row items-start gap-2 border-t border-surface-border py-2.5"
               >
-                <View className={`h-4 w-4 items-center justify-center rounded border ${autoCharge ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${autoCharge ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
                   {autoCharge ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
                 </View>
-                <Text className="text-xs text-ink-muted">{t.mobilePlan.autoCharge}</Text>
+                <View className="flex-1">
+                  <Text className="text-xs text-ink">{t.mobilePlan.autoCharge}</Text>
+                  {autoCharge ? (
+                    <Text className="pt-0.5 text-[11px] text-ink-subtle">{t.mobilePlan.autoChargeHint}</Text>
+                  ) : null}
+                </View>
               </Pressable>
             </View>
 

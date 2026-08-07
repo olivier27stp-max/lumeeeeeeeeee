@@ -4775,10 +4775,15 @@ const fr: TranslationKeys = {
     modeSingleHint: 'Une seule facture couvre l’ensemble du plan.',
     modeInstallments: 'Plusieurs paiements',
     modeInstallmentsHint: 'Choisis le nombre de paiements et leur montant.',
-    autoCharge: 'Envoyer la facture automatiquement',
-    paymentCount: 'Paiements',
-    paymentAmount: 'Chacun',
-    balance: 'Solde : {amount}',
+    // Libellés repris mot pour mot du web : auto_charge ne se contente pas
+    // d'envoyer la facture, il prélève sur la carte au dossier.
+    autoCharge: 'Se faire payer automatiquement',
+    autoChargeHint:
+      'Le paiement sera demandé automatiquement sur la carte au dossier du client à chaque facture émise.',
+    paymentCount: 'Nombre de paiements',
+    paymentAmount: 'Montant par paiement',
+    installmentsRecap: '{count} paiements de {each} = {covered}',
+    jobTotal: 'total de la job {total}',
     overTotal: 'Dépasse le total de la job de {amount}',
     range: 'du {from} au {to}',
     sameTimeHint: 'Chaque rendez-vous reprend les heures choisies ci-dessus.',
