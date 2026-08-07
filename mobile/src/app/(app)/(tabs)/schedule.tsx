@@ -477,7 +477,9 @@ export default function Schedule() {
         }
       }
       // Gabarit sauvegardé SANS la ligne d'heure (elle change à chaque déplacement).
-      const tmpl = reschedNice.replace(/\n*📅\s*(?:Nouvelle heure|New time)\s*:[^\n]*/g, '').trim();
+      // Le 📅 a été retiré des messages : il reste optionnel ici, sinon les
+      // gabarits déjà enregistrés garderaient une heure périmée.
+      const tmpl = reschedNice.replace(/\n*(?:📅\s*)?(?:Nouvelle heure|New time)\s*:[^\n]*/g, '').trim();
       AsyncStorage.setItem(reschedKey, packTemplate(tmpl, current?.companyName, job.client_name ?? '')).catch(() => {});
       const cid = await findOrCreateConversation({ orgId, phone, clientId: job.client_id, clientName: job.client_name });
       setShowResched(false);

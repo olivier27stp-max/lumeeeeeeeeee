@@ -104,9 +104,8 @@ export default function NewJob() {
   const [sendingBooking, setSendingBooking] = useState(false);
   // Garde-fou du web : tant qu'un contrat attend la signature du client, on
   // propose de l'envoyer AVANT la confirmation de rendez-vous.
-  const [contratEnAttente, setContratEnAttente] = useState<{ id: string } | null>(null);
+  const [contratEnAttente, setContratEnAttente] = useState<{ id: string; token: string | null } | null>(null);
   const [envoiContrat, setEnvoiContrat] = useState<'sms' | 'email' | null>(null);
-  const [ignorerGarde, setIgnorerGarde] = useState(false);
 
   // Owner/admin can assign the job to any team; others default to their own.
   const [assignedTeam, setAssignedTeam] = useState<string | null>(teamId ?? null);
@@ -660,9 +659,12 @@ export default function NewJob() {
       // s'il attend une signature.
       try {
         const ent = await getJobAgreement(job.id);
-        setContratEnAttente(ent && ent.status !== 'signed' && ent.require_signature ? { id: ent.id } : null);
+        setContratEnAttente(
+          ent && ent.status !== 'signed' && ent.require_signature
+            ? { id: ent.id, token: ent.view_token }
+            : null,
+        );
       } catch { setContratEnAttente(null); }
-      setIgnorerGarde(false);
       const saved = await AsyncStorage.getItem(bookingKey).catch(() => null);
       setBookingNice(
         unpackTemplate(saved, current?.companyName, lang, client?.name ?? '') ??
@@ -675,10 +677,18 @@ export default function NewJob() {
 
   // The auto-filled appointment details appended under the nice message.
   const bookingDetails = () => {
-    const lines: string[] = [`📅 ${formatDateTime(startDate.toISOString(), lang === 'fr' ? 'fr-CA' : 'en-CA')}`];
-    if (address.trim()) lines.push(`📍 ${address.trim()}`);
-    if (canSeePricing && totals.total > 0) lines.push(`💵 ${formatCurrencyCents(totals.total, 'CAD')}`);
+    const lines: string[] = [formatDateTime(startDate.toISOString(), lang === 'fr' ? 'fr-CA' : 'en-CA')];
+    if (address.trim()) lines.push(address.trim());
+    if (canSeePricing && totals.total > 0) lines.push(formatCurrencyCents(totals.total, 'CAD'));
     return lines.join('\n');
+  };
+
+  // Le lien du contrat va DANS la confirmation : le client reçoit un seul
+  // message, qui confirme son rendez-vous ET lui donne le document à signer.
+  const ligneContrat = () => {
+    const base = process.env.EXPO_PUBLIC_WEB_URL?.replace(/\/$/, '') ?? '';
+    if (!contratEnAttente?.token || !base) return '';
+    return `\n\n${t.modals.contractLineSms.replace('{url}', `${base}/contract/${contratEnAttente.token}`)}`;
   };
 
   // Go to the new job's detail page (after sending or skipping the confirmation).
@@ -702,7 +712,7 @@ export default function NewJob() {
         setSendingBooking(false);
         return;
       }
-      const body = `${bookingNice.trim()}\n\n${bookingDetails()}`;
+      const body = `${bookingNice.trim()}\n\n${bookingDetails()}${ligneContrat()}`;
       await sendSmsViaServer({ phone, text: body, clientId: client.id, clientName: client.name });
       // Persist the edited nice message for next time.
       AsyncStorage.setItem(bookingKey, packTemplate(bookingNice.trim(), current?.companyName, client.name ?? '')).catch(() => {});
@@ -724,7 +734,7 @@ export default function NewJob() {
     try {
       if (canal === 'sms') await sendAgreementSmsViaServer(contratEnAttente.id);
       else await sendAgreementEmailViaServer(contratEnAttente.id);
-      // Envoyé : on laisse la confirmation pour quand il sera signé, comme le web.
+      // Contrat parti seul : la confirmation reste disponible depuis la job.
       setShowBooking(false);
       goToJob();
     } catch (e) {
@@ -1559,11 +1569,11 @@ export default function NewJob() {
         >
           <Pressable className="absolute inset-0" onPress={() => Keyboard.dismiss()} />
           <View className="rounded-t-3xl bg-white p-5 gap-4" style={{ paddingBottom: 28 }}>
-            {contratEnAttente && !ignorerGarde ? (
+            {contratEnAttente ? (
               <>
                 <View className="gap-0.5">
                   <Text className="text-lg font-bold text-ink">{t.modals.agreementToSign}</Text>
-                  <Text className="text-xs text-ink-muted">{t.modals.agreementGateHint}</Text>
+                  <Text className="text-xs text-ink-muted">{t.modals.agreementGateHintSoft}</Text>
                 </View>
                 <View className="flex-row gap-2">
                   <Pressable
@@ -1585,19 +1595,13 @@ export default function NewJob() {
                     </Text>
                   </Pressable>
                 </View>
-                <Pressable onPress={() => setIgnorerGarde(true)} className="items-center py-1">
-                  <Text className="text-xs font-semibold text-ink-muted">{t.modals.sendAnyway}</Text>
-                </Pressable>
               </>
             ) : (
-            <View className="gap-0.5">
-              <Text className="text-lg font-bold text-ink">{t.mobileJobs.sendBookingInfo}</Text>
-              <Text className="text-xs text-ink-muted">{t.mobileJobs.confirmAppointmentByMessage}</Text>
-            </View>
+              <View className="gap-0.5">
+                <Text className="text-lg font-bold text-ink">{t.mobileJobs.sendBookingInfo}</Text>
+                <Text className="text-xs text-ink-muted">{t.mobileJobs.confirmAppointmentByMessage}</Text>
+              </View>
             )}
-
-            {contratEnAttente && !ignorerGarde ? null : (
-            <>
 
             <View className="gap-1.5">
               <Text className="text-xs uppercase text-ink-muted">{t.mobileJobs.message}</Text>
@@ -1629,7 +1633,10 @@ export default function NewJob() {
               <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
                 {t.mobileJobs.autoAddedDetails}
               </Text>
-              <Text className="text-sm leading-5 text-ink">{bookingDetails()}</Text>
+              <Text className="text-sm leading-5 text-ink">
+                {bookingDetails()}
+                {ligneContrat()}
+              </Text>
             </View>
 
             <View className="flex-row gap-2 pt-1">
@@ -1640,8 +1647,6 @@ export default function NewJob() {
                 <Button title={t.mobileJobs.send} onPress={sendBooking} loading={sendingBooking} />
               </View>
             </View>
-            </>
-            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>

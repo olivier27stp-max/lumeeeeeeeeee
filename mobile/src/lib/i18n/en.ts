@@ -1525,6 +1525,8 @@ const en = {
     agreementBySms: 'Agreement by text',
     agreementByEmail: 'Agreement by email',
     sendAnyway: 'Send the confirmation anyway',
+    contractLineSms: 'Agreement to sign: {url}',
+    agreementGateHintSoft: 'An agreement is awaiting the client’s signature. The link is already included in the confirmation below — or send it on its own.',
     percentageOption: 'Percentage (%)',
     fixedAmountOption: 'Fixed Amount ($)',
     // Labels from the web's "Details" block, taken as-is.

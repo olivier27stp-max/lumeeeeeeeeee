@@ -1517,6 +1517,8 @@ const fr: TranslationKeys = {
     agreementBySms: 'Contrat par texto',
     agreementByEmail: 'Contrat par courriel',
     sendAnyway: 'Envoyer la confirmation quand même',
+    contractLineSms: 'Contrat à signer : {url}',
+    agreementGateHintSoft: 'Un contrat attend la signature du client. Le lien est déjà inclus dans la confirmation ci-dessous — ou envoie-le seul.',
     percentageOption: 'Pourcentage (%)',
     fixedAmountOption: 'Montant fixe ($)',
     // Libellés du bloc « Détails » du web, repris tels quels.
