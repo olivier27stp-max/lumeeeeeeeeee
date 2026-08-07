@@ -785,7 +785,7 @@ router.get('/quotes/public/:token', async (req, res) => {
     // Company branding
     const { data: companyData } = await admin
       .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, country')
+      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color')
       .eq('org_id', quote.org_id)
       .maybeSingle();
 
@@ -894,6 +894,8 @@ router.get('/quotes/public/:token', async (req, res) => {
         street1: companyData?.street1 || null, city: companyData?.city || null,
         province: companyData?.province || null, postal_code: companyData?.postal_code || null,
         country: companyData?.country || null,
+        // Accent des documents client. null = encre noire, le défaut.
+        brand_color: companyData?.brand_color || null,
       },
       client, lead,
       items: (items || []).map((i: any) => ({

@@ -253,7 +253,7 @@ router.get('/agreements/public/:token', async (req, res) => {
     // Company branding (of the agreement's org — multi-tenant safe)
     const { data: companyData } = await admin
       .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code')
+      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, brand_color')
       .eq('org_id', agreement.org_id)
       .maybeSingle();
     let taxRegistrationLines: string[] = [];
@@ -316,6 +316,8 @@ router.get('/agreements/public/:token', async (req, res) => {
         email: companyData?.email || null,
         website: companyData?.website || null,
         tax_lines: taxRegistrationLines,
+        // Accent des documents client. null = encre noire, le défaut.
+        brand_color: companyData?.brand_color || null,
       },
       client,
       doc,

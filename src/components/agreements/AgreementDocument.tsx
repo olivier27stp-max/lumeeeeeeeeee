@@ -1,4 +1,5 @@
 import React from 'react';
+import { resolveBrand } from '../../lib/brandColor';
 import { formatCents } from '../../lib/jobCalc';
 
 // ── Lume fallback logo (panda) ──
@@ -33,6 +34,8 @@ export interface AgreementDocData {
     email: string | null;
     website: string | null;
     taxLines: string[];
+    /** Accent choisi par l'entreprise. Absent = encre noire. */
+    brandColor?: string | null;
   };
   clientName: string | null;
   clientEmail: string | null;
@@ -97,6 +100,8 @@ function fmtVisitDate(date: string, language: 'en' | 'fr'): string {
 export default function AgreementDocument({ data, language }: { data: AgreementDocData; language: 'en' | 'fr' }) {
   const fr = language === 'fr';
   const logoUrl = data.logoUrl || LUME_LOGO_URL;
+  // Tout hex invalide retombe sur l'encre noire — la valeur part dans du CSS.
+  const brand = resolveBrand(data.company.brandColor);
   const plan = data.servicePlan && data.servicePlan.visits.length > 0 ? data.servicePlan : null;
   // One 12-month grid per planned year (legacy visits without a year all fall
   // in the plan's own year). A month can hold several visit dates.
@@ -148,7 +153,10 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
             )}
           </div>
           <div className="text-right ml-6">
-            <h1 className="text-[28px] font-bold text-[#111] tracking-tight leading-none">
+            <h1
+              style={{ color: brand }}
+              className="text-[28px] font-bold tracking-tight leading-none"
+            >
               {fr ? 'CONTRAT' : 'CONTRACT'}
             </h1>
             <p className="text-[13px] text-[#888] mt-1 font-medium">{data.agreementNumber}</p>
@@ -306,7 +314,7 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
           ))}
           <div className="border-t border-[#e5e5e5] pt-2 mt-2 flex justify-between text-[15px]">
             <span className="font-bold text-[#111]">Total</span>
-            <span className="font-bold text-[#111]">{formatCents(data.totalCents)}</span>
+            <span style={{ color: brand }} className="font-bold">{formatCents(data.totalCents)}</span>
           </div>
         </div>
       </div>

@@ -14,6 +14,8 @@ export interface AgreementCompanyBranding {
   website: string | null;
   address: string | null;
   taxLines: string[];
+  /** Accent choisi par l'entreprise. null = encre noire. */
+  brand_color: string | null;
 }
 
 /** Company branding of the CURRENT org (org-scoped — RLS can expose several orgs). */
@@ -23,7 +25,7 @@ export async function getAgreementCompanyBranding(): Promise<AgreementCompanyBra
   const [{ data }, taxLines] = await Promise.all([
     supabase
       .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code')
+      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, brand_color')
       .eq('org_id', orgId)
       .limit(1)
       .maybeSingle(),
@@ -40,6 +42,7 @@ export async function getAgreementCompanyBranding(): Promise<AgreementCompanyBra
     website: data?.website || null,
     address,
     taxLines,
+    brand_color: data?.brand_color || null,
   };
 }
 
@@ -141,6 +144,7 @@ export function buildAgreementDocData(params: {
       email: company.email,
       website: company.website,
       taxLines: company.taxLines,
+      brandColor: company.brand_color,
     },
     clientName: docClientName,
     clientEmail,

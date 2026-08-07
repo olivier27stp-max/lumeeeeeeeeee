@@ -91,7 +91,7 @@ router.get('/pay/:publicToken', async (req, res) => {
     // Fetch company settings for branding (single source of truth)
     const { data: orgSettings } = await admin
       .from('company_settings')
-      .select('company_name, logo_url, email, phone')
+      .select('company_name, logo_url, email, phone, brand_color')
       .eq('org_id', paymentRequest.org_id)
       .maybeSingle();
 
@@ -118,6 +118,7 @@ router.get('/pay/:publicToken', async (req, res) => {
       business: {
         name: orgSettings?.company_name || null,
         logo_url: orgSettings?.logo_url || null,
+        brand_color: orgSettings?.brand_color || null,
         email: orgSettings?.email || null,
         phone: orgSettings?.phone || null,
       },

@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle, CreditCard, FileText, Loader2, PenLine } from
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import AgreementDocument, { type AgreementDocData } from '../components/agreements/AgreementDocument';
+import { resolveBrand, readableOn } from '../lib/brandColor';
 
 interface PublicAgreementData {
   agreement: {
@@ -25,6 +26,8 @@ interface PublicAgreementData {
     email: string | null;
     website: string | null;
     tax_lines: string[];
+    /** Accent choisi par l'entreprise. null = encre noire. */
+    brand_color?: string | null;
   };
   client: { name: string | null; email: string | null; phone: string | null };
   doc: {
@@ -67,10 +70,11 @@ const centsFr = (cents: number, currency: string, fr: boolean) =>
  * et useElements n'existent qu'à l'intérieur du fournisseur.
  */
 function DepositPaymentForm({
-  fr, label, onSuccess, onError,
+  fr, label, brand, onSuccess, onError,
 }: {
   fr: boolean;
   label: string;
+  brand: string;
   onSuccess: () => Promise<void> | void;
   onError: (msg: string) => void;
 }) {
@@ -103,7 +107,8 @@ function DepositPaymentForm({
       <button
         type="submit"
         disabled={processing || !stripe || !elements}
-        className="w-full bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        style={{ background: brand, color: readableOn(brand) }}
+        className="w-full py-3 rounded-lg font-medium text-[14px] transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {processing
           ? <><Loader2 size={16} className="animate-spin" /> {fr ? 'Traitement…' : 'Processing…'}</>
@@ -328,6 +333,9 @@ export default function ContractView() {
     );
   }
 
+  // Une seule résolution : tout hex invalide retombe sur l'encre noire.
+  const brand = resolveBrand(data.company.brand_color);
+
   const language: 'en' | 'fr' = fr ? 'fr' : 'en';
   const docData: AgreementDocData = {
     agreementNumber: data.number,
@@ -342,6 +350,7 @@ export default function ContractView() {
       email: data.company.email,
       website: data.company.website,
       taxLines: data.company.tax_lines,
+      brandColor: data.company.brand_color ?? null,
     },
     clientName: data.doc.client_name || data.client.name,
     clientEmail: data.client.email,
@@ -447,7 +456,7 @@ export default function ContractView() {
                       appearance: {
                         theme: 'flat',
                         variables: {
-                          colorPrimary: '#111111',
+                          colorPrimary: brand,
                           colorBackground: '#ffffff',
                           colorText: '#111111',
                           colorDanger: '#c00000',
@@ -458,13 +467,14 @@ export default function ContractView() {
                         rules: {
                           '.Label': { color: '#666666', fontSize: '12px', fontWeight: '500' },
                           '.Input': { borderColor: '#dddddd', padding: '10px 12px' },
-                          '.Input:focus': { borderColor: '#111111', boxShadow: '0 0 0 1px #111111' },
+                          '.Input:focus': { borderColor: brand, boxShadow: `0 0 0 1px ${brand}` },
                         },
                       },
                     }}
                   >
                     <DepositPaymentForm
                       fr={fr}
+                      brand={brand}
                       label={`${fr ? 'Payer' : 'Pay'} ${centsFr(depositCents, depositIntent.currency || 'CAD', fr)}`}
                       onSuccess={async () => {
                         await confirmDepositPayment(depositIntent.payment_intent_id);
@@ -479,7 +489,8 @@ export default function ContractView() {
                 {!depositLoading && !depositIntent && !depositError && (
                   <button
                     onClick={loadDepositIntent}
-                    className="w-full bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors flex items-center justify-center gap-2"
+                    style={{ background: brand, color: readableOn(brand) }}
+                    className="w-full py-3 rounded-lg font-medium text-[14px] transition-opacity hover:opacity-90 flex items-center justify-center gap-2"
                   >
                     <CreditCard size={16} />
                     {fr ? 'Payer' : 'Pay'} {centsFr(depositCents, 'CAD', fr)}
@@ -561,7 +572,8 @@ export default function ContractView() {
                   <button
                     onClick={handleSign}
                     disabled={signing || !signatureData || !signerName.trim()}
-                    className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    style={{ background: brand, color: readableOn(brand) }}
+                    className="flex-1 py-3 rounded-lg font-medium text-[14px] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
                     <CheckCircle size={16} />
                     {signing ? (fr ? 'Signature…' : 'Signing...') : (fr ? 'Confirmer et signer' : 'Confirm & Sign')}
