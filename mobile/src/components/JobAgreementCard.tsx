@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
@@ -26,6 +27,9 @@ export function JobAgreementCard({
   const { t, language } = useTranslation();
   const a = t.mobileAgreement;
   const qc = useQueryClient();
+  // Les conditions font cinq paragraphes : repliées par défaut, sinon elles
+  // écrasent le reste du panneau. Le web les met derrière un aperçu.
+  const [conditionsOuvertes, setConditionsOuvertes] = useState(false);
 
   const { data: contrat, isLoading } = useQuery({
     queryKey: ['job-agreement', jobId],
@@ -104,7 +108,14 @@ export function JobAgreementCard({
             ) : null}
           </View>
 
-          <Text className="text-xs leading-5 text-ink-muted">{contrat.terms}</Text>
+          <Pressable onPress={() => setConditionsOuvertes((v) => !v)} hitSlop={6}>
+            <Text className="text-xs font-semibold text-ink-muted">
+              {conditionsOuvertes ? a.hideTerms : a.viewTerms} {conditionsOuvertes ? '▴' : '▾'}
+            </Text>
+          </Pressable>
+          {conditionsOuvertes ? (
+            <Text className="text-xs leading-5 text-ink-muted">{contrat.terms}</Text>
+          ) : null}
 
           {contrat.status !== 'signed' ? (
             <View className="flex-row gap-2">

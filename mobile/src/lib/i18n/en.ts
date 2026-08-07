@@ -4736,6 +4736,8 @@ const en = {
     sign: 'Get it signed',
     sendEmail: 'Send by email',
     sendSms: 'Send by SMS',
+    viewTerms: 'View terms',
+    hideTerms: 'Hide',
     signedBy: 'Signed by {name}',
     saving: 'Saving…',
   },

@@ -4731,6 +4731,8 @@ const fr: TranslationKeys = {
     sign: 'Faire signer',
     sendEmail: 'Envoyer par courriel',
     sendSms: 'Envoyer par SMS',
+    viewTerms: 'Voir les conditions',
+    hideTerms: 'Masquer',
     signedBy: 'Signée par {name}',
     saving: 'Enregistrement…',
   },
