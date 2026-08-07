@@ -1502,6 +1502,12 @@ const fr: TranslationKeys = {
     addVisit: 'Ajouter une visite',
     removeVisit: 'Retirer cette visite',
     visitLabel: 'Visite',
+    askForReview: 'Demander un avis',
+    contractBox: 'Contrat',
+    contractBoxHint: 'Optionnel — contrat écrit lié à ce job',
+    createContractSimple: 'Créer un contrat',
+    termsAndConditions: 'Termes et conditions',
+    signatureRequired: 'Signature du client obligatoire',
     percentageOption: 'Pourcentage (%)',
     fixedAmountOption: 'Montant fixe ($)',
     // Libellés du bloc « Détails » du web, repris tels quels.

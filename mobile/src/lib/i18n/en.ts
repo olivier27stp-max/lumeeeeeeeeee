@@ -1510,6 +1510,12 @@ const en = {
     addVisit: 'Add a visit',
     removeVisit: 'Remove this visit',
     visitLabel: 'Visit',
+    askForReview: 'Ask for a review',
+    contractBox: 'Agreement',
+    contractBoxHint: 'Optional — written contract attached to this job',
+    createContractSimple: 'Create an agreement',
+    termsAndConditions: 'Terms and conditions',
+    signatureRequired: 'Client signature required',
     percentageOption: 'Percentage (%)',
     fixedAmountOption: 'Fixed Amount ($)',
     // Labels from the web's "Details" block, taken as-is.

@@ -273,6 +273,8 @@ export interface JobInput {
   depositValue?: number;
   requirePaymentMethod?: boolean;
   billingSplit?: boolean;
+  /** Demander un avis au client une fois la job terminée. */
+  askForReview?: boolean;
 }
 
 /** Build the job_recurrence_rules payload from a UI frequency key + start date.
@@ -373,6 +375,7 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       deposit_type: rest.depositRequired ? rest.depositType ?? null : null,
       deposit_value: rest.depositRequired ? rest.depositValue ?? 0 : 0,
       require_payment_method: rest.requirePaymentMethod ?? false,
+      ask_for_review: rest.askForReview ?? false,
       // Un plan « plusieurs paiements » implique la facturation par étapes,
       // exactement comme le web.
       billing_split:

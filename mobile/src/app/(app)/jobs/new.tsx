@@ -19,7 +19,7 @@ import { sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
 import { resolveTaxes } from '@/lib/api/taxes';
 import { createServiceContract } from '@/lib/api/serviceContracts';
-import { createJobAgreement } from '@/lib/api/jobAgreements';
+import { createJobAgreement, DEFAULT_AGREEMENT_TERMS } from '@/lib/api/jobAgreements';
 import { bookingNiceMessage, packTemplate, unpackTemplate } from '@/lib/contact';
 import { formatCurrencyCents, formatDateTime, formatTime } from '@/lib/format';
 import { useAuth } from '@/lib/auth';
@@ -175,6 +175,12 @@ export default function NewJob() {
   const [billingSplit, setBillingSplit] = useState(false);
   // Le mobile forçait requires_invoicing à vrai; le web en fait une case.
   const [requiresInvoicing, setRequiresInvoicing] = useState(true);
+  const [askForReview, setAskForReview] = useState(false);
+  // Contrat écrit — le web l'offre sur les DEUX types de job, avec ses termes
+  // modifiables et la signature exigible.
+  const [createAgreement, setCreateAgreement] = useState(false);
+  const [agreementTerms, setAgreementTerms] = useState('');
+  const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
 
   // Les vendeurs à qui attribuer la job (bloc « Vendeur » du web).
   const { data: membres } = useQuery({
@@ -194,6 +200,14 @@ export default function NewJob() {
   useEffect(() => {
     if (orgTax) setTaxRate(String(orgTax.totalRatePct));
   }, [orgTax]);
+
+  // Termes par défaut, dans la langue de l'app — identiques au web.
+  useEffect(() => {
+    if (!agreementTerms.trim()) {
+      setAgreementTerms(DEFAULT_AGREEMENT_TERMS[lang === 'fr' ? 'fr' : 'en']);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang]);
 
   // When a client is chosen, prefill the job's service address from their address
   // (only when the user hasn't typed one yet) so the job and client stay connected.
@@ -542,6 +556,7 @@ export default function NewJob() {
         salespersonId,
         saleDate: saleDate ? ymd(saleDate) : null,
         showOnLeaderboard,
+        askForReview,
         depositRequired,
         depositType,
         depositValue: parseFloat(depositValue) || 0,
@@ -556,12 +571,16 @@ export default function NewJob() {
       // Sur le web, cocher « créer un contrat » crée AUSSI l'entente écrite —
       // les deux cases y sont synchronisées. Au pire du best-effort : le job et
       // ses rendez-vous sont déjà enregistrés.
-      if (jobType === 'recurring' && createContract) {
+      // Le web crée l'entente pour les deux types de job : soit par la case du
+      // bloc Contrat, soit parce qu'un plan à forfait la coche d'office.
+      if (createAgreement || (jobType === 'recurring' && createContract)) {
         try {
           await createJobAgreement({
             orgId: orgId ?? '',
             jobId: job.id,
             clientId: client?.id ?? null,
+            requireSignature: agreementRequireSignature,
+            terms: agreementTerms.trim() || undefined,
             language: lang === 'fr' ? 'fr' : 'en',
           });
         } catch (e) {
@@ -726,6 +745,16 @@ export default function NewJob() {
             {showOnLeaderboard ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
           </View>
           <Text className="text-xs text-ink-muted">{t.modals.showOnLeaderboard}</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setAskForReview((v) => !v)}
+          className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+        >
+          <View className={`h-4 w-4 items-center justify-center rounded border ${askForReview ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+            {askForReview ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+          </View>
+          <Text className="text-xs text-ink-muted">{t.modals.askForReview}</Text>
         </Pressable>
       </View>
 
@@ -1373,6 +1402,52 @@ export default function NewJob() {
 
         </>
       ) : null}
+
+      {/* ── Contrat — bloc du web, offert sur les DEUX types de job ── */}
+      <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4 pb-3">
+        <Text className="pb-0.5 pt-3 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+          {t.modals.contractBox}
+        </Text>
+        <Text className="pb-2 text-[11px] text-ink-muted">{t.modals.contractBoxHint}</Text>
+
+        <Pressable
+          onPress={() => setCreateAgreement((v) => !v)}
+          className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+        >
+          <View className={`h-4 w-4 items-center justify-center rounded border ${createAgreement ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+            {createAgreement ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+          </View>
+          <Text className="flex-1 text-xs text-ink">{t.modals.createContractSimple}</Text>
+        </Pressable>
+
+        {createAgreement ? (
+          <>
+            <Pressable
+              onPress={() => setAgreementRequireSignature((v) => !v)}
+              className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+            >
+              <View className={`h-4 w-4 items-center justify-center rounded border ${agreementRequireSignature ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {agreementRequireSignature ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <Text className="flex-1 text-xs text-ink">{t.modals.signatureRequired}</Text>
+            </Pressable>
+
+            <View className="gap-1 border-t border-surface-border pt-2">
+              <Text className="text-[11px] font-medium text-ink-muted">
+                {t.modals.termsAndConditions}
+              </Text>
+              <TextInput
+                value={agreementTerms}
+                onChangeText={setAgreementTerms}
+                multiline
+                textAlignVertical="top"
+                className="rounded-xl border border-surface-border bg-white px-3 py-2 text-xs leading-5 text-ink"
+                style={{ height: 150 }}
+              />
+            </View>
+          </>
+        ) : null}
+      </View>
 
       <Button title={t.mobileJobs.createJob} onPress={() => saveMut.mutate()} loading={saveMut.isPending} disabled={!title.trim() || !orgId} />
 
