@@ -284,6 +284,17 @@ export async function sendQuoteEmailViaServer(quoteId: string): Promise<void> {
   await serverPost('/emails/send-mobile-quote', { quoteId });
 }
 
+/** Envoie le contrat au client par courriel — mêmes routes que le web
+ *  (jobAgreementsApi.sendAgreementEmail / sendAgreementSms). Le client le signe
+ *  ensuite sur sa page publique /contract/:token. */
+export async function sendAgreementEmailViaServer(agreementId: string): Promise<void> {
+  await serverPost('/emails/send-agreement', { agreementId });
+}
+
+export async function sendAgreementSmsViaServer(agreementId: string): Promise<void> {
+  await serverPost('/agreements/send-sms', { agreementId });
+}
+
 /** Whether to fall back to the device's native composer instead of surfacing the
  * error: true for infra problems (no server URL, network, SMTP not configured =
  * 503, or any 5xx); false for real client errors (400/403/404 — e.g. the client

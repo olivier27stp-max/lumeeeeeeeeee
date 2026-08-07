@@ -1,10 +1,9 @@
 // Ententes de travail — portage de src/lib/jobAgreementsApi.ts (web).
 //
 // C'est le document que le client accepte : accès à la propriété, GARANTIE de
-// 7 jours, état des surfaces, annulation, responsabilité. Le web le crée depuis
-// la fiche du job; le mobile peut en plus le faire signer sur place, avec le
-// doigt, grâce au pavé de signature déjà présent dans l'app.
-//
+// 7 jours, état des surfaces, annulation, responsabilité. Créé depuis la fiche
+// du job puis envoyé au client, qui le signe sur sa page publique — exactement
+// le flux du web.
 // Refusé par un déclencheur de la base quand le job porte déjà une soumission :
 // dans ce cas c'est la soumission approuvée qui fait office de contrat.
 
@@ -100,24 +99,6 @@ export async function createJobAgreement(input: {
     .single();
   if (error) throw new Error(error.message);
   return data as JobAgreement;
-}
-
-/** Signature sur place : le client signe au doigt, sur le téléphone. */
-export async function signJobAgreement(
-  id: string,
-  signerName: string,
-  signatureBase64Png: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from('job_agreements')
-    .update({
-      signer_name: signerName.trim(),
-      signature_data: `data:image/png;base64,${signatureBase64Png}`,
-      signed_at: new Date().toISOString(),
-      status: 'signed',
-    })
-    .eq('id', id);
-  if (error) throw new Error(error.message);
 }
 
 export async function updateAgreementTerms(id: string, terms: string): Promise<void> {

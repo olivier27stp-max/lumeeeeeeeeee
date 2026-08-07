@@ -1,19 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
-import { SignaturePad } from '@/components/SignaturePad';
-import {
-  createJobAgreement,
-  getJobAgreement,
-  signJobAgreement,
-} from '@/lib/api/jobAgreements';
+import { createJobAgreement, getJobAgreement } from '@/lib/api/jobAgreements';
+import { sendAgreementEmailViaServer, sendAgreementSmsViaServer } from '@/lib/api/server';
 import { useTranslation } from '@/lib/i18n';
 
-/** L'entente de travail d'un job : accès à la propriété, garantie de 7 jours,
- *  annulation, responsabilité. Le web la crée depuis la fiche du job et
- *  l'envoie au client; le mobile la fait en plus signer sur place. */
+/** Le contrat écrit lié à une job : accès à la propriété, garantie de 7 jours,
+ *  annulation, responsabilité.
+ *
+ *  Même flux que le web (JobDetails) : on crée le contrat, on l'envoie au
+ *  client par courriel ou par SMS, et le client le signe sur sa page publique
+ *  /contract/:token. Pas de signature sur l'appareil — le web n'en a pas. */
 export function JobAgreementCard({
   jobId,
   orgId,
@@ -28,10 +26,8 @@ export function JobAgreementCard({
   const { t, language } = useTranslation();
   const a = t.mobileAgreement;
   const qc = useQueryClient();
-  const [padOuvert, setPadOuvert] = useState(false);
-  const [nomSignataire, setNomSignataire] = useState('');
 
-  const { data: entente, isLoading } = useQuery({
+  const { data: contrat, isLoading } = useQuery({
     queryKey: ['job-agreement', jobId],
     queryFn: () => getJobAgreement(jobId),
     enabled: !!jobId,
@@ -49,19 +45,19 @@ export function JobAgreementCard({
     onError: (e: Error) => Alert.alert(a.title, e.message),
   });
 
-  const signer = useMutation({
-    mutationFn: (base64: string) => signJobAgreement(entente!.id, nomSignataire, base64),
-    onSuccess: () => {
-      setPadOuvert(false);
-      setNomSignataire('');
-      qc.invalidateQueries({ queryKey: ['job-agreement', jobId] });
+  const envoyer = useMutation({
+    mutationFn: async (canal: 'email' | 'sms') => {
+      if (!contrat) return;
+      if (canal === 'email') await sendAgreementEmailViaServer(contrat.id);
+      else await sendAgreementSmsViaServer(contrat.id);
     },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['job-agreement', jobId] }),
     onError: (e: Error) => Alert.alert(a.title, e.message),
   });
 
   const libelleStatut =
-    entente?.status === 'signed' ? a.statusSigned
-      : entente?.status === 'sent' ? a.statusSent
+    contrat?.status === 'signed' ? a.statusSigned
+      : contrat?.status === 'sent' ? a.statusSent
       : a.statusDraft;
 
   return (
@@ -76,7 +72,7 @@ export function JobAgreementCard({
 
       {isLoading ? (
         <ActivityIndicator />
-      ) : !entente ? (
+      ) : !contrat ? (
         <>
           <Text className="text-xs text-ink-subtle">{a.none}</Text>
           <Pressable
@@ -93,52 +89,45 @@ export function JobAgreementCard({
         <>
           <View className="flex-row items-center gap-2">
             <View
-              className={`rounded-full px-2.5 py-1 ${entente.status === 'signed' ? 'bg-emerald-100' : 'bg-surface-sunken'}`}
+              className={`rounded-full px-2.5 py-1 ${contrat.status === 'signed' ? 'bg-emerald-100' : 'bg-surface-sunken'}`}
             >
               <Text
-                className={`text-[11px] font-bold uppercase ${entente.status === 'signed' ? 'text-emerald-700' : 'text-ink-muted'}`}
+                className={`text-[11px] font-bold uppercase ${contrat.status === 'signed' ? 'text-emerald-700' : 'text-ink-muted'}`}
               >
                 {libelleStatut}
               </Text>
             </View>
-            {entente.signer_name ? (
+            {contrat.signer_name ? (
               <Text className="flex-1 text-xs text-ink-muted" numberOfLines={1}>
-                {a.signedBy.replace('{name}', entente.signer_name)}
+                {a.signedBy.replace('{name}', contrat.signer_name)}
               </Text>
             ) : null}
           </View>
 
-          <Text className="text-xs leading-5 text-ink-muted">{entente.terms}</Text>
+          <Text className="text-xs leading-5 text-ink-muted">{contrat.terms}</Text>
 
-          {entente.status !== 'signed' ? (
-            <>
-              <TextInput
-                value={nomSignataire}
-                onChangeText={setNomSignataire}
-                placeholder={a.signerPlaceholder}
-                className="rounded-xl border border-surface-border bg-white px-3 py-2 text-sm text-ink"
-              />
+          {contrat.status !== 'signed' ? (
+            <View className="flex-row gap-2">
               <Pressable
-                onPress={() => setPadOuvert(true)}
-                disabled={!nomSignataire.trim() || signer.isPending}
-                className={`items-center rounded-xl py-2.5 ${nomSignataire.trim() ? 'bg-ink' : 'bg-surface-sunken'}`}
+                onPress={() => envoyer.mutate('email')}
+                disabled={envoyer.isPending}
+                className="flex-1 items-center rounded-xl bg-ink py-2.5"
               >
-                <Text
-                  className={`text-sm font-semibold ${nomSignataire.trim() ? 'text-white' : 'text-ink-subtle'}`}
-                >
-                  {signer.isPending ? a.saving : a.sign}
+                <Text className="text-sm font-semibold text-white">
+                  {envoyer.isPending ? a.saving : a.sendEmail}
                 </Text>
               </Pressable>
-            </>
+              <Pressable
+                onPress={() => envoyer.mutate('sms')}
+                disabled={envoyer.isPending}
+                className="flex-1 items-center rounded-xl border border-surface-border bg-white py-2.5"
+              >
+                <Text className="text-sm font-semibold text-ink">{a.sendSms}</Text>
+              </Pressable>
+            </View>
           ) : null}
         </>
       )}
-
-      <SignaturePad
-        visible={padOuvert}
-        onClose={() => setPadOuvert(false)}
-        onSave={(base64) => signer.mutate(base64)}
-      />
     </Card>
   );
 }
