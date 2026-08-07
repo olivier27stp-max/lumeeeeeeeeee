@@ -62,8 +62,8 @@ router.get('/platform-admin/business', async (req, res) => {
       subsActive30dResult,
       subsActivePrev30dResult,
     ] = await Promise.all([
-      admin.from('orgs').select('id', { count: 'exact', head: true }),
-      admin.from('orgs').select('id', { count: 'exact', head: true }).gte('created_at', thirtyDaysAgo.toISOString()),
+      admin.from('orgs').select('id', { count: 'exact', head: true }).is('deleted_at', null),
+      admin.from('orgs').select('id', { count: 'exact', head: true }).is('deleted_at', null).gte('created_at', thirtyDaysAgo.toISOString()),
       // All subscriptions (not just active) for breakdown
       // `subscriptions` n'a pas de colonne `trial_end` : pour un abonnement en
       // essai, la fin de période courante fait office de fin d'essai.
@@ -197,7 +197,7 @@ router.get('/platform-admin/growth-series', async (req, res) => {
     if (!await requirePlatformOwner(req, res)) return;
     const admin = getServiceClient();
     const [orgsR, membR] = await Promise.all([
-      admin.from('orgs').select('created_at').order('created_at', { ascending: true }),
+      admin.from('orgs').select('created_at').is('deleted_at', null).order('created_at', { ascending: true }),
       admin.from('memberships').select('created_at').order('created_at', { ascending: true }),
     ]);
     const group = (rows: any[]) => {
@@ -251,7 +251,7 @@ router.get('/platform-admin/operations', async (req, res) => {
         .eq('status', 'failed').gte('created_at', sevenDaysAgo.toISOString())
         .order('created_at', { ascending: false }).limit(10),
       // All orgs for inactive check
-      admin.from('orgs').select('id, name, created_at, updated_at'),
+      admin.from('orgs').select('id, name, created_at, updated_at').is('deleted_at', null),
     ]);
 
     // Inactive orgs: no jobs or logins in 30 days
@@ -324,7 +324,7 @@ router.get('/platform-admin/users', async (req, res) => {
       recentLoginsResult,
     ] = await Promise.all([
       admin.from('memberships').select('user_id', { count: 'exact', head: true }),
-      admin.from('orgs').select('id, name, created_at'),
+      admin.from('orgs').select('id, name, created_at').is('deleted_at', null),
       admin.from('memberships').select('org_id'),
       // Recent activity by org (jobs created in last 30d)
       admin.from('jobs').select('org_id, created_at').is('deleted_at', null).gte('created_at', thirtyDaysAgo.toISOString()),
@@ -438,7 +438,7 @@ router.get('/platform-admin/billing', async (req, res) => {
     const orgIds = [...new Set((subs || []).map((s: any) => s.org_id))];
     let orgMap = new Map<string, string>();
     if (orgIds.length > 0) {
-      const { data: orgs } = await admin.from('orgs').select('id, name').in('id', orgIds);
+      const { data: orgs } = await admin.from('orgs').select('id, name').is('deleted_at', null).in('id', orgIds);
       for (const o of orgs || []) orgMap.set(o.id, o.name);
     }
 
@@ -504,7 +504,7 @@ router.get('/platform-admin/org/:orgId', async (req, res) => {
     const { orgId } = req.params;
 
     const [orgResult, membersResult, subResult, allSubsResult, jobsResult, clientsResult] = await Promise.all([
-      admin.from('orgs').select('*').eq('id', orgId).single(),
+      admin.from('orgs').select('*').is('deleted_at', null).eq('id', orgId).single(),
       admin.from('memberships').select('user_id, role, full_name, avatar_url, created_at').eq('org_id', orgId),
       admin.from('subscriptions').select('*, plans!subscriptions_plan_id_fkey(slug, name)').eq('org_id', orgId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       // All subscriptions for this org (to calculate total subscription revenue)
