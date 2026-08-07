@@ -143,6 +143,24 @@ export default function NewJob() {
     d.setHours(d.getHours() + 1, 0, 0, 0);
     return d;
   });
+  // ── Visites d'un job ponctuel ──
+  // Le web en gère PLUSIEURS (bloc « Visites » de NewJobModal) : le job n'a pas
+  // de date propre, ce sont ses visites qui apparaissent au calendrier.
+  type VisiteDraft = { key: string; date: string; debut: string; fin: string; anytime: boolean };
+  let compteurVisite = 0;
+  const nouvelleVisiteDraft = (modele?: Partial<VisiteDraft>): VisiteDraft => {
+    const d = new Date();
+    return {
+      key: `v-${Date.now()}-${compteurVisite++}`,
+      date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+      debut: '09:00',
+      fin: '10:00',
+      anytime: false,
+      ...modele,
+    };
+  };
+  const [visitDrafts, setVisitDrafts] = useState<VisiteDraft[]>(() => [nouvelleVisiteDraft()]);
+
   const [items, setItems] = useState<LineItemInput[]>([]);
   const [taxRate, setTaxRate] = useState(DEFAULT_TAX);
   // Champs du formulaire web qui manquaient au mobile.
@@ -398,6 +416,37 @@ export default function NewJob() {
     return `${lang === 'fr' ? 'Services : ' : 'Services: '}${parts.join(' · ')}`;
   };
 
+  // Les visites d'un job ponctuel, triées, converties en rendez-vous.
+  const visitesTriees = useMemo(
+    () => [...visitDrafts].sort((a, b) => `${a.date}T${a.debut}`.localeCompare(`${b.date}T${b.debut}`)),
+    [visitDrafts],
+  );
+  const visitPayload = useMemo(() => {
+    if (jobType === 'recurring') return [];
+    return visitesTriees.map((v) => {
+      const [y, m, d] = v.date.split('-').map(Number);
+      const [hd, md] = (v.anytime ? '00:00' : v.debut).split(':').map(Number);
+      const [hf, mf] = (v.anytime ? '23:59' : v.fin).split(':').map(Number);
+      const debut = new Date(y, m - 1, d, hd, md, 0, 0);
+      const fin = new Date(y, m - 1, d, hf, mf, 0, 0);
+      return {
+        startISO: debut.toISOString(),
+        endISO: (fin > debut ? fin : debut).toISOString(),
+        notes: null as string | null,
+      };
+    });
+  }, [jobType, visitesTriees]);
+
+  const modifierVisite = (key: string, patch: Partial<VisiteDraft>) =>
+    setVisitDrafts((prev) => prev.map((v) => (v.key === key ? { ...v, ...patch } : v)));
+  const ajouterVisiteDraft = () =>
+    setVisitDrafts((prev) => {
+      const derniere = prev[prev.length - 1];
+      return [...prev, nouvelleVisiteDraft(derniere ? { date: derniere.date, debut: derniere.debut, fin: derniere.fin, anytime: derniere.anytime } : undefined)];
+    });
+  const retirerVisiteDraft = (key: string) =>
+    setVisitDrafts((prev) => prev.filter((v) => v.key !== key));
+
   // Ce qui part réellement en base : une visite = un rendez-vous à l'agenda.
   const planPayload = useMemo(() => {
     if (jobType !== 'recurring') return [];
@@ -475,13 +524,20 @@ export default function NewJob() {
         team_id: isManager ? assignedTeam : teamId ?? null,
         job_type: jobType,
         requires_invoicing: requiresInvoicing,
-        scheduled_at: startDate.toISOString(),
-        end_at: endDate.toISOString(),
+        // Ponctuel : c'est la PREMIÈRE visite qui donne la date du job — le
+        // web fait pareil, et sans visite le job reste en brouillon.
+        scheduled_at:
+          jobType === 'recurring' ? startDate.toISOString() : visitPayload[0]?.startISO ?? null,
+        end_at:
+          jobType === 'recurring' ? endDate.toISOString() : visitPayload[0]?.endISO ?? null,
         items: canSeePricing ? billableItems : [],
         taxRatePct: parseFloat(taxRate) || 0,
         // Le plan matérialise ses rendez-vous : pas de règle de récurrence en
         // parallèle, elle en générerait des doublons.
-        planVisits: jobType === 'recurring' && planPayload.length > 0 ? planPayload : null,
+        planVisits:
+          jobType === 'recurring'
+            ? (planPayload.length > 0 ? planPayload : null)
+            : (visitPayload.length > 0 ? visitPayload : null),
         jobNumber,
         salespersonId,
         saleDate: saleDate ? ymd(saleDate) : null,
@@ -996,59 +1052,96 @@ export default function NewJob() {
         ) : null}
       </View>
 
-      {/* Date & heure — masquée pour un plan de service : sa carte « Règle »
-          porte déjà la date de début et les heures, et chaque visite a les
-          siennes. Les afficher ici en plus, c'était le même réglage deux fois.
-          Le web fait pareil ({!isServicePlan && …}). */}
-      <View className="gap-2" style={jobType === 'recurring' ? { display: 'none' } : undefined}>
-        <SectionLabel>{t.mobileJobs.dateAndTime}</SectionLabel>
+      {/* ── Visites — bloc du web pour un service ponctuel ──
+          Le job n'a pas de date propre : ce sont ses visites qui vont au
+          calendrier. Le mobile n'en gérait qu'UNE; le web en gère plusieurs,
+          chacune avec ses heures et sa case « pas d'heure précise ». */}
+      {jobType === 'recurring' ? null : (
+        <View className="gap-2">
+          <SectionLabel>{t.modals.visitsTitle}</SectionLabel>
+          <Text className="px-1 text-[11px] text-ink-muted">{t.modals.visitsHint}</Text>
 
-        <MiniWeekCalendar selected={startDate} onSelect={pickDay} counts={countForDay} />
+          <MiniWeekCalendar selected={startDate} onSelect={pickDay} counts={countForDay} />
 
-        {/* Selected day's bookings → see free slots */}
-        <View className="rounded-2xl bg-white p-3">
-          <Text className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-subtle">
-            {startDate.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })} ·{' '}
-            {dayJobs.length === 0 ? t.mobileJobs.freeDay : t.mobileJobs.bookedCount.replace('{n}', String(dayJobs.length))}
-          </Text>
-          {dayJobs.length === 0 ? (
-            <Text className="text-xs text-ink-subtle">{t.mobileJobs.noJobsFreeAgenda}</Text>
+          {visitesTriees.length === 0 ? (
+            <View className="items-center rounded-2xl border border-dashed border-surface-border py-6">
+              <Text className="text-sm text-ink-muted">{t.modals.noVisitsPlanned}</Text>
+            </View>
           ) : (
-            dayJobs.map((j) => (
-              <View key={j.id} className="flex-row justify-between border-t border-surface-border py-1.5">
-                <Text className="text-sm text-ink" numberOfLines={1}>{j.client_name ?? j.title}</Text>
-                <Text className="text-xs text-ink-muted">{formatTime(j.scheduled_at)}</Text>
-              </View>
-            ))
-          )}
-        </View>
+            visitesTriees.map((v, idx) => {
+              const [vy, vm, vd] = v.date.split('-').map(Number);
+              const [hd, md] = v.debut.split(':').map(Number);
+              const [hf, mf] = v.fin.split(':').map(Number);
+              return (
+                <View key={v.key} className="gap-2 rounded-2xl border border-surface-border bg-white p-3">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-semibold text-ink-muted">
+                      {t.modals.visitLabel} {idx + 1}
+                    </Text>
+                    {visitesTriees.length > 1 ? (
+                      <Pressable hitSlop={10} onPress={() => retirerVisiteDraft(v.key)}>
+                        <Text className="px-1 text-sm font-bold text-ink-subtle">✕</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
 
-        {/* Start / End time — compact pickers (tap, choose, auto-close) */}
-        <View className="flex-row gap-3">
-          <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">{t.mobileJobs.start_}</Text>
-            <DateTimePicker
-              value={startDate}
-              mode="time"
-              display="compact"
-              themeVariant="light"
-              accentColor="#171717"
-              onChange={(_, d) => { if (d) setStartDate((prev) => setTimeOn(prev, d)); }}
-            />
-          </View>
-          <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">{t.modals.endTime}</Text>
-            <DateTimePicker
-              value={endDate}
-              mode="time"
-              display="compact"
-              themeVariant="light"
-              accentColor="#171717"
-              onChange={(_, d) => { if (d) setEndDate((prev) => setTimeOn(prev, d)); }}
-            />
-          </View>
+                  <View className="flex-row items-center justify-between gap-2">
+                    <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.modals.startDate}</Text>
+                    <DateTimePicker
+                      value={new Date(vy, vm - 1, vd)}
+                      mode="date"
+                      display="compact"
+                      themeVariant="light"
+                      accentColor="#171717"
+                      onChange={(_, d) => { if (d) modifierVisite(v.key, { date: ymd(d) }); }}
+                    />
+                  </View>
+
+                  {!v.anytime ? (
+                    <View className="flex-row items-center justify-between gap-2">
+                      <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.modals.startTime}</Text>
+                      <DateTimePicker
+                        value={new Date(vy, vm - 1, vd, hd, md)}
+                        mode="time"
+                        display="compact"
+                        themeVariant="light"
+                        accentColor="#171717"
+                        onChange={(_, d) => { if (d) modifierVisite(v.key, { debut: hhmm(d) }); }}
+                      />
+                      <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.modals.endTime}</Text>
+                      <DateTimePicker
+                        value={new Date(vy, vm - 1, vd, hf, mf)}
+                        mode="time"
+                        display="compact"
+                        themeVariant="light"
+                        accentColor="#171717"
+                        onChange={(_, d) => { if (d) modifierVisite(v.key, { fin: hhmm(d) }); }}
+                      />
+                    </View>
+                  ) : null}
+
+                  <Pressable
+                    onPress={() => modifierVisite(v.key, { anytime: !v.anytime })}
+                    className="flex-row items-center gap-2"
+                  >
+                    <View className={`h-4 w-4 items-center justify-center rounded border ${v.anytime ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                      {v.anytime ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                    </View>
+                    <Text className="text-xs text-ink-muted">{t.mobilePlan.anytime}</Text>
+                  </Pressable>
+                </View>
+              );
+            })
+          )}
+
+          <Pressable
+            onPress={ajouterVisiteDraft}
+            className="items-center rounded-xl border border-dashed border-surface-border py-2.5"
+          >
+            <Text className="text-sm font-semibold text-ink-muted">＋ {t.modals.addVisit}</Text>
+          </Pressable>
         </View>
-      </View>
+      )}
 
       <Input
         label={t.mobileJobs.description}

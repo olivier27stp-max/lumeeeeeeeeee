@@ -1497,6 +1497,11 @@ const fr: TranslationKeys = {
     servicePlanCreateContractHint: 'Le contrat affiche les 12 mois, avec la date de visite dans chaque mois planifié',
     billingAndPayments: 'Facturation et paiements',
     noVisitsPlanned: 'Aucune visite planifiée',
+    visitsTitle: 'Visites',
+    visitsHint: 'Le job n’a pas de date : ce sont ses visites qui apparaissent au calendrier. Sans visite, le job reste en brouillon.',
+    addVisit: 'Ajouter une visite',
+    removeVisit: 'Retirer cette visite',
+    visitLabel: 'Visite',
     percentageOption: 'Pourcentage (%)',
     fixedAmountOption: 'Montant fixe ($)',
     // Libellés du bloc « Détails » du web, repris tels quels.

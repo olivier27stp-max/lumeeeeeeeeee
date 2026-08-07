@@ -1505,6 +1505,11 @@ const en = {
     servicePlanCreateContractHint: 'The contract lists all 12 months, with the visit date in each planned month',
     billingAndPayments: 'Billing and Payments',
     noVisitsPlanned: 'No visit planned',
+    visitsTitle: 'Visits',
+    visitsHint: 'A job has no date of its own: its visits are what show on the calendar. Without a visit, the job stays a draft.',
+    addVisit: 'Add a visit',
+    removeVisit: 'Remove this visit',
+    visitLabel: 'Visit',
     percentageOption: 'Percentage (%)',
     fixedAmountOption: 'Fixed Amount ($)',
     // Labels from the web's "Details" block, taken as-is.
