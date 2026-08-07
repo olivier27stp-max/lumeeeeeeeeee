@@ -10,6 +10,7 @@ import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe 
 import { decryptSecret } from '../../src/lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
+import { getCompanyBranding } from '../lib/companyBranding';
 
 const router = Router();
 
@@ -783,11 +784,11 @@ router.get('/quotes/public/:token', async (req, res) => {
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
     // Company branding
-    const { data: companyData } = await admin
-      .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color')
-      .eq('org_id', quote.org_id)
-      .maybeSingle();
+    const companyData = await getCompanyBranding(
+      admin,
+      quote.org_id,
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color',
+    );
 
     // Line items
     const { data: items } = await admin

@@ -8,6 +8,7 @@ import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
 import { twilioClient } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { createDepositIntent, verifyDepositIntent, DepositPaymentError } from '../lib/depositPayments';
+import { getCompanyBranding } from '../lib/companyBranding';
 
 const router = Router();
 
@@ -251,11 +252,11 @@ router.get('/agreements/public/:token', async (req, res) => {
     }
 
     // Company branding (of the agreement's org — multi-tenant safe)
-    const { data: companyData } = await admin
-      .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, brand_color')
-      .eq('org_id', agreement.org_id)
-      .maybeSingle();
+    const companyData = await getCompanyBranding(
+      admin,
+      agreement.org_id,
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, brand_color',
+    );
     let taxRegistrationLines: string[] = [];
     try {
       const { data: taxes } = await admin

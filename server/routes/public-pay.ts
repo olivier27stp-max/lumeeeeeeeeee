@@ -9,6 +9,7 @@ import {
   getOrCreatePlatformCustomerForClient,
 } from '../lib/stripe-connect';
 import { getPlatformStripe } from '../lib/stripe-connect';
+import { getCompanyBranding } from '../lib/companyBranding';
 
 const router = Router();
 
@@ -89,11 +90,11 @@ router.get('/pay/:publicToken', async (req, res) => {
       .order('created_at', { ascending: true });
 
     // Fetch company settings for branding (single source of truth)
-    const { data: orgSettings } = await admin
-      .from('company_settings')
-      .select('company_name, logo_url, email, phone, brand_color')
-      .eq('org_id', paymentRequest.org_id)
-      .maybeSingle();
+    const orgSettings = await getCompanyBranding(
+      admin,
+      paymentRequest.org_id,
+      'company_name, logo_url, email, phone, brand_color',
+    );
 
     // Use the actual current balance, not the original request amount
     const currentBalance = Number(invoice.balance_cents || 0);
