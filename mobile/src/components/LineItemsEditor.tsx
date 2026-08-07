@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { Input } from '@/components/ui/Input';
@@ -52,7 +52,16 @@ export function LineItemsEditor({
     enabled: catalogOpen && !!orgId,
   });
 
+  // Ne rien remonter au tout premier rendu : l'ensemencement n'a pas encore eu
+  // lieu, et un onChange([]) écraserait la liste du parent. C'est ce qui vidait
+  // les services d'une visite au moment d'en choisir une autre, puisque
+  // l'éditeur est remonté à chaque changement de visite.
+  const premierRendu = useRef(true);
   useEffect(() => {
+    if (premierRendu.current) {
+      premierRendu.current = false;
+      if (seedKey) return;
+    }
     const items: LineItemInput[] = rows
       .filter((r) => r.name.trim() || r.price.trim())
       .map((r) => ({

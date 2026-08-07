@@ -998,8 +998,11 @@ export default function NewJob() {
         ) : null}
       </View>
 
-      {/* Date & time */}
-      <View className="gap-2">
+      {/* Date & heure — masquée pour un plan de service : sa carte « Règle »
+          porte déjà la date de début et les heures, et chaque visite a les
+          siennes. Les afficher ici en plus, c'était le même réglage deux fois.
+          Le web fait pareil ({!isServicePlan && …}). */}
+      <View className="gap-2" style={jobType === 'recurring' ? { display: 'none' } : undefined}>
         <SectionLabel>{t.mobileJobs.dateAndTime}</SectionLabel>
 
         <MiniWeekCalendar selected={startDate} onSelect={pickDay} counts={countForDay} />
