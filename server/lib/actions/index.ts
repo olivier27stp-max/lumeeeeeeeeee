@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { findOrCreateConversation, normalizeE164 } from '../helpers';
+import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -41,6 +41,51 @@ export function resolveTemplate(
   return template
     .replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '')
     .replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? '');
+}
+
+/**
+ * Le contrat à signer d'une job, s'il y en a un en attente.
+ *
+ * Une confirmation de rendez-vous qui n'apporte pas le document à signer force
+ * un second message ; on expose donc le lien aux gabarits :
+ *   [contract_link] — l'URL nue
+ *   [contract_line] — la phrase complète pour un SMS
+ *   [contract_html] — le paragraphe équivalent pour un courriel
+ *
+ * Les trois sont vides quand il n'y a rien à signer, pour qu'un gabarit qui
+ * les contient ne laisse ni trou ni balise orpheline.
+ */
+async function resolveContractVars(
+  supabase: SupabaseClient,
+  jobId: string,
+): Promise<{ contract_link: string; contract_line: string; contract_html: string }> {
+  const vide = { contract_link: '', contract_line: '', contract_html: '' };
+  if (!jobId) return vide;
+
+  let base = '';
+  try {
+    base = resolvePublicBaseUrl();
+  } catch {
+    return vide; // PUBLIC_URL absent : mieux vaut pas de lien qu'un lien cassé.
+  }
+
+  const { data, error } = await supabase
+    .from('job_agreements')
+    .select('view_token, status, require_signature')
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return vide;
+  if (!data.require_signature || data.status === 'signed' || !data.view_token) return vide;
+
+  const url = `${base}/contract/${data.view_token}`;
+  return {
+    contract_link: url,
+    contract_line: `Contrat à signer : ${url}`,
+    contract_html: `<p>Contrat à signer : <a href="${url}">${url}</a></p>`,
+  };
 }
 
 export async function resolveEntityVariables(
@@ -112,6 +157,7 @@ export async function resolveEntityVariables(
           vars.client_phone = c.phone || '';
         }
       }
+      Object.assign(vars, await resolveContractVars(supabase, entityId));
     }
   }
 
@@ -176,6 +222,7 @@ export async function resolveEntityVariables(
         vars.client_name = evt.job.client_name;
         vars.client_first_name = evt.job.client_name.split(' ')[0] || '';
       }
+      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, evt.job_id));
     }
   }
 

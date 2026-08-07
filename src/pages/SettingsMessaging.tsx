@@ -392,7 +392,9 @@ const TRIGGER_GROUPS: Array<{ label: { fr: string; en: string }; triggers: strin
   { label: { fr: 'Après la job', en: 'After the job' }, triggers: ['job.completed'] },
 ];
 
-const SMS_VARIABLES = '[client_first_name] [client_name] [company_name] [appointment_date] [appointment_time] [appointment_address]';
+// [contract_line] disparaît quand la job n'a pas de contrat en attente de
+// signature — on peut donc la laisser dans un gabarit générique.
+const SMS_VARIABLES = '[client_first_name] [client_name] [company_name] [appointment_date] [appointment_time] [appointment_address] [contract_line]';
 
 // A2P brand verticals — Twilio codes stay as values, only labels are localized.
 const VERTICAL_OPTIONS: Array<{ value: string; fr: string; en: string }> = [

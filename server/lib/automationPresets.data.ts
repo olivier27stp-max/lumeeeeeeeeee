@@ -31,13 +31,13 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "send_sms",
         "config": {
-          "body": "Bonjour [client_first_name], votre rendez-vous avec [company_name] est confirmé pour le [appointment_date] à [appointment_time]. À bientôt!"
+          "body": "Bonjour [client_first_name], votre rendez-vous avec [company_name] est confirmé pour le [appointment_date] à [appointment_time]. À bientôt!\n[contract_line]"
         }
       },
       {
         "type": "send_email",
         "config": {
-          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> [appointment_date]</li><li><strong>Heure :</strong> [appointment_time]</li><li><strong>Adresse :</strong> [appointment_address]</li></ul><p>À bientôt!<br/>[company_name]</p></div>",
+          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> [appointment_date]</li><li><strong>Heure :</strong> [appointment_time]</li><li><strong>Adresse :</strong> [appointment_address]</li></ul><p>À bientôt!<br/>[company_name]</p>[contract_html]</div>",
           "subject": "[company_name] — Rendez-vous confirmé"
         }
       },

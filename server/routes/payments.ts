@@ -1889,7 +1889,7 @@ async function handleCheckoutSessionCompleted(
         to: userEmail,
         subject: 'Bienvenue chez Lume — configure ton compte',
         html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;color:#111114">
-  <h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0 0 8px">Paiement confirmé 🎉</h1>
+  <h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0 0 8px">Paiement confirmé</h1>
   <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 22px">Ton abonnement <strong>${plan.name}</strong> est actif. Il te reste une étape&nbsp;: créer ton mot de passe et remplir les infos de ton entreprise pour commencer à travailler.</p>
   <a href="${setupUrl}" style="display:inline-block;background:#111114;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 26px;border-radius:12px">Configurer mon compte →</a>
   <p style="font-size:12px;color:#999;line-height:1.6;margin:24px 0 0">Si le bouton ne fonctionne pas, copie ce lien&nbsp;:<br><span style="color:#555">${setupUrl}</span></p>
