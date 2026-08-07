@@ -4734,6 +4734,7 @@ const fr: TranslationKeys = {
     noPhoneOnFile: "Ce client n'a pas de numéro de téléphone. Utilise Partager à la place.",
     noEmailOnFile: "Ce client n'a pas de courriel.",
     nothingLeftToPay: 'Cette facture est déjà entièrement payée.',
+    paymentLinkFailed: "Le lien de paiement n'a pas pu être créé.",
     alreadyPunchedIn: 'Tu es déjà pointé.',
     cameraDenied: "L'accès à la caméra a été refusé.",
     photoLibraryDenied: "L'accès aux photos a été refusé.",

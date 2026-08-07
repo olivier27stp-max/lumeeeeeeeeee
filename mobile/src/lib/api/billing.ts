@@ -4,6 +4,7 @@
 
 import { supabase } from '../supabase';
 import { getOrgCurrency } from './org';
+import { serverPost } from './server';
 import { breakdownFor, resolveTaxes, saveAppliedTaxes } from './taxes';
 import { tr } from '@/lib/i18n';
 
@@ -146,8 +147,21 @@ export async function listQuotesForJob(jobId: string): Promise<QuoteRow[]> {
 /**
  * Get (or create) a public payment link for an invoice, then return the full
  * URL the client opens to pay: `${EXPO_PUBLIC_WEB_URL}/pay/:public_token`.
- * Works against Supabase directly (payment_requests RLS allows org members to
- * read/insert); the secure web page handles Stripe. Requires EXPO_PUBLIC_WEB_URL.
+ *
+ * La LECTURE d'une demande existante se fait directement sur Supabase (la RLS
+ * la couvre). La CRÉATION, elle, passe obligatoirement par le serveur :
+ * `payment_requests` fait partie des tables où `authenticated` n'a que le
+ * SELECT — l'insertion directe échouait en « permission denied for table
+ * payment_requests » (42501), remontée par Sentry le 2026-08-07. Les policies
+ * d'écriture existent bien, mais un GRANT manquant les rend inopérantes, et
+ * c'est VOULU : on ne laisse pas un client écrire des enregistrements de
+ * paiement.
+ *
+ * Passer par POST /api/payment-requests/create apporte en prime des garde-fous
+ * que l'insertion directe n'avait pas : appartenance à l'org revérifiée,
+ * facture réellement rattachée à l'org, solde > 0, et surtout compte Stripe
+ * connecté ET `charges_enabled` — sans quoi on fabriquait un lien de paiement
+ * mort. Le montant est recalculé serveur depuis le solde de la facture.
  */
 export async function getOrCreatePaymentToken(params: {
   orgId: string;
@@ -168,24 +182,16 @@ export async function getOrCreatePaymentToken(params: {
     .in('status', ['pending', 'sent'])
     .maybeSingle();
 
-  let token = existing?.public_token as string | undefined;
+  const token = existing?.public_token as string | undefined;
+  if (token) return token;
 
-  if (!token) {
-    const { data, error } = await supabase
-      .from('payment_requests')
-      .insert({
-        org_id: params.orgId,
-        invoice_id: params.invoiceId,
-        amount_cents: params.amountCents,
-        currency: params.currency || 'CAD',
-      })
-      .select('public_token')
-      .single();
-    if (error) throw new Error(error.message);
-    token = data.public_token as string;
-  }
-
-  return token;
+  const res = await serverPost<{ payment_request?: { public_token?: string } }>(
+    '/payment-requests/create',
+    { orgId: params.orgId, invoiceId: params.invoiceId, sendVia: 'link_only' },
+  );
+  const created = res?.payment_request?.public_token;
+  if (!created) throw new Error(tr().mobileErrors.paymentLinkFailed);
+  return created;
 }
 
 /**

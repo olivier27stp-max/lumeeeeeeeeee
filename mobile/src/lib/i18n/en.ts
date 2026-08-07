@@ -4741,6 +4741,7 @@ const en = {
     noPhoneOnFile: 'This client has no phone number on file. Use Share instead.',
     noEmailOnFile: 'This client has no email on file.',
     nothingLeftToPay: 'This invoice has nothing left to pay.',
+    paymentLinkFailed: 'The payment link could not be created.',
     alreadyPunchedIn: 'You are already punched in.',
     cameraDenied: 'Camera access denied.',
     photoLibraryDenied: 'Photo library access denied.',
