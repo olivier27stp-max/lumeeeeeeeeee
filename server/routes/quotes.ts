@@ -1275,8 +1275,11 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
         .eq('org_id', quote.org_id)
         .maybeSingle();
       if (orgSecrets?.stripe_secret_key_enc) {
+        // La colonne est CHIFFRÉE : la passer telle quelle à Stripe donnait une
+        // clé invalide, donc ce repli n'a jamais fonctionné. Même correction
+        // qu'en haut dans deposit-intent.
         const Stripe = (await import('stripe')).default;
-        const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
+        const orgStripe = new Stripe(decryptSecret(orgSecrets.stripe_secret_key_enc));
         intent = await orgStripe.paymentIntents.retrieve(payment_intent_id);
       }
     }
