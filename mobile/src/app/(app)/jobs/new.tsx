@@ -201,6 +201,11 @@ export default function NewJob() {
   const [serviceYears, setServiceYears] = useState<number[]>([new Date().getFullYear()]);
   const [visitTimes, setVisitTimes] = useState<Record<string, { start: string; end: string }>>({});
   const [createContract, setCreateContract] = useState(false);
+  // Facturation du plan — mêmes trois modes que le web.
+  const [billingMode, setBillingMode] = useState<'per_visit' | 'single' | 'installments'>('per_visit');
+  const [autoCharge, setAutoCharge] = useState(false);
+  const [installmentsCount, setInstallmentsCount] = useState('');
+  const [installmentAmount, setInstallmentAmount] = useState('');
 
   const ymd = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -321,6 +326,14 @@ export default function NewJob() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobType, planVisits, visitTimes, startDate, endDate]);
 
+  // N versements du montant choisi; ce qui reste devient le « Solde ».
+  const installmentsPlan = useMemo(() => {
+    const count = parseInt(installmentsCount, 10);
+    const amountCents = Math.round((Number.parseFloat(installmentAmount) || 0) * 100);
+    if (!Number.isFinite(count) || count <= 0 || amountCents <= 0) return null;
+    return { count, amountCents, coveredCents: count * amountCents };
+  }, [installmentsCount, installmentAmount]);
+
   const totals = useMemo(() => {
     const subtotal = items.reduce((s, i) => s + Math.round(i.qty * i.unit_price_cents), 0);
     const tax = Math.round((subtotal * (parseFloat(taxRate) || 0)) / 100);
@@ -376,6 +389,10 @@ export default function NewJob() {
         // Le plan matérialise ses rendez-vous : pas de règle de récurrence en
         // parallèle, elle en générerait des doublons.
         planVisits: jobType === 'recurring' && planPayload.length > 0 ? planPayload : null,
+        billingMode: jobType === 'recurring' ? billingMode : null,
+        autoCharge: jobType === 'recurring' ? autoCharge : false,
+        installments:
+          jobType === 'recurring' && billingMode === 'installments' ? installmentsPlan : null,
       });
 
       // Sur le web, cocher « créer un contrat » crée AUSSI l'entente écrite —
@@ -777,6 +794,80 @@ export default function NewJob() {
             >
               <Text className="text-sm font-semibold text-ink-muted">＋ {t.mobilePlan.addNextYear}</Text>
             </Pressable>
+
+            {/* ── Facturation du plan — trois modes, comme le web ── */}
+            <View className="mt-1 rounded-2xl border border-surface-border bg-surface-sunken px-4 py-1">
+              <Text className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+                {t.mobilePlan.billing}
+              </Text>
+              <View className="border-t border-surface-border">
+                <SelectRow
+                  label=""
+                  value={billingMode}
+                  onSelect={setBillingMode}
+                  options={[
+                    { key: 'per_visit' as const, label: t.mobilePlan.modePerVisit },
+                    { key: 'single' as const, label: t.mobilePlan.modeSingle },
+                    { key: 'installments' as const, label: t.mobilePlan.modeInstallments },
+                  ]}
+                />
+              </View>
+              <Text className="pb-2 text-[11px] text-ink-subtle">
+                {billingMode === 'per_visit' ? t.mobilePlan.modePerVisitHint
+                  : billingMode === 'single' ? t.mobilePlan.modeSingleHint
+                  : t.mobilePlan.modeInstallmentsHint}
+              </Text>
+
+              {billingMode === 'installments' ? (
+                <View className="gap-2 border-t border-surface-border py-2">
+                  <View className="flex-row items-center gap-2">
+                    <Text className="shrink-0 text-xs font-medium text-ink-muted">
+                      {t.mobilePlan.paymentCount}
+                    </Text>
+                    <TextInput
+                      value={installmentsCount}
+                      onChangeText={(v) => setInstallmentsCount(v.replace(/[^0-9]/g, '').slice(0, 2))}
+                      keyboardType="number-pad"
+                      placeholder="3"
+                      className="w-14 rounded-lg border border-surface-border bg-white px-2 py-1.5 text-center text-sm font-semibold text-ink"
+                    />
+                    <Text className="shrink-0 text-xs font-medium text-ink-muted">
+                      {t.mobilePlan.paymentAmount}
+                    </Text>
+                    <TextInput
+                      value={installmentAmount}
+                      onChangeText={(v) => setInstallmentAmount(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+                      keyboardType="decimal-pad"
+                      placeholder="100"
+                      className="w-20 rounded-lg border border-surface-border bg-white px-2 py-1.5 text-center text-sm font-semibold text-ink"
+                    />
+                  </View>
+                  {installmentsPlan ? (
+                    <Text
+                      className={`text-[11px] ${totals.total - installmentsPlan.coveredCents < 0 ? 'text-status-late' : 'text-ink-subtle'}`}
+                    >
+                      {totals.total - installmentsPlan.coveredCents >= 0
+                        ? t.mobilePlan.balance.replace(
+                            '{amount}',
+                            formatCurrencyCents(totals.total - installmentsPlan.coveredCents, 'CAD'))
+                        : t.mobilePlan.overTotal.replace(
+                            '{amount}',
+                            formatCurrencyCents(installmentsPlan.coveredCents - totals.total, 'CAD'))}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <Pressable
+                onPress={() => setAutoCharge((v) => !v)}
+                className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+              >
+                <View className={`h-4 w-4 items-center justify-center rounded border ${autoCharge ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                  {autoCharge ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                </View>
+                <Text className="text-xs text-ink-muted">{t.mobilePlan.autoCharge}</Text>
+              </Pressable>
+            </View>
 
             {/* Contrat optionnel */}
             <Pressable

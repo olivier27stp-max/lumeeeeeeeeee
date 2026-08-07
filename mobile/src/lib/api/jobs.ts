@@ -255,6 +255,14 @@ export interface JobInput {
    *  chaque visite au lieu de laisser un cron les générer. Exclusif avec
    *  `recurrence` : les deux ensemble créeraient des doublons. */
   planVisits?: { startISO: string; endISO: string }[] | null;
+  /** Mode de facturation d'un plan de service (jobs.billing_mode) :
+   *  'per_visit' facture chaque visite complétée, 'single' une seule fois,
+   *  'installments' suit l'échéancier de job_billing_milestones. */
+  billingMode?: 'per_visit' | 'single' | 'installments' | null;
+  /** Envoie la facture d'emblée quand elle est créée (jobs.auto_charge). */
+  autoCharge?: boolean;
+  /** « Plusieurs paiements » : N versements d'un montant fixe, plus le solde. */
+  installments?: { count: number; amountCents: number } | null;
 }
 
 /** Build the job_recurrence_rules payload from a UI frequency key + start date.
@@ -341,6 +349,11 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       client_name: rest.client_name ?? null,
       team_id: rest.team_id ?? null,
       job_type: rest.job_type ?? 'one_off',
+      // Écrits à l'INSERT, pas en UPDATE : `jobs` n'accorde la modification
+      // que colonne par colonne, et ces deux-là ne l'étaient pas (le web y a
+      // perdu tous ses modes de facturation en silence).
+      billing_mode: rest.billingMode ?? null,
+      auto_charge: rest.autoCharge ?? false,
       requires_invoicing: rest.requires_invoicing ?? false,
       property_address: rest.property_address ?? '',
       scheduled_at: rest.scheduled_at ?? null,
@@ -395,6 +408,35 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
     });
     const { error: recErr } = await supabase.from('job_recurrence_rules').insert(row);
     if (recErr) throw new Error(`${tr().mobileErrors.recurrenceFailed} : ${recErr.message}`);
+  }
+
+  // « Plusieurs paiements » : N versements du montant choisi, puis un « Solde »
+  // qui couvre le reste — sans lui le total du job ne serait jamais payé en
+  // entier. Même construction que le web (NewJobModal).
+  if (rest.billingMode === 'installments' && input.installments && input.installments.count > 0) {
+    const { count, amountCents } = input.installments;
+    const { data: auth } = await supabase.auth.getUser();
+    const createdBy = auth?.user?.id ?? null;
+    const jalons = Array.from({ length: count }, (_, i) => ({
+      org_id: orgId,
+      job_id: job.id,
+      created_by: createdBy,
+      position: i + 1,
+      label: `Paiement ${i + 1}`,
+      percent: null,
+      amount_cents: amountCents,
+      due_date: null,
+    }));
+    const solde = total - count * amountCents;
+    if (solde > 0) {
+      jalons.push({
+        org_id: orgId, job_id: job.id, created_by: createdBy,
+        position: jalons.length + 1, label: 'Solde', percent: null,
+        amount_cents: solde, due_date: null,
+      });
+    }
+    const { error: jalErr } = await supabase.from('job_billing_milestones').insert(jalons);
+    if (jalErr) throw new Error(`${tr().mobileErrors.installmentsFailed} : ${jalErr.message}`);
   }
 
   // Plan de service : un événement d'agenda par rendez-vous planifié. C'est LE
