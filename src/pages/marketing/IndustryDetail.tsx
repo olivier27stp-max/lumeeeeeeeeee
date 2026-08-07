@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from '../../i18n';
+import TrustSection from '../../components/marketing/TrustSection';
 import type { Language } from '../../i18n';
 
 // Contenu bilingue local — les dictionnaires i18n globaux ne couvrent pas ces
@@ -248,82 +249,7 @@ export default function IndustryDetail() {
         </div>
       </section>
 
-      {/* Trust */}
-      <section className="py-16 md:py-20 px-6">
-        <div className="max-w-7xl mx-auto">
-          <motion.p
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="text-center text-base md:text-lg uppercase tracking-[0.15em] font-semibold text-black mb-12"
-          >
-            {t.marketingSite.trust.heading}
-          </motion.p>
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2.5 select-none h-10">
-              <svg width="28" height="28" viewBox="0 0 18 18" fill="none" className="shrink-0">
-                <rect x="1" y="1" width="16" height="16" rx="3" stroke="#c0392b" strokeWidth="1.5" />
-                <circle cx="9" cy="9" r="3" fill="#c0392b" />
-              </svg>
-              <div className="flex flex-col leading-none">
-                <span className="text-[22px] font-bold text-black tracking-tight">Summit</span>
-                <span className="text-[11px] font-medium text-black tracking-[0.04em]">ROOFING CO.</span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 select-none h-10">
-              <span className="text-[26px] font-extrabold tracking-[0.06em] text-black uppercase">
-                CLEARVIEW
-              </span>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                <rect x="3" y="4" width="14" height="16" rx="1" stroke="black" strokeWidth="1.8" fill="none" />
-                <line x1="10" y1="4" x2="10" y2="20" stroke="black" strokeWidth="1.2" />
-                <line x1="3" y1="12" x2="17" y2="12" stroke="black" strokeWidth="1.2" />
-                <path d="M2 20L18 20" stroke="black" strokeWidth="2" strokeLinecap="round" />
-                <path d="M20 3L20 7" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M18 5L22 5" stroke="black" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M19 10L19 12" stroke="black" strokeWidth="1" strokeLinecap="round" />
-                <path d="M18 11L20 11" stroke="black" strokeWidth="1" strokeLinecap="round" />
-                <circle cx="22" cy="8" r="0.7" fill="black" />
-              </svg>
-            </div>
-
-            <div className="flex items-center gap-2.5 select-none h-10">
-              <span className="text-[26px] font-light tracking-[0.12em] text-black border-2 border-black rounded-lg px-2.5 py-0.5">
-                NTG
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2.5 select-none h-10">
-              <span className="text-[26px] text-black">
-                <span className="font-extrabold">APEX</span>
-                <span className="font-normal">SUPPLY</span>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2.5 select-none h-10">
-              <img src="/vision-lavage.png" alt="Vision Lavage" className="h-8 w-auto" />
-            </div>
-
-            <div className="flex items-center gap-2.5 select-none h-10">
-              <span className="text-[26px] font-black tracking-tight text-black italic">
-                Bright<span className="text-[#2563eb]">Wash</span>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2.5 select-none h-10">
-              <span className="text-[26px] font-bold tracking-[0.15em] text-black uppercase">
-                PRO<span className="font-light">SHINE</span>
-              </span>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+      <TrustSection />
 
       {/* Mobile section */}
       <section className="px-6 py-24 md:py-32">
