@@ -887,23 +887,29 @@ export default function NewJob() {
               <Text className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
                 {t.mobilePlan.billing}
               </Text>
-              <View className="border-t border-surface-border">
-                <SelectRow
-                  label=""
-                  value={billingMode}
-                  onSelect={setBillingMode}
-                  options={[
-                    { key: 'per_visit' as const, label: t.mobilePlan.modePerVisit },
-                    { key: 'single' as const, label: t.mobilePlan.modeSingle },
-                    { key: 'installments' as const, label: t.mobilePlan.modeInstallments },
-                  ]}
-                />
+              {/* Les trois modes, chacun avec son explication visible — comme le
+                  web, qui les présente en cartes plutôt qu'en menu déroulant. */}
+              <View className="gap-2 border-t border-surface-border py-2">
+                {([
+                  { key: 'per_visit' as const, label: t.mobilePlan.modePerVisit, hint: t.mobilePlan.modePerVisitHint },
+                  { key: 'single' as const, label: t.mobilePlan.modeSingle, hint: t.mobilePlan.modeSingleHint },
+                  { key: 'installments' as const, label: t.mobilePlan.modeInstallments, hint: t.mobilePlan.modeInstallmentsHint },
+                ]).map((opt) => {
+                  const actif = billingMode === opt.key;
+                  return (
+                    <Pressable
+                      key={opt.key}
+                      onPress={() => setBillingMode(opt.key)}
+                      className={`rounded-xl border px-3 py-2.5 ${actif ? 'border-ink bg-white' : 'border-surface-border bg-white'}`}
+                    >
+                      <Text className={`text-sm ${actif ? 'font-bold text-ink' : 'font-medium text-ink-muted'}`}>
+                        {opt.label}
+                      </Text>
+                      <Text className="pt-0.5 text-[11px] text-ink-subtle">{opt.hint}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
-              <Text className="pb-2 text-[11px] text-ink-subtle">
-                {billingMode === 'per_visit' ? t.mobilePlan.modePerVisitHint
-                  : billingMode === 'single' ? t.mobilePlan.modeSingleHint
-                  : t.mobilePlan.modeInstallmentsHint}
-              </Text>
 
               {billingMode === 'installments' ? (
                 <View className="gap-2 border-t border-surface-border py-2">
