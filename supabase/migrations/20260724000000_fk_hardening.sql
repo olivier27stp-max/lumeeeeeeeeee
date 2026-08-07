@@ -1,11 +1,19 @@
 -- ============================================================
 -- ⛔ HISTORIQUE — NE PAS REJOUER (constaté le 2026-08-07)
 -- ------------------------------------------------------------
--- Ses 19 clés étrangères sont DÉJÀ en place en prod et en staging (vérifié le
--- 2026-08-03 : 0 orphelin sur les 19 relations). La rejouer échouerait de deux
--- façons : `public.job_time_logs` (lignes 33 et 55) a été SUPPRIMÉE depuis →
--- 42P01, et les contraintes existantes referaient un 42710. Le fichier tout
--- entier étant dans une transaction, tout serait annulé.
+-- Ses 20 contraintes sont DÉJÀ en place : vérifié le 2026-08-07 contre le
+-- catalogue de la prod, 20/20 présentes, aucune manquante (et 0 orphelin sur
+-- les 19 relations au 2026-08-03). La rejouer échouerait donc en 42710
+-- (duplicate_object) dès le premier `add constraint` ; le fichier entier étant
+-- dans une transaction, tout serait annulé.
+--
+-- NB — `public.job_time_logs` (lignes 33 et 55) existe bel et bien, en prod
+-- comme en staging (0 ligne). Elle figure pourtant dans les drops de
+-- 20260752600000_drop_dead_tables.sql : cette migration a bien été appliquée
+-- (21 de ses 23 tables ont disparu), mais job_time_logs et job_materials ont
+-- été recréées après coup, des deux côtés à l'identique. Ne pas se fier à la
+-- lecture d'un fichier de migration pour savoir ce qui existe : interroger le
+-- catalogue.
 --
 -- Pour créer un environnement neuf, la source de vérité est `supabase/baseline/`
 -- (`npm run db:bootstrap`), pas ce dossier — voir CLAUDE.md.
