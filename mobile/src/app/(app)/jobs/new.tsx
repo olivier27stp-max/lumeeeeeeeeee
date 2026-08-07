@@ -319,6 +319,32 @@ export default function NewJob() {
   // ── Produits/services par visite ──
   const itemsPersonnalises = jobType === 'recurring' && !applyItemsToAll;
   const itemsDeVisite = (key: string) => visitItems[key] ?? items;
+  /** La visite en cours d'édition — repli sur la première si la règle a
+   *  régénéré le plan et que la clé retenue n'existe plus (comportement du web). */
+  const visiteEditee =
+    itemsPersonnalises
+      ? [...planVisits].sort((a, b) => a.date.localeCompare(b.date))
+          .find((v) => v.key === itemsVisitKey) ??
+        [...planVisits].sort((a, b) => a.date.localeCompare(b.date))[0] ?? null
+      : null;
+
+  /** Le menu « S'applique à » — porte à lui seul la bascule, comme le web
+   *  (selectItemsScope) : « Toutes les visites » revient au jeu commun, choisir
+   *  une visite sème chaque visite d'une copie puis ouvre celle-là. */
+  const choisirPorteeServices = (valeur: string) => {
+    if (valeur === 'all') {
+      setApplyItemsToAll(true);
+      setItemsVisitKey(null);
+      return;
+    }
+    if (applyItemsToAll) {
+      setApplyItemsToAll(false);
+      setVisitItems(
+        Object.fromEntries(planVisits.map((v) => [v.key, items.map((i) => ({ ...i }))])),
+      );
+    }
+    setItemsVisitKey(valeur);
+  };
   /** « Lavage — août 2026 » : une fois les lignes aplaties au niveau du job, on
    *  doit encore savoir de quelle visite chacune provient (convention du web). */
   const etiquetteVisite = (v: PlanVisit) => `${nomMois(v.month, 'long')} ${v.year}`;
@@ -1011,54 +1037,34 @@ export default function NewJob() {
       {/* Pricing (admin) */}
       {canSeePricing ? (
         <>
-          {/* Plan de service : services communs, ou propres à chaque visite */}
+          {/* Plan de service — « S'applique à » : un seul menu, comme le web.
+              Choisir une visite bascule d'office en services personnalisés. */}
           {jobType === 'recurring' && planVisits.length > 0 ? (
-            <Pressable
-              onPress={() => {
-                const on = !applyItemsToAll;
-                setApplyItemsToAll(on);
-                if (on) { setVisitItems({}); setItemsVisitKey(null); }
-                else {
-                  // Chaque visite part d'une copie des services du plan.
-                  const trie = [...planVisits].sort((a, b) => a.date.localeCompare(b.date));
-                  setVisitItems(Object.fromEntries(trie.map((v) => [v.key, items.map((i) => ({ ...i }))])));
-                  setItemsVisitKey(trie[0]?.key ?? null);
-                }
-              }}
-              className="flex-row items-center gap-2 px-1"
-            >
-              <View className={`h-4 w-4 items-center justify-center rounded border ${applyItemsToAll ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                {applyItemsToAll ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
-              </View>
-              <Text className="text-xs text-ink-muted">{t.mobilePlan.sameItems}</Text>
-            </Pressable>
+            <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4 pb-2">
+              <SelectRow
+                label={t.mobilePlan.appliesToLabel}
+                value={itemsVisitKey ?? 'all'}
+                onSelect={choisirPorteeServices}
+                options={[
+                  { key: 'all', label: t.mobilePlan.allVisits },
+                  ...[...planVisits]
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .map((v) => ({ key: v.key, label: `${etiquetteVisite(v)} — ${dateLisible(v.date)}` })),
+                ]}
+              />
+              <Text className="pb-1 text-[11px] text-ink-subtle">
+                {itemsPersonnalises ? t.mobilePlan.itemsCustomHint : t.mobilePlan.itemsApplyAllHint}
+              </Text>
+            </View>
           ) : null}
 
-          {itemsPersonnalises && planVisits.length > 0 ? (
-            <>
-              {/* Quelle visite on est en train de garnir */}
-              <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4">
-                <SelectRow
-                  label={t.mobilePlan.visitBeingEdited}
-                  value={itemsVisitKey ?? [...planVisits].sort((a, b) => a.date.localeCompare(b.date))[0].key}
-                  onSelect={setItemsVisitKey}
-                  options={[...planVisits]
-                    .sort((a, b) => a.date.localeCompare(b.date))
-                    .map((v) => ({ key: v.key, label: dateLisible(v.date) }))}
-                />
-              </View>
-              {(() => {
-                const cle = itemsVisitKey ?? [...planVisits].sort((a, b) => a.date.localeCompare(b.date))[0].key;
-                return (
-                  <LineItemsEditor
-                    key={cle}
-                    seedKey={cle}
-                    seed={visitItems[cle] ?? items}
-                    onChange={(lignes) => setVisitItems((prev) => ({ ...prev, [cle]: lignes }))}
-                  />
-                );
-              })()}
-            </>
+          {itemsPersonnalises && visiteEditee ? (
+            <LineItemsEditor
+              key={visiteEditee.key}
+              seedKey={visiteEditee.key}
+              seed={visitItems[visiteEditee.key] ?? items}
+              onChange={(lignes) => setVisitItems((prev) => ({ ...prev, [visiteEditee.key]: lignes }))}
+            />
           ) : (
             <LineItemsEditor onChange={setItems} />
           )}

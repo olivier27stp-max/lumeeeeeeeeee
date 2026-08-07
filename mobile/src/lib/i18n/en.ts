@@ -4768,8 +4768,11 @@ const en = {
     removeYear: 'Remove this year',
     rule: 'Rule',
     startDate: 'Start date',
-    sameItems: 'Same products & services for every visit',
-    visitBeingEdited: 'Visit',
+    // One menu, like the web: "All visits" or a specific visit.
+    appliesToLabel: 'Applies to',
+    allVisits: 'All visits',
+    itemsApplyAllHint: 'The same products and services apply to every visit of the plan.',
+    itemsCustomHint: 'Pick a visit from the list to change its products and services.',
     billing: 'Billing',
     modePerVisit: 'One invoice per visit',
     modePerVisitHint: 'Each visit gets its own invoice when it is completed.',

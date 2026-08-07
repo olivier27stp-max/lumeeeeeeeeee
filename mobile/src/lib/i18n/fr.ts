@@ -4763,8 +4763,11 @@ const fr: TranslationKeys = {
     removeYear: 'Retirer cette année',
     rule: 'Règle',
     startDate: 'Date de début',
-    sameItems: 'Mêmes produits et services pour chaque visite',
-    visitBeingEdited: 'Visite',
+    // Un seul menu, comme le web : « Toutes les visites » ou une visite précise.
+    appliesToLabel: 'S’applique à',
+    allVisits: 'Toutes les visites',
+    itemsApplyAllHint: 'Les mêmes produits et services s’appliquent à chaque visite du plan.',
+    itemsCustomHint: 'Choisis une visite dans la liste pour modifier ses produits et services.',
     billing: 'Facturation',
     modePerVisit: 'Une facture par visite',
     modePerVisitHint: 'Chaque visite a sa propre facture, créée quand elle est complétée.',
