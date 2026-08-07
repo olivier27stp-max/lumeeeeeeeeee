@@ -8,6 +8,7 @@ import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
 import { twilioClient } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { createDepositIntent, verifyDepositIntent, DepositPaymentError } from '../lib/depositPayments';
+import { eventBus } from '../lib/eventBus';
 import { getCompanyBranding } from '../lib/companyBranding';
 
 const router = Router();
@@ -401,6 +402,18 @@ router.post('/agreements/public/sign', async (req, res) => {
         reference_id: agreement.job_id,
       });
     } catch { /* non-critical */ }
+
+    // Le client vient de signer : c'est le moment de lui confirmer, avec sa
+    // copie et le dépôt s'il en reste un. Passe par le moteur d'automatisation
+    // (preset « agreement_signed ») pour rester modifiable et débrayable.
+    eventBus.emit('agreement.signed', {
+      orgId: agreement.org_id,
+      entityType: 'job',
+      entityId: agreement.job_id,
+      metadata: { agreement_id: agreement.id, signer_name, job_number: refNumber },
+      relatedEntityType: 'job_agreement',
+      relatedEntityId: agreement.id,
+    });
 
     // Le dépôt à verser, tel que gelé dans le document signé — la page
     // enchaîne directement sur le paiement quand il y en a un.

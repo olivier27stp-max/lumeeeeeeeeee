@@ -192,6 +192,27 @@ async function main() {
     ok('la signature est acceptée', sig.ok, `http ${sig.status}`);
     ok('le dépôt est réclamé aussitôt', sigJson?.deposit_due === true, `${(sigJson?.deposit_cents ?? 0) / 100} $`);
 
+    // La confirmation de signature : le client reçoit-il sa copie ?
+    await new Promise((r) => setTimeout(r, 4000));
+    const { data: jSig } = await admin
+      .from('automation_execution_logs')
+      .select('action_type')
+      .eq('entity_id', job.id)
+      .eq('trigger_event', 'agreement.signed');
+    ok('la règle « contrat signé » se déclenche', (jSig ?? []).length > 0,
+       `${(jSig ?? []).length} action(s) : ${(jSig ?? []).map((j) => j.action_type).join(', ') || 'aucune'}`);
+
+    const { data: regleSig } = await admin
+      .from('automation_rules').select('actions')
+      .eq('org_id', orgId).eq('preset_key', 'agreement_signed').maybeSingle();
+    const gabaritSig = (regleSig?.actions ?? []).find((a) => a.type === 'send_sms')?.config?.body ?? '';
+    const varsSig = await resolveEntityVariables(admin, orgId, 'job', job.id);
+    const corpsSig = resolveTemplate(gabaritSig, varsSig);
+    ok('la copie signée est dans le message', corpsSig.includes('/contract/'));
+    ok('le dépôt restant est annoncé', corpsSig.includes('344,93') || corpsSig.includes('344.93'),
+       varsSig.deposit_amount || 'absent');
+    console.log('\n  ── message de signature ──\n' + corpsSig.split('\n').map((l) => '  ' + l).join('\n') + '\n');
+
     const varsApres = await resolveEntityVariables(admin, orgId, 'schedule_event', rdv.id);
     const corpsApres = resolveTemplate(gabarit, varsApres);
     ok('le lien disparaît une fois le contrat signé', !corpsApres.includes('/contract/'),

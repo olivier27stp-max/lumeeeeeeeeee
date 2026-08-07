@@ -356,6 +356,7 @@ export default function SettingsMessaging() {
 
 const RULE_LABELS_FR: Record<string, string> = {
   appointment_confirmation: 'Confirmation de rendez-vous',
+  agreement_signed: 'Contrat signé',
   job_reminder_7d: 'Rappel de rendez-vous — 7 jours avant',
   job_reminder_1d: 'Rappel de rendez-vous — la veille',
   job_reminder_2h: 'Rappel de rendez-vous — 2 h avant',

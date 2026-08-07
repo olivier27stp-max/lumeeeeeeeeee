@@ -17,8 +17,7 @@ import {
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
-  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft,
-} from 'lucide-react';
+  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
@@ -217,6 +216,7 @@ const PRESET_META: Record<string, {
   job_reminder_1d:          { icon: CalendarClock,  category: 'Jobs' },
   job_reminder_2h:          { icon: CalendarClock,  category: 'Jobs' },
   appointment_confirmation: { icon: CalendarClock,  category: 'Jobs' },
+  agreement_signed:         { icon: FileSignature, category: 'Jobs' },
   no_show_followup:         { icon: UserX,          category: 'Jobs' },
 
   // Invoices
