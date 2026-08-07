@@ -195,7 +195,7 @@ export function rescheduleNiceMessage(
 
 /** The "new time" line appended to a reschedule message. */
 export function newTimeLine(whenText: string, lang: 'fr' | 'en' = 'en'): string {
-  return lang === 'fr' ? `\n\n📅 Nouvelle heure : ${whenText}` : `\n\n📅 New time: ${whenText}`;
+  return lang === 'fr' ? `\n\nNouvelle heure : ${whenText}` : `\n\nNew time: ${whenText}`;
 }
 
 /** The deposit note appended to a quote message when a deposit is required. */
