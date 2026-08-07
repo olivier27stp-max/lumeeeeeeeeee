@@ -15,6 +15,7 @@ import { ActivityIndicator, Alert, Pressable, Switch, Text, View } from 'react-n
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { DEFAULT_BRAND, readableOn, resolveBrand } from '@/lib/brandColor';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { useTranslation } from '@/lib/i18n';
 import { CompanySettings, getCompany, updateCompany } from '@/lib/api/org';
@@ -38,6 +39,20 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </View>
   );
 }
+
+// Quelques couleurs prêtes à choisir. Le champ texte reste là pour une
+// teinte exacte — c'est la marque du client, pas la nôtre. Le noir en tête
+// est le défaut : le choisir revient à ne pas avoir de couleur.
+const PALETTE = [
+  DEFAULT_BRAND,
+  '#1D4ED8',
+  '#0F766E',
+  '#B91C1C',
+  '#C2410C',
+  '#6D28D9',
+  '#BE185D',
+  '#FACC15',
+] as const;
 
 export default function Company() {
   const qc = useQueryClient();
@@ -76,6 +91,7 @@ export default function Company() {
       currency: data.currency ?? 'CAD',
       google_review_url: data.google_review_url ?? '',
       review_enabled: data.review_enabled ?? false,
+      brand_color: data.brand_color ?? '',
     });
   }
 
@@ -106,6 +122,7 @@ export default function Company() {
         google_review_url: reviewUrl,
         revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
         currency: form.currency || 'CAD',
+        brand_color: (form.brand_color ?? '').trim() || null,
       });
     },
     onSuccess: () => {
@@ -217,6 +234,56 @@ export default function Company() {
               )}
             </Pressable>
           )}
+        </Section>
+
+        {/* Couleur de marque — l'accent des documents envoyés au client */}
+        <Section title={fr ? 'Couleur de la marque' : 'Brand colour'}>
+          <Text className="text-xs leading-5 text-ink-muted">
+            {fr
+              ? "Utilisée sur ce que ton client reçoit : contrat, soumission, page de paiement. Le reste de l'app ne change pas."
+              : 'Used on what your client receives: contract, quote, payment page. The rest of the app is unchanged.'}
+          </Text>
+
+          <View className="flex-row flex-wrap gap-2">
+            {PALETTE.map((c) => {
+              const choisie = resolveBrand(form.brand_color) === c;
+              return (
+                <Pressable
+                  key={c}
+                  onPress={() => set('brand_color')(c === DEFAULT_BRAND ? '' : c)}
+                  accessibilityLabel={c}
+                  className={`h-10 w-10 items-center justify-center rounded-full ${choisie ? 'border-2 border-ink' : 'border border-surface-border'}`}
+                  style={{ backgroundColor: c }}
+                >
+                  {choisie ? (
+                    <Text className="text-xs font-bold" style={{ color: readableOn(c) }}>✓</Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Input
+            label={fr ? 'Code de couleur' : 'Colour code'}
+            value={form.brand_color ?? ''}
+            onChangeText={set('brand_color')}
+            placeholder={DEFAULT_BRAND}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+
+          {/* Aperçu du bouton que le client voit */}
+          <View className="flex-row items-center gap-3">
+            <View
+              className="rounded-xl px-4 py-2.5"
+              style={{ backgroundColor: resolveBrand(form.brand_color) }}
+            >
+              <Text className="text-sm font-semibold" style={{ color: readableOn(form.brand_color) }}>
+                {fr ? 'Signer le contrat' : 'Sign the contract'}
+              </Text>
+            </View>
+            <Text className="text-[11px] text-ink-subtle">{fr ? 'Aperçu' : 'Preview'}</Text>
+          </View>
         </Section>
 
         {/* Company info */}

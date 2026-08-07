@@ -108,10 +108,12 @@ export interface CompanySettings {
   currency: string | null;
   google_review_url: string | null;
   review_enabled: boolean | null;
+  /** Accent de la marque (#RRGGBB) sur les documents client. null = encre noire. */
+  brand_color: string | null;
 }
 
 const COMPANY_COLS =
-  'org_id, company_name, logo_url, phone, email, website, street1, street2, city, province, postal_code, country, revenue_goal_cents, currency, google_review_url, review_enabled';
+  'org_id, company_name, logo_url, phone, email, website, street1, street2, city, province, postal_code, country, revenue_goal_cents, currency, google_review_url, review_enabled, brand_color';
 
 export async function getCompany(orgId: string): Promise<CompanySettings | null> {
   const { data, error } = await supabase
