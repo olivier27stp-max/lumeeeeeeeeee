@@ -37,7 +37,8 @@
     "check:silent-mutations": "node scripts/check-silent-mutations.mjs",
     "check:missing-migrations": "node --env-file=.env.local scripts/check-missing-migrations.mjs",
     "check:ambiguous-embeds": "node --env-file=.env.local scripts/check-ambiguous-embeds.mjs",
-    "check:broken-objects": "node --env-file=.env.local scripts/check-broken-objects.mjs"
+    "check:broken-objects": "node --env-file=.env.local scripts/check-broken-objects.mjs",
+    "test:parcours": "tsx --env-file=.env.local scripts/test-parcours-contrat.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
