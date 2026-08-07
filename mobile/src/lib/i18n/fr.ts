@@ -4718,10 +4718,13 @@ const fr: TranslationKeys = {
 
   // Ententes de travail (job_agreements) — accès, garantie, annulation…
   mobileAgreement: {
-    title: 'Entente de travail',
-    hint: 'Accès à la propriété, garantie de 7 jours, annulation et responsabilité.',
-    none: 'Aucune entente sur cette job.',
-    create: "Créer l'entente",
+    // Le web appelle ça « Contrat » (JobDetails, AgreementCreateModal) — on
+    // garde exactement son vocabulaire, sinon on cherche la même chose sous
+    // deux noms.
+    title: 'Contrat',
+    hint: 'Contrat écrit lié à cette job : accès, garantie de 7 jours, annulation.',
+    none: 'Aucun contrat sur cette job.',
+    create: 'Créer le contrat',
     statusDraft: 'Brouillon',
     statusSent: 'Envoyée',
     statusSigned: 'Signée',

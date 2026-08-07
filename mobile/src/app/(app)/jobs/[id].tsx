@@ -559,7 +559,12 @@ export default function JobDetail() {
         ) : null}
 
         {orgId ? (
-          <JobAgreementCard jobId={job.id} orgId={orgId} clientId={job.client_id} />
+          <JobAgreementCard
+            jobId={job.id}
+            orgId={orgId}
+            clientId={job.client_id}
+            jobNumber={job.job_number}
+          />
         ) : null}
 
         {orgId ? <SpecificNotesCard jobId={job.id} orgId={orgId} /> : null}

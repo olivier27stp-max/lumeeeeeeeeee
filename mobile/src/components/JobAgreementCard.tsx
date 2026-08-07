@@ -18,10 +18,12 @@ export function JobAgreementCard({
   jobId,
   orgId,
   clientId,
+  jobNumber,
 }: {
   jobId: string;
   orgId: string;
   clientId?: string | null;
+  jobNumber?: string | null;
 }) {
   const { t, language } = useTranslation();
   const a = t.mobileAgreement;
@@ -65,7 +67,10 @@ export function JobAgreementCard({
   return (
     <Card className="gap-3">
       <View>
-        <Text className="text-sm font-bold text-ink">{a.title}</Text>
+        {/* « Contrat · CTR-123 », comme l'en-tête du web */}
+        <Text className="text-sm font-bold text-ink">
+          {a.title}{jobNumber ? ` · CTR-${jobNumber}` : ''}
+        </Text>
         <Text className="pt-0.5 text-xs text-ink-muted">{a.hint}</Text>
       </View>
 

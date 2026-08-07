@@ -4725,8 +4725,9 @@ const en = {
 
   // Ententes de travail (job_agreements) — accès, garantie, annulation…
   mobileAgreement: {
-    title: 'Work agreement',
-    hint: 'Property access, 7-day warranty, cancellation and liability.',
+    // Same wording as the web (JobDetails calls it « Agreement »).
+    title: 'Agreement',
+    hint: 'Written contract attached to this job: access, 7-day warranty, cancellation.',
     none: 'No agreement on this job yet.',
     create: 'Create the agreement',
     statusDraft: 'Draft',
