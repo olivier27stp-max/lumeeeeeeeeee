@@ -9,6 +9,10 @@ import { AuthProvider } from '@/lib/auth';
 import { MembershipProvider } from '@/lib/membership-context';
 import { LanguageProvider } from '@/lib/i18n';
 import { asyncPersister, queryClient } from '@/lib/queryClient';
+import { installerGestionnaireGlobal } from '@/lib/erreurs';
+
+// Les plantages non rattrapés partent aussi au serveur.
+installerGestionnaireGlobal();
 
 export default function RootLayout() {
   return (

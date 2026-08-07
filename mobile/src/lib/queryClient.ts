@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import NetInfo from '@react-native-community/netinfo';
-import { onlineManager, QueryClient } from '@tanstack/react-query';
+import { MutationCache, onlineManager, QueryCache, QueryClient } from '@tanstack/react-query';
 
 import { registerMutationDefaults } from './offline/registerMutationDefaults';
+import { signalerErreur } from './erreurs';
 
 // Bridge React Query's online state to the device's connectivity so queries
 // pause/resume correctly offline. When connectivity returns, React Query
@@ -16,6 +17,19 @@ onlineManager.setEventListener((setOnline) => {
 });
 
 export const queryClient = new QueryClient({
+  // Toute lecture ou écriture qui échoue est signalée au serveur, qui la
+  // transmet à Sentry. C'est le point de passage le plus large de l'app : sans
+  // lui, une requête en échec ne laisse qu'un écran vide.
+  queryCache: new QueryCache({
+    onError: (erreur, requete) => {
+      void signalerErreur(erreur, { source: 'query', cle: JSON.stringify(requete.queryKey).slice(0, 120) });
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (erreur, _vars, _ctx, mutation) => {
+      void signalerErreur(erreur, { source: 'mutation', cle: JSON.stringify(mutation.options.mutationKey ?? []).slice(0, 120) });
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 30_000,
