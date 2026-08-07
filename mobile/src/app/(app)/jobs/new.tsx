@@ -882,105 +882,6 @@ export default function NewJob() {
               <Text className="text-sm font-semibold text-ink-muted">＋ {t.mobilePlan.addNextYear}</Text>
             </Pressable>
 
-            {/* ── Facturation du plan — trois modes, comme le web ── */}
-            <View className="mt-1 rounded-2xl border border-surface-border bg-surface-sunken px-4 py-1">
-              <Text className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-                {t.mobilePlan.billing}
-              </Text>
-              {/* Les trois modes, chacun avec son explication visible — comme le
-                  web, qui les présente en cartes plutôt qu'en menu déroulant. */}
-              <View className="gap-2 border-t border-surface-border py-2">
-                {([
-                  { key: 'per_visit' as const, label: t.mobilePlan.modePerVisit, hint: t.mobilePlan.modePerVisitHint },
-                  { key: 'single' as const, label: t.mobilePlan.modeSingle, hint: t.mobilePlan.modeSingleHint },
-                  { key: 'installments' as const, label: t.mobilePlan.modeInstallments, hint: t.mobilePlan.modeInstallmentsHint },
-                ]).map((opt) => {
-                  const actif = billingMode === opt.key;
-                  return (
-                    <Pressable
-                      key={opt.key}
-                      onPress={() => setBillingMode(opt.key)}
-                      className={`rounded-xl border px-3 py-2.5 ${actif ? 'border-ink bg-white' : 'border-surface-border bg-white'}`}
-                    >
-                      <Text className={`text-sm ${actif ? 'font-bold text-ink' : 'font-medium text-ink-muted'}`}>
-                        {opt.label}
-                      </Text>
-                      <Text className="pt-0.5 text-[11px] text-ink-subtle">{opt.hint}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {billingMode === 'installments' ? (
-                <View className="gap-2 border-t border-surface-border py-2">
-                  {/* Deux champs étiquetés, comme le web */}
-                  <View className="flex-row gap-3">
-                    <View className="flex-1 gap-1">
-                      <Text className="text-[11px] font-medium text-ink-muted">
-                        {t.mobilePlan.paymentCount}
-                      </Text>
-                      <TextInput
-                        value={installmentsCount}
-                        onChangeText={(v) => setInstallmentsCount(v.replace(/[^0-9]/g, '').slice(0, 2))}
-                        keyboardType="number-pad"
-                        placeholder="3"
-                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
-                      />
-                    </View>
-                    <View className="flex-1 gap-1">
-                      <Text className="text-[11px] font-medium text-ink-muted">
-                        {t.mobilePlan.paymentAmount}
-                      </Text>
-                      <TextInput
-                        value={installmentAmount}
-                        onChangeText={(v) => setInstallmentAmount(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
-                        keyboardType="decimal-pad"
-                        placeholder="100"
-                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
-                      />
-                    </View>
-                  </View>
-                  {/* Récapitulatif au format du web : N paiements de X = Y · total de la job Z */}
-                  {installmentsPlan ? (
-                    <View>
-                      <Text className="text-[11px] text-ink-muted">
-                        {t.mobilePlan.installmentsRecap
-                          .replace('{count}', String(installmentsPlan.count))
-                          .replace('{each}', formatCurrencyCents(installmentsPlan.amountCents, 'CAD'))
-                          .replace('{covered}', formatCurrencyCents(installmentsPlan.coveredCents, 'CAD'))}
-                        <Text className="text-ink-subtle">
-                          {' · '}
-                          {t.mobilePlan.jobTotal.replace('{total}', formatCurrencyCents(totals.total, 'CAD'))}
-                        </Text>
-                      </Text>
-                      {installmentsPlan.coveredCents > totals.total ? (
-                        <Text className="pt-0.5 text-[11px] text-status-late">
-                          {t.mobilePlan.overTotal.replace(
-                            '{amount}',
-                            formatCurrencyCents(installmentsPlan.coveredCents - totals.total, 'CAD'))}
-                        </Text>
-                      ) : null}
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-
-              <Pressable
-                onPress={() => setAutoCharge((v) => !v)}
-                className="flex-row items-start gap-2 border-t border-surface-border py-2.5"
-              >
-                <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${autoCharge ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
-                  {autoCharge ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
-                </View>
-                <View className="flex-1">
-                  <Text className="text-xs text-ink">{t.mobilePlan.autoCharge}</Text>
-                  {autoCharge ? (
-                    <Text className="pt-0.5 text-[11px] text-ink-subtle">{t.mobilePlan.autoChargeHint}</Text>
-                  ) : null}
-                </View>
-              </Pressable>
-            </View>
-
             {/* Contrat optionnel */}
             <Pressable
               onPress={() => setCreateContract((v) => !v)}
@@ -1102,6 +1003,108 @@ export default function NewJob() {
             <Row label={t.mobileJobs.tax} value={formatCurrencyCents(totals.tax, 'CAD')} />
             <Row label={t.mobileJobs.total} value={formatCurrencyCents(totals.total, 'CAD')} bold />
           </View>
+          {/* Facturation et paiements — après les produits et services,
+              comme le web (Box « Facturation et paiements »). */}
+          {jobType === 'recurring' ? (
+            <View className="mt-1 rounded-2xl border border-surface-border bg-surface-sunken px-4 py-1">
+              <Text className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+                {t.mobilePlan.billing}
+              </Text>
+              {/* Les trois modes, chacun avec son explication visible — comme le
+                  web, qui les présente en cartes plutôt qu'en menu déroulant. */}
+              <View className="gap-2 border-t border-surface-border py-2">
+                {([
+                  { key: 'per_visit' as const, label: t.mobilePlan.modePerVisit, hint: t.mobilePlan.modePerVisitHint },
+                  { key: 'single' as const, label: t.mobilePlan.modeSingle, hint: t.mobilePlan.modeSingleHint },
+                  { key: 'installments' as const, label: t.mobilePlan.modeInstallments, hint: t.mobilePlan.modeInstallmentsHint },
+                ]).map((opt) => {
+                  const actif = billingMode === opt.key;
+                  return (
+                    <Pressable
+                      key={opt.key}
+                      onPress={() => setBillingMode(opt.key)}
+                      className={`rounded-xl border px-3 py-2.5 ${actif ? 'border-ink bg-white' : 'border-surface-border bg-white'}`}
+                    >
+                      <Text className={`text-sm ${actif ? 'font-bold text-ink' : 'font-medium text-ink-muted'}`}>
+                        {opt.label}
+                      </Text>
+                      <Text className="pt-0.5 text-[11px] text-ink-subtle">{opt.hint}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {billingMode === 'installments' ? (
+                <View className="gap-2 border-t border-surface-border py-2">
+                  {/* Deux champs étiquetés, comme le web */}
+                  <View className="flex-row gap-3">
+                    <View className="flex-1 gap-1">
+                      <Text className="text-[11px] font-medium text-ink-muted">
+                        {t.mobilePlan.paymentCount}
+                      </Text>
+                      <TextInput
+                        value={installmentsCount}
+                        onChangeText={(v) => setInstallmentsCount(v.replace(/[^0-9]/g, '').slice(0, 2))}
+                        keyboardType="number-pad"
+                        placeholder="3"
+                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                      />
+                    </View>
+                    <View className="flex-1 gap-1">
+                      <Text className="text-[11px] font-medium text-ink-muted">
+                        {t.mobilePlan.paymentAmount}
+                      </Text>
+                      <TextInput
+                        value={installmentAmount}
+                        onChangeText={(v) => setInstallmentAmount(v.replace(/[^0-9.,]/g, '').replace(',', '.'))}
+                        keyboardType="decimal-pad"
+                        placeholder="100"
+                        className="rounded-lg border border-surface-border bg-white px-3 py-2 text-sm font-semibold text-ink"
+                      />
+                    </View>
+                  </View>
+                  {/* Récapitulatif au format du web : N paiements de X = Y · total de la job Z */}
+                  {installmentsPlan ? (
+                    <View>
+                      <Text className="text-[11px] text-ink-muted">
+                        {t.mobilePlan.installmentsRecap
+                          .replace('{count}', String(installmentsPlan.count))
+                          .replace('{each}', formatCurrencyCents(installmentsPlan.amountCents, 'CAD'))
+                          .replace('{covered}', formatCurrencyCents(installmentsPlan.coveredCents, 'CAD'))}
+                        <Text className="text-ink-subtle">
+                          {' · '}
+                          {t.mobilePlan.jobTotal.replace('{total}', formatCurrencyCents(totals.total, 'CAD'))}
+                        </Text>
+                      </Text>
+                      {installmentsPlan.coveredCents > totals.total ? (
+                        <Text className="pt-0.5 text-[11px] text-status-late">
+                          {t.mobilePlan.overTotal.replace(
+                            '{amount}',
+                            formatCurrencyCents(installmentsPlan.coveredCents - totals.total, 'CAD'))}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
+              <Pressable
+                onPress={() => setAutoCharge((v) => !v)}
+                className="flex-row items-start gap-2 border-t border-surface-border py-2.5"
+              >
+                <View className={`mt-0.5 h-4 w-4 items-center justify-center rounded border ${autoCharge ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                  {autoCharge ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+                </View>
+                <View className="flex-1">
+                  <Text className="text-xs text-ink">{t.mobilePlan.autoCharge}</Text>
+                  {autoCharge ? (
+                    <Text className="pt-0.5 text-[11px] text-ink-subtle">{t.mobilePlan.autoChargeHint}</Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            </View>
+          ) : null}
+
         </>
       ) : null}
 
