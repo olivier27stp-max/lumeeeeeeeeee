@@ -24,6 +24,18 @@ DEST="${BACKUP_DIR:-$(dirname "$PWD")/lume-backups}"
 RETENTION_JOURS="${BACKUP_RETENTION_DAYS:-14}"
 mkdir -p "$DEST"
 
+# Un échec doit se VOIR. Le montage précédent se contentait d'écrire dans un
+# journal que personne ne lit : c'est exactement comme ça que l'arrêt des
+# sauvegardes du 2 au 5 août 2026 est passé inaperçu pendant trois jours.
+alerter() {
+  local code=$?
+  [ "$code" -eq 0 ] && return 0
+  date -u +%FT%TZ > "$DEST/.derniere-panne" 2>/dev/null || true
+  osascript -e 'display notification "Voir lume-backups/backup.log" with title "Sauvegarde Lume ÉCHOUÉE" sound name "Basso"' >/dev/null 2>&1 || true
+  echo "[$(date -u +%FT%TZ)] ÉCHEC (code $code)." >&2
+}
+trap alerter EXIT
+
 env_get() { grep "^$1=" .env.local | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"; }
 REF="$(env_get SUPABASE_PROJECT_REF_PROD)"
 PASS="$(env_get SUPABASE_DB_PASSWORD)"
@@ -62,6 +74,8 @@ if [ "$NB_TABLES" -lt 100 ]; then
   exit 1
 fi
 echo "[$(date -u +%FT%TZ)] OK : $NB_TABLES tables, $TAILLE"
+date -u +%FT%TZ > "$DEST/.derniere-reussite"
+rm -f "$DEST/.derniere-panne"
 
 # Rotation
 SUPPRIMES=$(find "$DEST" -name 'prod-*' -type f -mtime +"$RETENTION_JOURS" -print -delete | wc -l | tr -d ' ')
