@@ -13,7 +13,8 @@ import { LineItemsEditor } from '@/components/LineItemsEditor';
 import { MiniWeekCalendar, sameDay } from '@/components/MiniWeekCalendar';
 import { createJob, listJobsInRange } from '@/lib/api/jobs';
 import { getClient } from '@/lib/api/clients';
-import { listMembers, listTeams } from '@/lib/api/org';
+import { getCompany, listMembers, listTeams } from '@/lib/api/org';
+import { libelleProperty, listClientProperties } from '@/lib/api/properties';
 import { findOrCreateConversation } from '@/lib/api/messaging';
 import { sendSmsViaServer } from '@/lib/api/server';
 import { LineItemInput } from '@/lib/api/billing';
@@ -114,6 +115,7 @@ export default function NewJob() {
   const prefill = useLocalSearchParams<{
     address?: string; title?: string;
     clientId?: string; clientName?: string; clientPhone?: string; clientEmail?: string; note?: string;
+    leadId?: string;
   }>();
   const [title, setTitle] = useState(typeof prefill.title === 'string' ? prefill.title : '');
   // D2D flow: a pin with a linked client arrives pre-selected; otherwise its
@@ -176,11 +178,29 @@ export default function NewJob() {
   // Le mobile forçait requires_invoicing à vrai; le web en fait une case.
   const [requiresInvoicing, setRequiresInvoicing] = useState(true);
   const [askForReview, setAskForReview] = useState(false);
+  const [propertyId, setPropertyId] = useState<string | null>(null);
+  const leadId = typeof prefill.leadId === 'string' && prefill.leadId ? prefill.leadId : null;
   // Contrat écrit — le web l'offre sur les DEUX types de job, avec ses termes
   // modifiables et la signature exigible.
   const [createAgreement, setCreateAgreement] = useState(false);
   const [agreementTerms, setAgreementTerms] = useState('');
   const [agreementRequireSignature, setAgreementRequireSignature] = useState(true);
+
+  // Logo de l'entreprise : le contrat le porte, comme sur le web.
+  const { data: entreprise } = useQuery({
+    queryKey: ['company', orgId],
+    queryFn: () => getCompany(orgId ?? ''),
+    enabled: !!orgId,
+  });
+  const [useCompanyLogo, setUseCompanyLogo] = useState(true);
+
+  // Les propriétés du client — le web laisse y rattacher le job.
+  const { data: proprietes } = useQuery({
+    queryKey: ['properties', client?.id],
+    queryFn: () => listClientProperties(String(client?.id)),
+    enabled: !!client?.id,
+  });
+  useEffect(() => { setPropertyId(null); }, [client?.id]);
 
   // Les vendeurs à qui attribuer la job (bloc « Vendeur » du web).
   const { data: membres } = useQuery({
@@ -557,6 +577,8 @@ export default function NewJob() {
         saleDate: saleDate ? ymd(saleDate) : null,
         showOnLeaderboard,
         askForReview,
+        propertyId,
+        leadId,
         depositRequired,
         depositType,
         depositValue: parseFloat(depositValue) || 0,
@@ -580,6 +602,7 @@ export default function NewJob() {
             jobId: job.id,
             clientId: client?.id ?? null,
             requireSignature: agreementRequireSignature,
+            logoUrl: useCompanyLogo ? entreprise?.logo_url ?? null : null,
             terms: agreementTerms.trim() || undefined,
             language: lang === 'fr' ? 'fr' : 'en',
           });
@@ -686,7 +709,16 @@ export default function NewJob() {
   if (!canCreateJobs) return <Redirect href="/(app)/(tabs)" />;
 
   return (
-    <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
+    <ScrollView
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
+      // Sans ça, le clavier recouvre le bas de la page et le contenu
+      // qui s'y trouve devient inatteignable — c'est ce qui rendait
+      // les derniers services du catalogue impossibles à voir.
+      automaticallyAdjustKeyboardInsets
+      className="flex-1 bg-surface-alt"
+      contentContainerStyle={{ padding: 20, gap: 14, paddingBottom: 140 }}
+    >
       <Input label={t.mobileJobs.jobTitle} value={title} onChangeText={setTitle} placeholder={t.mobileJobs.jobTitlePlaceholder} />
 
       {/* Détails — numéro, vendeur, date de vente, classement. Le formulaire
@@ -746,6 +778,20 @@ export default function NewJob() {
           </View>
           <Text className="text-xs text-ink-muted">{t.modals.showOnLeaderboard}</Text>
         </Pressable>
+
+        {client && (proprietes?.length ?? 0) > 0 ? (
+          <View className="border-t border-surface-border">
+            <SelectRow
+              label={t.modals.propertyLabel}
+              value={propertyId ?? ''}
+              onSelect={(v) => setPropertyId(v || null)}
+              options={[
+                { key: '', label: t.modals.selectProperty },
+                ...(proprietes ?? []).map((pr) => ({ key: pr.id, label: libelleProperty(pr) })),
+              ]}
+            />
+          </View>
+        ) : null}
 
         <Pressable
           onPress={() => setAskForReview((v) => !v)}
@@ -920,6 +966,22 @@ export default function NewJob() {
                   </View>
                 </View>
               )}
+
+              {/* Assignation d'équipe — le web la met DANS la carte « Règle »,
+                  parce que toutes les visites du plan en héritent. */}
+              {isManager && (teams?.length ?? 0) > 0 ? (
+                <View className="border-t border-surface-border">
+                  <SelectRow
+                    label={t.modals.assignTeam}
+                    value={assignedTeam ?? ''}
+                    onSelect={(v) => setAssignedTeam(v || null)}
+                    options={[
+                      { key: '', label: t.modals.unassignedOption },
+                      ...(teams ?? []).map((eq) => ({ key: eq.id, label: eq.name })),
+                    ]}
+                  />
+                </View>
+              ) : null}
             </View>
 
             {/* Nombre de visites générées, comme le web */}
@@ -1430,6 +1492,16 @@ export default function NewJob() {
                 {agreementRequireSignature ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
               </View>
               <Text className="flex-1 text-xs text-ink">{t.modals.signatureRequired}</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => setUseCompanyLogo((v) => !v)}
+              className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+            >
+              <View className={`h-4 w-4 items-center justify-center rounded border ${useCompanyLogo ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {useCompanyLogo ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <Text className="flex-1 text-xs text-ink">{t.modals.companyLogoOnContract}</Text>
             </Pressable>
 
             <View className="gap-1 border-t border-surface-border pt-2">

@@ -1516,6 +1516,10 @@ const en = {
     createContractSimple: 'Create an agreement',
     termsAndConditions: 'Terms and conditions',
     signatureRequired: 'Client signature required',
+    selectProperty: 'Select a property',
+    propertyLabel: 'Property',
+    companyLogoOnContract: 'Company logo on the contract',
+    convertToJob: 'Create a job',
     percentageOption: 'Percentage (%)',
     fixedAmountOption: 'Fixed Amount ($)',
     // Labels from the web's "Details" block, taken as-is.

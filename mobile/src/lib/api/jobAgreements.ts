@@ -78,6 +78,8 @@ export async function createJobAgreement(input: {
   clientId?: string | null;
   requireSignature?: boolean;
   terms?: string;
+  /** Logo affiché sur le contrat — celui de l'entreprise par défaut. */
+  logoUrl?: string | null;
   language: 'en' | 'fr';
 }): Promise<JobAgreement> {
   if (await jobHasQuote(input.jobId)) {
@@ -93,6 +95,7 @@ export async function createJobAgreement(input: {
       created_by: userData?.user?.id ?? null,
       require_signature: input.requireSignature ?? true,
       terms: input.terms || DEFAULT_AGREEMENT_TERMS[input.language],
+      logo_url: input.logoUrl || null,
       status: 'draft',
     })
     .select(COLS)

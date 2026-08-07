@@ -126,7 +126,16 @@ export default function NewInvoice() {
   if (!(can('invoices.create') || canSeePricing)) return <Redirect href="/(app)/(tabs)" />;
 
   return (
-    <ScrollView keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" className="flex-1 bg-surface-alt" contentContainerStyle={{ padding: 20, gap: 14 }}>
+    <ScrollView
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
+      // Sans ça, le clavier recouvre le bas de la page et le contenu
+      // qui s'y trouve devient inatteignable — c'est ce qui rendait
+      // les derniers services du catalogue impossibles à voir.
+      automaticallyAdjustKeyboardInsets
+      className="flex-1 bg-surface-alt"
+      contentContainerStyle={{ padding: 20, gap: 14, paddingBottom: 140 }}
+    >
       {/* Mode toggle — like the web's "From a job / From a client" */}
       <View className="flex-row rounded-2xl bg-surface-sunken p-1">
         {(['client', 'job'] as const).map((m) => (

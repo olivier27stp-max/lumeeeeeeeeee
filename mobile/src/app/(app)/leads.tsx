@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, Text, View } from 'react-native';
@@ -178,6 +178,25 @@ export default function Leads() {
                 </Pressable>
               );
             })}
+
+            {/* Convertir en job — c'est ce qui renseigne jobs.lead_id, et ce
+                parcours n'existait pas sur mobile. Le lead EST le client. */}
+            <Pressable
+              onPress={() => {
+                if (!editLead) return;
+                const q = new URLSearchParams({
+                  clientId: editLead.id,
+                  leadId: editLead.id,
+                  clientName: `${editLead.first_name ?? ''} ${editLead.last_name ?? ''}`.trim() || 'Client',
+                  title: editLead.company || '',
+                }).toString();
+                setEditLead(null);
+                router.push(`/(app)/jobs/new?${q}` as any);
+              }}
+              className="mt-2 items-center rounded-xl bg-ink py-3"
+            >
+              <Text className="text-base font-semibold text-white">{t.modals.convertToJob}</Text>
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>

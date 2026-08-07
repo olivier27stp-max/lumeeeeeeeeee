@@ -1508,6 +1508,10 @@ const fr: TranslationKeys = {
     createContractSimple: 'Créer un contrat',
     termsAndConditions: 'Termes et conditions',
     signatureRequired: 'Signature du client obligatoire',
+    selectProperty: 'Sélectionner une propriété',
+    propertyLabel: 'Propriété',
+    companyLogoOnContract: 'Logo de l’entreprise sur le contrat',
+    convertToJob: 'Créer un job',
     percentageOption: 'Pourcentage (%)',
     fixedAmountOption: 'Montant fixe ($)',
     // Libellés du bloc « Détails » du web, repris tels quels.
