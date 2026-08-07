@@ -44,20 +44,22 @@ export async function getDashboard(orgId: string, periodStartISO: string): Promi
     }
   }
 
-  const { data: jobs } = await supabase
+  const { data: jobs, error: jobsErr } = await supabase
     .from('jobs')
     .select('id')
     .eq('org_id', orgId)
     .eq('status', 'completed')
     .is('deleted_at', null)
     .gte('completed_at', periodStartISO);
+  if (jobsErr) throw new Error(jobsErr.message);
 
   // Quotes still pending a client decision (sent/draft/pending — not closed).
-  const { data: quotes } = await supabase
+  const { data: quotes, error: quotesErr } = await supabase
     .from('quotes')
     .select('status')
     .eq('org_id', orgId)
     .is('deleted_at', null);
+  if (quotesErr) throw new Error(quotesErr.message);
   const closed = ['approved', 'declined', 'converted', 'expired'];
   const quotesPending = (quotes ?? []).filter((q: any) => !closed.includes(q.status ?? '')).length;
 
@@ -88,17 +90,19 @@ export interface ActionItem {
  *  - unpaid / overdue invoices
  *  - approved quotes waiting to be invoiced
  *  - completed jobs that still need an invoice
- * Reads are defensive (select '*') so schema differences can't break it.
+ * Les erreurs remontent : un échec de requête ne doit pas se déguiser en
+ * « rien à traiter ».
  */
 export async function getActionItems(orgId: string): Promise<ActionItem[]> {
   const items: ActionItem[] = [];
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: invRows } = await supabase
+  const { data: invRows, error: invErr } = await supabase
     .from('invoices')
     .select('*')
     .eq('org_id', orgId)
     .is('deleted_at', null);
+  if (invErr) throw new Error(invErr.message);
   const invoices = (invRows ?? []) as any[];
   for (const r of invoices) {
     if ((r.balance_cents ?? 0) > 0) {
@@ -114,12 +118,13 @@ export async function getActionItems(orgId: string): Promise<ActionItem[]> {
     }
   }
 
-  const { data: quoteRows } = await supabase
+  const { data: quoteRows, error: quoteRowsErr } = await supabase
     .from('quotes')
     .select('*')
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .eq('status', 'approved');
+  if (quoteRowsErr) throw new Error(quoteRowsErr.message);
   for (const r of (quoteRows ?? []) as any[]) {
     items.push({
       id: `q-${r.id}`,
@@ -131,13 +136,14 @@ export async function getActionItems(orgId: string): Promise<ActionItem[]> {
     });
   }
 
-  const { data: jobRows } = await supabase
+  const { data: jobRows, error: jobRowsErr } = await supabase
     .from('jobs')
     .select('id, title, requires_invoicing, status')
     .eq('org_id', orgId)
     .eq('status', 'completed')
     .eq('requires_invoicing', true)
     .is('deleted_at', null);
+  if (jobRowsErr) throw new Error(jobRowsErr.message);
   const invoicedJobIds = new Set(invoices.map((r) => r.job_id).filter(Boolean));
   for (const r of (jobRows ?? []) as any[]) {
     if (!invoicedJobIds.has(r.id)) {
