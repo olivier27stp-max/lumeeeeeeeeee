@@ -155,6 +155,8 @@ export default function NewJob() {
   const [depositValue, setDepositValue] = useState('');
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(false);
   const [billingSplit, setBillingSplit] = useState(false);
+  // Le mobile forçait requires_invoicing à vrai; le web en fait une case.
+  const [requiresInvoicing, setRequiresInvoicing] = useState(true);
 
   // Les vendeurs à qui attribuer la job (bloc « Vendeur » du web).
   const { data: membres } = useQuery({
@@ -472,7 +474,7 @@ export default function NewJob() {
         description: description.trim() || null,
         team_id: isManager ? assignedTeam : teamId ?? null,
         job_type: jobType,
-        requires_invoicing: true,
+        requires_invoicing: requiresInvoicing,
         scheduled_at: startDate.toISOString(),
         end_at: endDate.toISOString(),
         items: canSeePricing ? billableItems : [],
@@ -724,6 +726,16 @@ export default function NewJob() {
         </View>
         {jobType === 'recurring' ? (
           <View className="gap-2 pt-1">
+            {/* Titre du bloc, comme le web (Box « Calendrier du plan de service ») */}
+            <View className="px-1 pt-1">
+              <Text className="text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+                {t.modals.servicePlanSchedule}
+              </Text>
+              <Text className="pt-0.5 text-[11px] text-ink-muted">
+                {t.modals.servicePlanScheduleHint}
+              </Text>
+            </View>
+
             {/* ── Carte « Règle », comme le web : champs étiquetés et menus
                    déroulants, pas une rangée de pastilles. ── */}
             <View className="rounded-2xl border border-surface-border bg-surface-sunken px-4 py-1">
@@ -745,7 +757,7 @@ export default function NewJob() {
 
               {!anytime ? (
                 <View className="flex-row items-center justify-between gap-2 border-t border-surface-border py-2">
-                  <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.mobileJobs.start}</Text>
+                  <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.modals.startTime}</Text>
                   <DateTimePicker
                     value={startDate}
                     mode="time"
@@ -754,7 +766,7 @@ export default function NewJob() {
                     accentColor="#171717"
                     onChange={(_, d) => { if (d) setStartDate((p) => setTimeOn(p, d)); }}
                   />
-                  <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.mobileJobs.end}</Text>
+                  <Text className="shrink-0 text-xs font-medium text-ink-muted">{t.modals.endTime}</Text>
                   <DateTimePicker
                     value={endDate}
                     mode="time"
@@ -833,7 +845,7 @@ export default function NewJob() {
                   : t.mobilePlan.generated.replace('{count}', String(planVisits.length))}
               </Text>
             ) : (
-              <Text className="px-1 text-xs text-ink-muted">{t.mobilePlan.none}</Text>
+              <Text className="px-1 text-xs text-ink-muted">{t.modals.noVisitsPlanned}</Text>
             )}
 
             {/* Une section par année : grille des 12 mois, puis les dates
@@ -884,7 +896,7 @@ export default function NewJob() {
                   {moisRetenus.length > 0 ? (
                     <>
                       <Text className="px-1 pt-1 text-[11px] font-semibold uppercase text-ink-subtle">
-                        {t.mobilePlan.visitDates}
+                        {t.modals.servicePlanDates}
                       </Text>
                       {moisRetenus.map((m) => {
                         const visites = visitesDuMois(year, m);
@@ -977,7 +989,7 @@ export default function NewJob() {
               </View>
               <View className="flex-1">
                 <Text className="text-sm text-ink">{t.mobilePlan.createContract}</Text>
-                <Text className="pt-0.5 text-xs text-ink-muted">{t.mobilePlan.createContractHint}</Text>
+                <Text className="pt-0.5 text-xs text-ink-muted">{t.modals.servicePlanCreateContractHint}</Text>
               </View>
             </Pressable>
           </View>
@@ -1025,7 +1037,7 @@ export default function NewJob() {
             />
           </View>
           <View className="flex-1 flex-row items-center justify-between rounded-xl border border-surface-border bg-surface-sunken px-4 py-2.5">
-            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">{t.mobileJobs.end}</Text>
+            <Text className="text-[11px] font-semibold uppercase text-ink-subtle">{t.modals.endTime}</Text>
             <DateTimePicker
               value={endDate}
               mode="time"
@@ -1057,6 +1069,16 @@ export default function NewJob() {
             <Text className="pb-1 pt-3 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
               {t.modals.billing}
             </Text>
+
+            <Pressable
+              onPress={() => setRequiresInvoicing((v) => !v)}
+              className="flex-row items-center gap-2 border-t border-surface-border py-2.5"
+            >
+              <View className={`h-4 w-4 items-center justify-center rounded border ${requiresInvoicing ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
+                {requiresInvoicing ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
+              </View>
+              <Text className="flex-1 text-xs text-ink">{t.modals.remindInvoice}</Text>
+            </Pressable>
 
             <Pressable
               onPress={() => setDepositRequired((v) => !v)}
@@ -1098,7 +1120,7 @@ export default function NewJob() {
               <View className={`h-4 w-4 items-center justify-center rounded border ${requirePaymentMethod ? 'border-ink bg-ink' : 'border-surface-border bg-white'}`}>
                 {requirePaymentMethod ? <Text className="text-[10px] font-bold text-white">✓</Text> : null}
               </View>
-              <Text className="flex-1 text-xs text-ink">{t.quotes.requirePaymentMethod}</Text>
+              <Text className="flex-1 text-xs text-ink">{t.modals.requirePaymentMethodOnFile}</Text>
             </Pressable>
 
             {jobType === 'recurring' ? null : (
@@ -1114,6 +1136,9 @@ export default function NewJob() {
             )}
           </View>
 
+          <Text className="px-1 pt-1 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
+            {t.modals.productsServices}
+          </Text>
           {/* Plan de service — « S'applique à » : un seul menu, comme le web.
               Choisir une visite bascule d'office en services personnalisés. */}
           {jobType === 'recurring' && planVisits.length > 0 ? (
@@ -1156,7 +1181,7 @@ export default function NewJob() {
           {jobType === 'recurring' ? (
             <View className="mt-1 rounded-2xl border border-surface-border bg-surface-sunken px-4 py-1">
               <Text className="pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest text-ink-subtle">
-                {t.mobilePlan.billing}
+                {t.modals.billingAndPayments}
               </Text>
               {/* Les trois modes, chacun avec son explication visible — comme le
                   web, qui les présente en cartes plutôt qu'en menu déroulant. */}
