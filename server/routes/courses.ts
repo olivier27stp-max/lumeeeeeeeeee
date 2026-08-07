@@ -934,12 +934,41 @@ router.post('/courses/:id/assign', validate(courseAssignSchema), async (req, res
     if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
 
     const { user_ids, team_ids } = req.body as { user_ids?: string[]; team_ids?: string[] };
+
+    // Les cibles viennent du corps de requête et ne sont couvertes par AUCUNE
+    // clé étrangère composite (course_assignments n'en a pas sur user_id/team_id) :
+    // sans cette vérification, on pouvait assigner un cours à un utilisateur ou
+    // une équipe d'une autre organisation. On ne retient que ce qui appartient
+    // bien à l'org appelante — les autres identifiants sont ignorés en silence,
+    // comme l'était déjà un identifiant inexistant.
+    const demandeUsers = [...new Set((user_ids || []).filter(Boolean))];
+    const demandeTeams = [...new Set((team_ids || []).filter(Boolean))];
+
+    const [membresRes, equipesRes] = await Promise.all([
+      demandeUsers.length
+        ? admin.from('memberships').select('user_id').eq('org_id', auth.orgId).in('user_id', demandeUsers)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      demandeTeams.length
+        ? admin.from('teams').select('id').eq('org_id', auth.orgId).in('id', demandeTeams)
+        : Promise.resolve({ data: [] as any[], error: null }),
+    ]);
+    if (membresRes.error) throw membresRes.error;
+    if (equipesRes.error) throw equipesRes.error;
+
+    const usersOk = new Set((membresRes.data || []).map((m: any) => m.user_id));
+    const teamsOk = new Set((equipesRes.data || []).map((t: any) => t.id));
+    const rejetes = demandeUsers.filter((u) => !usersOk.has(u)).length
+                  + demandeTeams.filter((t) => !teamsOk.has(t)).length;
+    if (rejetes > 0) {
+      console.warn('[courses/assign] cibles hors organisation ignorées:', { orgId: auth.orgId, courseId: req.params.id, rejetes });
+    }
+
     const rows: any[] = [];
 
-    for (const uid of user_ids || []) {
+    for (const uid of demandeUsers.filter((u) => usersOk.has(u))) {
       rows.push({ course_id: req.params.id, user_id: uid, assigned_by: auth.user.id });
     }
-    for (const tid of team_ids || []) {
+    for (const tid of demandeTeams.filter((t) => teamsOk.has(t))) {
       rows.push({ course_id: req.params.id, team_id: tid, assigned_by: auth.user.id });
     }
 
@@ -1067,6 +1096,19 @@ router.get('/courses/:id/team-progress', async (req, res) => {
 
     const courseId = req.params.id;
 
+    // Le cours DOIT appartenir à l'org de l'appelant — même garde que
+    // /courses/:id/assign. Sans elle, un admin de l'org A pouvait sonder un
+    // cours de l'org B en fournissant son UUID (nombre de leçons, ciblage).
+    // Cours introuvable => on garde le comportement historique (liste vide),
+    // pour ne rien changer d'observable en dehors de la faille elle-même.
+    const { data: courseRow } = await admin
+      .from('courses')
+      .select('org_id, visibility, target_roles, target_user_ids, created_by')
+      .eq('id', courseId)
+      .maybeSingle();
+    if (!courseRow) return res.json([]);
+    if (courseRow.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
+
     // Get total lesson count
     const { data: modules } = await admin
       .from('course_modules')
@@ -1091,11 +1133,7 @@ router.get('/courses/:id/team-progress', async (req, res) => {
 
     // Audience du cours: on ne montre la progression QUE des membres qui peuvent
     // voir ce cours (rôle ciblé / user ciblé / assigné), pas toute l'org.
-    const { data: courseRow } = await admin
-      .from('courses')
-      .select('visibility, target_roles, target_user_ids, created_by')
-      .eq('id', courseId)
-      .maybeSingle();
+    // `courseRow` est déjà chargé en tête du handler (garde d'appartenance).
     const tRoles: string[] = Array.isArray(courseRow?.target_roles) ? courseRow!.target_roles : [];
     const tUsers: string[] = Array.isArray(courseRow?.target_user_ids) ? courseRow!.target_user_ids : [];
     const hasTargeting = tRoles.length > 0 || tUsers.length > 0;

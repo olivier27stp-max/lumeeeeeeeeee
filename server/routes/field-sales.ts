@@ -392,6 +392,21 @@ router.post('/houses', async (req: Request, res: Response) => {
 
     if (duplicate) return mergeIntoExisting(duplicate);
 
+    // `assigned_user_id` vient du corps de requête et, contrairement à
+    // territory_id, n'est PAS couvert par une clé étrangère composite (col, org_id) :
+    // rien n'empêchait d'assigner une maison à un utilisateur d'une autre
+    // organisation. On exige donc une membership dans l'org appelante.
+    if (assigned_user_id && assigned_user_id !== auth.user.id) {
+      const { data: cible, error: cibleErr } = await admin
+        .from('memberships')
+        .select('user_id')
+        .eq('org_id', auth.orgId)
+        .eq('user_id', assigned_user_id)
+        .maybeSingle();
+      if (cibleErr) return sendSafeError(res, cibleErr, 'Field sales operation failed.', '[field-sales]');
+      if (!cible) return res.status(400).json({ error: 'assigned_user_id does not belong to this organization.' });
+    }
+
     const { data: house, error: hErr } = await admin
       .from('field_house_profiles')
       .insert({
