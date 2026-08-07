@@ -22,6 +22,7 @@ import { createClient } from '@supabase/supabase-js';
 // Import route modules
 import searchRouter from './routes/search';
 import geocodeRouter from './routes/geocode';
+import clientErrorsRouter from './routes/client-errors';
 import leadsRouter from './routes/leads';
 import paymentsRouter, { stripeWebhookHandler } from './routes/payments';
 import messagesRouter from './routes/messages';
@@ -367,6 +368,7 @@ app.use(rbacMiddleware());
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);
 app.use('/api', geocodeRouter);
+app.use('/api', clientErrorsRouter);
 app.use('/api', routeOptimizationRouter);
 app.use('/api', leadsRouter);
 app.use('/api', paymentsRouter);
