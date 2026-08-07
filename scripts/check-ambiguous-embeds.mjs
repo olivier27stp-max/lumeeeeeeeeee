@@ -62,8 +62,31 @@ function walk(d, out = []) {
 
 // .from('enfant') ... .select('..., parent(...)')  — jointure imbriquée
 const RE_FROM_SELECT = /\.from\s*\(\s*['"]([a-z_0-9]+)['"]\s*\)[\s\S]{0,200}?\.select\s*\(\s*[`'"]([^`'"]*)[`'"]/g;
-// Une jointure : `nom(` ou `nom!hint(` — on capture le nom et l'éventuel indice
-const RE_EMBED = /([a-z_0-9]+)(![a-z_0-9]+)?(![a-z]+)?\s*\(/g;
+// Une jointure : `nom(` ou `nom!hint(`, ou une parenthèse fermante.
+const RE_EMBED = /([a-z_0-9]+)(?:!([a-z_0-9]+))?\s*\(|\)/g;
+// Fonctions d'agrégat PostgREST : ce ne sont pas des jointures.
+const AGREGATS = new Set(['select', 'count', 'sum', 'avg', 'min', 'max']);
+
+/**
+ * Rend chaque jointure AVEC SA VRAIE TABLE DE DÉPART. Une jointure imbriquée
+ * part de la jointure qui l'englobe, pas du `.from()` :
+ *     .from('a').select('*, b(x, c(y))')   →   a→b  PUIS  b→c   (et non a→c)
+ * Sans cette pile, `field_sales_teams` était accusée de joindre directement
+ * `field_sales_reps` alors qu'elle passe par `field_sales_team_members` — un
+ * faux positif qui a coûté une correction inutile.
+ */
+function jointures(depart, sel) {
+  const out = [];
+  const pile = [depart];
+  for (const m of sel.matchAll(RE_EMBED)) {
+    if (m[0] === ')') { if (pile.length > 1) pile.pop(); continue; }
+    const [, nom, indice] = m;
+    if (AGREGATS.has(nom)) continue;
+    out.push({ enfant: pile[pile.length - 1], parent: nom, indice });
+    pile.push(nom);
+  }
+  return out;
+}
 
 const trouves = [];
 for (const dir of ['src', 'server']) {
@@ -71,15 +94,12 @@ for (const dir of ['src', 'server']) {
   for (const f of fichiers) {
     const src = readFileSync(f, 'utf8');
     for (const m of src.matchAll(RE_FROM_SELECT)) {
-      const [, enfant, sel] = m;
+      const [, depart, sel] = m;
       const ligne = src.slice(0, m.index).split('\n').length;
-      for (const e of sel.matchAll(RE_EMBED)) {
-        const [, parent, indice] = e;
-        if (parent === 'select' || parent === 'count') continue;
+      for (const { enfant, parent, indice } of jointures(depart, sel)) {
         if (!ambigu.has(`${enfant}|${parent}`)) continue;
         // Un indice nommant la clé (!xxx_fkey) lève déjà l'ambiguïté.
-        const leve = indice && /_fkey|_same_org/.test(indice);
-        if (leve) continue;
+        if (indice && /_fkey|_same_org/.test(indice)) continue;
         trouves.push({ fichier: relative(ROOT, f), ligne, enfant, parent });
       }
     }

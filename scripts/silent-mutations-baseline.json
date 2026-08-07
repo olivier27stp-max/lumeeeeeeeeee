@@ -11,10 +11,9 @@
  "server/routes/invitations.ts": 1,
  "server/routes/mfa-sms.ts": 2,
  "server/routes/notifications.ts": 2,
- "server/routes/payments.ts": 3,
+ "server/routes/payments.ts": 2,
  "server/routes/public-pay.ts": 1,
  "server/routes/quotes.ts": 31,
  "server/routes/referrals.ts": 1,
- "server/routes/team-compliance.ts": 1,
- "server/scripts/arm-setup-test.ts": 3
+ "server/routes/team-compliance.ts": 1
 }

@@ -1,4 +1,15 @@
 -- ============================================================
+-- ⛔ HISTORIQUE — NE PAS REJOUER (constaté le 2026-08-07)
+-- ------------------------------------------------------------
+-- Ses 19 clés étrangères sont DÉJÀ en place en prod et en staging (vérifié le
+-- 2026-08-03 : 0 orphelin sur les 19 relations). La rejouer échouerait de deux
+-- façons : `public.job_time_logs` (lignes 33 et 55) a été SUPPRIMÉE depuis →
+-- 42P01, et les contraintes existantes referaient un 42710. Le fichier tout
+-- entier étant dans une transaction, tout serait annulé.
+--
+-- Pour créer un environnement neuf, la source de vérité est `supabase/baseline/`
+-- (`npm run db:bootstrap`), pas ce dossier — voir CLAUDE.md.
+-- ============================================================
 -- MIGRATION: FK hardening — add missing foreign keys on real tables
 -- ------------------------------------------------------------
 -- ⚠️ RUN ON STAGING FIRST. Adding FKs changes write behavior: any code path

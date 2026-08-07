@@ -1012,8 +1012,9 @@ export default function NewJobModal({
           .eq('org_id', oid)
           .limit(1)
           .maybeSingle()
-          .then(({ data: billing }) => {
-            if (billing?.currency) setOrgCurrency(billing.currency);
+          .then(({ data: settings, error }) => {
+            if (error) console.error('[NewJobModal] devise de l\'org non lue:', error.message);
+            if (settings?.currency) setOrgCurrency(settings.currency);
           })
       )
     ).catch(() => {});
@@ -1841,7 +1842,10 @@ export default function NewJobModal({
           try {
             const visits = await listJobVisits(createdJob.id);
             if (visits[0]) {
-              await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
+              // Le try/catch ne couvre que listJobVisits : supabase-js ne lève
+              // pas, donc sans lire `error` la note partait au néant.
+              const { error } = await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
+              if (error) console.error('[jobs] first visit services not stamped:', error.message);
             }
           } catch (err) {
             console.error('[jobs] failed to stamp first visit services', err);

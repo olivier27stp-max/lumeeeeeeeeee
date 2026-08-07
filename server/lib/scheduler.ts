@@ -95,9 +95,13 @@ async function handleDaysBeforeAppointment(
   const today = todayDateString();
 
   // `schedule_events` n'a pas de client_id : le client se rejoint via le job.
+  // La FK est nommée explicitement : il existe DEUX contraintes vers `jobs`
+  // (`schedule_events_job_id_fkey` et la composite `_same_org` du cloisonnement
+  // multi-tenant). Sans ce nom, PostgREST répond PGRST201/HTTP 300 et la
+  // requête ne rapporte RIEN — cette automatisation ne partait jamais.
   const { data: events, error } = await supabase
     .from('schedule_events')
-    .select('id, title, start_time, job:jobs(client_id)')
+    .select('id, title, start_time, job:jobs!schedule_events_job_id_fkey(client_id)')
     .eq('org_id', automation.org_id);
 
   if (error || !events) return;
