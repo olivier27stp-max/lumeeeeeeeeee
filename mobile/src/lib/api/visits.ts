@@ -3,6 +3,7 @@
 // createJob already writes to. Any org member can read/write (RLS).
 
 import { supabase } from '../supabase';
+import { notifierRendezVousCree } from './server';
 
 export interface JobVisit {
   id: string;
@@ -34,17 +35,30 @@ export async function addJobVisit(input: {
   startISO: string;
   endISO: string;
 }): Promise<void> {
-  const { error } = await supabase.from('schedule_events').insert({
-    org_id: input.orgId,
-    job_id: input.jobId,
-    team_id: input.teamId ?? null,
-    start_at: input.startISO,
-    end_at: input.endISO,
-    start_time: input.startISO,
-    end_time: input.endISO,
-    status: 'scheduled',
-  });
+  const { data, error } = await supabase
+    .from('schedule_events')
+    .insert({
+      org_id: input.orgId,
+      job_id: input.jobId,
+      team_id: input.teamId ?? null,
+      start_at: input.startISO,
+      end_at: input.endISO,
+      start_time: input.startISO,
+      end_time: input.endISO,
+      status: 'scheduled',
+    })
+    .select('id')
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  // Comme le web (scheduleApi.addVisit) : sans ça, ajouter une visite
+  // n'envoie aucune confirmation au client.
+  if (data?.id) {
+    await notifierRendezVousCree({
+      eventId: data.id,
+      jobId: input.jobId,
+      startTime: input.startISO,
+    });
+  }
 }
 
 export async function deleteJobVisit(id: string): Promise<void> {

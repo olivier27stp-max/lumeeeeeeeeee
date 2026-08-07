@@ -446,3 +446,37 @@ export async function fetchCurrentPlan(): Promise<PlanRow | null> {
   }
   return null;
 }
+
+// ── Automatisations : prévenir le moteur d'un rendez-vous créé ────────
+//
+// Les rendez-vous sont écrits directement dans schedule_events par le client
+// (mobile comme web) : le serveur ne les voit jamais passer, donc aucune
+// automatisation ne peut se déclencher toute seule. Le web appelle cette
+// route depuis scheduleApi.ts ; le mobile ne le faisait pas du tout, si bien
+// qu'une job créée au téléphone n'envoyait jamais la confirmation de
+// rendez-vous au client.
+//
+// Volontairement silencieux : une automatisation manquée ne doit pas faire
+// échouer la création de la job.
+
+export async function notifierRendezVousCree(input: {
+  eventId: string;
+  jobId?: string | null;
+  clientId?: string | null;
+  startTime?: string | null;
+  title?: string | null;
+  address?: string | null;
+}): Promise<void> {
+  try {
+    await serverPost('/automations/events/appointment-created', {
+      eventId: input.eventId,
+      jobId: input.jobId ?? undefined,
+      clientId: input.clientId ?? undefined,
+      startTime: input.startTime ?? undefined,
+      title: input.title ?? undefined,
+      address: input.address ?? undefined,
+    });
+  } catch (e) {
+    console.warn('[automatisations] confirmation de rendez-vous non déclenchée', e);
+  }
+}

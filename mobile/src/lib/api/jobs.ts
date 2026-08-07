@@ -1,6 +1,7 @@
 import { supabase } from '../supabase';
 import { Job } from '@/types/db';
 import { createNotification } from './notifications';
+import { notifierRendezVousCree } from './server';
 import { getOrgCurrency } from './org';
 import { endOfToday, startOfToday } from '../format';
 import { tr } from '@/lib/i18n';
@@ -491,15 +492,30 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       // convention que le web quand les produits sont personnalisés.
       notes: v.notes ?? null,
     }));
-    const { error: evErr } = await supabase.from('schedule_events').insert(rows);
+    const { data: crees, error: evErr } = await supabase
+      .from('schedule_events')
+      .insert(rows)
+      .select('id, start_at');
     if (evErr) throw new Error(`${tr().mobileErrors.appointmentsFailed} : ${evErr.message}`);
+    // Le moteur d'automatisation ne voit pas les écritures directes : sans cet
+    // appel, la confirmation de rendez-vous n'est jamais envoyée.
+    for (const ev of crees ?? []) {
+      await notifierRendezVousCree({
+        eventId: ev.id,
+        jobId: job.id,
+        clientId: rest.client_id ?? null,
+        startTime: ev.start_at,
+        title: rest.title ?? null,
+        address: rest.property_address ?? null,
+      });
+    }
     return job;
   }
 
   // Auto-add to the schedule (schedule_events) so it shows in the calendar,
   // like the web. Best effort — never fail job creation over this.
   if (rest.scheduled_at) {
-    await supabase
+    const { data: cree } = await supabase
       .from('schedule_events')
       .insert({
         org_id: orgId,
@@ -511,7 +527,19 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
         end_time: rest.end_at ?? rest.scheduled_at,
         status: 'scheduled',
       })
-      .then(undefined, () => {});
+      .select('id')
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+    if (cree?.id) {
+      await notifierRendezVousCree({
+        eventId: cree.id,
+        jobId: job.id,
+        clientId: rest.client_id ?? null,
+        startTime: rest.scheduled_at,
+        title: rest.title ?? null,
+        address: rest.property_address ?? null,
+      });
+    }
   }
   return job;
 }
