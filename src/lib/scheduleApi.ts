@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
-import { emitAppointmentCreated, emitAppointmentCancelled } from './automationEventsApi';
+import { emitAppointmentCreated, emitAppointmentCancelled, emitAppointmentRescheduled } from './automationEventsApi';
 
 export const DEFAULT_TIMEZONE = 'America/Toronto';
 const CACHE_TTL_MS = 30_000;
@@ -309,8 +309,19 @@ export async function rescheduleEvent(payload: {
   // rpc_reschedule_event recomputes jobs.scheduled_at from the visit set
   // server-side (next upcoming visit), so no client-side sync is needed —
   // important now that a job can have several visits.
+
+  // Replanifie les rappels sur la nouvelle date (non bloquant). Sans ça, les
+  // tâches restaient calées sur l'ancienne : un rappel « 2h avant » est déjà
+  // parti 22h APRÈS la visite en prod.
+  const mapped = mapScheduleRow(eventRow);
+  emitAppointmentRescheduled({
+    eventId: payload.eventId,
+    jobId: mapped.job_id ?? undefined,
+    startTime: payload.startAt,
+  });
+
   return {
-    event: mapScheduleRow(eventRow),
+    event: mapped,
     overlaps: Number((data as any)?.overlaps || 0),
   };
 }

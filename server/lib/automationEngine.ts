@@ -60,9 +60,14 @@ function evaluateConditions(
 
 // ── Deduplication key builder ───────────────────────────────
 
+// La clé NE DOIT PAS contenir la date : `idx_scheduled_tasks_dedup` est unique
+// sur (org_id, execution_key) parmi les tâches pending/running, et c'est ce qui
+// empêche de planifier deux fois la même action. Avec la date du jour, renvoyer
+// le même devis le lendemain produisait une clé différente : les 5 relances
+// déjà en attente restaient, 5 nouvelles s'ajoutaient, et le client recevait
+// tout en double (constaté en prod : 10 tâches pending pour un seul devis).
 function buildExecutionKey(ruleId: string, entityId: string, actionIndex: number): string {
-  const today = new Date().toISOString().slice(0, 10);
-  return `${ruleId}:${entityId}:${actionIndex}:${today}`;
+  return `${ruleId}:${entityId}:${actionIndex}`;
 }
 
 // ── Quiet hours (SMS only) ──────────────────────────────────

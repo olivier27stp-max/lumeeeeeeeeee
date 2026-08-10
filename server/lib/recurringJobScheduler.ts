@@ -113,7 +113,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
 
         // Create schedule event for the new job
         if (newJob?.id) {
-          const { error: evtErr } = await supabase.from('schedule_events').insert({
+          const { data: newEvent, error: evtErr } = await supabase.from('schedule_events').insert({
             org_id: job.org_id,
             job_id: newJob.id,
             // schedule_events n'a pas de client_id : le client se resout via le job.
@@ -121,9 +121,56 @@ async function processRecurringJobs(supabase: SupabaseClient) {
             start_at: scheduledAt,
             end_at: new Date(nextDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2h default
             status: 'scheduled',
-          });
+          })
+            .select('id')
+            .single();
           // Job cree mais absent du calendrier : l'equipe ne le voit pas.
           if (evtErr) console.error(`[recurring-jobs] schedule_event insert failed for job ${newJob.id} (rule ${rule.id}):`, evtErr.message);
+
+          // Les visites creees ici n'emettaient AUCUN evenement : les presets
+          // job_reminder_7d/1d/2h ne se declenchaient jamais, donc les clients
+          // des tournees recurrentes ne recevaient aucun rappel. Le chemin UI
+          // (scheduleApi) passe par /automations/events ; ici on est deja
+          // cote serveur, on emet donc directement sur le bus.
+          if (newEvent?.id) {
+            let clientName = '';
+            let clientEmail = '';
+            let clientPhone = '';
+            if (job.client_id) {
+              const { data: client } = await supabase
+                .from('clients')
+                .select('first_name, last_name, email, phone')
+                .eq('id', job.client_id)
+                .eq('org_id', job.org_id)
+                .maybeSingle();
+              if (client) {
+                clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
+                clientEmail = client.email || '';
+                clientPhone = client.phone || '';
+              }
+            }
+
+            const { eventBus } = await import('./eventBus');
+            await eventBus.emit('appointment.created', {
+              orgId: job.org_id,
+              entityType: 'schedule_event',
+              entityId: newEvent.id,
+              metadata: {
+                job_id: newJob.id,
+                client_id: job.client_id || null,
+                start_time: scheduledAt,
+                title: job.title || '',
+                address: job.property_address || '',
+                client_name: clientName,
+                client_email: clientEmail,
+                client_phone: clientPhone,
+                job_name: job.title || '',
+                recurring: true,
+              },
+              relatedEntityType: 'job',
+              relatedEntityId: newJob.id,
+            });
+          }
         }
 
         // Calculate next occurrence.

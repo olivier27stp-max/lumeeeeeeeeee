@@ -44,6 +44,22 @@ export function emitAppointmentCreated(params: {
   fireEvent('appointment-created', params);
 }
 
+/**
+ * Notify engine that an appointment was moved to a new date/time.
+ * Le serveur annule les rappels encore en attente (calés sur l'ancienne date)
+ * avant de les replanifier sur la nouvelle.
+ */
+export function emitAppointmentRescheduled(params: {
+  eventId: string;
+  jobId?: string;
+  clientId?: string;
+  startTime?: string;
+  title?: string;
+  address?: string;
+}) {
+  fireEvent('appointment-rescheduled', params);
+}
+
 /** Notify engine that an appointment was cancelled/unscheduled */
 export function emitAppointmentCancelled(params: {
   eventId: string;

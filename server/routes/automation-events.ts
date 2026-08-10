@@ -115,6 +115,99 @@ router.post('/automations/events/appointment-cancelled', validate(automationEven
   }
 });
 
+// ── POST /automations/events/appointment-rescheduled ──
+// Called after a schedule_event is moved to a new date/time.
+//
+// Les rappels de visite sont planifiés à partir de la date du RDV
+// (`execute_at = start_time - délai`). Déplacer la visite sans repasser ici
+// laissait les anciennes tâches calées sur l'ANCIENNE date : constaté en prod,
+// un rappel « 2h avant » parti 22h APRÈS la visite. On annule donc les tâches
+// encore en attente pour cet événement, puis on ré-émet pour les replanifier.
+router.post('/automations/events/appointment-rescheduled', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const { eventId, jobId, clientId, startTime, title, address } = req.body;
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' });
+
+    const admin = getServiceClient();
+
+    // Purge des rappels obsolètes. Cloisonné par org_id : un eventId d'une
+    // autre org ne doit jamais voir ses tâches annulées depuis cette session.
+    const { error: cancelError } = await admin
+      .from('automation_scheduled_tasks')
+      .update({ status: 'cancelled', completed_at: new Date().toISOString() })
+      .eq('org_id', auth.orgId)
+      .eq('entity_id', eventId)
+      .in('status', ['pending']);
+    if (cancelError) {
+      // Sans la purge, ré-émettre ajouterait des rappels EN PLUS des périmés.
+      console.error(`[automation-events] failed to cancel stale reminders (event ${eventId}, org ${auth.orgId}):`, cancelError.message);
+      return res.status(500).json({ error: 'Failed to clear stale reminders' });
+    }
+
+    let clientName = '';
+    let clientEmail = '';
+    let clientPhone = '';
+    let jobName = '';
+
+    if (jobId && auth.orgId) {
+      const { data: job } = await admin
+        .from('jobs')
+        .select('title, client_id')
+        .eq('id', jobId)
+        .eq('org_id', auth.orgId)
+        .maybeSingle();
+      if (job) {
+        jobName = job.title || '';
+        const cid = clientId || job.client_id;
+        if (cid) {
+          const { data: client } = await admin
+            .from('clients')
+            .select('first_name, last_name, email, phone')
+            .eq('id', cid)
+            .eq('org_id', auth.orgId)
+            .maybeSingle();
+          if (client) {
+            clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim();
+            clientEmail = client.email || '';
+            clientPhone = client.phone || '';
+          }
+        }
+      }
+    }
+
+    // `appointment.created` (et non `.updated`) : c'est ce trigger que portent
+    // les presets job_reminder_*, donc le seul qui replanifie les rappels.
+    await eventBus.emit('appointment.created', {
+      orgId: auth.orgId,
+      entityType: 'schedule_event',
+      entityId: eventId,
+      actorId: auth.user.id,
+      metadata: {
+        job_id: jobId || null,
+        client_id: clientId || null,
+        start_time: startTime || null,
+        title: title || jobName || '',
+        address: address || '',
+        client_name: clientName,
+        client_email: clientEmail,
+        client_phone: clientPhone,
+        job_name: jobName,
+        rescheduled: true,
+      },
+      relatedEntityType: jobId ? 'job' : undefined,
+      relatedEntityId: jobId || undefined,
+    });
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[automation-events] appointment.rescheduled error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ── POST /automations/events/job-completed ──
 // Called when a job status is changed to "completed"
 router.post('/automations/events/job-completed', validate(automationEventSchema), async (req, res) => {
