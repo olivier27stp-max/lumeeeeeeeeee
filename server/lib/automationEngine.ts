@@ -90,6 +90,29 @@ export function isQuietHours(d: Date = new Date()): boolean {
   return h < SEND_START_HOUR || h >= SEND_END_HOUR;
 }
 
+/**
+ * Cette action doit-elle respecter la fenêtre 8h–20h ?
+ *
+ * Les SMS, toujours. Les courriels, seulement quand ils sont COMMERCIAUX.
+ *
+ * Le critère est le délai de la règle, et non une liste de déclencheurs à
+ * maintenir : un message immédiat est une confirmation que le destinataire
+ * attend (« rendez-vous confirmé », « dépôt reçu ») — le retarder jusqu'à 8h
+ * lui ferait croire que sa demande n'est pas passée. Un message différé est
+ * une relance ou un suivi : rien ne justifie qu'il parte à 3h du matin.
+ *
+ * Corrige aussi une incohérence visible : une règle envoyant SMS + courriel
+ * voyait ses deux moitiés partir à des heures différentes, le SMS étant seul
+ * reporté.
+ */
+function shouldRespectQuietHours(actionType: string, delaySeconds: number): boolean {
+  if (actionType === 'send_sms') return true;
+  if (actionType !== 'send_email') return false;
+  // Délai non nul (positif OU négatif, comme les rappels « X h avant ») =
+  // message programmé, donc pas une confirmation attendue dans l'instant.
+  return delaySeconds !== 0;
+}
+
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
 export function nextSendTime(from: Date = new Date()): Date {
   const next = new Date(from);
@@ -128,8 +151,10 @@ async function executeRuleActions(
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i);
 
-    // Defer immediate SMS fired during quiet hours to the next send window.
-    if (action.type === 'send_sms' && isQuietHours()) {
+    // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
+    // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
+    // seuls ses SMS sont reportés, jamais ses courriels.
+    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && isQuietHours()) {
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
       const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
@@ -147,7 +172,7 @@ async function executeRuleActions(
           console.error(`[automationEngine] failed to defer quiet-hours SMS (rule ${rule.id}, org ${event.orgId}):`, deferError.message);
         }
       } else {
-        console.log(`[automationEngine] SMS deferred to send window (quiet hours) for rule "${rule.name}"`);
+        console.log(`[automationEngine] ${action.type} deferred to send window (quiet hours) for rule "${rule.name}"`);
       }
       continue;
     }
@@ -479,9 +504,14 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!tasks || tasks.length === 0) return;
 
   for (const task of tasks as any[]) {
-    // Quiet hours: push due SMS tasks to the next send window without
-    // consuming an attempt — the client shouldn't be texted at night.
-    if (task.action_config?.type === 'send_sms' && isQuietHours()) {
+    // Heures calmes : on repousse à la prochaine fenêtre sans consommer de
+    // tentative. Toute tâche présente ici est par construction DIFFÉRÉE (une
+    // action immédiate s'exécute en direct, sans passer par cette file) : elle
+    // porte donc une relance ou un suivi, jamais une confirmation attendue.
+    // Les deux canaux sont concernés — auparavant seuls les SMS l'étaient, et
+    // un courriel de relance pouvait partir à 3h du matin.
+    const taskType = task.action_config?.type;
+    if ((taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()) {
       const { error: pushError } = await supabase
         .from('automation_scheduled_tasks')
         .update({ execute_at: nextSendTime().toISOString() })

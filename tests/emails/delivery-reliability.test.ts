@@ -842,3 +842,115 @@ describe('visibilité — l’utilisateur voit enfin les échecs', () => {
     expect(load).toContain('Failed to load automation failures');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// 16. Demandes de démo : le prospect n'est plus perdu
+// ───────────────────────────────────────────────────────────────────
+
+describe('book-demo — la demande survit à une panne de courriel', () => {
+  const marketing = read('server/routes/marketing.ts');
+
+  it('la demande est enregistrée en base AVANT toute notification', () => {
+    // Avant : « plus de persistance en base ». Les deux envois partaient sans
+    // await, avec un .catch() inopérant — un SMTP en panne faisait disparaître
+    // le prospect pendant que la page répondait « demande reçue ».
+    expect(marketing).toContain("from('demo_requests')");
+    const insertIdx = marketing.indexOf("from('demo_requests')");
+    const mailIdx = marketing.indexOf('const adminMail = await sendEmail(');
+    expect(insertIdx).toBeGreaterThan(-1);
+    expect(mailIdx).toBeGreaterThan(insertIdx);
+  });
+
+  it('les deux envois sont attendus et leur résultat est lu', () => {
+    expect(marketing).toContain('const adminMail = await sendEmail(');
+    expect(marketing).toContain('const prospectMail = await sendEmail(');
+    expect(marketing).toContain('if (!adminMail.sent)');
+    expect(marketing).toContain('if (!prospectMail.sent)');
+    // Les .catch() morts ont disparu : sendEmail ne rejette jamais.
+    expect(marketing).not.toMatch(/\}\)\.catch\(\(err\) => console\.error\('\[public\/book-demo\]/);
+  });
+
+  it('le seul cas vraiment grave est remonté à Sentry avec les coordonnées', () => {
+    // Ni enregistré ni notifié : la demande n'existe nulle part. Les
+    // coordonnées permettent de rattraper le prospect à la main.
+    expect(marketing).toContain('if (!persisted && !adminMail.sent)');
+    expect(marketing).toContain("kind: 'demo_request_lost'");
+    expect(marketing).toContain('phone: body.phone');
+  });
+
+  it('un échec d’enregistrement ne fait pas échouer la soumission', () => {
+    // Mieux vaut une demande notifiée par courriel seul que rejetée.
+    expect(marketing).toContain("console.error('[public/book-demo] enregistrement échoué:'");
+    expect(marketing).toContain("status: 'new'");
+  });
+
+  it('SMTP absent est un incident, pas un simple avertissement', () => {
+    expect(marketing).toContain("console.error('[public/book-demo] SMTP non configuré");
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// 17. Heures calmes : les relances par courriel aussi
+// ───────────────────────────────────────────────────────────────────
+
+describe('heures calmes — plus de relance courriel à 3h du matin', () => {
+  const engine = read('server/lib/automationEngine.ts');
+
+  it('la décision distingue commercial et transactionnel', () => {
+    // Le critère est le délai de la règle, pas une liste de déclencheurs à
+    // maintenir : immédiat = confirmation attendue, différé = relance.
+    expect(engine).toContain('function shouldRespectQuietHours');
+    expect(engine).toContain("if (actionType === 'send_sms') return true;");
+    expect(engine).toContain('return delaySeconds !== 0;');
+  });
+
+  it('une confirmation immédiate par courriel n’est jamais retardée', () => {
+    // Retarder « rendez-vous confirmé » jusqu'à 8h ferait croire au client que
+    // sa demande n'est pas passée.
+    const fn = engine.slice(
+      engine.indexOf('function shouldRespectQuietHours'),
+      engine.indexOf('/** Next moment inside the send window'),
+    );
+    expect(fn).toContain("if (actionType !== 'send_email') return false;");
+  });
+
+  it('les tâches différées respectent la fenêtre sur les DEUX canaux', () => {
+    // Toute tâche de cette file est par construction différée : elle porte une
+    // relance, jamais une confirmation.
+    expect(engine).toContain("(taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()");
+  });
+
+  it('le report ne consomme pas de tentative', () => {
+    // Sinon une nuit suffirait à épuiser le quota de reprises.
+    const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
+    const push = bloc.indexOf('execute_at: nextSendTime()');
+    const attempts = bloc.indexOf('attempts:');
+    expect(push).toBeGreaterThan(-1);
+    expect(attempts === -1 || attempts > push).toBe(true);
+  });
+
+  it('la fenêtre reste 8h–20h, heure du Québec', () => {
+    expect(engine).toContain("QUIET_TZ = 'America/Toronto'");
+    expect(engine).toContain('SEND_START_HOUR = 8');
+    expect(engine).toContain('SEND_END_HOUR = 20');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// 18. Modèles de courriels : module inerte, documenté comme tel
+// ───────────────────────────────────────────────────────────────────
+
+describe('modèles de courriels — état documenté', () => {
+  it('le CRUD porte un avertissement sur son inaccessibilité', () => {
+    // Décision prise : conserver sans câbler. La note évite qu'on redécouvre
+    // le problème dans six mois — ou qu'on supprime `review_request` avec.
+    const routes = read('server/routes/email-templates.ts');
+    expect(routes).toContain('MODULE INACCESSIBLE DEPUIS L’APPLICATION'.replace('’', "'"));
+    expect(routes).toContain('review_request');
+  });
+
+  it('review_request reste le seul type réellement consommé', () => {
+    const actions = read('server/lib/actions/index.ts');
+    expect(actions).toContain("'review_request'");
+  });
+});
