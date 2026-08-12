@@ -166,13 +166,13 @@ import { useLocationTrackingConsent } from './hooks/useLocationTrackingConsent';
 import LocationConsentModal from './components/LocationConsentModal';
 import { CompanySelectorPage, CompanySwitcher, NoCompanyState } from './components/CompanySelector';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
+import SessionTimeoutModal from './components/SessionTimeoutModal';
 
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
 import { useQueryClient } from '@tanstack/react-query';
 // Cross-cutting hooks previously inlined in App()
-import { useInactivityLogout } from './hooks/useInactivityLogout';
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
 
 // Toasts (sonner) — pastille monochrome Lume, styles dans index.css (.lume-toast).
@@ -233,7 +233,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Auto-signout after 30 min of inactivity
+  // Auto-signout after 4 h of inactivity (warns 5 min ahead)
   useSessionTimeout(user?.id || null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -413,9 +413,6 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // Auto-logout after 30 minutes of inactivity
-  useInactivityLogout(!!user);
 
   // Ctrl+K opens command palette
   useCommandPaletteShortcut(setCommandPaletteOpen);
@@ -1376,6 +1373,7 @@ function AuthenticatedApp({
         onAccept={locationConsent.accept}
         onDecline={locationConsent.decline}
       />
+      <SessionTimeoutModal language={language} />
     </JobModalControllerProvider>
   );
 }
