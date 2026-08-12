@@ -70,6 +70,18 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     return { sent: true, messageId: info.messageId };
   } catch (err: any) {
     console.error('[mailer] send failed:', err.message);
+    // Remonté à Sentry : cette erreur est attrapée volontairement (pour ne pas
+    // casser le flux appelant), donc le gestionnaire global ne la verrait
+    // jamais. Sans ça, un serveur SMTP en panne reste invisible jusqu'à ce
+    // qu'un client se plaigne de ne rien avoir reçu.
+    try {
+      const { captureException } = await import('./sentry');
+      captureException(err, {
+        kind: 'email_send_failed',
+        to: Array.isArray(params.to) ? params.to.join(', ') : params.to,
+        subject: params.subject,
+      });
+    } catch { /* no-op */ }
     return { sent: false, error: err.message };
   }
 }

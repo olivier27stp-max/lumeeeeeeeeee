@@ -425,6 +425,34 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
       return res.status(500).json({ error: 'Failed to create subscription.' });
     }
 
+    // ── Provisionnement du numéro SMS (non bloquant) ──
+    // Ce chemin est celui réellement emprunté par les abonnements en
+    // production, mais il ne provisionnait AUCUN numéro : seul le webhook
+    // Stripe `checkout.session.completed` le faisait. Constat en prod : les 5
+    // orgs dont le forfait inclut les SMS avaient toutes
+    // `stripe_checkout_session_id = NULL`, aucun numéro, et
+    // `provisioning_events` était vide. Le seul canal SMS existant avait été
+    // enregistré à la main par le support.
+    //
+    // Non bloquant volontairement : l'abonnement est déjà payé et enregistré,
+    // un numéro indisponible ne doit pas le faire échouer. L'issue est tracée
+    // dans `provisioning_events` et l'org peut relancer depuis
+    // Réglages → Messagerie.
+    if (plan?.includes_sms && subscription?.id) {
+      try {
+        const { provisionSmsForNewSubscription } = await import('../lib/twilioProvisioning');
+        const provRes = await provisionSmsForNewSubscription({
+          orgId: auth.orgId,
+          subscriptionId: subscription.id,
+        });
+        if (!provRes.provisioned && provRes.error) {
+          console.error('[billing/subscribe] SMS provisioning failed (non-blocking):', provRes.error);
+        }
+      } catch (provErr: any) {
+        console.error('[billing/subscribe] SMS provisioning error (non-blocking):', provErr?.message);
+      }
+    }
+
     // Update billing profile
     if (billing_email || company_name) {
       const { error: errBill408 } = await admin.from('billing_profiles').upsert({

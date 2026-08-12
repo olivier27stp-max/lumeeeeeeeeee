@@ -64,6 +64,108 @@ export async function provisionSmsNumber(orgId: string, options?: {
   return { channelId: channelId as string, phoneNumber: purchased.phoneNumber };
 }
 
+/**
+ * Provisionne le numéro SMS d'une org qui vient de s'abonner, en journalisant
+ * l'issue dans `provisioning_events`.
+ *
+ * Vivait auparavant dans `routes/payments.ts`, donc appelable UNIQUEMENT depuis
+ * le webhook Stripe `checkout.session.completed`. Or le parcours d'abonnement
+ * réellement emprunté en production est `POST /api/billing/subscribe`, qui ne
+ * l'appelait jamais : mesuré en prod, les 5 orgs dont le forfait inclut les SMS
+ * avaient toutes `stripe_checkout_session_id = NULL` et aucun numéro, et la
+ * table `provisioning_events` était vide — non pas « en échec », mais jamais
+ * atteinte. D'où l'extraction ici, pour que les deux chemins d'abonnement
+ * partagent la même logique et la même observabilité.
+ *
+ * Ne lève jamais : l'échec est journalisé et signalé par la valeur de retour.
+ * Un problème de numéro ne doit pas faire échouer un paiement déjà encaissé
+ * (côté webhook, un throw ferait rejouer Stripe et doublerait le provisioning).
+ *
+ * Idempotent : ne fait rien si l'org a déjà un canal SMS actif.
+ */
+export async function provisionSmsForNewSubscription(params: {
+  orgId: string;
+  subscriptionId: string;
+}): Promise<{ provisioned: boolean; phoneNumber?: string; skipped?: string; error?: string }> {
+  const { orgId, subscriptionId } = params;
+  const admin = getServiceClient();
+
+  // Numéro encore en attente de libération (ré-abonnement pendant le délai de
+  // grâce) : on le réactive au lieu d'en acheter un second.
+  try {
+    const { cancelSmsNumberRelease } = await import('./twilioRelease');
+    if (await cancelSmsNumberRelease(orgId)) {
+      console.log(`[provisioning] Org ${orgId} re-subscribed — restored its existing number`);
+      return { provisioned: false, skipped: 'restored_pending_release' };
+    }
+  } catch (err: any) {
+    console.error('[provisioning] Failed to check pending release:', err?.message);
+  }
+
+  const { data: existingChannel } = await admin
+    .from('communication_channels')
+    .select('id, phone_number')
+    .eq('org_id', orgId)
+    .eq('channel_type', 'sms')
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (existingChannel) {
+    console.log(`[provisioning] Org ${orgId} already has SMS channel ${existingChannel.phone_number}, skipping`);
+    return { provisioned: false, skipped: 'already_has_channel', phoneNumber: existingChannel.phone_number };
+  }
+
+  // Journalise l'intention AVANT l'achat : un échec Twilio laisse ainsi une
+  // ligne `failed` exploitable, au lieu de disparaître.
+  const { data: eventRow, error: logErr } = await admin
+    .from('provisioning_events')
+    .insert({
+      org_id: orgId,
+      subscription_id: subscriptionId,
+      event_type: 'sms_number_purchase',
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+
+  // L'erreur d'insert n'était pas testée auparavant : si l'écriture échouait,
+  // tout le provisionnement se déroulait sans laisser la moindre trace.
+  if (logErr) {
+    console.error('[provisioning] provisioning_events insert failed (l’issue ne sera pas tracée):', logErr.message);
+  }
+
+  try {
+    const result = await provisionSmsNumber(orgId);
+
+    if (eventRow) {
+      await admin
+        .from('provisioning_events')
+        .update({ status: 'success', twilio_number: result.phoneNumber })
+        .eq('id', eventRow.id);
+    }
+    console.log(`[provisioning] SMS number ${result.phoneNumber} assigned to org ${orgId}`);
+    return { provisioned: true, phoneNumber: result.phoneNumber };
+  } catch (err: any) {
+    const message = String(err?.message || err).slice(0, 500);
+    if (eventRow) {
+      await admin
+        .from('provisioning_events')
+        .update({ status: 'failed', error_message: message })
+        .eq('id', eventRow.id);
+    }
+    console.error(`[provisioning] SMS provisioning failed for org ${orgId}:`, message);
+    // Remonté à Sentry : un client vient de payer un forfait avec SMS et
+    // n'obtient pas son numéro. C'est exactement le genre d'échec qui est
+    // resté invisible pendant des mois — 4 orgs payantes sans numéro, sans
+    // aucune alerte.
+    try {
+      const { captureException } = await import('./sentry');
+      captureException(err, { kind: 'sms_provisioning_failed', orgId, subscriptionId });
+    } catch { /* no-op */ }
+    return { provisioned: false, error: message };
+  }
+}
+
 async function findAvailableNumber(country: string, areaCode?: string) {
   const params: Record<string, any> = { limit: 1, smsEnabled: true };
   if (areaCode) params.areaCode = areaCode;

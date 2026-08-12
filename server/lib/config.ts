@@ -28,6 +28,40 @@ export const twilioClient = twilioAccountSid && twilioAuthToken && twilioAccount
   ? Twilio(twilioAccountSid, twilioAuthToken)
   : null;
 
+/**
+ * URL du callback de statut Twilio, à passer à CHAQUE `messages.create`.
+ *
+ * Sans ce paramètre par message, Twilio ne renvoie jamais l'accusé de
+ * réception d'un SMS sortant : tous les messages restaient éternellement au
+ * statut `sent` — qui signifie seulement « l'API Twilio a accepté l'appel »,
+ * pas « le téléphone du client l'a reçu ». Un message rejeté par l'opérateur
+ * apparaissait donc comme livré, pour toujours.
+ *
+ * (Le `statusCallback` configuré sur le numéro à l'achat ne couvre que les
+ * messages ENTRANTS ; il ne remplace pas ce paramètre.)
+ *
+ * L'ordre des variables reproduit exactement celui de la validation de
+ * signature dans `routes/messages.ts` : la signature se valide contre l'URL
+ * EXACTE appelée par Twilio, donc toute divergence ferait rejeter 100 % des
+ * callbacks. Retourne `undefined` si aucune URL publique n'est configurée —
+ * on n'envoie alors pas de callback plutôt qu'une URL relative invalide.
+ */
+export function getTwilioStatusCallbackUrl(): string | undefined {
+  const base = (
+    process.env.TWILIO_WEBHOOK_BASE_URL
+    || process.env.PUBLIC_URL
+    || process.env.PUBLIC_BASE_URL
+    || process.env.FRONTEND_URL
+    || ''
+  ).trim().replace(/\/$/, '');
+
+  if (!base || !/^https?:\/\//.test(base)) return undefined;
+  // Twilio ne peut pas joindre une machine locale : inutile d'annoncer une URL
+  // qu'il ne pourra jamais appeler.
+  if (/localhost|127\.0\.0\.1/.test(base)) return undefined;
+  return `${base}/api/messages/status`;
+}
+
 export const stripeWebhookClient = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
 // ── Lume Agent (Google Gemini) ──

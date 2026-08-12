@@ -3,6 +3,7 @@ import {
   createNotification,
   sendSmsIfConfigured,
   applyTemplate,
+  isSmsOptedOut,
 } from './notificationHelpers';
 import {
   addDelay,
@@ -46,6 +47,63 @@ function todayDateString(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Envoi SMS d'automatisation — TOUJOURS depuis le numéro propre à l'org
+// ---------------------------------------------------------------------------
+
+/**
+ * Résout le numéro Twilio de l'org puis envoie.
+ *
+ * Pourquoi ce détour plutôt qu'un `sendSmsIfConfigured(twilio, ...)` direct :
+ * le scheduler recevait `TWILIO_PHONE_NUMBER` (numéro GLOBAL de la plateforme)
+ * et l'utilisait pour tous les locataires. Deux conséquences en production :
+ *
+ *   1. si la variable d'env était vide, `twilioConfig` valait `null` et AUCUN
+ *      SMS d'automatisation ne partait — sans la moindre erreur visible ;
+ *   2. si elle était remplie, tous les orgs envoyaient depuis le même numéro
+ *      inconnu : les réponses des clients atterrissaient dans la mauvaise
+ *      boîte et le gate de forfait (`SmsNotInPlanError`) était contourné.
+ *
+ * `server/lib/actions/index.ts` faisait déjà correctement ce travail ; le
+ * scheduler n'avait jamais été aligné. Le client Twilio (authentification)
+ * reste global, seul le numéro expéditeur est résolu par org.
+ */
+async function sendOrgSms(
+  twilio: TwilioConfig | null,
+  orgId: string,
+  to: string | null | undefined,
+  body: string,
+  supabase?: SupabaseClient,
+): Promise<import('./notificationHelpers').SmsSendResult> {
+  if (!twilio?.client) return { sent: false, reason: 'not_configured' };
+  if (!to) return { sent: false, reason: 'no_recipient' };
+
+  // Conformité CASL : les automatisations contournaient entièrement la liste
+  // STOP et continuaient de relancer un client qui s'était désabonné.
+  if (supabase) {
+    const { normalizeE164 } = await import('./helpers');
+    const normalized = normalizeE164(to);
+    if (await isSmsOptedOut(supabase, orgId, normalized)) {
+      console.warn(`[scheduler] SMS ignoré : ${normalized} s'est désabonné (STOP) de l'org ${orgId}`);
+      return { sent: false, reason: 'no_recipient', error: 'recipient opted out (STOP)' };
+    }
+  }
+
+  let fromNumber: string;
+  try {
+    const { getOrgSmsFromNumber } = await import('./twilioProvisioning');
+    fromNumber = await getOrgSmsFromNumber(orgId);
+  } catch (e: any) {
+    // Org sans numéro provisionné ou forfait sans SMS : on saute la jambe SMS
+    // plutôt que de retomber sur le numéro plateforme (fuite d'identité entre
+    // locataires + contournement du forfait).
+    console.warn(`[scheduler] SMS ignoré pour l'org ${orgId} : ${e?.name || e?.message}`);
+    return { sent: false, reason: 'not_configured', error: e?.message };
+  }
+
+  return sendSmsIfConfigured({ client: twilio.client, phoneNumber: fromNumber }, to, body);
+}
+
+// ---------------------------------------------------------------------------
 // Trigger handlers
 // ---------------------------------------------------------------------------
 
@@ -81,8 +139,11 @@ async function handleDaysAfterQuoteSent(
       invoice_number: inv.invoice_number,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, inv.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    // L'envoi d'abord, la notification ensuite : elle doit refléter ce qui
+    // s'est réellement passé. Auparavant la notification « envoyé » était
+    // créée avant l'appel Twilio et sans jamais regarder son résultat —
+    // l'utilisateur voyait un succès pour un SMS jamais parti.
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, inv.id);
   }
 }
 
@@ -124,8 +185,7 @@ async function handleDaysBeforeAppointment(
       event_title: evt.title,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, evt.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, evt.id);
   }
 }
 
@@ -157,8 +217,11 @@ async function handleOnInvoiceDueDate(
       invoice_number: inv.invoice_number,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, inv.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    // L'envoi d'abord, la notification ensuite : elle doit refléter ce qui
+    // s'est réellement passé. Auparavant la notification « envoyé » était
+    // créée avant l'appel Twilio et sans jamais regarder son résultat —
+    // l'utilisateur voyait un succès pour un SMS jamais parti.
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, inv.id);
   }
 }
 
@@ -193,8 +256,11 @@ async function handleDaysAfterInvoiceDue(
       invoice_number: inv.invoice_number,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, inv.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    // L'envoi d'abord, la notification ensuite : elle doit refléter ce qui
+    // s'est réellement passé. Auparavant la notification « envoyé » était
+    // créée avant l'appel Twilio et sans jamais regarder son résultat —
+    // l'utilisateur voyait un succès pour un SMS jamais parti.
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, inv.id);
   }
 }
 
@@ -230,51 +296,173 @@ async function handleDaysAfterJobCompleted(
       job_title: job.title,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, job.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, job.id);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Deduplication: track which (automation_id, reference_id, date) combos
-// have already fired so we don't spam within the same day.
-// Uses an in-memory set that resets daily.
+// Déduplication : une automatisation ne doit se déclencher qu'une fois par
+// jour et par entité concernée.
+//
+// Le garde-fou vivait UNIQUEMENT en mémoire du processus. Deux conséquences
+// réelles en production :
+//   - la mémoire est vidée à chaque redémarrage ou déploiement, donc le tick
+//     suivant (toutes les 5 min) renvoyait les messages déjà envoyés ;
+//   - avec plusieurs instances du serveur, chacune a son propre Set : autant
+//     de copies du même message que d'instances.
+//
+// La vérification s'appuie désormais sur la table `notifications`, qui porte
+// déjà `reference_id` + `created_at` et reçoit une ligne à chaque
+// déclenchement. Elle survit donc aux redéploiements et est partagée par
+// toutes les instances. Le Set est conservé en cache devant la base : il évite
+// une requête quand la réponse est déjà connue, mais ne fait plus autorité.
 // ---------------------------------------------------------------------------
 
 let firedKeyDate = '';
 const firedKeys = new Set<string>();
 
-function hasFired(automationId: string, refId: string): boolean {
+function cacheKey(automationId: string, refId: string) {
+  return `${automationId}:${refId}`;
+}
+
+function resetCacheIfNewDay() {
   const today = todayDateString();
   if (firedKeyDate !== today) {
     firedKeys.clear();
     firedKeyDate = today;
   }
-  return firedKeys.has(`${automationId}:${refId}`);
+}
+
+async function hasFired(
+  supabase: SupabaseClient,
+  orgId: string,
+  automationName: string,
+  refId: string,
+  automationId: string,
+): Promise<boolean> {
+  resetCacheIfNewDay();
+  if (firedKeys.has(cacheKey(automationId, refId))) return true;
+
+  // Une notification portant ce titre et cette référence, créée aujourd'hui,
+  // prouve que l'automatisation s'est déjà déclenchée — y compris avant un
+  // redéploiement ou depuis une autre instance.
+  const debutJour = `${todayDateString()}T00:00:00.000Z`;
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('reference_id', refId)
+      .eq('title', automationName)
+      .gte('created_at', debutJour)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      // Fail-open : en cas d'incident de lecture, mieux vaut un doublon
+      // possible qu'une automatisation entièrement muette.
+      console.error('[scheduler] vérification anti-doublon échouée:', error.message);
+      return false;
+    }
+    if (data) {
+      firedKeys.add(cacheKey(automationId, refId));
+      return true;
+    }
+    return false;
+  } catch (err: any) {
+    console.error('[scheduler] vérification anti-doublon échouée:', err?.message);
+    return false;
+  }
 }
 
 function markFired(automationId: string, refId: string) {
-  const today = todayDateString();
-  if (firedKeyDate !== today) {
-    firedKeys.clear();
-    firedKeyDate = today;
-  }
-  firedKeys.add(`${automationId}:${refId}`);
+  resetCacheIfNewDay();
+  firedKeys.add(cacheKey(automationId, refId));
 }
 
-// Wrap the original createNotification to include dedup
-async function createNotificationDeduped(
+/**
+ * Déduplication en mémoire, pour les détections internes (facture en retard,
+ * devis expiré) qui émettent un ÉVÉNEMENT sans écrire de notification.
+ *
+ * `hasFired` ne peut pas les couvrir : elle s'appuie sur la table
+ * `notifications`, qu'ils n'alimentent pas. Le risque résiduel est faible —
+ * un doublon ici ne fait que ré-émettre un événement idempotent en aval,
+ * il n'envoie aucun message à un client.
+ */
+function hasFiredLocal(scope: string, refId: string): boolean {
+  resetCacheIfNewDay();
+  return firedKeys.has(cacheKey(scope, refId));
+}
+
+/**
+ * Exécute une automatisation une seule fois par jour et par entité : envoie le
+ * SMS, puis journalise le résultat réel.
+ *
+ * Remplace l'ancien `createNotificationDeduped`, dont la garde ne couvrait que
+ * la notification : l'appel SMS se trouvait à l'EXTÉRIEUR et repartait donc à
+ * chaque tick (toutes les 5 minutes) même quand le doublon était détecté. Le
+ * client recevait le message en boucle, alors que l'utilisateur ne voyait
+ * qu'une seule notification.
+ */
+async function runAutomationOnce(
   supabase: SupabaseClient,
-  orgId: string,
-  automationId: string,
-  automationName: string,
+  automation: Automation,
+  twilio: TwilioConfig | null,
+  phone: string | null | undefined,
   body: string,
-  referenceId?: string,
+  referenceId: string,
 ) {
   const refKey = referenceId || 'no-ref';
-  if (hasFired(automationId, refKey)) return;
-  markFired(automationId, refKey);
-  await createNotification(supabase, orgId, automationName, body, referenceId);
+  if (await hasFired(supabase, automation.org_id, automation.name, refKey, automation.id)) return;
+  // Marqué AVANT l'envoi : deux ticks rapprochés ne doivent pas passer tous
+  // les deux pendant que le premier attend la réponse de Twilio.
+  markFired(automation.id, refKey);
+
+  const smsRes = await sendOrgSms(twilio, automation.org_id, phone, body, supabase);
+  await notifyAutomationResult(supabase, automation, body, referenceId, smsRes);
+}
+
+/**
+ * Notifie l'utilisateur du résultat RÉEL de l'automatisation.
+ *
+ * Deux corrections par rapport au comportement précédent :
+ *
+ *  1. La notification ne dit plus « envoyé » quand rien n'est parti. Quand le
+ *     SMS échoue, elle le dit explicitement et donne la cause — sinon
+ *     l'utilisateur n'a aucun moyen d'apprendre que son client n'a rien reçu.
+ *
+ *  2. `no_recipient` (le client n'a pas de téléphone) n'est PAS un échec à
+ *     signaler : l'automatisation n'avait simplement rien à faire ici. On
+ *     garde alors la notification neutre d'origine, sans bruit inutile.
+ */
+async function notifyAutomationResult(
+  supabase: SupabaseClient,
+  automation: Automation,
+  body: string,
+  referenceId: string,
+  smsRes: import('./notificationHelpers').SmsSendResult,
+) {
+  // Le TITRE reste toujours `automation.name`, y compris en cas d'échec :
+  // c'est lui qui sert de clé à la détection de doublon en base
+  // (`hasFired` filtre sur org_id + reference_id + title). Un titre différent
+  // selon l'issue rendrait la garde inopérante dès qu'un envoi échoue, et
+  // l'automatisation repartirait au tick suivant. La cause de l'échec va donc
+  // dans le corps du message, pas dans le titre.
+  if (smsRes.sent || smsRes.reason === 'no_recipient') {
+    await createNotification(supabase, automation.org_id, automation.name, body, referenceId);
+    return;
+  }
+
+  const cause = smsRes.reason === 'not_configured'
+    ? "aucun numéro SMS n'est configuré pour cette organisation"
+    : (smsRes.error || 'erreur d’envoi');
+  await createNotification(
+    supabase,
+    automation.org_id,
+    automation.name,
+    `⚠️ SMS non envoyé (${cause}). Message prévu : ${body}`,
+    referenceId,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -420,7 +608,7 @@ async function detectOverdueInvoices(supabase: SupabaseClient) {
     // Only emit on specific days to match preset conditions
     if ([1, 3, 5, 15, 30].includes(daysOverdue)) {
       const dedupKey = `overdue:${inv.id}:${daysOverdue}`;
-      if (hasFired('overdue-detection', dedupKey)) continue;
+      if (hasFiredLocal('overdue-detection', dedupKey)) continue;
       markFired('overdue-detection', dedupKey);
 
       await eventBus.emit('invoice.overdue', {
@@ -456,7 +644,7 @@ async function expireOverdueQuotes(supabase: SupabaseClient) {
 
   for (const q of quotes as any[]) {
     const dedupKey = `quote-expire:${q.id}`;
-    if (hasFired('quote-expiry', dedupKey)) continue;
+    if (hasFiredLocal('quote-expiry', dedupKey)) continue;
     markFired('quote-expiry', dedupKey);
 
     await supabase

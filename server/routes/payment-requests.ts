@@ -2,9 +2,10 @@ import { Router } from 'express';
 import { sendSafeError } from '../lib/error-handler';
 import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supabase';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
-import { emailFrom, twilioClient } from '../lib/config';
+import { emailFrom, twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getInvoiceForOrg } from '../lib/payments';
 import {
   getConnectedAccount,
@@ -168,6 +169,12 @@ async function sendPaymentSms(params: {
 }) {
   if (!twilioClient) return { sent: false, reason: 'Twilio not configured' };
 
+  // Conformité CASL : ne pas relancer par SMS un client qui a répondu STOP.
+  const optOutPhone = normalizeE164(params.clientPhone);
+  if (await isSmsOptedOut(getServiceClient(), params.orgId, optOutPhone)) {
+    return { sent: false, reason: 'Recipient has opted out of SMS (STOP)' };
+  }
+
   let fromNumber: string;
   try {
     fromNumber = await getOrgSmsFromNumber(params.orgId);
@@ -188,10 +195,13 @@ async function sendPaymentSms(params: {
   const body = `${companyName}: Payment of ${amountFormatted} requested for invoice ${params.invoiceNumber}. Pay securely here: ${params.paymentUrl}`;
 
   try {
+    const statusCallback = getTwilioStatusCallbackUrl();
     const msg = await twilioClient.messages.create({
       body,
       from: fromNumber,
       to: normalizeE164(params.clientPhone),
+      // Accusé de réception Twilio (sinon le statut reste figé à « envoyé »).
+      ...(statusCallback ? { statusCallback } : {}),
     });
     return { sent: true, sid: msg.sid };
   } catch (err: any) {

@@ -5,7 +5,8 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { resolvePublicBaseUrl } from '../lib/helpers';
 import { sendSafeError } from '../lib/error-handler';
 import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
-import { twilioClient } from '../lib/config';
+import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
+import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 
 const router = Router();
@@ -585,6 +586,15 @@ router.post('/agreements/send-sms', async (req, res) => {
       viewUrl +
       (nextVisitDate ? ` Prochaine visite : ${nextVisitDate}.` : '');
 
+    // Conformité CASL : un destinataire ayant répondu STOP ne doit plus rien
+    // recevoir de cette org — y compris les contrats.
+    if (await isSmsOptedOut(admin, agreement.org_id, formattedPhone)) {
+      return res.status(409).json({
+        error: 'This recipient has opted out of SMS from your organization.',
+        code: 'sms_opted_out',
+      });
+    }
+
     let fromNumber: string;
     try {
       fromNumber = await getOrgSmsFromNumber(agreement.org_id);
@@ -604,10 +614,13 @@ router.post('/agreements/send-sms', async (req, res) => {
       throw e;
     }
 
+    const smsStatusCallback = getTwilioStatusCallbackUrl();
     await twilioClient.messages.create({
       body: smsBody,
       from: fromNumber,
       to: formattedPhone,
+      // Accusé de réception Twilio (sinon le statut reste figé à « envoyé »).
+      ...(smsStatusCallback ? { statusCallback: smsStatusCallback } : {}),
     });
 
     // draft → sent (a signed agreement stays signed)

@@ -77,7 +77,6 @@ import commissionsRouter from './routes/commissions';
 import payrollRouter from './routes/payroll';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
-import platformAdminRouter from './routes/platform-admin';
 import authRouter from './routes/auth';
 import dsrRouter from './routes/dsr';
 import teamComplianceRouter from './routes/team-compliance';
@@ -457,10 +456,13 @@ app.use('/api', payrollRouter);
 app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
 
-// Platform admin — tightly rate limited, owner-only routes enforce auth internally
-const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${userKey(req)}` });
-app.use('/api/platform-admin', platformAdminLimiter);
-app.use('/api', platformAdminRouter);
+// Le back-office « Platform Admin » (page + 8 routes de lecture seule donnant
+// une vue inter-tenants) a été retiré à la demande du propriétaire. Un accès
+// transverse aux données de tous les locataires n'a pas sa place dans l'app.
+// `PLATFORM_OWNER_ID` reste utilisé par /api/incidents/login-anomalies, qui
+// agrège des tentatives de connexion échouées sans org_id — cette route doit
+// rester réservée au propriétaire, sinon un admin d'org verrait les adresses
+// et IP des autres locataires.
 
 // CSP violation reports — public endpoint, tight limit to prevent log flooding
 const cspReportLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP

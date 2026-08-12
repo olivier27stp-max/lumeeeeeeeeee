@@ -274,10 +274,15 @@ export async function executeSendSms(
   }
 
   try {
+    const { getTwilioStatusCallbackUrl } = await import('../config');
+    const statusCallback = getTwilioStatusCallbackUrl();
     const sent = await ctx.twilio.client.messages.create({
       body,
       from: fromNumber,
       to,
+      // Accusé de réception : la ligne `messages` insérée juste après resterait
+      // sinon éternellement à « envoyé », même si le SMS n'arrive jamais.
+      ...(statusCallback ? { statusCallback } : {}),
     });
 
     // Log into the conversations inbox — without this, automation texts were

@@ -5,7 +5,11 @@ import type { JobDraftInitialValues } from '../components/NewJobModal';
 import { calculateJobFinancials, type CalcLineItem, type TaxLine } from './jobCalc';
 import { resolveClientIdForLead } from './leadsApi';
 import { clientDisplayName } from './clientsApi';
-import { emitJobCompleted } from './automationEventsApi';
+import {
+  emitJobCompleted,
+  emitAppointmentCreated,
+  emitAppointmentRescheduled,
+} from './automationEventsApi';
 import { invalidateScheduleCache } from './scheduleApi';
 import { syncEntityPin } from './fieldSalesApi';
 
@@ -202,7 +206,7 @@ async function syncJobSchedule(payload: {
   endAt?: string | null;
 }) {
   if (payload.scheduledAt && payload.endAt) {
-    const { error, status } = await supabase.rpc('rpc_schedule_job', {
+    const { data, error, status } = await supabase.rpc('rpc_schedule_job', {
       p_job_id: payload.jobId,
       p_start_at: payload.scheduledAt,
       p_end_at: payload.endAt,
@@ -217,6 +221,35 @@ async function syncJobSchedule(payload: {
       end_at: payload.endAt,
     });
     if (error) throw error;
+
+    // Déclenche les automatisations de rendez-vous (confirmation immédiate,
+    // rappels J-7 / J-1 / 2h).
+    //
+    // Sans ça, un job créé avec sa date depuis le modal « Nouveau job » ne
+    // déclenchait RIEN : le client ne recevait ni confirmation ni rappel. Le
+    // même geste fait par glisser-déposer dans le calendrier
+    // (`scheduleUnscheduledJob`) ou par « ajouter une visite » (`addVisit`)
+    // émettait bien l'événement — d'où un comportement incohérent et
+    // invisible : sur un job à 3 visites, seules les visites 2 et 3
+    // déclenchaient les rappels.
+    //
+    // `rpc_schedule_job` renvoie `updated: true` quand il a DÉPLACÉ une visite
+    // existante plutôt que d'en créer une. La distinction est nécessaire :
+    // ré-émettre `created` sur un déplacement renverrait une confirmation au
+    // client et laisserait les anciens rappels calés sur l'ancienne date.
+    const eventRow = (data as any)?.event;
+    const eventId = eventRow?.id;
+    if (eventId) {
+      const params = {
+        eventId: String(eventId),
+        jobId: payload.jobId,
+        startTime: payload.scheduledAt,
+      };
+      // Non bloquant : une automatisation muette ne doit jamais faire échouer
+      // l'enregistrement du job.
+      if ((data as any)?.updated) emitAppointmentRescheduled(params);
+      else emitAppointmentCreated(params);
+    }
     return;
   }
 
