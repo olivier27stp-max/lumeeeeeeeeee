@@ -19,6 +19,20 @@ function slaForPlan(plan: string): string {
   return '2 business days';
 }
 
+/**
+ * Clé stable du même SLA, pour l'accusé de réception affiché au client.
+ *
+ * Le texte ci-dessus est anglais et part dans l'email interne — l'afficher tel
+ * quel à un client francophone donnerait un toast bilingue. Le front traduit
+ * la clé ; le serveur reste la seule source du délai.
+ */
+type SlaKey = '4h' | '1d' | '2d';
+function slaKeyForPlan(plan: string): SlaKey {
+  if (plan === 'autopilot' || plan === 'enterprise') return '4h';
+  if (plan === 'pro') return '1d';
+  return '2d';
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -38,7 +52,13 @@ router.post('/support', validate(supportRequestSchema), async (req, res) => {
     if (!auth) return;
 
     if (!isMailerConfigured()) {
-      return res.status(503).json({ error: 'Support email is not configured. Please email ' + supportEmail + ' directly.' });
+      // `code` + `supportEmail` permettent au client de composer le message
+      // dans SA langue ; `error` reste pour les appels hors navigateur.
+      return res.status(503).json({
+        error: 'Support email is not configured. Please email ' + supportEmail + ' directly.',
+        code: 'mailer_unconfigured',
+        supportEmail,
+      });
     }
 
     const { subject, message, category } = req.body as {
@@ -126,10 +146,19 @@ router.post('/support', validate(supportRequestSchema), async (req, res) => {
 
     if (!result.sent) {
       console.error('[support] send failed:', result.error);
-      return res.status(502).json({ error: 'Could not send your request right now. Please try again, or email ' + supportEmail + '.' });
+      return res.status(502).json({
+        error: 'Could not send your request right now. Please try again, or email ' + supportEmail + '.',
+        code: 'send_failed',
+        supportEmail,
+      });
     }
 
-    return res.json({ ok: true, priority: isPriority ? 'priority' : 'normal', sla });
+    return res.json({
+      ok: true,
+      priority: isPriority ? 'priority' : 'normal',
+      sla,
+      slaKey: slaKeyForPlan(plan),
+    });
   } catch (err: any) {
     return sendSafeError(res, err, 'Could not send your support request.', '[support]');
   }
