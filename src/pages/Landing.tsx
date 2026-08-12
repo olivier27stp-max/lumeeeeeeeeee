@@ -40,7 +40,7 @@ export default function Landing({ onStart }: LandingProps) {
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
           <span className="text-lg font-bold tracking-[0.25em] uppercase">Lume</span>
           <a
-            href="mailto:support@lumecrm.ca"
+            href="mailto:support@lumecrm.net"
             className="text-xs font-medium text-text-tertiary hover:text-black transition-colors tracking-wide uppercase"
           >
             Contact
@@ -167,7 +167,7 @@ export default function Landing({ onStart }: LandingProps) {
                   <div className="mt-8">
                     {isEnterprise ? (
                       <a
-                        href="mailto:support@lumecrm.ca"
+                        href="mailto:support@lumecrm.net"
                         className={`
                           flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-colors
                           border border-black/10 text-[#666] hover:bg-black/5
@@ -204,7 +204,7 @@ export default function Landing({ onStart }: LandingProps) {
           <span className="text-xs font-bold tracking-[0.2em] uppercase text-[#999]">Lume</span>
           <p className="text-[11px] text-[#bbb]">{`© ${new Date().getFullYear()} Lume CRM. ${t.landing.allRightsReserved}`}</p>
           <div className="flex gap-6 text-[11px] text-[#999]">
-            <a href="mailto:support@lumecrm.ca" className="hover:text-black transition-colors">
+            <a href="mailto:support@lumecrm.net" className="hover:text-black transition-colors">
               {t.landing.contact}
             </a>
           </div>

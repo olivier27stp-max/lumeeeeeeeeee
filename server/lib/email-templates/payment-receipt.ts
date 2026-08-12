@@ -23,7 +23,8 @@ export interface ReceiptTemplateData {
 }
 
 export function renderPaymentReceiptEmail(data: ReceiptTemplateData): string {
-  const supportEmail = data.supportEmail || 'support@lumecrm.com';
+  // Domaine canonique (lumecrm.net) — le défaut était sur .com, un domaine tiers.
+  const supportEmail = data.supportEmail || 'support@lumecrm.net';
 
   return `<!DOCTYPE html>
 <html lang="en">

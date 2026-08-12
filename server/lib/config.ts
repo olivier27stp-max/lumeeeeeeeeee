@@ -92,7 +92,10 @@ export function getBaseUrl(): string {
 export const emailFrom = process.env.EMAIL_FROM || `Lume CRM <${process.env.SMTP_USER || 'noreply@lume.crm'}>`;
 
 // Inbox that receives in-app support requests. Override with SUPPORT_EMAIL in .env.local.
-export const supportEmail = process.env.SUPPORT_EMAIL || 'support@lumecrm.ca';
+// Le défaut doit rester sur le domaine canonique (lumecrm.net, cf. CANONICAL_HOST
+// dans server/index.ts) : un défaut pointant ailleurs envoie les demandes des
+// clients à un domaine qui ne nous appartient pas, sans erreur visible.
+export const supportEmail = process.env.SUPPORT_EMAIL || 'support@lumecrm.net';
 
 // Platform admin
 export const platformOwnerId = process.env.PLATFORM_OWNER_ID || '';
