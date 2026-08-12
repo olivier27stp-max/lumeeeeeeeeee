@@ -122,8 +122,12 @@ describe('confirmation de dépôt', () => {
   it('l’opérateur neq est réellement supporté par le moteur', () => {
     // Une condition que le moteur ne sait pas évaluer laisserait passer tous
     // les paiements — le doublon reviendrait par la bande.
+    //
+    // La comparaison passe désormais par `memeValeur` (lot 4), qui tolère les
+    // différences de type. L'exclusion reste stricte sur la valeur.
     const engine = read('server/lib/automationEngine.ts');
-    expect(engine).toContain("if ('neq' in expected && actual === expected.neq) return false;");
+    expect(engine).toContain("if ('neq' in expected && memeValeur(actual, expected.neq)) return false;");
+    expect(engine).toContain("'eq', 'neq', 'in', 'not_in'");
   });
 
   it('les deux presets ne peuvent pas se déclencher ensemble', () => {

@@ -59,7 +59,21 @@ export async function toggleAutomationRule(id: string, isActive: boolean): Promi
  * Replace the body of the send_sms action inside a rule's actions array.
  * Read-modify-write: the other actions (email, tasks, logs) are untouched.
  */
-export async function updateRuleSmsBody(id: string, body: string): Promise<void> {
+/**
+ * Réécrit le corps d'une action d'envoi — SMS ou courriel.
+ *
+ * Remplace `updateRuleSmsBody`, qui ne couvrait que les SMS : le texte des
+ * courriels n'était modifiable NULLE PART, alors que 35 automatisations
+ * écrivent aux clients au nom de l'entreprise.
+ *
+ * `subject` n'a de sens que pour un courriel ; il est ignoré pour un SMS.
+ */
+export async function updateRuleMessage(
+  id: string,
+  actionType: 'send_sms' | 'send_email',
+  body: string,
+  subject?: string,
+): Promise<void> {
   const { data: rule, error: readErr } = await supabase
     .from('automation_rules')
     .select('actions')
@@ -68,14 +82,35 @@ export async function updateRuleSmsBody(id: string, body: string): Promise<void>
   if (readErr) throw readErr;
 
   const actions = ((rule?.actions || []) as AutomationRule['actions']).map((a) =>
-    a.type === 'send_sms' ? { ...a, config: { ...a.config, body } } : a
+    a.type === actionType
+      ? {
+          ...a,
+          config: {
+            ...a.config,
+            body,
+            ...(actionType === 'send_email' && subject !== undefined ? { subject } : {}),
+          },
+        }
+      : a,
   );
 
-  const { error } = await supabase
+  // `.select()` force PostgREST à retourner les lignes touchées : sans lui, un
+  // filtrage par la RLS produirait un « succès » silencieux (0 ligne modifiée)
+  // et l'utilisateur croirait avoir enregistré son texte.
+  const { data: updated, error } = await supabase
     .from('automation_rules')
     .update({ actions, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) throw error;
+  if (!updated || updated.length === 0) {
+    throw new Error("Modification refusée — vous n'avez pas accès à cette automatisation.");
+  }
+}
+
+/** @deprecated Utiliser `updateRuleMessage`. Conservé le temps de migrer les appelants. */
+export async function updateRuleSmsBody(id: string, body: string): Promise<void> {
+  return updateRuleMessage(id, 'send_sms', body);
 }
 
 // seedDefaultPresets() a été retiré (audit 2026-07-31).

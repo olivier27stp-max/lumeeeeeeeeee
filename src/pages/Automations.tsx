@@ -22,6 +22,7 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
+import MessageEditor from '../components/automations/MessageEditor';
 import {
   type AutomationRule,
   getAutomationRules,
@@ -736,6 +737,25 @@ export default function Automations() {
                                       </div>
                                     </div>
                                   </div>
+
+                                  {/* Le texte réellement envoyé au client, éditable.
+                                      La page n'affichait que le TYPE d'action
+                                      (« Envoyer un courriel ») : l'utilisateur ne
+                                      pouvait ni relire ni corriger ce qui partait en
+                                      son nom. */}
+                                  {rule.actions
+                                    .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
+                                    .map((a, i) => (
+                                      <MessageEditor
+                                        key={`${rule.id}-${a.type}-${i}`}
+                                        ruleId={rule.id}
+                                        actionType={a.type as 'send_sms' | 'send_email'}
+                                        body={String(a.config?.body ?? '')}
+                                        subject={a.type === 'send_email' ? String(a.config?.subject ?? '') : undefined}
+                                        fr={fr}
+                                        onSaved={load}
+                                      />
+                                    ))}
                                 </td>
                               </tr>
                             )}
