@@ -261,3 +261,43 @@ describe('déplacement de visite — les rappels suivent la nouvelle date', () =
     expect(read('src/lib/scheduleApi.ts')).toContain('emitAppointmentRescheduled({');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// 7. Un seul système d'automatisations
+// ───────────────────────────────────────────────────────────────────
+
+describe('workflows — second système retiré', () => {
+  const engine = read('server/lib/automationEngine.ts');
+
+  it('le moteur ne lit plus la table workflows', () => {
+    // Deux systèmes parallèles coexistaient pour le même besoin :
+    // `automation_rules` (35 presets, 1386 règles actives, la page
+    // Automatisations) et `workflows` (constructeur visuel jamais terminé —
+    // aucune page, 31 lignes dans UNE org, `workflow_runs` vide).
+    expect(engine).not.toContain("from('workflows')");
+    expect(engine).not.toContain('EVENT_TO_TRIGGER');
+  });
+
+  it('le retrait est documenté à l’endroit du code retiré', () => {
+    // Pour qu'on ne le réintroduise pas en croyant combler un manque.
+    expect(engine).toContain('constructeur');
+    expect(engine).toContain('`automation_rules`');
+  });
+
+  it('les règles, elles, sont toujours traitées', () => {
+    // Non-régression : c'est le système qui porte réellement le produit.
+    expect(engine).toContain("from('automation_rules')");
+    expect(engine).toContain("eq('org_id', event.orgId)");
+    expect(engine).toContain("eq('trigger_event', event.type)");
+  });
+
+  it('les clients API du second système ont disparu', () => {
+    // `workflowApi.ts` et `workflowPresets.ts` n'étaient importés par aucune
+    // page — vérifié avant suppression.
+    const existe = (p: string) => {
+      try { read(p); return true; } catch { return false; }
+    };
+    expect(existe('src/lib/workflowApi.ts')).toBe(false);
+    expect(existe('src/lib/workflowPresets.ts')).toBe(false);
+  });
+});

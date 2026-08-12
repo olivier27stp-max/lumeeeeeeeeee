@@ -344,28 +344,6 @@ async function scheduleDelayedActions(
 
 // ── Event handler ───────────────────────────────────────────
 
-// ── Map CRM event types to workflow trigger_type values ────
-const EVENT_TO_TRIGGER: Record<string, string> = {
-  'lead.created': 'lead_created',
-  'lead.updated': 'lead_updated',
-  'lead.status_changed': 'lead_status_changed',
-  'lead.converted': 'lead_converted',
-  'pipeline_deal.stage_changed': 'pipeline_deal_stage_changed',
-  'estimate.sent': 'estimate_sent',
-  'estimate.accepted': 'estimate_approved',
-  'quote.created': 'quote_created',
-  'quote.sent': 'quote_sent',
-  'quote.approved': 'quote_approved',
-  'quote.declined': 'quote_declined',
-  'quote.converted': 'quote_converted',
-  'appointment.created': 'job_scheduled',
-  'job.created': 'job_scheduled',
-  'job.completed': 'job_completed',
-  'invoice.created': 'invoice_created',
-  'invoice.sent': 'invoice_created',
-  'invoice.overdue': 'invoice_overdue',
-  'invoice.paid': 'payment_received',
-};
 
 // ── Convert delay_value + delay_unit to seconds ───────────
 function delayToSeconds(value: number, unit: string): number {
@@ -403,61 +381,16 @@ async function handleEvent(event: CRMEvent) {
       }
     }
 
-    // ── 2. Match workflows table (new system) ──
-    const triggerType = EVENT_TO_TRIGGER[event.type];
-    if (triggerType) {
-      const { data: workflows, error: wfError } = await engineConfig.supabase
-        .from('workflows')
-        .select('id, org_id, name, trigger_type, delay_value, delay_unit, conditions, actions_config')
-        .eq('org_id', event.orgId)
-        .eq('trigger_type', triggerType)
-        .eq('active', true)
-        .eq('status', 'published');
+    // Le second système d'automatisations (table `workflows`, constructeur
+    // visuel) a été retiré : aucune interface ne permettait d'en créer, les
+    // 31 lignes existantes vivaient dans une seule org et n'ont jamais été
+    // exécutées (`workflow_runs` vide). Leur planification différée violait de
+    // surcroît une clé étrangère — `automation_scheduled_tasks.automation_rule_id`
+    // pointe vers `automation_rules`, pas vers `workflows`.
+    //
+    // Les automatisations du produit vivent dans `automation_rules`, traitées
+    // juste au-dessus.
 
-      if (wfError) {
-        console.error('[automationEngine] failed to fetch workflows:', wfError.message);
-      }
-
-      if (workflows && workflows.length > 0) {
-        for (const wf of workflows as any[]) {
-          // Evaluate conditions (array format)
-          const wfConditions = wf.conditions || [];
-          if (Array.isArray(wfConditions) && wfConditions.length > 0) {
-            const condObj: Record<string, any> = {};
-            for (const c of wfConditions) {
-              if (c.operator === 'equals') condObj[c.field] = { eq: c.value };
-              else if (c.operator === 'not_equals') condObj[c.field] = { neq: c.value };
-            }
-            if (!evaluateConditions(condObj, event)) continue;
-          }
-
-          // Convert workflow to AutomationRule format for execution
-          const wfActions = wf.actions_config || [];
-          if (!Array.isArray(wfActions) || wfActions.length === 0) continue;
-
-          const delaySeconds = delayToSeconds(wf.delay_value || 0, wf.delay_unit || 'immediate');
-
-          const pseudoRule: AutomationRule = {
-            id: wf.id,
-            org_id: wf.org_id,
-            name: wf.name,
-            trigger_event: event.type,
-            conditions: {},
-            delay_seconds: delaySeconds,
-            actions: wfActions,
-            is_active: true,
-          };
-
-          if (delaySeconds > 0) {
-            await scheduleDelayedActions(pseudoRule, event, engineConfig);
-          } else {
-            await executeRuleActions(pseudoRule, event, engineConfig);
-          }
-
-          console.log(`[automationEngine] workflow "${wf.name}" matched event ${event.type}`);
-        }
-      }
-    }
   } catch (err: any) {
     console.error('[automationEngine] error handling event:', err.message);
   }
