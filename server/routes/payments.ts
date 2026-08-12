@@ -485,6 +485,37 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           // Never fail the webhook over number housekeeping — it is retried by the sweep.
           console.error('[webhook/subscription.updated] SMS entitlement sync failed:', smsErr?.message);
         }
+
+        // ── Confirmer le changement de forfait au client ──
+        // Uniquement quand le forfait a réellement changé (updateRow.plan_id est
+        // renseigné) : ce webhook se déclenche aussi à chaque renouvellement et
+        // au moindre ajustement, ce qui enverrait un courriel pour rien.
+        if (updateRow.plan_id) {
+          try {
+            const { data: row } = await admin
+              .from('subscriptions')
+              .select('org_id, plans!subscriptions_plan_id_fkey(name)')
+              .eq('stripe_subscription_id', sub.id)
+              .maybeSingle();
+            const nomPlan = (row as any)?.plans?.name;
+            if (row?.org_id && nomPlan) {
+              const { sendPlanChangedEmail } = await import('../lib/subscription-email');
+              await sendPlanChangedEmail({
+                orgId: row.org_id,
+                eventId: event.id,
+                planName: nomPlan,
+                amountCents: updateRow.amount_cents,
+                currency: (firstItem?.price?.currency || 'cad').toUpperCase(),
+                interval: updateRow.interval,
+                periodEnd: periodEnd,
+              });
+            }
+          } catch (mailErr: any) {
+            // La base est déjà à jour : ne jamais faire rejouer le webhook pour
+            // un courriel. sendPlanChangedEmail journalise l'échec.
+            console.error('[webhook/subscription.updated] courriel de changement échoué:', mailErr?.message);
+          }
+        }
       }
 
       // ── F-13: Handle customer.subscription.deleted ──
@@ -500,8 +531,28 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             // idem : subscriptions n'a pas de colonne updated_at.
           })
           .eq('stripe_subscription_id', sub.id)
-          .select('org_id')
+          .select('org_id, current_period_end, plans!subscriptions_plan_id_fkey(name)')
           .maybeSingle();
+
+        // ── Confirmer l'annulation au client ──
+        // Sans ce courriel, le client ignore jusqu'à quand il garde l'accès :
+        // il croit l'avoir perdu sur-le-champ et écrit au support, ou pense que
+        // l'annulation a échoué et conteste le prélèvement suivant.
+        try {
+          if (canceledRow?.org_id) {
+            const { sendSubscriptionCanceledEmail } = await import('../lib/subscription-email');
+            await sendSubscriptionCanceledEmail({
+              orgId: canceledRow.org_id,
+              eventId: event.id,
+              planName: (canceledRow as any)?.plans?.name ?? null,
+              accessUntil: (canceledRow as any)?.current_period_end ?? null,
+            });
+          }
+        } catch (mailErr: any) {
+          // L'abonnement est déjà annulé en base : ne jamais faire rejouer le
+          // webhook pour un courriel.
+          console.error('[webhook/subscription.deleted] courriel d\'annulation échoué:', mailErr?.message);
+        }
 
         // Schedule the Twilio number for release (grace period, not immediate —
         // releasing is irreversible and breaks every existing conversation).
