@@ -423,6 +423,14 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           // requete, donc le webhook levait une erreur -> rejeu Stripe en boucle.
         };
 
+        // Motif d'annulation saisi dans le portail Stripe. Arrive ici quand le
+        // client programme son départ (cancel_at_period_end), et une seconde
+        // fois sur .deleted à l'échéance. Sans cette donnée, on ne sait pas
+        // POURQUOI les clients partent — donc on ne peut rien y changer.
+        const motif = (sub as any).cancellation_details;
+        if (motif?.feedback) updateRow.cancellation_feedback = motif.feedback;
+        if (motif?.comment) updateRow.cancellation_comment = String(motif.comment).slice(0, 2000);
+
         if (firstItem?.price) {
           const stripeInterval = firstItem.price.recurring?.interval; // 'month' | 'year'
           const unitAmount = firstItem.price.unit_amount as number | null;
@@ -523,15 +531,23 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const sub = event.data.object as Stripe.Subscription;
         const admin = getServiceClient();
 
+        // Motif d'annulation (portail Stripe). Sur .deleted il peut différer de
+        // celui reçu à la programmation du départ : on ne l'écrase que s'il est
+        // réellement présent, pour ne pas effacer une réponse déjà captée.
+        const motifFinal = (sub as any).cancellation_details;
+        const majAnnulation: Record<string, any> = {
+          status: 'canceled',
+          canceled_at: new Date().toISOString(),
+          // idem : subscriptions n'a pas de colonne updated_at.
+        };
+        if (motifFinal?.feedback) majAnnulation.cancellation_feedback = motifFinal.feedback;
+        if (motifFinal?.comment) majAnnulation.cancellation_comment = String(motifFinal.comment).slice(0, 2000);
+
         const { data: canceledRow } = await admin
           .from('subscriptions')
-          .update({
-            status: 'canceled',
-            canceled_at: new Date().toISOString(),
-            // idem : subscriptions n'a pas de colonne updated_at.
-          })
+          .update(majAnnulation)
           .eq('stripe_subscription_id', sub.id)
-          .select('org_id, current_period_end, plans!subscriptions_plan_id_fkey(name)')
+          .select('org_id, current_period_end, cancellation_feedback, cancellation_comment, plans!subscriptions_plan_id_fkey(name)')
           .maybeSingle();
 
         // ── Confirmer l'annulation au client ──
@@ -540,12 +556,25 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         // l'annulation a échoué et conteste le prélèvement suivant.
         try {
           if (canceledRow?.org_id) {
-            const { sendSubscriptionCanceledEmail } = await import('../lib/subscription-email');
+            const { sendSubscriptionCanceledEmail, sendChurnAlert } = await import('../lib/subscription-email');
+            const planName = (canceledRow as any)?.plans?.name ?? null;
             await sendSubscriptionCanceledEmail({
               orgId: canceledRow.org_id,
               eventId: event.id,
-              planName: (canceledRow as any)?.plans?.name ?? null,
+              planName,
               accessUntil: (canceledRow as any)?.current_period_end ?? null,
+            });
+
+            // Alerte interne : le motif du départ, seule donnée qui permette de
+            // corriger la cause plutôt que de deviner.
+            const { data: orgRow } = await admin
+              .from('orgs').select('name').eq('id', canceledRow.org_id).maybeSingle();
+            await sendChurnAlert({
+              orgName: orgRow?.name ?? null,
+              orgId: canceledRow.org_id,
+              planName,
+              feedback: (canceledRow as any)?.cancellation_feedback ?? null,
+              comment: (canceledRow as any)?.cancellation_comment ?? null,
             });
           }
         } catch (mailErr: any) {
