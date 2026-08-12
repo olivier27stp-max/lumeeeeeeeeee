@@ -1,6 +1,7 @@
 // @ts-nocheck — React class component requires @types/react which this project omits
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { captureClientException } from '../lib/sentry';
 
 interface Props {
   children: ReactNode;
@@ -25,6 +26,11 @@ class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('[ErrorBoundary] Caught error:', error, info.componentStack);
+    // React intercepte les erreurs de rendu : elles ne remontent PAS au
+    // handler global de Sentry. Sans cet appel, un écran blanc chez un client
+    // ne laisse aucune trace ailleurs que dans SA console. No-op sans DSN ;
+    // l'org courante est déjà attachée au scope par CompanyContext.
+    captureClientException(error, { componentStack: info.componentStack });
   }
 
   handleReset = () => {
