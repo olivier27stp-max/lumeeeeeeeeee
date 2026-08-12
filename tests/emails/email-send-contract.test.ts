@@ -162,39 +162,39 @@ describe('vérification de result.sent — l’état des lieux, site par site', 
 // BUGS CONNUS — la phase 2 inversera ces trois blocs
 // ───────────────────────────────────────────────────────────────────
 
-describe('BUG CONNU B3 — quotes.ts envoie sans jamais regarder le résultat', () => {
+describe('B3 CORRIGÉ — quotes.ts ne ment plus sur l’envoi', () => {
   const quotes = read('server/routes/quotes.ts');
   const route = routeBody(quotes, "router.post('/quotes/send-email'", "router.post('/quotes/send-sms'");
 
-  it('le retour de sendEmail n’est même pas assigné', () => {
-    // État actuel : `await sendEmail({...})` nu.
-    expect(route).toMatch(/await sendEmail\(\{/);
-    expect(route).not.toMatch(/(const|let)\s+\w+\s*=\s*await sendEmail/);
-    // Aucune lecture d'un `.sent` de RÉSULTAT dans la route. Attention : la
-    // chaîne 'quote.sent' (nom d'event) apparaît ici — d'où l'ancrage sur un
-    // identifiant de variable plutôt que sur `.sent` nu.
-    expect(route).not.toMatch(/\b(result|emailResult|res)\.sent\b/);
+  it('le résultat de sendEmail est lu', () => {
+    // Avant : `await sendEmail({...})` nu, retour jamais assigné.
+    expect(route).toMatch(/const emailResult = await sendEmail\(\{/);
+    expect(route).toContain('if (!emailResult.sent)');
   });
 
-  it('conséquence : SMTP mort → 200 {ok:true} et TOUS les effets de bord appliqués', () => {
-    // C'est le cœur du bug. L'org voit « envoyé » partout, le client n'a rien reçu.
-    expect(route).toContain("return res.json({ ok: true, channel: 'email'");
+  it('un échec bloque TOUS les effets de bord et renvoie une erreur', () => {
+    // Le cœur du bug : l'org voyait « envoyé » partout alors que le client
+    // n'avait rien reçu. La route sort maintenant avant d'écrire quoi que ce
+    // soit.
+    expect(route).toContain("code: 'email_send_failed'");
+    expect(route).toContain('return res.status(502)');
 
-    const sendIdx = route.indexOf('await sendEmail(');
+    const guardIdx = route.indexOf('if (!emailResult.sent)');
     for (const effect of [
       "status: 'awaiting_response'",  // le devis avance
-      "from('quote_send_log')",       // un log affirme la livraison
-      "set_deal_stage",               // le deal bouge dans le pipeline
+      "from('quote_send_log')",       // le journal de livraison
+      'set_deal_stage',               // le deal bouge dans le pipeline
       "eventBus.emit('quote.sent'",   // les automatisations partent
     ]) {
-      const idx = route.indexOf(effect, sendIdx);
-      expect(idx, `effet de bord absent ou déplacé : ${effect}`).toBeGreaterThan(sendIdx);
+      expect(route.indexOf(effect, guardIdx), `effet de bord avant la garde : ${effect}`)
+        .toBeGreaterThan(guardIdx);
     }
+    // Et le 200 optimiste n'est atteint qu'après la garde.
+    expect(route.indexOf("return res.json({ ok: true, channel: 'email'")).toBeGreaterThan(guardIdx);
   });
 
-  it('quote_send_log.delivery_status est écrit "sent" en dur, jamais dérivé du résultat', () => {
-    expect(route).toContain("delivery_status: 'sent'");
-    expect(route).not.toMatch(/delivery_status:\s*result/);
+  it('delivery_status est dérivé du résultat, plus écrit en dur', () => {
+    expect(route).toContain("delivery_status: emailResult.sent ? 'sent' : 'failed'");
   });
 
   it('la garde de statut, elle, est correcte : un devis approuvé ne redescend pas', () => {

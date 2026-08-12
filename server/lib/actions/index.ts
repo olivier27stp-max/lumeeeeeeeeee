@@ -199,10 +199,27 @@ export async function executeSendEmail(
     const { sendEmail, isMailerConfigured } = await import('../mailer');
     if (!isMailerConfigured()) return { success: false, error: 'SMTP not configured' };
 
+    // Identité de l'ORG, pas de Lume.
+    //
+    // Ces courriels partaient au nom de « Lume CRM » avec l'adresse SMTP de la
+    // plateforme en Reply-To : le client d'un locataire recevait « Rappel :
+    // facture INV-042 » signé Lume, et sa réponse atterrissait dans la boîte de
+    // la plateforme au lieu de celle de l'entrepreneur. Le HTML partait aussi
+    // brut — sans logo, sans pied de page, sans numéros de taxes — alors que
+    // tous les autres envois du produit utilisent ce layout.
+    //
+    // `senderFor` conserve l'adresse d'expédition VÉRIFIÉE de la plateforme
+    // (SPF/DKIM) : seuls le nom affiché et le Reply-To sont ceux du tenant.
+    // Envoyer depuis l'adresse réelle de chaque org exigerait une config DNS
+    // par client et casserait la délivrabilité de tout le monde.
+    const { getCompanySettings, buildEmailLayout, senderFor } = await import('../../routes/emails');
+    const company = await getCompanySettings(ctx.orgId);
+
     const result = await sendEmail({
+      ...senderFor(company),
       to,
       subject,
-      html: body,
+      html: buildEmailLayout(company, body),
     });
     if (!result.sent) return { success: false, error: result.error || 'Send failed' };
 

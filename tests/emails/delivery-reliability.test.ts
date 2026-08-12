@@ -603,3 +603,121 @@ describe('Sentry — les échecs attrapés remontent quand même', () => {
     expect(read('server/routes/communications.ts')).toContain('isSmsOptedOut(serviceClient, orgId, normalizedTo)');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// 11. Les emails d'automatisation partent au nom de l'entreprise
+// ───────────────────────────────────────────────────────────────────
+
+describe('automatisations — identité de l’org, plus de « Lume CRM »', () => {
+  const actions = read('server/lib/actions/index.ts');
+  const fn = actions.slice(
+    actions.indexOf('async function executeSendEmail'),
+    actions.indexOf('async function executeSendSms'),
+  );
+
+  it('le nom affiché et le Reply-To sont ceux du tenant', () => {
+    // Avant : ni `from` ni `replyTo`. Le client d'un locataire recevait
+    // « Rappel : facture INV-042 » signé Lume CRM, et sa réponse arrivait dans
+    // la boîte de la plateforme au lieu de celle de l'entrepreneur.
+    expect(fn).toContain('senderFor(company)');
+    expect(fn).toContain('getCompanySettings(ctx.orgId)');
+  });
+
+  it('le courriel est brandé (logo, pied de page, numéros de taxes)', () => {
+    // Avant : `html: body` brut. Tous les autres envois du produit passent par
+    // ce layout — l'automatisation était le seul trou.
+    expect(fn).toContain('buildEmailLayout(company, body)');
+    expect(fn).not.toMatch(/html:\s*body,/);
+  });
+
+  it('l’adresse d’expédition reste celle, vérifiée, de la plateforme', () => {
+    // Invariant SPF/DKIM : envoyer depuis l'adresse réelle de chaque org
+    // exigerait une config DNS par client et casserait la délivrabilité de
+    // tout le monde.
+    const emails = read('server/routes/emails.ts');
+    const sender = emails.slice(emails.indexOf('export function senderFor'), emails.indexOf('// ── POST /api/emails/send-invoice'));
+    expect(sender).toContain('process.env.SMTP_USER');
+    expect(sender).not.toMatch(/from:\s*company\.company_email/);
+  });
+
+  it('le résultat reste vérifié', () => {
+    expect(fn).toContain('if (!result.sent)');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// 12. Reprise sur échec des tâches planifiées
+// ───────────────────────────────────────────────────────────────────
+
+describe('moteur d’automatisation — les échecs transitoires sont réessayés', () => {
+  const engine = read('server/lib/automationEngine.ts');
+
+  it('une tâche échouée peut repasser en attente au lieu d’être perdue', () => {
+    // Avant : `status: 'failed'` définitif. Le fetch ne sélectionne que les
+    // 'pending', donc la tâche n'était PLUS JAMAIS reprise. Mesuré en prod :
+    // 8 tâches perdues, dont 6 courriels sur « SMTP not configured ».
+    expect(engine).toContain('function nextStateAfterFailure');
+    expect(engine).toContain("status: 'pending'");
+    expect(engine).toContain('execute_at:');
+  });
+
+  it('le compteur de tentatives est enfin LU, pas seulement incrémenté', () => {
+    expect(engine).toContain('MAX_TASK_ATTEMPTS');
+    expect(engine).toContain('dejaTentees < MAX_TASK_ATTEMPTS');
+  });
+
+  it('les échecs définitifs ne sont pas réessayés', () => {
+    // Un client sans adresse courriel ne le sera pas davantage à la 4e
+    // tentative : réessayer ne ferait que polluer les journaux.
+    expect(engine).toContain('function isTransientFailure');
+    for (const cas of ['no recipient', 'not configured', 'opted out', 'plan does not include']) {
+      expect(engine).toContain(cas);
+    }
+  });
+
+  it('le délai entre reprises est croissant', () => {
+    // Laisse à un service externe le temps de se rétablir sans marteler la file.
+    expect(engine).toContain('[5, 30, 120]');
+  });
+
+  it('un succès ferme la tâche proprement', () => {
+    expect(engine).toContain("status: 'completed'");
+    expect(engine).toContain('last_error: null');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// 13. Courriel de vérification : plus de blocage silencieux
+// ───────────────────────────────────────────────────────────────────
+
+describe('auth — l’échec du courriel de vérification est remonté', () => {
+  const auth = read('server/routes/auth.ts');
+
+  it('sendVerificationEmail retourne son résultat au lieu de void', () => {
+    // Avant : `Promise<void>`. Aucun appelant ne pouvait savoir, et le serveur
+    // journalisait « Verification email sent » sans aucune preuve.
+    expect(auth).toContain('Promise<{ sent: boolean; error?: string }>');
+    expect(auth).toContain('return { sent: result.sent, error: result.error }');
+  });
+
+  it('le parcours d’achat remonte l’échec au client', () => {
+    // Sur ce parcours, le paiement est bloqué tant que l'adresse n'est pas
+    // confirmée : un courriel non délivré laissait un client payant coincé.
+    expect(auth).toContain('verification_email_sent: verif.sent');
+    expect(auth).toContain('verification_email_error');
+  });
+
+  it('le renvoi manuel dit s’il a réussi', () => {
+    expect(auth).toContain('sent: verif.sent');
+  });
+
+  it('plus aucun console.log affirmant un envoi non vérifié', () => {
+    expect(auth).not.toContain("console.log('[auth/register-checkout] Verification email sent to:'");
+    expect(auth).not.toContain("console.log('[auth] Resent verification email for existing unconfirmed user:'");
+  });
+
+  it('SMTP absent est journalisé comme un incident, pas comme une trace', () => {
+    expect(auth).toContain('SMTP non configuré');
+    expect(auth).toMatch(/console\.error\('\[auth\] SMTP non configuré/);
+  });
+});

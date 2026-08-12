@@ -60,9 +60,14 @@ function evaluateConditions(
 
 // ── Deduplication key builder ───────────────────────────────
 
+// La clé NE DOIT PAS contenir la date : `idx_scheduled_tasks_dedup` est unique
+// sur (org_id, execution_key) parmi les tâches pending/running, et c'est ce qui
+// empêche de planifier deux fois la même action. Avec la date du jour, renvoyer
+// le même devis le lendemain produisait une clé différente : les 5 relances
+// déjà en attente restaient, 5 nouvelles s'ajoutaient, et le client recevait
+// tout en double (constaté en prod : 10 tâches pending pour un seul devis).
 function buildExecutionKey(ruleId: string, entityId: string, actionIndex: number): string {
-  const today = new Date().toISOString().slice(0, 10);
-  return `${ruleId}:${entityId}:${actionIndex}:${today}`;
+  return `${ruleId}:${entityId}:${actionIndex}`;
 }
 
 // ── Quiet hours (SMS only) ──────────────────────────────────
@@ -388,6 +393,65 @@ async function handleEvent(event: CRMEvent) {
 
 // ── Scheduled task processor (called by scheduler) ──────────
 
+/** Nombre maximal de tentatives pour une tâche planifiée (1 initiale + 3 reprises). */
+const MAX_TASK_ATTEMPTS = 4;
+
+/**
+ * Un échec est-il réessayable ?
+ *
+ * Distinction volontaire : une panne SMTP passagère mérite une reprise, un
+ * client sans adresse courriel n'en méritera jamais — le réessayer trois fois
+ * ne ferait que retarder l'inévitable et polluer les journaux.
+ */
+function isTransientFailure(error?: string | null): boolean {
+  if (!error) return true; // cause inconnue → on laisse sa chance à la reprise
+  const definitifs = [
+    'no recipient',           // pas d'adresse / pas de téléphone
+    'not configured',         // SMTP ou Twilio absent (config, pas incident)
+    'opted out',              // désabonnement : ne jamais réessayer
+    'plan does not include',  // forfait insuffisant
+    'are disabled',           // fonctionnalité désactivée dans les réglages
+  ];
+  const lower = error.toLowerCase();
+  return !definitifs.some((d) => lower.includes(d));
+}
+
+/**
+ * Détermine l'état suivant d'une tâche qui vient d'échouer.
+ *
+ * Sans cette logique, une tâche échouée passait en `failed` définitif : le
+ * fetch ne sélectionne que les `pending`, donc elle n'était PLUS JAMAIS
+ * reprise. Le compteur `attempts` était bien incrémenté, mais jamais relu.
+ * Résultat mesuré en prod : 8 tâches perdues, dont 6 relances par courriel
+ * tombées sur un « SMTP not configured » passager.
+ *
+ * Reprise à délai croissant (5 min, 30 min, 2 h) pour laisser le temps à un
+ * service externe de se rétablir sans marteler la file.
+ */
+function nextStateAfterFailure(
+  attempts: number,
+  error?: string | null,
+): Record<string, unknown> {
+  const dejaTentees = Number(attempts || 0) + 1; // `attempts` a été incrémenté à la prise
+  const peutReessayer = dejaTentees < MAX_TASK_ATTEMPTS && isTransientFailure(error);
+
+  if (!peutReessayer) {
+    return {
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      last_error: error || null,
+    };
+  }
+
+  const delaisMinutes = [5, 30, 120];
+  const attente = delaisMinutes[Math.min(dejaTentees - 1, delaisMinutes.length - 1)];
+  return {
+    status: 'pending',
+    execute_at: new Date(Date.now() + attente * 60_000).toISOString(),
+    last_error: `${error || 'échec'} — reprise ${dejaTentees}/${MAX_TASK_ATTEMPTS} dans ${attente} min`,
+  };
+}
+
 export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!engineConfig) return;
 
@@ -504,14 +568,18 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         console.error(`[automationEngine] failed to write execution log for task ${task.id} (org ${task.org_id}):`, logError.message);
       }
 
-      // Update task status
+      // Update task status — avec reprise sur échec transitoire.
       const { error: statusError } = await supabase
         .from('automation_scheduled_tasks')
-        .update({
-          status: result.success ? 'completed' : 'failed',
-          completed_at: new Date().toISOString(),
-          last_error: result.error || null,
-        })
+        .update(
+          result.success
+            ? {
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                last_error: null,
+              }
+            : nextStateAfterFailure(task.attempts, result.error),
+        )
         .eq('id', task.id);
       if (statusError) {
         // La tâche resterait 'running' pour toujours : personne ne la reprend.
@@ -521,11 +589,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       console.error(`[automationEngine] scheduled task ${task.id} failed:`, err.message);
       const { error: statusError } = await supabase
         .from('automation_scheduled_tasks')
-        .update({
-          status: 'failed',
-          completed_at: new Date().toISOString(),
-          last_error: err.message,
-        })
+        .update(nextStateAfterFailure(task.attempts, err.message))
         .eq('id', task.id);
       if (statusError) {
         console.error(`[automationEngine] failed to mark task ${task.id} as failed:`, statusError.message);
