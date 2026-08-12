@@ -524,8 +524,51 @@ function nextStateAfterFailure(
   };
 }
 
+/**
+ * Délai au-delà duquel une tâche « en cours » est considérée comme abandonnée.
+ *
+ * Large volontairement : une action lente (SMTP poussif, Twilio qui traîne)
+ * doit pouvoir finir sans être reprise en parallèle.
+ */
+const TACHE_FIGEE_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Remet en file les tâches restées « en cours » après un arrêt brutal.
+ *
+ * Une tâche passe en `running` avant son exécution. Si le processus meurt
+ * entre les deux — déploiement, plantage, mémoire épuisée — la ligne reste
+ * `running` pour toujours :
+ *   · le fetch ne sélectionne que les `pending`, donc elle n'est jamais
+ *     reprise ;
+ *   · l'index d'unicité couvre `running`, donc sa clé reste occupée et cette
+ *     action ne peut PLUS JAMAIS être replanifiée pour cette entité.
+ *
+ * Chaque déploiement pendant un tick perdait ainsi quelques relances et
+ * rendait l'entité concernée sourde pour cette règle.
+ */
+async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
+  const limite = new Date(Date.now() - TACHE_FIGEE_MS).toISOString();
+  const { data, error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update({ status: 'pending', execute_at: new Date().toISOString() })
+    .eq('status', 'running')
+    .lt('updated_at', limite)
+    .select('id');
+
+  if (error) {
+    console.error('[automationEngine] récupération des tâches figées échouée:', error.message);
+    return;
+  }
+  if (data && data.length > 0) {
+    console.warn(`[automationEngine] ${data.length} tâche(s) figée(s) remise(s) en file (arrêt brutal détecté)`);
+  }
+}
+
 export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!engineConfig) return;
+
+  // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
+  await recupererTachesFigees(supabase);
 
   const now = new Date().toISOString();
 
@@ -572,14 +615,29 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // Mark as running. Si la prise n'est pas persistée, la tâche reste
     // 'pending' et serait ré-exécutée au tour suivant — on la saute plutôt
     // que d'envoyer deux fois la même action.
-    const { error: claimError } = await supabase
+    const { data: claimed, error: claimError } = await supabase
       .from('automation_scheduled_tasks')
-      .update({ status: 'running', attempts: task.attempts + 1 })
-      .eq('id', task.id);
+      // `execute_at` est réécrit à l'instant de la prise : la table n'a pas de
+      // colonne `updated_at`, et c'est cet horodatage qui permet de repérer
+      // une tâche restée `running` après un arrêt brutal (cf.
+      // `recupererTachesFigees`). Sans lui, la détection n'aurait aucun repère
+      // temporel.
+      //
+      // Le filtre `.eq('status','pending')` rend la prise atomique : avec deux
+      // instances du serveur, une seule voit sa mise à jour aboutir, l'autre
+      // touche 0 ligne et passe son tour. Sans lui, les deux réussissaient et
+      // exécutaient l'action — le client recevait le message en double.
+      .update({ status: 'running', attempts: task.attempts + 1, execute_at: new Date().toISOString() })
+      .eq('id', task.id)
+      .eq('status', 'pending')
+      .select('id');
     if (claimError) {
       console.error(`[automationEngine] failed to claim scheduled task ${task.id}:`, claimError.message);
       continue;
     }
+    // Zéro ligne touchée = une autre instance (ou un tick qui se chevauche) a
+    // pris la tâche entre le fetch et l'update. On la lui laisse.
+    if (!claimed || claimed.length === 0) continue;
 
     try {
       const actionConfig = task.action_config;
@@ -677,49 +735,79 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
 
 // ── Stop condition checker ──────────────────────────────────
 
+/**
+ * Faut-il abandonner cette tâche planifiée ?
+ *
+ * `true` = la relance n'a plus lieu d'être (facture payée, devis accepté,
+ * rendez-vous annulé…). La tâche est alors annulée DÉFINITIVEMENT.
+ *
+ * D'où la précaution centrale de cette fonction : `supabase-js` ne lève jamais
+ * d'exception, il retourne `{ data, error }`. Les six lectures ci-dessous ne
+ * lisaient que `data` — sur erreur (délai dépassé, incident réseau, RLS),
+ * `data` vaut `null`, que le code interprétait comme « entité supprimée » et
+ * traduisait par une annulation irrémédiable. Un hoquet de deux secondes
+ * suffisait à supprimer des relances en attente, sans log ni reprise.
+ *
+ * Règle appliquée partout maintenant : une erreur de LECTURE ne conclut rien.
+ * On laisse la tâche en place ; le tick suivant réessaiera.
+ */
 async function checkStopConditions(
   supabase: SupabaseClient,
   entityType: string,
   entityId: string,
   triggerEvent?: string,
 ): Promise<boolean> {
+  /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
+  const illisible = (table: string, message: string): boolean => {
+    console.error(
+      `[automationEngine] condition d'arrêt indéterminable (${table}, ${entityType} ${entityId}) — tâche conservée:`,
+      message,
+    );
+    return false; // ne PAS annuler
+  };
+
   // Invoice reminders: stop if paid, cancelled, disputed, or client archived
   if (entityType === 'invoice') {
-    const { data: inv } = await supabase
+    const { data: inv, error } = await supabase
       .from('invoices')
       .select('status, client_id')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('invoices', error.message);
     if (!inv) return true; // Invoice deleted
     if (['paid', 'cancelled', 'void'].includes(inv.status)) return true;
     // Check if client is archived/deleted
     if (inv.client_id) {
-      const { data: cl } = await supabase.from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+      const { data: cl, error: clErr } = await supabase
+        .from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+      if (clErr) return illisible('clients', clErr.message);
       if (cl?.deleted_at) return true;
     }
   }
 
   // Estimate follow-ups: stop if accepted, rejected, or lead archived
   if (entityType === 'invoice' && triggerEvent === 'estimate.sent') {
-    const { data: inv } = await supabase
+    const { data: inv, error } = await supabase
       .from('invoices')
       .select('status')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('invoices', error.message);
     if (!inv) return true;
     if (['paid', 'accepted', 'rejected', 'cancelled', 'void'].includes(inv.status)) return true;
   }
 
   // Appointment reminders: stop if cancelled
   if (entityType === 'schedule_event' || entityType === 'appointment') {
-    const { data: evt } = await supabase
+    const { data: evt, error } = await supabase
       .from('schedule_events')
       .select('status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('schedule_events', error.message);
     if (!evt) return true;
     if (evt.deleted_at) return true;
     if (evt.status === 'cancelled') return true;
@@ -728,12 +816,13 @@ async function checkStopConditions(
   // Quote follow-ups: stop once the client responded (approved, declined,
   // changes requested) or the quote left circulation (expired, converted, archived)
   if (entityType === 'quote') {
-    const { data: quote } = await supabase
+    const { data: quote, error } = await supabase
       .from('quotes')
       .select('status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('quotes', error.message);
     if (!quote) return true; // Quote deleted
     if (quote.deleted_at) return true;
     if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return true;
@@ -741,12 +830,13 @@ async function checkStopConditions(
 
   // Lead: stop if archived or deleted (a lead is a client with status='lead')
   if (entityType === 'lead') {
-    const { data: lead } = await supabase
+    const { data: lead, error } = await supabase
       .from('clients')
       .select('status, lead_status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('clients', error.message);
     if (!lead) return true;
     if (lead.deleted_at) return true;
     // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.
