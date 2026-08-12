@@ -301,3 +301,63 @@ describe('workflows — second système retiré', () => {
     expect(existe('src/lib/workflowPresets.ts')).toBe(false);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// 8. Conditions — comparaison tolérante, opérateurs inconnus refusés
+// ───────────────────────────────────────────────────────────────────
+
+describe('conditions — types et opérateurs', () => {
+  const engine = read('server/lib/automationEngine.ts');
+  const fn = engine.slice(
+    engine.indexOf('function memeValeur'),
+    engine.indexOf('// ── Deduplication key builder'),
+  );
+
+  it('la comparaison ne dépend plus du type', () => {
+    // Les conditions viennent d'un champ de saisie : elles arrivent en CHAÎNE.
+    // Les métadonnées portent le type réel — `days_overdue` et `amount_cents`
+    // sont des NOMBRES. Avec `!==`, `3 !== "3"` : la règle ne se déclenchait
+    // jamais, sans que rien ne le signale.
+    expect(fn).toContain('function memeValeur');
+    expect(fn).toContain('String(a) === String(b)');
+    expect(fn).toContain('memeValeur(actual, expected.eq)');
+    expect(fn).toContain('memeValeur(actual, expected.neq)');
+  });
+
+  it('null et « null » restent distincts', () => {
+    // Sans ce garde, normaliser en chaîne rendrait `null` égal au texte
+    // « null » — un champ absent satisferait une condition.
+    expect(fn).toContain('a === null || a === undefined || b === null || b === undefined');
+    expect(fn).toContain('return false');
+  });
+
+  it('un opérateur inconnu bloque la règle au lieu d’être ignoré', () => {
+    // Avant : tout opérateur non géré était absent de l'évaluation, donc la
+    // condition passait pour VRAIE. Une règle « si montant > 5000 » partait
+    // pour n'importe quel montant — un faux positif, plus dangereux qu'un
+    // blocage.
+    expect(fn).toContain('OPERATEURS_CONNUS');
+    expect(fn).toContain('opérateur(s) non supporté(s)');
+    const bloc = fn.slice(fn.indexOf('const inconnus'));
+    expect(bloc.slice(0, bloc.indexOf('\n\n'))).toContain('return false');
+  });
+
+  it('les quatre opérateurs supportés le restent', () => {
+    expect(fn).toContain("['eq', 'neq', 'in', 'not_in']");
+    expect(fn).toContain("'in' in expected");
+    expect(fn).toContain("'not_in' in expected");
+  });
+
+  it('les listes comparent aussi sans se soucier du type', () => {
+    // `in` et `not_in` utilisaient `includes`, donc l'égalité stricte.
+    expect(fn).toContain('expected.in.some(');
+    expect(fn).toContain('expected.not_in.some(');
+  });
+
+  it('l’exclusion des dépôts continue de fonctionner', () => {
+    // Non-régression du lot 1 : `payment_confirmation` porte
+    // `{ payment_type: { neq: 'deposit' } }`. La tolérance de type ne doit pas
+    // rendre l'exclusion inopérante.
+    expect(fn).toContain("if ('neq' in expected && memeValeur(actual, expected.neq)) return false;");
+  });
+});

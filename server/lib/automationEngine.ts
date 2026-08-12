@@ -34,6 +34,29 @@ let engineConfig: EngineConfig | null = null;
 
 // ── Condition evaluator ─────────────────────────────────────
 
+/**
+ * Compare deux valeurs sans se laisser piéger par leur type.
+ *
+ * Les conditions sont stockées en jsonb et proviennent souvent d'un champ de
+ * saisie : elles arrivent donc en CHAÎNE. Les métadonnées d'événement, elles,
+ * portent le type réel — `days_overdue` et `amount_cents` sont des NOMBRES.
+ * Avec une égalité stricte, `3 !== "3"` : la règle ne se déclenchait jamais,
+ * et l'utilisateur n'avait aucun moyen de comprendre pourquoi (le moteur
+ * passait au suivant en silence).
+ *
+ * On normalise donc en chaîne pour comparer, après avoir écarté `null` et
+ * `undefined` — sinon `null` et la chaîne « null » deviendraient égaux.
+ */
+function memeValeur(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || a === undefined || b === null || b === undefined) return false;
+  if (typeof a === 'object' || typeof b === 'object') return false;
+  return String(a) === String(b);
+}
+
+/** Opérateurs que `evaluateConditions` sait évaluer. */
+const OPERATEURS_CONNUS = ['eq', 'neq', 'in', 'not_in'];
+
 function evaluateConditions(
   conditions: Record<string, any>,
   event: CRMEvent,
@@ -46,13 +69,28 @@ function evaluateConditions(
 
     // Support operators
     if (typeof expected === 'object' && expected !== null && !Array.isArray(expected)) {
-      if ('eq' in expected && actual !== expected.eq) return false;
-      if ('neq' in expected && actual === expected.neq) return false;
-      if ('in' in expected && Array.isArray(expected.in) && !expected.in.includes(actual)) return false;
-      if ('not_in' in expected && Array.isArray(expected.not_in) && expected.not_in.includes(actual)) return false;
+      // Un opérateur inconnu était purement IGNORÉ : la condition passait pour
+      // vraie et la règle s'exécutait sur tout. Une règle « si montant > 5000 »
+      // partait donc pour n'importe quel montant — un faux positif, bien plus
+      // dangereux qu'un blocage. On refuse désormais d'évaluer ce qu'on ne
+      // comprend pas.
+      const inconnus = Object.keys(expected).filter((op) => !OPERATEURS_CONNUS.includes(op));
+      if (inconnus.length > 0) {
+        console.warn(
+          `[automationEngine] condition ignorée — opérateur(s) non supporté(s) sur « ${key} » : ${inconnus.join(', ')}`,
+        );
+        return false;
+      }
+
+      if ('eq' in expected && !memeValeur(actual, expected.eq)) return false;
+      if ('neq' in expected && memeValeur(actual, expected.neq)) return false;
+      if ('in' in expected && Array.isArray(expected.in)
+        && !expected.in.some((v: unknown) => memeValeur(actual, v))) return false;
+      if ('not_in' in expected && Array.isArray(expected.not_in)
+        && expected.not_in.some((v: unknown) => memeValeur(actual, v))) return false;
     } else {
       // Direct equality
-      if (actual !== expected) return false;
+      if (!memeValeur(actual, expected)) return false;
     }
   }
   return true;
