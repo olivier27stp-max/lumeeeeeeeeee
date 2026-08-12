@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { resolveBrand, readableOn } from '../lib/brandColor';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertTriangle, CreditCard, Loader2, Lock, ShieldCheck } from 'lucide-react';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
@@ -179,7 +180,7 @@ export default function PublicPayment() {
           appearance: {
             theme: 'stripe',
             variables: {
-              colorPrimary: '#1f2937',
+              colorPrimary: resolveBrand(paymentData.business?.brand_color),
               borderRadius: '8px',
             },
           },
@@ -190,6 +191,7 @@ export default function PublicPayment() {
           currency={paymentData.currency}
           publicToken={token!}
           businessName={paymentData.business?.name || null}
+          brand={resolveBrand(paymentData.business?.brand_color)}
         />
       </Elements>
     </PublicPageShell>
@@ -198,11 +200,12 @@ export default function PublicPayment() {
 
 // ── Stripe Checkout Form ──
 
-function CheckoutForm({ amountCents, currency, publicToken, businessName }: {
+function CheckoutForm({ amountCents, currency, publicToken, businessName, brand }: {
   amountCents: number;
   currency: string;
   publicToken: string;
   businessName?: string | null;
+  brand: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -305,9 +308,10 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName }: {
       <button
         type="submit"
         disabled={!stripe || processing}
-        className="w-full rounded-lg bg-neutral-900 text-white py-3 px-4 font-semibold text-sm
-                   hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed
-                   inline-flex items-center justify-center gap-2 transition-colors"
+        style={{ background: brand, color: readableOn(brand) }}
+        className="w-full rounded-lg py-3 px-4 font-semibold text-sm
+                   hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed
+                   inline-flex items-center justify-center gap-2 transition-opacity"
       >
         {processing ? (
           <>
@@ -334,7 +338,7 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName }: {
 
 function PublicPageShell({ children, business }: {
   children: React.ReactNode;
-  business?: { name: string | null; logo_url: string | null; email: string | null; phone: string | null } | null;
+  business?: { name: string | null; logo_url: string | null; email: string | null; phone: string | null; brand_color?: string | null } | null;
 }) {
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col">

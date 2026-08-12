@@ -11,6 +11,7 @@ import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe 
 import { decryptSecret } from '../../src/lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
+import { getCompanyBranding } from '../lib/companyBranding';
 
 const router = Router();
 
@@ -811,11 +812,11 @@ router.get('/quotes/public/:token', async (req, res) => {
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
     // Company branding
-    const { data: companyData } = await admin
-      .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, country')
-      .eq('org_id', quote.org_id)
-      .maybeSingle();
+    const companyData = await getCompanyBranding(
+      admin,
+      quote.org_id,
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color',
+    );
 
     // Line items
     const { data: items } = await admin
@@ -922,6 +923,8 @@ router.get('/quotes/public/:token', async (req, res) => {
         street1: companyData?.street1 || null, city: companyData?.city || null,
         province: companyData?.province || null, postal_code: companyData?.postal_code || null,
         country: companyData?.country || null,
+        // Accent des documents client. null = encre noire, le défaut.
+        brand_color: companyData?.brand_color || null,
       },
       client, lead,
       items: (items || []).map((i: any) => ({
@@ -1303,8 +1306,11 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
         .eq('org_id', quote.org_id)
         .maybeSingle();
       if (orgSecrets?.stripe_secret_key_enc) {
+        // La colonne est CHIFFRÉE : la passer telle quelle à Stripe donnait une
+        // clé invalide, donc ce repli n'a jamais fonctionné. Même correction
+        // qu'en haut dans deposit-intent.
         const Stripe = (await import('stripe')).default;
-        const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
+        const orgStripe = new Stripe(decryptSecret(orgSecrets.stripe_secret_key_enc));
         intent = await orgStripe.paymentIntents.retrieve(payment_intent_id);
       }
     }

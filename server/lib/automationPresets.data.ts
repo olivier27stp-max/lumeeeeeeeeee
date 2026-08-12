@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Données — Les 34 presets d'automatisation canoniques.
+   Données — Les 35 presets d'automatisation canoniques.
 
    Généré depuis l'état prod validé (audit 2026-08-02) : textes FR issus
    de apply_automation_presets_fr, triggers corrigés (quote.sent).
@@ -21,6 +21,29 @@ export interface AutomationPresetDef {
 
 export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
   {
+    "preset_key": "agreement_signed",
+    "name": "Contract Signed",
+    "description": "Confirm to the client that their contract is signed",
+    "trigger_event": "agreement.signed",
+    "conditions": {},
+    "delay_seconds": 0,
+    "actions": [
+      {
+        "type": "send_sms",
+        "config": {
+          "body": "Merci [client_first_name]! Votre contrat avec [company_name] est signé. Votre copie : [signed_contract_link]\n[deposit_line]"
+        }
+      },
+      {
+        "type": "send_email",
+        "config": {
+          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Merci [client_first_name],</h2><p>Votre contrat avec [company_name] est signé. Vous pouvez le consulter en tout temps ici :</p><p><a href=\"[signed_contract_link]\">[signed_contract_link]</a></p><p>[deposit_line]</p><p>À bientôt!<br/>[company_name]</p></div>",
+          "subject": "[company_name] — Contrat signé"
+        }
+      }
+    ]
+  },
+  {
     "preset_key": "appointment_confirmation",
     "name": "Appointment Confirmation",
     "description": "Confirm appointment immediately",
@@ -31,13 +54,13 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "send_sms",
         "config": {
-          "body": "Bonjour [client_first_name], votre rendez-vous avec [company_name] est confirmé pour le [appointment_date] à [appointment_time]. À bientôt!"
+          "body": "Bonjour [client_first_name], votre rendez-vous avec [company_name] est confirmé pour le [appointment_date] à [appointment_time]. À bientôt!\n[contract_line]"
         }
       },
       {
         "type": "send_email",
         "config": {
-          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> [appointment_date]</li><li><strong>Heure :</strong> [appointment_time]</li><li><strong>Adresse :</strong> [appointment_address]</li></ul><p>À bientôt!<br/>[company_name]</p></div>",
+          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour [client_first_name],</h2><p>Votre rendez-vous est confirmé :</p><ul><li><strong>Date :</strong> [appointment_date]</li><li><strong>Heure :</strong> [appointment_time]</li><li><strong>Adresse :</strong> [appointment_address]</li></ul><p>À bientôt!<br/>[company_name]</p>[contract_html]</div>",
           "subject": "[company_name] — Rendez-vous confirmé"
         }
       },
