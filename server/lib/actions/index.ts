@@ -565,6 +565,44 @@ export async function executeCreateTask(
     .maybeSingle();
   if (!owner?.user_id) return { success: false, error: 'No org owner found to own the task' };
 
+  // `tasks.linked_entity_type` porte un CHECK qui n'admet que cinq valeurs :
+  // client, lead, quote, invoice, job. Or le moteur émet aussi
+  // `schedule_event`, `payment`, `pipeline_deal`… Écrire `ctx.entityType` tel
+  // quel violait donc la contrainte : une règle « quand un rendez-vous est
+  // créé → créer une tâche de préparation » échouait à l'insertion, était
+  // réessayée trois fois pour rien, puis abandonnée — sans que l'utilisateur
+  // ne voie rien. Le bug ne touchait que les règles créées à la main, donc
+  // précisément la fonctionnalité annoncée.
+  //
+  // Un rendez-vous appartient à un job : on rattache la tâche au job porteur
+  // quand il existe, plutôt que d'élargir la contrainte.
+  const TYPES_VALIDES = ['client', 'lead', 'quote', 'invoice', 'job'];
+  let lienType: string | null = ctx.entityType;
+  let lienId: string | null = ctx.entityId;
+
+  if (!TYPES_VALIDES.includes(ctx.entityType)) {
+    if (ctx.entityType === 'schedule_event' || ctx.entityType === 'appointment') {
+      const { data: evt } = await ctx.supabase
+        .from('schedule_events')
+        .select('job_id')
+        .eq('id', ctx.entityId)
+        .maybeSingle();
+      if (evt?.job_id) {
+        lienType = 'job';
+        lienId = evt.job_id;
+      } else {
+        // Visite sans job rattaché : la tâche existe quand même, sans lien.
+        lienType = null;
+        lienId = null;
+      }
+    } else {
+      // Entité non représentable (paiement, deal…) : tâche sans lien plutôt
+      // que pas de tâche du tout.
+      lienType = null;
+      lienId = null;
+    }
+  }
+
   // Column names verified against prod: linked_entity_* (not entity_*),
   // status enum uses 'open' (not 'pending').
   const { error } = await ctx.supabase.from('tasks').insert({
@@ -572,8 +610,8 @@ export async function executeCreateTask(
     title,
     description: description || null,
     status: 'open',
-    linked_entity_type: ctx.entityType,
-    linked_entity_id: ctx.entityId,
+    linked_entity_type: lienType,
+    linked_entity_id: lienId,
     created_by: owner.user_id,
     due_date: config.due_date || null,
   });

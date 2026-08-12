@@ -116,13 +116,16 @@ router.post('/automations/events/appointment-cancelled', validate(automationEven
 });
 
 // ── POST /automations/events/appointment-rescheduled ──
-// Appelée quand `rpc_schedule_job` a DÉPLACÉ une visite existante plutôt que
-// d'en créer une. Distinct de `appointment.created` : ré-émettre `created` sur
-// un déplacement renverrait une confirmation au client (cf. src/lib/jobsApi.ts).
-// L'événement émis est `appointment.updated`, qui existe déjà dans
-// CRMEventType : « déplacé » EST une mise à jour de rendez-vous. Inventer un
-// `appointment.rescheduled` aurait ajouté un type qu'aucune règle n'écoute et
-// qui n'apparaît pas dans le sélecteur de déclencheurs.
+//
+// Appelée quand une visite est DÉPLACÉE (calendrier, ou `rpc_schedule_job` sur
+// un job déjà planifié). Annule les rappels calés sur l'ancienne date, puis
+// les replanifie sur la nouvelle.
+//
+// Une version précédente se contentait d'émettre `appointment.updated`, au
+// motif que « déplacé EST une mise à jour ». Le raisonnement était juste, le
+// résultat non : AUCUN preset n'écoute cet événement et il n'est pas dans
+// EVENT_TO_TRIGGER, donc rien ne se replanifiait — et rien n'annulait les
+// tâches périmées. La route retournait pourtant `{ ok: true }`.
 router.post('/automations/events/appointment-rescheduled', validate(automationEventSchema), async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
@@ -131,7 +134,49 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
     const { eventId, jobId, clientId, startTime } = req.body;
     if (!eventId) return res.status(400).json({ error: 'eventId is required' });
 
-    await eventBus.emit('appointment.updated', {
+    // ── 1. Annuler les rappels calés sur l'ANCIENNE date ──
+    //
+    // Les rappels sont planifiés à partir de la date du rendez-vous
+    // (`execute_at = start_at − délai`). Déplacer la visite sans les annuler
+    // les laisse à leur ancienne échéance : symptôme déjà observé en
+    // production, un rappel « 2 h avant » parti 22 h APRÈS la visite.
+    //
+    // L'ORDRE COMPTE. L'index d'unicité `idx_scheduled_tasks_dedup` porte sur
+    // (org_id, execution_key) parmi les tâches `pending` ET `running`. Si on
+    // ré-émettait d'abord, la nouvelle planification serait rejetée en 23505
+    // et il ne resterait que les anciennes tâches — pire que le bug d'origine.
+    const admin = getServiceClient();
+    const { data: annulees, error: cancelErr } = await admin
+      .from('automation_scheduled_tasks')
+      .update({
+        status: 'cancelled',
+        completed_at: new Date().toISOString(),
+        last_error: 'Rendez-vous déplacé — rappel replanifié sur la nouvelle date',
+      })
+      .eq('org_id', auth.orgId)
+      .eq('entity_id', eventId)
+      .eq('status', 'pending')
+      .select('id');
+
+    if (cancelErr) {
+      // Sans annulation, ré-émettre ne ferait qu'échouer sur l'unicité : on
+      // s'arrête ici plutôt que de laisser croire à une replanification.
+      console.error('[automation-events] annulation des rappels périmés échouée:', cancelErr.message);
+      return res.status(500).json({ error: 'Failed to reschedule reminders' });
+    }
+
+    // ── 2. Replanifier sur la nouvelle date ──
+    //
+    // `appointment.created` et non `appointment.updated` : c'est le seul
+    // événement que les presets de rappel écoutent (vérifié — aucune règle
+    // n'écoute `appointment.updated`, et il n'est pas dans EVENT_TO_TRIGGER).
+    // Les rappels J-7 / J-1 / 2 h se replanifient donc à partir de la nouvelle
+    // heure, et `resolveExecuteAt` abandonne ceux dont le créneau est déjà
+    // dépassé.
+    //
+    // La confirmation immédiate (délai 0) repart aussi : c'est voulu, un
+    // client dont le rendez-vous change doit être prévenu.
+    await eventBus.emit('appointment.created', {
       orgId: auth.orgId,
       entityType: 'schedule_event',
       entityId: eventId,
@@ -140,10 +185,11 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
         job_id: jobId || null,
         client_id: clientId || null,
         start_time: startTime || null,
+        rescheduled: true,
       },
     });
 
-    return res.json({ ok: true });
+    return res.json({ ok: true, cancelled: annulees?.length ?? 0 });
   } catch (err: any) {
     console.error('[automation-events] appointment.updated error:', err.message);
     return res.status(500).json({ error: 'Internal server error' });

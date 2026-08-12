@@ -10,12 +10,46 @@ export function startRecurringJobScheduler(supabase: SupabaseClient) {
   console.log('[recurring-jobs] scheduler started (interval: 5 min)');
 
   // Run immediately on startup
-  void processRecurringJobs(supabase);
+  void passageProtege(supabase);
 
   // Then every 5 minutes
   intervalHandle = setInterval(() => {
-    void processRecurringJobs(supabase);
+    void passageProtege(supabase);
   }, 5 * 60 * 1000);
+}
+
+/** Vrai pendant qu'un passage est en cours dans CE processus. */
+let passageEnCours = false;
+
+/**
+ * Exécute un passage sous double protection.
+ *
+ * La création d'une occurrence et l'avancement de `next_run_at` ne sont pas
+ * atomiques : deux passages concurrents créent DEUX jobs identiques, visibles
+ * par l'utilisateur dans son calendrier. Le fichier documente déjà ce risque
+ * pour le cas d'un échec d'écriture, sans le couvrir pour le cas concurrent.
+ *
+ * Garde locale (`passageEnCours`) contre le chevauchement de deux ticks dans
+ * le même processus, verrou consultatif contre le multi-instance — comme tous
+ * les autres crons du produit.
+ */
+async function passageProtege(supabase: SupabaseClient) {
+  if (passageEnCours) {
+    console.warn('[recurring-jobs] passage précédent encore en cours — ignoré');
+    return;
+  }
+  passageEnCours = true;
+  try {
+    const { withAdvisoryLock } = await import('./advisory-lock');
+    const { acquired } = await withAdvisoryLock('recurring-jobs', () => processRecurringJobs(supabase));
+    if (!acquired) {
+      console.log('[recurring-jobs] passage pris par une autre instance — ignoré');
+    }
+  } catch (err: any) {
+    console.error('[recurring-jobs] passage échoué:', err?.message);
+  } finally {
+    passageEnCours = false;
+  }
 }
 
 export function stopRecurringJobScheduler() {

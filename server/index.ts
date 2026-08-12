@@ -472,10 +472,10 @@ app.use('/api', fieldSessionsRouter);
 // Le back-office « Platform Admin » (page + 8 routes de lecture seule donnant
 // une vue inter-tenants) a été retiré à la demande du propriétaire. Un accès
 // transverse aux données de tous les locataires n'a pas sa place dans l'app.
-// `PLATFORM_OWNER_ID` reste utilisé par /api/incidents/login-anomalies, qui
-// agrège des tentatives de connexion échouées sans org_id — cette route doit
-// rester réservée au propriétaire, sinon un admin d'org verrait les adresses
-// et IP des autres locataires.
+// GET /api/incidents/anomalies, dernier survivant de cette catégorie, a été
+// retiré ensuite : il exposait les courriels et IP de tous les locataires et
+// n'était consultable que depuis ce back-office. `PLATFORM_OWNER_ID` ne sert
+// donc plus qu'à la boîte de réception des demandes de démo (marketing.ts).
 
 // CSP violation reports — public endpoint, tight limit to prevent log flooding
 const cspReportLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP

@@ -302,6 +302,49 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             }).eq('id', payReqId);
             if (payReqErr) throw new Error('payment_requirements paid update failed: ' + payReqErr.message);
           }
+
+          // Déclenche la confirmation de dépôt.
+          //
+          // Ce chemin ne produisait AUCUN événement : le preset
+          // `deposit_received` attendait `invoice.paid` avec
+          // `payment_type: 'deposit'` dans les métadonnées, une clé qu'aucun
+          // émetteur ne fournissait. Résultat mesuré en prod : 30 règles
+          // actives, badge vert, et zéro envoi depuis toujours. Le client
+          // versait son dépôt sans jamais recevoir la confirmation que sa
+          // place était réservée.
+          //
+          // `payment_type` distingue ce paiement d'un règlement de facture :
+          // `payment_confirmation` porte désormais la condition inverse
+          // (`neq: 'deposit'`), sans quoi les deux presets partiraient
+          // ensemble et le client recevrait deux SMS.
+          //
+          // Non bloquant : le dépôt est déjà encaissé et enregistré, une
+          // automatisation muette ne doit pas faire échouer le webhook — un
+          // throw ici ferait rejouer Stripe.
+          try {
+            const { data: q } = await admin
+              .from('quotes')
+              .select('org_id, client_id, lead_id, quote_number')
+              .eq('id', quoteId)
+              .maybeSingle();
+            if (q?.org_id) {
+              const { eventBus } = await import('../lib/eventBus');
+              await eventBus.emit('invoice.paid', {
+                orgId: q.org_id,
+                entityType: 'quote',
+                entityId: quoteId,
+                metadata: {
+                  payment_type: 'deposit',
+                  quote_number: q.quote_number || '',
+                  client_id: q.client_id || q.lead_id || null,
+                  amount_cents: Number(intent.amount_received || intent.amount || 0),
+                  provider: 'stripe',
+                },
+              });
+            }
+          } catch (emitErr: any) {
+            console.error('[webhook] émission dépôt reçu échouée:', emitErr?.message);
+          }
         }
       }
 

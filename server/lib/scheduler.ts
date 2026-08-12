@@ -795,8 +795,44 @@ export function startScheduler(
   console.log('[scheduler] automation scheduler started (interval: 5 min)');
 
   // Run once immediately, then every 5 minutes
-  tick(supabase, twilioConfig);
-  intervalHandle = setInterval(() => tick(supabase, twilioConfig), INTERVAL_MS);
+  void tickProtege(supabase, twilioConfig);
+  intervalHandle = setInterval(() => void tickProtege(supabase, twilioConfig), INTERVAL_MS);
+}
+
+/** Vrai pendant qu'un tick est en cours dans CE processus. */
+let tickEnCours = false;
+
+/**
+ * Exécute un tick sous double protection.
+ *
+ * 1. `tickEnCours` — garde locale. `setInterval` relance toutes les 5 minutes
+ *    sans se soucier de la durée du tick précédent ; un tick long (les
+ *    handlers font une requête `clients` par ligne) se faisait doubler par le
+ *    suivant.
+ * 2. `withAdvisoryLock` — garde distribuée. Tous les autres crons du produit
+ *    l'utilisent déjà ; celui-ci, qui est pourtant le seul à ENVOYER aux
+ *    clients, en était dépourvu. Avec deux instances, chaque message partait
+ *    en double.
+ *
+ * Le nom du verrou est stable : il identifie le travail, pas l'instance.
+ */
+async function tickProtege(supabase: SupabaseClient, twilio: TwilioConfig | null) {
+  if (tickEnCours) {
+    console.warn('[scheduler] tick précédent encore en cours — passage ignoré');
+    return;
+  }
+  tickEnCours = true;
+  try {
+    const { withAdvisoryLock } = await import('./advisory-lock');
+    const { acquired } = await withAdvisoryLock('automation-scheduler', () => tick(supabase, twilio));
+    if (!acquired) {
+      console.log('[scheduler] tick pris par une autre instance — passage ignoré');
+    }
+  } catch (err: any) {
+    console.error('[scheduler] tick échoué:', err?.message);
+  } finally {
+    tickEnCours = false;
+  }
 }
 
 export function stopScheduler() {

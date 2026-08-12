@@ -171,3 +171,91 @@ describe('détails de contenu', () => {
     expect(presets).not.toMatch(/\{\{\w+\}\}/);
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// Notifications internes : français professionnel
+// ───────────────────────────────────────────────────────────────────
+
+describe('notifications d’automatisation — français, et utiles', () => {
+  const presets = read('server/lib/automationPresets.data.ts');
+
+  /** Titres et corps des actions internes (notifications + tâches). */
+  /**
+   * Extrait par parcours du JSON, pas par expression régulière.
+   *
+   * Une première version regex renvoyait une liste VIDE — le bloc `config`
+   * s'étend sur plusieurs lignes — ce qui faisait passer les assertions sans
+   * rien vérifier. Un test vert qui ne teste rien est pire que pas de test,
+   * d'où le garde-fou de longueur ci-dessous.
+   */
+  function textesInternes(): string[] {
+    // Le tableau est du JSON valide, mais entouré de TypeScript :
+    //   export const AUTOMATION_PRESETS: AutomationPresetDef[] = [ … ];
+    // On borne sur le `= [` — chercher le premier `[` attraperait celui de
+    // l'annotation de type `AutomationPresetDef[]`.
+    const debut = presets.indexOf('= [', presets.indexOf('AUTOMATION_PRESETS')) + 2;
+    const fin = presets.lastIndexOf('];');
+    const data = JSON.parse(presets.slice(debut, fin + 1));
+    const out: string[] = [];
+    for (const p of data) {
+      for (const a of p.actions || []) {
+        if (a.type !== 'create_notification' && a.type !== 'create_task') continue;
+        for (const champ of ['title', 'body', 'description']) {
+          if (a.config?.[champ]) out.push(String(a.config[champ]));
+        }
+      }
+    }
+    return out;
+  }
+
+  it('l’extraction trouve bien les textes (garde-fou du test lui-même)', () => {
+    expect(textesInternes().length).toBeGreaterThan(15);
+  });
+
+  it('aucun texte interne n’est resté en anglais', () => {
+    // Ces textes s'affichent dans la cloche de notifications et la liste de
+    // tâches de l'utilisateur. « Escalate to management. » dans un CRM
+    // québécois, ça ne passe pas.
+    const anglais = /\b(has not|Task created|Escalate|Immediate action|Make a final|never responded|cancelled their|Schedule the job|not yet received|going cold|New Lead|Payment Received|Appointment Cancelled|days overdue|days unpaid|days outstanding|Follow up:|Client \[)/;
+    const fautifs = textesInternes().filter((t) => anglais.test(t));
+    expect(fautifs, `textes encore en anglais : ${fautifs.join(' | ')}`).toEqual([]);
+  });
+
+  it('les variables restent intactes après traduction', () => {
+    // Une substitution maladroite aurait pu casser [client_name] : le
+    // destinataire verrait alors un trou dans sa notification.
+    const avecVars = textesInternes().filter((t) => /\[[a-z_]+\]/.test(t));
+    expect(avecVars.length).toBeGreaterThan(10);
+    // Aucune variable tronquée ni malformée.
+    for (const t of avecVars) {
+      expect(t, `variable malformée dans « ${t} »`).not.toMatch(/\[[a-z_]*\s|\s[a-z_]*\]/);
+    }
+  });
+
+  it('les notifications d’échéance disent quoi faire, pas seulement quoi constater', () => {
+    // « Task created for follow-up. » ne disait ni de quelle facture il
+    // s'agissait, ni ce qui était attendu.
+    expect(presets).toContain('Un appel est recommandé.');
+    expect(presets).toContain('À transmettre à un responsable ou à mettre en recouvrement.');
+    expect(presets).toContain('Faire un dernier appel, ou clore le dossier.');
+  });
+
+  it('plus de « URGENT » en majuscules — l’urgence se lit dans le contenu', () => {
+    expect(presets).not.toContain('URGENT: Invoice');
+  });
+
+  it('la migration couvre aussi les variantes présentes uniquement en base', () => {
+    // Le seed SQL et le fichier TypeScript ont divergé : la prod portait des
+    // formulations absentes du fichier source. Sans elles, une partie des
+    // notifications serait restée en anglais après migration.
+    const mig = read('supabase/migrations/20260812140000_notifications_automatisation_francais.sql');
+    expect(mig).toContain('Variantes présentes UNIQUEMENT en base');
+    expect(mig).toContain('days outstanding');
+    expect(mig).toContain('Task created for follow-up');
+    // Le fragment court doit être traité APRÈS la phrase longue qui le
+    // contient, sinon le remplacement produit un mélange franco-anglais.
+    const court = mig.lastIndexOf("array['Task created for follow-up.'");
+    const long = mig.indexOf("array['[client_name] invoice overdue 14 days.");
+    expect(court).toBeGreaterThan(long);
+  });
+});

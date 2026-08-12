@@ -229,27 +229,70 @@ async function executeRuleActions(
 
 // ── Resolve execution time ──────────────────────────────────
 
+/**
+ * Tolérance avant d'abandonner un rappel dont l'heure est déjà passée.
+ *
+ * Un rappel « la veille » calculé avec 20 minutes de retard reste pertinent ;
+ * le même rappel calculé 3 jours trop tard ne l'est plus.
+ */
+const RETARD_TOLERE_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Calcule le moment d'exécution d'une action différée.
+ *
+ * Retourne `null` quand la tâche doit être ABANDONNÉE plutôt que planifiée.
+ *
+ * Auparavant, un rappel dont l'heure était déjà passée était exécuté « dans
+ * 5 secondes ». Concrètement : créer aujourd'hui un rendez-vous pour DEMAIN
+ * déclenchait immédiatement le rappel « J-7 », et le client recevait dans la
+ * seconde « votre rendez-vous est dans une semaine » — alors qu'il est demain.
+ * Un message factuellement faux, sur le cas le plus courant qui soit (la prise
+ * de rendez-vous à court terme).
+ *
+ * On garde une tolérance : un rappel légèrement en retard part quand même,
+ * parce que le décalage vient alors du tick de 5 minutes, pas d'une erreur de
+ * cadence.
+ */
 async function resolveExecuteAt(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
-): Promise<Date> {
+): Promise<Date | null> {
   // Negative delay = "X seconds before the event's reference time"
   // Used for appointment reminders (e.g., -86400 = 1 day before start_time)
   if (rule.delay_seconds < 0 && (event.entityType === 'schedule_event' || event.entityType === 'appointment')) {
-    const { data: evt } = await config.supabase
+    const { data: evt, error } = await config.supabase
       .from('schedule_events')
       .select('start_at, start_time')
       .eq('id', event.entityId)
       .maybeSingle();
 
+    // Une erreur de lecture ne doit pas être confondue avec « pas de date » :
+    // sans ce garde, on retombait sur le délai positif ci-dessous et le rappel
+    // « 1 semaine avant » partait 1 semaine APRÈS la création du rendez-vous.
+    if (error) {
+      console.error(`[automationEngine] lecture de schedule_events échouée (rule ${rule.id}):`, error.message);
+      return null;
+    }
+
     const startField = evt?.start_at || evt?.start_time;
     if (startField) {
       const eventTime = new Date(startField).getTime();
       const executeAt = new Date(eventTime + rule.delay_seconds * 1000);
-      // If the calculated time is already past, execute immediately
-      if (executeAt.getTime() <= Date.now()) {
-        return new Date(Date.now() + 5000); // 5s from now
+      const retard = Date.now() - executeAt.getTime();
+
+      if (retard > RETARD_TOLERE_MS) {
+        // Le créneau du rappel est franchement dépassé : l'envoyer dirait au
+        // client quelque chose de faux.
+        console.log(
+          `[automationEngine] rappel abandonné (créneau dépassé de ${Math.round(retard / 60000)} min) — règle "${rule.name}"`,
+        );
+        return null;
+      }
+      if (retard > 0) {
+        // Léger retard (tick de 5 min) : on part tout de suite, le message
+        // reste juste.
+        return new Date(Date.now() + 5000);
       }
       return executeAt;
     }
@@ -267,6 +310,10 @@ async function scheduleDelayedActions(
   config: EngineConfig,
 ) {
   const executeAt = await resolveExecuteAt(rule, event, config);
+
+  // `null` = créneau dépassé ou date de référence illisible : on ne planifie
+  // rien plutôt que d'envoyer un rappel devenu faux.
+  if (!executeAt) return;
 
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
@@ -297,28 +344,6 @@ async function scheduleDelayedActions(
 
 // ── Event handler ───────────────────────────────────────────
 
-// ── Map CRM event types to workflow trigger_type values ────
-const EVENT_TO_TRIGGER: Record<string, string> = {
-  'lead.created': 'lead_created',
-  'lead.updated': 'lead_updated',
-  'lead.status_changed': 'lead_status_changed',
-  'lead.converted': 'lead_converted',
-  'pipeline_deal.stage_changed': 'pipeline_deal_stage_changed',
-  'estimate.sent': 'estimate_sent',
-  'estimate.accepted': 'estimate_approved',
-  'quote.created': 'quote_created',
-  'quote.sent': 'quote_sent',
-  'quote.approved': 'quote_approved',
-  'quote.declined': 'quote_declined',
-  'quote.converted': 'quote_converted',
-  'appointment.created': 'job_scheduled',
-  'job.created': 'job_scheduled',
-  'job.completed': 'job_completed',
-  'invoice.created': 'invoice_created',
-  'invoice.sent': 'invoice_created',
-  'invoice.overdue': 'invoice_overdue',
-  'invoice.paid': 'payment_received',
-};
 
 // ── Convert delay_value + delay_unit to seconds ───────────
 function delayToSeconds(value: number, unit: string): number {
@@ -356,61 +381,16 @@ async function handleEvent(event: CRMEvent) {
       }
     }
 
-    // ── 2. Match workflows table (new system) ──
-    const triggerType = EVENT_TO_TRIGGER[event.type];
-    if (triggerType) {
-      const { data: workflows, error: wfError } = await engineConfig.supabase
-        .from('workflows')
-        .select('id, org_id, name, trigger_type, delay_value, delay_unit, conditions, actions_config')
-        .eq('org_id', event.orgId)
-        .eq('trigger_type', triggerType)
-        .eq('active', true)
-        .eq('status', 'published');
+    // Le second système d'automatisations (table `workflows`, constructeur
+    // visuel) a été retiré : aucune interface ne permettait d'en créer, les
+    // 31 lignes existantes vivaient dans une seule org et n'ont jamais été
+    // exécutées (`workflow_runs` vide). Leur planification différée violait de
+    // surcroît une clé étrangère — `automation_scheduled_tasks.automation_rule_id`
+    // pointe vers `automation_rules`, pas vers `workflows`.
+    //
+    // Les automatisations du produit vivent dans `automation_rules`, traitées
+    // juste au-dessus.
 
-      if (wfError) {
-        console.error('[automationEngine] failed to fetch workflows:', wfError.message);
-      }
-
-      if (workflows && workflows.length > 0) {
-        for (const wf of workflows as any[]) {
-          // Evaluate conditions (array format)
-          const wfConditions = wf.conditions || [];
-          if (Array.isArray(wfConditions) && wfConditions.length > 0) {
-            const condObj: Record<string, any> = {};
-            for (const c of wfConditions) {
-              if (c.operator === 'equals') condObj[c.field] = { eq: c.value };
-              else if (c.operator === 'not_equals') condObj[c.field] = { neq: c.value };
-            }
-            if (!evaluateConditions(condObj, event)) continue;
-          }
-
-          // Convert workflow to AutomationRule format for execution
-          const wfActions = wf.actions_config || [];
-          if (!Array.isArray(wfActions) || wfActions.length === 0) continue;
-
-          const delaySeconds = delayToSeconds(wf.delay_value || 0, wf.delay_unit || 'immediate');
-
-          const pseudoRule: AutomationRule = {
-            id: wf.id,
-            org_id: wf.org_id,
-            name: wf.name,
-            trigger_event: event.type,
-            conditions: {},
-            delay_seconds: delaySeconds,
-            actions: wfActions,
-            is_active: true,
-          };
-
-          if (delaySeconds > 0) {
-            await scheduleDelayedActions(pseudoRule, event, engineConfig);
-          } else {
-            await executeRuleActions(pseudoRule, event, engineConfig);
-          }
-
-          console.log(`[automationEngine] workflow "${wf.name}" matched event ${event.type}`);
-        }
-      }
-    }
   } catch (err: any) {
     console.error('[automationEngine] error handling event:', err.message);
   }
@@ -477,8 +457,51 @@ function nextStateAfterFailure(
   };
 }
 
+/**
+ * Délai au-delà duquel une tâche « en cours » est considérée comme abandonnée.
+ *
+ * Large volontairement : une action lente (SMTP poussif, Twilio qui traîne)
+ * doit pouvoir finir sans être reprise en parallèle.
+ */
+const TACHE_FIGEE_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Remet en file les tâches restées « en cours » après un arrêt brutal.
+ *
+ * Une tâche passe en `running` avant son exécution. Si le processus meurt
+ * entre les deux — déploiement, plantage, mémoire épuisée — la ligne reste
+ * `running` pour toujours :
+ *   · le fetch ne sélectionne que les `pending`, donc elle n'est jamais
+ *     reprise ;
+ *   · l'index d'unicité couvre `running`, donc sa clé reste occupée et cette
+ *     action ne peut PLUS JAMAIS être replanifiée pour cette entité.
+ *
+ * Chaque déploiement pendant un tick perdait ainsi quelques relances et
+ * rendait l'entité concernée sourde pour cette règle.
+ */
+async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
+  const limite = new Date(Date.now() - TACHE_FIGEE_MS).toISOString();
+  const { data, error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update({ status: 'pending', execute_at: new Date().toISOString() })
+    .eq('status', 'running')
+    .lt('updated_at', limite)
+    .select('id');
+
+  if (error) {
+    console.error('[automationEngine] récupération des tâches figées échouée:', error.message);
+    return;
+  }
+  if (data && data.length > 0) {
+    console.warn(`[automationEngine] ${data.length} tâche(s) figée(s) remise(s) en file (arrêt brutal détecté)`);
+  }
+}
+
 export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!engineConfig) return;
+
+  // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
+  await recupererTachesFigees(supabase);
 
   const now = new Date().toISOString();
 
@@ -525,14 +548,29 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // Mark as running. Si la prise n'est pas persistée, la tâche reste
     // 'pending' et serait ré-exécutée au tour suivant — on la saute plutôt
     // que d'envoyer deux fois la même action.
-    const { error: claimError } = await supabase
+    const { data: claimed, error: claimError } = await supabase
       .from('automation_scheduled_tasks')
-      .update({ status: 'running', attempts: task.attempts + 1 })
-      .eq('id', task.id);
+      // `execute_at` est réécrit à l'instant de la prise : la table n'a pas de
+      // colonne `updated_at`, et c'est cet horodatage qui permet de repérer
+      // une tâche restée `running` après un arrêt brutal (cf.
+      // `recupererTachesFigees`). Sans lui, la détection n'aurait aucun repère
+      // temporel.
+      //
+      // Le filtre `.eq('status','pending')` rend la prise atomique : avec deux
+      // instances du serveur, une seule voit sa mise à jour aboutir, l'autre
+      // touche 0 ligne et passe son tour. Sans lui, les deux réussissaient et
+      // exécutaient l'action — le client recevait le message en double.
+      .update({ status: 'running', attempts: task.attempts + 1, execute_at: new Date().toISOString() })
+      .eq('id', task.id)
+      .eq('status', 'pending')
+      .select('id');
     if (claimError) {
       console.error(`[automationEngine] failed to claim scheduled task ${task.id}:`, claimError.message);
       continue;
     }
+    // Zéro ligne touchée = une autre instance (ou un tick qui se chevauche) a
+    // pris la tâche entre le fetch et l'update. On la lui laisse.
+    if (!claimed || claimed.length === 0) continue;
 
     try {
       const actionConfig = task.action_config;
@@ -630,49 +668,79 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
 
 // ── Stop condition checker ──────────────────────────────────
 
+/**
+ * Faut-il abandonner cette tâche planifiée ?
+ *
+ * `true` = la relance n'a plus lieu d'être (facture payée, devis accepté,
+ * rendez-vous annulé…). La tâche est alors annulée DÉFINITIVEMENT.
+ *
+ * D'où la précaution centrale de cette fonction : `supabase-js` ne lève jamais
+ * d'exception, il retourne `{ data, error }`. Les six lectures ci-dessous ne
+ * lisaient que `data` — sur erreur (délai dépassé, incident réseau, RLS),
+ * `data` vaut `null`, que le code interprétait comme « entité supprimée » et
+ * traduisait par une annulation irrémédiable. Un hoquet de deux secondes
+ * suffisait à supprimer des relances en attente, sans log ni reprise.
+ *
+ * Règle appliquée partout maintenant : une erreur de LECTURE ne conclut rien.
+ * On laisse la tâche en place ; le tick suivant réessaiera.
+ */
 async function checkStopConditions(
   supabase: SupabaseClient,
   entityType: string,
   entityId: string,
   triggerEvent?: string,
 ): Promise<boolean> {
+  /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
+  const illisible = (table: string, message: string): boolean => {
+    console.error(
+      `[automationEngine] condition d'arrêt indéterminable (${table}, ${entityType} ${entityId}) — tâche conservée:`,
+      message,
+    );
+    return false; // ne PAS annuler
+  };
+
   // Invoice reminders: stop if paid, cancelled, disputed, or client archived
   if (entityType === 'invoice') {
-    const { data: inv } = await supabase
+    const { data: inv, error } = await supabase
       .from('invoices')
       .select('status, client_id')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('invoices', error.message);
     if (!inv) return true; // Invoice deleted
     if (['paid', 'cancelled', 'void'].includes(inv.status)) return true;
     // Check if client is archived/deleted
     if (inv.client_id) {
-      const { data: cl } = await supabase.from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+      const { data: cl, error: clErr } = await supabase
+        .from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+      if (clErr) return illisible('clients', clErr.message);
       if (cl?.deleted_at) return true;
     }
   }
 
   // Estimate follow-ups: stop if accepted, rejected, or lead archived
   if (entityType === 'invoice' && triggerEvent === 'estimate.sent') {
-    const { data: inv } = await supabase
+    const { data: inv, error } = await supabase
       .from('invoices')
       .select('status')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('invoices', error.message);
     if (!inv) return true;
     if (['paid', 'accepted', 'rejected', 'cancelled', 'void'].includes(inv.status)) return true;
   }
 
   // Appointment reminders: stop if cancelled
   if (entityType === 'schedule_event' || entityType === 'appointment') {
-    const { data: evt } = await supabase
+    const { data: evt, error } = await supabase
       .from('schedule_events')
       .select('status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('schedule_events', error.message);
     if (!evt) return true;
     if (evt.deleted_at) return true;
     if (evt.status === 'cancelled') return true;
@@ -681,12 +749,13 @@ async function checkStopConditions(
   // Quote follow-ups: stop once the client responded (approved, declined,
   // changes requested) or the quote left circulation (expired, converted, archived)
   if (entityType === 'quote') {
-    const { data: quote } = await supabase
+    const { data: quote, error } = await supabase
       .from('quotes')
       .select('status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('quotes', error.message);
     if (!quote) return true; // Quote deleted
     if (quote.deleted_at) return true;
     if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return true;
@@ -694,12 +763,13 @@ async function checkStopConditions(
 
   // Lead: stop if archived or deleted (a lead is a client with status='lead')
   if (entityType === 'lead') {
-    const { data: lead } = await supabase
+    const { data: lead, error } = await supabase
       .from('clients')
       .select('status, lead_status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('clients', error.message);
     if (!lead) return true;
     if (lead.deleted_at) return true;
     // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.
