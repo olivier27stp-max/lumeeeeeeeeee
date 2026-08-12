@@ -178,3 +178,37 @@ export async function getFailureCountsByRule(): Promise<Record<string, number>> 
   }
   return counts;
 }
+
+/**
+ * Identité de l'entreprise, pour l'aperçu des courriels d'automatisation.
+ *
+ * Le serveur enveloppe chaque envoi dans `buildEmailLayout` (logo, en-tête,
+ * pied de page) — exactement comme pour une facture ou un devis. Sans ces
+ * données, l'éditeur montrerait un message « nu » alors qu'il arrivera habillé
+ * chez le client.
+ */
+export interface ApercuEntreprise {
+  company_name: string | null;
+  company_logo_url: string | null;
+  company_phone: string | null;
+}
+
+export async function getCompanyBranding(): Promise<ApercuEntreprise> {
+  const vide = { company_name: null, company_logo_url: null, company_phone: null };
+  const orgId = await getCurrentOrgId();
+  if (!orgId) return vide;
+
+  const { data, error } = await supabase
+    .from('company_settings')
+    .select('company_name, logo_url, phone')
+    .eq('org_id', orgId)
+    .maybeSingle();
+
+  // Un aperçu sans logo reste utile : on ne bloque pas l'éditeur pour ça.
+  if (error || !data) return vide;
+  return {
+    company_name: data.company_name ?? null,
+    company_logo_url: data.logo_url ?? null,
+    company_phone: data.phone ?? null,
+  };
+}

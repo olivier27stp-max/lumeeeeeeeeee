@@ -244,3 +244,51 @@ describe('éditeur pleine page — le courriel s’édite dans son rendu', () =>
     expect(ed).toContain("b.type === 'puce' ? `- ${b.texte}`");
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// L'aperçu montre l'habillage réel — logo, en-tête, pied de page
+// ───────────────────────────────────────────────────────────────────
+
+describe('aperçu — le courriel s’affiche habillé, comme une facture', () => {
+  const ed = read('src/components/automations/EmailPreviewEditor.tsx');
+  const api = read('src/lib/automationRulesApi.ts');
+
+  it('le logo et le nom de l’entreprise sont affichés', () => {
+    // Le serveur enveloppe chaque envoi dans `buildEmailLayout` — même
+    // traitement que les factures et devis. Sans l'afficher, on écrirait un
+    // message « nu » sans voir qu'il arrive habillé.
+    expect(ed).toContain('entreprise.company_logo_url');
+    expect(ed).toContain('entreprise.company_name');
+    expect(ed).toContain('getCompanyBranding');
+  });
+
+  it('le pied de page reprend celui du serveur', () => {
+    // « Sent via LUME on behalf of X » + téléphone : le voir évite de répéter
+    // la signature en fin de message.
+    expect(ed).toContain('Envoyé via');
+    expect(ed).toContain('entreprise.company_phone');
+  });
+
+  it('l’origine de l’habillage est expliquée à l’utilisateur', () => {
+    expect(ed).toContain('vos réglages d’entreprise');
+  });
+
+  it('un aperçu sans logo reste utilisable', () => {
+    // Une org sans logo ne doit pas voir l'éditeur bloqué.
+    expect(ed).toContain("aperçu sans logo : pas bloquant");
+    const fn = api.slice(api.indexOf('export async function getCompanyBranding'));
+    expect(fn).toContain('if (error || !data) return vide;');
+  });
+
+  it('le branding est lu pour l’org courante seulement', () => {
+    const fn = api.slice(api.indexOf('export async function getCompanyBranding'));
+    expect(fn).toContain("eq('org_id', orgId)");
+  });
+
+  it('les colonnes lues existent bien dans company_settings', () => {
+    // `logo_url` et `phone` — pas `company_logo_url` ni `company_phone`, qui
+    // sont les noms côté serveur après transformation.
+    const fn = api.slice(api.indexOf('export async function getCompanyBranding'));
+    expect(fn).toContain("select('company_name, logo_url, phone')");
+  });
+});

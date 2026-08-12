@@ -14,7 +14,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
-import { updateRuleMessage } from '../../lib/automationRulesApi';
+import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
 import { htmlVersTexte, texteVersHtml, remplacerVariables } from '../../lib/emailBodyText';
 
 interface Props {
@@ -26,6 +26,20 @@ interface Props {
   fr: boolean;
   onClose: () => void;
   onSaved: () => void;
+}
+
+/**
+ * Identité de l'entreprise, pour montrer le courriel tel qu'il partira.
+ *
+ * Le serveur enveloppe chaque envoi dans `buildEmailLayout` — logo, en-tête,
+ * pied de page avec téléphone et numéros de taxes — exactement comme pour une
+ * facture ou un devis. L'éditeur doit le refléter, sinon on écrit un message
+ * « nu » sans voir qu'il arrivera habillé.
+ */
+interface Entreprise {
+  company_name?: string | null;
+  company_logo_url?: string | null;
+  company_phone?: string | null;
 }
 
 /** Un bloc du courriel : titre, paragraphe ou puce. */
@@ -73,6 +87,17 @@ export default function EmailPreviewEditor({
   const [actif, setActif] = useState<number | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
+  const [entreprise, setEntreprise] = useState<Entreprise>({});
+
+  // L'en-tête et le pied de page sont ajoutés par le SERVEUR à l'envoi
+  // (`buildEmailLayout`), comme pour une facture ou un devis. Les afficher ici
+  // évite d'écrire un message « nu » sans voir qu'il arrivera habillé — et de
+  // répéter le nom de l'entreprise déjà présent dans le pied de page.
+  useEffect(() => {
+    getCompanyBranding()
+      .then(setEntreprise)
+      .catch(() => { /* aperçu sans logo : pas bloquant */ });
+  }, []);
 
   const initial = useMemo(() => ({ blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(body))), objet: subject }), [body, subject]);
   const modifie = blocsEnTexte(blocs) !== initial.blocs || objet !== initial.objet;
@@ -188,6 +213,22 @@ export default function EmailPreviewEditor({
               />
             </div>
 
+            {/* En-tête ajouté par le serveur — non modifiable ici, il vient
+                des réglages de l'entreprise. */}
+            <div className="px-5 py-4 border-b border-outline/30 text-center bg-white dark:bg-surface">
+              {entreprise.company_logo_url ? (
+                <img
+                  src={entreprise.company_logo_url}
+                  alt={entreprise.company_name ?? ''}
+                  className="mx-auto max-h-10 object-contain"
+                />
+              ) : (
+                <span className="text-[18px] font-bold tracking-widest text-[#1a1a2e] dark:text-text-primary">
+                  {entreprise.company_name || 'LUME'}
+                </span>
+              )}
+            </div>
+
             {/* Corps */}
             <div className="px-5 py-4 space-y-0.5">
               {blocs.map((bloc) => (
@@ -229,7 +270,26 @@ export default function EmailPreviewEditor({
                 </button>
               </div>
             </div>
+
+            {/* Pied de page ajouté par le serveur. Le montrer évite de
+                répéter « Merci, [company_name] » en fin de message : la
+                signature y est déjà. */}
+            <div className="px-5 py-3 border-t border-outline/30 bg-surface-secondary/40 text-center">
+              <p className="text-[10px] text-text-tertiary">
+                {fr ? 'Envoyé via' : 'Sent via'} <strong>LUME</strong>
+                {entreprise.company_name ? ` ${fr ? 'pour' : 'on behalf of'} ${entreprise.company_name}` : ''}
+              </p>
+              {entreprise.company_phone && (
+                <p className="text-[10px] text-text-tertiary mt-0.5">{entreprise.company_phone}</p>
+              )}
+            </div>
           </div>
+
+          <p className="mx-auto max-w-[600px] mt-2 text-[10px] text-text-tertiary text-center">
+            {fr
+              ? 'L’en-tête et le pied de page viennent de vos réglages d’entreprise — comme sur vos factures et soumissions.'
+              : 'Header and footer come from your company settings — same as on invoices and quotes.'}
+          </p>
 
           {/* Aperçu du rendu final, variables remplacées */}
           <div className="mx-auto max-w-[600px] mt-3">
