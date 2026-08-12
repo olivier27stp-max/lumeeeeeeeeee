@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { resolveBrand, readableOn } from '../lib/brandColor';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import { formatQuoteMoney } from '../lib/quotesApi';
@@ -19,6 +20,8 @@ interface CompanyBranding {
   province: string | null;
   postal_code: string | null;
   country: string | null;
+  /** Accent choisi par l'entreprise. null = encre noire. */
+  brand_color?: string | null;
 }
 
 interface QuoteData {
@@ -104,7 +107,7 @@ function buildCompanyAddress(c: CompanyBranding): string | null {
 // Stripe Deposit Payment Form
 // ══════════════════════════════════════════════════════════════
 
-function DepositPaymentForm({ onSuccess, onError }: { onSuccess: () => Promise<void> | void; onError: (msg: string) => void }) {
+function DepositPaymentForm({ brand, onSuccess, onError }: { brand: string; onSuccess: () => Promise<void> | void; onError: (msg: string) => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -137,7 +140,8 @@ function DepositPaymentForm({ onSuccess, onError }: { onSuccess: () => Promise<v
       <button
         type="submit"
         disabled={processing || !stripe || !elements}
-        className="w-full bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        style={{ background: brand, color: readableOn(brand) }}
+        className="w-full py-3 rounded-lg font-medium text-[14px] transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {processing ? (
           <><Loader2 size={16} className="animate-spin" /> {isFr ? 'Traitement…' : 'Processing...'}</>
@@ -168,6 +172,8 @@ export default function QuoteView() {
   const [signerName, setSignerName] = useState('');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef(false);
+  // Une seule résolution : tout hex invalide retombe sur l'encre noire.
+  const brand = resolveBrand(data?.company?.brand_color);
 
   // Deposit payment state
   const [depositIntentData, setDepositIntentData] = useState<{ client_secret: string; publishable_key: string; amount_cents: number; currency: string; payment_intent_id: string } | null>(null);
@@ -813,7 +819,8 @@ export default function QuoteView() {
                         setError('');
                         setTimeout(() => initCanvas(), 100);
                       }}
-                      className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors flex items-center justify-center gap-2"
+                      style={{ background: brand, color: readableOn(brand) }}
+                      className="flex-1 py-3 rounded-lg font-medium text-[14px] transition-opacity hover:opacity-90 flex items-center justify-center gap-2"
                     >
                       <CheckCircle size={16} />
                       {isFr ? 'Accepter la soumission' : 'Accept Quote'}
@@ -861,7 +868,8 @@ export default function QuoteView() {
                       <button
                         onClick={handleRequestChanges}
                         disabled={requestingChanges || !changeMessage.trim()}
-                        className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        style={{ background: brand, color: readableOn(brand) }}
+                        className="flex-1 py-3 rounded-lg font-medium text-[14px] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         <Pencil size={16} />
                         {requestingChanges ? (isFr ? 'Envoi…' : 'Sending...') : (isFr ? 'Envoyer la demande' : 'Send Request')}
@@ -941,7 +949,8 @@ export default function QuoteView() {
                       <button
                         onClick={handleAccept}
                         disabled={accepting || !signatureData || !signerName.trim()}
-                        className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        style={{ background: brand, color: readableOn(brand) }}
+                        className="flex-1 py-3 rounded-lg font-medium text-[14px] transition-opacity hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
                         <CheckCircle size={16} />
                         {accepting ? (isFr ? 'Acceptation…' : 'Accepting...') : (isFr ? 'Confirmer et accepter' : 'Confirm & Accept')}
@@ -1094,7 +1103,7 @@ export default function QuoteView() {
                           appearance: {
                             theme: 'flat',
                             variables: {
-                              colorPrimary: '#111111',
+                              colorPrimary: brand,
                               colorBackground: '#ffffff',
                               colorText: '#111111',
                               colorDanger: '#c00000',
@@ -1105,12 +1114,13 @@ export default function QuoteView() {
                             rules: {
                               '.Label': { color: '#666666', fontSize: '12px', fontWeight: '500' },
                               '.Input': { borderColor: '#dddddd', padding: '10px 12px' },
-                              '.Input:focus': { borderColor: '#111111', boxShadow: '0 0 0 1px #111111' },
+                              '.Input:focus': { borderColor: brand, boxShadow: `0 0 0 1px ${brand}` },
                             },
                           },
                         }}
                       >
                         <DepositPaymentForm
+                          brand={brand}
                           onSuccess={async () => {
                             if (depositIntentData.payment_intent_id) {
                               await confirmDepositPayment(depositIntentData.payment_intent_id);

@@ -96,6 +96,18 @@ KEY_RE = re.compile(r"(?:^|[\{,])\s*([A-Za-z_][A-Za-z_0-9]*)\s*:")
 KV_RE = re.compile(r"(?:^|[\{,])\s*([A-Za-z_][A-Za-z_0-9]*)\s*:\s*'([A-Za-z_0-9 .-]+)'")
 PSEUDO = {'count', '*'}
 
+# Helpers qui lisent une table connue SANS .from() sur place : la liste de
+# colonnes leur est passée en argument, donc FROM_RE ne la voit pas. Sans cette
+# table, un tel appel échappait complètement au détecteur — c'est ce qui a
+# laissé passer brand_color le 7 août 2026, alors que la colonne manquait en
+# prod et faisait échouer toute la requête.
+HELPERS_LECTURE = {
+    'getCompanyBranding': 'company_settings',
+}
+HELPER_RE = re.compile(
+    r"\b(" + "|".join(HELPERS_LECTURE) + r")\s*\((.*?)\)", re.S)
+HELPER_COLS_RE = re.compile(r"[`'\"]([A-Za-z_][A-Za-z_0-9 ,\n]*)[`'\"]")
+
 
 def parse_select(expr):
     """Colonnes de premier niveau d'un select(), embeds et alias ignorés."""
@@ -243,6 +255,22 @@ def main():
                                 (rel, line_at(brace), table, km.group(1),
                                  km.group(2), sorted(allowed)),
                                 allow_ref=f'{km.group(1)}={km.group(2)}')
+
+            # Lectures passant par un helper : la liste de colonnes est un
+            # argument, pas un .select() — il faut la valider séparément.
+            for hm in HELPER_RE.finditer(text):
+                table = HELPERS_LECTURE[hm.group(1)]
+                if table not in cols:
+                    continue
+                litteraux = HELPER_COLS_RE.findall(hm.group(2))
+                # La liste de colonnes est le littéral qui en contient plusieurs.
+                for lit in litteraux:
+                    if ',' not in lit:
+                        continue
+                    for c in parse_select(lit):
+                        if c not in cols[table] and c not in PSEUDO:
+                            add(read_f, (rel, table, c, 'r'),
+                                (rel, line_at(hm.start()), table, c))
 
             for rm in RPC_RE.finditer(text):
                 fn = rm.group(1)

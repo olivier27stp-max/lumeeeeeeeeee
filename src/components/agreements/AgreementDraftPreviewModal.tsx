@@ -60,7 +60,7 @@ export default function AgreementDraftPreviewModal({
   useEffect(() => {
     if (!open) return;
     getAgreementCompanyBranding().then(setCompany).catch(() => {
-      setCompany({ company_name: fr ? 'Entreprise' : 'Business', logo_url: null, phone: null, email: null, website: null, address: null, taxLines: [] });
+      setCompany({ company_name: fr ? 'Entreprise' : 'Business', logo_url: null, phone: null, email: null, website: null, address: null, taxLines: [], brand_color: null });
     });
   }, [open]);
 
@@ -85,6 +85,7 @@ export default function AgreementDraftPreviewModal({
         email: company.email,
         website: company.website,
         taxLines: company.taxLines,
+        brandColor: company.brand_color,
       },
       clientName: data.clientName,
       clientEmail: data.clientEmail,

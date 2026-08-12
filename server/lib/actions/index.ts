@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
-import { findOrCreateConversation, normalizeE164 } from '../helpers';
+import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -41,6 +41,110 @@ export function resolveTemplate(
   return template
     .replace(/\{(\w+)\}/g, (_, key) => vars[key] ?? '')
     .replace(/\[(\w+)\]/g, (_, key) => vars[key] ?? '');
+}
+
+/**
+ * Le contrat à signer d'une job, s'il y en a un en attente.
+ *
+ * Une confirmation de rendez-vous qui n'apporte pas le document à signer force
+ * un second message ; on expose donc le lien aux gabarits :
+ *   [contract_link] — l'URL nue
+ *   [contract_line] — la phrase complète pour un SMS
+ *   [contract_html] — le paragraphe équivalent pour un courriel
+ *
+ * Les trois sont vides quand il n'y a rien à signer, pour qu'un gabarit qui
+ * les contient ne laisse ni trou ni balise orpheline.
+ */
+async function resolveContractVars(
+  supabase: SupabaseClient,
+  jobId: string,
+): Promise<{ contract_link: string; contract_line: string; contract_html: string }> {
+  const vide = { contract_link: '', contract_line: '', contract_html: '' };
+  if (!jobId) return vide;
+
+  let base = '';
+  try {
+    base = resolvePublicBaseUrl();
+  } catch {
+    return vide; // PUBLIC_URL absent : mieux vaut pas de lien qu'un lien cassé.
+  }
+
+  const { data, error } = await supabase
+    .from('job_agreements')
+    .select('view_token, status, require_signature')
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return vide;
+  if (!data.require_signature || data.status === 'signed' || !data.view_token) return vide;
+
+  const url = `${base}/contract/${data.view_token}`;
+  return {
+    contract_link: url,
+    contract_line: `Contrat à signer : ${url}`,
+    contract_html: `<p>Contrat à signer : <a href="${url}">${url}</a></p>`,
+  };
+}
+
+/**
+ * Le contrat SIGNÉ d'une job, plus le dépôt qui resterait dû.
+ *
+ * resolveContractVars ne rend rien une fois le document signé — c'est voulu,
+ * il n'y a plus rien à signer. Mais la confirmation de signature, elle, a
+ * justement besoin du lien à ce moment-là :
+ *   [signed_contract_link] l'URL de la copie signée
+ *   [deposit_amount]       le dépôt restant, formaté
+ *   [deposit_line]         la phrase complète, vide si rien n'est dû
+ */
+async function resolveSignedContractVars(
+  supabase: SupabaseClient,
+  jobId: string,
+): Promise<{ signed_contract_link: string; deposit_amount: string; deposit_line: string }> {
+  const vide = { signed_contract_link: '', deposit_amount: '', deposit_line: '' };
+  if (!jobId) return vide;
+
+  let base = '';
+  try {
+    base = resolvePublicBaseUrl();
+  } catch {
+    return vide;
+  }
+
+  const { data: acc } = await supabase
+    .from('job_agreements')
+    .select('view_token, status, snapshot')
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!acc?.view_token) return vide;
+
+  const url = `${base}/contract/${acc.view_token}`;
+
+  const { data: job } = await supabase
+    .from('jobs')
+    .select('deposit_status, currency')
+    .eq('id', jobId)
+    .maybeSingle();
+
+  const terms = (acc.snapshot as { payment_terms?: { deposit_required?: boolean; deposit_cents?: number } } | null)?.payment_terms;
+  const du = terms?.deposit_required && job?.deposit_status !== 'paid'
+    ? Math.round(Number(terms.deposit_cents || 0))
+    : 0;
+  if (du <= 0) return { signed_contract_link: url, deposit_amount: '', deposit_line: '' };
+
+  const montant = new Intl.NumberFormat('fr-CA', {
+    style: 'currency',
+    currency: (job?.currency || 'CAD').toUpperCase(),
+  }).format(du / 100);
+  return {
+    signed_contract_link: url,
+    deposit_amount: montant,
+    deposit_line: `Il reste un dépôt de ${montant} à verser, sur cette même page.`,
+  };
 }
 
 export async function resolveEntityVariables(
@@ -112,6 +216,8 @@ export async function resolveEntityVariables(
           vars.client_phone = c.phone || '';
         }
       }
+      Object.assign(vars, await resolveContractVars(supabase, entityId));
+      Object.assign(vars, await resolveSignedContractVars(supabase, entityId));
     }
   }
 
@@ -176,6 +282,7 @@ export async function resolveEntityVariables(
         vars.client_name = evt.job.client_name;
         vars.client_first_name = evt.job.client_name.split(' ')[0] || '';
       }
+      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, evt.job_id));
     }
   }
 

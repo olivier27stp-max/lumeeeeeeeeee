@@ -25,6 +25,7 @@ export type CRMEventType =
   | 'quote.declined'
   | 'quote.changes_requested'
   | 'quote.converted'
+  | 'agreement.signed'
   | 'appointment.created'
   | 'appointment.updated'
   | 'appointment.cancelled'
@@ -65,6 +66,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'quote.declined': 'quote_declined',
   'quote.changes_requested': 'quote_changes_requested',
   'quote.converted': 'quote_converted',
+  'agreement.signed': 'agreement_signed',
   'appointment.created': 'appointment_created',
   'appointment.updated': 'appointment_updated',
   'appointment.cancelled': 'appointment_cancelled',
