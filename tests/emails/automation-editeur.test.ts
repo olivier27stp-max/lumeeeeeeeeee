@@ -66,9 +66,14 @@ describe('éditeur — ce que l’utilisateur voit et fait', () => {
     expect(page).toContain("a.type === 'send_sms' || a.type === 'send_email'");
   });
 
-  it('le courriel expose son objet, pas le SMS', () => {
-    expect(editeur).toContain('estCourriel && (');
+  it('le courriel s’ouvre dans son propre éditeur, le SMS s’édite en place', () => {
+    // Éditer un courriel dans la bande étroite du panneau obligeait à taper
+    // dans un champ minuscule ; il s'ouvre donc en pleine page.
     expect(editeur).toContain("actionType === 'send_email'");
+    expect(editeur).toContain('EmailPreviewEditor');
+    expect(editeur).toContain('setEditeurOuvert');
+    // L'objet est édité dans cette fenêtre, pas dans le panneau.
+    expect(read('src/components/automations/EmailPreviewEditor.tsx')).toContain('setObjet');
   });
 
   it('le compteur de caractères prévient du coût d’un SMS long', () => {

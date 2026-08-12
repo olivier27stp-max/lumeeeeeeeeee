@@ -747,6 +747,7 @@ export default function Automations() {
                                     .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
                                     .map((a, i) => (
                                       <MessageEditor
+                                        ruleName={localizeAutomationName(rule.name, language)}
                                         key={`${rule.id}-${a.type}-${i}`}
                                         ruleId={rule.id}
                                         actionType={a.type as 'send_sms' | 'send_email'}

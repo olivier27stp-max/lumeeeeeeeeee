@@ -3665,6 +3665,50 @@ const en = {
     },
   },
 
+  // Help and support (drawer, settings page, contact form).
+  // The 12 FAQ articles stay in SupportDrawer.tsx: keeping question and answer
+  // side by side makes the content editable from a single place.
+  support: {
+    needHand: 'Need a hand?',
+    drawerNoMatch: 'Nothing matches your search.',
+    drawerCantFind: 'Can’t find it? Send us a message — we reply fast.',
+    title: 'Help and support',
+    contactTitle: 'Contact support',
+    intro: 'Tell us what’s going on. Requests are prioritized based on your plan.',
+    pageIntro: 'Search for an answer below. If you can’t find it, send us a message — we reply fast.',
+    searchPlaceholder: 'Search our help…',
+    commonQuestions: 'Common questions',
+    resultCount: 'result',
+    resultCountPlural: 'results',
+    noMatch: 'Nothing matches. Ask your question below.',
+    askSupport: 'Ask support',
+    goToPage: 'Take me there →',
+    cantFind: 'Can’t find what you’re looking for?',
+    getSupport: 'Get support',
+    writeUs: 'Send us a message',
+    back: 'Back',
+    close: 'Close',
+    // Form
+    categoryQuestion: 'Question',
+    categoryBug: 'Something broke',
+    categoryBilling: 'Billing',
+    categoryFeature: 'Feature request',
+    categoryOther: 'Other',
+    subject: 'Subject',
+    subjectPlaceholder: 'One-line summary',
+    message: 'Message',
+    messagePlaceholder: 'Describe the issue, steps to reproduce, etc.',
+    send: 'Send',
+    hint: 'A subject (3 characters) and a message (10 characters) are required.',
+    sent: 'Sent — we’ll get back to you soon.',
+    sentWithSla: 'Sent — we’ll reply within {delay}.',
+    sendFailed: 'Could not send your message.',
+    sendFailedWithEmail: 'Could not send your message. Please email {email}.',
+    sla4h: '4 business hours',
+    sla1d: '1 business day',
+    sla2d: '2 business days',
+  },
+
   // Public marketing website (home page, header, footer)
   marketingSite: {
     langToggle: 'FR',

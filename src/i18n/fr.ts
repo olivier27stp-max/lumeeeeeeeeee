@@ -3657,6 +3657,50 @@ const fr: TranslationKeys = {
     },
   },
 
+  // Aide et support (tiroir, page réglages, formulaire de contact).
+  // Les 12 articles de FAQ restent dans SupportDrawer.tsx : garder question et
+  // réponse côte à côte rend le contenu éditable d'un seul endroit.
+  support: {
+    needHand: 'Besoin d’aide ?',
+    drawerNoMatch: 'Aucune réponse ne correspond à votre recherche.',
+    drawerCantFind: 'Vous ne trouvez pas ? Écrivez-nous, on répond vite.',
+    title: 'Aide et support',
+    contactTitle: 'Contacter le support',
+    intro: 'Décrivez votre problème. Les demandes sont priorisées selon votre forfait.',
+    pageIntro: 'Cherchez une réponse ci-dessous. Si vous ne trouvez pas, écrivez-nous — on répond vite.',
+    searchPlaceholder: 'Rechercher dans l’aide…',
+    commonQuestions: 'Questions fréquentes',
+    resultCount: 'résultat',
+    resultCountPlural: 'résultats',
+    noMatch: 'Aucune réponse ne correspond. Posez votre question ci-dessous.',
+    askSupport: 'Poser la question au support',
+    goToPage: 'Aller à la page →',
+    cantFind: 'Vous ne trouvez pas ce que vous cherchez ?',
+    getSupport: 'Contacter le support',
+    writeUs: 'Nous écrire',
+    back: 'Retour',
+    close: 'Fermer',
+    // Formulaire
+    categoryQuestion: 'Question',
+    categoryBug: 'Un bug',
+    categoryBilling: 'Facturation',
+    categoryFeature: 'Suggestion',
+    categoryOther: 'Autre',
+    subject: 'Sujet',
+    subjectPlaceholder: 'Résumé en une ligne',
+    message: 'Message',
+    messagePlaceholder: 'Décrivez le problème, les étapes pour le reproduire, etc.',
+    send: 'Envoyer',
+    hint: 'Un sujet (3 caractères) et un message (10 caractères) sont requis.',
+    sent: 'Message envoyé — on revient vers vous bientôt.',
+    sentWithSla: 'Message envoyé — réponse sous {delay}.',
+    sendFailed: 'Échec de l’envoi.',
+    sendFailedWithEmail: 'Échec de l’envoi. Écrivez-nous à {email}.',
+    sla4h: '4 heures ouvrables',
+    sla1d: '1 jour ouvrable',
+    sla2d: '2 jours ouvrables',
+  },
+
   // Site web public (page d'accueil, en-tête, pied de page)
   marketingSite: {
     langToggle: 'EN',
