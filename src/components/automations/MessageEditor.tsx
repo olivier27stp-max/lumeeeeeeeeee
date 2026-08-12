@@ -12,7 +12,7 @@ import { Mail, MessageSquare, Loader2, Check, Eye, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage } from '../../lib/automationRulesApi';
-import { htmlVersTexte, texteVersHtml, remplacerVariables } from '../../lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 import EmailPreviewEditor from './EmailPreviewEditor';
 
 interface Props {
@@ -31,18 +31,6 @@ interface Props {
 
 /** Saut de ligne — nommé pour rester lisible dans les découpes de texte. */
 const SAUT = '\n';
-
-/** Variables reconnues par le moteur, avec un libellé compréhensible. */
-const VARIABLES: Array<{ cle: string; fr: string; en: string }> = [
-  { cle: 'client_first_name', fr: 'Prénom du client', en: 'Client first name' },
-  { cle: 'client_name', fr: 'Nom complet', en: 'Full name' },
-  { cle: 'company_name', fr: 'Votre entreprise', en: 'Your company' },
-  { cle: 'invoice_number', fr: 'N° de facture', en: 'Invoice #' },
-  { cle: 'invoice_total', fr: 'Montant', en: 'Amount' },
-  { cle: 'quote_number', fr: 'N° de soumission', en: 'Quote #' },
-  { cle: 'appointment_date', fr: 'Date du RDV', en: 'Appointment date' },
-  { cle: 'appointment_time', fr: 'Heure du RDV', en: 'Appointment time' },
-];
 
 export default function MessageEditor({ ruleId, ruleName, actionType, body, subject, fr, onSaved }: Props) {
   const estCourriel = actionType === 'send_email';
@@ -175,7 +163,7 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
         <span className="text-[10px] text-text-tertiary mr-1">
           {fr ? 'Insérer :' : 'Insert:'}
         </span>
-        {VARIABLES.map((v) => (
+        {VARIABLES_PROPOSEES.map((v) => (
           <button
             key={v.cle}
             type="button"

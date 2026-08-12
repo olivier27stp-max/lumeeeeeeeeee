@@ -14,7 +14,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { htmlVersTexte, texteVersHtml, remplacerVariables } from '../../src/lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../src/lib/emailBodyText';
 
 const root = resolve(__dirname, '..', '..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
@@ -126,28 +126,24 @@ describe('aperçu — ce que le client verra', () => {
     expect(remplacerVariables('Valeur : [variable_inventee]')).toContain('[variable_inventee]');
   });
 
-  it('chaque variable proposée dans l’éditeur a un exemple', () => {
-    const editeur = read('src/components/automations/MessageEditor.tsx');
-    const bloc = editeur.slice(editeur.indexOf('const VARIABLES'), editeur.indexOf('];', editeur.indexOf('const VARIABLES')));
-    const cles = [...bloc.matchAll(/cle: '([a-z_]+)'/g)].map((m) => m[1]);
-    expect(cles.length).toBeGreaterThan(5);
-    for (const c of cles) {
+  it('chaque variable proposée a un exemple d’aperçu', () => {
+    // La liste est déclarée UNE fois dans `emailBodyText` : dupliquée dans
+    // chaque éditeur, elle finissait par diverger entre le SMS et le courriel.
+    expect(VARIABLES_PROPOSEES.length).toBeGreaterThan(5);
+    for (const v of VARIABLES_PROPOSEES) {
       expect(
-        remplacerVariables(`[${c}]`),
-        `variable proposée sans exemple d'aperçu : ${c}`,
-      ).not.toBe(`[${c}]`);
+        remplacerVariables(`[${v.cle}]`),
+        `variable proposée sans exemple d'aperçu : ${v.cle}`,
+      ).not.toBe(`[${v.cle}]`);
     }
   });
 
   it('chaque variable proposée est fournie par le moteur', () => {
     // Proposer une variable que le serveur ne remplit pas insérerait un trou
     // dans le message réellement envoyé.
-    const editeur = read('src/components/automations/MessageEditor.tsx');
     const actions = read('server/lib/actions/index.ts');
-    const bloc = editeur.slice(editeur.indexOf('const VARIABLES'), editeur.indexOf('];', editeur.indexOf('const VARIABLES')));
-    const cles = [...bloc.matchAll(/cle: '([a-z_]+)'/g)].map((m) => m[1]);
-    for (const c of cles) {
-      expect(actions, `variable proposée mais jamais résolue : ${c}`).toContain(`vars.${c}`);
+    for (const v of VARIABLES_PROPOSEES) {
+      expect(actions, `variable proposée mais jamais résolue : ${v.cle}`).toContain(`vars.${v.cle}`);
     }
   });
 });
@@ -175,16 +171,22 @@ describe('éditeur — plus de HTML à l’écran', () => {
     expect(apercu).toContain('function texteEnBlocs');
   });
 
-  it('un aperçu montre le rendu avec des données d’exemple', () => {
+  it('un SEUL aperçu — le courriel affiché EST le rendu final', () => {
+    // Un second bloc « ce que le client lira » répétait exactement le premier
+    // depuis que le courriel s'affiche habillé : du bruit sans information.
     expect(apercu).toContain('remplacerVariables');
-    expect(apercu).toContain('Ce que le client lira');
+    expect(apercu).not.toContain('Ce que le client lira');
+    expect(apercu).toContain('Un SEUL aperçu');
   });
 
   it('les variables sont nommées en clair, pas en jargon', () => {
     // « Prénom du client » plutôt que « [client_first_name] ».
+    const noms = VARIABLES_PROPOSEES.map((v) => v.fr);
+    expect(noms).toContain('Prénom du client');
+    expect(noms).toContain('N° de facture');
+    // Les deux éditeurs consomment la MÊME liste.
     for (const src of [message, apercu]) {
-      expect(src).toContain("fr: 'Prénom du client'");
-      expect(src).toContain("fr: 'N° de facture'");
+      expect(src).toContain('VARIABLES_PROPOSEES');
     }
   });
 
@@ -203,9 +205,11 @@ describe('éditeur pleine page — le courriel s’édite dans son rendu', () =>
   it('chaque bloc de texte est un champ modifiable sur place', () => {
     // Pas un gros champ de texte à côté d'un aperçu : le courriel EST
     // l'éditeur. On clique sur la phrase, on la corrige.
-    expect(ed).toContain('const Champ = ({ bloc }');
-    expect(ed).toContain('majBloc(bloc.id, e.target.value)');
-    expect(ed).toContain('bloc.type === \'titre\'');
+    expect(ed).toContain('function ChampBloc');
+    expect(ed).toContain('majBloc(bloc.id, t)');
+    // Déclaré au niveau module : un composant défini DANS le rendu est recréé
+    // à chaque frappe, ce qui fait perdre le focus en pleine phrase.
+    expect(ed.indexOf('function ChampBloc')).toBeLessThan(ed.indexOf('export default function'));
   });
 
   it('on peut ajouter et retirer des lignes', () => {

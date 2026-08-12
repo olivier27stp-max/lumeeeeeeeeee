@@ -161,3 +161,23 @@ const EXEMPLES: Record<string, string> = {
 export function remplacerVariables(s: string): string {
   return s.replace(/\[(\w+)\]/g, (tout, cle) => EXEMPLES[cle] ?? tout);
 }
+
+/**
+ * Variables proposées à l'utilisateur, sous leur nom clair.
+ *
+ * Déclarées ici et non dans chaque éditeur : dupliquée, la liste finissait par
+ * diverger entre le SMS et le courriel. Chaque entrée doit exister dans
+ * `EXEMPLES` ci-dessus ET être réellement fournie par `resolveEntityVariables`
+ * côté serveur — sinon l'utilisateur insère un trou dans son message. Deux
+ * tests le vérifient.
+ */
+export const VARIABLES_PROPOSEES: Array<{ cle: string; fr: string; en: string }> = [
+  { cle: 'client_first_name', fr: 'Prénom du client', en: 'Client first name' },
+  { cle: 'client_name', fr: 'Nom complet', en: 'Full name' },
+  { cle: 'company_name', fr: 'Votre entreprise', en: 'Your company' },
+  { cle: 'invoice_number', fr: 'N° de facture', en: 'Invoice #' },
+  { cle: 'invoice_total', fr: 'Montant', en: 'Amount' },
+  { cle: 'quote_number', fr: 'N° de soumission', en: 'Quote #' },
+  { cle: 'appointment_date', fr: 'Date du RDV', en: 'Appointment date' },
+  { cle: 'appointment_time', fr: 'Heure du RDV', en: 'Appointment time' },
+];
