@@ -58,6 +58,29 @@ export function captureException(err: unknown, context?: Record<string, any>): v
 }
 
 /**
+ * Signale l'échec d'une tâche de fond.
+ *
+ * Les crons attrapent leurs erreurs pour ne pas tuer la boucle `setInterval` —
+ * une exception non gérée arrêterait la tâche pour de bon. Mais un `catch` qui
+ * se contente d'un `console.error` rend la panne invisible : les journaux
+ * Railway ne sont lus par personne, et une tâche qui échoue à chaque tick
+ * pendant des semaines n'alerte jamais. Même raisonnement que dans `mailer.ts`.
+ *
+ * Le tag `cron` permet de filtrer par tâche dans Sentry.
+ */
+export function captureCronFailure(cronName: string, err: unknown): void {
+  console.error(`[cron:${cronName}]`, (err as any)?.message || err);
+  if (!sentryNode) return;
+  try {
+    sentryNode.withScope((scope: any) => {
+      scope.setTag('cron', cronName);
+      scope.setLevel('error');
+      sentryNode.captureException(err instanceof Error ? err : new Error(String(err)));
+    });
+  } catch { /* no-op */ }
+}
+
+/**
  * Attache l'org de la requête courante au scope Sentry.
  *
  * Appelé depuis `requireAuthedClient`, le point de passage unique de toutes les
