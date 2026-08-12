@@ -94,7 +94,7 @@ import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
-import { initSentry, attachSentryErrorHandler, captureException } from './lib/sentry';
+import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure } from './lib/sentry';
 
 const app = express();
 
@@ -803,26 +803,28 @@ app.listen(port, '0.0.0.0', () => {
     import('./lib/alerts-engine').then(({ runAlertScan }) => {
       setInterval(async () => {
         const res = await withAdvisoryLock('alerts-engine', () => runAlertScan()).catch((e: any) => {
-          console.error('[alerts] Lock error:', e?.message); return { acquired: true };
+          captureCronFailure('alerts-engine', e); return { acquired: true };
         });
         if (!res.acquired) { /* another replica owns this tick */ }
       }, 30 * 60 * 1000);
       console.log('[alerts] Engine started (every 30min, lock-guarded)');
       setTimeout(() => withAdvisoryLock('alerts-engine-startup', () => runAlertScan())
-        .catch((e: any) => console.error('[alerts] Startup scan error:', e?.message)), 10_000);
-    });
+        .catch((e: any) => captureCronFailure('alerts-engine-startup', e)), 10_000);
+    // Un import() qui échoue laisse la tâche non démarrée, sans erreur ni trace :
+    // le cron ne tourne simplement jamais.
+    }).catch((e: any) => captureCronFailure('alerts-engine-import', e));
 
     // Map pin repair — geocode request pins saved without coords, every 10 minutes
     Promise.all([import('./lib/fieldPinSync'), import('./lib/supabase')]).then(
       ([{ repairMissingPinCoords }, { getServiceClient }]) => {
         const runRepair = () =>
           withAdvisoryLock('field-pin-repair', () => repairMissingPinCoords(getServiceClient()))
-            .catch((e: any) => console.error('[field-pin-repair] Lock error:', e?.message));
+            .catch((e: any) => captureCronFailure('field-pin-repair', e));
         setInterval(runRepair, 10 * 60 * 1000);
         setTimeout(runRepair, 20_000);
         console.log('[field-pin-repair] Cron started (every 10min, lock-guarded)');
       },
-    );
+    ).catch((e: any) => captureCronFailure('field-pin-repair-import', e));
 
     // Surveillance des évènements de sécurité — le dernier maillon de la
     // détection installée le 2026-07-31. Les sondes et la télémétrie écrivaient
@@ -830,7 +832,7 @@ app.listen(port, '0.0.0.0', () => {
     // personne ne regarde équivaut à pas de détection.
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
-    }).catch((e: any) => console.error('[alerting] démarrage impossible:', e?.message));
+    }).catch((e: any) => captureCronFailure('security-alerting-startup', e));
 
     // Scheduled reports — check every hour
     import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
@@ -838,19 +840,19 @@ app.listen(port, '0.0.0.0', () => {
         const res = await withAdvisoryLock('scheduled-reports', async () => {
           const sent = await processScheduledReports();
           if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
-        }).catch((e: any) => { console.error('[scheduled-reports] Lock error:', e?.message); return { acquired: true }; });
+        }).catch((e: any) => { captureCronFailure('scheduled-reports', e); return { acquired: true }; });
         if (!res.acquired) { /* skipped */ }
       }, 60 * 60 * 1000);
       console.log('[scheduled-reports] Cron started (hourly, lock-guarded)');
-    });
+    }).catch((e: any) => captureCronFailure('scheduled-reports-import', e));
 
     // Security maintenance — every 15 minutes
     setInterval(() => {
       withAdvisoryLock('security-maintenance', () => runSecurityMaintenance())
-        .catch((err: any) => console.error('[security] Lock error:', err?.message));
+        .catch((err: any) => captureCronFailure('security-maintenance', err));
     }, 15 * 60 * 1000);
     console.log('[security] Maintenance job started (every 15min, lock-guarded)');
     setTimeout(() => withAdvisoryLock('security-maintenance-startup', () => runSecurityMaintenance())
-      .catch((e: any) => console.error('[security] Startup maintenance error:', e?.message)), 15_000);
+      .catch((e: any) => captureCronFailure('security-maintenance-startup', e)), 15_000);
   });
 });
