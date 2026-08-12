@@ -95,9 +95,10 @@ export function useSettingsNav(): NavGroup[] {
         { path: '/settings/support', label: 'Support', icon: LifeBuoy },
       ],
     },
-    // Le groupe « Plateforme » (lien Platform Admin) a été retiré des réglages
-    // sur demande de Rafba. La page /platform-admin reste accessible par URL
-    // directe (elle a son propre gate propriétaire-de-plateforme).
+    // Le groupe « Plateforme » (lien Platform Admin) a été retiré des réglages,
+    // puis la page elle-même a été supprimée de l'application : elle donnait
+    // une vue inter-tenants (orgs, utilisateurs, revenus) qui n'a pas sa place
+    // dans le produit. L'URL /platform-admin n'existe plus.
   ];
 }
 

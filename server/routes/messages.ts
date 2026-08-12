@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
-import { twilioClient, twilioAuthToken, Twilio } from '../lib/config';
+import { twilioClient, twilioAuthToken, Twilio, getTwilioStatusCallbackUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
 import { validate, messageSendSchema } from '../lib/validation';
@@ -67,11 +67,17 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
     // Find or create conversation
     const conversation = await findOrCreateConversation(serviceClient, orgId, normalizedPhone, client_id, client_name);
 
-    // Send via Twilio from this org's own number
+    // Send via Twilio from this org's own number.
+    // `statusCallback` est indispensable pour recevoir l'accusé de réception :
+    // sans lui, la ligne insérée plus bas reste éternellement à `status: 'sent'`
+    // (= « Twilio a accepté »), même si l'opérateur rejette le message. C'est
+    // POST /api/messages/status qui la fera passer à delivered/failed.
+    const statusCallback = getTwilioStatusCallbackUrl();
     const twilioMessage = await twilioClient.messages.create({
       body: message_text,
       from: fromNumber,
       to: normalizedPhone,
+      ...(statusCallback ? { statusCallback } : {}),
     });
 
     // Save message to database

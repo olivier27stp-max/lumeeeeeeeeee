@@ -1,5 +1,5 @@
 /**
- * End-to-end API tests for Courses + Platform Admin
+ * End-to-end API tests for Courses
  * Run with: node tests/courses/run-api-tests.mjs
  */
 import { createClient } from '@supabase/supabase-js';
@@ -145,12 +145,6 @@ async function run() {
   console.log('\n── CLEANUP ──');
   if (dupCourse.ok) await test('DELETE dup course', `${API}/courses/${dupCourse.body.id}`, { method: 'DELETE' });
   await test('DELETE course', `${API}/courses/${courseId}`, { method: 'DELETE' });
-
-  // ═══ PLATFORM ADMIN ═══
-  console.log('\n── PLATFORM ADMIN ──');
-  await test('GET /platform-admin/business', `${API.replace('/api', '')}/api/platform-admin/business`);
-  await test('GET /platform-admin/revenue-series', `${API.replace('/api', '')}/api/platform-admin/revenue-series?days=30`);
-  await test('GET /platform-admin/growth-series', `${API.replace('/api', '')}/api/platform-admin/growth-series`);
 
   printSummary();
 }

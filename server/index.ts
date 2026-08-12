@@ -41,6 +41,7 @@ import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
+import unsubscribeRouter from './routes/unsubscribe';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
@@ -77,7 +78,6 @@ import commissionsRouter from './routes/commissions';
 import payrollRouter from './routes/payroll';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
-import platformAdminRouter from './routes/platform-admin';
 import authRouter from './routes/auth';
 import dsrRouter from './routes/dsr';
 import teamComplianceRouter from './routes/team-compliance';
@@ -234,6 +234,13 @@ app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   // External webhooks: signature-validated downstream, never carry CSRF headers.
   if (WEBHOOK_PATHS_EXEMPT_FROM_CSRF.includes(req.path)) return next();
+  // Désinscription en un clic : le POST est émis par le client de messagerie
+  // (bouton natif « Se désabonner » de Gmail/Outlook via List-Unsubscribe-Post),
+  // qui n'envoie aucun en-tête personnalisé. Le jeton de 32 octets dans l'URL
+  // tient lieu d'authentification, et l'action est idempotente et sans risque :
+  // le pire cas d'un CSRF réussi serait de désabonner quelqu'un — ce que la
+  // route est faite pour faire.
+  if (/^\/unsubscribe\/[a-f0-9]{64}$/.test(req.path)) return next();
   // API key requests are not vulnerable to CSRF
   if (req.headers['x-api-key']) return next();
   // Require either Authorization header or X-Requested-With (custom header = JS origin)
@@ -385,6 +392,8 @@ app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
+// Désinscription courriel — publique, authentifiée par le jeton de l'URL.
+app.use('/api', unsubscribeRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
 app.use('/api', dsrRouter);
@@ -446,8 +455,11 @@ app.use('/api', orgsRouter);
 app.use('/api', rolePresetsRouter);
 app.use('/api', billingRouter);
 app.use('/api', referralsRouter);
-// In-app support: cap per IP so one tenant can't flood the support inbox.
-app.use('/api/support', rateLimit({ windowMs: 60_000, max: 5 }));
+// In-app support: cap per user so one tenant can't flood the support inbox.
+// Clé sur l'utilisateur, pas l'IP : plusieurs employés d'un même client
+// derrière un NAT partageaient le quota (faux positifs), et une rotation d'IP
+// le contournait. La route exige déjà une session, donc la clé est fiable.
+app.use('/api/support', rateLimit({ windowMs: 60_000, max: 5, keyFn: (req) => `support:${userKey(req)}` }));
 app.use('/api', supportRouter);
 app.use('/api', coursesRouter);
 app.use('/api/field-sales', fieldSalesRouter);
@@ -457,10 +469,13 @@ app.use('/api', payrollRouter);
 app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
 
-// Platform admin — tightly rate limited, owner-only routes enforce auth internally
-const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${userKey(req)}` });
-app.use('/api/platform-admin', platformAdminLimiter);
-app.use('/api', platformAdminRouter);
+// Le back-office « Platform Admin » (page + 8 routes de lecture seule donnant
+// une vue inter-tenants) a été retiré à la demande du propriétaire. Un accès
+// transverse aux données de tous les locataires n'a pas sa place dans l'app.
+// `PLATFORM_OWNER_ID` reste utilisé par /api/incidents/login-anomalies, qui
+// agrège des tentatives de connexion échouées sans org_id — cette route doit
+// rester réservée au propriétaire, sinon un admin d'org verrait les adresses
+// et IP des autres locataires.
 
 // CSP violation reports — public endpoint, tight limit to prevent log flooding
 const cspReportLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP

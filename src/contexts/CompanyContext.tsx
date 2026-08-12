@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import type { TeamRole, Scope, PermissionsMap } from '../lib/permissions';
 import { resolvePermissions, getDefaultPermissions, getDefaultScope } from '../lib/permissions';
 import { getDevRoleOverride } from '../hooks/usePermissions';
+import { setSentryOrgContext } from '../lib/sentry';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -243,6 +244,14 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
     if (!activeOrgId) return null;
     return companies.find((c) => c.orgId === activeOrgId) || null;
   }, [companies, activeOrgId]);
+
+  // Étiquette les erreurs Sentry avec l'org active (id + nom lisible), et la
+  // met à jour au changement de compagnie. No-op sans VITE_SENTRY_DSN.
+  useEffect(() => {
+    setSentryOrgContext(
+      current ? { orgId: current.orgId, companyName: current.companyName, userId } : null,
+    );
+  }, [current, userId]);
 
   const value = useMemo<CompanyContextValue>(() => ({
     current,

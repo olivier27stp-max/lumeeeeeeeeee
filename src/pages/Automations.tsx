@@ -26,6 +26,7 @@ import {
   type AutomationRule,
   getAutomationRules,
   toggleAutomationRule,
+  getFailureCountsByRule,
 } from '../lib/automationRulesApi';
 
 // ── Automation name translations (for DB-seeded English names) ──
@@ -332,6 +333,8 @@ export default function Automations() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** Échecs par règle sur 7 jours — alimente le badge d'alerte. */
+  const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   // ── Load (read only — no auto-seed) ──
@@ -348,6 +351,17 @@ export default function Automations() {
         return true;
       });
       setRules(deduped);
+
+      // Échecs des 7 derniers jours. Le moteur les journalisait déjà, mais
+      // aucune page ne lisait la table : une automatisation cassée restait
+      // affichée « active » avec un badge vert, et l'utilisateur n'apprenait
+      // jamais que ses clients n'avaient rien reçu.
+      // Non bloquant : la liste doit s'afficher même si ce chargement échoue.
+      try {
+        setFailureCounts(await getFailureCountsByRule());
+      } catch (e: any) {
+        console.error('Failed to load automation failures:', e.message);
+      }
     } catch (e: any) {
       console.error('Failed to load rules:', e.message);
       toast.error(language === 'fr' ? 'Impossible de charger les automatisations' : 'Failed to load automations');
@@ -604,6 +618,19 @@ export default function Automations() {
                                       {rule.is_preset && !isDefault && (
                                         <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-tertiary text-text-tertiary shrink-0">
                                           {t.automations.optional}
+                                        </span>
+                                      )}
+                                      {/* Échecs récents : sans ce badge, une automatisation
+                                          cassée restait « active » en vert et l'utilisateur
+                                          ignorait que ses clients n'avaient rien reçu. */}
+                                      {(failureCounts[rule.id] || 0) > 0 && (
+                                        <span
+                                          title={fr
+                                            ? `${failureCounts[rule.id]} échec(s) dans les 7 derniers jours`
+                                            : `${failureCounts[rule.id]} failure(s) in the last 7 days`}
+                                          className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0"
+                                        >
+                                          {fr ? `${failureCounts[rule.id]} échec` : `${failureCounts[rule.id]} failed`}
                                         </span>
                                       )}
                                     </div>

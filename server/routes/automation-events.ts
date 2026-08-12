@@ -115,6 +115,41 @@ router.post('/automations/events/appointment-cancelled', validate(automationEven
   }
 });
 
+// ── POST /automations/events/appointment-rescheduled ──
+// Appelée quand `rpc_schedule_job` a DÉPLACÉ une visite existante plutôt que
+// d'en créer une. Distinct de `appointment.created` : ré-émettre `created` sur
+// un déplacement renverrait une confirmation au client (cf. src/lib/jobsApi.ts).
+// L'événement émis est `appointment.updated`, qui existe déjà dans
+// CRMEventType : « déplacé » EST une mise à jour de rendez-vous. Inventer un
+// `appointment.rescheduled` aurait ajouté un type qu'aucune règle n'écoute et
+// qui n'apparaît pas dans le sélecteur de déclencheurs.
+router.post('/automations/events/appointment-rescheduled', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const { eventId, jobId, clientId, startTime } = req.body;
+    if (!eventId) return res.status(400).json({ error: 'eventId is required' });
+
+    await eventBus.emit('appointment.updated', {
+      orgId: auth.orgId,
+      entityType: 'schedule_event',
+      entityId: eventId,
+      actorId: auth.user.id,
+      metadata: {
+        job_id: jobId || null,
+        client_id: clientId || null,
+        start_time: startTime || null,
+      },
+    });
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[automation-events] appointment.updated error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // ── POST /automations/events/job-completed ──
 // Called when a job status is changed to "completed"
 router.post('/automations/events/job-completed', validate(automationEventSchema), async (req, res) => {

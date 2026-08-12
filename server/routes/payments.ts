@@ -1844,12 +1844,14 @@ async function handleCheckoutSessionCompleted(
   }
 
   // ── 10. Auto-provision Twilio SMS number (non-blocking) ──
-  // Only for plans that include SMS (pro / enterprise). Starter is skipped.
+  // Uniquement pour les forfaits incluant les SMS. Starter est ignoré.
   if (plan.includes_sms) {
     try {
+      const { provisionSmsForNewSubscription } = await import('../lib/twilioProvisioning');
       await provisionSmsForNewSubscription({ orgId, subscriptionId: subscription.id });
     } catch (provErr: any) {
-      // Never fail the subscription on provisioning error — it's logged + retryable.
+      // Ne jamais faire échouer l'abonnement sur une erreur de provisionnement :
+      // le paiement est déjà encaissé, et un throw ici ferait rejouer Stripe.
       console.error('[webhook/checkout] SMS provisioning error (non-blocking):', provErr?.message);
     }
   }
@@ -1903,82 +1905,11 @@ async function handleCheckoutSessionCompleted(
   console.log(`[webhook/checkout] Subscription activated for ${userEmail} — plan: ${plan.name}, org: ${orgId}`);
 }
 
-// ─── Auto-provision Twilio SMS number after a paid subscription ────────────
-// Idempotent: skips if an active SMS channel already exists for the org.
-// Logs outcome to provisioning_events for observability + retry tooling.
-
-async function provisionSmsForNewSubscription(params: {
-  orgId: string;
-  subscriptionId: string;
-}): Promise<void> {
-  const { orgId, subscriptionId } = params;
-  const admin = getServiceClient();
-
-  // If the org still has a number pending release (re-subscribed during the
-  // grace period), reactivate it rather than buying a second one.
-  try {
-    const { cancelSmsNumberRelease } = await import('../lib/twilioRelease');
-    if (await cancelSmsNumberRelease(orgId)) {
-      console.log(`[provisioning] Org ${orgId} re-subscribed — restored its existing number`);
-      return;
-    }
-  } catch (err: any) {
-    console.error('[provisioning] Failed to check pending release:', err?.message);
-  }
-
-  // Skip if an active SMS channel is already attached to this org
-  const { data: existingChannel } = await admin
-    .from('communication_channels')
-    .select('id, phone_number')
-    .eq('org_id', orgId)
-    .eq('channel_type', 'sms')
-    .eq('status', 'active')
-    .maybeSingle();
-
-  if (existingChannel) {
-    console.log(`[provisioning] Org ${orgId} already has SMS channel ${existingChannel.phone_number}, skipping`);
-    return;
-  }
-
-  // Log intent so we can observe + retry failures
-  const { data: eventRow } = await admin
-    .from('provisioning_events')
-    .insert({
-      org_id: orgId,
-      subscription_id: subscriptionId,
-      event_type: 'sms_number_purchase',
-      status: 'pending',
-    })
-    .select('id')
-    .single();
-
-  try {
-    const { provisionSmsNumber } = await import('../lib/twilioProvisioning');
-    const result = await provisionSmsNumber(orgId);
-
-    if (eventRow) {
-      await admin
-        .from('provisioning_events')
-        .update({
-          status: 'success',
-          twilio_number: result.phoneNumber,
-        })
-        .eq('id', eventRow.id);
-    }
-    console.log(`[provisioning] SMS number ${result.phoneNumber} assigned to org ${orgId}`);
-  } catch (err: any) {
-    if (eventRow) {
-      await admin
-        .from('provisioning_events')
-        .update({
-          status: 'failed',
-          error_message: String(err?.message || err).slice(0, 500),
-        })
-        .eq('id', eventRow.id);
-    }
-    throw err;
-  }
-}
+// ─── Provisionnement du numéro SMS ─────────────────────────────────────────
+// La logique vit désormais dans `server/lib/twilioProvisioning.ts` afin d'être
+// partagée avec `POST /api/billing/subscribe` — le parcours d'abonnement
+// réellement emprunté en production, qui ne provisionnait aucun numéro.
+// Voir `provisionSmsForNewSubscription`.
 
 // ── Carte au dossier (payment on file) ────────────────────────────────────
 

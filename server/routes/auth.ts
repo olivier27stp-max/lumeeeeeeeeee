@@ -27,13 +27,26 @@ function getAdminClient() {
   });
 }
 
-async function sendVerificationEmail(to: string, verifyUrl: string, name: string) {
+/**
+ * Envoie le courriel de confirmation de compte.
+ *
+ * Retourne désormais le résultat au lieu de `void` : la fonction ne le lisait
+ * pas et les appelants journalisaient « email sent » sans preuve. Sur le
+ * parcours d'achat (`register-checkout`), le paiement reste bloqué tant que
+ * l'adresse n'est pas confirmée — un courriel non délivré laissait donc un
+ * client payant coincé, sans le moindre signal côté serveur.
+ */
+async function sendVerificationEmail(
+  to: string,
+  verifyUrl: string,
+  name: string,
+): Promise<{ sent: boolean; error?: string }> {
   if (!isMailerConfigured()) {
-    console.warn('[auth] SMTP not configured — verification email not sent');
-    return;
+    console.error('[auth] SMTP non configuré — courriel de vérification NON envoyé à', to);
+    return { sent: false, error: 'SMTP not configured' };
   }
 
-  await sendEmail({
+  const result = await sendEmail({
     to,
     subject: 'Confirme ton compte Lume CRM',
     html: `
@@ -54,6 +67,13 @@ async function sendVerificationEmail(to: string, verifyUrl: string, name: string
       </div>
     `,
   });
+
+  if (!result.sent) {
+    // Journalisé en `error` (et non `log`) : l'utilisateur ne pourra pas
+    // confirmer son compte, donc pas payer. C'est un incident, pas une trace.
+    console.error('[auth] échec d’envoi du courriel de vérification à', to, '—', result.error);
+  }
+  return { sent: result.sent, error: result.error };
 }
 
 // ─── POST /api/auth/register — create account + send verification email ───
@@ -114,12 +134,11 @@ router.post('/auth/register', authRateLimit, async (req, res) => {
 
             const baseUrl = getBaseUrl();
             const verifyUrl = `${baseUrl}/verify-email?token=${newToken}&email=${encodeURIComponent(email)}`;
-            try {
-              await sendVerificationEmail(email, verifyUrl, fullName.trim());
-              console.log('[auth] Resent verification email for existing unconfirmed user:', email);
-            } catch (emailErr: any) {
-              console.error('[auth] Failed to resend verification email:', emailErr.message);
-            }
+            // `sendVerificationEmail` ne lève jamais et journalise elle-même
+            // ses échecs : le try/catch qui entourait cet appel était une
+            // branche morte, et le `console.log` qui suivait affirmait un
+            // envoi jamais vérifié.
+            await sendVerificationEmail(email, verifyUrl, fullName.trim());
           }
           // Already confirmed — return ok silently (prevent enumeration)
         } catch (lookupErr: any) {
@@ -135,13 +154,13 @@ router.post('/auth/register', authRateLimit, async (req, res) => {
     const baseUrl = getBaseUrl();
     const verifyUrl = `${baseUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
 
-    try {
-      await sendVerificationEmail(email, verifyUrl, fullName.trim());
-    } catch (emailErr: any) {
-      console.error('[auth] Failed to send verification email:', emailErr.message);
-    }
+    const verif = await sendVerificationEmail(email, verifyUrl, fullName.trim());
 
-    return res.json({ ok: true });
+    // `ok: true` est conservé même en cas d'échec d'envoi : le compte EST créé,
+    // et une réponse uniforme évite l'énumération d'adresses. Mais le drapeau
+    // permet au front d'afficher « nous n'avons pas pu envoyer le courriel »
+    // plutôt que de laisser l'utilisateur attendre indéfiniment.
+    return res.json({ ok: true, verification_email_sent: verif.sent });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to create account.', '[auth]');
   }
@@ -243,13 +262,16 @@ router.post('/auth/resend-verification', authRateLimit, async (req, res) => {
     const verifyUrl = `${baseUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
     const name = user.user_metadata?.full_name || '';
 
-    try {
-      await sendVerificationEmail(email, verifyUrl, name);
-    } catch (emailErr: any) {
-      console.error('[auth] resend verification email failed:', emailErr.message);
-    }
+    // Renvoi explicitement demandé par l'utilisateur : il doit savoir si le
+    // courriel est réellement reparti, sinon il attend indéfiniment un message
+    // qui n'arrivera jamais.
+    const verif = await sendVerificationEmail(email, verifyUrl, name);
 
-    return res.json({ ok: true });
+    return res.json({
+      ok: true,
+      sent: verif.sent,
+      ...(verif.sent ? {} : { error_detail: verif.error }),
+    });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to resend verification.', '[auth]');
   }
@@ -307,7 +329,7 @@ router.post('/auth/register-checkout', authRateLimit, async (req, res) => {
             });
             const baseUrl = getBaseUrl();
             const verifyUrl = `${baseUrl}/verify-email?token=${newToken}&email=${encodeURIComponent(email)}`;
-            try { await sendVerificationEmail(email, verifyUrl, fullName.trim()); } catch (err) { console.error('[auth] sendVerificationEmail failed:', err); }
+            await sendVerificationEmail(email, verifyUrl, fullName.trim());
           }
           return res.json({ ok: true, existing: true, email_verified: !!meta.billing_email_verified });
         }
@@ -319,14 +341,19 @@ router.post('/auth/register-checkout', authRateLimit, async (req, res) => {
     // Send verification email for new user
     const baseUrl = getBaseUrl();
     const verifyUrl = `${baseUrl}/verify-email?token=${verificationToken}&email=${encodeURIComponent(email)}`;
-    try {
-      await sendVerificationEmail(email, verifyUrl, fullName.trim());
-      console.log('[auth/register-checkout] Verification email sent to:', email);
-    } catch (emailErr: any) {
-      console.error('[auth/register-checkout] Verification email failed:', emailErr.message);
-    }
+    // Le résultat est remonté au client : sur ce parcours, le paiement est
+    // bloqué tant que l'adresse n'est pas confirmée. Un courriel non délivré
+    // laissait l'acheteur coincé sans explication, pendant que le serveur
+    // journalisait « Verification email sent » sans aucune preuve.
+    const verif = await sendVerificationEmail(email, verifyUrl, fullName.trim());
 
-    return res.json({ ok: true, userId: userData.user?.id, email_verified: false });
+    return res.json({
+      ok: true,
+      userId: userData.user?.id,
+      email_verified: false,
+      verification_email_sent: verif.sent,
+      ...(verif.sent ? {} : { verification_email_error: verif.error }),
+    });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to create account.', '[auth]');
   }

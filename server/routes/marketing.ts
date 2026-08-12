@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { sendSafeError } from '../lib/error-handler';
+import { getServiceClient } from '../lib/supabase';
 
 const router = Router();
 
@@ -61,9 +62,16 @@ function getOwnerEmail(): string {
 }
 
 // ── POST /api/public/book-demo ──────────────────────────────
-// Plus de persistance en base — la soumission envoie simplement un courriel
-// au propriétaire (willhebert30@gmail.com par défaut) + une confirmation au
-// prospect. Pas de page admin dans le CRM.
+// La demande est D'ABORD enregistrée dans `demo_requests`, ensuite seulement
+// notifiée par courriel.
+//
+// La persistance avait été retirée au profit d'un simple envoi de courriel :
+// les deux appels partaient sans `await`, avec un `.catch()` inopérant (le
+// mailer ne lève jamais). Un SMTP en panne — ou simplement non configuré —
+// faisait donc disparaître le prospect sans laisser la moindre trace, pendant
+// que la page répondait « demande reçue ». La table existe toujours et porte
+// même le suivi commercial (statut, notes, date de conversion) : elle avait
+// juste été débranchée.
 router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
   try {
     const body = req.body as z.infer<typeof bookDemoSchema>;
@@ -76,10 +84,43 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
     const reference = `LUM-${Date.now().toString(36).toUpperCase()}`;
     const ownerEmail = getOwnerEmail();
 
+    // Enregistrement AVANT toute notification : le prospect ne doit jamais
+    // dépendre de la bonne santé du serveur de courriel.
+    let persisted = false;
+    try {
+      const { error: insertError } = await getServiceClient()
+        .from('demo_requests')
+        .insert({
+          full_name: body.full_name,
+          company_name,
+          email: body.email,
+          phone: body.phone,
+          industry,
+          employee_count: body.employee_count || null,
+          source: body.source || null,
+          availability: body.availability || null,
+          message: body.message || null,
+          status: 'new',
+          notes: `Réf. ${reference}`,
+          ip_address: ip || null,
+          user_agent: ua || null,
+        });
+      if (insertError) {
+        console.error('[public/book-demo] enregistrement échoué:', insertError.message);
+      } else {
+        persisted = true;
+      }
+    } catch (dbErr: any) {
+      console.error('[public/book-demo] enregistrement échoué:', dbErr?.message);
+    }
+
     if (!isMailerConfigured()) {
-      console.warn('[public/book-demo] mailer not configured — email skipped', { reference, email: body.email });
-      // On répond OK quand même pour pas casser le formulaire en dev.
-      return res.json({ ok: true, message: 'Demo request received' });
+      // La demande est enregistrée : le prospect n'est plus perdu, même sans
+      // courriel. On le signale tout de même comme un incident.
+      console.error('[public/book-demo] SMTP non configuré — aucune notification envoyée', {
+        reference, email: body.email, persisted,
+      });
+      return res.json({ ok: true, message: 'Demo request received', reference });
     }
 
     const submittedAt = new Date().toLocaleString('fr-CA', {
@@ -128,12 +169,18 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
       </div>
     `;
 
-    sendEmail({
+    // Attendu et vérifié : l'appel partait sans `await`, avec un `.catch()`
+    // inopérant puisque `sendEmail` ne lève jamais. Un échec était donc
+    // totalement invisible.
+    const adminMail = await sendEmail({
       to: ownerEmail,
       replyTo: body.email,
       subject: `[${reference}] Nouveau lead Lume — ${company_name} (${industry})`,
       html: adminHtml,
-    }).catch((err) => console.error('[public/book-demo] admin email failed:', err?.message));
+    });
+    if (!adminMail.sent) {
+      console.error('[public/book-demo] notification au propriétaire non envoyée:', adminMail.error, { reference });
+    }
 
     // ── Prospect confirmation email ────────────────────────
     const prospectHtml = `
@@ -155,13 +202,32 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
         <p style="margin-top:24px">— L'équipe Lume CRM</p>
       </div>
     `;
-    sendEmail({
+    const prospectMail = await sendEmail({
       to: body.email,
       subject: 'Merci pour ta demande de démo Lume',
       html: prospectHtml,
-    }).catch((err) => console.error('[public/book-demo] prospect email failed:', err?.message));
+    });
+    if (!prospectMail.sent) {
+      console.error('[public/book-demo] confirmation au prospect non envoyée:', prospectMail.error, { reference });
+    }
 
-    return res.json({ ok: true, message: 'Demo request received' });
+    // Le seul cas réellement grave : ni enregistré, ni notifié — la demande
+    // n'existe alors nulle part. On le remonte à Sentry avec les coordonnées
+    // pour pouvoir rattraper le prospect à la main.
+    if (!persisted && !adminMail.sent) {
+      try {
+        const { captureException } = await import('../lib/sentry');
+        captureException(new Error('Demande de démo perdue : ni enregistrée ni notifiée'), {
+          kind: 'demo_request_lost',
+          reference,
+          email: body.email,
+          phone: body.phone,
+          company: company_name,
+        });
+      } catch { /* no-op */ }
+    }
+
+    return res.json({ ok: true, message: 'Demo request received', reference });
   } catch (err: any) {
     return sendSafeError(res, err, 'Unable to submit demo request.', '[public/book-demo]');
   }

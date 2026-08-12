@@ -3,6 +3,32 @@
    CRUD for email_templates (org-scoped, auth required).
    ═══════════════════════════════════════════════════════════════ */
 
+/**
+ * ⚠️ MODULE INACCESSIBLE DEPUIS L'APPLICATION (constat 2026-08-12).
+ *
+ * Ce CRUD est complet et fonctionnel, mais AUCUNE page ne l'appelle :
+ * `src/components/EmailTemplatePicker.tsx` et `src/lib/emailTemplatesApi.ts`
+ * ne sont importés nulle part. Il n'existe aucun écran de gestion des
+ * modèles.
+ *
+ * Ce que le code lit réellement dans `email_templates` :
+ *   - `review_request` — seul type consommé, par `executeRequestReview`
+ *     (server/lib/actions/index.ts) ;
+ *   - un modèle par `id`, quand le front passe explicitement
+ *     `emailTemplateId` à POST /emails/send-invoice — ce qu'aucune page ne
+ *     fait aujourd'hui.
+ *
+ * Les autres types (`invoice_sent`, `invoice_reminder`, `quote_sent`,
+ * `generic`) sont stockables mais jamais lus : les envois correspondants
+ * génèrent leur HTML en dur. 11 modèles existent en prod, dont 3 `quote_sent`
+ * semés par une migration et jamais utilisés.
+ *
+ * Conservé volontairement : le code est inerte tant qu'il n'est pas câblé, et
+ * le brancher est une fonctionnalité produit (éditeur, prévisualisation,
+ * variables), pas un correctif. Ne pas le supprimer sans préserver
+ * `review_request`.
+ */
+
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate, emailTemplateSchema } from '../lib/validation';

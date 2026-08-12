@@ -140,6 +140,8 @@ export interface PublicPaymentData {
     logo_url: string | null;
     email: string | null;
     phone: string | null;
+    /** Couleur de marque de l'org — renvoyée par server/routes/public-pay.ts. */
+    brand_color?: string | null;
   } | null;
 }
 

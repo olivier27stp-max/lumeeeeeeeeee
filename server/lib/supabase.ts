@@ -3,6 +3,7 @@ import express from 'express';
 import { getSupabaseAdminClient } from './supabaseAdmin';
 import { supabaseUrl, supabaseAnonKey, supabaseServiceRoleKey } from './config';
 import { ORG_UUID_RE, shouldUseRequestedOrg } from './active-org';
+import { setSentryRequestOrg } from './sentry';
 
 let adminClientCache: SupabaseClient | null = null;
 
@@ -152,6 +153,10 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
     res.status(403).json({ error: 'No organization context found for user.' });
     return null;
   }
+
+  // Toute erreur levée plus loin dans cette requête portera l'org — sinon
+  // l'alerte Sentry ne dit pas chez quel client ça a planté. No-op sans DSN.
+  setSentryRequestOrg(orgId, user.id);
 
   return { client, orgId, user };
 }

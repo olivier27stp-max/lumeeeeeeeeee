@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { emailFrom, twilioClient, getBaseUrl } from '../lib/config';
+import { emailFrom, twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
+import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
@@ -401,12 +402,25 @@ router.post('/quotes/send-email', async (req, res) => {
       </div>
     `;
 
-    await sendEmail({
+    // Le résultat DOIT être lu : `sendEmail` ne lève jamais, donc un appel nu
+    // laissait passer tous les effets de bord ci-dessous alors qu'aucun
+    // courriel n'était parti — statut avancé, `delivery_status: 'sent'` écrit
+    // en dur, deal poussé dans le pipeline, relances automatiques déclenchées,
+    // et une réponse HTTP 200 affirmant l'envoi. Le client n'avait rien reçu,
+    // l'org voyait « envoyé » partout.
+    const emailResult = await sendEmail({
       from: emailFrom,
       to: recipientEmail,
       subject: finalSubject,
       html: emailHtml,
     });
+    if (!emailResult.sent) {
+      return res.status(502).json({
+        error: 'Le courriel n’a pas pu être envoyé. La soumission n’a pas été marquée comme envoyée.',
+        code: 'email_send_failed',
+        detail: emailResult.error,
+      });
+    }
 
     // Update quote — a sent quote is awaiting the client's response.
     // Only pre-response statuses advance; re-sending an approved/converted/
@@ -419,13 +433,15 @@ router.post('/quotes/send-email', async (req, res) => {
       updated_at: new Date().toISOString(),
     }).eq('id', quoteId).eq('org_id', auth.orgId);
 
-    // Log send
+    // Log send — `delivery_status` était écrit en dur à 'sent', y compris quand
+    // rien n'était parti. On n'atteint désormais cette ligne qu'après un envoi
+    // confirmé, mais la valeur reste dérivée du résultat réel.
     await admin.from('quote_send_log').insert({
       quote_id: quoteId,
       channel: 'email',
       recipient: recipientEmail,
       sent_by: auth.user.id,
-      delivery_status: 'sent',
+      delivery_status: emailResult.sent ? 'sent' : 'failed',
     });
 
     // Log status change
@@ -523,6 +539,15 @@ router.post('/quotes/send-sms', async (req, res) => {
 
     const smsBody = `${companyName} sent you a quote (#${quote.quote_number}) for ${totalFormatted}. View it here: ${quoteUrl}`;
 
+    // Conformité CASL : un destinataire ayant répondu STOP ne doit plus rien
+    // recevoir de cette org — y compris les devis.
+    if (await isSmsOptedOut(admin, quote.org_id, formattedPhone)) {
+      return res.status(409).json({
+        error: 'This recipient has opted out of SMS from your organization.',
+        code: 'sms_opted_out',
+      });
+    }
+
     let fromNumber: string;
     try {
       fromNumber = await getOrgSmsFromNumber(quote.org_id);
@@ -542,10 +567,13 @@ router.post('/quotes/send-sms', async (req, res) => {
       throw e;
     }
 
+    const smsStatusCallback = getTwilioStatusCallbackUrl();
     const twilioMsg = await twilioClient.messages.create({
       body: smsBody,
       from: fromNumber,
       to: formattedPhone,
+      // Accusé de réception Twilio (sinon le statut reste figé à « envoyé »).
+      ...(smsStatusCallback ? { statusCallback: smsStatusCallback } : {}),
     });
 
     // Only pre-response statuses advance — same rule as the email route.

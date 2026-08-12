@@ -63,7 +63,7 @@ export default function SupportPage() {
       <div className="section-card p-5 space-y-3">
         <h3 className="text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
           {query.trim()
-            ? (isFr ? `${results.length} résultat${results.length > 1 ? 's' : ''}` : `${results.length} result${results.length > 1 ? 's' : ''}`)
+            ? (isFr ? `${results.length} résultat${results.length > 1 ? 's' : ''}` : `${results.length} result${results.length === 1 ? '' : 's'}`)
             : (isFr ? 'Questions fréquentes' : 'Common questions')}
         </h3>
 

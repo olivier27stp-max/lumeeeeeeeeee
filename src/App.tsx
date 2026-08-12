@@ -166,7 +166,6 @@ import { useLocationTrackingConsent } from './hooks/useLocationTrackingConsent';
 import LocationConsentModal from './components/LocationConsentModal';
 import { CompanySelectorPage, CompanySwitcher, NoCompanyState } from './components/CompanySelector';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
-import { usePlatformOwner } from './hooks/usePlatformOwner';
 
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
@@ -175,9 +174,6 @@ import { useQueryClient } from '@tanstack/react-query';
 // Cross-cutting hooks previously inlined in App()
 import { useInactivityLogout } from './hooks/useInactivityLogout';
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
-
-// Platform Admin — lazy loaded, owner-only
-const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
 
 // Toasts (sonner) — pastille monochrome Lume, styles dans index.css (.lume-toast).
 // Partagé par les deux <Toaster> (VerifyEmailGate + AuthenticatedApp).
@@ -742,7 +738,12 @@ function AuthenticatedApp({
   }, [user, currentOrgId]);
   // usePermissions MUST be called inside CompanyProvider to get correct data
   const permsCtx = usePermissions();
-  const isPlatformOwner = usePlatformOwner();
+  // Les outils de développement (bascule de rôle / de forfait) étaient
+  // conditionnés par `usePlatformOwner`, supprimé avec le back-office
+  // Platform Admin. Ils ne donnent aucun accès inter-tenants — ils agissent
+  // uniquement sur la session courante — et sont désormais réservés au mode
+  // développement, donc invisibles en production.
+  const showDevTools = import.meta.env.DEV;
   const venteModule = useModuleAccess('module_vente');
 
   // Auto-locate every signed-in user (desktop + mobile web) for the whole
@@ -951,8 +952,8 @@ function AuthenticatedApp({
             </div>
           )}
 
-          {/* Dev tools (role + plan switch) — founder / platform-owner only, hidden from real customer accounts */}
-          {isPlatformOwner && (
+          {/* Dev tools (role + plan switch) — mode développement uniquement */}
+          {showDevTools && (
           <div className="px-2.5 pb-2">
             <DevRoleSwitcher expanded={sidebarExpanded} />
             {/* Temporary plan switcher — sits right under the role switcher */}
@@ -1347,8 +1348,10 @@ function AuthenticatedApp({
                     {/* Email mailbox OAuth return — per-owner, no org permission gate. */}
                     <Route path="/email/callback" element={<EmailOAuthCallback />} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
-{/* Platform Admin — owner-only, server enforces auth */}
-                    <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/lume-agent" replace />} />
+                    {/* /platform-admin retiré : le back-office donnait une vue
+                        inter-tenants (orgs, utilisateurs, revenus) depuis
+                        l'application. L'URL redirige désormais comme toute
+                        route inconnue. */}
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>

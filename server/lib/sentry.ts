@@ -56,3 +56,28 @@ export function captureException(err: unknown, context?: Record<string, any>): v
     sentryNode.captureException(err, { extra: context });
   } catch { /* no-op */ }
 }
+
+/**
+ * Attache l'org de la requête courante au scope Sentry.
+ *
+ * Appelé depuis `requireAuthedClient`, le point de passage unique de toutes les
+ * routes authentifiées. Sans ça, une alerte Sentry dit quelle ligne a planté
+ * mais pas chez quel client — inexploitable pour le support.
+ *
+ * Volontairement PAS d'email : le nom de l'org identifie déjà le compte, et
+ * c'est une donnée personnelle de moins transmise à un sous-traitant.
+ *
+ * Le nom de l'org n'est pas connu ici (`requireAuthedClient` ne le charge pas,
+ * et une requête de plus par appel API serait un mauvais échange) — il est
+ * résolu côté navigateur par `setSentryOrgContext`. L'`org_id` suffit à relier
+ * les deux.
+ */
+export function setSentryRequestOrg(orgId: string, userId: string): void {
+  if (!sentryNode?.getCurrentHub) return;
+  try {
+    const scope = sentryNode.getCurrentHub().getScope();
+    if (!scope) return;
+    scope.setUser({ id: userId });
+    scope.setTag('org_id', orgId);
+  } catch { /* no-op */ }
+}

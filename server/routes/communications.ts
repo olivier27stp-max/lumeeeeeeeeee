@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { twilioClient, emailFrom } from '../lib/config';
+import { twilioClient, emailFrom, getTwilioStatusCallbackUrl } from '../lib/config';
+import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
 import { provisionSmsNumber, getOrgSmsChannel, orgPlanIncludesSms } from '../lib/twilioProvisioning';
@@ -79,12 +80,26 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
       });
     }
 
+    // Conformité CASL : ne rien envoyer à un destinataire ayant répondu STOP.
+    // Ce site avait été oublié lors du passage sur les autres points d'envoi.
+    if (await isSmsOptedOut(serviceClient, orgId, normalizedTo)) {
+      return res.status(409).json({
+        error: 'This recipient has opted out of SMS from your organization.',
+        code: 'sms_opted_out',
+      });
+    }
+
+    // Accusé de réception : sans ce callback, la ligne `messages` insérée juste
+    // après reste bloquée à `status: 'sent'` même si le SMS n'arrive jamais.
+    const statusCallback = getTwilioStatusCallbackUrl();
+
     // Run conversation lookup in parallel with Twilio send — independent DB round-trip
     const [twilioMsg, conversation] = await Promise.all([
       twilioClient.messages.create({
         body,
         from: fromNumber,
         to: normalizedTo,
+        ...(statusCallback ? { statusCallback } : {}),
       }),
       findOrCreateConversation(serviceClient, orgId, normalizedTo, client_id),
     ]);
@@ -328,11 +343,46 @@ router.post('/communications/provision-sms', requireRole('owner', 'admin'), asyn
     // override the area code, never the country (prevents buying US numbers by hand).
     const { area_code } = req.body || {};
 
-    const result = await provisionSmsNumber(orgId, {
-      areaCode: typeof area_code === 'string' && /^\d{3}$/.test(area_code) ? area_code : undefined,
-    });
+    // Journalise la tentative dans `provisioning_events` : sans ça, un
+    // provisionnement manuel qui échoue ne laissait AUCUNE trace en base —
+    // l'admin voyait une erreur à l'écran et le support n'avait rien à
+    // consulter. (Cette route conserve son propre appel car elle seule accepte
+    // un indicatif régional choisi par l'utilisateur.)
+    const admin = getServiceClient();
+    const { data: eventRow } = await admin
+      .from('provisioning_events')
+      .insert({
+        org_id: orgId,
+        event_type: 'sms_number_purchase',
+        status: 'pending',
+        metadata: { source: 'manual', requested_area_code: area_code || null },
+      })
+      .select('id')
+      .single();
 
-    return res.json(result);
+    try {
+      const result = await provisionSmsNumber(orgId, {
+        areaCode: typeof area_code === 'string' && /^\d{3}$/.test(area_code) ? area_code : undefined,
+      });
+      if (eventRow) {
+        await admin
+          .from('provisioning_events')
+          .update({ status: 'success', twilio_number: result.phoneNumber })
+          .eq('id', eventRow.id);
+      }
+      return res.json(result);
+    } catch (provErr: any) {
+      if (eventRow) {
+        await admin
+          .from('provisioning_events')
+          .update({
+            status: 'failed',
+            error_message: String(provErr?.message || provErr).slice(0, 500),
+          })
+          .eq('id', eventRow.id);
+      }
+      throw provErr;
+    }
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to provision SMS number.', '[communications/provision-sms]');
   }
