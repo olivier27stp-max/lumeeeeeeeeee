@@ -83,14 +83,11 @@ describe('éditeur — ce que l’utilisateur voit et fait', () => {
     expect(editeur).toContain('Math.ceil(texte.length / 160)');
   });
 
-  it('les variables du moteur sont proposées', () => {
-    // Elles doivent correspondre à ce que `resolveEntityVariables` fournit
-    // réellement, sinon l'utilisateur insère un trou dans son message.
-    expect(editeur).toContain('client_first_name');
-    expect(editeur).toContain('company_name');
-    expect(editeur).toContain('invoice_number');
-    expect(editeur).toContain('quote_number');
-    expect(editeur).toContain('appointment_date');
+  it('les variables viennent d’une source unique', () => {
+    // Dupliquée dans chaque éditeur, la liste finissait par diverger entre le
+    // SMS et le courriel : ajouter une variable obligeait à penser aux deux.
+    expect(editeur).toContain('VARIABLES_PROPOSEES');
+    expect(read('src/lib/emailBodyText.ts')).toContain('export const VARIABLES_PROPOSEES');
   });
 
   it('le bouton reste inerte tant que rien n’a changé', () => {
@@ -119,11 +116,12 @@ describe('variables proposées — cohérence avec le moteur', () => {
   it('chaque variable proposée est réellement fournie par le résolveur', () => {
     // Proposer une variable que le moteur ne remplit pas insérerait un trou
     // dans le message envoyé au client — `resolveTemplate` remplace une
-    // variable inconnue par une chaîne vide.
-    const editeur = read('src/components/automations/MessageEditor.tsx');
+    // variable inconnue par une chaîne vide. (Vérifié aussi dans
+    // email-body-text.test.ts, sur la liste elle-même.)
+    const lib = read('src/lib/emailBodyText.ts');
     const actions = read('server/lib/actions/index.ts');
-    const bloc = editeur.slice(editeur.indexOf('const VARIABLES'), editeur.indexOf('];', editeur.indexOf('const VARIABLES')));
-    const proposees = [...bloc.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+    const bloc = lib.slice(lib.indexOf('VARIABLES_PROPOSEES'));
+    const proposees = [...bloc.matchAll(/cle: '([a-z_]+)'/g)].map((m) => m[1]);
     expect(proposees.length).toBeGreaterThan(5);
     for (const v of proposees) {
       expect(actions, `variable proposée mais jamais résolue : ${v}`).toContain(`vars.${v}`);

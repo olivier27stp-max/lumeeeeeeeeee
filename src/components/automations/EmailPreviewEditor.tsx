@@ -15,7 +15,7 @@ import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
-import { htmlVersTexte, texteVersHtml, remplacerVariables } from '../../lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 
 interface Props {
   ruleId: string;
@@ -26,6 +26,13 @@ interface Props {
   fr: boolean;
   onClose: () => void;
   onSaved: () => void;
+}
+
+/** Un bloc du courriel : titre, paragraphe ou puce. */
+interface Bloc {
+  id: number;
+  type: 'titre' | 'paragraphe' | 'puce';
+  texte: string;
 }
 
 /**
@@ -42,26 +49,48 @@ interface Entreprise {
   company_phone?: string | null;
 }
 
-/** Un bloc du courriel : titre, paragraphe ou puce. */
-interface Bloc {
-  id: number;
-  type: 'titre' | 'paragraphe' | 'puce';
-  texte: string;
-}
-
-/** Variables du moteur, nommées en clair. */
-const VARIABLES: Array<{ cle: string; fr: string; en: string }> = [
-  { cle: 'client_first_name', fr: 'Prénom du client', en: 'Client first name' },
-  { cle: 'client_name', fr: 'Nom complet', en: 'Full name' },
-  { cle: 'company_name', fr: 'Votre entreprise', en: 'Your company' },
-  { cle: 'invoice_number', fr: 'N° de facture', en: 'Invoice #' },
-  { cle: 'invoice_total', fr: 'Montant', en: 'Amount' },
-  { cle: 'quote_number', fr: 'N° de soumission', en: 'Quote #' },
-  { cle: 'appointment_date', fr: 'Date du RDV', en: 'Appointment date' },
-  { cle: 'appointment_time', fr: 'Heure du RDV', en: 'Appointment time' },
-];
-
 let compteurId = 0;
+
+/**
+ * Champ d'un bloc, auto-dimensionné à son contenu.
+ *
+ * Déclaré au niveau module, pas dans le composant parent : React recrée un
+ * composant défini à l'intérieur d'un rendu à CHAQUE frappe, ce qui démonte le
+ * champ et lui fait perdre le focus au milieu d'une phrase.
+ */
+function ChampBloc({
+  bloc, fr, onChange, onFocus,
+}: {
+  bloc: Bloc;
+  fr: boolean;
+  onChange: (texte: string) => void;
+  onFocus: () => void;
+}) {
+  const ajuster = (el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  };
+
+  return (
+    <textarea
+      value={bloc.texte}
+      onChange={(e) => { onChange(e.target.value); ajuster(e.currentTarget); }}
+      onFocus={onFocus}
+      rows={1}
+      placeholder={fr ? 'Écrivez ici…' : 'Type here…'}
+      className={cn(
+        'w-full bg-transparent border border-transparent rounded px-2 py-1 resize-none overflow-hidden',
+        'hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors',
+        bloc.type === 'titre'
+          ? 'text-[17px] font-semibold text-text-primary'
+          : 'text-[13px] text-text-secondary leading-relaxed',
+      )}
+      style={{ minHeight: bloc.type === 'titre' ? 30 : 26 }}
+      ref={ajuster}
+    />
+  );
+}
 
 /** Découpe le texte converti en blocs manipulables. */
 function texteEnBlocs(texte: string): Bloc[] {
@@ -143,33 +172,6 @@ export default function EmailPreviewEditor({
     }
   };
 
-  /** Champ auto-dimensionné : le texte ne doit jamais être coupé. */
-  const Champ = ({ bloc }: { bloc: Bloc }) => (
-    <textarea
-      value={bloc.texte}
-      onChange={(e) => majBloc(bloc.id, e.target.value)}
-      onFocus={() => setActif(bloc.id)}
-      rows={1}
-      placeholder={fr ? 'Écrivez ici…' : 'Type here…'}
-      className={cn(
-        'w-full bg-transparent border border-transparent rounded px-2 py-1 resize-none overflow-hidden',
-        'hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors',
-        bloc.type === 'titre'
-          ? 'text-[17px] font-semibold text-text-primary'
-          : 'text-[13px] text-text-secondary leading-relaxed',
-      )}
-      style={{ height: 'auto', minHeight: bloc.type === 'titre' ? 30 : 26 }}
-      onInput={(e) => {
-        const el = e.currentTarget;
-        el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
-      }}
-      ref={(el) => {
-        if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }
-      }}
-    />
-  );
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -237,7 +239,12 @@ export default function EmailPreviewEditor({
                     <span className="text-text-tertiary text-[13px] pt-1.5 select-none">•</span>
                   )}
                   <div className="flex-1 min-w-0">
-                    <Champ bloc={bloc} />
+                    <ChampBloc
+                      bloc={bloc}
+                      fr={fr}
+                      onChange={(t) => majBloc(bloc.id, t)}
+                      onFocus={() => setActif(bloc.id)}
+                    />
                   </div>
                   <button
                     onClick={() => supprimerBloc(bloc.id)}
@@ -285,42 +292,14 @@ export default function EmailPreviewEditor({
             </div>
           </div>
 
-          <p className="mx-auto max-w-[600px] mt-2 text-[10px] text-text-tertiary text-center">
+          {/* Un SEUL aperçu : le courriel ci-dessus EST le rendu final.
+              Un second bloc « ce que le client lira » répétait la même chose
+              et ajoutait du bruit sans rien apprendre. */}
+          <p className="mx-auto max-w-[600px] mt-2 text-[10px] text-text-tertiary text-center leading-relaxed">
             {fr
-              ? 'L’en-tête et le pied de page viennent de vos réglages d’entreprise — comme sur vos factures et soumissions.'
-              : 'Header and footer come from your company settings — same as on invoices and quotes.'}
+              ? 'L’en-tête et le pied de page viennent de vos réglages d’entreprise. Les valeurs entre crochets seront remplacées par les vraies données du client.'
+              : 'Header and footer come from your company settings. Bracketed values are replaced with the client’s real data.'}
           </p>
-
-          {/* Aperçu du rendu final, variables remplacées */}
-          <div className="mx-auto max-w-[600px] mt-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
-              {fr ? 'Ce que le client lira' : 'What the client will read'}
-            </p>
-            <div className="rounded-lg border border-outline/50 bg-surface p-4">
-              {objet && (
-                <p className="text-[12px] font-semibold text-text-primary pb-2 mb-2 border-b border-outline/40">
-                  {remplacerVariables(objet)}
-                </p>
-              )}
-              {blocs.map((b) => (
-                <p
-                  key={b.id}
-                  className={cn(
-                    b.type === 'titre' ? 'text-[13px] font-semibold text-text-primary mb-1.5' : 'text-[12px] text-text-secondary leading-relaxed mb-1.5',
-                    b.type === 'puce' && 'pl-3',
-                  )}
-                >
-                  {b.type === 'puce' && '• '}
-                  {remplacerVariables(b.texte) || <span className="italic text-text-tertiary">…</span>}
-                </p>
-              ))}
-            </div>
-            <p className="mt-1.5 text-[10px] text-text-tertiary">
-              {fr
-                ? 'Exemple avec des données fictives — les vraies valeurs du client seront utilisées.'
-                : 'Sample data — the client’s real values will be used.'}
-            </p>
-          </div>
         </div>
 
         {/* Pied : variables + enregistrement */}
@@ -329,7 +308,7 @@ export default function EmailPreviewEditor({
             <span className="text-[10px] text-text-tertiary mr-1">
               {fr ? 'Insérer :' : 'Insert:'}
             </span>
-            {VARIABLES.map((v) => (
+            {VARIABLES_PROPOSEES.map((v) => (
               <button
                 key={v.cle}
                 title={`[${v.cle}]`}
