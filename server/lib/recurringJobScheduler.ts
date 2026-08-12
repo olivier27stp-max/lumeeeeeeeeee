@@ -113,17 +113,59 @@ async function processRecurringJobs(supabase: SupabaseClient) {
 
         // Create schedule event for the new job
         if (newJob?.id) {
-          const { error: evtErr } = await supabase.from('schedule_events').insert({
-            org_id: job.org_id,
-            job_id: newJob.id,
-            // schedule_events n'a pas de client_id : le client se resout via le job.
-            team_id: job.team_id,
-            start_at: scheduledAt,
-            end_at: new Date(nextDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2h default
-            status: 'scheduled',
-          });
+          const { data: newEvent, error: evtErr } = await supabase
+            .from('schedule_events')
+            .insert({
+              org_id: job.org_id,
+              job_id: newJob.id,
+              // schedule_events n'a pas de client_id : le client se resout via le job.
+              team_id: job.team_id,
+              start_at: scheduledAt,
+              end_at: new Date(nextDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2h default
+              status: 'scheduled',
+            })
+            .select('id')
+            .single();
           // Job cree mais absent du calendrier : l'equipe ne le voit pas.
           if (evtErr) console.error(`[recurring-jobs] schedule_event insert failed for job ${newJob.id} (rule ${rule.id}):`, evtErr.message);
+
+          // Déclenche les automatisations de rendez-vous : confirmation
+          // immédiate, puis rappels J-7 / J-1 / 2 h.
+          //
+          // Ce chemin insérait directement dans `schedule_events` sans passer
+          // par le bus : les clients d'une tournée récurrente — donc ceux qui
+          // ont un contrat d'entretien, les plus fidèles — ne recevaient NI
+          // confirmation NI rappel, alors que les visites planifiées à la main
+          // en recevaient. Même panne que celle du modal « Nouveau job », sur
+          // un autre chemin.
+          //
+          // Non bloquant : une automatisation muette ne doit pas interrompre
+          // la génération des occurrences suivantes.
+          if (newEvent?.id) {
+            try {
+              const { eventBus } = await import('./eventBus');
+              await eventBus.emit('appointment.created', {
+                orgId: job.org_id,
+                entityType: 'schedule_event',
+                entityId: newEvent.id,
+                // Créé par le planificateur, pas par un utilisateur.
+                actorId: job.created_by || undefined,
+                metadata: {
+                  job_id: newJob.id,
+                  client_id: job.client_id || null,
+                  start_time: scheduledAt,
+                  title: job.title || '',
+                  address: job.property_address || '',
+                  job_name: job.title || '',
+                  source: 'recurring',
+                },
+                relatedEntityType: 'job',
+                relatedEntityId: newJob.id,
+              });
+            } catch (emitErr: any) {
+              console.error(`[recurring-jobs] appointment.created emit failed for event ${newEvent.id}:`, emitErr?.message);
+            }
+          }
         }
 
         // Calculate next occurrence.

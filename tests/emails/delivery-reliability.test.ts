@@ -226,17 +226,27 @@ describe('confirmation de rendez-vous — le chemin principal émet enfin', () =
     expect(scheduleApi).toContain('emitAppointmentRescheduled({');
   });
 
-  it('TROU CONNU : les jobs récurrents ne déclenchent aucune automatisation', () => {
-    // `recurringJobScheduler` insère directement dans `schedule_events` sans
-    // passer par le bus d'événements : les clients d'une tournée récurrente ne
-    // reçoivent donc ni confirmation ni rappel.
-    //
-    // Hors périmètre de l'audit des envois (c'est le déclencheur qui manque,
-    // pas l'envoi), mais figé ici pour que le trou reste visible. Le jour où
-    // l'émission est ajoutée, ce test échoue — c'est le signal attendu.
+  it('les jobs récurrents déclenchent enfin leurs automatisations', () => {
+    // `recurringJobScheduler` insérait directement dans `schedule_events` sans
+    // passer par le bus : les clients d'une tournée récurrente — ceux qui ont
+    // un contrat d'entretien, donc les plus fidèles — ne recevaient NI
+    // confirmation NI rappel, alors que les visites planifiées à la main en
+    // recevaient. Même panne que celle du modal « Nouveau job ».
     const recurring = read('server/lib/recurringJobScheduler.ts');
-    expect(recurring).toContain("from('schedule_events').insert(");
-    expect(recurring).not.toContain('appointment.created');
+    expect(recurring).toContain("eventBus.emit('appointment.created'");
+    expect(recurring).toContain("entityType: 'schedule_event'");
+    // L'id de l'événement créé est nécessaire pour émettre : sans `.select()`,
+    // l'insert ne renvoyait rien.
+    expect(recurring).toContain(".select('id')");
+    expect(recurring).toContain("source: 'recurring'");
+  });
+
+  it('une automatisation muette n’interrompt pas la génération des occurrences', () => {
+    // Le planificateur tourne en boucle sur plusieurs règles : une erreur
+    // d'émission ne doit pas empêcher les suivantes d'être créées.
+    const recurring = read('server/lib/recurringJobScheduler.ts');
+    expect(recurring).toContain('appointment.created emit failed');
+    expect(recurring).toMatch(/catch \(emitErr: any\)/);
   });
 });
 
