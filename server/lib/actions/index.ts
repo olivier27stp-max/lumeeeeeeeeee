@@ -212,14 +212,41 @@ export async function executeSendEmail(
     // (SPF/DKIM) : seuls le nom affiché et le Reply-To sont ceux du tenant.
     // Envoyer depuis l'adresse réelle de chaque org exigerait une config DNS
     // par client et casserait la délivrabilité de tout le monde.
+    // Conformité CASL : ces courriels sont des communications COMMERCIALES
+    // (relances, suivis, réengagement à 90 jours), pas des documents demandés
+    // par le client. Ils exigent donc un mécanisme de retrait fonctionnel, et
+    // le respect de ceux qui s'en sont déjà servis.
+    const { isEmailUnsubscribed, getUnsubscribeUrl } = await import('../notificationHelpers');
+    if (await isEmailUnsubscribed(ctx.supabase, ctx.orgId, to)) {
+      return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
+    }
+
     const { getCompanySettings, buildEmailLayout, senderFor } = await import('../../routes/emails');
     const company = await getCompanySettings(ctx.orgId);
+    const unsubUrl = await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to);
+
+    // Lien visible en pied de page + en-têtes standards : Gmail et Outlook
+    // affichent alors leur bouton natif « Se désabonner », ce qui améliore
+    // aussi nettement la délivrabilité.
+    const pied = unsubUrl
+      ? `<p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
+           <a href="${unsubUrl}" style="color:#9ca3af;text-decoration:underline;">Se désabonner de ces communications</a>
+         </p>`
+      : '';
 
     const result = await sendEmail({
       ...senderFor(company),
       to,
       subject,
-      html: buildEmailLayout(company, body),
+      html: buildEmailLayout(company, body + pied),
+      ...(unsubUrl
+        ? {
+            headers: {
+              'List-Unsubscribe': `<${unsubUrl}>`,
+              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+            },
+          }
+        : {}),
     });
     if (!result.sent) return { success: false, error: result.error || 'Send failed' };
 

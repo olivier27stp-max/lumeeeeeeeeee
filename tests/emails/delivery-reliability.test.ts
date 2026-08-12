@@ -625,8 +625,9 @@ describe('automatisations — identité de l’org, plus de « Lume CRM »', () 
 
   it('le courriel est brandé (logo, pied de page, numéros de taxes)', () => {
     // Avant : `html: body` brut. Tous les autres envois du produit passent par
-    // ce layout — l'automatisation était le seul trou.
-    expect(fn).toContain('buildEmailLayout(company, body)');
+    // ce layout — l'automatisation était le seul trou. Le corps porte
+    // désormais aussi le lien de désinscription.
+    expect(fn).toContain('buildEmailLayout(company, body + pied)');
     expect(fn).not.toMatch(/html:\s*body,/);
   });
 
@@ -719,5 +720,125 @@ describe('auth — l’échec du courriel de vérification est remonté', () => 
   it('SMTP absent est journalisé comme un incident, pas comme une trace', () => {
     expect(auth).toContain('SMTP non configuré');
     expect(auth).toMatch(/console\.error\('\[auth\] SMTP non configuré/);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// 14. Désabonnement courriel (CASL)
+// ───────────────────────────────────────────────────────────────────
+
+describe('désabonnement courriel — le pendant email de STOP', () => {
+  const helpers = read('server/lib/notificationHelpers.ts');
+  const route = read('server/routes/unsubscribe.ts');
+  const actions = read('server/lib/actions/index.ts');
+
+  it('la liste est consultée avant tout envoi commercial', () => {
+    // Le SMS respecte STOP sur ses 8 points d'envoi ; l'email n'avait aucun
+    // équivalent, et aucun des 23 messages d'automatisation ne portait de lien
+    // de retrait.
+    expect(helpers).toContain('export async function isEmailUnsubscribed');
+    expect(actions).toContain('isEmailUnsubscribed(ctx.supabase, ctx.orgId, to)');
+    expect(actions).toContain('has unsubscribed from marketing emails');
+  });
+
+  it('un porteur de jeton n’est pas traité comme un désabonné', () => {
+    // La ligne est créée à l'avance pour construire le lien du pied de page.
+    // Sans ce filtre, le premier courriel envoyé rendrait l'adresse désabonnée.
+    const fn = helpers.slice(
+      helpers.indexOf('export async function isEmailUnsubscribed'),
+      helpers.indexOf('export async function getUnsubscribeUrl'),
+    );
+    expect(fn).toContain(".neq('category', 'pending')");
+  });
+
+  it('fail-open : un incident de lecture ne coupe pas les communications', () => {
+    const fn = helpers.slice(
+      helpers.indexOf('export async function isEmailUnsubscribed'),
+      helpers.indexOf('export async function getUnsubscribeUrl'),
+    );
+    expect(fn).toContain('return false');
+    expect(fn).toContain('envoi autorisé par défaut');
+  });
+
+  it('le lien figure dans le pied de page ET dans les en-têtes', () => {
+    // Les deux comptent : le lien visible pour l'humain, l'en-tête pour le
+    // bouton natif de Gmail/Outlook (qui améliore aussi la délivrabilité).
+    expect(actions).toContain("'List-Unsubscribe'");
+    expect(actions).toContain("'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'");
+    expect(actions).toContain('Se désabonner de ces communications');
+  });
+
+  it('la route publique valide le format du jeton', () => {
+    // 32 octets en hexadécimal. Filtrer ici évite une requête pour toute URL
+    // manifestement invalide.
+    expect((route.match(/\^\[a-f0-9\]\{64\}\$/g) || []).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('le GET et le POST sont tous deux gérés', () => {
+    // Le POST est requis par `List-Unsubscribe-Post` : sans lui, le bouton
+    // natif de Gmail ne s'affiche pas.
+    expect(route).toContain("router.get('/unsubscribe/:token'");
+    expect(route).toContain("router.post('/unsubscribe/:token'");
+  });
+
+  it('recliquer le lien ne produit pas d’erreur', () => {
+    expect(route).toContain('Vous êtes déjà désabonné');
+  });
+
+  it('le POST est exempté du contrôle CSRF, par préfixe et non par égalité', () => {
+    // Gmail n'envoie aucun en-tête personnalisé. La liste d'exemptions est en
+    // correspondance exacte, donc un chemin à jeton variable n'y entre pas.
+    const index = read('server/index.ts');
+    // Ancré sur les éléments stables plutôt que sur la regex littérale, dont
+    // l'échappement rendrait l'assertion fragile.
+    expect(index).toContain('unsubscribe');
+    expect(index).toContain('[a-f0-9]{64}');
+    expect(index).toContain('.test(req.path)) return next();');
+  });
+
+  it('le désabonnement n’affecte pas les courriels transactionnels', () => {
+    // Reçus, factures et courriels de sécurité ne consultent pas cette liste :
+    // c'est légal et attendu.
+    for (const f of ['server/routes/emails.ts', 'server/lib/billing-email.ts']) {
+      expect(read(f)).not.toContain('isEmailUnsubscribed');
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────
+// 15. Les échecs d'automatisation deviennent visibles dans l'app
+// ───────────────────────────────────────────────────────────────────
+
+describe('visibilité — l’utilisateur voit enfin les échecs', () => {
+  const api = read('src/lib/automationRulesApi.ts');
+  const page = read('src/pages/Automations.tsx');
+
+  it('les journaux d’exécution sont enfin lus par le front', () => {
+    // Le moteur écrivait consciencieusement dans cette table depuis toujours ;
+    // aucune page ne la lisait. Une automatisation cassée restait affichée
+    // « active » avec un badge vert.
+    expect(api).toContain("from('automation_execution_logs')");
+    expect(api).toContain("eq('result_success', false)");
+    expect(api).toContain('export async function getRecentAutomationFailures');
+  });
+
+  it('la lecture est cloisonnée par organisation', () => {
+    const fn = api.slice(
+      api.indexOf('export async function getRecentAutomationFailures'),
+      api.indexOf('export async function getFailureCountsByRule'),
+    );
+    expect(fn).toContain("eq('org_id', orgId)");
+  });
+
+  it('un badge signale les échecs sur la règle concernée', () => {
+    expect(page).toContain('failureCounts[rule.id]');
+    expect(page).toContain('échec(s) dans les 7 derniers jours');
+  });
+
+  it('un échec de ce chargement ne casse pas la page', () => {
+    // La liste des automatisations doit s'afficher même si les journaux sont
+    // illisibles.
+    const load = page.slice(page.indexOf('const load = useCallback'), page.indexOf('useEffect(() => { load(); }'));
+    expect(load).toContain('Failed to load automation failures');
   });
 });

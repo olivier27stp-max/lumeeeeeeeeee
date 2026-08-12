@@ -52,12 +52,15 @@ describe('mailer — le contrat de base dont tout le reste dépend', () => {
     expect(mailer).toContain('export function isMailerConfigured');
   });
 
-  it('SendEmailParams n’a ni headers ni text — List-Unsubscribe est donc impossible', () => {
-    // Verrouille la limite documentée au §1.1 du plan. La phase 1z ajoutera ces
-    // deux champs ; ce test devra alors être mis à jour en connaissance de cause.
+  it('SendEmailParams accepte des en-têtes — List-Unsubscribe est possible', () => {
+    // Le champ manquait, ce qui rendait `List-Unsubscribe` techniquement
+    // impossible : Gmail et Outlook n'affichaient pas leur bouton natif « Se
+    // désabonner », et les courriels commerciaux partaient sans mécanisme de
+    // retrait (exposition CASL).
     const params = routeBody(mailer, 'export interface SendEmailParams', 'export interface SendEmailResult');
-    expect(params).not.toMatch(/\bheaders\b/);
-    expect(params).not.toMatch(/^\s*text\??:/m);
+    expect(params).toMatch(/headers\?: Record<string, string>/);
+    // Et les en-têtes sont bien transmis au transport.
+    expect(mailer).toContain('...(params.headers ? { headers: params.headers } : {})');
   });
 
   it('le transport est Nodemailer/SMTP, pas Resend', () => {

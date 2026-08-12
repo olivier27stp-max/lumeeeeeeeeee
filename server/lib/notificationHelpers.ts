@@ -78,6 +78,93 @@ export async function isSmsOptedOut(
 }
 
 /**
+ * Cette adresse s'est-elle désabonnée des courriels de cette organisation ?
+ *
+ * Conformité CASL. Pendant email de `isSmsOptedOut`. À n'appeler QUE pour les
+ * communications commerciales (relances, suivis, réengagement) : les courriels
+ * strictement transactionnels — reçu de paiement, facture demandée, courriel
+ * de sécurité — ne se désabonnent pas, et c'est légal.
+ *
+ * Fail-open, comme pour le SMS : un incident de lecture ne doit pas couper
+ * toutes les communications d'un locataire.
+ */
+export async function isEmailUnsubscribed(
+  supabase: SupabaseClient,
+  orgId: string,
+  email: string | null | undefined,
+): Promise<boolean> {
+  if (!email) return false;
+  try {
+    // `category = 'pending'` = la ligne n'est qu'un porteur de jeton, créée
+    // pour construire le lien du pied de page. Elle ne devient un
+    // désabonnement qu'au clic (la route publique bascule la catégorie).
+    const { data, error } = await supabase
+      .from('email_unsubscribes')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('email', email.trim().toLowerCase())
+      .neq('category', 'pending')
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error('[email] vérification de désabonnement échouée (envoi autorisé par défaut):', error.message);
+      return false;
+    }
+    return !!data;
+  } catch (err: any) {
+    console.error('[email] vérification de désabonnement échouée (envoi autorisé par défaut):', err?.message);
+    return false;
+  }
+}
+
+/**
+ * Récupère (ou crée) le jeton de désinscription d'une adresse, et retourne le
+ * lien à insérer dans le pied de page.
+ *
+ * Le jeton est créé à l'avance, sans marquer l'adresse comme désabonnée : la
+ * ligne ne porte le désabonnement qu'une fois le lien réellement cliqué.
+ * Retourne `null` si le lien ne peut pas être construit — on préfère un
+ * courriel sans lien qu'un courriel avec un lien mort.
+ */
+export async function getUnsubscribeUrl(
+  supabase: SupabaseClient,
+  orgId: string,
+  email: string | null | undefined,
+): Promise<string | null> {
+  if (!email) return null;
+  const base = (process.env.FRONTEND_URL || process.env.PUBLIC_URL || '').trim().replace(/\/$/, '');
+  if (!base || !/^https?:\/\//.test(base)) return null;
+
+  const normalise = email.trim().toLowerCase();
+  try {
+    const { data: existant } = await supabase
+      .from('email_unsubscribes')
+      .select('token')
+      .eq('org_id', orgId)
+      .eq('email', normalise)
+      .limit(1)
+      .maybeSingle();
+    if (existant?.token) return `${base}/api/unsubscribe/${existant.token}`;
+
+    // Créée en `category: 'pending'` : simple porteur de jeton, ignoré par
+    // `isEmailUnsubscribed` tant que le lien n'a pas été cliqué.
+    const { data: cree, error } = await supabase
+      .from('email_unsubscribes')
+      .insert({ org_id: orgId, email: normalise, category: 'pending' })
+      .select('token')
+      .single();
+    if (error || !cree?.token) {
+      console.error('[email] création du jeton de désinscription échouée:', error?.message);
+      return null;
+    }
+    return `${base}/api/unsubscribe/${cree.token}`;
+  } catch (err: any) {
+    console.error('[email] création du jeton de désinscription échouée:', err?.message);
+    return null;
+  }
+}
+
+/**
  * Résultat d'un envoi SMS.
  *
  * `sent: false` ne veut pas dire « erreur Twilio » : il couvre aussi les cas où

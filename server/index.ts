@@ -41,6 +41,7 @@ import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
+import unsubscribeRouter from './routes/unsubscribe';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
@@ -233,6 +234,13 @@ app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   // External webhooks: signature-validated downstream, never carry CSRF headers.
   if (WEBHOOK_PATHS_EXEMPT_FROM_CSRF.includes(req.path)) return next();
+  // Désinscription en un clic : le POST est émis par le client de messagerie
+  // (bouton natif « Se désabonner » de Gmail/Outlook via List-Unsubscribe-Post),
+  // qui n'envoie aucun en-tête personnalisé. Le jeton de 32 octets dans l'URL
+  // tient lieu d'authentification, et l'action est idempotente et sans risque :
+  // le pire cas d'un CSRF réussi serait de désabonner quelqu'un — ce que la
+  // route est faite pour faire.
+  if (/^\/unsubscribe\/[a-f0-9]{64}$/.test(req.path)) return next();
   // API key requests are not vulnerable to CSRF
   if (req.headers['x-api-key']) return next();
   // Require either Authorization header or X-Requested-With (custom header = JS origin)
@@ -384,6 +392,8 @@ app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
+// Désinscription courriel — publique, authentifiée par le jeton de l'URL.
+app.use('/api', unsubscribeRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
 app.use('/api', dsrRouter);
@@ -445,8 +455,11 @@ app.use('/api', orgsRouter);
 app.use('/api', rolePresetsRouter);
 app.use('/api', billingRouter);
 app.use('/api', referralsRouter);
-// In-app support: cap per IP so one tenant can't flood the support inbox.
-app.use('/api/support', rateLimit({ windowMs: 60_000, max: 5 }));
+// In-app support: cap per user so one tenant can't flood the support inbox.
+// Clé sur l'utilisateur, pas l'IP : plusieurs employés d'un même client
+// derrière un NAT partageaient le quota (faux positifs), et une rotation d'IP
+// le contournait. La route exige déjà une session, donc la clé est fiable.
+app.use('/api/support', rateLimit({ windowMs: 60_000, max: 5, keyFn: (req) => `support:${userKey(req)}` }));
 app.use('/api', supportRouter);
 app.use('/api', coursesRouter);
 app.use('/api/field-sales', fieldSalesRouter);

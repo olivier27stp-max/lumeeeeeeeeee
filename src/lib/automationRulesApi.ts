@@ -94,3 +94,52 @@ export async function updateRuleSmsBody(id: string, body: string): Promise<void>
 // Si un ensemencement manuel redevient nécessaire, le passer par une route
 // serveur avec contrôle admin explicite — ne PAS re-accorder le droit à
 // `authenticated`.
+
+/* ── Échecs d'automatisation ──────────────────────────────────────
+   Le moteur journalise chaque exécution dans `automation_execution_logs`,
+   mais AUCUNE page ne lisait cette table : une automatisation cassée restait
+   affichée « active » avec un badge vert, et l'utilisateur n'apprenait jamais
+   que ses clients n'avaient rien reçu. */
+
+export interface AutomationFailure {
+  id: string;
+  automation_rule_id: string | null;
+  action_type: string;
+  result_error: string | null;
+  entity_type: string | null;
+  created_at: string;
+}
+
+/**
+ * Échecs d'exécution des 7 derniers jours, les plus récents d'abord.
+ *
+ * Lecture seule, cloisonnée par l'org courante et par la RLS de la table.
+ */
+export async function getRecentAutomationFailures(limit = 50): Promise<AutomationFailure[]> {
+  const orgId = await getCurrentOrgId();
+  if (!orgId) return [];
+
+  const depuis = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('automation_execution_logs')
+    .select('id, automation_rule_id, action_type, result_error, entity_type, created_at')
+    .eq('org_id', orgId)
+    .eq('result_success', false)
+    .gte('created_at', depuis)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return (data || []) as AutomationFailure[];
+}
+
+/** Nombre d'échecs par règle sur 7 jours — pour le badge d'alerte de la liste. */
+export async function getFailureCountsByRule(): Promise<Record<string, number>> {
+  const failures = await getRecentAutomationFailures(200);
+  const counts: Record<string, number> = {};
+  for (const f of failures) {
+    if (!f.automation_rule_id) continue;
+    counts[f.automation_rule_id] = (counts[f.automation_rule_id] || 0) + 1;
+  }
+  return counts;
+}

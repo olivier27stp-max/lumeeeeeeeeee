@@ -42,6 +42,14 @@ export interface SendEmailParams {
   replyTo?: string;
   subject: string;
   html: string;
+  /**
+   * En-têtes SMTP additionnels.
+   *
+   * Nécessaire pour `List-Unsubscribe` / `List-Unsubscribe-Post` : sans eux,
+   * Gmail et Outlook n'affichent pas leur bouton natif « Se désabonner », et
+   * les courriels commerciaux sont davantage classés en pourriel.
+   */
+  headers?: Record<string, string>;
 }
 
 export interface SendEmailResult {
@@ -65,6 +73,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       replyTo: params.replyTo,
       subject: params.subject,
       html: params.html,
+      ...(params.headers ? { headers: params.headers } : {}),
     });
 
     return { sent: true, messageId: info.messageId };
