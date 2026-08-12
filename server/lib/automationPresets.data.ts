@@ -711,9 +711,13 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
   {
     "preset_key": "payment_confirmation",
     "name": "Payment Confirmation",
-    "description": "Thank client for payment",
+    "description": "Remercier le client pour son paiement",
     "trigger_event": "invoice.paid",
-    "conditions": {},
+    "conditions": {
+      "payment_type": {
+        "neq": "deposit"
+      }
+    },
     "delay_seconds": 0,
     "actions": [
       {
@@ -740,15 +744,15 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
   {
     "preset_key": "post_appointment_survey",
     "name": "Post-Appointment Satisfaction Check",
-    "description": "Quick satisfaction survey after service",
+    "description": "Suivi de satisfaction le lendemain du service",
     "trigger_event": "job.completed",
     "conditions": {},
-    "delay_seconds": 3600,
+    "delay_seconds": 86400,
     "actions": [
       {
         "type": "send_sms",
         "config": {
-          "body": "Bonjour [client_first_name], comment s'est passé notre service? Répondez de 1 à 5 (5 = parfait). — [company_name]"
+          "body": "Bonjour [client_first_name], est-ce que tout est à votre goût depuis notre passage? Répondez à ce message si quelque chose ne va pas. — [company_name]"
         }
       },
       {

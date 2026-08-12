@@ -229,27 +229,70 @@ async function executeRuleActions(
 
 // ── Resolve execution time ──────────────────────────────────
 
+/**
+ * Tolérance avant d'abandonner un rappel dont l'heure est déjà passée.
+ *
+ * Un rappel « la veille » calculé avec 20 minutes de retard reste pertinent ;
+ * le même rappel calculé 3 jours trop tard ne l'est plus.
+ */
+const RETARD_TOLERE_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Calcule le moment d'exécution d'une action différée.
+ *
+ * Retourne `null` quand la tâche doit être ABANDONNÉE plutôt que planifiée.
+ *
+ * Auparavant, un rappel dont l'heure était déjà passée était exécuté « dans
+ * 5 secondes ». Concrètement : créer aujourd'hui un rendez-vous pour DEMAIN
+ * déclenchait immédiatement le rappel « J-7 », et le client recevait dans la
+ * seconde « votre rendez-vous est dans une semaine » — alors qu'il est demain.
+ * Un message factuellement faux, sur le cas le plus courant qui soit (la prise
+ * de rendez-vous à court terme).
+ *
+ * On garde une tolérance : un rappel légèrement en retard part quand même,
+ * parce que le décalage vient alors du tick de 5 minutes, pas d'une erreur de
+ * cadence.
+ */
 async function resolveExecuteAt(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
-): Promise<Date> {
+): Promise<Date | null> {
   // Negative delay = "X seconds before the event's reference time"
   // Used for appointment reminders (e.g., -86400 = 1 day before start_time)
   if (rule.delay_seconds < 0 && (event.entityType === 'schedule_event' || event.entityType === 'appointment')) {
-    const { data: evt } = await config.supabase
+    const { data: evt, error } = await config.supabase
       .from('schedule_events')
       .select('start_at, start_time')
       .eq('id', event.entityId)
       .maybeSingle();
 
+    // Une erreur de lecture ne doit pas être confondue avec « pas de date » :
+    // sans ce garde, on retombait sur le délai positif ci-dessous et le rappel
+    // « 1 semaine avant » partait 1 semaine APRÈS la création du rendez-vous.
+    if (error) {
+      console.error(`[automationEngine] lecture de schedule_events échouée (rule ${rule.id}):`, error.message);
+      return null;
+    }
+
     const startField = evt?.start_at || evt?.start_time;
     if (startField) {
       const eventTime = new Date(startField).getTime();
       const executeAt = new Date(eventTime + rule.delay_seconds * 1000);
-      // If the calculated time is already past, execute immediately
-      if (executeAt.getTime() <= Date.now()) {
-        return new Date(Date.now() + 5000); // 5s from now
+      const retard = Date.now() - executeAt.getTime();
+
+      if (retard > RETARD_TOLERE_MS) {
+        // Le créneau du rappel est franchement dépassé : l'envoyer dirait au
+        // client quelque chose de faux.
+        console.log(
+          `[automationEngine] rappel abandonné (créneau dépassé de ${Math.round(retard / 60000)} min) — règle "${rule.name}"`,
+        );
+        return null;
+      }
+      if (retard > 0) {
+        // Léger retard (tick de 5 min) : on part tout de suite, le message
+        // reste juste.
+        return new Date(Date.now() + 5000);
       }
       return executeAt;
     }
@@ -267,6 +310,10 @@ async function scheduleDelayedActions(
   config: EngineConfig,
 ) {
   const executeAt = await resolveExecuteAt(rule, event, config);
+
+  // `null` = créneau dépassé ou date de référence illisible : on ne planifie
+  // rien plutôt que d'envoyer un rappel devenu faux.
+  if (!executeAt) return;
 
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
