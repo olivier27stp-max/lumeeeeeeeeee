@@ -203,3 +203,61 @@ describe('création de tâche — plus de violation de contrainte', () => {
     expect(fn).not.toContain('linked_entity_type: ctx.entityType');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// 6. Déplacer une visite replanifie réellement les rappels
+// ───────────────────────────────────────────────────────────────────
+
+describe('déplacement de visite — les rappels suivent la nouvelle date', () => {
+  const route = read('server/routes/automation-events.ts');
+  const bloc = route.slice(
+    route.indexOf("router.post('/automations/events/appointment-rescheduled'"),
+    route.indexOf("router.post('/automations/events/job-completed'"),
+  );
+
+  it('les rappels périmés sont annulés', () => {
+    // Une version précédente se contentait d'émettre `appointment.updated` :
+    // aucun preset ne l'écoute, il n'est pas dans EVENT_TO_TRIGGER, et rien
+    // n'annulait les tâches. La route retournait pourtant { ok: true }.
+    expect(bloc).toContain("from('automation_scheduled_tasks')");
+    expect(bloc).toContain("status: 'cancelled'");
+    expect(bloc).toContain("eq('entity_id', eventId)");
+    expect(bloc).toContain("eq('status', 'pending')");
+  });
+
+  it('l’annulation est cloisonnée par organisation', () => {
+    expect(bloc).toContain("eq('org_id', auth.orgId)");
+  });
+
+  it('l’annulation précède la replanification — l’ordre est vital', () => {
+    // L'index d'unicité couvre `pending` ET `running`. Ré-émettre d'abord ferait
+    // rejeter la nouvelle planification (23505) et il ne resterait que les
+    // anciennes tâches : pire que le bug d'origine.
+    const annulation = bloc.indexOf("status: 'cancelled'");
+    const emission = bloc.indexOf("eventBus.emit('appointment.created'");
+    expect(annulation).toBeGreaterThan(-1);
+    expect(emission).toBeGreaterThan(annulation);
+  });
+
+  it('l’événement émis est celui que les presets écoutent vraiment', () => {
+    // `appointment.updated` n'est écouté par aucun preset — vérifié en base.
+    expect(bloc).toContain("eventBus.emit('appointment.created'");
+    expect(bloc).not.toContain("eventBus.emit('appointment.updated'");
+    // Le drapeau distingue un déplacement d'une création, pour les journaux.
+    expect(bloc).toContain('rescheduled: true');
+  });
+
+  it('un échec d’annulation interrompt la route', () => {
+    // Sans annulation, la replanification échouerait sur l'unicité : mieux
+    // vaut une erreur franche qu'un { ok: true } trompeur.
+    expect(bloc).toContain('annulation des rappels périmés échouée');
+    expect(bloc).toContain('return res.status(500)');
+  });
+
+  it('les deux chemins de déplacement appellent bien la route', () => {
+    // Modal « Nouveau job » (via le flag `updated` du RPC) et glisser-déposer
+    // dans le calendrier.
+    expect(read('src/lib/jobsApi.ts')).toContain('emitAppointmentRescheduled(params)');
+    expect(read('src/lib/scheduleApi.ts')).toContain('emitAppointmentRescheduled({');
+  });
+});
