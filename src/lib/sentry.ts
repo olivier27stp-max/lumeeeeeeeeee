@@ -33,7 +33,16 @@ export async function initSentryClient(): Promise<void> {
       dsn,
       environment: import.meta.env.MODE,
       release: import.meta.env.VITE_SENTRY_RELEASE,
-      tracesSampleRate: Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+      // Sans cette intégration, `tracesSampleRate` ne mesure RIEN côté
+      // navigateur : ni le chargement de page, ni les Core Web Vitals (LCP,
+      // CLS, INP), ni les appels API. C'est ce qui laissait Insights vide.
+      integrations: [sentryReact.browserTracingIntegration()],
+      // 0.1 est un réglage pour gros trafic ; à notre volume il ne restait
+      // presque rien à afficher. À redescendre si le quota devient serré.
+      tracesSampleRate: Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || '1.0'),
+      // Ne pas mesurer les appels vers des domaines tiers (Stripe, Mapbox,
+      // Google) : leur lenteur n'est pas la nôtre et brouillerait les données.
+      tracePropagationTargets: [/^\//, /^https:\/\/lumecrm\.net/],
       replaysSessionSampleRate: 0,
       replaysOnErrorSampleRate: 0,
       // Strip PII-looking strings from breadcrumbs

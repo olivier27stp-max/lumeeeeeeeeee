@@ -26,7 +26,18 @@ export function initSentry(app: Express): void {
       dsn,
       environment: process.env.NODE_ENV || 'development',
       release: process.env.SENTRY_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA,
-      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+      // 0.1 (une requête sur dix) est un réglage pour gros trafic : à notre
+      // volume il ne restait presque rien, et la page Insights paraissait
+      // vide. À remonter le jour où le quota Sentry devient contraignant.
+      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || '1.0'),
+      // Sans ces intégrations, `tracesSampleRate` ne mesure RIEN : c'est ce qui
+      // laissait la page Insights vide. Http instrumente les appels sortants
+      // (Supabase, Stripe, Twilio) — c'est là que se cache la lenteur réelle ;
+      // Express attribue chaque mesure à sa route plutôt qu'à une URL brute.
+      integrations: [
+        new sentryNode.Integrations.Http({ tracing: true }),
+        new sentryNode.Integrations.Express({ app }),
+      ],
       // Filter: never send health checks or auth token fragments
       beforeSend(event: any) {
         if (event.request?.url?.includes('/api/health')) return null;
@@ -35,10 +46,21 @@ export function initSentry(app: Express): void {
         if (event.request?.headers?.authorization) event.request.headers.authorization = '[redacted]';
         return event;
       },
+      // Les transactions ont leur propre filtre : `beforeSend` ne les voit pas.
+      // La sonde de disponibilité tourne toutes les 5 min et noierait les
+      // mesures utiles sous des mesures d'elle-même.
+      beforeSendTransaction(event: any) {
+        const name = event.transaction || '';
+        if (name.includes('/api/health')) return null;
+        return event;
+      },
     });
 
     // Request handler must be the first middleware on the app
     app.use(sentryNode.Handlers?.requestHandler?.() ?? ((_req: any, _res: any, next: any) => next()));
+    // Le tracing handler suit le request handler et précède les routes : c'est
+    // lui qui ouvre une transaction par requête.
+    if (sentryNode.Handlers?.tracingHandler) app.use(sentryNode.Handlers.tracingHandler());
     console.log('[sentry] initialized');
   } catch (e: any) {
     console.warn('[sentry] @sentry/node not installed — run: npm i @sentry/node', e?.message);
