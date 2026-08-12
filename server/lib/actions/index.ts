@@ -168,33 +168,99 @@ export async function resolveEntityVariables(
     vars.google_review_url = company.google_review_url || '';
   }
 
+  /**
+   * Renseigne les variables client à partir d'une fiche `clients`.
+   *
+   * Centralise ce que les branches recopiaient, et surtout ajoute un repli :
+   * `clients.first_name` est nullable et vide sur une fiche d'entreprise. Sans
+   * repli, un message commençant par « Bonjour [client_first_name], » partait
+   * en « Bonjour , » — `resolveTemplate` remplaçant une variable absente par
+   * une chaîne vide, l'anomalie était invisible dans les journaux et visible
+   * seulement par le destinataire.
+   */
+  const setClientVars = (c: {
+    first_name?: string | null;
+    last_name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    company?: string | null;
+  }) => {
+    const complet = `${c.first_name || ''} ${c.last_name || ''}`.trim();
+    const entreprise = (c.company || '').trim();
+    vars.client_first_name = c.first_name || entreprise || complet || '';
+    vars.client_last_name = c.last_name || '';
+    vars.client_name = complet || entreprise || '';
+    vars.client_email = c.email || '';
+    vars.client_phone = c.phone || '';
+  };
+
   if (entityType === 'lead') {
     const { data: lead } = await supabase
       .from('clients')
-      .select('first_name, last_name, email, phone, title, client_id:id')
+      .select('first_name, last_name, email, phone, company, title, client_id:id')
       .eq('id', entityId)
       .maybeSingle();
     if (lead) {
-      vars.client_first_name = lead.first_name || '';
-      vars.client_last_name = lead.last_name || '';
-      vars.client_name = `${lead.first_name || ''} ${lead.last_name || ''}`.trim();
-      vars.client_email = lead.email || '';
-      vars.client_phone = lead.phone || '';
+      setClientVars(lead);
     }
   }
 
   if (entityType === 'client') {
     const { data: client } = await supabase
       .from('clients')
-      .select('first_name, last_name, email, phone')
+      .select('first_name, last_name, email, phone, company')
       .eq('id', entityId)
       .maybeSingle();
     if (client) {
-      vars.client_first_name = client.first_name || '';
-      vars.client_last_name = client.last_name || '';
-      vars.client_name = `${client.first_name || ''} ${client.last_name || ''}`.trim();
-      vars.client_email = client.email || '';
-      vars.client_phone = client.phone || '';
+      setClientVars(client);
+    }
+  }
+
+  // Soumissions (table `quotes`).
+  //
+  // Cette branche MANQUAIT, alors que `quote.sent` et `quote.approved` émettent
+  // bien `entityType: 'quote'`. Conséquence mesurée en prod : 322 règles
+  // actives réparties sur 46 orgs, et ZÉRO exécution — toute la séquence de
+  // relance de soumission et de rappel de dépôt était morte.
+  //
+  // Les envois échouaient sur « No recipient email/phone » (destinataire
+  // résolu depuis `vars.client_email`, absent), et les actions internes
+  // créaient des tâches à trous : « Urgent: Quote follow-up — » avec un nom
+  // vide, puisque `resolveTemplate` remplace une variable inconnue par une
+  // chaîne vide plutôt que de laisser le placeholder visible.
+  if (entityType === 'quote') {
+    const { data: quote } = await supabase
+      .from('quotes')
+      .select('quote_number, total_cents, currency, valid_until, client_id, lead_id, job_id')
+      .eq('id', entityId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+    if (quote) {
+      vars.quote_number = quote.quote_number || '';
+      vars.quote_total = quote.total_cents
+        ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' })
+            .format(Number(quote.total_cents) / 100)
+        : '$0.00';
+      vars.quote_valid_until = quote.valid_until || '';
+
+      // `quotes` porte DEUX liens vers `clients` : `client_id` (client
+      // converti) et `lead_id` (prospect). Même repli que la route d'envoi de
+      // soumission, sinon un devis encore au stade prospect ne résout rien.
+      const contactId = quote.client_id || quote.lead_id;
+      if (contactId) {
+        const { data: c } = await supabase
+          .from('clients')
+          .select('first_name, last_name, email, phone, company')
+          .eq('id', contactId)
+          .maybeSingle();
+        if (c) {
+          setClientVars(c);
+        }
+      }
+      if (quote.job_id) {
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).maybeSingle();
+        if (j) vars.job_name = j.title || '';
+      }
     }
   }
 
@@ -207,13 +273,9 @@ export async function resolveEntityVariables(
     if (job) {
       vars.job_name = job.title || '';
       if (job.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone').eq('id', job.client_id).maybeSingle();
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).maybeSingle();
         if (c) {
-          vars.client_first_name = c.first_name || '';
-          vars.client_last_name = c.last_name || '';
-          vars.client_name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
-          vars.client_email = c.email || '';
-          vars.client_phone = c.phone || '';
+          setClientVars(c);
         }
       }
       Object.assign(vars, await resolveContractVars(supabase, entityId));
@@ -232,13 +294,9 @@ export async function resolveEntityVariables(
       vars.invoice_due_date = inv.due_date || '';
       vars.invoice_total = inv.total_cents ? `$${(inv.total_cents / 100).toFixed(2)}` : '$0.00';
       if (inv.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone').eq('id', inv.client_id).maybeSingle();
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).maybeSingle();
         if (c) {
-          vars.client_first_name = c.first_name || '';
-          vars.client_last_name = c.last_name || '';
-          vars.client_name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
-          vars.client_email = c.email || '';
-          vars.client_phone = c.phone || '';
+          setClientVars(c);
         }
       }
       if (inv.job_id) {
@@ -256,7 +314,7 @@ export async function resolveEntityVariables(
         id, job_id, start_at, start_time, end_at, end_time, notes, status,
         job:jobs!schedule_events_job_id_fkey(
           id, title, property_address, client_id, client_name,
-          clients:clients!jobs_client_id_fkey(first_name, last_name, email, phone)
+          clients:clients!jobs_client_id_fkey(first_name, last_name, email, phone, company)
         )
       `)
       .eq('id', entityId)
@@ -269,15 +327,14 @@ export async function resolveEntityVariables(
         vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
       }
       vars.appointment_title = evt.job?.title || '';
-      vars.appointment_address = evt.job?.property_address || '';
+      // `jobs.property_address` a pour DEFAULT '-' : sans ce filtre, le client
+      // recevait littéralement « Adresse : - ».
+      const adresse = (evt.job?.property_address || '').trim();
+      vars.appointment_address = adresse === '-' ? '' : adresse;
       vars.job_name = evt.job?.title || '';
       const c = evt.job?.clients;
       if (c) {
-        vars.client_first_name = c.first_name || '';
-        vars.client_last_name = c.last_name || '';
-        vars.client_name = `${c.first_name || ''} ${c.last_name || ''}`.trim();
-        vars.client_email = c.email || '';
-        vars.client_phone = c.phone || '';
+        setClientVars(c);
       } else if (evt.job?.client_name) {
         vars.client_name = evt.job.client_name;
         vars.client_first_name = evt.job.client_name.split(' ')[0] || '';
@@ -686,15 +743,28 @@ export async function executeRequestReview(
     .maybeSingle();
 
   if (emailTemplate) {
-    // Resolve template variables using {var} syntax
+    // Résolution via `resolveTemplate`, comme partout ailleurs.
+    //
+    // Ce bloc utilisait un second résolveur maison qui ne comprenait que la
+    // syntaxe {var} — alors que TOUS les presets du produit utilisent [var].
+    // Un utilisateur composant son modèle en copiant cette syntaxe voyait donc
+    // « [client_name] » littéralement dans le courriel reçu par son client :
+    // le seul endroit du système où un placeholder brut pouvait atteindre le
+    // destinataire.
+    //
+    // Les variables complètes de l'entité sont désormais disponibles
+    // (invoice_number, quote_number, appointment_date…), pas seulement les
+    // quatre clés locales ; celles-ci restent prioritaires car elles portent la
+    // formule de politesse et le lien du sondage.
     const templateVars: Record<string, string> = {
+      ...vars,
       client_name: clientGreeting,
       company_name: vars.company_name || '',
       job_name: vars.job_name || 'your project',
       review_link: surveyUrl,
     };
-    subject = emailTemplate.subject.replace(/\{(\w+)\}/g, (_, k) => templateVars[k] ?? '');
-    body = emailTemplate.body.replace(/\{(\w+)\}/g, (_, k) => templateVars[k] ?? '');
+    subject = resolveTemplate(emailTemplate.subject, templateVars);
+    body = resolveTemplate(emailTemplate.body, templateVars);
   }
 
   // 9. Send email
