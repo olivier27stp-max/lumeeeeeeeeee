@@ -81,6 +81,45 @@ export function captureCronFailure(cronName: string, err: unknown): void {
 }
 
 /**
+ * Exécute une tâche de fond en signalant son passage à Sentry (« check-in »).
+ *
+ * `captureCronFailure` couvre la tâche qui PLANTE. Celle qui ne tourne plus DU
+ * TOUT ne lève rien : pas d'erreur, donc pas d'alerte, alors que les rappels
+ * cessent de partir. C'est le mode de panne le plus silencieux.
+ *
+ * Un check-in `in_progress` puis `ok`/`error` permet à Sentry de détecter les
+ * deux : l'échec, et le silence (« missed check-in ») si aucun passage n'arrive
+ * dans la fenêtre attendue.
+ *
+ * Le moniteur doit exister côté Sentry (Crons → Add Monitor) avec exactement ce
+ * `monitorSlug` ; sinon les check-ins sont ignorés sans erreur. Le code reste
+ * donc sans effet tant que la configuration n'est pas faite — et sans risque.
+ */
+export async function withCronCheckIn<T>(
+  monitorSlug: string,
+  fn: () => Promise<T>,
+): Promise<T | undefined> {
+  let checkInId: string | undefined;
+  try {
+    checkInId = sentryNode?.captureCheckIn?.({ monitorSlug, status: 'in_progress' });
+  } catch { /* no-op */ }
+
+  try {
+    const result = await fn();
+    try {
+      sentryNode?.captureCheckIn?.({ checkInId, monitorSlug, status: 'ok' });
+    } catch { /* no-op */ }
+    return result;
+  } catch (err) {
+    try {
+      sentryNode?.captureCheckIn?.({ checkInId, monitorSlug, status: 'error' });
+    } catch { /* no-op */ }
+    captureCronFailure(monitorSlug, err);
+    return undefined;
+  }
+}
+
+/**
  * Attache l'org de la requête courante au scope Sentry.
  *
  * Appelé depuis `requireAuthedClient`, le point de passage unique de toutes les

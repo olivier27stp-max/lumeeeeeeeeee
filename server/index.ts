@@ -94,7 +94,7 @@ import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
-import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure } from './lib/sentry';
+import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure, withCronCheckIn } from './lib/sentry';
 
 const app = express();
 
@@ -696,8 +696,29 @@ app.get('*', (_req, res, next) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 // Health check endpoint
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
+// Sonde de disponibilité, destinée à un moniteur externe (UptimeRobot & co).
+//
+// Elle interroge la base : un serveur qui répond « ok » alors que Supabase est
+// injoignable est un faux positif — le moniteur reste vert pendant que
+// l'application est inutilisable pour tout le monde. Un 503 est renvoyé dans ce
+// cas, c'est ce que les moniteurs interprètent comme une panne.
+//
+// La requête est volontairement minuscule (une ligne, une colonne) et n'est PAS
+// mise en cache : elle tourne à chaque appel, toutes les 1 à 5 minutes.
+app.get('/api/health', async (_req, res) => {
+  const started = Date.now();
+  try {
+    const { getServiceClient } = await import('./lib/supabase.js');
+    const admin = getServiceClient();
+    const { error } = await admin.from('orgs').select('id').limit(1);
+    if (error) throw new Error(error.message);
+    res.json({ status: 'ok', uptime: process.uptime(), db_ms: Date.now() - started });
+  } catch (err: any) {
+    // Pas de captureCronFailure ici : la panne se répéterait à chaque sondage et
+    // noierait Sentry. Le moniteur externe est le bon canal d'alerte.
+    console.error('[health] base injoignable:', err?.message || err);
+    res.status(503).json({ status: 'degraded', error: 'database unreachable' });
+  }
 });
 
 // Global error handler — sanitized for ALL environments (no stack traces, no DB details)
@@ -802,7 +823,7 @@ app.listen(port, '0.0.0.0', () => {
     // Automated alerts — scan every 30 minutes
     import('./lib/alerts-engine').then(({ runAlertScan }) => {
       setInterval(async () => {
-        const res = await withAdvisoryLock('alerts-engine', () => runAlertScan()).catch((e: any) => {
+        const res = await withAdvisoryLock('alerts-engine', () => withCronCheckIn('alerts-engine', () => runAlertScan())).catch((e: any) => {
           captureCronFailure('alerts-engine', e); return { acquired: true };
         });
         if (!res.acquired) { /* another replica owns this tick */ }
@@ -818,7 +839,7 @@ app.listen(port, '0.0.0.0', () => {
     Promise.all([import('./lib/fieldPinSync'), import('./lib/supabase')]).then(
       ([{ repairMissingPinCoords }, { getServiceClient }]) => {
         const runRepair = () =>
-          withAdvisoryLock('field-pin-repair', () => repairMissingPinCoords(getServiceClient()))
+          withAdvisoryLock('field-pin-repair', () => withCronCheckIn('field-pin-repair', () => repairMissingPinCoords(getServiceClient())))
             .catch((e: any) => captureCronFailure('field-pin-repair', e));
         setInterval(runRepair, 10 * 60 * 1000);
         setTimeout(runRepair, 20_000);
@@ -837,10 +858,10 @@ app.listen(port, '0.0.0.0', () => {
     // Scheduled reports — check every hour
     import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
       setInterval(async () => {
-        const res = await withAdvisoryLock('scheduled-reports', async () => {
+        const res = await withAdvisoryLock('scheduled-reports', () => withCronCheckIn('scheduled-reports', async () => {
           const sent = await processScheduledReports();
           if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
-        }).catch((e: any) => { captureCronFailure('scheduled-reports', e); return { acquired: true }; });
+        })).catch((e: any) => { captureCronFailure('scheduled-reports', e); return { acquired: true }; });
         if (!res.acquired) { /* skipped */ }
       }, 60 * 60 * 1000);
       console.log('[scheduled-reports] Cron started (hourly, lock-guarded)');
@@ -848,7 +869,7 @@ app.listen(port, '0.0.0.0', () => {
 
     // Security maintenance — every 15 minutes
     setInterval(() => {
-      withAdvisoryLock('security-maintenance', () => runSecurityMaintenance())
+      withAdvisoryLock('security-maintenance', () => withCronCheckIn('security-maintenance', () => runSecurityMaintenance()))
         .catch((err: any) => captureCronFailure('security-maintenance', err));
     }, 15 * 60 * 1000);
     console.log('[security] Maintenance job started (every 15min, lock-guarded)');
