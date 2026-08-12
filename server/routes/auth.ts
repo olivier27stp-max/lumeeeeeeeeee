@@ -221,6 +221,30 @@ router.post('/auth/verify-email', authRateLimit, async (req, res) => {
       return res.status(500).json({ error: 'Failed to verify email.' });
     }
 
+    // ── Courriel de bienvenue ──
+    // Envoyé ici et pas à l'inscription : c'est le moment où l'espace devient
+    // réellement utilisable. Jamais bloquant — le compte est déjà confirmé, et
+    // renvoyer une erreur ferait croire au client que la vérification a échoué.
+    try {
+      if (isMailerConfigured() && user.email) {
+        const { renderWelcomeEmail } = await import('../lib/email-templates/welcome');
+        const prenom = String(meta?.first_name || meta?.full_name || '').trim().split(' ')[0] || '';
+        const result = await sendEmail({
+          to: user.email,
+          replyTo: process.env.SUPPORT_EMAIL || undefined,
+          subject: 'Bienvenue dans Lume — par où commencer',
+          html: renderWelcomeEmail({
+            name: prenom,
+            appUrl: getBaseUrl(),
+            supportEmail: process.env.SUPPORT_EMAIL || '',
+          }),
+        });
+        if (!result.sent) console.warn('[auth] courriel de bienvenue non envoyé:', result.error);
+      }
+    } catch (welcomeErr: any) {
+      console.error('[auth] courriel de bienvenue échoué:', welcomeErr?.message);
+    }
+
     return res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to verify email.', '[auth]');
