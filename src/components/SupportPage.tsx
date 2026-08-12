@@ -14,7 +14,10 @@ import { ARTICLES } from './SupportDrawer';
  * contact form below it — same order as the drawer, just laid out wide.
  */
 export default function SupportPage() {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
+  const ts = t.support;
+  // `isFr` reste nécessaire : les 12 articles de FAQ sont bilingues en dur
+  // dans SupportDrawer.tsx (question et réponse gardées côte à côte).
   const isFr = language === 'fr';
   const navigate = useNavigate();
 
@@ -38,12 +41,10 @@ export default function SupportPage() {
         </div>
         <div>
           <h2 className="text-[17px] font-bold text-text-primary">
-            {isFr ? 'Aide et support' : 'Help and support'}
+            {ts.title}
           </h2>
           <p className="text-[13px] text-text-tertiary mt-0.5 leading-relaxed">
-            {isFr
-              ? 'Cherchez une réponse ci-dessous. Si vous ne trouvez pas, écrivez-nous — on répond vite.'
-              : 'Search for an answer below. If you can’t find it, send us a message — we reply fast.'}
+            {ts.pageIntro}
           </p>
         </div>
       </div>
@@ -54,7 +55,7 @@ export default function SupportPage() {
         <input
           value={query}
           onChange={(e) => { setQuery(e.target.value); setExpanded(null); }}
-          placeholder={isFr ? 'Rechercher dans l\'aide…' : 'Search our help…'}
+          placeholder={ts.searchPlaceholder}
           className="w-full pl-10 pr-3 py-3 rounded-xl bg-surface-secondary border border-outline-subtle text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
         />
       </div>
@@ -63,15 +64,13 @@ export default function SupportPage() {
       <div className="section-card p-5 space-y-3">
         <h3 className="text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
           {query.trim()
-            ? (isFr ? `${results.length} résultat${results.length > 1 ? 's' : ''}` : `${results.length} result${results.length === 1 ? '' : 's'}`)
-            : (isFr ? 'Questions fréquentes' : 'Common questions')}
+            ? `${results.length} ${results.length === 1 ? ts.resultCount : ts.resultCountPlural}`
+            : ts.commonQuestions}
         </h3>
 
         {results.length === 0 ? (
           <p className="py-6 text-center text-[13px] text-text-tertiary">
-            {isFr
-              ? 'Aucune réponse ne correspond. Posez votre question ci-dessous.'
-              : 'Nothing matches. Ask your question below.'}
+            {ts.noMatch}
           </p>
         ) : (
           <div className="space-y-1">
@@ -109,7 +108,7 @@ export default function SupportPage() {
                           onClick={() => navigate(a.path!)}
                           className="mt-2.5 text-[12px] font-semibold text-primary hover:underline"
                         >
-                          {isFr ? 'Aller à la page →' : 'Take me there →'}
+                          {ts.goToPage}
                         </button>
                       )}
                     </div>
@@ -126,7 +125,7 @@ export default function SupportPage() {
         <div className="flex items-center gap-2">
           <Mail size={15} className="text-text-tertiary" />
           <h3 className="text-[11px] font-bold text-text-tertiary uppercase tracking-wider">
-            {isFr ? 'Nous écrire' : 'Send us a message'}
+            {ts.writeUs}
           </h3>
         </div>
         <SupportPanel bare />
