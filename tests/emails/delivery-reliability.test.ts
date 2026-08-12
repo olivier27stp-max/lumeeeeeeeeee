@@ -216,12 +216,27 @@ describe('confirmation de rendez-vous — le chemin principal émet enfin', () =
     expect(fire).toContain('Non-blocking');
   });
 
-  it('les autres chemins de planification continuent d’émettre', () => {
-    // Non-régression : ces trois-là marchaient déjà, ils doivent le rester.
+  it('les autres chemins de planification émettent aussi', () => {
     const scheduleApi = read('src/lib/scheduleApi.ts');
-    expect(scheduleApi).toContain('emitAppointmentCreated({');   // scheduleUnscheduledJob + addVisit
-    expect(scheduleApi).toContain('emitAppointmentRescheduled({'); // rescheduleEvent
-    expect(read('server/lib/recurringJobScheduler.ts')).toContain('appointment.created');
+    // Glisser-déposer dans le calendrier + ajout d'une visite.
+    expect(scheduleApi).toContain('emitAppointmentCreated({');
+    // Déplacement d'une visite : sans cette émission, les rappels restent
+    // calés sur l'ANCIENNE date — un rappel « 2 h avant » est déjà parti 22 h
+    // APRÈS la visite en production.
+    expect(scheduleApi).toContain('emitAppointmentRescheduled({');
+  });
+
+  it('TROU CONNU : les jobs récurrents ne déclenchent aucune automatisation', () => {
+    // `recurringJobScheduler` insère directement dans `schedule_events` sans
+    // passer par le bus d'événements : les clients d'une tournée récurrente ne
+    // reçoivent donc ni confirmation ni rappel.
+    //
+    // Hors périmètre de l'audit des envois (c'est le déclencheur qui manque,
+    // pas l'envoi), mais figé ici pour que le trou reste visible. Le jour où
+    // l'émission est ajoutée, ce test échoue — c'est le signal attendu.
+    const recurring = read('server/lib/recurringJobScheduler.ts');
+    expect(recurring).toContain("from('schedule_events').insert(");
+    expect(recurring).not.toContain('appointment.created');
   });
 });
 
