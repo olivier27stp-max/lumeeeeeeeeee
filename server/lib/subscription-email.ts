@@ -199,6 +199,63 @@ export async function sendPlanChangedEmail(params: {
   });
 }
 
+/** Libellés lisibles des motifs d'annulation renvoyés par Stripe. */
+const MOTIFS: Record<string, string> = {
+  too_expensive: 'Trop cher',
+  missing_features: 'Fonctionnalités manquantes',
+  switched_service: 'Est passé à un concurrent',
+  unused: 'N’utilisait pas le service',
+  customer_service: 'Insatisfait du service client',
+  too_complex: 'Trop compliqué',
+  low_quality: 'Qualité insuffisante',
+  other: 'Autre',
+};
+
+/**
+ * Prévient l'équipe qu'un client vient de partir, avec le motif qu'il a donné.
+ *
+ * C'est la seule information qui permette de réduire un taux de départ : sans
+ * elle, on optimise à l'aveugle. Envoyée à l'adresse de support, séparément de
+ * la confirmation adressée au client.
+ */
+export async function sendChurnAlert(params: {
+  orgName: string | null;
+  orgId: string;
+  planName: string | null;
+  feedback: string | null;
+  comment: string | null;
+}): Promise<void> {
+  if (!isMailerConfigured() || !supportEmail) return;
+  try {
+    const motif = params.feedback ? (MOTIFS[params.feedback] || params.feedback) : 'non renseigné';
+    const nom = params.orgName || params.orgId;
+    const corps = `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;line-height:1.9;border:1px solid #f0f1f3;border-radius:8px;">
+        <tr><td style="padding:10px 14px;color:#6b7280;width:38%;">Client</td><td style="padding:10px 14px;font-weight:600;">${escapeHtml(nom)}</td></tr>
+        <tr><td style="padding:10px 14px;color:#6b7280;">Forfait</td><td style="padding:10px 14px;">${escapeHtml(params.planName || '—')}</td></tr>
+        <tr><td style="padding:10px 14px;color:#6b7280;">Motif</td><td style="padding:10px 14px;font-weight:600;">${escapeHtml(motif)}</td></tr>
+        <tr><td style="padding:10px 14px;color:#6b7280;">Org ID</td><td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af;">${escapeHtml(params.orgId)}</td></tr>
+      </table>
+      ${params.comment
+        ? `<p style="margin:16px 0 0;font-size:13px;line-height:1.65;"><strong>Commentaire :</strong><br>${escapeHtml(params.comment)}</p>`
+        : '<p style="margin:16px 0 0;font-size:12.5px;color:#6b7280;">Aucun commentaire laissé.</p>'}
+      <p style="margin:18px 0 0;font-size:12.5px;line-height:1.65;color:#6b7280;">
+        Un départ vaut souvent un appel : c'est le moment où le client dit ce
+        qu'aucune enquête ne capte.
+      </p>`;
+
+    await sendEmail({
+      from: emailFrom,
+      to: supportEmail,
+      subject: `[Départ] ${nom} — ${motif}`,
+      html: layout('Un client a annulé son abonnement', corps),
+    });
+  } catch (err: any) {
+    // Purement informatif : ne doit jamais perturber le flux d'annulation.
+    console.error('[subscription-email] alerte de départ échouée:', err?.message);
+  }
+}
+
 /** Confirme l'annulation et, surtout, jusqu'à quand l'accès reste ouvert. */
 export async function sendSubscriptionCanceledEmail(params: {
   orgId: string;
