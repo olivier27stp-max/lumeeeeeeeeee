@@ -258,6 +258,14 @@ function sanitizeDecimalInput(value: string) {
   return `${head || '0'}.${rest.join('')}`;
 }
 
+// Adresse affichable d'une propriété : la colonne `address` quand elle est
+// remplie, sinon recomposée depuis les champs structurés (rue, ville, …).
+function propertyAddressLabel(p: PropertyRecord): string {
+  if (p.address?.trim()) return p.address.trim();
+  const street = [p.street_number, p.street_name].filter(Boolean).join(' ').trim();
+  return [street, p.city, p.province, p.postal_code].filter(Boolean).join(', ');
+}
+
 function normalizeDecimalInput(value: string) {
   const sanitized = sanitizeDecimalInput(value).trim();
   if (!sanitized) return '';
@@ -1001,20 +1009,17 @@ export default function NewJobModal({
       .then(setSalespeople)
       .catch(() => setSalespeople([]));
 
-    // Fetch org currency (scoped to current org). It lives on company_settings —
-    // org_billing_settings has no currency column, so that read always failed
-    // and the modal silently kept the default currency.
+    // Fetch org currency (scoped to current org)
     import('../lib/orgApi').then(({ getCurrentOrgIdOrThrow }) =>
       getCurrentOrgIdOrThrow().then(oid =>
         supabase
-          .from('company_settings')
+          .from('org_billing_settings')
           .select('currency')
           .eq('org_id', oid)
           .limit(1)
           .maybeSingle()
-          .then(({ data: settings, error }) => {
-            if (error) console.error('[NewJobModal] devise de l\'org non lue:', error.message);
-            if (settings?.currency) setOrgCurrency(settings.currency);
+          .then(({ data: billing }) => {
+            if (billing?.currency) setOrgCurrency(billing.currency);
           })
       )
     ).catch(() => {});
@@ -1842,10 +1847,7 @@ export default function NewJobModal({
           try {
             const visits = await listJobVisits(createdJob.id);
             if (visits[0]) {
-              // Le try/catch ne couvre que listJobVisits : supabase-js ne lève
-              // pas, donc sans lire `error` la note partait au néant.
-              const { error } = await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
-              if (error) console.error('[jobs] first visit services not stamped:', error.message);
+              await supabase.from('schedule_events').update({ notes: firstNotes }).eq('id', visits[0].id);
             }
           } catch (err) {
             console.error('[jobs] failed to stamp first visit services', err);
@@ -2360,24 +2362,27 @@ export default function NewJobModal({
                                 .filter((p) => {
                                   const q = propertySearch.trim().toLowerCase();
                                   if (!q) return true;
-                                  return p.name.toLowerCase().includes(q) || (p.address || '').toLowerCase().includes(q);
+                                  return p.name.toLowerCase().includes(q) || propertyAddressLabel(p).toLowerCase().includes(q);
                                 })
-                                .map((p) => (
-                                  <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => { setPropertyId(p.id); setPropertySearch(p.name); setPropertyDropdownOpen(false); }}
-                                    className={cn(
-                                      'w-full text-left px-3 py-2 hover:bg-surface-secondary transition-colors',
-                                      p.id === propertyId && 'bg-surface-tertiary'
-                                    )}
-                                  >
-                                    <div className="text-sm font-bold text-text-primary">{p.name}</div>
-                                    {p.address && (
-                                      <div className="text-xs text-text-tertiary">{p.address}</div>
-                                    )}
-                                  </button>
-                                ))}
+                                .map((p) => {
+                                  const addr = propertyAddressLabel(p);
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => { setPropertyId(p.id); setPropertySearch(p.name); setPropertyDropdownOpen(false); }}
+                                      className={cn(
+                                        'w-full text-left px-3 py-2 hover:bg-surface-secondary transition-colors',
+                                        p.id === propertyId && 'bg-surface-tertiary'
+                                      )}
+                                    >
+                                      <div className="text-sm font-bold text-text-primary">{p.name}</div>
+                                      {addr && (
+                                        <div className="text-xs text-text-tertiary">{addr}</div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
                               <button
                                 type="button"
                                 onClick={() => {
@@ -2395,6 +2400,13 @@ export default function NewJobModal({
                             </div>
                           )}
                         </div>
+                        {(() => {
+                          const selected = properties.find((p) => p.id === propertyId);
+                          const addr = selected ? propertyAddressLabel(selected) : '';
+                          return addr ? (
+                            <p className="text-[11px] text-text-tertiary px-1">{addr}</p>
+                          ) : null;
+                        })()}
                         {propertyDropdownOpen && (
                           <div className="fixed inset-0 z-40" onClick={() => setPropertyDropdownOpen(false)} />
                         )}
@@ -2574,28 +2586,6 @@ export default function NewJobModal({
                       </div>
                     )}
 
-                    {/* Assignation — l'équipe peut être assignée même sans
-                        horaire créé ni disponibilité vérifiée */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
-                      <TeamSelectDropdown
-                        teams={teams}
-                        value={teamSelection}
-                        onChange={setTeamSelection}
-                        date={ruleStartDate || startDate}
-                        fr={language === 'fr'}
-                        plural={multiVisit}
-                        suggestions={teamSuggestions}
-                        placeholder={t.modals.selectTeam}
-                        unassignedLabel={t.modals.unassignedOption}
-                        unassignedValue={UNASSIGNED_TEAM_VALUE}
-                      />
-                      <p className="text-[11px] text-text-tertiary">
-                        {language === 'fr'
-                          ? 'L’équipe peut être assignée même si elle n’est pas disponible ou que son horaire n’a pas encore été créé — le job portera l’étiquette « Not scheduled yet ».'
-                          : 'The team can be assigned even if unavailable or without a schedule yet — the job will carry the “Not scheduled yet” tag.'}
-                      </p>
-                    </div>
                   </div>
 
                   {serviceYears.map((year, yearIdx) => {
@@ -2931,6 +2921,15 @@ export default function NewJobModal({
                       <AlertTriangle size={14} className="shrink-0 mt-0.5 text-amber-600" />
                       <span>{teamConflictWarning}</span>
                     </div>
+                  )}
+                  {/* Service plan : l'équipe peut être assignée même sans
+                      horaire créé ni disponibilité vérifiée */}
+                  {isServicePlan && (
+                    <p className="text-[11px] text-text-tertiary">
+                      {language === 'fr'
+                        ? 'L’équipe peut être assignée même si elle n’est pas disponible ou que son horaire n’a pas encore été créé — le job portera l’étiquette « Not scheduled yet ».'
+                        : 'The team can be assigned even if unavailable or without a schedule yet — the job will carry the “Not scheduled yet” tag.'}
+                    </p>
                   )}
                 </div>
               </Box>
