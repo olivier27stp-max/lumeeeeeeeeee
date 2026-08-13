@@ -616,6 +616,9 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               // l'inclure faisait echouer la requete et, depuis le durcissement
               // des erreurs, partir le webhook en boucle de rejeu Stripe.
               status: 'active',
+              // L'impayé est résolu : on efface la date de début, sinon la
+              // grâce continuerait à courir et suspendrait un client à jour.
+              past_due_since: null,
             })
             .eq('stripe_subscription_id', stripeSubId);
           if (invPaidErr) throw new Error('invoice.paid subscription sync failed: ' + invPaidErr.message);
@@ -656,6 +659,10 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const stripeSubId = typeof invAny.subscription === 'string' ? invAny.subscription : invAny.subscription?.id;
         const admin = getServiceClient();
         if (stripeSubId) {
+          // La date n'est posée qu'au PREMIER échec : `past_due_since is null`.
+          // Stripe réessaie plusieurs fois (Smart Retries) et émet cet event à
+          // chaque tentative ; réécrire la date à chaque fois repousserait la
+          // suspension indéfiniment et la grâce ne finirait jamais.
           const { error: pastDueErr } = await admin
             .from('subscriptions')
             .update({
@@ -664,9 +671,24 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             })
             .eq('stripe_subscription_id', stripeSubId);
           if (pastDueErr) throw new Error('invoice.payment_failed subscription sync failed: ' + pastDueErr.message);
+
+          const { error: dateErr } = await admin
+            .from('subscriptions')
+            .update({ past_due_since: new Date().toISOString() })
+            .eq('stripe_subscription_id', stripeSubId)
+            .is('past_due_since', null);
+          if (dateErr) throw new Error('invoice.payment_failed past_due_since failed: ' + dateErr.message);
         }
-        // Hook point for dunning emails — kept as a log entry for now to avoid
-        // sending unverified PII through unrelated mailer paths.
+
+        // Le client doit savoir POURQUOI il va perdre l'accès, et comment
+        // l'éviter. Best-effort : la facture est déjà en échec côté Stripe,
+        // un mailer indisponible ne doit pas faire rejouer le webhook.
+        try {
+          await envoyerCourrielEchecPaiement(stripeSubId, inv);
+        } catch (mailErr: any) {
+          console.error('[webhook] courriel échec de paiement non envoyé:', mailErr?.message);
+        }
+
         console.warn('[webhook] invoice.payment_failed', {
           stripe_subscription_id: stripeSubId,
           attempt: inv.attempt_count,
@@ -2112,5 +2134,58 @@ router.post('/payments/card-on-file/charge', async (req, res) => {
     return sendSafeError(res, error, 'Unable to charge the card on file.', '[card-on-file/charge]');
   }
 });
+
+/**
+ * Prévient le client qu'un prélèvement d'abonnement a échoué.
+ *
+ * Résout l'org depuis l'identifiant Stripe, puis délègue la mise en forme et
+ * l'idempotence à `subscription-email`. Ne lève pas au-delà de l'appelant, qui
+ * l'enveloppe déjà : la facture est en échec chez Stripe, et faire échouer le
+ * webhook ne ferait que le rejouer sans rien corriger.
+ */
+async function envoyerCourrielEchecPaiement(
+  stripeSubId: string | undefined,
+  inv: Stripe.Invoice,
+): Promise<void> {
+  if (!stripeSubId) return;
+
+  const admin = getServiceClient();
+  const { data: sub, error } = await admin
+    .from('subscriptions')
+    .select('org_id, currency, past_due_since, plan_id')
+    .eq('stripe_subscription_id', stripeSubId)
+    .maybeSingle();
+
+  // supabase-js ne lève jamais : sans ce test, une erreur de lecture passerait
+  // pour « aucun abonnement » et le client ne serait jamais prévenu.
+  if (error) throw new Error('lecture abonnement impossible: ' + error.message);
+  if (!sub?.org_id) return;
+
+  const { JOURS_DE_GRACE, sendPaymentFailedEmail } = await import('../lib/subscription-email');
+
+  // La date vient d'être posée par l'appelant ; le repli couvre le cas d'une
+  // ligne écrite avant cette version.
+  const depuis = sub.past_due_since ? new Date(sub.past_due_since) : new Date();
+  const suspension = new Date(depuis.getTime() + JOURS_DE_GRACE * 86400_000);
+
+  let planName: string | null = null;
+  if (sub.plan_id) {
+    const { data: plan } = await admin
+      .from('plans').select('name, name_fr').eq('id', sub.plan_id).maybeSingle();
+    // L'interface est en français : le nom traduit passe devant.
+    planName = (plan as any)?.name_fr || (plan as any)?.name || null;
+  }
+
+  await sendPaymentFailedEmail({
+    orgId: sub.org_id,
+    // Stripe réessaie et réémet l'événement : la tentative fait partie de la
+    // clé, sinon seul le tout premier échec serait annoncé au client.
+    eventId: `${inv.id}:${inv.attempt_count ?? 0}`,
+    amountCents: Math.max(0, Math.round(inv.amount_due || 0)),
+    currency: (sub.currency || inv.currency || 'CAD').toUpperCase(),
+    planName,
+    suspensionLe: suspension.toISOString(),
+  });
+}
 
 export default router;

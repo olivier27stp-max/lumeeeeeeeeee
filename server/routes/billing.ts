@@ -118,6 +118,26 @@ router.get('/billing/current', async (req, res) => {
     // Any member may know the org's PLAN — it gates whole app areas, and a 403
     // here made the front treat paying orgs as "no subscription" and paywall
     // sales reps. Payment details stay behind financial.view_payments.
+    // ── Grâce d'accès sur impayé ──
+    // Calculée ici, jamais dans le front : c'est une règle d'accès, et un
+    // navigateur n'est pas une source de vérité. Le front n'en reçoit que le
+    // verdict et la date à afficher.
+    const s0 = subRes.data as Record<string, any> | null;
+    let grace: { actif: boolean; expire_le: string; jours_restants: number } | null = null;
+    if (s0?.status === 'past_due') {
+      const { JOURS_DE_GRACE } = await import('../lib/subscription-email');
+      // Sans date de départ (ligne antérieure à la colonne), on accorde la
+      // grâce complète : mieux vaut ouvrir à tort que fermer sans préavis.
+      const depuis = s0.past_due_since ? new Date(s0.past_due_since) : new Date();
+      const fin = new Date(depuis.getTime() + JOURS_DE_GRACE * 86400_000);
+      const restant = fin.getTime() - Date.now();
+      grace = {
+        actif: restant > 0,
+        expire_le: fin.toISOString(),
+        jours_restants: Math.max(0, Math.ceil(restant / 86400_000)),
+      };
+    }
+
     const ctx = await getUserContext(admin, auth.user.id, auth.orgId);
     const canViewPayments = ctx ? hasPermission(ctx, 'financial.view_payments') : false;
     if (!canViewPayments) {
@@ -133,10 +153,13 @@ router.get('/billing/current', async (req, res) => {
             plans: s.plans ?? null,
           }
         : null;
-      return res.json({ subscription: redacted, billing_profile: null, restricted: true });
+      // `grace` accompagne la version restreinte : un employé sans droit
+      // financier subit la suspension comme les autres, le gate a besoin du
+      // verdict pour lui aussi. Il ne révèle ni montant ni moyen de paiement.
+      return res.json({ subscription: redacted, billing_profile: null, restricted: true, grace });
     }
 
-    return res.json({ subscription: subRes.data, billing_profile: profileRes.data });
+    return res.json({ subscription: subRes.data, billing_profile: profileRes.data, grace });
   } catch (err: any) {
     console.error('[billing/current]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });

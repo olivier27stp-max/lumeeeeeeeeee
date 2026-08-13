@@ -68,7 +68,12 @@ interface EnvoiParams {
   orgId: string;
   /** Identifiant d'événement Stripe — clé d'idempotence contre les rejeux. */
   eventId: string;
-  emailType: 'subscription_changed' | 'subscription_canceled';
+  emailType:
+    | 'subscription_changed'
+    | 'subscription_canceled'
+    | 'payment_failed'
+    | 'dunning_reminder'
+    | 'access_suspended';
   sujet: string;
   titre: string;
   corpsHtml: string;
@@ -291,6 +296,165 @@ export async function sendSubscriptionCanceledEmail(params: {
     emailType: 'subscription_canceled',
     sujet: 'Votre abonnement Lume a été annulé',
     titre: 'Abonnement annulé',
+    corpsHtml: corps,
+    amountCents: 0,
+    currency: 'CAD',
+    planName: params.planName,
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Relance d'impayé (dunning)
+
+   Un paiement refusé, c'est presque toujours une carte expirée — pas
+   quelqu'un qui refuse de payer. Le client ne le sait pas : sa banque ne
+   le prévient pas, Stripe non plus. Sans ces courriels, il découvre le
+   problème le jour où son CRM se ferme, en pleine journée de travail.
+
+   Trois messages, de plus en plus directs :
+     · l'échec, le jour même — ce qui s'est passé, comment le corriger ;
+     · une relance à J+3 — la date de fermeture, en clair ;
+     · la suspension, à J+7 — l'accès est coupé, les données sont là.
+
+   Le ton reste factuel. Un artisan dont la carte a expiré n'est pas un
+   mauvais payeur ; le traiter comme tel est le meilleur moyen de le
+   perdre pour de bon.
+   ═══════════════════════════════════════════════════════════════ */
+
+/** Jours d'accès maintenus après le premier échec, avant suspension. */
+export const JOURS_DE_GRACE = 7;
+
+/** Bloc « comment corriger », commun aux trois courriels. */
+function commentCorriger(): string {
+  return `
+    <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;">
+      Pour régler ça : ouvrez Lume, puis <strong>Paramètres → Facturation</strong>,
+      et mettez à jour votre carte. Le prélèvement est relancé aussitôt.
+    </p>`;
+}
+
+/**
+ * Premier échec de prélèvement — le client a encore tout son accès.
+ *
+ * Idempotent sur l'identifiant de la facture Stripe ET le numéro de
+ * tentative : Stripe réessaie plusieurs fois et émet l'événement à chaque
+ * fois. Sans le numéro de tentative dans la clé, la 2e relance serait prise
+ * pour un rejeu et le client ne serait jamais prévenu qu'on a réessayé.
+ */
+export async function sendPaymentFailedEmail(params: {
+  orgId: string;
+  /** `stripe_invoice_id:attempt_count` — voir ci-dessus. */
+  eventId: string;
+  amountCents: number;
+  currency: string;
+  planName: string | null;
+  /** Date de suspension, déjà calculée par l'appelant. */
+  suspensionLe: string | null;
+}): Promise<{ sent: boolean; skipped: boolean; error?: string }> {
+  const date = formatDate(params.suspensionLe);
+  const corps = `
+    <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;">
+      Le prélèvement de ${escapeHtml(formatMoney(params.amountCents, params.currency))} pour votre
+      abonnement Lume n'a pas pu être effectué. Neuf fois sur dix, c'est une carte
+      expirée ou un plafond atteint — rien de grave.
+    </p>
+    <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;">
+      <strong>Votre accès reste ouvert${date ? ` jusqu'au ${escapeHtml(date)}` : ''}.</strong>
+      Vos clients, vos jobs et vos factures sont intacts.
+    </p>
+    ${commentCorriger()}
+    <p style="margin:16px 0 0;font-size:12.5px;line-height:1.65;color:#6b7280;">
+      Votre banque a peut-être déjà réessayé de son côté. Si c'est le cas, ce
+      courriel n'appelle aucune action.
+    </p>`;
+
+  return envoyer({
+    orgId: params.orgId,
+    eventId: params.eventId,
+    emailType: 'payment_failed',
+    sujet: 'Votre paiement Lume n’est pas passé — votre accès reste ouvert',
+    titre: 'Le paiement n’a pas pu être effectué',
+    corpsHtml: corps,
+    amountCents: params.amountCents,
+    currency: params.currency,
+    planName: params.planName,
+  });
+}
+
+/**
+ * Relance pendant la grâce — la fermeture approche et le client ne l'a pas
+ * encore réglée. Le message dit la date, sans détour.
+ */
+export async function sendDunningReminderEmail(params: {
+  orgId: string;
+  /** `orgId:jour` — un seul rappel par jour de relance, même si le cron rejoue. */
+  eventId: string;
+  joursRestants: number;
+  suspensionLe: string | null;
+  planName: string | null;
+}): Promise<{ sent: boolean; skipped: boolean; error?: string }> {
+  const date = formatDate(params.suspensionLe);
+  const j = params.joursRestants;
+  const delai = j <= 1 ? 'demain' : `dans ${j} jours`;
+  const corps = `
+    <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;">
+      Votre paiement Lume n'est toujours pas passé, et nous n'avons pas réussi à
+      le relancer.
+    </p>
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.65;">
+      <strong>Sans mise à jour de votre carte, votre accès sera suspendu ${escapeHtml(delai)}${date ? `, le ${escapeHtml(date)}` : ''}.</strong>
+    </p>
+    ${commentCorriger()}
+    <p style="margin:16px 0 0;font-size:12.5px;line-height:1.65;color:#6b7280;">
+      Un problème avec votre carte, ou besoin d'un délai ? Répondez à ce courriel :
+      on trouve une solution, ça arrive à tout le monde.
+    </p>`;
+
+  return envoyer({
+    orgId: params.orgId,
+    eventId: params.eventId,
+    emailType: 'dunning_reminder',
+    sujet: `Votre accès Lume sera suspendu ${delai}`,
+    titre: 'Votre carte n’a toujours pas été mise à jour',
+    corpsHtml: corps,
+    amountCents: 0,
+    currency: 'CAD',
+    planName: params.planName,
+  });
+}
+
+/**
+ * Suspension effective. L'insistance sur la conservation des données n'est pas
+ * de la politesse : c'est la question que se pose immédiatement quelqu'un qui
+ * vient de perdre l'accès à tout son carnet de clients.
+ */
+export async function sendAccessSuspendedEmail(params: {
+  orgId: string;
+  /** `orgId:suspended` — un seul envoi par épisode d'impayé. */
+  eventId: string;
+  planName: string | null;
+}): Promise<{ sent: boolean; skipped: boolean; error?: string }> {
+  const corps = `
+    <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;">
+      Faute de paiement, l'accès à votre espace Lume est suspendu.
+    </p>
+    <p style="margin:0 0 14px;font-size:13.5px;line-height:1.65;">
+      <strong>Rien n'est perdu.</strong> Vos clients, vos jobs, vos factures et vos
+      documents sont conservés tels quels. Dès que votre carte est à jour, tout
+      revient immédiatement — vous ne recommencez rien.
+    </p>
+    ${commentCorriger()}
+    <p style="margin:16px 0 0;font-size:12.5px;line-height:1.65;color:#6b7280;">
+      Vous souhaitez plutôt arrêter, ou récupérer une copie de vos données ?
+      Répondez à ce courriel, on s'en occupe.
+    </p>`;
+
+  return envoyer({
+    orgId: params.orgId,
+    eventId: params.eventId,
+    emailType: 'access_suspended',
+    sujet: 'Votre accès Lume est suspendu — vos données sont conservées',
+    titre: 'Accès suspendu',
     corpsHtml: corps,
     amountCents: 0,
     currency: 'CAD',

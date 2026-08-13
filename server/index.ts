@@ -835,6 +835,19 @@ app.listen(port, '0.0.0.0', () => {
     // le cron ne tourne simplement jamais.
     }).catch((e: any) => captureCronFailure('alerts-engine-import', e));
 
+    // Relance des impayés — J+3 rappel, J+7 suspension. Toutes les 6 heures :
+    // la granularité utile est le jour, inutile de scruter plus souvent.
+    Promise.all([import('./lib/dunning-engine'), import('./lib/supabase')]).then(
+      ([{ runDunningScan }, { getServiceClient }]) => {
+        const runDunning = () =>
+          withAdvisoryLock('dunning-engine', () => withCronCheckIn('dunning-engine', () => runDunningScan(getServiceClient())))
+            .catch((e: any) => captureCronFailure('dunning-engine', e));
+        setInterval(runDunning, 6 * 60 * 60 * 1000);
+        setTimeout(runDunning, 30_000);
+        console.log('[dunning] Cron started (every 6h, lock-guarded)');
+      },
+    ).catch((e: any) => captureCronFailure('dunning-engine-import', e));
+
     // Map pin repair — geocode request pins saved without coords, every 10 minutes
     Promise.all([import('./lib/fieldPinSync'), import('./lib/supabase')]).then(
       ([{ repairMissingPinCoords }, { getServiceClient }]) => {
