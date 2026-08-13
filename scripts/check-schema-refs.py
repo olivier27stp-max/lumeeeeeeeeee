@@ -28,6 +28,13 @@ import sys
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# La console Windows sort en cp1252 : un seul accent ou emoji dans un message
+# faisait planter le script APRES son analyse, verdict perdu. Le detecteur le
+# plus important du projet echouait donc sur son propre affichage.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 PROD = '--prod' in sys.argv
 
 CATALOG_SQL = """
@@ -59,7 +66,10 @@ select json_build_object(
 def env(name):
     path = os.path.join(ROOT, '.env.local')
     if os.path.exists(path):
-        for line in open(path):
+        # encoding explicite : sans lui, Python prend cp1252 sous Windows et un
+        # seul octet non-ASCII dans .env.local fait planter TOUT le detecteur.
+        # errors='replace' : une valeur illisible ne doit pas priver du reste.
+        for line in open(path, encoding='utf-8', errors='replace'):
             if line.startswith(name + '='):
                 return line.split('=', 1)[1].strip().strip('"').strip("'")
     return os.environ.get(name)
@@ -198,7 +208,11 @@ def main():
         for n in names:
             if not n.endswith(('.ts', '.tsx', '.mjs')):
                 continue
-            rel = os.path.relpath(os.path.join(base, n), ROOT)
+            # relpath rend des antislashs sous Windows ('src\\lib\\x.ts') : le
+            # test startswith('src/') n'a JAMAIS matche, le detecteur analysait
+            # 0 fichier et affichait quand meme « aucun ecart ». Un vert qui ne
+            # verifie rien est pire que pas de detecteur du tout.
+            rel = os.path.relpath(os.path.join(base, n), ROOT).replace(os.sep, '/')
             if not (rel.startswith('src/') or rel.startswith('server/')):
                 continue
             scanned += 1

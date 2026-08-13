@@ -523,7 +523,12 @@ async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
     .from('automation_scheduled_tasks')
     .update({ status: 'pending', execute_at: new Date().toISOString() })
     .eq('status', 'running')
-    .lt('updated_at', limite)
+    // `updated_at` N'EXISTE PAS sur cette table (colonnes vérifiées en base).
+    // Avec PostgREST, une seule colonne inconnue fait échouer TOUTE la requête
+    // — et supabase-js ne lève pas : la récupération des tâches figées ne
+    // faisait donc jamais rien, en silence. `execute_at` est réécrit au moment
+    // où la tâche est réclamée, il date bien le début du blocage.
+    .lt('execute_at', limite)
     .select('id');
 
   if (error) {
