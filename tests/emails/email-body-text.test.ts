@@ -296,3 +296,65 @@ describe('aperçu — le courriel s’affiche habillé, comme une facture', () =
     expect(fn).toContain("select('company_name, logo_url, phone')");
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// Garde-fous d'usage : ne pas perdre de travail, tenir sur mobile
+// ───────────────────────────────────────────────────────────────────
+
+describe('éditeur — on ne perd pas son travail', () => {
+  const ed = read('src/components/automations/EmailPreviewEditor.tsx');
+
+  it('fermer avec des modifications demande confirmation', () => {
+    // Sans cette garde, un clic à côté effaçait un courriel réécrit sans le
+    // moindre avertissement.
+    expect(ed).toContain('const fermer = useCallback');
+    expect(ed).toContain('window.confirm');
+    expect(ed).toContain('ne sont pas enregistrées');
+  });
+
+  it('les quatre chemins de fermeture passent par la garde', () => {
+    // Fond, croix, bouton Fermer, touche Échap.
+    expect((ed.match(/onClick=\{fermer\}/g) || []).length).toBe(3);
+    expect(ed).toContain("e.key === 'Escape') fermer()");
+    // Plus aucun appel direct qui contournerait la confirmation.
+    expect(ed).not.toContain('onClick={onClose}');
+  });
+
+  it('une ligne supprimée peut être rétablie', () => {
+    // Le bouton de suppression est proche du texte : un clic malheureux
+    // effaçait un paragraphe sans recours.
+    expect(ed).toContain('const supprimerBloc');
+    expect(ed).toContain("label: fr ? 'Annuler' : 'Undo'");
+    expect(ed).toContain('copie.splice(');
+  });
+
+  it('la ligne est rétablie à sa position d’origine', () => {
+    // La remettre en fin de courriel serait presque aussi frustrant que la
+    // perdre.
+    const fn = ed.slice(ed.indexOf('const supprimerBloc'), ed.indexOf('const ajouterBloc'));
+    expect(fn).toContain('findIndex');
+    expect(fn).toContain('Math.min(position, copie.length)');
+  });
+
+  it('supprimer une ligne vide ne propose rien', () => {
+    // Rien à rétablir : la proposition serait du bruit.
+    expect(ed).toContain('if (!bloc.texte.trim()) return;');
+  });
+});
+
+describe('éditeur — utilisable sur téléphone', () => {
+  const ed = read('src/components/automations/EmailPreviewEditor.tsx');
+
+  it('la fenêtre occupe l’écran sur petit format', () => {
+    // Une fenêtre centrée avec marges laissait très peu de place au texte sur
+    // un téléphone.
+    expect(ed).toContain('h-[95vh] sm:h-auto');
+    expect(ed).toContain('rounded-t-xl sm:rounded-xl');
+    expect(ed).toContain('items-end sm:items-center');
+  });
+
+  it('les marges se réduisent sur petit écran', () => {
+    expect(ed).toContain('p-3 sm:p-5');
+    expect(ed).toContain('p-0 sm:p-4');
+  });
+});

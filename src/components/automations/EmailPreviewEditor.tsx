@@ -10,7 +10,7 @@
    Aucune balise n'est jamais visible.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
@@ -131,18 +131,59 @@ export default function EmailPreviewEditor({
   const initial = useMemo(() => ({ blocs: blocsEnTexte(texteEnBlocs(htmlVersTexte(body))), objet: subject }), [body, subject]);
   const modifie = blocsEnTexte(blocs) !== initial.blocs || objet !== initial.objet;
 
-  // Échap ferme le panneau — réflexe attendu d'une fenêtre superposée.
+  /**
+   * Ferme la fenêtre, en demandant confirmation si du travail serait perdu.
+   *
+   * Les quatre chemins de fermeture — Échap, la croix, le bouton Fermer, un
+   * clic sur le fond — passent par ici. Sans cette garde, un clic à côté
+   * effaçait un courriel réécrit sans le moindre avertissement.
+   */
+  const fermer = useCallback(() => {
+    if (modifie) {
+      const question = fr
+        ? 'Vos modifications ne sont pas enregistrées. Fermer quand même ?'
+        : 'Your changes are not saved. Close anyway?';
+      if (!window.confirm(question)) return;
+    }
+    onClose();
+  }, [modifie, fr, onClose]);
+
+  // Échap ferme la fenêtre — réflexe attendu d'une fenêtre superposée.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') fermer(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [fermer]);
 
   const majBloc = (id: number, texte: string) =>
     setBlocs((bs) => bs.map((b) => (b.id === id ? { ...b, texte } : b)));
 
-  const supprimerBloc = (id: number) =>
+  /**
+   * Supprime un bloc, en offrant de le rétablir.
+   *
+   * Le bouton de suppression est proche du texte : un clic malheureux faisait
+   * disparaître un paragraphe sans recours, et rien ne permettait d'annuler.
+   */
+  const supprimerBloc = (id: number) => {
+    const bloc = blocs.find((b) => b.id === id);
+    const position = blocs.findIndex((b) => b.id === id);
+    if (!bloc) return;
+
     setBlocs((bs) => bs.filter((b) => b.id !== id));
+
+    // Rien à rétablir si la ligne était vide.
+    if (!bloc.texte.trim()) return;
+    toast(fr ? 'Ligne supprimée' : 'Line removed', {
+      action: {
+        label: fr ? 'Annuler' : 'Undo',
+        onClick: () => setBlocs((bs) => {
+          const copie = [...bs];
+          copie.splice(Math.min(position, copie.length), 0, bloc);
+          return copie;
+        }),
+      },
+    });
+  };
 
   const ajouterBloc = (type: Bloc['type']) =>
     setBlocs((bs) => [...bs, { id: compteurId++, type, texte: '' }]);
@@ -174,11 +215,11 @@ export default function EmailPreviewEditor({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+      onClick={fermer}
     >
       <div
-        className="w-full max-w-3xl max-h-[90vh] flex flex-col rounded-xl bg-surface-secondary shadow-2xl overflow-hidden"
+        className="w-full sm:max-w-3xl h-[95vh] sm:h-auto sm:max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl bg-surface-secondary shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* En-tête */}
@@ -190,7 +231,7 @@ export default function EmailPreviewEditor({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={fermer}
             className="p-1.5 rounded-md hover:bg-surface-tertiary text-text-secondary shrink-0"
             aria-label={fr ? 'Fermer' : 'Close'}
           >
@@ -199,7 +240,7 @@ export default function EmailPreviewEditor({
         </div>
 
         {/* Le courriel */}
-        <div className="flex-1 overflow-y-auto p-5 bg-surface-tertiary/30">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 bg-surface-tertiary/30">
           <div className="mx-auto max-w-[600px] rounded-lg bg-white dark:bg-surface shadow-sm overflow-hidden">
             {/* Objet — ce que le client voit dans sa boîte */}
             <div className="px-5 py-3 border-b border-outline/40 bg-surface-secondary/40">
@@ -328,7 +369,7 @@ export default function EmailPreviewEditor({
             </p>
             <div className="flex items-center gap-2">
               <button
-                onClick={onClose}
+                onClick={fermer}
                 className="px-3 py-1.5 rounded-md text-[11px] text-text-secondary hover:bg-surface-tertiary transition-colors"
               >
                 {fr ? 'Fermer' : 'Close'}
