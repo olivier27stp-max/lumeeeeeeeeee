@@ -1720,6 +1720,9 @@ export default function JobDetails() {
                   title={agreement.snapshot
                     ? (language === 'fr' ? 'Services et prix (figés à la signature)' : 'Services and prices (frozen at signature)')
                     : (language === 'fr' ? 'Services et prix du job' : 'Job services and prices')}
+                  servicePlanVisitCount={agreement.snapshot
+                    ? (agreement.snapshot.service_plan?.visits?.length ?? 0)
+                    : (contract?.visits?.length ?? 0)}
                   data={agreement.snapshot
                     ? {
                         items: agreement.snapshot.items || [],

@@ -3426,6 +3426,7 @@ export default function NewJobModal({
                       {/* Live recap — always mirrors the items/prices entered on this page */}
                       <AgreementServicesSummary
                         title={language === 'fr' ? 'Services et prix du job — inclus au contrat' : 'Job services and prices — included on the contract'}
+                        servicePlanVisitCount={isServicePlan ? sortedPlanVisits.length : 0}
                         data={{
                           items: agreementPreviewData.items,
                           subtotalCents: effectiveSubtotalCents,

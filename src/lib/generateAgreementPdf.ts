@@ -222,6 +222,26 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
   }
 
   // ── SERVICES TABLE ──
+  // Service plan: state explicitly that prices are the plan total, not per visit.
+  if (data.servicePlan && data.servicePlan.visits.length > 1) {
+    if (y > pageH - 120) {
+      doc.addPage();
+      y = 50;
+    }
+    const n = data.servicePlan.visits.length;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...midGray);
+    const noteLines = doc.splitTextToSize(
+      L(
+        `The prices below cover all ${n} planned visits of the plan — this is not a price charged per visit.`,
+        `Les prix ci-dessous couvrent la totalité des ${n} visites prévues au plan — il ne s'agit pas d'un prix facturé à chaque visite.`,
+      ),
+      contentW,
+    );
+    doc.text(noteLines, marginL, y);
+    y += noteLines.length * 10 + 8;
+  }
   const colX = {
     desc: marginL,
     qty: marginL + contentW * 0.6,

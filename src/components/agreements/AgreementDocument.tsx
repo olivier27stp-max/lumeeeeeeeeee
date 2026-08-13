@@ -254,6 +254,19 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
 
       {/* ── SERVICES TABLE ── */}
       <div className="px-8 py-6">
+        {/* Service plan: state explicitly that prices are the plan total, not per visit */}
+        {plan && allPlanVisits.length > 1 && (
+          <div className="mb-4 rounded-lg border border-[#e5e5e5] bg-[#fafafa] px-3.5 py-2.5">
+            <p className="text-[12px] font-semibold text-[#333]">
+              {fr ? 'Prix du plan de service' : 'Service plan pricing'}
+            </p>
+            <p className="text-[11.5px] text-[#777] mt-0.5 leading-relaxed">
+              {fr
+                ? `Les prix ci-dessous couvrent la totalité des ${allPlanVisits.length} visites prévues au plan — il ne s'agit pas d'un prix facturé à chaque visite.`
+                : `The prices below cover all ${allPlanVisits.length} planned visits of the plan — this is not a price charged per visit.`}
+            </p>
+          </div>
+        )}
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-[#e5e5e5]">
