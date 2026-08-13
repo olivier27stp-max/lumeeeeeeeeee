@@ -192,7 +192,11 @@ router.get('/taxes/resolve', async (req, res) => {
       group = data;
     }
     if (!group) {
-      return res.json({ taxes: [], group: null, region });
+      // Aucun groupe (lien groupe↔taxes jamais créé ou dérivé) : les taxes
+      // actives de l'org restent la vérité — ne pas prétendre « non configuré ».
+      const { data: orphanConfigs } = await admin.from('tax_configs').select('*')
+        .eq('org_id', auth.orgId).eq('is_active', true).order('sort_order');
+      return res.json({ taxes: orphanConfigs || [], group: null, region });
     }
 
     // Get taxes in this group

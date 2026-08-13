@@ -463,6 +463,10 @@ export default function NewJobModal({
   const [orgCurrency, setOrgCurrency] = useState('CAD');
   const [resolvedTaxConfigs, setResolvedTaxConfigs] = useState<TaxConfig[]>([]);
   const [taxConfigured, setTaxConfigured] = useState<boolean | null>(null);
+  // Échec de CHARGEMENT (réseau/serveur) — distinct de « aucune taxe configurée »
+  const [taxLoadFailed, setTaxLoadFailed] = useState(false);
+  const [taxClientExempt, setTaxClientExempt] = useState(false);
+  const taxResolveArgsRef = useRef<{ clientId: string | null; leadId: string | null }>({ clientId: null, leadId: null });
   const [tpsEnabled, setTpsEnabled] = useState(true);
   const [tpsRate, setTpsRate] = useState(5);
   const [tvqEnabled, setTvqEnabled] = useState(true);
@@ -780,6 +784,44 @@ export default function NewJobModal({
     });
   };
 
+  // Résout les taxes applicables (Paramètres → région/groupe par défaut).
+  // Un échec réseau/serveur ≠ « aucune taxe configurée » : on retente une fois,
+  // puis on affiche une erreur de chargement avec bouton Réessayer.
+  const loadResolvedTaxes = (clientId: string | null, leadId: string | null) => {
+    taxResolveArgsRef.current = { clientId, leadId };
+    setTaxLoadFailed(false);
+    setTaxClientExempt(false);
+    setTaxConfigured(null);
+    resolveTaxes(clientId, leadId)
+      .catch(() => new Promise((r) => setTimeout(r, 800)).then(() => resolveTaxes(clientId, leadId)))
+      .then((res) => {
+        const taxes = res.taxes || [];
+        if (taxes.length > 0) {
+          setResolvedTaxConfigs(taxes);
+          setTaxConfigured(true);
+          const t1 = taxes[0]; const t2 = taxes[1];
+          setTpsEnabled(t1 ? t1.is_active : false);
+          setTpsRate(t1 ? t1.rate : 0);
+          setTvqEnabled(t2 ? t2.is_active : false);
+          setTvqRate(t2 ? t2.rate : 0);
+          setCustomTaxEnabled(false); setCustomTaxRate(0);
+        } else if (res.exempt) {
+          // Client exonéré : les taxes SONT configurées, elles ne s'appliquent pas.
+          setResolvedTaxConfigs([]);
+          setTaxClientExempt(true);
+          setTaxConfigured(true);
+          setTpsEnabled(false); setTpsRate(0);
+          setTvqEnabled(false); setTvqRate(0);
+          setCustomTaxEnabled(false); setCustomTaxRate(0);
+        } else {
+          setTaxConfigured(false);
+          setTpsEnabled(false); setTpsRate(0);
+          setTvqEnabled(false); setTvqRate(0);
+        }
+      })
+      .catch(() => { setTaxConfigured(null); setTaxLoadFailed(true); });
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     setInlineError(null);
@@ -940,26 +982,12 @@ export default function NewJobModal({
       setCustomTaxLabel(initialCustom?.label || 'Custom tax');
       setCustomTaxRate(initialCustom?.rate ?? 0);
       setResolvedTaxConfigs(initialTaxes.map((t: any) => ({ id: t.code, org_id: '', name: t.label, rate: t.rate, type: 'percentage' as const, region: '', country: '', is_compound: false, is_active: t.enabled, sort_order: 0 })));
+      setTaxLoadFailed(false);
+      setTaxClientExempt(false);
       setTaxConfigured(true);
     } else {
       // New job: resolve from Settings
-      setTaxConfigured(null);
-      resolveTaxes(initialValues?.client_id || null, initialValues?.lead_id || null).then(({ taxes }) => {
-        if (taxes.length > 0) {
-          setResolvedTaxConfigs(taxes);
-          setTaxConfigured(true);
-          const t1 = taxes[0]; const t2 = taxes[1];
-          setTpsEnabled(t1 ? t1.is_active : false);
-          setTpsRate(t1 ? t1.rate : 0);
-          setTvqEnabled(t2 ? t2.is_active : false);
-          setTvqRate(t2 ? t2.rate : 0);
-          setCustomTaxEnabled(false); setCustomTaxRate(0);
-        } else {
-          setTaxConfigured(false);
-          setTpsEnabled(false); setTpsRate(0);
-          setTvqEnabled(false); setTvqRate(0);
-        }
-      }).catch(() => { setTaxConfigured(false); });
+      loadResolvedTaxes(initialValues?.client_id || null, initialValues?.lead_id || null);
     }
 
     listClients({ page: 1, pageSize: 200, sort: 'name_asc' })
@@ -1263,24 +1291,7 @@ export default function NewJobModal({
     setCustomTaxLabel('Custom tax');
     setCustomTaxRate(0);
     // Load taxes from settings
-    setTaxConfigured(null);
-    resolveTaxes(null, null).then(({ taxes }) => {
-      if (taxes.length > 0) {
-        setResolvedTaxConfigs(taxes);
-        setTaxConfigured(true);
-        // Map resolved taxes to existing TPS/TVQ state for backward compat
-        const t1 = taxes[0];
-        const t2 = taxes[1];
-        setTpsEnabled(t1 ? t1.is_active : false);
-        setTpsRate(t1 ? t1.rate : 0);
-        setTvqEnabled(t2 ? t2.is_active : false);
-        setTvqRate(t2 ? t2.rate : 0);
-      } else {
-        setTaxConfigured(false);
-        setTpsEnabled(false); setTpsRate(0);
-        setTvqEnabled(false); setTvqRate(0);
-      }
-    }).catch(() => { setTaxConfigured(false); });
+    loadResolvedTaxes(null, null);
   };
 
   const handleClose = (reason: 'cancel' | 'created' = 'cancel') => {
@@ -3096,13 +3107,33 @@ export default function NewJobModal({
                 {/* ── Taxes et totaux ── */}
                 <div className="border-t border-outline-subtle/40 pt-4 space-y-3">
                   {taxConfigured === null ? (
+                    taxLoadFailed ? (
+                      <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                        <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                        <span className="text-[12px] text-amber-800">
+                          {language === 'fr' ? 'Impossible de charger les taxes.' : 'Could not load taxes.'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => loadResolvedTaxes(taxResolveArgsRef.current.clientId, taxResolveArgsRef.current.leadId)}
+                          className="text-[12px] font-medium text-primary hover:underline"
+                        >
+                          {language === 'fr' ? 'Réessayer' : 'Retry'}
+                        </button>
+                      </div>
+                    ) : (
                     <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Chargement des taxes...' : 'Loading taxes...'}</p>
+                    )
                   ) : taxConfigured === false ? (
                     <div className="rounded-lg border border-danger/30 bg-danger-light p-4">
                       <p className="text-[13px] font-semibold text-danger">{language === 'fr' ? 'Aucune taxe configurée' : 'No taxes configured'}</p>
                       <p className="text-[12px] text-text-secondary mt-1">{language === 'fr' ? 'Vous devez configurer votre région de taxes dans les Paramètres avant de créer des jobs.' : 'You need to configure your tax region in Settings before creating jobs.'}</p>
                       <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">{language === 'fr' ? 'Aller aux paramètres de taxes' : 'Go to Tax Settings'}</a>
                     </div>
+                  ) : taxClientExempt ? (
+                    <p className="text-[12px] text-text-tertiary">
+                      {language === 'fr' ? 'Client exonéré de taxes — aucune taxe appliquée.' : 'Tax-exempt client — no taxes applied.'}
+                    </p>
                   ) : (
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                       {resolvedTaxConfigs.map((tax, idx) => (
