@@ -727,6 +727,13 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         }
       },
       {
+        "type": "send_email",
+        "config": {
+          "subject": "Paiement reçu — merci [client_first_name]!",
+          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Merci [client_first_name]!</h2><p style=\"color:#333;line-height:1.6;\">Nous confirmons la réception de votre paiement pour la facture [invoice_number].</p><p style=\"color:#333;line-height:1.6;\">Merci de votre confiance.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>"
+        }
+      },
+      {
         "type": "create_notification",
         "config": {
           "body": "[client_name] a payé la facture [invoice_number].",
@@ -1100,6 +1107,13 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
         "type": "send_sms",
         "config": {
           "body": "Bonjour [client_first_name], merci d'avoir contacté [company_name]! On revient vers vous très vite."
+        }
+      },
+      {
+        "type": "send_email",
+        "config": {
+          "subject": "Merci d'avoir contacté [company_name]",
+          "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Bonjour [client_first_name],</h2><p style=\"color:#333;line-height:1.6;\">Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement.</p><p style=\"color:#333;line-height:1.6;\">Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité.</p><p style=\"color:#333;line-height:1.6;\">[company_name]</p></div>"
         }
       },
       {

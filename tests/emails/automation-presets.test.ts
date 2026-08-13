@@ -212,3 +212,80 @@ describe('migrations du lot 1', () => {
     expect(mig).toContain('Prod et staging divergent');
   });
 });
+
+// ───────────────────────────────────────────────────────────────────
+// Choix des canaux — aligné sur les pratiques du secteur
+// ───────────────────────────────────────────────────────────────────
+
+describe('canaux — ce qui compte part sur les deux', () => {
+  /** Canaux d'envoi d'un preset. */
+  function canaux(cle: string): string[] {
+    return (preset(cle).actions || [])
+      .map((a: any) => a.type)
+      .filter((t: string) => t === 'send_sms' || t === 'send_email');
+  }
+
+  it('les moments à ne pas manquer partent par SMS ET courriel', () => {
+    // Mesuré en prod : 30 des 59 clients réels n'ont PAS de téléphone, et 12
+    // ne sont joignables QUE par courriel. Une automatisation SMS-seule ne les
+    // atteint jamais.
+    //
+    // Housecall Pro applique le même découpage : rendez-vous planifié et
+    // demande d'avis sur les deux canaux, « je suis en route » en SMS seul.
+    for (const cle of [
+      'appointment_confirmation',
+      'job_reminder_7d',
+      'job_reminder_1d',
+      'payment_confirmation',
+      'welcome_new_lead',
+    ]) {
+      const c = canaux(cle);
+      expect(c, `${cle} devrait porter les deux canaux`).toContain('send_sms');
+      expect(c, `${cle} devrait porter les deux canaux`).toContain('send_email');
+    }
+  });
+
+  it('le rappel 2 h avant reste en SMS seul', () => {
+    // Le courriel arriverait trop tard pour être utile — même logique que le
+    // « je suis en route » de Housecall Pro.
+    const c = canaux('job_reminder_2h');
+    expect(c).toContain('send_sms');
+    expect(c).not.toContain('send_email');
+  });
+
+  it('les relances gardent UN seul canal', () => {
+    // Cinq relances de facture × deux canaux = dix messages pour une seule
+    // facture impayée. Le consensus du secteur est de ne pas doubler ce qui
+    // se répète.
+    for (const cle of [
+      'invoice_sent_reminder_3d',
+      'invoice_sent_reminder_7d',
+      'quote_followup_3d',
+      'quote_followup_7d',
+    ]) {
+      const c = canaux(cle);
+      expect(c.length, `${cle} ne devrait pas doubler ses relances`).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('les nouveaux courriels portent les mêmes variables que leur SMS', () => {
+    // Un courriel qui n'adresse pas le client par son prénom alors que le SMS
+    // le fait donnerait deux tons différents pour le même message.
+    for (const cle of ['payment_confirmation', 'welcome_new_lead']) {
+      const email = (preset(cle).actions || []).find((a: any) => a.type === 'send_email');
+      expect(email, `${cle} n'a pas de courriel`).toBeDefined();
+      expect(email.config.body).toContain('[client_first_name]');
+      expect(email.config.body).toContain('[company_name]');
+      expect(email.config.subject).toBeTruthy();
+    }
+  });
+
+  it('la migration n’écrase pas le SMS existant', () => {
+    // Le courriel est AJOUTÉ au tableau : le SMS et les actions internes
+    // (notification, journal) doivent survivre.
+    const mig = read('supabase/migrations/20260812190000_courriel_sur_presets_cles.sql');
+    expect(mig).toContain('actions || jsonb_build_array');
+    expect(mig).toContain("not exists");
+    expect(mig).toContain("a->>'type' = 'send_email'");
+  });
+});
