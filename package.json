@@ -32,6 +32,7 @@
     "backup:status": "bash scripts/backup-status.sh",
     "db:diff": "python3 scripts/db-diff.py",
     "test:rls": "tsx scripts/test-rls-isolation.ts",
+    "seed:rls": "node --env-file=.env.local scripts/seed-rls-fixture.mjs",
     "check:schema-refs": "python3 scripts/check-schema-refs.py",
     "check:db-coherence": "node --env-file=.env.local scripts/check-db-coherence.mjs",
     "check:silent-mutations": "node scripts/check-silent-mutations.mjs",

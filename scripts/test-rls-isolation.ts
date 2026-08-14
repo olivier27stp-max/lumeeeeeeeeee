@@ -167,7 +167,13 @@ async function main() {
   console.log(`Couverture lecture: ${conclusive} relation(s) testée(s) de façon concluante, ${inconclusive} sans donnée d'une autre org (NON testées).`);
   // Un jeu de données trop pauvre rend le résultat sans valeur : on le dit, et
   // on sort en code 2 (« fixture inadéquate »), distinct du code 1 (« fuite »).
-  const MIN_CONCLUSIVE = 10;
+  // Relevé de 10 à 80 le 2026-08-13, après peuplement de staging par
+  // `npm run seed:rls` : la couverture est passée de 28 à 96 relations
+  // concluantes. Un seuil laissé à 10 aurait laissé la fixture s'appauvrir
+  // sans bruit, et le « PASS » serait redevenu creux — c'est précisément le
+  // piège que ce compteur existe pour éviter. La marge sous 96 absorbe les
+  // variations normales du jeu de données.
+  const MIN_CONCLUSIVE = 80;
   if (conclusive < MIN_CONCLUSIVE) {
     console.error(`\n✗ FIXTURE INADÉQUATE : seulement ${conclusive} relation(s) concluante(s) (minimum ${MIN_CONCLUSIVE}).`);
     console.error('  La base de test doit contenir des données réparties sur au moins 2 organisations.');
