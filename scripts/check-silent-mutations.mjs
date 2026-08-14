@@ -33,7 +33,7 @@
  *         node scripts/check-silent-mutations.mjs --update   (après corrections)
  */
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const REFERENCE = join(ROOT, 'scripts', 'silent-mutations-baseline.json');
@@ -69,7 +69,12 @@ function compter() {
         if (/^\s*(\/\/|\*)/.test(l)) continue;
         n++;
       }
-      if (n) par[relative(ROOT, f)] = n;
+      // `relative()` rend des antislashs sous Windows ('server\lib\x.ts'),
+      // alors que la baseline stocke des slashs. Aucune clé ne correspondait
+      // donc, et le détecteur annonçait TOUS les fichiers en régression à
+      // chaque exécution — inutilisable, exactement comme check-schema-refs
+      // qui souffrait du même défaut.
+      if (n) par[relative(ROOT, f).split(sep).join('/')] = n;
     }
   }
   return par;

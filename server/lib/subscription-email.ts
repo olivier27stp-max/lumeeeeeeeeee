@@ -145,7 +145,10 @@ async function envoyer(p: EnvoiParams): Promise<{ sent: boolean; skipped: boolea
       html: layout(p.titre, p.corpsHtml),
     });
 
-    await admin.from('billing_receipt_log').insert({
+    // L'erreur est LUE : cette ligne est la garde d'idempotence. Si l'insertion
+    // échoue en silence, le prochain rejeu de webhook par Stripe ne trouvera
+    // aucune trace et renverra le même courriel au client.
+    const { error: journalErr } = await admin.from('billing_receipt_log').insert({
       org_id: p.orgId,
       recipient_email: destinataire,
       email_type: p.emailType,
@@ -158,6 +161,16 @@ async function envoyer(p: EnvoiParams): Promise<{ sent: boolean; skipped: boolea
       message_id: resultat.messageId || null,
       sent_at: resultat.sent ? new Date().toISOString() : null,
     });
+
+    // Journaliser, pas lever : le courriel est DÉJÀ parti. Faire échouer ici
+    // ferait rejouer le webhook Stripe et enverrait un second courriel — soit
+    // exactement le doublon que ce journal doit empêcher.
+    if (journalErr) {
+      console.error(
+        `[subscription-email] journal non écrit pour ${p.emailType} (${p.eventId}) —`,
+        `un rejeu Stripe pourrait renvoyer ce courriel :`, journalErr.message,
+      );
+    }
 
     return { sent: resultat.sent, skipped: false, error: resultat.error };
   } catch (err: any) {
