@@ -227,11 +227,10 @@ const PRESET_META: Record<string, {
   invoice_sent_reminder_7d: { icon: FileText,       category: 'Invoices' },
   invoice_sent_reminder_14d:{ icon: AlertTriangle,  category: 'Invoices' },
   invoice_sent_reminder_30d:{ icon: AlertTriangle,  category: 'Invoices' },
-  invoice_reminder_1d:      { icon: FileText,       category: 'Invoices' },
-  invoice_reminder_3d:      { icon: FileText,       category: 'Invoices' },
-  invoice_reminder_5d:      { icon: FileText,       category: 'Invoices' },
-  invoice_reminder_15d:     { icon: AlertTriangle,  category: 'Invoices' },
-  invoice_reminder_30d:     { icon: AlertTriangle,  category: 'Invoices' },
+  // Les `invoice_reminder_*` (sans `sent_`) ont été retirés : anciens noms de
+  // presets qui n'existent plus, ni dans automationPresets.data.ts ni dans
+  // aucune règle en base (vérifié prod et staging : 0 occurrence). Ils
+  // laissaient croire à cinq relances de facture de plus qu'il n'y en a.
 
   // Payments
   payment_confirmation:     { icon: CreditCard,     category: 'Payments' },
