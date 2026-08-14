@@ -394,7 +394,7 @@ router.post('/agreements/public/sign', async (req, res) => {
       .maybeSingle();
     refNumber = job?.job_number ? String(job.job_number) : '';
     try {
-      await admin.from('notifications').insert({
+      const { error: notifErr } = await admin.from('notifications').insert({
         org_id: agreement.org_id,
         type: 'agreement_signed',
         title: `${signer_name} signed the contract for job #${refNumber}`.trim(),
@@ -402,6 +402,9 @@ router.post('/agreements/public/sign', async (req, res) => {
         icon: 'check-circle',
         reference_id: agreement.job_id,
       });
+      // supabase-js ne lève pas : sans cette lecture, le catch
+      // ci-dessous n'attrape rien et la notification disparaît en silence.
+      if (notifErr) console.error('[agreements] notification non créée:', notifErr.message);
     } catch { /* non-critical */ }
 
     // Le client vient de signer : c'est le moment de lui confirmer, avec sa
@@ -522,7 +525,15 @@ router.post('/agreements/public/deposit-intent', async (req, res) => {
     // que le mobile ne renseigne la colonne restaient à 'not_required', donc
     // rien ne comptait le dépôt comme dû dans le CRM.
     if (job.deposit_status !== 'pending') {
-      await admin.from('jobs').update({ deposit_status: 'pending' }).eq('id', job.id);
+      const { error: pendingErr } = await admin
+        .from('jobs').update({ deposit_status: 'pending' }).eq('id', job.id);
+      // Non bloquant : l'intention de paiement se crée quand même, le client
+      // peut payer. Mais sans trace, le dépôt resterait invisible dans le CRM.
+      if (pendingErr) {
+        console.error('[agreements] dépôt dû non enregistré sur la job', {
+          job_id: job.id, erreur: pendingErr.message,
+        });
+      }
     }
 
     const intent = await createDepositIntent({
@@ -590,7 +601,16 @@ router.post('/agreements/public/deposit-confirm', async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    await admin.from('jobs').update({ deposit_status: 'paid', updated_at: now }).eq('id', job.id);
+    // L'argent est DÉJÀ encaissé chez Stripe à ce stade. Si cette écriture
+    // échoue sans être lue, le dépôt est pris mais le job reste marqué impayé :
+    // le client est relancé pour une somme qu'il a payée.
+    const { error: majJobErr } = await admin
+      .from('jobs').update({ deposit_status: 'paid', updated_at: now }).eq('id', job.id);
+    if (majJobErr) {
+      console.error('[agreements] dépôt encaissé mais job non mis à jour', {
+        job_id: job.id, payment_intent_id, erreur: majJobErr.message,
+      });
+    }
 
     const { data: payReq } = await admin
       .from('payment_requirements')
@@ -601,11 +621,17 @@ router.post('/agreements/public/deposit-confirm', async (req, res) => {
       .in('status', ['pending', 'authorized'])
       .maybeSingle();
     if (payReq) {
-      await admin.from('payment_requirements').update({ status: 'paid', updated_at: now }).eq('id', payReq.id);
+      const { error: majReqErr } = await admin
+        .from('payment_requirements').update({ status: 'paid', updated_at: now }).eq('id', payReq.id);
+      if (majReqErr) {
+        console.error('[agreements] exigence de paiement non soldée', {
+          requirement_id: payReq.id, payment_intent_id, erreur: majReqErr.message,
+        });
+      }
     }
 
     try {
-      await admin.from('notifications').insert({
+      const { error: notifErr } = await admin.from('notifications').insert({
         org_id: agreement.org_id,
         type: 'deposit_paid',
         title: 'Dépôt reçu',
@@ -613,6 +639,9 @@ router.post('/agreements/public/deposit-confirm', async (req, res) => {
         icon: 'credit-card',
         reference_id: job.id,
       });
+      // supabase-js ne lève pas : sans cette lecture, le catch
+      // ci-dessous n'attrape rien et la notification disparaît en silence.
+      if (notifErr) console.error('[agreements] notification non créée:', notifErr.message);
     } catch { /* non-critical */ }
 
     return res.json({ ok: true, status: 'paid' });
