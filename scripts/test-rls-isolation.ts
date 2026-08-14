@@ -28,6 +28,19 @@ dotenv.config({ path: '.env.local' });
 const DB_URL = process.env.DB_URL || process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 if (!DB_URL) { console.error('Set DB_URL (privileged/postgres connection).'); process.exit(2); }
 
+// Ce test ÉCRIT dans la base (création d'orgs et de lignes de contrôle). Il ne
+// doit jamais toucher la prod. `SUPABASE_DB_URL` a réellement pointé sur la
+// prod dans un .env.local, sans que rien ne le signale : le garde-fou vaut
+// mieux que la vigilance.
+const REF_PROD = process.env.SUPABASE_PROJECT_REF_PROD?.trim();
+if (REF_PROD && DB_URL.includes(REF_PROD)) {
+  console.error(
+    `REFUS : DB_URL pointe sur la PRODUCTION (${REF_PROD}).\n` +
+    `Ce test écrit dans la base. Faites-le pointer sur staging.`,
+  );
+  process.exit(2);
+}
+
 /**
  * Parse the connection string by hand rather than handing it to `pg`.
  *
