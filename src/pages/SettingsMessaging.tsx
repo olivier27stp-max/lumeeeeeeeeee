@@ -383,6 +383,17 @@ const RULE_LABELS_FR: Record<string, string> = {
   client_anniversary: 'Anniversaire de la job (1 an)',
   reengagement_90d: 'Réactivation client — 90 jours',
   seasonal_reminder_6m: 'Rappel saisonnier — 6 mois',
+  // Ces sept-là n'avaient aucun libellé : le repli affichait `rule.name`,
+  // c'est-à-dire le nom anglais du preset. Un entrepreneur québécois lisait
+  // donc « Cross-Sell — 30 Days After Job » et « Google Review Request » au
+  // milieu d'une interface française.
+  lead_followup_3d: 'Relance de lead — 3 jours',
+  lead_followup_14d: 'Relance de lead — 14 jours (dernière)',
+  estimate_followup: 'Relance après estimation',
+  quote_followup_21d: 'Relance de devis — 21 jours (dernière)',
+  invoice_sent_reminder_1d: 'Rappel de facture — 1 jour',
+  google_review: "Demande d'avis Google",
+  cross_sell_30d: 'Offre complémentaire — 30 jours après la job',
 };
 
 const TRIGGER_GROUPS: Array<{ label: { fr: string; en: string }; triggers: string[] }> = [
