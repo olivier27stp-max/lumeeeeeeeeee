@@ -48,6 +48,7 @@ export interface JobsKpis {
 
 export interface JobLineItemInput {
   name: string;
+  description?: string | null;
   qty: number;
   unit_price_cents: number;
   included?: boolean;
@@ -498,16 +499,26 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
   if (jobError) throw jobError;
   if (!jobRow) return null;
 
-  let lineItems: Array<{ name: string; qty: number; unit_price_cents: number; included?: boolean }> = [];
-  const { data: lineItemsData, error: lineItemsError } = await supabase
+  let lineItems: Array<{ name: string; description?: string | null; qty: number; unit_price_cents: number; included?: boolean }> = [];
+  let { data: lineItemsData, error: lineItemsError } = await supabase
     .from('job_line_items')
-    .select('name,qty,unit_price_cents,included')
+    .select('name,description,qty,unit_price_cents,included')
     .eq('job_id', id)
     .order('created_at', { ascending: true });
+  // Migration 20260815000000 pas encore appliquée : réessaie sans description.
+  if (lineItemsError && /description/.test(lineItemsError.message || '')) {
+    const retry = await supabase
+      .from('job_line_items')
+      .select('name,qty,unit_price_cents,included')
+      .eq('job_id', id)
+      .order('created_at', { ascending: true });
+    lineItemsData = retry.data as typeof lineItemsData;
+    lineItemsError = retry.error;
+  }
   if (lineItemsError) {
     if (!isMissingJobLineItemsTableError(lineItemsError)) throw lineItemsError;
   } else {
-    lineItems = (lineItemsData || []) as Array<{ name: string; qty: number; unit_price_cents: number; included?: boolean }>;
+    lineItems = (lineItemsData || []) as Array<{ name: string; description?: string | null; qty: number; unit_price_cents: number; included?: boolean }>;
   }
 
   return {
@@ -545,6 +556,7 @@ export async function getJobModalDraftById(id: string): Promise<JobModalDraft | 
     end_at: jobRow.end_at || null,
     line_items: (lineItems || []).map((row) => ({
       name: row.name,
+      description: row.description ?? null,
       qty: Number(row.qty || 1),
       unit_price_cents: Number(row.unit_price_cents || 0),
       included: row.included !== false,
@@ -885,13 +897,21 @@ export async function createJob(payload: {
         // l'org résolue par ce module (cohérence multi-org).
         org_id: orgId,
         name: item.name.trim(),
+        description: item.description?.trim() || null,
         qty: item.qty,
         unit_price_cents: item.unit_price_cents,
         total_cents: Math.max(0, Math.round(item.qty * item.unit_price_cents)),
         included: item.included !== false,
       }));
     if (rows.length > 0) {
-      const { error: itemError, status: itemStatus } = await supabase.from('job_line_items').insert(rows);
+      let { error: itemError, status: itemStatus } = await supabase.from('job_line_items').insert(rows);
+      // Migration 20260815000000 pas encore appliquée : réessaie sans la
+      // colonne description pour ne jamais bloquer la sauvegarde du job.
+      if (itemError && /description/.test(itemError.message || '')) {
+        ({ error: itemError, status: itemStatus } = await supabase
+          .from('job_line_items')
+          .insert(rows.map(({ description: _d, ...rest }) => rest)));
+      }
       devLogJobWrite('insert_line_items_response', {
         org_id: orgId,
         status: itemStatus,
@@ -1248,6 +1268,7 @@ export async function exportJobsCsv(query: Omit<JobsQuery, 'page' | 'pageSize'>)
 export interface JobLineItem {
   id: string;
   name: string;
+  description: string | null;
   qty: number;
   unit_price_cents: number;
   total_cents: number;
@@ -1255,11 +1276,21 @@ export interface JobLineItem {
 }
 
 export async function getJobLineItems(jobId: string): Promise<JobLineItem[]> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('job_line_items')
-    .select('id,name,qty,unit_price_cents,total_cents,included')
+    .select('id,name,description,qty,unit_price_cents,total_cents,included')
     .eq('job_id', jobId)
     .order('created_at', { ascending: true });
+  // Migration 20260815000000 pas encore appliquée : réessaie sans description.
+  if (error && /description/.test(error.message || '')) {
+    const retry = await supabase
+      .from('job_line_items')
+      .select('id,name,qty,unit_price_cents,total_cents,included')
+      .eq('job_id', jobId)
+      .order('created_at', { ascending: true });
+    data = retry.data as typeof data;
+    error = retry.error;
+  }
   if (error) {
     if (isMissingJobLineItemsTableError(error)) return [];
     throw error;
@@ -1267,6 +1298,7 @@ export async function getJobLineItems(jobId: string): Promise<JobLineItem[]> {
   return (data || []).map((row: any) => ({
     id: row.id,
     name: row.name || '',
+    description: row.description ?? null,
     qty: Number(row.qty || 1),
     unit_price_cents: Number(row.unit_price_cents || 0),
     total_cents: Number(row.total_cents || 0),

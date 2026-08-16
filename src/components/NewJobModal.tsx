@@ -40,6 +40,7 @@ import { toast } from 'sonner';
 interface LineItemForm {
   id: string;
   name: string;
+  description?: string;
   qtyInput: string;
   unitPriceInput: string;
   included: boolean;
@@ -103,6 +104,7 @@ function draftTimes(v: VisitDraft): { start: string; end: string } {
 
 export interface JobDraftLineItem {
   name: string;
+  description?: string | null;
   qty?: number;
   unit_price_cents?: number;
   included?: boolean;
@@ -178,7 +180,7 @@ interface NewJobModalProps {
     currency: string;
     requires_invoicing: boolean;
     billing_split: boolean;
-    line_items: Array<{ name: string; qty: number; unit_price_cents: number; included?: boolean }>;
+    line_items: Array<{ name: string; description?: string | null; qty: number; unit_price_cents: number; included?: boolean }>;
     deposit_required?: boolean;
     deposit_type?: 'percentage' | 'fixed' | null;
     deposit_value?: number;
@@ -785,41 +787,47 @@ export default function NewJobModal({
   };
 
   // Résout les taxes applicables (Paramètres → région/groupe par défaut).
-  // Un échec réseau/serveur ≠ « aucune taxe configurée » : on retente une fois,
-  // puis on affiche une erreur de chargement avec bouton Réessayer.
-  const loadResolvedTaxes = (clientId: string | null, leadId: string | null) => {
-    taxResolveArgsRef.current = { clientId, leadId };
+  // Un échec réseau/serveur ≠ « aucune taxe configurée » : on retente avec
+  // délai croissant (~33 s au total — un redéploiement Railway laisse l'API
+  // injoignable 30-60 s), puis erreur de chargement avec bouton Réessayer.
+  const loadResolvedTaxes = async (clientId: string | null, leadId: string | null) => {
+    const args = { clientId, leadId };
+    taxResolveArgsRef.current = args;
     setTaxLoadFailed(false);
     setTaxClientExempt(false);
     setTaxConfigured(null);
-    resolveTaxes(clientId, leadId)
-      .catch(() => new Promise((r) => setTimeout(r, 800)).then(() => resolveTaxes(clientId, leadId)))
-      .then((res) => {
-        const taxes = res.taxes || [];
-        if (taxes.length > 0) {
-          setResolvedTaxConfigs(taxes);
-          setTaxConfigured(true);
-          const t1 = taxes[0]; const t2 = taxes[1];
-          setTpsEnabled(t1 ? t1.is_active : false);
-          setTpsRate(t1 ? t1.rate : 0);
-          setTvqEnabled(t2 ? t2.is_active : false);
-          setTvqRate(t2 ? t2.rate : 0);
-          setCustomTaxEnabled(false); setCustomTaxRate(0);
-        } else if (res.exempt) {
-          // Client exonéré : les taxes SONT configurées, elles ne s'appliquent pas.
-          setResolvedTaxConfigs([]);
-          setTaxClientExempt(true);
-          setTaxConfigured(true);
-          setTpsEnabled(false); setTpsRate(0);
-          setTvqEnabled(false); setTvqRate(0);
-          setCustomTaxEnabled(false); setCustomTaxRate(0);
-        } else {
-          setTaxConfigured(false);
-          setTpsEnabled(false); setTpsRate(0);
-          setTvqEnabled(false); setTvqRate(0);
-        }
-      })
-      .catch(() => { setTaxConfigured(null); setTaxLoadFailed(true); });
+    let res: Awaited<ReturnType<typeof resolveTaxes>> | null = null;
+    for (const delayMs of [0, 800, 2000, 5000, 10000, 15000]) {
+      if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+      // Un appel plus récent (autre client choisi, Réessayer) a pris le relais.
+      if (taxResolveArgsRef.current !== args) return;
+      try { res = await resolveTaxes(clientId, leadId); break; } catch { /* retente */ }
+    }
+    if (taxResolveArgsRef.current !== args) return;
+    if (!res) { setTaxConfigured(null); setTaxLoadFailed(true); return; }
+    const taxes = res.taxes || [];
+    if (taxes.length > 0) {
+      setResolvedTaxConfigs(taxes);
+      setTaxConfigured(true);
+      const t1 = taxes[0]; const t2 = taxes[1];
+      setTpsEnabled(t1 ? t1.is_active : false);
+      setTpsRate(t1 ? t1.rate : 0);
+      setTvqEnabled(t2 ? t2.is_active : false);
+      setTvqRate(t2 ? t2.rate : 0);
+      setCustomTaxEnabled(false); setCustomTaxRate(0);
+    } else if (res.exempt) {
+      // Client exonéré : les taxes SONT configurées, elles ne s'appliquent pas.
+      setResolvedTaxConfigs([]);
+      setTaxClientExempt(true);
+      setTaxConfigured(true);
+      setTpsEnabled(false); setTpsRate(0);
+      setTvqEnabled(false); setTvqRate(0);
+      setCustomTaxEnabled(false); setCustomTaxRate(0);
+    } else {
+      setTaxConfigured(false);
+      setTpsEnabled(false); setTpsRate(0);
+      setTvqEnabled(false); setTvqRate(0);
+    }
   };
 
   useEffect(() => {
@@ -957,6 +965,7 @@ export default function NewJobModal({
         initialValues.line_items.map((item) => ({
           id: crypto.randomUUID(),
           name: item.name || '',
+          description: item.description || undefined,
           qtyInput: String(Math.max(1, Number(item.qty || 1))),
           unitPriceInput: String(Math.max(0, Number(item.unit_price_cents || 0) / 100)),
           included: item.included !== false,
@@ -1345,6 +1354,7 @@ export default function NewJobModal({
     const newItem: LineItemForm = {
       id: crypto.randomUUID(),
       name: service.name,
+      description: service.description || undefined,
       qtyInput: '1',
       unitPriceInput: String(service.default_price_cents / 100),
       included: true,
@@ -1382,6 +1392,7 @@ export default function NewJobModal({
       ...item,
       source_service_id: service.id,
       name: service.name,
+      description: service.description ?? item.description,
       unitPriceInput: String(service.default_price_cents / 100),
       item_type: service.item_type || 'service',
       unit_cost_cents: service.default_cost_cents ?? null,
@@ -1729,6 +1740,7 @@ export default function NewJobModal({
       .filter((item) => item.name.trim() || (Number.parseFloat(item.unitPriceInput || '0') || 0) > 0)
       .map((item) => ({
         name: billableItemName(item),
+        description: item.description?.trim() || null,
         qty: Math.max(1, Number.parseFloat(item.qtyInput || '0') || 1),
         unit_price_cents: Math.max(0, Math.round((Number.parseFloat(item.unitPriceInput || '0') || 0) * 100)),
         included: item.included,
@@ -2025,12 +2037,13 @@ export default function NewJobModal({
     <div
       key={item.id}
       className={cn(
-        'flex flex-wrap md:flex-nowrap items-center gap-2 rounded-lg border px-2.5 py-2 transition-all',
+        'rounded-lg border px-2.5 py-2 transition-all space-y-1.5',
         item.included
           ? 'border-outline-subtle/40 bg-surface-secondary/20'
           : 'border-outline-subtle/20 bg-surface-secondary/5 opacity-60'
       )}
     >
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
       <button
         type="button"
         onClick={() => setLineEditId(item.id)}
@@ -2118,6 +2131,14 @@ export default function NewJobModal({
           <Trash2 size={13} />
         </button>
       </div>
+      </div>
+      <textarea
+        value={item.description || ''}
+        onChange={(event) => handlers.update({ description: event.target.value })}
+        placeholder="Description"
+        rows={1}
+        className={cn('glass-input w-full !py-1.5 !px-2.5 min-h-[34px] text-xs resize-none', !item.included && 'line-through')}
+      />
     </div>
   );
 
