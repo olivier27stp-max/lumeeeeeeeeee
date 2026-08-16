@@ -583,22 +583,27 @@ router.post('/courses/:id/duplicate', async (req, res) => {
       .eq('course_id', original.id)
       .order('sort_order');
 
+    // Un module ou une leçon perdu en silence donne une copie incomplète que
+    // l'utilisateur croit fidèle — on remonte l'erreur (500) plutôt que de
+    // laisser passer un cours amputé.
     for (const mod of modules || []) {
-      const { data: newMod } = await admin
+      const { data: newMod, error: modErr } = await admin
         .from('course_modules')
         .insert({ course_id: newCourse.id, title: mod.title, sort_order: mod.sort_order })
         .select()
         .single();
+      if (modErr) throw modErr;
       if (!newMod) continue;
 
-      const { data: lessons } = await admin
+      const { data: lessons, error: lessonsErr } = await admin
         .from('course_lessons')
         .select('*')
         .eq('module_id', mod.id)
         .order('sort_order');
+      if (lessonsErr) throw lessonsErr;
 
       for (const lesson of lessons || []) {
-        await admin.from('course_lessons').insert({
+        const { error: lessonErr } = await admin.from('course_lessons').insert({
           module_id: newMod.id,
           title: lesson.title,
           content_type: lesson.content_type,
@@ -609,6 +614,7 @@ router.post('/courses/:id/duplicate', async (req, res) => {
           duration_min: lesson.duration_min,
           sort_order: lesson.sort_order,
         });
+        if (lessonErr) throw lessonErr;
       }
     }
 
@@ -718,7 +724,9 @@ router.put('/courses/:courseId/modules/reorder', validate(courseReorderSchema), 
     // Scope each update to the course we validated edit rights on, so a caller
     // can't slip another course's/org's module ids into `order`.
     for (let i = 0; i < order.length; i++) {
-      await admin.from('course_modules').update({ sort_order: i }).eq('id', order[i]).eq('course_id', req.params.courseId);
+      const { error } = await admin.from('course_modules').update({ sort_order: i }).eq('id', order[i]).eq('course_id', req.params.courseId);
+      // Sinon la route répond ok et l'ordre repart à l'ancien au rechargement.
+      if (error) throw error;
     }
     return res.json({ ok: true });
   } catch (err: any) {
@@ -901,7 +909,8 @@ router.put('/courses/modules/:moduleId/lessons/reorder', validate(courseReorderS
     // Scope each update to this module (whose course we validated), so a caller
     // can't slip another module's/org's lesson ids into `order`.
     for (let i = 0; i < order.length; i++) {
-      await admin.from('course_lessons').update({ sort_order: i }).eq('id', order[i]).eq('module_id', req.params.moduleId);
+      const { error } = await admin.from('course_lessons').update({ sort_order: i }).eq('id', order[i]).eq('module_id', req.params.moduleId);
+      if (error) throw error;
     }
     return res.json({ ok: true });
   } catch (err: any) {
@@ -925,12 +934,41 @@ router.post('/courses/:id/assign', validate(courseAssignSchema), async (req, res
     if (!course || course.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
 
     const { user_ids, team_ids } = req.body as { user_ids?: string[]; team_ids?: string[] };
+
+    // Les cibles viennent du corps de requête et ne sont couvertes par AUCUNE
+    // clé étrangère composite (course_assignments n'en a pas sur user_id/team_id) :
+    // sans cette vérification, on pouvait assigner un cours à un utilisateur ou
+    // une équipe d'une autre organisation. On ne retient que ce qui appartient
+    // bien à l'org appelante — les autres identifiants sont ignorés en silence,
+    // comme l'était déjà un identifiant inexistant.
+    const demandeUsers = [...new Set((user_ids || []).filter(Boolean))];
+    const demandeTeams = [...new Set((team_ids || []).filter(Boolean))];
+
+    const [membresRes, equipesRes] = await Promise.all([
+      demandeUsers.length
+        ? admin.from('memberships').select('user_id').eq('org_id', auth.orgId).in('user_id', demandeUsers)
+        : Promise.resolve({ data: [] as any[], error: null }),
+      demandeTeams.length
+        ? admin.from('teams').select('id').eq('org_id', auth.orgId).in('id', demandeTeams)
+        : Promise.resolve({ data: [] as any[], error: null }),
+    ]);
+    if (membresRes.error) throw membresRes.error;
+    if (equipesRes.error) throw equipesRes.error;
+
+    const usersOk = new Set((membresRes.data || []).map((m: any) => m.user_id));
+    const teamsOk = new Set((equipesRes.data || []).map((t: any) => t.id));
+    const rejetes = demandeUsers.filter((u) => !usersOk.has(u)).length
+                  + demandeTeams.filter((t) => !teamsOk.has(t)).length;
+    if (rejetes > 0) {
+      console.warn('[courses/assign] cibles hors organisation ignorées:', { orgId: auth.orgId, courseId: req.params.id, rejetes });
+    }
+
     const rows: any[] = [];
 
-    for (const uid of user_ids || []) {
+    for (const uid of demandeUsers.filter((u) => usersOk.has(u))) {
       rows.push({ course_id: req.params.id, user_id: uid, assigned_by: auth.user.id });
     }
-    for (const tid of team_ids || []) {
+    for (const tid of demandeTeams.filter((t) => teamsOk.has(t))) {
       rows.push({ course_id: req.params.id, team_id: tid, assigned_by: auth.user.id });
     }
 
@@ -1058,6 +1096,19 @@ router.get('/courses/:id/team-progress', async (req, res) => {
 
     const courseId = req.params.id;
 
+    // Le cours DOIT appartenir à l'org de l'appelant — même garde que
+    // /courses/:id/assign. Sans elle, un admin de l'org A pouvait sonder un
+    // cours de l'org B en fournissant son UUID (nombre de leçons, ciblage).
+    // Cours introuvable => on garde le comportement historique (liste vide),
+    // pour ne rien changer d'observable en dehors de la faille elle-même.
+    const { data: courseRow } = await admin
+      .from('courses')
+      .select('org_id, visibility, target_roles, target_user_ids, created_by')
+      .eq('id', courseId)
+      .maybeSingle();
+    if (!courseRow) return res.json([]);
+    if (courseRow.org_id !== auth.orgId) return res.status(403).json({ error: 'Forbidden.' });
+
     // Get total lesson count
     const { data: modules } = await admin
       .from('course_modules')
@@ -1082,11 +1133,7 @@ router.get('/courses/:id/team-progress', async (req, res) => {
 
     // Audience du cours: on ne montre la progression QUE des membres qui peuvent
     // voir ce cours (rôle ciblé / user ciblé / assigné), pas toute l'org.
-    const { data: courseRow } = await admin
-      .from('courses')
-      .select('visibility, target_roles, target_user_ids, created_by')
-      .eq('id', courseId)
-      .maybeSingle();
+    // `courseRow` est déjà chargé en tête du handler (garde d'appartenance).
     const tRoles: string[] = Array.isArray(courseRow?.target_roles) ? courseRow!.target_roles : [];
     const tUsers: string[] = Array.isArray(courseRow?.target_user_ids) ? courseRow!.target_user_ids : [];
     const hasTargeting = tRoles.length > 0 || tUsers.length > 0;

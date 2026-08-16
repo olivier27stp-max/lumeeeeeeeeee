@@ -8,8 +8,9 @@ Prérequis: Docker démarré, et dans .env.local :
   SUPABASE_DB_PASSWORD=...        (mot de passe Postgres, identique prod/staging)
 
 Sort avec code 0 si identique, 1 si dérive détectée.
-Deltas assumés (ignorés) : fonction rls_auto_enable() côté staging (filet auto-RLS),
-et l'ordre d'affichage des rôles dans les policies (artefact pg_dump non déterministe).
+Aucun delta assumé : les deux bases doivent être STRICTEMENT identiques (staging
+est la référence de développement). Seul l'ordre d'affichage des rôles dans les
+policies est normalisé — artefact pg_dump non déterministe, pas un écart réel.
 """
 import os, re, subprocess, sys, tempfile
 
@@ -17,7 +18,21 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PROD = {"ref": "bbzcuzqfgsdvjsymfwmr", "host": "aws-1-ca-central-1.pooler.supabase.com"}
 STAGING = {"ref": "boylnjjlhexljmddmjyg", "host": "aws-0-ca-central-1.pooler.supabase.com"}
-IGNORED_STAGING_ONLY = {"rls_auto_enable()", "FUNCTION rls_auto_enable()"}
+IGNORED_STAGING_ONLY: set[str] = set()  # aucun écart toléré côté objets
+
+# Seule exception admise, et elle n'est PAS un choix : les DEFAULT PRIVILEGES
+# appartenant au rôle `supabase_admin` ne peuvent être posés ni par `postgres`
+# ni par l'API de gestion (42501 permission denied dans les deux cas). Ils sont
+# créés par la plateforme à la naissance du projet ; un `drop schema public`
+# les détruit sans retour possible — d'où l'interdiction, dans
+# clone-prod-to-staging.sh, de supprimer le schéma plutôt que de le vider.
+# Ils ne régissent que les objets créés PAR supabase_admin ; nos migrations
+# créent tout en tant que `postgres`, donc aucun effet fonctionnel.
+IGNORED_DEFAULT_ACL = {
+    'DEFAULT PRIVILEGES FOR FUNCTIONS',
+    'DEFAULT PRIVILEGES FOR SEQUENCES',
+    'DEFAULT PRIVILEGES FOR TABLES',
+}
 
 
 def env_password():
@@ -83,6 +98,8 @@ def main():
     only_stag = sorted(k for k in set(stag) - set(prod) if k[2] not in IGNORED_STAGING_ONLY)
     changed = []
     for k in sorted(set(prod) & set(stag)):
+        if k[1] == 'DEFAULT ACL' and k[2] in IGNORED_DEFAULT_ACL:
+            continue
         a, b = prod[k], stag[k]
         if k[1] == "POLICY" or (k[1] == "ACL" and "POLICY" in k[2]):
             a, b = norm_policy(a), norm_policy(b)

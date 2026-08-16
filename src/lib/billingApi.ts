@@ -134,14 +134,34 @@ export async function fetchPlans(): Promise<Plan[]> {
   }));
 }
 
+/**
+ * Grâce d'accès accordée après un échec de paiement.
+ *
+ * Calculée par le serveur — la durée n'est jamais décidée côté navigateur.
+ * `null` si l'abonnement n'est pas en impayé.
+ */
+export interface GraceImpaye {
+  /** L'accès est-il encore ouvert malgré l'impayé ? */
+  actif: boolean;
+  /** Date de suspension effective, en ISO. */
+  expire_le: string;
+  jours_restants: number;
+}
+
 export async function fetchCurrentBilling(): Promise<{
   subscription: Subscription | null;
   billing_profile: BillingProfile | null;
+  restricted?: boolean;
+  grace?: GraceImpaye | null;
 }> {
   const res = await fetch(`${API_BASE}/billing/current`, {
     headers: await authHeaders(),
   });
-  if (!res.ok) throw new Error('Failed to load billing info.');
+  if (!res.ok) {
+    const err = new Error('Failed to load billing info.') as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
   return res.json();
 }
 

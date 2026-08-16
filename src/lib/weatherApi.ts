@@ -24,10 +24,28 @@ export interface WeatherForecast {
   todayMaxWindKmh: number; // peak wind gust-ish today (km/h)
 }
 
-// Read the org's city (fallback to address). Coordinates aren't stored on the
-// org, so we geocode the city name with Open-Meteo's free geocoding API.
+// Read the user's city (profile first, company fallback). Coordinates aren't
+// stored, so we geocode the city name with Open-Meteo's free geocoding API.
 async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number } | null> {
   const orgId = await getCurrentOrgIdOrThrow();
+
+  // La ville du PROFIL de l'usager prime : un employé qui travaille dans un
+  // autre secteur voit la météo de son coin, pas celle du bureau.
+  let profileCity = '';
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: tm } = await supabase
+        .from('team_members')
+        .select('city')
+        .eq('user_id', user.id)
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle();
+      profileCity = String(tm?.city || '').trim();
+    }
+  } catch { /* profil sans fiche team_members — on retombe sur l'entreprise */ }
+
   // The company's address lives in company_settings (not orgs).
   const { data, error } = await supabase
     .from('company_settings')
@@ -35,9 +53,9 @@ async function getOrgLocation(): Promise<{ city: string; lat: number; lng: numbe
     .eq('org_id', orgId)
     .limit(1)
     .maybeSingle();
-  if (error || !data) return null;
+  if (!profileCity && (error || !data)) return null;
 
-  const query = String(data.city || data.street1 || '').trim();
+  const query = profileCity || String(data?.city || data?.street1 || '').trim();
   if (!query) return null;
 
   const geoUrl =

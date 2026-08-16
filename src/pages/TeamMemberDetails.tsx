@@ -334,7 +334,8 @@ export default function TeamMemberDetails() {
         // Keep the P&L column in sync: profitability reads hourly_rate_cents,
         // not labour_cost_hourly — editing here used to have no effect on job
         // costing despite the copy claiming it did.
-        hourly_rate_cents: sanitizedCost !== null ? Math.round(sanitizedCost * 100) : null,
+        // NOT NULL DEFAULT 0 : un coût vide vaut 0, jamais null (23502 sinon).
+        hourly_rate_cents: sanitizedCost !== null ? Math.round(sanitizedCost * 100) : 0,
         working_hours: form.working_hours,
         communication_preferences: form.communication_preferences,
         updated_at: new Date().toISOString(),

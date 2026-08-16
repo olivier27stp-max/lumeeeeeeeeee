@@ -245,10 +245,17 @@ export default function OnboardingFlow() {
     if (!u) return;
     const { data: mem } = await supabase.from('memberships').select('org_id').eq('user_id', u.id).limit(1).maybeSingle();
     if (!mem) {
-      const { data: newOrg } = await supabase.from('orgs').insert({ name: companyName || u.email?.split('@')[0] || 'Workspace', created_by: u.id }).select('id').single();
-      if (newOrg) await supabase.from('memberships').insert({ user_id: u.id, org_id: newOrg.id, role: 'owner' });
+      const { data: newOrg, error: orgErr } = await supabase.from('orgs').insert({ name: companyName || u.email?.split('@')[0] || 'Workspace', created_by: u.id }).select('id').single();
+      // Les appelants enveloppent provisionOrg dans un try/catch silencieux :
+      // on journalise ici, sinon un échec de provisioning est invisible.
+      if (orgErr) { console.error('[onboarding] org creation failed', orgErr.message); throw orgErr; }
+      if (newOrg) {
+        const { error: memErr } = await supabase.from('memberships').insert({ user_id: u.id, org_id: newOrg.id, role: 'owner' });
+        if (memErr) { console.error('[onboarding] membership creation failed', memErr.message); throw memErr; }
+      }
     }
-    try { await supabase.from('profiles').update({ onboarding_done: true }).eq('id', u.id); } catch {}
+    const { error: profErr } = await supabase.from('profiles').update({ onboarding_done: true }).eq('id', u.id);
+    if (profErr) console.error('[onboarding] failed to mark onboarding_done', profErr.message);
   };
 
   const goNext = () => {

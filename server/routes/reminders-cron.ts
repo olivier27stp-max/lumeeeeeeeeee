@@ -23,9 +23,9 @@ import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
-import { sendSmsIfConfigured, applyTemplate } from '../lib/notificationHelpers';
+import { sendSmsIfConfigured, applyTemplate, isSmsOptedOut } from '../lib/notificationHelpers';
 import { twilioClient, twilioPhoneNumber } from '../lib/config';
-import { resolvePublicBaseUrl } from '../lib/helpers';
+import { resolvePublicBaseUrl, normalizeE164 } from '../lib/helpers';
 import { createPaymentRequest } from '../lib/stripe-connect';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 
@@ -88,6 +88,35 @@ function htmlEscape(s: string) {
 
 function bodyToHtml(text: string) {
   return htmlEscape(text).replace(/\n/g, '<br/>');
+}
+
+/**
+ * Écrit la ligne de journal du rappel.
+ *
+ * C'est elle qui porte l'idempotence : le passage suivant du cron cherche
+ * (invoice_id, days_after_due, channel) dans `reminder_log` pour savoir s'il
+ * doit relancer. Si l'insert échoue et que l'erreur est avalée, le client
+ * reçoit la MÊME relance à chaque exécution du cron — l'échec doit donc être
+ * visible dans le rapport de la tâche.
+ */
+async function insertReminderLog(
+  svc: ReturnType<typeof getServiceClient>,
+  row: Record<string, unknown>,
+  errors: Array<{ invoice_id?: string; error: string }>,
+): Promise<void> {
+  const { error } = await svc.from('reminder_log').insert(row);
+  if (error) {
+    console.error('[cron/reminders] reminder_log insert failed — reminder will be re-sent:', {
+      invoice_id: row.invoice_id,
+      days_after_due: row.days_after_due,
+      channel: row.channel,
+      error: error.message,
+    });
+    errors.push({
+      invoice_id: String(row.invoice_id || ''),
+      error: `reminder_log insert failed (duplicate sends ahead): ${error.message}`,
+    });
+  }
 }
 
 router.post('/cron/payment-reminders', async (req, res) => {
@@ -210,7 +239,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
               if (channel === 'both') {
                 // For 'both', defer logging until SMS attempted (single row with channel='both').
               } else {
-                await svc.from('reminder_log').insert({
+                await insertReminderLog(svc, {
                   org_id: orgId,
                   invoice_id: inv.id,
                   days_after_due: daysAfter,
@@ -218,7 +247,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
                   sent_to: toEmail,
                   status: result.sent ? 'sent' : 'failed',
                   error_message: result.sent ? null : (result.error || 'send failed'),
-                });
+                }, errors);
                 if (result.sent) sent++;
                 else failed++;
               }
@@ -230,7 +259,12 @@ router.post('/cron/payment-reminders', async (req, res) => {
             // a tenant's invoice reminder from the platform number leaks identity
             // across orgs, and skips the plan gate. Skip the SMS leg instead.
             let orgFromNumber: string | null = null;
-            if (twilioClient && (channel === 'sms' || channel === 'both') && toPhone) {
+            // Conformité CASL : ne pas relancer par SMS un client qui a
+            // répondu STOP. Les relances automatiques contournaient la liste.
+            const smsOptedOut = toPhone
+              ? await isSmsOptedOut(svc, orgId, normalizeE164(toPhone))
+              : false;
+            if (twilioClient && (channel === 'sms' || channel === 'both') && toPhone && !smsOptedOut) {
               try {
                 orgFromNumber = await getOrgSmsFromNumber(orgId);
               } catch (e) {
@@ -244,16 +278,19 @@ router.post('/cron/payment-reminders', async (req, res) => {
             }
             if ((channel === 'sms' || channel === 'both') && toPhone && twilioClient && orgFromNumber) {
               const smsBody = applyTemplate(settings.custom_sms_body || DEFAULT_SMS_BODY, vars);
-              let smsOk = true;
-              let smsErr: string | null = null;
-              try {
-                await sendSmsIfConfigured({ client: twilioClient, phoneNumber: orgFromNumber }, toPhone, smsBody);
-              } catch (e: any) {
-                smsOk = false;
-                smsErr = e?.message || 'sms failed';
-              }
+              // `sendSmsIfConfigured` ne lève jamais : le try/catch qui entourait
+              // cet appel était inatteignable, `smsOk` restait donc toujours à
+              // true et un échec Twilio était journalisé comme 'sent'. On lit
+              // maintenant le résultat réel.
+              const smsRes = await sendSmsIfConfigured(
+                { client: twilioClient, phoneNumber: orgFromNumber },
+                toPhone,
+                smsBody,
+              );
+              const smsOk = smsRes.sent;
+              const smsErr = smsRes.sent ? null : (smsRes.error || smsRes.reason || 'sms failed');
               if (channel === 'sms') {
-                await svc.from('reminder_log').insert({
+                await insertReminderLog(svc, {
                   org_id: orgId,
                   invoice_id: inv.id,
                   days_after_due: daysAfter,
@@ -261,14 +298,14 @@ router.post('/cron/payment-reminders', async (req, res) => {
                   sent_to: toPhone,
                   status: smsOk ? 'sent' : 'failed',
                   error_message: smsErr,
-                });
+                }, errors);
                 if (smsOk) sent++; else failed++;
               } else {
                 // 'both' — combine results, single row
                 const emailRes = (inv as any)._email_result;
                 const ok = (emailRes?.sent ?? false) || smsOk;
                 const sentTo = [toEmail, toPhone].filter(Boolean).join(' / ');
-                await svc.from('reminder_log').insert({
+                await insertReminderLog(svc, {
                   org_id: orgId,
                   invoice_id: inv.id,
                   days_after_due: daysAfter,
@@ -276,13 +313,13 @@ router.post('/cron/payment-reminders', async (req, res) => {
                   sent_to: sentTo || 'unknown',
                   status: ok ? 'sent' : 'failed',
                   error_message: ok ? null : (smsErr || emailRes?.error || 'both channels failed'),
-                });
+                }, errors);
                 if (ok) sent++; else failed++;
               }
             } else if (channel === 'both' && (inv as any)._email_result) {
               // SMS was unavailable; record what email did
               const emailRes = (inv as any)._email_result;
-              await svc.from('reminder_log').insert({
+              await insertReminderLog(svc, {
                 org_id: orgId,
                 invoice_id: inv.id,
                 days_after_due: daysAfter,
@@ -290,8 +327,35 @@ router.post('/cron/payment-reminders', async (req, res) => {
                 sent_to: toEmail || 'unknown',
                 status: emailRes?.sent ? 'sent' : 'failed',
                 error_message: emailRes?.sent ? null : (emailRes?.error || 'sms unavailable'),
-              });
+              }, errors);
               if (emailRes?.sent) sent++; else failed++;
+            } else if (channel === 'sms') {
+              // Canal SMS seul, mais rien n'a pu être envoyé : pas de numéro
+              // chez le client, Twilio non configuré, ou org sans numéro
+              // provisionné / hors forfait.
+              //
+              // Sans cette branche, AUCUNE ligne n'était écrite dans
+              // `reminder_log` : la dédup ne trouvait rien au passage suivant
+              // et le cron re-tentait la même relance indéfiniment, à chaque
+              // exécution, sans que ni le compteur `sent` ni `failed` ne
+              // bougent. On trace donc l'échec pour fermer la boucle.
+              const reason = !toPhone
+                ? 'client has no phone number'
+                : smsOptedOut
+                  ? 'recipient opted out of SMS (STOP)'
+                  : !twilioClient
+                    ? 'twilio not configured'
+                    : 'org has no provisioned SMS number (or plan excludes SMS)';
+              await insertReminderLog(svc, {
+                org_id: orgId,
+                invoice_id: inv.id,
+                days_after_due: daysAfter,
+                channel: 'sms',
+                sent_to: toPhone || 'unknown',
+                status: 'failed',
+                error_message: reason,
+              }, errors);
+              failed++;
             }
           } catch (e: any) {
             failed++;

@@ -34,6 +34,29 @@ let engineConfig: EngineConfig | null = null;
 
 // ── Condition evaluator ─────────────────────────────────────
 
+/**
+ * Compare deux valeurs sans se laisser piéger par leur type.
+ *
+ * Les conditions sont stockées en jsonb et proviennent souvent d'un champ de
+ * saisie : elles arrivent donc en CHAÎNE. Les métadonnées d'événement, elles,
+ * portent le type réel — `days_overdue` et `amount_cents` sont des NOMBRES.
+ * Avec une égalité stricte, `3 !== "3"` : la règle ne se déclenchait jamais,
+ * et l'utilisateur n'avait aucun moyen de comprendre pourquoi (le moteur
+ * passait au suivant en silence).
+ *
+ * On normalise donc en chaîne pour comparer, après avoir écarté `null` et
+ * `undefined` — sinon `null` et la chaîne « null » deviendraient égaux.
+ */
+function memeValeur(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === null || a === undefined || b === null || b === undefined) return false;
+  if (typeof a === 'object' || typeof b === 'object') return false;
+  return String(a) === String(b);
+}
+
+/** Opérateurs que `evaluateConditions` sait évaluer. */
+const OPERATEURS_CONNUS = ['eq', 'neq', 'in', 'not_in'];
+
 function evaluateConditions(
   conditions: Record<string, any>,
   event: CRMEvent,
@@ -46,13 +69,28 @@ function evaluateConditions(
 
     // Support operators
     if (typeof expected === 'object' && expected !== null && !Array.isArray(expected)) {
-      if ('eq' in expected && actual !== expected.eq) return false;
-      if ('neq' in expected && actual === expected.neq) return false;
-      if ('in' in expected && Array.isArray(expected.in) && !expected.in.includes(actual)) return false;
-      if ('not_in' in expected && Array.isArray(expected.not_in) && expected.not_in.includes(actual)) return false;
+      // Un opérateur inconnu était purement IGNORÉ : la condition passait pour
+      // vraie et la règle s'exécutait sur tout. Une règle « si montant > 5000 »
+      // partait donc pour n'importe quel montant — un faux positif, bien plus
+      // dangereux qu'un blocage. On refuse désormais d'évaluer ce qu'on ne
+      // comprend pas.
+      const inconnus = Object.keys(expected).filter((op) => !OPERATEURS_CONNUS.includes(op));
+      if (inconnus.length > 0) {
+        console.warn(
+          `[automationEngine] condition ignorée — opérateur(s) non supporté(s) sur « ${key} » : ${inconnus.join(', ')}`,
+        );
+        return false;
+      }
+
+      if ('eq' in expected && !memeValeur(actual, expected.eq)) return false;
+      if ('neq' in expected && memeValeur(actual, expected.neq)) return false;
+      if ('in' in expected && Array.isArray(expected.in)
+        && !expected.in.some((v: unknown) => memeValeur(actual, v))) return false;
+      if ('not_in' in expected && Array.isArray(expected.not_in)
+        && expected.not_in.some((v: unknown) => memeValeur(actual, v))) return false;
     } else {
       // Direct equality
-      if (actual !== expected) return false;
+      if (!memeValeur(actual, expected)) return false;
     }
   }
   return true;
@@ -60,9 +98,14 @@ function evaluateConditions(
 
 // ── Deduplication key builder ───────────────────────────────
 
+// La clé NE DOIT PAS contenir la date : `idx_scheduled_tasks_dedup` est unique
+// sur (org_id, execution_key) parmi les tâches pending/running, et c'est ce qui
+// empêche de planifier deux fois la même action. Avec la date du jour, renvoyer
+// le même devis le lendemain produisait une clé différente : les 5 relances
+// déjà en attente restaient, 5 nouvelles s'ajoutaient, et le client recevait
+// tout en double (constaté en prod : 10 tâches pending pour un seul devis).
 function buildExecutionKey(ruleId: string, entityId: string, actionIndex: number): string {
-  const today = new Date().toISOString().slice(0, 10);
-  return `${ruleId}:${entityId}:${actionIndex}:${today}`;
+  return `${ruleId}:${entityId}:${actionIndex}`;
 }
 
 // ── Quiet hours (SMS only) ──────────────────────────────────
@@ -83,6 +126,29 @@ function localHour(d: Date): number {
 export function isQuietHours(d: Date = new Date()): boolean {
   const h = localHour(d);
   return h < SEND_START_HOUR || h >= SEND_END_HOUR;
+}
+
+/**
+ * Cette action doit-elle respecter la fenêtre 8h–20h ?
+ *
+ * Les SMS, toujours. Les courriels, seulement quand ils sont COMMERCIAUX.
+ *
+ * Le critère est le délai de la règle, et non une liste de déclencheurs à
+ * maintenir : un message immédiat est une confirmation que le destinataire
+ * attend (« rendez-vous confirmé », « dépôt reçu ») — le retarder jusqu'à 8h
+ * lui ferait croire que sa demande n'est pas passée. Un message différé est
+ * une relance ou un suivi : rien ne justifie qu'il parte à 3h du matin.
+ *
+ * Corrige aussi une incohérence visible : une règle envoyant SMS + courriel
+ * voyait ses deux moitiés partir à des heures différentes, le SMS étant seul
+ * reporté.
+ */
+function shouldRespectQuietHours(actionType: string, delaySeconds: number): boolean {
+  if (actionType === 'send_sms') return true;
+  if (actionType !== 'send_email') return false;
+  // Délai non nul (positif OU négatif, comme les rappels « X h avant ») =
+  // message programmé, donc pas une confirmation attendue dans l'instant.
+  return delaySeconds !== 0;
 }
 
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
@@ -123,22 +189,28 @@ async function executeRuleActions(
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i);
 
-    // Defer immediate SMS fired during quiet hours to the next send window.
-    if (action.type === 'send_sms' && isQuietHours()) {
-      try {
-        await config.supabase.from('automation_scheduled_tasks').insert({
-          org_id: event.orgId,
-          automation_rule_id: rule.id,
-          entity_type: event.entityType,
-          entity_id: event.entityId,
-          action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-          execute_at: nextSendTime().toISOString(),
-          status: 'pending',
-          execution_key: executionKey,
-        });
-        console.log(`[automationEngine] SMS deferred to send window (quiet hours) for rule "${rule.name}"`);
-      } catch (err: any) {
-        if (err?.code !== '23505') console.error('[automationEngine] failed to defer quiet-hours SMS:', err.message);
+    // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
+    // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
+    // seuls ses SMS sont reportés, jamais ses courriels.
+    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && isQuietHours()) {
+      // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
+      // dans la réponse, pas dans un catch.
+      const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
+        org_id: event.orgId,
+        automation_rule_id: rule.id,
+        entity_type: event.entityType,
+        entity_id: event.entityId,
+        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+        execute_at: nextSendTime().toISOString(),
+        status: 'pending',
+        execution_key: executionKey,
+      });
+      if (deferError) {
+        if (deferError.code !== '23505') {
+          console.error(`[automationEngine] failed to defer quiet-hours SMS (rule ${rule.id}, org ${event.orgId}):`, deferError.message);
+        }
+      } else {
+        console.log(`[automationEngine] ${action.type} deferred to send window (quiet hours) for rule "${rule.name}"`);
       }
       continue;
     }
@@ -150,7 +222,7 @@ async function executeRuleActions(
       const durationMs = Date.now() - startTime;
 
       // Log execution
-      await config.supabase.from('automation_execution_logs').insert({
+      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
         org_id: event.orgId,
         automation_rule_id: rule.id,
         trigger_event: event.type,
@@ -163,6 +235,9 @@ async function executeRuleActions(
         result_error: result.error || null,
         duration_ms: durationMs,
       });
+      if (logError) {
+        console.error(`[automationEngine] failed to write execution log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
+      }
 
       if (!result.success) {
         console.error(`[automationEngine] action ${action.type} failed for rule "${rule.name}":`, result.error);
@@ -171,7 +246,7 @@ async function executeRuleActions(
       const durationMs = Date.now() - startTime;
       console.error(`[automationEngine] action ${action.type} threw for rule "${rule.name}":`, err.message);
 
-      await config.supabase.from('automation_execution_logs').insert({
+      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
         org_id: event.orgId,
         automation_rule_id: rule.id,
         trigger_event: event.type,
@@ -183,33 +258,79 @@ async function executeRuleActions(
         result_error: err.message,
         duration_ms: durationMs,
       });
+      if (logError) {
+        console.error(`[automationEngine] failed to write failure log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
+      }
     }
   }
 }
 
 // ── Resolve execution time ──────────────────────────────────
 
+/**
+ * Tolérance avant d'abandonner un rappel dont l'heure est déjà passée.
+ *
+ * Un rappel « la veille » calculé avec 20 minutes de retard reste pertinent ;
+ * le même rappel calculé 3 jours trop tard ne l'est plus.
+ */
+const RETARD_TOLERE_MS = 30 * 60 * 1000; // 30 minutes
+
+/**
+ * Calcule le moment d'exécution d'une action différée.
+ *
+ * Retourne `null` quand la tâche doit être ABANDONNÉE plutôt que planifiée.
+ *
+ * Auparavant, un rappel dont l'heure était déjà passée était exécuté « dans
+ * 5 secondes ». Concrètement : créer aujourd'hui un rendez-vous pour DEMAIN
+ * déclenchait immédiatement le rappel « J-7 », et le client recevait dans la
+ * seconde « votre rendez-vous est dans une semaine » — alors qu'il est demain.
+ * Un message factuellement faux, sur le cas le plus courant qui soit (la prise
+ * de rendez-vous à court terme).
+ *
+ * On garde une tolérance : un rappel légèrement en retard part quand même,
+ * parce que le décalage vient alors du tick de 5 minutes, pas d'une erreur de
+ * cadence.
+ */
 async function resolveExecuteAt(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
-): Promise<Date> {
+): Promise<Date | null> {
   // Negative delay = "X seconds before the event's reference time"
   // Used for appointment reminders (e.g., -86400 = 1 day before start_time)
   if (rule.delay_seconds < 0 && (event.entityType === 'schedule_event' || event.entityType === 'appointment')) {
-    const { data: evt } = await config.supabase
+    const { data: evt, error } = await config.supabase
       .from('schedule_events')
       .select('start_at, start_time')
       .eq('id', event.entityId)
       .maybeSingle();
 
+    // Une erreur de lecture ne doit pas être confondue avec « pas de date » :
+    // sans ce garde, on retombait sur le délai positif ci-dessous et le rappel
+    // « 1 semaine avant » partait 1 semaine APRÈS la création du rendez-vous.
+    if (error) {
+      console.error(`[automationEngine] lecture de schedule_events échouée (rule ${rule.id}):`, error.message);
+      return null;
+    }
+
     const startField = evt?.start_at || evt?.start_time;
     if (startField) {
       const eventTime = new Date(startField).getTime();
       const executeAt = new Date(eventTime + rule.delay_seconds * 1000);
-      // If the calculated time is already past, execute immediately
-      if (executeAt.getTime() <= Date.now()) {
-        return new Date(Date.now() + 5000); // 5s from now
+      const retard = Date.now() - executeAt.getTime();
+
+      if (retard > RETARD_TOLERE_MS) {
+        // Le créneau du rappel est franchement dépassé : l'envoyer dirait au
+        // client quelque chose de faux.
+        console.log(
+          `[automationEngine] rappel abandonné (créneau dépassé de ${Math.round(retard / 60000)} min) — règle "${rule.name}"`,
+        );
+        return null;
+      }
+      if (retard > 0) {
+        // Léger retard (tick de 5 min) : on part tout de suite, le message
+        // reste juste.
+        return new Date(Date.now() + 5000);
       }
       return executeAt;
     }
@@ -228,27 +349,32 @@ async function scheduleDelayedActions(
 ) {
   const executeAt = await resolveExecuteAt(rule, event, config);
 
+  // `null` = créneau dépassé ou date de référence illisible : on ne planifie
+  // rien plutôt que d'envoyer un rappel devenu faux.
+  if (!executeAt) return;
+
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
     const executionKey = buildExecutionKey(rule.id, event.entityId, i);
 
-    try {
-      await config.supabase.from('automation_scheduled_tasks').insert({
-        org_id: event.orgId,
-        automation_rule_id: rule.id,
-        entity_type: event.entityType,
-        entity_id: event.entityId,
-        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-        execute_at: executeAt.toISOString(),
-        status: 'pending',
-        execution_key: executionKey,
-      });
-    } catch (err: any) {
+    // supabase-js ne lève jamais : le doublon (23505) comme toute autre erreur
+    // se lit dans la réponse — un catch ici n'aurait jamais rien attrapé.
+    const { error: insertError } = await config.supabase.from('automation_scheduled_tasks').insert({
+      org_id: event.orgId,
+      automation_rule_id: rule.id,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+      execute_at: executeAt.toISOString(),
+      status: 'pending',
+      execution_key: executionKey,
+    });
+    if (insertError) {
       // Unique constraint violation = duplicate, skip
-      if (err?.code === '23505') {
+      if (insertError.code === '23505') {
         console.log(`[automationEngine] skipped duplicate scheduled task: ${executionKey}`);
       } else {
-        console.error(`[automationEngine] failed to schedule task:`, err.message);
+        console.error(`[automationEngine] failed to schedule task (rule ${rule.id}, org ${event.orgId}):`, insertError.message);
       }
     }
   }
@@ -256,28 +382,6 @@ async function scheduleDelayedActions(
 
 // ── Event handler ───────────────────────────────────────────
 
-// ── Map CRM event types to workflow trigger_type values ────
-const EVENT_TO_TRIGGER: Record<string, string> = {
-  'lead.created': 'lead_created',
-  'lead.updated': 'lead_updated',
-  'lead.status_changed': 'lead_status_changed',
-  'lead.converted': 'lead_converted',
-  'pipeline_deal.stage_changed': 'pipeline_deal_stage_changed',
-  'estimate.sent': 'estimate_sent',
-  'estimate.accepted': 'estimate_approved',
-  'quote.created': 'quote_created',
-  'quote.sent': 'quote_sent',
-  'quote.approved': 'quote_approved',
-  'quote.declined': 'quote_declined',
-  'quote.converted': 'quote_converted',
-  'appointment.created': 'job_scheduled',
-  'job.created': 'job_scheduled',
-  'job.completed': 'job_completed',
-  'invoice.created': 'invoice_created',
-  'invoice.sent': 'invoice_created',
-  'invoice.overdue': 'invoice_overdue',
-  'invoice.paid': 'payment_received',
-};
 
 // ── Convert delay_value + delay_unit to seconds ───────────
 function delayToSeconds(value: number, unit: string): number {
@@ -315,61 +419,16 @@ async function handleEvent(event: CRMEvent) {
       }
     }
 
-    // ── 2. Match workflows table (new system) ──
-    const triggerType = EVENT_TO_TRIGGER[event.type];
-    if (triggerType) {
-      const { data: workflows, error: wfError } = await engineConfig.supabase
-        .from('workflows')
-        .select('id, org_id, name, trigger_type, delay_value, delay_unit, conditions, actions_config')
-        .eq('org_id', event.orgId)
-        .eq('trigger_type', triggerType)
-        .eq('active', true)
-        .eq('status', 'published');
+    // Le second système d'automatisations (table `workflows`, constructeur
+    // visuel) a été retiré : aucune interface ne permettait d'en créer, les
+    // 31 lignes existantes vivaient dans une seule org et n'ont jamais été
+    // exécutées (`workflow_runs` vide). Leur planification différée violait de
+    // surcroît une clé étrangère — `automation_scheduled_tasks.automation_rule_id`
+    // pointe vers `automation_rules`, pas vers `workflows`.
+    //
+    // Les automatisations du produit vivent dans `automation_rules`, traitées
+    // juste au-dessus.
 
-      if (wfError) {
-        console.error('[automationEngine] failed to fetch workflows:', wfError.message);
-      }
-
-      if (workflows && workflows.length > 0) {
-        for (const wf of workflows as any[]) {
-          // Evaluate conditions (array format)
-          const wfConditions = wf.conditions || [];
-          if (Array.isArray(wfConditions) && wfConditions.length > 0) {
-            const condObj: Record<string, any> = {};
-            for (const c of wfConditions) {
-              if (c.operator === 'equals') condObj[c.field] = { eq: c.value };
-              else if (c.operator === 'not_equals') condObj[c.field] = { neq: c.value };
-            }
-            if (!evaluateConditions(condObj, event)) continue;
-          }
-
-          // Convert workflow to AutomationRule format for execution
-          const wfActions = wf.actions_config || [];
-          if (!Array.isArray(wfActions) || wfActions.length === 0) continue;
-
-          const delaySeconds = delayToSeconds(wf.delay_value || 0, wf.delay_unit || 'immediate');
-
-          const pseudoRule: AutomationRule = {
-            id: wf.id,
-            org_id: wf.org_id,
-            name: wf.name,
-            trigger_event: event.type,
-            conditions: {},
-            delay_seconds: delaySeconds,
-            actions: wfActions,
-            is_active: true,
-          };
-
-          if (delaySeconds > 0) {
-            await scheduleDelayedActions(pseudoRule, event, engineConfig);
-          } else {
-            await executeRuleActions(pseudoRule, event, engineConfig);
-          }
-
-          console.log(`[automationEngine] workflow "${wf.name}" matched event ${event.type}`);
-        }
-      }
-    }
   } catch (err: any) {
     console.error('[automationEngine] error handling event:', err.message);
   }
@@ -377,8 +436,115 @@ async function handleEvent(event: CRMEvent) {
 
 // ── Scheduled task processor (called by scheduler) ──────────
 
+/** Nombre maximal de tentatives pour une tâche planifiée (1 initiale + 3 reprises). */
+const MAX_TASK_ATTEMPTS = 4;
+
+/**
+ * Un échec est-il réessayable ?
+ *
+ * Distinction volontaire : une panne SMTP passagère mérite une reprise, un
+ * client sans adresse courriel n'en méritera jamais — le réessayer trois fois
+ * ne ferait que retarder l'inévitable et polluer les journaux.
+ */
+function isTransientFailure(error?: string | null): boolean {
+  if (!error) return true; // cause inconnue → on laisse sa chance à la reprise
+  const definitifs = [
+    'no recipient',           // pas d'adresse / pas de téléphone
+    'not configured',         // SMTP ou Twilio absent (config, pas incident)
+    'opted out',              // désabonnement : ne jamais réessayer
+    'plan does not include',  // forfait insuffisant
+    'are disabled',           // fonctionnalité désactivée dans les réglages
+  ];
+  const lower = error.toLowerCase();
+  return !definitifs.some((d) => lower.includes(d));
+}
+
+/**
+ * Détermine l'état suivant d'une tâche qui vient d'échouer.
+ *
+ * Sans cette logique, une tâche échouée passait en `failed` définitif : le
+ * fetch ne sélectionne que les `pending`, donc elle n'était PLUS JAMAIS
+ * reprise. Le compteur `attempts` était bien incrémenté, mais jamais relu.
+ * Résultat mesuré en prod : 8 tâches perdues, dont 6 relances par courriel
+ * tombées sur un « SMTP not configured » passager.
+ *
+ * Reprise à délai croissant (5 min, 30 min, 2 h) pour laisser le temps à un
+ * service externe de se rétablir sans marteler la file.
+ */
+function nextStateAfterFailure(
+  attempts: number,
+  error?: string | null,
+): Record<string, unknown> {
+  const dejaTentees = Number(attempts || 0) + 1; // `attempts` a été incrémenté à la prise
+  const peutReessayer = dejaTentees < MAX_TASK_ATTEMPTS && isTransientFailure(error);
+
+  if (!peutReessayer) {
+    return {
+      status: 'failed',
+      completed_at: new Date().toISOString(),
+      last_error: error || null,
+    };
+  }
+
+  const delaisMinutes = [5, 30, 120];
+  const attente = delaisMinutes[Math.min(dejaTentees - 1, delaisMinutes.length - 1)];
+  return {
+    status: 'pending',
+    execute_at: new Date(Date.now() + attente * 60_000).toISOString(),
+    last_error: `${error || 'échec'} — reprise ${dejaTentees}/${MAX_TASK_ATTEMPTS} dans ${attente} min`,
+  };
+}
+
+/**
+ * Délai au-delà duquel une tâche « en cours » est considérée comme abandonnée.
+ *
+ * Large volontairement : une action lente (SMTP poussif, Twilio qui traîne)
+ * doit pouvoir finir sans être reprise en parallèle.
+ */
+const TACHE_FIGEE_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Remet en file les tâches restées « en cours » après un arrêt brutal.
+ *
+ * Une tâche passe en `running` avant son exécution. Si le processus meurt
+ * entre les deux — déploiement, plantage, mémoire épuisée — la ligne reste
+ * `running` pour toujours :
+ *   · le fetch ne sélectionne que les `pending`, donc elle n'est jamais
+ *     reprise ;
+ *   · l'index d'unicité couvre `running`, donc sa clé reste occupée et cette
+ *     action ne peut PLUS JAMAIS être replanifiée pour cette entité.
+ *
+ * Chaque déploiement pendant un tick perdait ainsi quelques relances et
+ * rendait l'entité concernée sourde pour cette règle.
+ */
+async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
+  const limite = new Date(Date.now() - TACHE_FIGEE_MS).toISOString();
+  const { data, error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update({ status: 'pending', execute_at: new Date().toISOString() })
+    .eq('status', 'running')
+    // `updated_at` N'EXISTE PAS sur cette table (colonnes vérifiées en base).
+    // Avec PostgREST, une seule colonne inconnue fait échouer TOUTE la requête
+    // — et supabase-js ne lève pas : la récupération des tâches figées ne
+    // faisait donc jamais rien, en silence. `execute_at` est réécrit au moment
+    // où la tâche est réclamée, il date bien le début du blocage.
+    .lt('execute_at', limite)
+    .select('id');
+
+  if (error) {
+    console.error('[automationEngine] récupération des tâches figées échouée:', error.message);
+    return;
+  }
+  if (data && data.length > 0) {
+    console.warn(`[automationEngine] ${data.length} tâche(s) figée(s) remise(s) en file (arrêt brutal détecté)`);
+  }
+}
+
 export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!engineConfig) return;
+
+  // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
+  await recupererTachesFigees(supabase);
 
   const now = new Date().toISOString();
 
@@ -404,21 +570,50 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!tasks || tasks.length === 0) return;
 
   for (const task of tasks as any[]) {
-    // Quiet hours: push due SMS tasks to the next send window without
-    // consuming an attempt — the client shouldn't be texted at night.
-    if (task.action_config?.type === 'send_sms' && isQuietHours()) {
-      await supabase
+    // Heures calmes : on repousse à la prochaine fenêtre sans consommer de
+    // tentative. Toute tâche présente ici est par construction DIFFÉRÉE (une
+    // action immédiate s'exécute en direct, sans passer par cette file) : elle
+    // porte donc une relance ou un suivi, jamais une confirmation attendue.
+    // Les deux canaux sont concernés — auparavant seuls les SMS l'étaient, et
+    // un courriel de relance pouvait partir à 3h du matin.
+    const taskType = task.action_config?.type;
+    if ((taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()) {
+      const { error: pushError } = await supabase
         .from('automation_scheduled_tasks')
         .update({ execute_at: nextSendTime().toISOString() })
         .eq('id', task.id);
+      if (pushError) {
+        console.error(`[automationEngine] failed to push task ${task.id} out of quiet hours:`, pushError.message);
+      }
       continue;
     }
 
-    // Mark as running
-    await supabase
+    // Mark as running. Si la prise n'est pas persistée, la tâche reste
+    // 'pending' et serait ré-exécutée au tour suivant — on la saute plutôt
+    // que d'envoyer deux fois la même action.
+    const { data: claimed, error: claimError } = await supabase
       .from('automation_scheduled_tasks')
-      .update({ status: 'running', attempts: task.attempts + 1 })
-      .eq('id', task.id);
+      // `execute_at` est réécrit à l'instant de la prise : la table n'a pas de
+      // colonne `updated_at`, et c'est cet horodatage qui permet de repérer
+      // une tâche restée `running` après un arrêt brutal (cf.
+      // `recupererTachesFigees`). Sans lui, la détection n'aurait aucun repère
+      // temporel.
+      //
+      // Le filtre `.eq('status','pending')` rend la prise atomique : avec deux
+      // instances du serveur, une seule voit sa mise à jour aboutir, l'autre
+      // touche 0 ligne et passe son tour. Sans lui, les deux réussissaient et
+      // exécutaient l'action — le client recevait le message en double.
+      .update({ status: 'running', attempts: task.attempts + 1, execute_at: new Date().toISOString() })
+      .eq('id', task.id)
+      .eq('status', 'pending')
+      .select('id');
+    if (claimError) {
+      console.error(`[automationEngine] failed to claim scheduled task ${task.id}:`, claimError.message);
+      continue;
+    }
+    // Zéro ligne touchée = une autre instance (ou un tick qui se chevauche) a
+    // pris la tâche entre le fetch et l'update. On la lui laisse.
+    if (!claimed || claimed.length === 0) continue;
 
     try {
       const actionConfig = task.action_config;
@@ -434,10 +629,13 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       );
 
       if (shouldStop) {
-        await supabase
+        const { error: cancelError } = await supabase
           .from('automation_scheduled_tasks')
           .update({ status: 'cancelled', completed_at: now })
           .eq('id', task.id);
+        if (cancelError) {
+          console.error(`[automationEngine] failed to cancel scheduled task ${task.id}:`, cancelError.message);
+        }
         continue;
       }
 
@@ -463,7 +661,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       const durationMs = Date.now() - startTime;
 
       // Log execution
-      await supabase.from('automation_execution_logs').insert({
+      const { error: logError } = await supabase.from('automation_execution_logs').insert({
         org_id: task.org_id,
         automation_rule_id: task.automation_rule_id,
         scheduled_task_id: task.id,
@@ -477,75 +675,115 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         result_error: result.error || null,
         duration_ms: durationMs,
       });
+      if (logError) {
+        console.error(`[automationEngine] failed to write execution log for task ${task.id} (org ${task.org_id}):`, logError.message);
+      }
 
-      // Update task status
-      await supabase
+      // Update task status — avec reprise sur échec transitoire.
+      const { error: statusError } = await supabase
         .from('automation_scheduled_tasks')
-        .update({
-          status: result.success ? 'completed' : 'failed',
-          completed_at: new Date().toISOString(),
-          last_error: result.error || null,
-        })
+        .update(
+          result.success
+            ? {
+                status: 'completed',
+                completed_at: new Date().toISOString(),
+                last_error: null,
+              }
+            : nextStateAfterFailure(task.attempts, result.error),
+        )
         .eq('id', task.id);
+      if (statusError) {
+        // La tâche resterait 'running' pour toujours : personne ne la reprend.
+        console.error(`[automationEngine] failed to close scheduled task ${task.id}:`, statusError.message);
+      }
     } catch (err: any) {
       console.error(`[automationEngine] scheduled task ${task.id} failed:`, err.message);
-      await supabase
+      const { error: statusError } = await supabase
         .from('automation_scheduled_tasks')
-        .update({
-          status: 'failed',
-          completed_at: new Date().toISOString(),
-          last_error: err.message,
-        })
+        .update(nextStateAfterFailure(task.attempts, err.message))
         .eq('id', task.id);
+      if (statusError) {
+        console.error(`[automationEngine] failed to mark task ${task.id} as failed:`, statusError.message);
+      }
     }
   }
 }
 
 // ── Stop condition checker ──────────────────────────────────
 
+/**
+ * Faut-il abandonner cette tâche planifiée ?
+ *
+ * `true` = la relance n'a plus lieu d'être (facture payée, devis accepté,
+ * rendez-vous annulé…). La tâche est alors annulée DÉFINITIVEMENT.
+ *
+ * D'où la précaution centrale de cette fonction : `supabase-js` ne lève jamais
+ * d'exception, il retourne `{ data, error }`. Les six lectures ci-dessous ne
+ * lisaient que `data` — sur erreur (délai dépassé, incident réseau, RLS),
+ * `data` vaut `null`, que le code interprétait comme « entité supprimée » et
+ * traduisait par une annulation irrémédiable. Un hoquet de deux secondes
+ * suffisait à supprimer des relances en attente, sans log ni reprise.
+ *
+ * Règle appliquée partout maintenant : une erreur de LECTURE ne conclut rien.
+ * On laisse la tâche en place ; le tick suivant réessaiera.
+ */
 async function checkStopConditions(
   supabase: SupabaseClient,
   entityType: string,
   entityId: string,
   triggerEvent?: string,
 ): Promise<boolean> {
+  /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
+  const illisible = (table: string, message: string): boolean => {
+    console.error(
+      `[automationEngine] condition d'arrêt indéterminable (${table}, ${entityType} ${entityId}) — tâche conservée:`,
+      message,
+    );
+    return false; // ne PAS annuler
+  };
+
   // Invoice reminders: stop if paid, cancelled, disputed, or client archived
   if (entityType === 'invoice') {
-    const { data: inv } = await supabase
+    const { data: inv, error } = await supabase
       .from('invoices')
       .select('status, client_id')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('invoices', error.message);
     if (!inv) return true; // Invoice deleted
     if (['paid', 'cancelled', 'void'].includes(inv.status)) return true;
     // Check if client is archived/deleted
     if (inv.client_id) {
-      const { data: cl } = await supabase.from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+      const { data: cl, error: clErr } = await supabase
+        .from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+      if (clErr) return illisible('clients', clErr.message);
       if (cl?.deleted_at) return true;
     }
   }
 
   // Estimate follow-ups: stop if accepted, rejected, or lead archived
   if (entityType === 'invoice' && triggerEvent === 'estimate.sent') {
-    const { data: inv } = await supabase
+    const { data: inv, error } = await supabase
       .from('invoices')
       .select('status')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('invoices', error.message);
     if (!inv) return true;
     if (['paid', 'accepted', 'rejected', 'cancelled', 'void'].includes(inv.status)) return true;
   }
 
   // Appointment reminders: stop if cancelled
   if (entityType === 'schedule_event' || entityType === 'appointment') {
-    const { data: evt } = await supabase
+    const { data: evt, error } = await supabase
       .from('schedule_events')
       .select('status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('schedule_events', error.message);
     if (!evt) return true;
     if (evt.deleted_at) return true;
     if (evt.status === 'cancelled') return true;
@@ -554,12 +792,13 @@ async function checkStopConditions(
   // Quote follow-ups: stop once the client responded (approved, declined,
   // changes requested) or the quote left circulation (expired, converted, archived)
   if (entityType === 'quote') {
-    const { data: quote } = await supabase
+    const { data: quote, error } = await supabase
       .from('quotes')
       .select('status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('quotes', error.message);
     if (!quote) return true; // Quote deleted
     if (quote.deleted_at) return true;
     if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return true;
@@ -567,12 +806,13 @@ async function checkStopConditions(
 
   // Lead: stop if archived or deleted (a lead is a client with status='lead')
   if (entityType === 'lead') {
-    const { data: lead } = await supabase
+    const { data: lead, error } = await supabase
       .from('clients')
       .select('status, lead_status, deleted_at')
       .eq('id', entityId)
       .maybeSingle();
 
+    if (error) return illisible('clients', error.message);
     if (!lead) return true;
     if (lead.deleted_at) return true;
     // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.

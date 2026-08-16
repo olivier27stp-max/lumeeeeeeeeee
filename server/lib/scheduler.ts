@@ -3,6 +3,7 @@ import {
   createNotification,
   sendSmsIfConfigured,
   applyTemplate,
+  isSmsOptedOut,
 } from './notificationHelpers';
 import {
   addDelay,
@@ -46,6 +47,63 @@ function todayDateString(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Envoi SMS d'automatisation — TOUJOURS depuis le numéro propre à l'org
+// ---------------------------------------------------------------------------
+
+/**
+ * Résout le numéro Twilio de l'org puis envoie.
+ *
+ * Pourquoi ce détour plutôt qu'un `sendSmsIfConfigured(twilio, ...)` direct :
+ * le scheduler recevait `TWILIO_PHONE_NUMBER` (numéro GLOBAL de la plateforme)
+ * et l'utilisait pour tous les locataires. Deux conséquences en production :
+ *
+ *   1. si la variable d'env était vide, `twilioConfig` valait `null` et AUCUN
+ *      SMS d'automatisation ne partait — sans la moindre erreur visible ;
+ *   2. si elle était remplie, tous les orgs envoyaient depuis le même numéro
+ *      inconnu : les réponses des clients atterrissaient dans la mauvaise
+ *      boîte et le gate de forfait (`SmsNotInPlanError`) était contourné.
+ *
+ * `server/lib/actions/index.ts` faisait déjà correctement ce travail ; le
+ * scheduler n'avait jamais été aligné. Le client Twilio (authentification)
+ * reste global, seul le numéro expéditeur est résolu par org.
+ */
+async function sendOrgSms(
+  twilio: TwilioConfig | null,
+  orgId: string,
+  to: string | null | undefined,
+  body: string,
+  supabase?: SupabaseClient,
+): Promise<import('./notificationHelpers').SmsSendResult> {
+  if (!twilio?.client) return { sent: false, reason: 'not_configured' };
+  if (!to) return { sent: false, reason: 'no_recipient' };
+
+  // Conformité CASL : les automatisations contournaient entièrement la liste
+  // STOP et continuaient de relancer un client qui s'était désabonné.
+  if (supabase) {
+    const { normalizeE164 } = await import('./helpers');
+    const normalized = normalizeE164(to);
+    if (await isSmsOptedOut(supabase, orgId, normalized)) {
+      console.warn(`[scheduler] SMS ignoré : ${normalized} s'est désabonné (STOP) de l'org ${orgId}`);
+      return { sent: false, reason: 'no_recipient', error: 'recipient opted out (STOP)' };
+    }
+  }
+
+  let fromNumber: string;
+  try {
+    const { getOrgSmsFromNumber } = await import('./twilioProvisioning');
+    fromNumber = await getOrgSmsFromNumber(orgId);
+  } catch (e: any) {
+    // Org sans numéro provisionné ou forfait sans SMS : on saute la jambe SMS
+    // plutôt que de retomber sur le numéro plateforme (fuite d'identité entre
+    // locataires + contournement du forfait).
+    console.warn(`[scheduler] SMS ignoré pour l'org ${orgId} : ${e?.name || e?.message}`);
+    return { sent: false, reason: 'not_configured', error: e?.message };
+  }
+
+  return sendSmsIfConfigured({ client: twilio.client, phoneNumber: fromNumber }, to, body);
+}
+
+// ---------------------------------------------------------------------------
 // Trigger handlers
 // ---------------------------------------------------------------------------
 
@@ -81,8 +139,11 @@ async function handleDaysAfterQuoteSent(
       invoice_number: inv.invoice_number,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, inv.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    // L'envoi d'abord, la notification ensuite : elle doit refléter ce qui
+    // s'est réellement passé. Auparavant la notification « envoyé » était
+    // créée avant l'appel Twilio et sans jamais regarder son résultat —
+    // l'utilisateur voyait un succès pour un SMS jamais parti.
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, inv.id);
   }
 }
 
@@ -94,9 +155,14 @@ async function handleDaysBeforeAppointment(
   // schedule_events where start_time - delay = now (today)
   const today = todayDateString();
 
+  // `schedule_events` n'a pas de client_id : le client se rejoint via le job.
+  // La FK est nommée explicitement : il existe DEUX contraintes vers `jobs`
+  // (`schedule_events_job_id_fkey` et la composite `_same_org` du cloisonnement
+  // multi-tenant). Sans ce nom, PostgREST répond PGRST201/HTTP 300 et la
+  // requête ne rapporte RIEN — cette automatisation ne partait jamais.
   const { data: events, error } = await supabase
     .from('schedule_events')
-    .select('id, title, start_time, client_id')
+    .select('id, title, start_time, job:jobs!schedule_events_job_id_fkey(client_id)')
     .eq('org_id', automation.org_id);
 
   if (error || !events) return;
@@ -106,8 +172,10 @@ async function handleDaysBeforeAppointment(
     const target = subtractDelay(new Date(evt.start_time), automation.delay_value, automation.delay_unit);
     if (target !== today) continue;
 
-    const { data: client } = evt.client_id
-      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', evt.client_id).maybeSingle()
+    const job = Array.isArray(evt.job) ? evt.job[0] : evt.job;
+    const clientId = job?.client_id || null;
+    const { data: client } = clientId
+      ? await supabase.from('clients').select('first_name, last_name, phone').eq('id', clientId).maybeSingle()
       : { data: null };
     const clientName = client
       ? `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client'
@@ -117,8 +185,7 @@ async function handleDaysBeforeAppointment(
       event_title: evt.title,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, evt.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, evt.id);
   }
 }
 
@@ -150,8 +217,11 @@ async function handleOnInvoiceDueDate(
       invoice_number: inv.invoice_number,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, inv.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    // L'envoi d'abord, la notification ensuite : elle doit refléter ce qui
+    // s'est réellement passé. Auparavant la notification « envoyé » était
+    // créée avant l'appel Twilio et sans jamais regarder son résultat —
+    // l'utilisateur voyait un succès pour un SMS jamais parti.
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, inv.id);
   }
 }
 
@@ -186,8 +256,11 @@ async function handleDaysAfterInvoiceDue(
       invoice_number: inv.invoice_number,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, inv.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    // L'envoi d'abord, la notification ensuite : elle doit refléter ce qui
+    // s'est réellement passé. Auparavant la notification « envoyé » était
+    // créée avant l'appel Twilio et sans jamais regarder son résultat —
+    // l'utilisateur voyait un succès pour un SMS jamais parti.
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, inv.id);
   }
 }
 
@@ -223,51 +296,173 @@ async function handleDaysAfterJobCompleted(
       job_title: job.title,
     });
 
-    await createNotificationDeduped(supabase, automation.org_id, automation.id, automation.name, body, job.id);
-    await sendSmsIfConfigured(twilio, client?.phone, body);
+    await runAutomationOnce(supabase, automation, twilio, client?.phone, body, job.id);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Deduplication: track which (automation_id, reference_id, date) combos
-// have already fired so we don't spam within the same day.
-// Uses an in-memory set that resets daily.
+// Déduplication : une automatisation ne doit se déclencher qu'une fois par
+// jour et par entité concernée.
+//
+// Le garde-fou vivait UNIQUEMENT en mémoire du processus. Deux conséquences
+// réelles en production :
+//   - la mémoire est vidée à chaque redémarrage ou déploiement, donc le tick
+//     suivant (toutes les 5 min) renvoyait les messages déjà envoyés ;
+//   - avec plusieurs instances du serveur, chacune a son propre Set : autant
+//     de copies du même message que d'instances.
+//
+// La vérification s'appuie désormais sur la table `notifications`, qui porte
+// déjà `reference_id` + `created_at` et reçoit une ligne à chaque
+// déclenchement. Elle survit donc aux redéploiements et est partagée par
+// toutes les instances. Le Set est conservé en cache devant la base : il évite
+// une requête quand la réponse est déjà connue, mais ne fait plus autorité.
 // ---------------------------------------------------------------------------
 
 let firedKeyDate = '';
 const firedKeys = new Set<string>();
 
-function hasFired(automationId: string, refId: string): boolean {
+function cacheKey(automationId: string, refId: string) {
+  return `${automationId}:${refId}`;
+}
+
+function resetCacheIfNewDay() {
   const today = todayDateString();
   if (firedKeyDate !== today) {
     firedKeys.clear();
     firedKeyDate = today;
   }
-  return firedKeys.has(`${automationId}:${refId}`);
+}
+
+async function hasFired(
+  supabase: SupabaseClient,
+  orgId: string,
+  automationName: string,
+  refId: string,
+  automationId: string,
+): Promise<boolean> {
+  resetCacheIfNewDay();
+  if (firedKeys.has(cacheKey(automationId, refId))) return true;
+
+  // Une notification portant ce titre et cette référence, créée aujourd'hui,
+  // prouve que l'automatisation s'est déjà déclenchée — y compris avant un
+  // redéploiement ou depuis une autre instance.
+  const debutJour = `${todayDateString()}T00:00:00.000Z`;
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id')
+      .eq('org_id', orgId)
+      .eq('reference_id', refId)
+      .eq('title', automationName)
+      .gte('created_at', debutJour)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      // Fail-open : en cas d'incident de lecture, mieux vaut un doublon
+      // possible qu'une automatisation entièrement muette.
+      console.error('[scheduler] vérification anti-doublon échouée:', error.message);
+      return false;
+    }
+    if (data) {
+      firedKeys.add(cacheKey(automationId, refId));
+      return true;
+    }
+    return false;
+  } catch (err: any) {
+    console.error('[scheduler] vérification anti-doublon échouée:', err?.message);
+    return false;
+  }
 }
 
 function markFired(automationId: string, refId: string) {
-  const today = todayDateString();
-  if (firedKeyDate !== today) {
-    firedKeys.clear();
-    firedKeyDate = today;
-  }
-  firedKeys.add(`${automationId}:${refId}`);
+  resetCacheIfNewDay();
+  firedKeys.add(cacheKey(automationId, refId));
 }
 
-// Wrap the original createNotification to include dedup
-async function createNotificationDeduped(
+/**
+ * Déduplication en mémoire, pour les détections internes (facture en retard,
+ * devis expiré) qui émettent un ÉVÉNEMENT sans écrire de notification.
+ *
+ * `hasFired` ne peut pas les couvrir : elle s'appuie sur la table
+ * `notifications`, qu'ils n'alimentent pas. Le risque résiduel est faible —
+ * un doublon ici ne fait que ré-émettre un événement idempotent en aval,
+ * il n'envoie aucun message à un client.
+ */
+function hasFiredLocal(scope: string, refId: string): boolean {
+  resetCacheIfNewDay();
+  return firedKeys.has(cacheKey(scope, refId));
+}
+
+/**
+ * Exécute une automatisation une seule fois par jour et par entité : envoie le
+ * SMS, puis journalise le résultat réel.
+ *
+ * Remplace l'ancien `createNotificationDeduped`, dont la garde ne couvrait que
+ * la notification : l'appel SMS se trouvait à l'EXTÉRIEUR et repartait donc à
+ * chaque tick (toutes les 5 minutes) même quand le doublon était détecté. Le
+ * client recevait le message en boucle, alors que l'utilisateur ne voyait
+ * qu'une seule notification.
+ */
+async function runAutomationOnce(
   supabase: SupabaseClient,
-  orgId: string,
-  automationId: string,
-  automationName: string,
+  automation: Automation,
+  twilio: TwilioConfig | null,
+  phone: string | null | undefined,
   body: string,
-  referenceId?: string,
+  referenceId: string,
 ) {
   const refKey = referenceId || 'no-ref';
-  if (hasFired(automationId, refKey)) return;
-  markFired(automationId, refKey);
-  await createNotification(supabase, orgId, automationName, body, referenceId);
+  if (await hasFired(supabase, automation.org_id, automation.name, refKey, automation.id)) return;
+  // Marqué AVANT l'envoi : deux ticks rapprochés ne doivent pas passer tous
+  // les deux pendant que le premier attend la réponse de Twilio.
+  markFired(automation.id, refKey);
+
+  const smsRes = await sendOrgSms(twilio, automation.org_id, phone, body, supabase);
+  await notifyAutomationResult(supabase, automation, body, referenceId, smsRes);
+}
+
+/**
+ * Notifie l'utilisateur du résultat RÉEL de l'automatisation.
+ *
+ * Deux corrections par rapport au comportement précédent :
+ *
+ *  1. La notification ne dit plus « envoyé » quand rien n'est parti. Quand le
+ *     SMS échoue, elle le dit explicitement et donne la cause — sinon
+ *     l'utilisateur n'a aucun moyen d'apprendre que son client n'a rien reçu.
+ *
+ *  2. `no_recipient` (le client n'a pas de téléphone) n'est PAS un échec à
+ *     signaler : l'automatisation n'avait simplement rien à faire ici. On
+ *     garde alors la notification neutre d'origine, sans bruit inutile.
+ */
+async function notifyAutomationResult(
+  supabase: SupabaseClient,
+  automation: Automation,
+  body: string,
+  referenceId: string,
+  smsRes: import('./notificationHelpers').SmsSendResult,
+) {
+  // Le TITRE reste toujours `automation.name`, y compris en cas d'échec :
+  // c'est lui qui sert de clé à la détection de doublon en base
+  // (`hasFired` filtre sur org_id + reference_id + title). Un titre différent
+  // selon l'issue rendrait la garde inopérante dès qu'un envoi échoue, et
+  // l'automatisation repartirait au tick suivant. La cause de l'échec va donc
+  // dans le corps du message, pas dans le titre.
+  if (smsRes.sent || smsRes.reason === 'no_recipient') {
+    await createNotification(supabase, automation.org_id, automation.name, body, referenceId);
+    return;
+  }
+
+  const cause = smsRes.reason === 'not_configured'
+    ? "aucun numéro SMS n'est configuré pour cette organisation"
+    : (smsRes.error || 'erreur d’envoi');
+  await createNotification(
+    supabase,
+    automation.org_id,
+    automation.name,
+    `⚠️ SMS non envoyé (${cause}). Message prévu : ${body}`,
+    referenceId,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +541,11 @@ async function handleRecurringInvoices(supabase: SupabaseClient) {
           unit_price_cents: item.unit_price_cents,
           line_total_cents: item.line_total_cents,
         }));
-        await supabase.from('invoice_items').insert(clonedItems);
+        const { error: itemsError } = await supabase.from('invoice_items').insert(clonedItems);
+        if (itemsError) {
+          // Le brouillon existe déjà mais SANS lignes — intervention manuelle requise.
+          console.error(`[scheduler] RECURRING INVOICE ${inv.id}: line items insert FAILED for cloned draft ${cloned.id} (${newInvoiceNumber}) — the draft is EMPTY and must be fixed manually:`, itemsError.message);
+        }
       }
 
       // Update the original invoice's next_recurrence_date
@@ -354,10 +553,15 @@ async function handleRecurringInvoices(supabase: SupabaseClient) {
         inv.next_recurrence_date,
         inv.recurrence_interval,
       );
-      await supabase
+      const { error: nextDateError } = await supabase
         .from('invoices')
         .update({ next_recurrence_date: nextDate })
         .eq('id', inv.id);
+      if (nextDateError) {
+        // Sans cette mise à jour, la facture serait re-clonée à CHAQUE passage du scheduler.
+        console.error(`[scheduler] RECURRING INVOICE ${inv.id}: next_recurrence_date update FAILED (draft ${cloned.id} already created) — risk of duplicate clones on next run:`, nextDateError.message);
+        continue;
+      }
 
       // Create a notification
       await createNotification(
@@ -404,7 +608,7 @@ async function detectOverdueInvoices(supabase: SupabaseClient) {
     // Only emit on specific days to match preset conditions
     if ([1, 3, 5, 15, 30].includes(daysOverdue)) {
       const dedupKey = `overdue:${inv.id}:${daysOverdue}`;
-      if (hasFired('overdue-detection', dedupKey)) continue;
+      if (hasFiredLocal('overdue-detection', dedupKey)) continue;
       markFired('overdue-detection', dedupKey);
 
       await eventBus.emit('invoice.overdue', {
@@ -440,7 +644,7 @@ async function expireOverdueQuotes(supabase: SupabaseClient) {
 
   for (const q of quotes as any[]) {
     const dedupKey = `quote-expire:${q.id}`;
-    if (hasFired('quote-expiry', dedupKey)) continue;
+    if (hasFiredLocal('quote-expiry', dedupKey)) continue;
     markFired('quote-expiry', dedupKey);
 
     await supabase
@@ -591,8 +795,44 @@ export function startScheduler(
   console.log('[scheduler] automation scheduler started (interval: 5 min)');
 
   // Run once immediately, then every 5 minutes
-  tick(supabase, twilioConfig);
-  intervalHandle = setInterval(() => tick(supabase, twilioConfig), INTERVAL_MS);
+  void tickProtege(supabase, twilioConfig);
+  intervalHandle = setInterval(() => void tickProtege(supabase, twilioConfig), INTERVAL_MS);
+}
+
+/** Vrai pendant qu'un tick est en cours dans CE processus. */
+let tickEnCours = false;
+
+/**
+ * Exécute un tick sous double protection.
+ *
+ * 1. `tickEnCours` — garde locale. `setInterval` relance toutes les 5 minutes
+ *    sans se soucier de la durée du tick précédent ; un tick long (les
+ *    handlers font une requête `clients` par ligne) se faisait doubler par le
+ *    suivant.
+ * 2. `withAdvisoryLock` — garde distribuée. Tous les autres crons du produit
+ *    l'utilisent déjà ; celui-ci, qui est pourtant le seul à ENVOYER aux
+ *    clients, en était dépourvu. Avec deux instances, chaque message partait
+ *    en double.
+ *
+ * Le nom du verrou est stable : il identifie le travail, pas l'instance.
+ */
+async function tickProtege(supabase: SupabaseClient, twilio: TwilioConfig | null) {
+  if (tickEnCours) {
+    console.warn('[scheduler] tick précédent encore en cours — passage ignoré');
+    return;
+  }
+  tickEnCours = true;
+  try {
+    const { withAdvisoryLock } = await import('./advisory-lock');
+    const { acquired } = await withAdvisoryLock('automation-scheduler', () => tick(supabase, twilio));
+    if (!acquired) {
+      console.log('[scheduler] tick pris par une autre instance — passage ignoré');
+    }
+  } catch (err: any) {
+    console.error('[scheduler] tick échoué:', err?.message);
+  } finally {
+    tickEnCours = false;
+  }
 }
 
 export function stopScheduler() {

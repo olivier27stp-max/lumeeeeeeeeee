@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
-import { twilioClient, twilioAuthToken, Twilio } from '../lib/config';
+import { twilioClient, twilioAuthToken, Twilio, getTwilioStatusCallbackUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
 import { validate, messageSendSchema } from '../lib/validation';
@@ -67,11 +67,17 @@ router.post('/messages/send', validate(messageSendSchema), async (req, res) => {
     // Find or create conversation
     const conversation = await findOrCreateConversation(serviceClient, orgId, normalizedPhone, client_id, client_name);
 
-    // Send via Twilio from this org's own number
+    // Send via Twilio from this org's own number.
+    // `statusCallback` est indispensable pour recevoir l'accusé de réception :
+    // sans lui, la ligne insérée plus bas reste éternellement à `status: 'sent'`
+    // (= « Twilio a accepté »), même si l'opérateur rejette le message. C'est
+    // POST /api/messages/status qui la fera passer à delivered/failed.
+    const statusCallback = getTwilioStatusCallbackUrl();
     const twilioMessage = await twilioClient.messages.create({
       body: message_text,
       from: fromNumber,
       to: normalizedPhone,
+      ...(statusCallback ? { statusCallback } : {}),
     });
 
     // Save message to database
@@ -200,17 +206,28 @@ router.post('/messages/inbound', (req, res) => {
     (async () => {
       try {
         // Find any org this phone has texted with — best-effort: all orgs with a conversation
-        const { data: convos } = await serviceClient
+        const { data: convos, error: convosError } = await serviceClient
           .from('conversations')
           .select('org_id')
           .eq('phone_number', normalizedPhone);
+        if (convosError) {
+          console.error('[SMS Inbound] Failed to list orgs for opt-out:', convosError.message);
+        }
         const orgIds = Array.from(new Set((convos || []).map((c: any) => c.org_id).filter(Boolean)));
+        let optedOut = 0;
         for (const oid of orgIds) {
-          await serviceClient
+          // CASL : une opposition non enregistrée = on continue de texter
+          // quelqu'un qui a répondu STOP. L'échec doit être bruyant.
+          const { error: optOutError } = await serviceClient
             .from('sms_opt_outs')
             .upsert({ org_id: oid, phone: normalizedPhone, reason: 'client_stop' }, { onConflict: 'org_id,phone' });
+          if (optOutError) {
+            console.error(`[SMS Inbound] STOP not recorded for org ${oid}:`, optOutError.message);
+          } else {
+            optedOut++;
+          }
         }
-        console.log(`[SMS Inbound] Opted-out ${normalizedPhone} from ${orgIds.length} org(s)`);
+        console.log(`[SMS Inbound] Opted-out ${normalizedPhone} from ${optedOut}/${orgIds.length} org(s)`);
       } catch (e: any) {
         console.error('[SMS Inbound] Opt-out handling failed:', e?.message);
       }
@@ -220,8 +237,44 @@ router.post('/messages/inbound', (req, res) => {
   if (startRegex.test(bodyTrim)) {
     (async () => {
       try {
-        await serviceClient.from('sms_opt_outs').delete().eq('phone', normalizedPhone);
-        console.log(`[SMS Inbound] Opt-out removed for ${normalizedPhone}`);
+        // CASL : un START ne réautorise QUE l'org concernée. Un delete global
+        // redonnait le consentement à des entreprises auxquelles la personne
+        // n'avait jamais répondu START.
+        let optInOrgIds: string[] = [];
+        const startTo = req.body?.To;
+        if (startTo) {
+          const { data: channel } = await serviceClient
+            .from('communication_channels')
+            .select('org_id')
+            .eq('phone_number', normalizeE164(startTo))
+            .eq('channel_type', 'sms')
+            .eq('status', 'active')
+            .maybeSingle();
+          if (channel?.org_id) optInOrgIds = [channel.org_id];
+        }
+        if (optInOrgIds.length === 0) {
+          // Numéro plateforme partagé : on se limite aux orgs avec qui la
+          // personne a effectivement une conversation (symétrique du STOP).
+          const { data: convos } = await serviceClient
+            .from('conversations')
+            .select('org_id')
+            .eq('phone_number', normalizedPhone);
+          optInOrgIds = Array.from(new Set((convos || []).map((c: any) => c.org_id).filter(Boolean)));
+        }
+        let optedIn = 0;
+        for (const oid of optInOrgIds) {
+          const { error: optInError } = await serviceClient
+            .from('sms_opt_outs')
+            .delete()
+            .eq('org_id', oid)
+            .eq('phone', normalizedPhone);
+          if (optInError) {
+            console.error(`[SMS Inbound] START not applied for org ${oid}:`, optInError.message);
+          } else {
+            optedIn++;
+          }
+        }
+        console.log(`[SMS Inbound] Opt-out removed for ${normalizedPhone} in ${optedIn}/${optInOrgIds.length} org(s)`);
       } catch (e: any) {
         console.error('[SMS Inbound] Opt-in handling failed:', e?.message);
       }
@@ -239,13 +292,33 @@ router.post('/messages/inbound', (req, res) => {
       }
       phoneVariants.push(phoneDigits);
 
+      // Le tenant, c'est l'org PROPRIÉTAIRE DU NUMÉRO qui a reçu le SMS.
+      // On le résout d'abord et on borne toutes les recherches dessus : avec le
+      // client service_role (aucune RLS), un même numéro de client présent dans
+      // deux orgs pouvait router le message — et la conversation — chez la
+      // mauvaise. Quand le numéro destinataire n'est pas rattaché à une org
+      // (numéro plateforme partagé), on retombe sur la recherche par téléphone,
+      // mais on refuse de deviner si plusieurs orgs correspondent.
+      const To = req.body?.To;
+      let destOrgId: string | null = null;
+      if (To) {
+        const { data: channel } = await serviceClient
+          .from('communication_channels')
+          .select('org_id')
+          .eq('phone_number', normalizeE164(To))
+          .eq('channel_type', 'sms')
+          .eq('status', 'active')
+          .maybeSingle();
+        destOrgId = channel?.org_id || null;
+      }
+
       // Find existing conversation
-      const { data: existingConvo } = await serviceClient
+      let convoQuery = serviceClient
         .from('conversations')
         .select('id, org_id, client_id, client_name')
-        .in('phone_number', phoneVariants)
-        .limit(1)
-        .maybeSingle();
+        .in('phone_number', phoneVariants);
+      if (destOrgId) convoQuery = convoQuery.eq('org_id', destOrgId);
+      const { data: existingConvo } = await convoQuery.limit(1).maybeSingle();
 
       let conversation = existingConvo;
       let orgId = existingConvo?.org_id;
@@ -253,57 +326,51 @@ router.post('/messages/inbound', (req, res) => {
       // No conversation — match client or lead by phone
       if (!conversation) {
         const phoneFilter = phoneVariants.map((p) => `phone.eq.${p}`).join(',');
-        const { data: client } = await serviceClient
+        let clientQuery = serviceClient
           .from('clients')
           .select('id, org_id, first_name, last_name, phone')
           .or(phoneFilter)
-          .is('deleted_at', null)
-          .limit(1)
-          .maybeSingle();
+          .is('deleted_at', null);
+        if (destOrgId) clientQuery = clientQuery.eq('org_id', destOrgId);
+        const { data: clientMatches } = await clientQuery.limit(5);
+
+        // Numéro plateforme partagé + correspondances dans plusieurs orgs :
+        // impossible de trancher sans risquer une fuite entre clients.
+        const matchedOrgIds = Array.from(new Set((clientMatches || []).map((c: any) => c.org_id)));
+        if (!destOrgId && matchedOrgIds.length > 1) {
+          console.warn(
+            `[SMS Inbound] ${normalizedPhone} correspond à ${matchedOrgIds.length} orgs et le numéro destinataire ${To} n'est rattaché à aucune : message ignoré (routage ambigu).`,
+          );
+          return;
+        }
+        const client = (clientMatches || [])[0] || null;
 
         let lead: any = null;
         if (!client) {
-          const { data: leadMatch } = await serviceClient
+          let leadQuery = serviceClient
             .from('clients')
             .select('id, org_id, first_name, last_name, phone')
             .eq('status', 'lead')
             .or(phoneFilter)
-            .is('deleted_at', null)
-            .limit(1)
-            .maybeSingle();
+            .is('deleted_at', null);
+          if (destOrgId) leadQuery = leadQuery.eq('org_id', destOrgId);
+          const { data: leadMatch } = await leadQuery.limit(1).maybeSingle();
           lead = leadMatch;
         }
 
         const matchedEntity = client || lead;
-        orgId = matchedEntity?.org_id || null;
+        orgId = matchedEntity?.org_id || destOrgId || null;
 
-        // No client/lead match → route to the org that owns the receiving Twilio number.
-        // Falling back to "first org in the table" is wrong: it dumps every unknown sender
-        // into Default Organization regardless of which tenant the SMS was actually sent to.
         if (!orgId) {
-          const To = req.body?.To;
-          if (To) {
-            const normalizedTo = normalizeE164(To);
-            const { data: channel } = await serviceClient
-              .from('communication_channels')
-              .select('org_id')
-              .eq('phone_number', normalizedTo)
-              .eq('channel_type', 'sms')
-              .eq('status', 'active')
-              .maybeSingle();
-            orgId = channel?.org_id || null;
-          }
-          if (!orgId) {
-            console.warn(`[SMS Inbound] No org found for destination ${To}; dropping message.`);
-            return;
-          }
+          console.warn(`[SMS Inbound] No org found for destination ${To}; dropping message.`);
+          return;
         }
 
         const clientName = matchedEntity
           ? `${matchedEntity.first_name || ''} ${matchedEntity.last_name || ''}`.trim()
           : null;
 
-        const { data: created } = await serviceClient
+        const { data: created, error: convoError } = await serviceClient
           .from('conversations')
           .insert({
             org_id: orgId,
@@ -313,6 +380,11 @@ router.post('/messages/inbound', (req, res) => {
           })
           .select('id, org_id, client_id, client_name')
           .single();
+
+        if (convoError) {
+          console.error(`[SMS Inbound] Failed to create conversation (org ${orgId}):`, convoError.message);
+          throw convoError; // bubble to withDeadLetter so the SMS isn't lost
+        }
 
         conversation = created;
       }
@@ -381,15 +453,18 @@ router.post('/messages/inbound', (req, res) => {
       // Do NOT increment unread_count here — doing so double-counts and the badge shows 2 for a
       // single inbound message. We only override last_message_text with a truncated preview.
       const truncatedBody = Body.length > 200 ? Body.substring(0, 200) + '...' : Body;
-      await serviceClient
+      const { error: previewError } = await serviceClient
         .from('conversations')
         .update({ last_message_text: truncatedBody })
         .eq('id', conversation.id);
+      if (previewError) {
+        console.error(`[SMS Inbound] Failed to update conversation preview (${conversation.id}):`, previewError.message);
+      }
 
       // Create notification (1 per message, guaranteed by the upsert gate above)
       if (effectiveOrgId) {
         const senderName = (conversation as any).client_name || normalizedPhone;
-        await serviceClient
+        const { error: notifError } = await serviceClient
           .from('notifications')
           .insert({
             org_id: effectiveOrgId,
@@ -397,12 +472,15 @@ router.post('/messages/inbound', (req, res) => {
             ref_id: conversation.id,
             title: `New SMS from ${senderName}`,
             body: Body.length > 100 ? Body.substring(0, 100) + '...' : Body,
-            metadata: {
-              conversation_id: conversation.id,
-              phone_number: normalizedPhone,
-              message_sid: MessageSid,
-            },
+            // `notifications` n'a pas de colonne metadata : l'inclure faisait
+            // echouer l'insertion (aucune notification de SMS entrant). La
+            // conversation reste identifiable par ref_id/entity_id.
+            entity_type: 'conversation',
+            entity_id: conversation.id,
           });
+        if (notifError) {
+          console.error(`[SMS Inbound] Failed to create notification (org ${effectiveOrgId}, conversation ${conversation.id}):`, notifError.message);
+        }
       }
 
       console.log('[SMS Inbound] Processed OK:', { from: normalizedPhone?.slice(-4) ? `***${normalizedPhone.slice(-4)}` : 'unknown', conversation_id: conversation.id });
@@ -471,10 +549,17 @@ router.post('/messages/status', async (req, res) => {
 
     const mappedStatus = statusMap[MessageStatus] || MessageStatus;
 
-    await serviceClient
+    const { error: statusError } = await serviceClient
       .from('messages')
       .update({ status: mappedStatus })
       .eq('provider_message_id', MessageSid);
+
+    // Répondre 200 sur un échec d'écriture ferait perdre l'accusé de réception
+    // définitivement ; un 500 laisse Twilio rejouer le callback.
+    if (statusError) {
+      console.error(`[messages/status] Failed to update ${MessageSid} to ${mappedStatus}:`, statusError.message);
+      return res.status(500).json({ error: 'Failed to persist status update' });
+    }
 
     return res.json({ received: true });
   } catch (error: any) {

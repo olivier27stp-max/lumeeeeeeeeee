@@ -2,9 +2,10 @@ import { Router } from 'express';
 import { sendSafeError } from '../lib/error-handler';
 import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supabase';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
-import { emailFrom, twilioClient } from '../lib/config';
+import { emailFrom, twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getInvoiceForOrg } from '../lib/payments';
 import {
   getConnectedAccount,
@@ -39,13 +40,15 @@ async function getCompanyInfo(orgId: string): Promise<CompanyInfo> {
       .maybeSingle();
     if (data) return { company_name: data.company_name, company_logo_url: data.logo_url, email: data.email, phone: data.phone };
 
-    // Fallback to org_billing_settings
+    // Fallback to org_billing_settings — cette table ne porte ni logo ni
+    // téléphone, et son courriel s'appelle `email_from`.
     const { data: billing } = await admin
       .from('org_billing_settings')
-      .select('company_name, logo_url, email, phone')
+      .select('company_name, email_from')
       .eq('org_id', orgId)
       .maybeSingle();
-    return billing || {};
+    if (!billing) return {};
+    return { company_name: billing.company_name, email: billing.email_from };
   } catch {
     return {};
   }
@@ -166,6 +169,12 @@ async function sendPaymentSms(params: {
 }) {
   if (!twilioClient) return { sent: false, reason: 'Twilio not configured' };
 
+  // Conformité CASL : ne pas relancer par SMS un client qui a répondu STOP.
+  const optOutPhone = normalizeE164(params.clientPhone);
+  if (await isSmsOptedOut(getServiceClient(), params.orgId, optOutPhone)) {
+    return { sent: false, reason: 'Recipient has opted out of SMS (STOP)' };
+  }
+
   let fromNumber: string;
   try {
     fromNumber = await getOrgSmsFromNumber(params.orgId);
@@ -186,10 +195,13 @@ async function sendPaymentSms(params: {
   const body = `${companyName}: Payment of ${amountFormatted} requested for invoice ${params.invoiceNumber}. Pay securely here: ${params.paymentUrl}`;
 
   try {
+    const statusCallback = getTwilioStatusCallbackUrl();
     const msg = await twilioClient.messages.create({
       body,
       from: fromNumber,
       to: normalizeE164(params.clientPhone),
+      // Accusé de réception Twilio (sinon le statut reste figé à « envoyé »).
+      ...(statusCallback ? { statusCallback } : {}),
     });
     return { sent: true, sid: msg.sid };
   } catch (err: any) {

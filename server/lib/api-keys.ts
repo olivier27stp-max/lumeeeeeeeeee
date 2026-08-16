@@ -126,11 +126,12 @@ export async function validateApiKey(rawKey: string): Promise<{
 /** Revoke an API key */
 export async function revokeApiKey(keyId: string, orgId: string, userId: string) {
   const admin = getServiceClient();
-  await admin
+  const { error: revokeErr } = await admin
     .from('api_keys')
     .update({ revoked: true, revoked_at: new Date().toISOString() })
     .eq('id', keyId)
     .eq('org_id', orgId);
+  if (revokeErr) throw new Error('Failed to revoke API key: ' + revokeErr.message);
 
   logSecurityEvent({
     org_id: orgId,

@@ -145,7 +145,7 @@ export default function AccessBlocked({ reason, userEmail, detail }: AccessBlock
                 {fr ? 'Réessayer' : 'Retry'}
               </button>
               <a
-                href="mailto:support@lumecrm.ca"
+                href="mailto:support@lumecrm.net"
                 className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg text-text-tertiary hover:text-text-primary transition-colors"
               >
                 <Mail size={14} />

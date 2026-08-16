@@ -336,7 +336,9 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
     loadActivities();
     // Mark all notifications as read when opening (scoped to current org)
     getCurrentOrgIdOrThrow().then(oid =>
-      supabase.from('notifications').update({ is_read: true }).eq('org_id', oid).eq('is_read', false).then(() => {})
+      supabase.from('notifications').update({ is_read: true }).eq('org_id', oid).eq('is_read', false).then(({ error }) => {
+        if (error) console.error('[activity] failed to mark notifications read', error.message);
+      })
     ).catch(() => {});
 
     // Subscribe to realtime notifications so new ones appear while panel is open
@@ -353,7 +355,9 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
           const newItem = buildNotifItem(payload.new, language);
           setActivities((prev) => [newItem, ...prev].slice(0, 100));
           // Mark as read immediately since panel is open
-          supabase.from('notifications').update({ is_read: true }).eq('id', payload.new.id).then(() => {});
+          supabase.from('notifications').update({ is_read: true }).eq('id', payload.new.id).then(({ error }) => {
+            if (error) console.error('[activity] failed to mark notification read', error.message);
+          });
         }
       )
       .subscribe();

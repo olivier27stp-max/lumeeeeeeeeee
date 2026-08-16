@@ -6,8 +6,12 @@
  */
 
 import type { Express } from 'express';
+import { createRequire } from 'node:module';
 
-// Lazy-load @sentry/node so the dependency is optional until installed
+// Lazy-load @sentry/node so the dependency is optional until installed.
+// Le serveur roule en ESM ("type": "module") : `require` n'existe pas au
+// runtime, il faut le fabriquer via createRequire.
+const nodeRequire = createRequire(import.meta.url);
 let sentryNode: any = null;
 
 export function initSentry(app: Express): void {
@@ -17,12 +21,23 @@ export function initSentry(app: Express): void {
     return;
   }
   try {
-    sentryNode = require('@sentry/node');
+    sentryNode = nodeRequire('@sentry/node');
     sentryNode.init({
       dsn,
       environment: process.env.NODE_ENV || 'development',
       release: process.env.SENTRY_RELEASE || process.env.VERCEL_GIT_COMMIT_SHA,
-      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || '0.1'),
+      // 0.1 (une requête sur dix) est un réglage pour gros trafic : à notre
+      // volume il ne restait presque rien, et la page Insights paraissait
+      // vide. À remonter le jour où le quota Sentry devient contraignant.
+      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE || '1.0'),
+      // Sans ces intégrations, `tracesSampleRate` ne mesure RIEN : c'est ce qui
+      // laissait la page Insights vide. Http instrumente les appels sortants
+      // (Supabase, Stripe, Twilio) — c'est là que se cache la lenteur réelle ;
+      // Express attribue chaque mesure à sa route plutôt qu'à une URL brute.
+      integrations: [
+        new sentryNode.Integrations.Http({ tracing: true }),
+        new sentryNode.Integrations.Express({ app }),
+      ],
       // Filter: never send health checks or auth token fragments
       beforeSend(event: any) {
         if (event.request?.url?.includes('/api/health')) return null;
@@ -31,10 +46,21 @@ export function initSentry(app: Express): void {
         if (event.request?.headers?.authorization) event.request.headers.authorization = '[redacted]';
         return event;
       },
+      // Les transactions ont leur propre filtre : `beforeSend` ne les voit pas.
+      // La sonde de disponibilité tourne toutes les 5 min et noierait les
+      // mesures utiles sous des mesures d'elle-même.
+      beforeSendTransaction(event: any) {
+        const name = event.transaction || '';
+        if (name.includes('/api/health')) return null;
+        return event;
+      },
     });
 
     // Request handler must be the first middleware on the app
     app.use(sentryNode.Handlers?.requestHandler?.() ?? ((_req: any, _res: any, next: any) => next()));
+    // Le tracing handler suit le request handler et précède les routes : c'est
+    // lui qui ouvre une transaction par requête.
+    if (sentryNode.Handlers?.tracingHandler) app.use(sentryNode.Handlers.tracingHandler());
     console.log('[sentry] initialized');
   } catch (e: any) {
     console.warn('[sentry] @sentry/node not installed — run: npm i @sentry/node', e?.message);
@@ -50,5 +76,92 @@ export function captureException(err: unknown, context?: Record<string, any>): v
   if (!sentryNode) return;
   try {
     sentryNode.captureException(err, { extra: context });
+  } catch { /* no-op */ }
+}
+
+/**
+ * Signale l'échec d'une tâche de fond.
+ *
+ * Les crons attrapent leurs erreurs pour ne pas tuer la boucle `setInterval` —
+ * une exception non gérée arrêterait la tâche pour de bon. Mais un `catch` qui
+ * se contente d'un `console.error` rend la panne invisible : les journaux
+ * Railway ne sont lus par personne, et une tâche qui échoue à chaque tick
+ * pendant des semaines n'alerte jamais. Même raisonnement que dans `mailer.ts`.
+ *
+ * Le tag `cron` permet de filtrer par tâche dans Sentry.
+ */
+export function captureCronFailure(cronName: string, err: unknown): void {
+  console.error(`[cron:${cronName}]`, (err as any)?.message || err);
+  if (!sentryNode) return;
+  try {
+    sentryNode.withScope((scope: any) => {
+      scope.setTag('cron', cronName);
+      scope.setLevel('error');
+      sentryNode.captureException(err instanceof Error ? err : new Error(String(err)));
+    });
+  } catch { /* no-op */ }
+}
+
+/**
+ * Exécute une tâche de fond en signalant son passage à Sentry (« check-in »).
+ *
+ * `captureCronFailure` couvre la tâche qui PLANTE. Celle qui ne tourne plus DU
+ * TOUT ne lève rien : pas d'erreur, donc pas d'alerte, alors que les rappels
+ * cessent de partir. C'est le mode de panne le plus silencieux.
+ *
+ * Un check-in `in_progress` puis `ok`/`error` permet à Sentry de détecter les
+ * deux : l'échec, et le silence (« missed check-in ») si aucun passage n'arrive
+ * dans la fenêtre attendue.
+ *
+ * Le moniteur doit exister côté Sentry (Crons → Add Monitor) avec exactement ce
+ * `monitorSlug` ; sinon les check-ins sont ignorés sans erreur. Le code reste
+ * donc sans effet tant que la configuration n'est pas faite — et sans risque.
+ */
+export async function withCronCheckIn<T>(
+  monitorSlug: string,
+  fn: () => Promise<T>,
+): Promise<T | undefined> {
+  let checkInId: string | undefined;
+  try {
+    checkInId = sentryNode?.captureCheckIn?.({ monitorSlug, status: 'in_progress' });
+  } catch { /* no-op */ }
+
+  try {
+    const result = await fn();
+    try {
+      sentryNode?.captureCheckIn?.({ checkInId, monitorSlug, status: 'ok' });
+    } catch { /* no-op */ }
+    return result;
+  } catch (err) {
+    try {
+      sentryNode?.captureCheckIn?.({ checkInId, monitorSlug, status: 'error' });
+    } catch { /* no-op */ }
+    captureCronFailure(monitorSlug, err);
+    return undefined;
+  }
+}
+
+/**
+ * Attache l'org de la requête courante au scope Sentry.
+ *
+ * Appelé depuis `requireAuthedClient`, le point de passage unique de toutes les
+ * routes authentifiées. Sans ça, une alerte Sentry dit quelle ligne a planté
+ * mais pas chez quel client — inexploitable pour le support.
+ *
+ * Volontairement PAS d'email : le nom de l'org identifie déjà le compte, et
+ * c'est une donnée personnelle de moins transmise à un sous-traitant.
+ *
+ * Le nom de l'org n'est pas connu ici (`requireAuthedClient` ne le charge pas,
+ * et une requête de plus par appel API serait un mauvais échange) — il est
+ * résolu côté navigateur par `setSentryOrgContext`. L'`org_id` suffit à relier
+ * les deux.
+ */
+export function setSentryRequestOrg(orgId: string, userId: string): void {
+  if (!sentryNode?.getCurrentHub) return;
+  try {
+    const scope = sentryNode.getCurrentHub().getScope();
+    if (!scope) return;
+    scope.setUser({ id: userId });
+    scope.setTag('org_id', orgId);
   } catch { /* no-op */ }
 }

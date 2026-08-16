@@ -1,0 +1,13 @@
+-- La table jobs n'accorde pas UPDATE à `authenticated` au niveau table : les
+-- droits sont donnés COLONNE PAR COLONNE. La migration 20260802200000, qui a
+-- ajouté billing_mode et auto_charge, a oublié de les accorder.
+--
+-- Conséquence en production : l'écriture du mode de facturation d'un plan de
+-- service échouait TOUJOURS (permission denied), et comme l'appel est en
+-- best-effort avec un simple console.warn, personne ne le voyait. Les 3 plans
+-- de la prod ont billing_mode NULL, donc la facturation par visite — pourtant
+-- l'option par défaut proposée à l'utilisateur — ne s'est jamais déclenchée.
+--
+-- `version` reste volontairement non modifiable : c'est le verrou optimiste,
+-- géré par déclencheur.
+GRANT UPDATE (billing_mode, auto_charge) ON public.jobs TO authenticated;

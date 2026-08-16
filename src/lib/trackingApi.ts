@@ -135,11 +135,12 @@ export async function startTrackingSession(params: {
   source?: TrackingSource;
 }): Promise<TrackingSession> {
   // Close any stale active sessions for this user first
-  await supabase
+  const { error: staleErr } = await supabase
     .from('tracking_sessions')
     .update({ status: 'expired', ended_at: new Date().toISOString() })
     .eq('user_id', params.userId)
     .eq('status', 'active');
+  if (staleErr) console.error('[tracking] failed to expire stale sessions', params.userId, staleErr.message);
 
   const { data, error } = await supabase
     .from('tracking_sessions')
@@ -176,11 +177,12 @@ export async function stopTrackingSession(params: {
   const now = new Date().toISOString();
   const status = params.reason || 'stopped';
 
-  await supabase
+  const { error: stopErr } = await supabase
     .from('tracking_sessions')
     .update({ status, ended_at: now })
     .eq('id', params.sessionId)
     .eq('user_id', params.userId);
+  if (stopErr) console.error('[tracking] failed to close session', params.sessionId, stopErr.message);
 
   await logTrackingEvent({
     orgId: params.orgId,
@@ -191,10 +193,11 @@ export async function stopTrackingSession(params: {
   });
 
   // Mark live location as offline
-  await supabase
+  const { error: offlineErr } = await supabase
     .from('tracking_live_locations')
     .update({ tracking_status: 'offline', session_id: null })
     .eq('user_id', params.userId);
+  if (offlineErr) console.error('[tracking] failed to mark live location offline', params.userId, offlineErr.message);
 }
 
 // ─── Position recording ─────────────────────────────────────────────────────
@@ -217,7 +220,7 @@ export async function recordPosition(params: {
   const isMoving = params.is_moving ?? (params.speed_mps != null ? params.speed_mps > TRACKING_CONFIG.movingSpeedThreshold : true);
 
   // Insert tracking point
-  await supabase.from('tracking_points').insert({
+  const { error: pointErr } = await supabase.from('tracking_points').insert({
     org_id: params.orgId,
     session_id: params.sessionId,
     user_id: params.userId,
@@ -232,12 +235,14 @@ export async function recordPosition(params: {
     job_id: params.job_id ?? null,
     recorded_at: now,
   });
+  if (pointErr) console.error('[tracking] tracking_points insert failed', pointErr.message);
 
   // Update session stats
-  await supabase
+  const { error: statsErr } = await supabase
     .from('tracking_sessions')
     .update({ last_point_at: now, point_count: undefined }) // point_count incremented via RPC or trigger
     .eq('id', params.sessionId);
+  if (statsErr) console.error('[tracking] session stats update failed', params.sessionId, statsErr.message);
 
   // Upsert live location
   await upsertLiveLocation({
@@ -301,7 +306,7 @@ export async function logTrackingEvent(params: {
   longitude?: number | null;
   details?: Record<string, any> | null;
 }): Promise<void> {
-  await supabase.from('tracking_events').insert({
+  const { error } = await supabase.from('tracking_events').insert({
     org_id: params.orgId,
     session_id: params.sessionId ?? null,
     user_id: params.userId,
@@ -311,6 +316,7 @@ export async function logTrackingEvent(params: {
     longitude: params.longitude ?? null,
     details: params.details ?? null,
   });
+  if (error) console.error('[tracking] event insert failed', params.eventType, error.message);
 }
 
 // ─── Admin queries ──────────────────────────────────────────────────────────

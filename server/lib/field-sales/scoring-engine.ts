@@ -193,12 +193,16 @@ export async function scoreAllTerritories(
 ): Promise<void> {
   const p = profile ?? DEFAULT_PROFILE;
 
-  const { data: territories } = await admin
+  const { data: territories, error: terErr } = await admin
     .from('field_territories')
     .select('id, assigned_user_id')
     .eq('org_id', orgId)
     .is('deleted_at', null);
 
+  if (terErr) {
+    console.error(`[scoring] territories load failed (org ${orgId}):`, terErr.message);
+    return;
+  }
   if (!territories?.length) return;
 
   const now = new Date();
@@ -207,20 +211,30 @@ export async function scoreAllTerritories(
 
   for (const ter of territories) {
     // Get pins in territory
-    const { data: pins } = await admin
+    const { data: pins, error: pinsErr } = await admin
       .from('field_house_profiles')
       .select('id, current_status, last_activity_at, reknock_priority_score, visit_count, quote_id, lead_id')
       .eq('org_id', orgId)
       .eq('territory_id', ter.id)
       .is('deleted_at', null);
 
+    // Une lecture ratée passerait pour « 0 pin » et remettrait le score de la
+    // zone à zéro : on saute la zone au lieu d'écraser ses scores.
+    if (pinsErr) {
+      console.error(`[scoring] pins load failed (org ${orgId}, territory ${ter.id}):`, pinsErr.message);
+      continue;
+    }
+
     const totalPins = pins?.length ?? 0;
     if (totalPins === 0) {
-      await admin.from('field_territories').update({
+      const { error: resetErr } = await admin.from('field_territories').update({
         territory_score: 0, fatigue_score: 0, coverage_percent: 0,
         total_pins: 0, active_leads: 0, close_rate: 0,
         last_scored_at: now.toISOString(),
       }).eq('id', ter.id);
+      if (resetErr) {
+        console.error(`[scoring] empty-territory reset failed (org ${orgId}, territory ${ter.id}):`, resetErr.message);
+      }
       continue;
     }
 
@@ -238,7 +252,7 @@ export async function scoreAllTerritories(
       if (pin.current_status === 'no_answer') recentNoAnswers++;
       if (pin.current_status === 'lead' || pin.lead_id) leads++;
       if (pin.quote_id) quotes++;
-      if (pin.current_status === 'sold') sales++;
+      if (pin.current_status === 'sale') sales++;
       if (pin.visit_count > 0) totalVisited++;
       if (pin.last_activity_at) {
         const d = new Date(pin.last_activity_at);
@@ -302,7 +316,7 @@ export async function scoreAllTerritories(
       total_visits: totalVisited,
     });
 
-    await admin.from('field_territories').update({
+    const { error: scoreErr } = await admin.from('field_territories').update({
       territory_score: score,
       fatigue_score: fatigue,
       coverage_percent: Math.round(coverage * 10) / 10,
@@ -311,6 +325,9 @@ export async function scoreAllTerritories(
       close_rate: Math.round(closeRate * 10) / 10,
       last_scored_at: now.toISOString(),
     }).eq('id', ter.id);
+    if (scoreErr) {
+      console.error(`[scoring] territory score update failed (org ${orgId}, territory ${ter.id}):`, scoreErr.message);
+    }
   }
 }
 
@@ -325,12 +342,16 @@ export async function scoreAllPins(
 ): Promise<void> {
   const p = profile ?? DEFAULT_PROFILE;
 
-  const { data: pins } = await admin
+  const { data: pins, error: pinsErr } = await admin
     .from('field_house_profiles')
     .select('id, current_status, last_activity_at, visit_count, territory_id, lat, lng, quote_id, lead_id, job_id')
     .eq('org_id', orgId)
     .is('deleted_at', null);
 
+  if (pinsErr) {
+    console.error(`[scoring] houses load failed (org ${orgId}):`, pinsErr.message);
+    return;
+  }
   if (!pins?.length) return;
 
   const now = new Date();
@@ -350,12 +371,15 @@ export async function scoreAllPins(
       : 999;
 
     // Skip pins that don't need reknocking
-    if (['sold', 'cancelled', 'do_not_knock', 'not_interested'].includes(pin.current_status)) {
-      await admin.from('field_house_profiles').update({
+    if (['sale', 'do_not_knock', 'not_interested'].includes(pin.current_status)) {
+      const { error: skipErr } = await admin.from('field_house_profiles').update({
         reknock_priority_score: 0,
-        ai_next_action: pin.current_status === 'sold' ? 'Completed' : 'No action needed',
+        ai_next_action: pin.current_status === 'sale' ? 'Completed' : 'No action needed',
         last_scored_at: now.toISOString(),
       }).eq('id', pin.id);
+      if (skipErr) {
+        console.error(`[scoring] closed-house score reset failed (org ${orgId}, house ${pin.id}):`, skipErr.message);
+      }
       continue;
     }
 
@@ -390,11 +414,14 @@ export async function scoreAllPins(
       unknown: 'Visit to assess opportunity',
     };
 
-    await admin.from('field_house_profiles').update({
+    const { error: pinScoreErr } = await admin.from('field_house_profiles').update({
       reknock_priority_score: score,
       ai_next_action: NEXT_ACTIONS[pin.current_status] ?? 'Visit house',
       last_scored_at: now.toISOString(),
     }).eq('id', pin.id);
+    if (pinScoreErr) {
+      console.error(`[scoring] house score update failed (org ${orgId}, house ${pin.id}):`, pinScoreErr.message);
+    }
   }
 }
 
@@ -409,13 +436,17 @@ async function getRepScore(
 ): Promise<number> {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
 
-  const { data: stats } = await admin
+  const { data: stats, error: statsErr } = await admin
     .from('field_daily_stats')
     .select('knocks, leads, sales')
     .eq('org_id', orgId)
     .eq('user_id', userId)
     .gte('date', thirtyDaysAgo);
 
+  if (statsErr) {
+    console.error(`[scoring] rep stats load failed (org ${orgId}, user ${userId}):`, statsErr.message);
+    return 50;
+  }
   if (!stats?.length) return 50;
 
   const totals = stats.reduce(

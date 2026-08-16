@@ -223,8 +223,10 @@ router.put('/commissions/rules/:id', async (req, res) => {
     'attribution', 'assigned_user_ids',
   ];
   const payload: Record<string, any> = {};
+  // `!= null` : un null explicite du client atteignait sinon des colonnes
+  // NOT NULL (name, is_active, priority) → 23502.
   for (const key of ALLOWED) {
-    if (req.body[key] !== undefined) payload[key] = req.body[key];
+    if (req.body[key] != null) payload[key] = req.body[key];
   }
   if (Object.keys(payload).length === 0) return res.status(400).json({ error: 'No editable fields provided.' });
 
@@ -294,9 +296,10 @@ router.delete('/commissions/rules/:id', async (req, res) => {
   if (!auth) return;
   try {
     const sc = getServiceClient();
-    await sc.from('fs_commission_rules')
+    const { error } = await sc.from('fs_commission_rules')
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', req.params.id).eq('org_id', auth.orgId);
+    if (error) throw new Error(error.message);
     res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');

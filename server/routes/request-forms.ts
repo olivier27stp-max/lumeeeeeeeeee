@@ -10,6 +10,22 @@ import { sendEmail } from '../lib/mailer';
 
 const router = Router();
 
+/**
+ * Échappe le HTML avant insertion dans un courriel.
+ *
+ * Les valeurs viennent d'un formulaire PUBLIC : sans échappement, un nom
+ * contenant du balisage serait interprété dans la boîte de réception du
+ * destinataire.
+ */
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── GET /request-forms — fetch the org's form ─────────────────────
 router.get('/request-forms', async (req, res) => {
   try {
@@ -538,7 +554,13 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
 
       if (dealError) {
         // Roll back lead-client on deal failure
-        await admin.from('clients').update({ deleted_at: new Date().toISOString() }).eq('id', leadIdStr);
+        const { error: rollbackErr } = await admin.from('clients')
+          .update({ deleted_at: new Date().toISOString() })
+          .eq('id', leadIdStr);
+        // Rollback rate = un client orphelin sans carte pipeline reste en base.
+        if (rollbackErr) {
+          console.error('[public/form] lead rollback failed:', { clientId: leadIdStr, orgId, error: rollbackErr.message });
+        }
         throw dealError;
       }
       dealId = dealInsert?.id ? String(dealInsert.id) : null;
@@ -673,6 +695,72 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
         }
       } catch (e: any) {
         console.error('[public/form] email notification failed:', e?.message);
+      }
+    }
+
+    // 4d. Accusé de réception au VISITEUR qui vient de soumettre.
+    //
+    // Jusqu'ici, seule l'org était prévenue (4b in-app, 4c email) : la
+    // personne qui remplissait le formulaire public ne recevait strictement
+    // rien et n'avait aucun moyen de savoir si sa demande était passée. Le
+    // seul retour possible venait de l'automatisation « bienvenue nouveau
+    // lead », qui n'envoie qu'un SMS — donc rien du tout pour un visiteur
+    // sans téléphone, ou pour une org sans numéro provisionné.
+    //
+    // Envoyé au nom de l'entreprise (nom d'affichage + réponse dirigée vers
+    // sa propre boîte), jamais au nom de Lume : c'est le client de l'org qui
+    // reçoit ce message. L'adresse d'expédition reste celle, vérifiée, de la
+    // plateforme — sinon SPF/DKIM casse.
+    //
+    // Fire-and-forget : un échec d'envoi ne doit jamais faire échouer une
+    // soumission déjà enregistrée.
+    step = 'visitor-ack';
+    if (body.email) {
+      try {
+        const { getCompanySettings, buildEmailLayout, senderFor } = await import('./emails');
+        const company = await getCompanySettings(orgId);
+        const companyName = company.company_name || 'notre équipe';
+
+        // Langue du visiteur inconnue (aucune colonne de langue sur les
+        // destinataires externes) : on suit celle de l'org, défaut fr.
+        const lang = actorLang;
+        const subject = lang === 'fr'
+          ? `Nous avons bien reçu votre demande — ${companyName}`
+          : `We received your request — ${companyName}`;
+
+        const bodyHtml = lang === 'fr'
+          ? `<p style="margin:0 0 16px;font-size:15px;">Bonjour ${escapeHtml(body.first_name)},</p>
+             <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+               Merci pour votre demande. Nous l'avons bien reçue et nous vous
+               reviendrons dans les plus brefs délais.</p>
+             <p style="margin:0 0 8px;font-size:14px;color:#666;">Récapitulatif :</p>
+             <p style="margin:0 0 16px;font-size:14px;color:#333;">
+               ${escapeHtml(fullName)}${contactLine ? `<br/>${escapeHtml(contactLine)}` : ''}</p>
+             <p style="margin:16px 0 0;font-size:14px;color:#666;">
+               Ce courriel confirme la réception de votre demande — aucune action
+               n'est requise de votre part.</p>`
+          : `<p style="margin:0 0 16px;font-size:15px;">Hi ${escapeHtml(body.first_name)},</p>
+             <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
+               Thanks for reaching out. We received your request and will get
+               back to you shortly.</p>
+             <p style="margin:0 0 8px;font-size:14px;color:#666;">Summary:</p>
+             <p style="margin:0 0 16px;font-size:14px;color:#333;">
+               ${escapeHtml(fullName)}${contactLine ? `<br/>${escapeHtml(contactLine)}` : ''}</p>
+             <p style="margin:16px 0 0;font-size:14px;color:#666;">
+               This email confirms we received your request — no action needed
+               on your side.</p>`;
+
+        const ack = await sendEmail({
+          ...senderFor(company),
+          to: body.email,
+          subject,
+          html: buildEmailLayout(company, bodyHtml),
+        });
+        if (!ack.sent) {
+          console.error('[public/form] accusé de réception non envoyé:', ack.error);
+        }
+      } catch (e: any) {
+        console.error('[public/form] accusé de réception échoué:', e?.message);
       }
     }
 

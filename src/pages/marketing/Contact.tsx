@@ -109,8 +109,8 @@ export default function Contact() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-[#111]">{c.email}</p>
-                  <a href="mailto:support@lumecrm.ca" className="text-sm text-text-secondary hover:text-[#111] transition-colors">
-                    support@lumecrm.ca
+                  <a href="mailto:support@lumecrm.net" className="text-sm text-text-secondary hover:text-[#111] transition-colors">
+                    support@lumecrm.net
                   </a>
                 </div>
               </div>

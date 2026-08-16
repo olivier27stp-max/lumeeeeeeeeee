@@ -122,6 +122,11 @@ router.post('/agent/webhook', express.json({ limit: '64kb' }), async (req, res) 
   if (typeof content !== 'string' || !content.trim()) {
     return res.status(400).json({ error: 'content is required' });
   }
+  // agent_messages.session_id est NOT NULL — rejeter tôt plutôt que 23502.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (typeof sessionId !== 'string' || !UUID_RE.test(sessionId)) {
+    return res.status(400).json({ error: 'sessionId (uuid) is required' });
+  }
   if (content.length > 16_000) {
     return res.status(413).json({ error: 'content too large' });
   }
@@ -131,7 +136,7 @@ router.post('/agent/webhook', express.json({ limit: '64kb' }), async (req, res) 
     .from('agent_messages')
     .insert({
       org_id: ctx.orgId,                              // tamper-proof — from JWT only
-      session_id: sessionId || null,
+      session_id: sessionId,
       role: role === 'assistant' ? 'assistant' : role === 'system' ? 'system' : 'tool',
       content: content.trim(),
       message_type: messageType || 'text',

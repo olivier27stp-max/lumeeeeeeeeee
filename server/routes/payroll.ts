@@ -144,7 +144,9 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
   const active = (members || []).filter((m: any) => m.status !== 'inactive');
   const userIds = active.map((m: any) => m.user_id);
 
-  const { data: entries } = userIds.length
+  // Une lecture en échec renverrait `data: null` sans lever : les heures et les
+  // commissions tomberaient à zéro et la paie serait sous-évaluée en silence.
+  const { data: entries, error: entriesErr } = userIds.length
     ? await sc
         .from('time_entries')
         .select('employee_id, punch_in_at, punch_out_at, breaks, status')
@@ -153,9 +155,10 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
         .in('employee_id', userIds)
         .gte('punch_in_at', fromIso)
         .lte('punch_in_at', toIso)
-    : { data: [] as any[] };
+    : { data: [] as any[], error: null };
+  if (entriesErr) throw new Error(entriesErr.message);
 
-  const { data: commissions } = userIds.length
+  const { data: commissions, error: commErr } = userIds.length
     ? await sc
         .from('fs_commission_entries')
         .select('user_id, amount, status')
@@ -164,7 +167,8 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
         .in('user_id', userIds)
         .gte('created_at', fromIso)
         .lte('created_at', toIso)
-    : { data: [] as any[] };
+    : { data: [] as any[], error: null };
+  if (commErr) throw new Error(commErr.message);
 
   // Adjustments/payments tables ship behind a migration — degrade gracefully.
   let adjustments: any[] = [];

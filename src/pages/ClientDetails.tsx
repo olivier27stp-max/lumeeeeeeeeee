@@ -350,7 +350,10 @@ export default function ClientDetails() {
     setNotesSaving(true);
     try {
       const orgId = await getCurrentOrgIdOrThrow();
-      await supabase.from('clients').update({ notes }).eq('id', client.id).eq('org_id', orgId);
+      // supabase-js ne lève pas : sans lire `error`, un refus RLS affichait
+      // « Notes enregistrées » alors que rien n'avait été écrit.
+      const { error } = await supabase.from('clients').update({ notes }).eq('id', client.id).eq('org_id', orgId);
+      if (error) throw error;
       toast.success(language === 'fr' ? 'Notes enregistrées' : 'Notes saved');
       setNotesEdited(false);
     } catch {
@@ -423,8 +426,14 @@ export default function ClientDetails() {
     if (!trimmed || !client) return;
     if (tags.includes(trimmed)) { setNewTag(''); setShowTagInput(false); return; }
     try {
-      await supabase.from('client_tags').insert({ client_id: client.id, tag: trimmed });
-    } catch { /* table may not exist */ }
+      const { error } = await supabase.from('client_tags').insert({ client_id: client.id, tag: trimmed });
+      if (error) throw error;
+    } catch (err: any) {
+      // Sans cette lecture, le tag s'affichait sans jamais être enregistré.
+      console.error('[clients] ajout de tag échoué:', err?.message ?? err);
+      toast.error(language === 'fr' ? "Impossible d'ajouter le tag" : 'Failed to add tag');
+      return;
+    }
     setTags((prev) => [...prev, trimmed]);
     setNewTag('');
     setShowTagInput(false);
@@ -435,7 +444,10 @@ export default function ClientDetails() {
     const previous = tags;
     setTags((prev) => prev.filter((tg) => tg !== tag));
     try {
-      await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
+      // Idem : un refus renvoyait `error` sans lever, donc le tag disparaissait
+      // de l'écran tout en restant en base.
+      const { error } = await supabase.from('client_tags').delete().eq('client_id', client.id).eq('tag', tag);
+      if (error) throw error;
     } catch {
       setTags(previous);
       toast.error(t.clientDetails.failedToRemoveTag);

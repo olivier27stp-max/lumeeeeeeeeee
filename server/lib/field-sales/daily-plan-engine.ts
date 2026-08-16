@@ -101,7 +101,7 @@ export async function generateDailyPlan(
     .select('id, address, current_status, reknock_priority_score, ai_next_action, territory_id')
     .eq('org_id', orgId)
     .is('deleted_at', null)
-    .not('current_status', 'in', '("sold","cancelled","do_not_knock","not_interested")')
+    .not('current_status', 'in', '("sale","do_not_knock","not_interested")')
     .order('reknock_priority_score', { ascending: false })
     .limit(30);
 

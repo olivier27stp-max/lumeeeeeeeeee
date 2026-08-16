@@ -50,13 +50,14 @@ export async function createDateSlot(input: DateSlotInput): Promise<DateSlotReco
   const orgId = await getCurrentOrgIdOrThrow();
 
   // Remove existing duplicate to avoid unique constraint violation
-  await supabase
+  const { error: dedupeErr } = await supabase
     .from('team_date_slots')
     .delete()
     .eq('team_id', input.team_id)
     .eq('slot_date', input.slot_date)
     .eq('start_time', input.start_time)
     .eq('end_time', input.end_time);
+  if (dedupeErr) throw dedupeErr;
 
   const { data, error } = await supabase
     .from('team_date_slots')
@@ -120,13 +121,14 @@ export async function bulkCreateDateSlots(
 
   // Delete existing slots for these dates first to avoid duplicates
   for (const d of dates) {
-    await supabase
+    const { error: dedupeErr } = await supabase
       .from('team_date_slots')
       .delete()
       .eq('team_id', teamId)
       .eq('slot_date', d)
       .eq('start_time', startTime)
       .eq('end_time', endTime);
+    if (dedupeErr) throw dedupeErr;
   }
 
   const rows = dates.map((d) => ({

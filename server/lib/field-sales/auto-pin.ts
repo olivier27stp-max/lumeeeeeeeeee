@@ -116,11 +116,16 @@ export async function autoCreateOrMergePin(
   // 1. Check for existing house: same normalized address (unique per org —
   //    covers houses created by the clients auto-pin trigger/backfill that are
   //    still waiting for geocoding, lat/lng null) or within 50m
-  const { data: nearby } = await admin
+  const { data: nearby, error: nearbyErr } = await admin
     .from('field_house_profiles')
     .select('id, address_normalized, lat, lng, client_id, lead_id, quote_id, job_id, territory_id, metadata, current_status')
     .eq('org_id', org_id)
     .is('deleted_at', null);
+  // Sans cette lecture la détection de doublon (adresse + rayon 50 m) est
+  // aveugle : on créerait une seconde maison au lieu de fusionner.
+  if (nearbyErr) {
+    throw new Error(`Failed to load houses for org ${org_id}: ${nearbyErr.message}`);
+  }
 
   let existingHouse = (nearby ?? []).find(
     (h: any) =>
@@ -167,7 +172,10 @@ export async function autoCreateOrMergePin(
       updates.metadata = { ...((existingHouse as any).metadata || {}), geocode_status: 'resolved' };
     }
 
-    await admin.from('field_house_profiles').update(updates).eq('id', houseId);
+    const { error: mergeErr } = await admin.from('field_house_profiles').update(updates).eq('id', houseId);
+    if (mergeErr) {
+      throw new Error(`Failed to merge house ${houseId} (org ${org_id}, ${entity_type} ${entity_id}): ${mergeErr.message}`);
+    }
   } else {
     // Create new house
     isNew = true;
@@ -234,7 +242,7 @@ export async function autoCreateOrMergePin(
       if ((raced as any).current_status === 'sale' && resolvedStatus !== 'sale') {
         effectiveStatus = 'sale';
       }
-      await admin.from('field_house_profiles').update({
+      const { error: racedErr } = await admin.from('field_house_profiles').update({
         current_status: effectiveStatus,
         last_activity_at: now,
         updated_at: now,
@@ -243,6 +251,9 @@ export async function autoCreateOrMergePin(
         ...(houseData.quote_id ? { quote_id: houseData.quote_id } : {}),
         ...(houseData.job_id ? { job_id: houseData.job_id } : {}),
       }).eq('id', houseId);
+      if (racedErr) {
+        throw new Error(`Failed to merge raced house ${houseId} (org ${org_id}, ${entity_type} ${entity_id}): ${racedErr.message}`);
+      }
     } else if (error || !house) {
       throw new Error(`Failed to create house: ${error?.message}`);
     } else {
@@ -262,14 +273,17 @@ export async function autoCreateOrMergePin(
 
   let pinId: string;
   if (existingPin) {
-    await admin.from('field_pins').update({
+    const { error: pinUpdErr } = await admin.from('field_pins').update({
       status: pinStatus,
       pin_color: pinColor,
       updated_at: now,
     }).eq('id', existingPin.id);
+    if (pinUpdErr) {
+      console.error(`[auto-pin] pin update failed (org ${org_id}, house ${houseId}, pin ${existingPin.id}):`, pinUpdErr.message);
+    }
     pinId = existingPin.id;
   } else {
-    const { data: pin } = await admin.from('field_pins').insert({
+    const { data: pin, error: pinInsErr } = await admin.from('field_pins').insert({
       org_id,
       house_id: houseId,
       user_id,
@@ -277,20 +291,28 @@ export async function autoCreateOrMergePin(
       pin_color: pinColor,
       has_note: false,
     }).select('id').single();
-    pinId = pin?.id ?? '';
+    // Sans ligne field_pins la maison n'apparaît pas sur la carte : c'est un
+    // échec de l'opération, pas un détail cosmétique.
+    if (pinInsErr || !pin) {
+      throw new Error(`Failed to create pin for house ${houseId} (org ${org_id}): ${pinInsErr?.message}`);
+    }
+    pinId = pin.id;
   }
 
   // 3. Create entity link
-  await admin.from('field_pin_entity_links').upsert({
+  const { error: linkErr } = await admin.from('field_pin_entity_links').upsert({
     org_id,
     house_id: houseId,
     entity_type,
     entity_id,
     linked_at: now,
   }, { onConflict: 'org_id,house_id,entity_type,entity_id' });
+  if (linkErr) {
+    console.error(`[auto-pin] entity link failed (org ${org_id}, house ${houseId}, ${entity_type} ${entity_id}):`, linkErr.message);
+  }
 
   // 4. Create event
-  await admin.from('field_house_events').insert({
+  const { error: eventErr } = await admin.from('field_house_events').insert({
     org_id,
     house_id: houseId,
     user_id,
@@ -299,6 +321,9 @@ export async function autoCreateOrMergePin(
     metadata: { auto_linked: true, entity_type, entity_id, status: effectiveStatus },
     created_at: now,
   });
+  if (eventErr) {
+    console.error(`[auto-pin] event insert failed (org ${org_id}, house ${houseId}, ${entity_type} ${entity_id}):`, eventErr.message);
+  }
 
   const linked = [entity_type];
   if (input.client_id) linked.push('client');

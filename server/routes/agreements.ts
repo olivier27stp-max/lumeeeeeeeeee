@@ -5,7 +5,8 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { resolvePublicBaseUrl } from '../lib/helpers';
 import { sendSafeError } from '../lib/error-handler';
 import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
-import { twilioClient } from '../lib/config';
+import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
+import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import {
   getPlatformStripe,
@@ -14,6 +15,9 @@ import {
   getOrCreatePlatformCustomerForClient,
   saveCardOnFileFromIntent,
 } from '../lib/stripe-connect';
+import { createDepositIntent, verifyDepositIntent, DepositPaymentError } from '../lib/depositPayments';
+import { eventBus } from '../lib/eventBus';
+import { getCompanyBranding } from '../lib/companyBranding';
 
 const router = Router();
 
@@ -235,14 +239,16 @@ router.get('/agreements/public/:token', async (req, res) => {
     // numéro via le devis.
     let refNumber: string | null = null;
     let entityClientId: string | null = agreement.client_id || null;
+    let depositStatus: string | null = null;
     if (agreement.job_id) {
       const { data: job } = await admin
         .from('jobs')
-        .select('job_number, client_id')
+        .select('job_number, client_id, deposit_status')
         .eq('id', agreement.job_id)
         .maybeSingle();
       refNumber = job?.job_number ? String(job.job_number) : null;
       entityClientId = entityClientId || job?.client_id || null;
+      depositStatus = job?.deposit_status || null;
     } else if (agreement.quote_id) {
       // Legacy read-only row — only reachable when signed (frozen snapshot).
       const { data: quote } = await admin
@@ -255,11 +261,11 @@ router.get('/agreements/public/:token', async (req, res) => {
     }
 
     // Company branding (of the agreement's org — multi-tenant safe)
-    const { data: companyData } = await admin
-      .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code')
-      .eq('org_id', agreement.org_id)
-      .maybeSingle();
+    const companyData = await getCompanyBranding(
+      admin,
+      agreement.org_id,
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, brand_color',
+    );
     let taxRegistrationLines: string[] = [];
     try {
       const { data: taxes } = await admin
@@ -360,10 +366,15 @@ router.get('/agreements/public/:token', async (req, res) => {
         email: companyData?.email || null,
         website: companyData?.website || null,
         tax_lines: taxRegistrationLines,
+        // Accent des documents client. null = encre noire, le défaut.
+        brand_color: companyData?.brand_color || null,
       },
       client,
       doc,
       payment_method: paymentMethod,
+      // Le client peut revenir sur le lien après coup : la page doit savoir
+      // si le dépôt reste à payer, pas seulement s'il en existe un.
+      deposit_status: depositStatus,
     });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to load agreement.', '[agreements/public/get]');
@@ -577,7 +588,7 @@ router.post('/agreements/public/sign', async (req, res) => {
       .maybeSingle();
     refNumber = job?.job_number ? String(job.job_number) : '';
     try {
-      await admin.from('notifications').insert({
+      const { error: notifErr } = await admin.from('notifications').insert({
         org_id: agreement.org_id,
         type: 'agreement_signed',
         title: `${signer_name} signed the contract for job #${refNumber}`.trim(),
@@ -585,11 +596,254 @@ router.post('/agreements/public/sign', async (req, res) => {
         icon: 'check-circle',
         reference_id: agreement.job_id,
       });
+      // supabase-js ne lève pas : sans cette lecture, le catch
+      // ci-dessous n'attrape rien et la notification disparaît en silence.
+      if (notifErr) console.error('[agreements] notification non créée:', notifErr.message);
     } catch { /* non-critical */ }
 
-    return res.json({ ok: true, status: 'signed' });
+    // Le client vient de signer : c'est le moment de lui confirmer, avec sa
+    // copie et le dépôt s'il en reste un. Passe par le moteur d'automatisation
+    // (preset « agreement_signed ») pour rester modifiable et débrayable.
+    eventBus.emit('agreement.signed', {
+      orgId: agreement.org_id,
+      entityType: 'job',
+      entityId: agreement.job_id,
+      metadata: { agreement_id: agreement.id, signer_name, job_number: refNumber },
+      relatedEntityType: 'job_agreement',
+      relatedEntityId: agreement.id,
+    });
+
+    // Le dépôt à verser, tel que gelé dans le document signé — la page
+    // enchaîne directement sur le paiement quand il y en a un.
+    const terms = (snapshot as { payment_terms?: { deposit_required?: boolean; deposit_cents?: number } } | null)?.payment_terms;
+    const depositCents = terms?.deposit_required ? Number(terms.deposit_cents || 0) : 0;
+
+    return res.json({
+      ok: true,
+      status: 'signed',
+      deposit_due: depositCents > 0,
+      deposit_cents: depositCents,
+    });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to sign agreement.', '[agreements/public/sign]');
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// PUBLIC: pay the deposit once the contract is signed
+//
+// Signer sans pouvoir payer obligeait le client à attendre une facture
+// séparée — le moment où il est le plus disposé à payer était perdu.
+// ══════════════════════════════════════════════════════════════
+
+const publicDepositSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+});
+const publicDepositConfirmSchema = publicDepositSchema.extend({
+  payment_intent_id: z.string().trim().min(1).max(200),
+});
+
+/**
+ * Le contrat, sa job, et le dépôt dû — recalculé côté serveur.
+ *
+ * Une fois signé, le montant vient du `snapshot` gelé : c'est celui que le
+ * client a accepté, même si la job a bougé depuis.
+ */
+async function loadAgreementDeposit(viewToken: string) {
+  const admin = getServiceClient();
+  const { data: agreement } = await admin
+    .from('job_agreements')
+    .select('id, org_id, job_id, client_id, status, require_signature, snapshot')
+    .eq('view_token', viewToken)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (!agreement) throw new DepositPaymentError(404, 'Agreement not found.');
+  if (!agreement.job_id) throw new DepositPaymentError(400, 'This agreement is no longer active.');
+  if (agreement.require_signature && agreement.status !== 'signed') {
+    throw new DepositPaymentError(400, 'Sign the contract before paying the deposit.');
+  }
+
+  const { data: job } = await admin
+    .from('jobs')
+    .select('id, job_number, currency, deposit_status')
+    .eq('id', agreement.job_id)
+    .maybeSingle();
+  if (!job) throw new DepositPaymentError(404, 'Job not found.');
+  if (job.deposit_status === 'paid') throw new DepositPaymentError(400, 'The deposit is already paid.');
+
+  const doc = agreement.snapshot ?? (await composeLiveDoc(admin, agreement));
+  const terms = (doc as { payment_terms?: { deposit_required?: boolean; deposit_cents?: number } } | null)?.payment_terms;
+  const depositCents = terms?.deposit_required ? Math.round(Number(terms.deposit_cents || 0)) : 0;
+  if (depositCents <= 0) throw new DepositPaymentError(400, 'No deposit payment required.');
+
+  return { admin, agreement, job, depositCents };
+}
+
+router.post('/agreements/public/deposit-intent', async (req, res) => {
+  try {
+    const parsed = publicDepositSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsed.error.issues.map(i => i.message) });
+    }
+    const { admin, agreement, job, depositCents } = await loadAgreementDeposit(parsed.data.view_token);
+
+    // L'exigence de paiement, pour que le CRM sache qu'un dépôt est attendu.
+    const { data: existing } = await admin
+      .from('payment_requirements')
+      .select('id')
+      .eq('entity_type', 'job')
+      .eq('entity_id', job.id)
+      .eq('requirement_type', 'deposit')
+      .in('status', ['pending', 'authorized'])
+      .maybeSingle();
+
+    let requirementId = existing?.id ?? '';
+    if (!requirementId) {
+      const { data: created } = await admin
+        .from('payment_requirements')
+        .insert({
+          org_id: agreement.org_id,
+          entity_type: 'job',
+          entity_id: job.id,
+          requirement_type: 'deposit',
+          amount_cents: depositCents,
+          currency: (job.currency || 'CAD').toUpperCase(),
+          status: 'pending',
+        })
+        .select('id')
+        .maybeSingle();
+      requirementId = created?.id ?? '';
+    }
+
+    // Un dépôt est réclamé : la job doit le refléter. Les lignes créées avant
+    // que le mobile ne renseigne la colonne restaient à 'not_required', donc
+    // rien ne comptait le dépôt comme dû dans le CRM.
+    if (job.deposit_status !== 'pending') {
+      const { error: pendingErr } = await admin
+        .from('jobs').update({ deposit_status: 'pending' }).eq('id', job.id);
+      // Non bloquant : l'intention de paiement se crée quand même, le client
+      // peut payer. Mais sans trace, le dépôt resterait invisible dans le CRM.
+      if (pendingErr) {
+        console.error('[agreements] dépôt dû non enregistré sur la job', {
+          job_id: job.id, erreur: pendingErr.message,
+        });
+      }
+    }
+
+    const intent = await createDepositIntent({
+      orgId: agreement.org_id,
+      amountCents: depositCents,
+      currency: job.currency || 'CAD',
+      metadata: {
+        org_id: agreement.org_id,
+        job_id: job.id,
+        agreement_id: agreement.id,
+        entity_type: 'job_deposit',
+        job_number: job.job_number ? String(job.job_number) : '',
+        client_id: agreement.client_id || '',
+        payment_requirement_id: requirementId,
+      },
+      // La fenêtre d'une minute borne les reprises : au-delà, le client
+      // obtient une intention neuve plutôt qu'une intention périmée.
+      idempotencyKey: `job-deposit-${job.id}-${depositCents}-${Math.floor(Date.now() / 60_000)}`,
+      contexte: '[agreements/public/deposit-intent]',
+    });
+
+    return res.json(intent);
+  } catch (error: any) {
+    if (error instanceof DepositPaymentError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    return sendSafeError(res, error, 'Failed to create deposit payment.', '[agreements/public/deposit-intent]');
+  }
+});
+
+router.post('/agreements/public/deposit-confirm', async (req, res) => {
+  try {
+    const parsed = publicDepositConfirmSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsed.error.issues.map(i => i.message) });
+    }
+    const { view_token, payment_intent_id } = parsed.data;
+
+    const admin = getServiceClient();
+    const { data: agreement } = await admin
+      .from('job_agreements')
+      .select('id, org_id, job_id')
+      .eq('view_token', view_token)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (!agreement?.job_id) return res.status(404).json({ error: 'Agreement not found.' });
+
+    const { data: job } = await admin
+      .from('jobs')
+      .select('id, deposit_status')
+      .eq('id', agreement.job_id)
+      .maybeSingle();
+    if (!job) return res.status(404).json({ error: 'Job not found.' });
+    if (job.deposit_status === 'paid') return res.json({ ok: true, status: 'paid' }); // idempotent
+
+    const intent = await verifyDepositIntent({
+      orgId: agreement.org_id,
+      paymentIntentId: payment_intent_id,
+      contexte: '[agreements/public/deposit-confirm]',
+    });
+    // L'intention doit bien porter sur CETTE job — sinon un paiement fait
+    // ailleurs suffirait à marquer ce dépôt comme réglé.
+    if (intent.metadata.job_id && intent.metadata.job_id !== job.id) {
+      return res.status(400).json({ error: 'Payment does not match this contract.' });
+    }
+
+    const now = new Date().toISOString();
+    // L'argent est DÉJÀ encaissé chez Stripe à ce stade. Si cette écriture
+    // échoue sans être lue, le dépôt est pris mais le job reste marqué impayé :
+    // le client est relancé pour une somme qu'il a payée.
+    const { error: majJobErr } = await admin
+      .from('jobs').update({ deposit_status: 'paid', updated_at: now }).eq('id', job.id);
+    if (majJobErr) {
+      console.error('[agreements] dépôt encaissé mais job non mis à jour', {
+        job_id: job.id, payment_intent_id, erreur: majJobErr.message,
+      });
+    }
+
+    const { data: payReq } = await admin
+      .from('payment_requirements')
+      .select('id')
+      .eq('entity_type', 'job')
+      .eq('entity_id', job.id)
+      .eq('requirement_type', 'deposit')
+      .in('status', ['pending', 'authorized'])
+      .maybeSingle();
+    if (payReq) {
+      const { error: majReqErr } = await admin
+        .from('payment_requirements').update({ status: 'paid', updated_at: now }).eq('id', payReq.id);
+      if (majReqErr) {
+        console.error('[agreements] exigence de paiement non soldée', {
+          requirement_id: payReq.id, payment_intent_id, erreur: majReqErr.message,
+        });
+      }
+    }
+
+    try {
+      const { error: notifErr } = await admin.from('notifications').insert({
+        org_id: agreement.org_id,
+        type: 'deposit_paid',
+        title: 'Dépôt reçu',
+        body: `Le dépôt du contrat a été payé (${payment_intent_id}).`,
+        icon: 'credit-card',
+        reference_id: job.id,
+      });
+      // supabase-js ne lève pas : sans cette lecture, le catch
+      // ci-dessous n'attrape rien et la notification disparaît en silence.
+      if (notifErr) console.error('[agreements] notification non créée:', notifErr.message);
+    } catch { /* non-critical */ }
+
+    return res.json({ ok: true, status: 'paid' });
+  } catch (error: any) {
+    if (error instanceof DepositPaymentError) {
+      return res.status(error.statusCode).json({ error: error.message });
+    }
+    return sendSafeError(res, error, 'Failed to confirm deposit payment.', '[agreements/public/deposit-confirm]');
   }
 });
 
@@ -779,6 +1033,15 @@ router.post('/agreements/send-sms', async (req, res) => {
       viewUrl +
       (nextVisitDate ? ` Prochaine visite : ${nextVisitDate}.` : '');
 
+    // Conformité CASL : un destinataire ayant répondu STOP ne doit plus rien
+    // recevoir de cette org — y compris les contrats.
+    if (await isSmsOptedOut(admin, agreement.org_id, formattedPhone)) {
+      return res.status(409).json({
+        error: 'This recipient has opted out of SMS from your organization.',
+        code: 'sms_opted_out',
+      });
+    }
+
     let fromNumber: string;
     try {
       fromNumber = await getOrgSmsFromNumber(agreement.org_id);
@@ -798,10 +1061,13 @@ router.post('/agreements/send-sms', async (req, res) => {
       throw e;
     }
 
+    const smsStatusCallback = getTwilioStatusCallbackUrl();
     await twilioClient.messages.create({
       body: smsBody,
       from: fromNumber,
       to: formattedPhone,
+      // Accusé de réception Twilio (sinon le statut reste figé à « envoyé »).
+      ...(smsStatusCallback ? { statusCallback: smsStatusCallback } : {}),
     });
 
     // draft → sent (a signed agreement stays signed)

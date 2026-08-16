@@ -111,7 +111,7 @@ export function normalizeAddress(address: string | null | undefined) {
   return String(address || '').trim().replace(/\s+/g, ' ');
 }
 
-export function resolvePublicBaseUrl(_req: express.Request) {
+export function resolvePublicBaseUrl(_req?: express.Request) {
   // PUBLIC_URL is the canonical name — Twilio provisioning registers its webhook URLs against it.
   // Fall back to legacy names for environments that haven't migrated yet.
   const configured =

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { emailFrom, twilioClient, getBaseUrl } from '../lib/config';
+import { emailFrom, twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
+import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
@@ -10,6 +11,7 @@ import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe 
 import { decryptSecret } from '../../src/lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
+import { getCompanyBranding } from '../lib/companyBranding';
 
 const router = Router();
 
@@ -400,12 +402,25 @@ router.post('/quotes/send-email', async (req, res) => {
       </div>
     `;
 
-    await sendEmail({
+    // Le résultat DOIT être lu : `sendEmail` ne lève jamais, donc un appel nu
+    // laissait passer tous les effets de bord ci-dessous alors qu'aucun
+    // courriel n'était parti — statut avancé, `delivery_status: 'sent'` écrit
+    // en dur, deal poussé dans le pipeline, relances automatiques déclenchées,
+    // et une réponse HTTP 200 affirmant l'envoi. Le client n'avait rien reçu,
+    // l'org voyait « envoyé » partout.
+    const emailResult = await sendEmail({
       from: emailFrom,
       to: recipientEmail,
       subject: finalSubject,
       html: emailHtml,
     });
+    if (!emailResult.sent) {
+      return res.status(502).json({
+        error: 'Le courriel n’a pas pu être envoyé. La soumission n’a pas été marquée comme envoyée.',
+        code: 'email_send_failed',
+        detail: emailResult.error,
+      });
+    }
 
     // Update quote — a sent quote is awaiting the client's response.
     // Only pre-response statuses advance; re-sending an approved/converted/
@@ -418,13 +433,15 @@ router.post('/quotes/send-email', async (req, res) => {
       updated_at: new Date().toISOString(),
     }).eq('id', quoteId).eq('org_id', auth.orgId);
 
-    // Log send
+    // Log send — `delivery_status` était écrit en dur à 'sent', y compris quand
+    // rien n'était parti. On n'atteint désormais cette ligne qu'après un envoi
+    // confirmé, mais la valeur reste dérivée du résultat réel.
     await admin.from('quote_send_log').insert({
       quote_id: quoteId,
       channel: 'email',
       recipient: recipientEmail,
       sent_by: auth.user.id,
-      delivery_status: 'sent',
+      delivery_status: emailResult.sent ? 'sent' : 'failed',
     });
 
     // Log status change
@@ -522,6 +539,15 @@ router.post('/quotes/send-sms', async (req, res) => {
 
     const smsBody = `${companyName} sent you a quote (#${quote.quote_number}) for ${totalFormatted}. View it here: ${quoteUrl}`;
 
+    // Conformité CASL : un destinataire ayant répondu STOP ne doit plus rien
+    // recevoir de cette org — y compris les devis.
+    if (await isSmsOptedOut(admin, quote.org_id, formattedPhone)) {
+      return res.status(409).json({
+        error: 'This recipient has opted out of SMS from your organization.',
+        code: 'sms_opted_out',
+      });
+    }
+
     let fromNumber: string;
     try {
       fromNumber = await getOrgSmsFromNumber(quote.org_id);
@@ -541,10 +567,13 @@ router.post('/quotes/send-sms', async (req, res) => {
       throw e;
     }
 
+    const smsStatusCallback = getTwilioStatusCallbackUrl();
     const twilioMsg = await twilioClient.messages.create({
       body: smsBody,
       from: fromNumber,
       to: formattedPhone,
+      // Accusé de réception Twilio (sinon le statut reste figé à « envoyé »).
+      ...(smsStatusCallback ? { statusCallback: smsStatusCallback } : {}),
     });
 
     // Only pre-response statuses advance — same rule as the email route.
@@ -681,6 +710,7 @@ router.post('/quotes/convert-to-job', async (req, res) => {
         .filter((item: any) => !item.is_optional)
         .map((item: any) => ({
           job_id: jobId,
+          org_id: auth.orgId,
           name: item.name,
           qty: item.quantity,
           unit_price_cents: item.unit_price_cents,
@@ -782,11 +812,11 @@ router.get('/quotes/public/:token', async (req, res) => {
     if (qErr || !quote) return res.status(404).json({ error: 'Quote not found.' });
 
     // Company branding
-    const { data: companyData } = await admin
-      .from('company_settings')
-      .select('company_name, logo_url, phone, email, website, street1, city, province, postal_code, country')
-      .eq('org_id', quote.org_id)
-      .maybeSingle();
+    const companyData = await getCompanyBranding(
+      admin,
+      quote.org_id,
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color',
+    );
 
     // Line items
     const { data: items } = await admin
@@ -893,6 +923,8 @@ router.get('/quotes/public/:token', async (req, res) => {
         street1: companyData?.street1 || null, city: companyData?.city || null,
         province: companyData?.province || null, postal_code: companyData?.postal_code || null,
         country: companyData?.country || null,
+        // Accent des documents client. null = encre noire, le défaut.
+        brand_color: companyData?.brand_color || null,
       },
       client, lead,
       items: (items || []).map((i: any) => ({
@@ -946,12 +978,16 @@ router.post('/quotes/public/accept', async (req, res) => {
 
     // Update quote status
     const depositStatus = quote.deposit_required ? 'pending' : 'not_required';
-    await admin.from('quotes').update({
+    const { error: acceptErr } = await admin.from('quotes').update({
       status: 'approved',
       approved_at: now,
       updated_at: now,
       deposit_status: depositStatus,
     }).eq('id', quote.id);
+    if (acceptErr) {
+      console.error('[quotes/public/accept] status update failed:', acceptErr.message);
+      return res.status(500).json({ error: 'Could not record acceptance. Please retry.' });
+    }
 
     // Create payment requirement if deposit is required
     if (quote.deposit_required && quote.deposit_value > 0) {
@@ -959,7 +995,7 @@ router.post('/quotes/public/accept', async (req, res) => {
         ? Math.round(quote.total_cents * Number(quote.deposit_value) / 100)
         : Math.round(Number(quote.deposit_value) * 100);
 
-      await admin.from('payment_requirements').insert({
+      const { error: depReqErr } = await admin.from('payment_requirements').insert({
         org_id: quote.org_id,
         entity_type: 'quote',
         entity_id: quote.id,
@@ -970,6 +1006,7 @@ router.post('/quotes/public/accept', async (req, res) => {
         payment_method_required: quote.require_payment_method || false,
         notes: `Deposit for Quote #${quote.quote_number}`,
       });
+      if (depReqErr) console.error('[quotes/public/accept] deposit payment_requirement insert failed:', depReqErr.message);
 
       // Update deposit_cents on the quote
       await admin.from('quotes').update({ deposit_cents: depositCents }).eq('id', quote.id);
@@ -977,7 +1014,7 @@ router.post('/quotes/public/accept', async (req, res) => {
 
     // Create payment method requirement if needed
     if (quote.require_payment_method && !quote.deposit_required) {
-      await admin.from('payment_requirements').insert({
+      const { error: pmReqErr } = await admin.from('payment_requirements').insert({
         org_id: quote.org_id,
         entity_type: 'quote',
         entity_id: quote.id,
@@ -988,6 +1025,7 @@ router.post('/quotes/public/accept', async (req, res) => {
         payment_method_required: true,
         notes: `Payment method required for Quote #${quote.quote_number}`,
       });
+      if (pmReqErr) console.error('[quotes/public/accept] payment_method requirement insert failed:', pmReqErr.message);
     }
 
     // Log status change
@@ -1000,7 +1038,7 @@ router.post('/quotes/public/accept', async (req, res) => {
     });
 
     // Store signature in quote_attachments
-    await admin.from('quote_attachments').insert({
+    const { error: sigErr } = await admin.from('quote_attachments').insert({
       quote_id: quote.id,
       file_url: signature_data,
       file_name: `signature_${signer_name.replace(/\s+/g, '_')}.png`,
@@ -1008,6 +1046,10 @@ router.post('/quotes/public/accept', async (req, res) => {
       uploaded_by: null,
       source_type: 'signature',
     });
+    if (sigErr) {
+      console.error('[quotes/public/accept] signature insert failed:', sigErr.message);
+      return res.status(500).json({ error: 'Could not record acceptance. Please retry.' });
+    }
 
     // Notification « Devis approuvé » : émise par le trigger DB sur le
     // changement de statut (migration 20260747000000).
@@ -1264,8 +1306,11 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
         .eq('org_id', quote.org_id)
         .maybeSingle();
       if (orgSecrets?.stripe_secret_key_enc) {
+        // La colonne est CHIFFRÉE : la passer telle quelle à Stripe donnait une
+        // clé invalide, donc ce repli n'a jamais fonctionné. Même correction
+        // qu'en haut dans deposit-intent.
         const Stripe = (await import('stripe')).default;
-        const orgStripe = new Stripe(orgSecrets.stripe_secret_key_enc);
+        const orgStripe = new Stripe(decryptSecret(orgSecrets.stripe_secret_key_enc));
         intent = await orgStripe.paymentIntents.retrieve(payment_intent_id);
       }
     }

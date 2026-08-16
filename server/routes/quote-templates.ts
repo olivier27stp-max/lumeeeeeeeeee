@@ -74,13 +74,17 @@ router.post('/quote-templates', async (req, res) => {
 
     // If setting as default, clear existing default first
     if (is_default) {
-      await admin
+      const { error: clearErr } = await admin
         .from('quote_templates')
         .update({ is_default: false })
         .eq('org_id', auth.orgId)
         .eq('is_default', true)
-        .is('deleted_at', null)
-        .then(() => {}); // ignore if column missing
+        .is('deleted_at', null);
+      // Colonne is_default absente = schéma pré-V2, toléré. Toute autre erreur
+      // laisse DEUX modèles par défaut : ça doit apparaître dans les journaux.
+      if (clearErr && !clearErr.message?.includes('column')) {
+        console.error('[quote-templates] clear previous default failed:', clearErr.message);
+      }
     }
 
     // Base payload (original schema)
@@ -164,14 +168,16 @@ router.put('/quote-templates/:id', async (req, res) => {
 
     // If setting as default, clear existing default first
     if (is_default) {
-      await admin
+      const { error: clearErr } = await admin
         .from('quote_templates')
         .update({ is_default: false })
         .eq('org_id', auth.orgId)
         .eq('is_default', true)
         .is('deleted_at', null)
-        .neq('id', req.params.id)
-        .then(() => {});
+        .neq('id', req.params.id);
+      if (clearErr && !clearErr.message?.includes('column')) {
+        console.error('[quote-templates] clear previous default failed:', clearErr.message);
+      }
     }
 
     const payload: Record<string, any> = {
@@ -245,8 +251,11 @@ router.patch('/quote-templates/:id/default', async (req, res) => {
     const { is_default } = req.body;
 
     if (is_default) {
-      await admin.from('quote_templates').update({ is_default: false })
-        .eq('org_id', auth.orgId).eq('is_default', true).is('deleted_at', null).then(() => {});
+      const { error: clearErr } = await admin.from('quote_templates').update({ is_default: false })
+        .eq('org_id', auth.orgId).eq('is_default', true).is('deleted_at', null);
+      if (clearErr && !clearErr.message?.includes('column')) {
+        console.error('[quote-templates] clear previous default failed:', clearErr.message);
+      }
     }
 
     const { data, error } = await admin.from('quote_templates')

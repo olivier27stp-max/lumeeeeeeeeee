@@ -24,6 +24,7 @@ import EntityHubHeader from '../components/EntityHubHeader';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
+import { SignedImg, SignedLink } from '../components/ui/SignedMedia';
 import { fetchFormSubmission, fetchRequestForm, updateFormSubmission, deleteFormSubmission } from '../lib/requestFormsApi';
 import { listSalespeople } from '../lib/jobsApi';
 import { useJobModalController } from '../contexts/JobModalController';
@@ -315,18 +316,18 @@ export default function RequestDetails() {
           </h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
             {photos.map((url) => (
-              <a
+              <SignedLink
                 key={url}
-                href={url}
+                url={url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group relative aspect-square overflow-hidden rounded-lg border border-border-subtle"
               >
-                <img src={url} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                <SignedImg url={url} alt="" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
                 <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:bg-black/30 group-hover:opacity-100">
                   <ExternalLink size={15} className="text-white" />
                 </span>
-              </a>
+              </SignedLink>
             ))}
           </div>
         </div>

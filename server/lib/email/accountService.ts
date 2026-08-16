@@ -97,7 +97,14 @@ export async function handleEmailOAuthCallback(params: {
   if (new Date(st.expires_at) < new Date()) {
     return { success: false, error: 'OAuth state expired. Please try connecting again.' };
   }
-  await db.from('email_oauth_states').update({ consumed_at: new Date().toISOString() }).eq('id', st.id);
+  // Un state non consommé reste rejouable : l'échec doit être visible.
+  const { error: consumeError } = await db
+    .from('email_oauth_states')
+    .update({ consumed_at: new Date().toISOString() })
+    .eq('id', st.id);
+  if (consumeError) {
+    console.error(`[email] failed to consume OAuth state ${st.id} (org ${st.org_id}, user ${st.user_id}, ${params.provider}):`, consumeError.message);
+  }
 
   // 2. Exchange code for tokens
   const { clientId, clientSecret } = clientCreds(params.provider);
@@ -159,7 +166,7 @@ export async function listEmailAccounts(userId: string): Promise<EmailAccountInf
 
 // ── Disconnect one mailbox (must belong to the caller) ────────
 export async function disconnectEmailAccount(userId: string, accountId: string): Promise<void> {
-  await getServiceClient()
+  const { error } = await getServiceClient()
     .from('email_accounts')
     .update({
       status: 'disconnected',
@@ -171,6 +178,12 @@ export async function disconnectEmailAccount(userId: string, accountId: string):
     })
     .eq('id', accountId)
     .eq('user_id', userId); // ownership guard
+
+  // Les jetons resteraient chiffrés en base alors que l'UI dit « déconnecté ».
+  if (error) {
+    console.error(`[email] failed to disconnect mailbox ${accountId} (user ${userId}):`, error.message);
+    throw new Error(`Failed to disconnect mailbox: ${error.message}`);
+  }
 }
 
 // ── Refresh an access token (returns a valid one, or null) ────
@@ -199,10 +212,13 @@ export async function getValidAccessToken(accountId: string): Promise<string | n
   }
 
   const markReconnectRequired = async (reason: string) => {
-    await db
+    const { error } = await db
       .from('email_accounts')
       .update({ status: 'reconnect_required', last_error: reason })
       .eq('id', accountId);
+    if (error) {
+      console.error(`[email] failed to flag mailbox ${accountId} as reconnect_required:`, error.message, '| reason:', reason);
+    }
   };
 
   const provider = getEmailProvider(record.provider);
@@ -226,7 +242,7 @@ export async function getValidAccessToken(accountId: string): Promise<string | n
   try {
     const t = await provider.refreshToken({ refreshToken, clientId, clientSecret });
     const expiresAt = t.expires_in ? new Date(Date.now() + t.expires_in * 1000).toISOString() : null;
-    await db
+    const { error: saveError } = await db
       .from('email_accounts')
       .update({
         encrypted_access_token: encryptSecret(t.access_token),
@@ -236,12 +252,21 @@ export async function getValidAccessToken(accountId: string): Promise<string | n
         last_error: null,
       })
       .eq('id', accountId);
+    // Jeton non persisté : l'appel courant passe, mais chaque appel suivant
+    // redemandera un refresh (rotation Google : l'ancien peut être invalidé).
+    if (saveError) {
+      console.error(`[email] failed to persist refreshed token for mailbox ${accountId} (org ${record.org_id}):`, saveError.message);
+    }
     return t.access_token;
   } catch (err) {
-    await db
+    const reason = err instanceof Error ? err.message : 'Token refresh failed';
+    const { error: markError } = await db
       .from('email_accounts')
-      .update({ status: 'reconnect_required', last_error: err instanceof Error ? err.message : 'Token refresh failed' })
+      .update({ status: 'reconnect_required', last_error: reason })
       .eq('id', accountId);
+    if (markError) {
+      console.error(`[email] failed to flag mailbox ${accountId} after refresh failure:`, markError.message, '| reason:', reason);
+    }
     return null;
   }
 }

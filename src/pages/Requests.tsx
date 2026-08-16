@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Loader2, Inbox, Mail, Phone, MapPin, Building2, ExternalLink, RefreshCw, Clock, Copy, Check, ImageIcon, Archive, ChevronRight } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { fetchFormSubmissions, fetchRequestForm } from '../lib/requestFormsApi';
+import { SignedImg } from '../components/ui/SignedMedia';
 import type { FormSubmission, RequestForm } from '../types';
 
 /** Reserved custom_responses key where the public form stores uploaded photo URLs. */
@@ -239,7 +240,7 @@ export default function Requests() {
                     <div className="flex gap-2">
                       {photos.slice(0, 4).map((url) => (
                         <div key={url} className="h-14 w-14 overflow-hidden rounded-lg border border-border-subtle">
-                          <img src={url} alt="" className="h-full w-full object-cover" />
+                          <SignedImg url={url} alt="" className="h-full w-full object-cover" />
                         </div>
                       ))}
                       {photos.length > 4 && (

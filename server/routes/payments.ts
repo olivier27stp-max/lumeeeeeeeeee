@@ -240,11 +240,12 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const admin = getServiceClient();
           const amountPaid = Math.max(0, Math.round(intent.amount_received || intent.amount || 0));
 
-          const { data: applied } = await admin.rpc('apply_invoice_payment', {
+          const { data: applied, error: applyErr } = await admin.rpc('apply_invoice_payment', {
             p_invoice_id: metadata.invoiceId,
             p_org_id: metadata.orgId,
             p_amount_cents: amountPaid,
           });
+          if (applyErr) throw new Error('apply_invoice_payment failed: ' + applyErr.message);
           const invoiceRow = Array.isArray(applied) ? applied[0] : applied;
 
           if (invoiceRow) {
@@ -288,16 +289,61 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           const quoteUpdate: Record<string, any> = { deposit_status: 'paid', updated_at: new Date().toISOString() };
           let qb = admin.from('quotes').update(quoteUpdate).eq('id', quoteId);
           if (webhookOrgId) qb = qb.eq('org_id', webhookOrgId);
-          await qb;
+          const { error: quoteDepErr } = await qb;
+          if (quoteDepErr) throw new Error('quote deposit_status update failed: ' + quoteDepErr.message);
 
           // Mark payment_requirement as paid
           const payReqId = String((intent.metadata as any)?.payment_requirement_id || '').trim();
           if (payReqId) {
-            await admin.from('payment_requirements').update({
+            const { error: payReqErr } = await admin.from('payment_requirements').update({
               status: 'paid',
               payment_id: null,
               updated_at: new Date().toISOString(),
             }).eq('id', payReqId);
+            if (payReqErr) throw new Error('payment_requirements paid update failed: ' + payReqErr.message);
+          }
+
+          // Déclenche la confirmation de dépôt.
+          //
+          // Ce chemin ne produisait AUCUN événement : le preset
+          // `deposit_received` attendait `invoice.paid` avec
+          // `payment_type: 'deposit'` dans les métadonnées, une clé qu'aucun
+          // émetteur ne fournissait. Résultat mesuré en prod : 30 règles
+          // actives, badge vert, et zéro envoi depuis toujours. Le client
+          // versait son dépôt sans jamais recevoir la confirmation que sa
+          // place était réservée.
+          //
+          // `payment_type` distingue ce paiement d'un règlement de facture :
+          // `payment_confirmation` porte désormais la condition inverse
+          // (`neq: 'deposit'`), sans quoi les deux presets partiraient
+          // ensemble et le client recevrait deux SMS.
+          //
+          // Non bloquant : le dépôt est déjà encaissé et enregistré, une
+          // automatisation muette ne doit pas faire échouer le webhook — un
+          // throw ici ferait rejouer Stripe.
+          try {
+            const { data: q } = await admin
+              .from('quotes')
+              .select('org_id, client_id, lead_id, quote_number')
+              .eq('id', quoteId)
+              .maybeSingle();
+            if (q?.org_id) {
+              const { eventBus } = await import('../lib/eventBus');
+              await eventBus.emit('invoice.paid', {
+                orgId: q.org_id,
+                entityType: 'quote',
+                entityId: quoteId,
+                metadata: {
+                  payment_type: 'deposit',
+                  quote_number: q.quote_number || '',
+                  client_id: q.client_id || q.lead_id || null,
+                  amount_cents: Number(intent.amount_received || intent.amount || 0),
+                  provider: 'stripe',
+                },
+              });
+            }
+          } catch (emitErr: any) {
+            console.error('[webhook] émission dépôt reçu échouée:', emitErr?.message);
           }
         }
       }
@@ -406,8 +452,17 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           canceled_at: canceledAt,
           current_period_start: periodStart,
           current_period_end: periodEnd,
-          updated_at: new Date().toISOString(),
+          // pas d'updated_at sur subscriptions : l'inclure faisait echouer la
+          // requete, donc le webhook levait une erreur -> rejeu Stripe en boucle.
         };
+
+        // Motif d'annulation saisi dans le portail Stripe. Arrive ici quand le
+        // client programme son départ (cancel_at_period_end), et une seconde
+        // fois sur .deleted à l'échéance. Sans cette donnée, on ne sait pas
+        // POURQUOI les clients partent — donc on ne peut rien y changer.
+        const motif = (sub as any).cancellation_details;
+        if (motif?.feedback) updateRow.cancellation_feedback = motif.feedback;
+        if (motif?.comment) updateRow.cancellation_comment = String(motif.comment).slice(0, 2000);
 
         if (firstItem?.price) {
           const stripeInterval = firstItem.price.recurring?.interval; // 'month' | 'year'
@@ -440,10 +495,11 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         }
 
         // Cross-validate via stripe_subscription_id only — never trust metadata blindly.
-        await admin
+        const { error: subSyncErr } = await admin
           .from('subscriptions')
           .update(updateRow)
           .eq('stripe_subscription_id', sub.id);
+        if (subSyncErr) throw new Error('subscription.updated sync failed: ' + subSyncErr.message);
 
         // ── Sync the org's SMS number with its new entitlement ──
         // A downgrade to a plan without SMS must not leave the number running:
@@ -470,6 +526,37 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           // Never fail the webhook over number housekeeping — it is retried by the sweep.
           console.error('[webhook/subscription.updated] SMS entitlement sync failed:', smsErr?.message);
         }
+
+        // ── Confirmer le changement de forfait au client ──
+        // Uniquement quand le forfait a réellement changé (updateRow.plan_id est
+        // renseigné) : ce webhook se déclenche aussi à chaque renouvellement et
+        // au moindre ajustement, ce qui enverrait un courriel pour rien.
+        if (updateRow.plan_id) {
+          try {
+            const { data: row } = await admin
+              .from('subscriptions')
+              .select('org_id, plans!subscriptions_plan_id_fkey(name)')
+              .eq('stripe_subscription_id', sub.id)
+              .maybeSingle();
+            const nomPlan = (row as any)?.plans?.name;
+            if (row?.org_id && nomPlan) {
+              const { sendPlanChangedEmail } = await import('../lib/subscription-email');
+              await sendPlanChangedEmail({
+                orgId: row.org_id,
+                eventId: event.id,
+                planName: nomPlan,
+                amountCents: updateRow.amount_cents,
+                currency: (firstItem?.price?.currency || 'cad').toUpperCase(),
+                interval: updateRow.interval,
+                periodEnd: periodEnd,
+              });
+            }
+          } catch (mailErr: any) {
+            // La base est déjà à jour : ne jamais faire rejouer le webhook pour
+            // un courriel. sendPlanChangedEmail journalise l'échec.
+            console.error('[webhook/subscription.updated] courriel de changement échoué:', mailErr?.message);
+          }
+        }
       }
 
       // ── F-13: Handle customer.subscription.deleted ──
@@ -477,16 +564,57 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const sub = event.data.object as Stripe.Subscription;
         const admin = getServiceClient();
 
+        // Motif d'annulation (portail Stripe). Sur .deleted il peut différer de
+        // celui reçu à la programmation du départ : on ne l'écrase que s'il est
+        // réellement présent, pour ne pas effacer une réponse déjà captée.
+        const motifFinal = (sub as any).cancellation_details;
+        const majAnnulation: Record<string, any> = {
+          status: 'canceled',
+          canceled_at: new Date().toISOString(),
+          // idem : subscriptions n'a pas de colonne updated_at.
+        };
+        if (motifFinal?.feedback) majAnnulation.cancellation_feedback = motifFinal.feedback;
+        if (motifFinal?.comment) majAnnulation.cancellation_comment = String(motifFinal.comment).slice(0, 2000);
+
         const { data: canceledRow } = await admin
           .from('subscriptions')
-          .update({
-            status: 'canceled',
-            canceled_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          })
+          .update(majAnnulation)
           .eq('stripe_subscription_id', sub.id)
-          .select('org_id')
+          .select('org_id, current_period_end, cancellation_feedback, cancellation_comment, plans!subscriptions_plan_id_fkey(name)')
           .maybeSingle();
+
+        // ── Confirmer l'annulation au client ──
+        // Sans ce courriel, le client ignore jusqu'à quand il garde l'accès :
+        // il croit l'avoir perdu sur-le-champ et écrit au support, ou pense que
+        // l'annulation a échoué et conteste le prélèvement suivant.
+        try {
+          if (canceledRow?.org_id) {
+            const { sendSubscriptionCanceledEmail, sendChurnAlert } = await import('../lib/subscription-email');
+            const planName = (canceledRow as any)?.plans?.name ?? null;
+            await sendSubscriptionCanceledEmail({
+              orgId: canceledRow.org_id,
+              eventId: event.id,
+              planName,
+              accessUntil: (canceledRow as any)?.current_period_end ?? null,
+            });
+
+            // Alerte interne : le motif du départ, seule donnée qui permette de
+            // corriger la cause plutôt que de deviner.
+            const { data: orgRow } = await admin
+              .from('orgs').select('name').eq('id', canceledRow.org_id).maybeSingle();
+            await sendChurnAlert({
+              orgName: orgRow?.name ?? null,
+              orgId: canceledRow.org_id,
+              planName,
+              feedback: (canceledRow as any)?.cancellation_feedback ?? null,
+              comment: (canceledRow as any)?.cancellation_comment ?? null,
+            });
+          }
+        } catch (mailErr: any) {
+          // L'abonnement est déjà annulé en base : ne jamais faire rejouer le
+          // webhook pour un courriel.
+          console.error('[webhook/subscription.deleted] courriel d\'annulation échoué:', mailErr?.message);
+        }
 
         // Schedule the Twilio number for release (grace period, not immediate —
         // releasing is irreversible and breaks every existing conversation).
@@ -514,13 +642,19 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const admin = getServiceClient();
         if (stripeSubId) {
           // Cross-validate: only touch the subscription row owned by the matching stripe sub id.
-          await admin
+          const { error: invPaidErr } = await admin
             .from('subscriptions')
             .update({
+              // pas d'updated_at sur subscriptions (colonne inexistante) :
+              // l'inclure faisait echouer la requete et, depuis le durcissement
+              // des erreurs, partir le webhook en boucle de rejeu Stripe.
               status: 'active',
-              updated_at: new Date().toISOString(),
+              // L'impayé est résolu : on efface la date de début, sinon la
+              // grâce continuerait à courir et suspendrait un client à jour.
+              past_due_since: null,
             })
             .eq('stripe_subscription_id', stripeSubId);
+          if (invPaidErr) throw new Error('invoice.paid subscription sync failed: ' + invPaidErr.message);
         }
         // If the invoice is on our internal invoices table (org-level), reconcile paid_cents.
         const internalInvoiceId = String((inv.metadata as any)?.invoice_id || '').trim();
@@ -536,7 +670,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           if (row) {
             const newPaid = Math.min(Number(row.total_cents || 0), Number(row.paid_cents || 0) + amountPaid);
             const newBal = Math.max(0, Number(row.total_cents || 0) - newPaid);
-            await admin
+            const { error: invReconcileErr } = await admin
               .from('invoices')
               .update({
                 paid_cents: newPaid,
@@ -546,6 +680,7 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               })
               .eq('id', internalInvoiceId)
               .eq('org_id', metaOrgId);
+            if (invReconcileErr) throw new Error('invoice.paid reconcile failed: ' + invReconcileErr.message);
           }
         }
       }
@@ -557,16 +692,36 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         const stripeSubId = typeof invAny.subscription === 'string' ? invAny.subscription : invAny.subscription?.id;
         const admin = getServiceClient();
         if (stripeSubId) {
-          await admin
+          // La date n'est posée qu'au PREMIER échec : `past_due_since is null`.
+          // Stripe réessaie plusieurs fois (Smart Retries) et émet cet event à
+          // chaque tentative ; réécrire la date à chaque fois repousserait la
+          // suspension indéfiniment et la grâce ne finirait jamais.
+          const { error: pastDueErr } = await admin
             .from('subscriptions')
             .update({
+              // subscriptions n'a pas de colonne updated_at.
               status: 'past_due',
-              updated_at: new Date().toISOString(),
             })
             .eq('stripe_subscription_id', stripeSubId);
+          if (pastDueErr) throw new Error('invoice.payment_failed subscription sync failed: ' + pastDueErr.message);
+
+          const { error: dateErr } = await admin
+            .from('subscriptions')
+            .update({ past_due_since: new Date().toISOString() })
+            .eq('stripe_subscription_id', stripeSubId)
+            .is('past_due_since', null);
+          if (dateErr) throw new Error('invoice.payment_failed past_due_since failed: ' + dateErr.message);
         }
-        // Hook point for dunning emails — kept as a log entry for now to avoid
-        // sending unverified PII through unrelated mailer paths.
+
+        // Le client doit savoir POURQUOI il va perdre l'accès, et comment
+        // l'éviter. Best-effort : la facture est déjà en échec côté Stripe,
+        // un mailer indisponible ne doit pas faire rejouer le webhook.
+        try {
+          await envoyerCourrielEchecPaiement(stripeSubId, inv);
+        } catch (mailErr: any) {
+          console.error('[webhook] courriel échec de paiement non envoyé:', mailErr?.message);
+        }
+
         console.warn('[webhook] invoice.payment_failed', {
           stripe_subscription_id: stripeSubId,
           attempt: inv.attempt_count,
@@ -610,7 +765,10 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
           await admin
             .from('payments')
             .update({
-              status: 'disputed',
+              // CHECK de payments.status : failed | pending | refunded | succeeded.
+              // 'disputed' n'en fait pas partie — le litige n'etait jamais
+              // consigne. Le motif reste tracable via failure_reason.
+              status: 'failed',
               failure_reason: `dispute:${dispute.reason || 'unknown'}`,
               updated_at: new Date().toISOString(),
             })
@@ -952,7 +1110,8 @@ router.get('/payments/payouts/detail', async (req, res) => {
 });
 
 // Single-payment detail — used by the Facturation tab payment-detail drawer.
-// Card brand/last4 come from the stored row; receipt_url is fetched live from Stripe.
+// `payments` ne stocke ni la marque ni les 4 derniers chiffres de la carte :
+// ces champs sont renvoyés à null. receipt_url est lu en direct chez Stripe.
 router.get('/payments/:id/detail', async (req, res) => {
   try {
     const auth = await requireAuthedClient(req, res);
@@ -968,7 +1127,7 @@ router.get('/payments/:id/detail', async (req, res) => {
     const admin = getServiceClient();
     const { data: payment, error } = await admin
       .from('payments')
-      .select('id, status, method, provider, card_last4, card_brand, amount_cents, currency, payment_date, paid_at, stripe_charge_id')
+      .select('id, status, method, provider, amount_cents, currency, payment_date, paid_at, stripe_charge_id')
       .eq('id', paymentId)
       .eq('org_id', requestedOrgId)
       .is('deleted_at', null)
@@ -996,8 +1155,8 @@ router.get('/payments/:id/detail', async (req, res) => {
       status: payment.status,
       method: payment.method,
       provider: payment.provider,
-      card_last4: payment.card_last4,
-      card_brand: payment.card_brand,
+      card_last4: null,
+      card_brand: null,
       amount_cents: payment.amount_cents,
       currency: payment.currency,
       payment_date: payment.paid_at || payment.payment_date,
@@ -1546,11 +1705,19 @@ router.post('/payments/refund', async (req, res) => {
 
     // If full refund, atomically reverse paid_cents
     if (isFullRefund && payment.invoice_id) {
-      await admin.rpc('reverse_invoice_payment', {
+      const { error: reverseErr } = await admin.rpc('reverse_invoice_payment', {
         p_invoice_id: payment.invoice_id,
         p_org_id: orgId,
         p_amount_cents: payment.amount_cents,
       });
+      if (reverseErr) {
+        console.error('[payments/refund] reverse_invoice_payment failed:', reverseErr.message);
+        return res.status(500).json({
+          error: 'Refund issued but DB sync failed — manual reconciliation required.',
+          refund_id: refund.id,
+          code: 'DB_SYNC_FAILED',
+        });
+      }
       // Apply commission reversal policy
       handleInvoiceReversal(admin, orgId, payment.invoice_id, `Refund: ${refund.id}`)
         .catch((err) => console.error('[commissions] reversal failed:', err?.message));
@@ -1558,10 +1725,18 @@ router.post('/payments/refund', async (req, res) => {
 
     // Update associated payment_request status if full refund
     if (isFullRefund && payment.payment_request_id) {
-      await admin
+      const { error: payReqCancelErr } = await admin
         .from('payment_requests')
         .update({ status: 'cancelled' })
         .eq('id', payment.payment_request_id);
+      if (payReqCancelErr) {
+        console.error('[payments/refund] payment_request cancel failed:', payReqCancelErr.message);
+        return res.status(500).json({
+          error: 'Refund issued but DB sync failed — manual reconciliation required.',
+          refund_id: refund.id,
+          code: 'DB_SYNC_FAILED',
+        });
+      }
     }
 
     return res.json({
@@ -1683,18 +1858,18 @@ async function handleCheckoutSessionCompleted(
     orgId = newOrg.id;
     // status:'active' is REQUIRED — CompanyContext only surfaces active memberships,
     // so omitting it left payment-link buyers with "Aucune compagnie".
-    await admin.from('memberships').insert({ user_id: userId, org_id: orgId, role: 'owner', status: 'active', full_name: fullName || null });
+    const { error: memErr } = await admin.from('memberships').insert({ user_id: userId, org_id: orgId, role: 'owner', status: 'active', full_name: fullName || null });
+    if (memErr) throw new Error('[webhook/checkout] Failed to create owner membership: ' + memErr.message);
   }
 
   // ── 5. Cancel any existing active subscriptions for this org ──
   const now = new Date();
-  try {
-    await admin
-      .from('subscriptions')
-      .update({ status: 'canceled', canceled_at: now.toISOString() })
-      .eq('org_id', orgId)
-      .eq('status', 'active');
-  } catch (err) { console.error('[webhook/checkout] cancel previous active subscription failed:', err); }
+  const { error: cancelPrevErr } = await admin
+    .from('subscriptions')
+    .update({ status: 'canceled', canceled_at: now.toISOString() })
+    .eq('org_id', orgId)
+    .eq('status', 'active');
+  if (cancelPrevErr) throw new Error('[webhook/checkout] cancel previous active subscription failed: ' + cancelPrevErr.message);
 
   // ── 6. Create subscription ──
   const periodEnd = new Date(now);
@@ -1733,9 +1908,10 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
-  // ── 7. Update billing profile + propagate billing address to org ──
+  // ── 7. Update billing profile + propagate billing address to company_settings ──
   // Stripe populates customer_details.address when checkout collects billing info.
-  // We copy it into orgs so the Twilio auto-provisioning step below picks the right
+  // We copy it into company_settings (l'adresse de l'org y vit — `orgs` n'a aucune
+  // colonne d'adresse) so the Twilio auto-provisioning step below picks the right
   // area code (Montréal → 514, NYC → 212, etc.) from the address the customer paid with.
   const stripeAddr = session.customer_details?.address || null;
   const billingCountry = (stripeAddr?.country || '').toUpperCase() || null;
@@ -1760,26 +1936,30 @@ async function handleCheckoutSessionCompleted(
     }, { onConflict: 'org_id' });
   } catch (err) { console.error('[webhook/checkout] billing_profiles upsert failed:', err); }
 
-  // Propagate address to org only if org fields are empty — never overwrite what the user set during onboarding.
+  // Propagate address only if the org's fields are empty — never overwrite what the user
+  // set during onboarding. Lecture ET écriture sur company_settings (colonne `province`,
+  // pas `region` ; rue = `street1`). Upsert : la ligne peut ne pas encore exister.
   if (billingCountry || billingCity || billingPostal) {
     try {
-      const { data: currentOrg } = await admin
-        .from('orgs')
-        .select('country, city, region, postal_code, address')
-        .eq('id', orgId)
+      const { data: currentSettings } = await admin
+        .from('company_settings')
+        .select('country, city, province, postal_code, street1')
+        .eq('org_id', orgId)
         .maybeSingle();
 
       const patch: Record<string, any> = {};
-      if (!currentOrg?.country && billingCountry) patch.country = billingCountry;
-      if (!currentOrg?.city && billingCity) patch.city = billingCity;
-      if (!currentOrg?.region && billingRegion) patch.region = billingRegion;
-      if (!currentOrg?.postal_code && billingPostal) patch.postal_code = billingPostal;
-      if (!currentOrg?.address && billingStreet) patch.address = billingStreet;
+      if (!currentSettings?.country && billingCountry) patch.country = billingCountry;
+      if (!currentSettings?.city && billingCity) patch.city = billingCity;
+      if (!currentSettings?.province && billingRegion) patch.province = billingRegion;
+      if (!currentSettings?.postal_code && billingPostal) patch.postal_code = billingPostal;
+      if (!currentSettings?.street1 && billingStreet) patch.street1 = billingStreet;
 
       if (Object.keys(patch).length > 0) {
-        await admin.from('orgs').update(patch).eq('id', orgId);
+        await admin
+          .from('company_settings')
+          .upsert({ org_id: orgId, ...patch }, { onConflict: 'org_id' });
       }
-    } catch (err) { console.error('[webhook/checkout] propagate billing address to org failed:', err); }
+    } catch (err) { console.error('[webhook/checkout] propagate billing address to company_settings failed:', err); }
   }
 
   // ── 8. Mark onboarding done ──
@@ -1788,18 +1968,33 @@ async function handleCheckoutSessionCompleted(
   } catch (err) { console.error('[webhook/checkout] mark onboarding_done failed:', err); }
 
   // ── 9. Record processed session (idempotency) ──
-  try {
-    await admin.from('processed_checkout_sessions').insert({
-      stripe_checkout_session_id: sessionId,
-      org_id: orgId,
-      user_id: userId,
-      subscription_id: subscription.id,
-      status: 'processed',
-    });
-  } catch (dedupErr: any) {
+  // NE JAMAIS throw ici : à ce stade l'org, la membership, l'abonnement, le
+  // numéro Twilio et le crédit de parrainage existent déjà. Un throw renverrait
+  // un non-2xx à Stripe, qui rejouerait l'événement — et la garde d'idempotence
+  // en tête de fonction lit précisément cette table : elle ne verrait rien et
+  // tout serait refait (2e abonnement, 2e numéro payant, 2e crédit).
+  // On réessaie, puis on crie très fort sans faire échouer le webhook.
+  const dedupRow = {
+    stripe_checkout_session_id: sessionId,
+    org_id: orgId,
+    user_id: userId,
+    subscription_id: subscription.id,
+    status: 'processed',
+  };
+  let { error: dedupErr } = await admin.from('processed_checkout_sessions').insert(dedupRow);
+  if (dedupErr && dedupErr.code !== '23505') {
+    ({ error: dedupErr } = await admin.from('processed_checkout_sessions').insert(dedupRow));
+  }
+  if (dedupErr) {
     // Unique constraint = already processed concurrently — safe to ignore
-    if (dedupErr?.code === '23505') return;
-    console.error('[webhook/checkout] Failed to record processed session:', dedupErr.message);
+    if (dedupErr.code === '23505') return;
+    console.error(
+      '[webhook/checkout] CRITIQUE — session traitée mais NON marquée. ' +
+        'L\'acheteur restera bloqué sur la création de mot de passe et un rejeu ' +
+        'Stripe dupliquerait le provisioning. Réconciliation manuelle requise. ' +
+        `session=${sessionId} org=${orgId} user=${userId} sub=${subscription.id}`,
+      dedupErr.message,
+    );
   }
 
   // ── 9b. Referral reward: the referrer earns a free month ──
@@ -1827,12 +2022,14 @@ async function handleCheckoutSessionCompleted(
   }
 
   // ── 10. Auto-provision Twilio SMS number (non-blocking) ──
-  // Only for plans that include SMS (pro / enterprise). Starter is skipped.
+  // Uniquement pour les forfaits incluant les SMS. Starter est ignoré.
   if (plan.includes_sms) {
     try {
+      const { provisionSmsForNewSubscription } = await import('../lib/twilioProvisioning');
       await provisionSmsForNewSubscription({ orgId, subscriptionId: subscription.id });
     } catch (provErr: any) {
-      // Never fail the subscription on provisioning error — it's logged + retryable.
+      // Ne jamais faire échouer l'abonnement sur une erreur de provisionnement :
+      // le paiement est déjà encaissé, et un throw ici ferait rejouer Stripe.
       console.error('[webhook/checkout] SMS provisioning error (non-blocking):', provErr?.message);
     }
   }
@@ -1872,7 +2069,7 @@ async function handleCheckoutSessionCompleted(
         to: userEmail,
         subject: 'Bienvenue chez Lume — configure ton compte',
         html: `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;color:#111114">
-  <h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0 0 8px">Paiement confirmé 🎉</h1>
+  <h1 style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin:0 0 8px">Paiement confirmé</h1>
   <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 22px">Ton abonnement <strong>${plan.name}</strong> est actif. Il te reste une étape&nbsp;: créer ton mot de passe et remplir les infos de ton entreprise pour commencer à travailler.</p>
   <a href="${setupUrl}" style="display:inline-block;background:#111114;color:#fff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 26px;border-radius:12px">Configurer mon compte →</a>
   <p style="font-size:12px;color:#999;line-height:1.6;margin:24px 0 0">Si le bouton ne fonctionne pas, copie ce lien&nbsp;:<br><span style="color:#555">${setupUrl}</span></p>
@@ -1886,82 +2083,11 @@ async function handleCheckoutSessionCompleted(
   console.log(`[webhook/checkout] Subscription activated for ${userEmail} — plan: ${plan.name}, org: ${orgId}`);
 }
 
-// ─── Auto-provision Twilio SMS number after a paid subscription ────────────
-// Idempotent: skips if an active SMS channel already exists for the org.
-// Logs outcome to provisioning_events for observability + retry tooling.
-
-async function provisionSmsForNewSubscription(params: {
-  orgId: string;
-  subscriptionId: string;
-}): Promise<void> {
-  const { orgId, subscriptionId } = params;
-  const admin = getServiceClient();
-
-  // If the org still has a number pending release (re-subscribed during the
-  // grace period), reactivate it rather than buying a second one.
-  try {
-    const { cancelSmsNumberRelease } = await import('../lib/twilioRelease');
-    if (await cancelSmsNumberRelease(orgId)) {
-      console.log(`[provisioning] Org ${orgId} re-subscribed — restored its existing number`);
-      return;
-    }
-  } catch (err: any) {
-    console.error('[provisioning] Failed to check pending release:', err?.message);
-  }
-
-  // Skip if an active SMS channel is already attached to this org
-  const { data: existingChannel } = await admin
-    .from('communication_channels')
-    .select('id, phone_number')
-    .eq('org_id', orgId)
-    .eq('channel_type', 'sms')
-    .eq('status', 'active')
-    .maybeSingle();
-
-  if (existingChannel) {
-    console.log(`[provisioning] Org ${orgId} already has SMS channel ${existingChannel.phone_number}, skipping`);
-    return;
-  }
-
-  // Log intent so we can observe + retry failures
-  const { data: eventRow } = await admin
-    .from('provisioning_events')
-    .insert({
-      org_id: orgId,
-      subscription_id: subscriptionId,
-      event_type: 'sms_number_purchase',
-      status: 'pending',
-    })
-    .select('id')
-    .single();
-
-  try {
-    const { provisionSmsNumber } = await import('../lib/twilioProvisioning');
-    const result = await provisionSmsNumber(orgId);
-
-    if (eventRow) {
-      await admin
-        .from('provisioning_events')
-        .update({
-          status: 'success',
-          twilio_number: result.phoneNumber,
-        })
-        .eq('id', eventRow.id);
-    }
-    console.log(`[provisioning] SMS number ${result.phoneNumber} assigned to org ${orgId}`);
-  } catch (err: any) {
-    if (eventRow) {
-      await admin
-        .from('provisioning_events')
-        .update({
-          status: 'failed',
-          error_message: String(err?.message || err).slice(0, 500),
-        })
-        .eq('id', eventRow.id);
-    }
-    throw err;
-  }
-}
+// ─── Provisionnement du numéro SMS ─────────────────────────────────────────
+// La logique vit désormais dans `server/lib/twilioProvisioning.ts` afin d'être
+// partagée avec `POST /api/billing/subscribe` — le parcours d'abonnement
+// réellement emprunté en production, qui ne provisionnait aucun numéro.
+// Voir `provisionSmsForNewSubscription`.
 
 // ── Carte au dossier (payment on file) ────────────────────────────────────
 
@@ -2041,5 +2167,58 @@ router.post('/payments/card-on-file/charge', async (req, res) => {
     return sendSafeError(res, error, 'Unable to charge the card on file.', '[card-on-file/charge]');
   }
 });
+
+/**
+ * Prévient le client qu'un prélèvement d'abonnement a échoué.
+ *
+ * Résout l'org depuis l'identifiant Stripe, puis délègue la mise en forme et
+ * l'idempotence à `subscription-email`. Ne lève pas au-delà de l'appelant, qui
+ * l'enveloppe déjà : la facture est en échec chez Stripe, et faire échouer le
+ * webhook ne ferait que le rejouer sans rien corriger.
+ */
+async function envoyerCourrielEchecPaiement(
+  stripeSubId: string | undefined,
+  inv: Stripe.Invoice,
+): Promise<void> {
+  if (!stripeSubId) return;
+
+  const admin = getServiceClient();
+  const { data: sub, error } = await admin
+    .from('subscriptions')
+    .select('org_id, currency, past_due_since, plan_id')
+    .eq('stripe_subscription_id', stripeSubId)
+    .maybeSingle();
+
+  // supabase-js ne lève jamais : sans ce test, une erreur de lecture passerait
+  // pour « aucun abonnement » et le client ne serait jamais prévenu.
+  if (error) throw new Error('lecture abonnement impossible: ' + error.message);
+  if (!sub?.org_id) return;
+
+  const { JOURS_DE_GRACE, sendPaymentFailedEmail } = await import('../lib/subscription-email');
+
+  // La date vient d'être posée par l'appelant ; le repli couvre le cas d'une
+  // ligne écrite avant cette version.
+  const depuis = sub.past_due_since ? new Date(sub.past_due_since) : new Date();
+  const suspension = new Date(depuis.getTime() + JOURS_DE_GRACE * 86400_000);
+
+  let planName: string | null = null;
+  if (sub.plan_id) {
+    const { data: plan } = await admin
+      .from('plans').select('name, name_fr').eq('id', sub.plan_id).maybeSingle();
+    // L'interface est en français : le nom traduit passe devant.
+    planName = (plan as any)?.name_fr || (plan as any)?.name || null;
+  }
+
+  await sendPaymentFailedEmail({
+    orgId: sub.org_id,
+    // Stripe réessaie et réémet l'événement : la tentative fait partie de la
+    // clé, sinon seul le tout premier échec serait annoncé au client.
+    eventId: `${inv.id}:${inv.attempt_count ?? 0}`,
+    amountCents: Math.max(0, Math.round(inv.amount_due || 0)),
+    currency: (sub.currency || inv.currency || 'CAD').toUpperCase(),
+    planName,
+    suspensionLe: suspension.toISOString(),
+  });
+}
 
 export default router;

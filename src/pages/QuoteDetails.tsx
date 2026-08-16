@@ -171,16 +171,19 @@ export default function QuoteDetails() {
         await updateQuote(quote.id, { contract_disclaimer: editDisclaimer.trim() || null });
         // Also update the section
         if (disclaimerSection) {
-          await supabase.from('quote_sections').update({ content: editDisclaimer.trim() }).eq('id', disclaimerSection.id);
+          const { error } = await supabase.from('quote_sections').update({ content: editDisclaimer.trim() }).eq('id', disclaimerSection.id);
+          if (error) throw error;
         }
       } else if (editing === 'intro') {
         if (introSection) {
-          await supabase.from('quote_sections').update({ content: editIntro.trim() }).eq('id', introSection.id);
+          const { error } = await supabase.from('quote_sections').update({ content: editIntro.trim() }).eq('id', introSection.id);
+          if (error) throw error;
         } else {
-          await supabase.from('quote_sections').insert({
+          const { error } = await supabase.from('quote_sections').insert({
             quote_id: quote.id, section_type: 'introduction', title: 'Introduction',
             content: editIntro.trim(), sort_order: 0, enabled: true,
           });
+          if (error) throw error;
         }
       } else if (editing === 'deposit') {
         await updateQuote(quote.id, {

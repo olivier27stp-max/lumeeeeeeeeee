@@ -290,11 +290,19 @@ export default function InvoiceEdit() {
           const subtotal = normalizedItems.reduce((s, i) => s + i.qty * i.unit_price_cents, 0);
           const disc = Math.max(0, Math.round(discountDollars * 100));
           const breakdown = calculateTaxes(subtotal, disc, resolvedTaxes);
-          // Delete old applied taxes for this invoice
-          await supabase.from('applied_taxes').delete().eq('document_type', 'invoice').eq('document_id', id!);
+          // Delete old applied taxes for this invoice.
+          // supabase-js ne throw pas : lire `error`, sinon l'échec est invisible
+          // (c'est comme ça que la ventilation TPS/TVQ a manqué sur les
+          // factures pendant des mois — policies d'écriture absentes).
+          const { error: delErr } = await supabase
+            .from('applied_taxes')
+            .delete()
+            .eq('document_type', 'invoice')
+            .eq('document_id', id!);
+          if (delErr) throw delErr;
           // Insert new
           if (breakdown.length > 0) {
-            await supabase.from('applied_taxes').insert(
+            const { error: insErr } = await supabase.from('applied_taxes').insert(
               breakdown.map((t, idx) => ({
                 document_type: 'invoice' as const,
                 document_id: id!,
@@ -306,8 +314,13 @@ export default function InvoiceEdit() {
                 sort_order: idx,
               }))
             );
+            if (insErr) throw insErr;
           }
-        } catch { /* non-critical — invoice still saves */ }
+        } catch (taxErr) {
+          // La facture est sauvegardée; la ventilation, elle, a échoué — on le dit.
+          console.error('[InvoiceEdit] applied_taxes non persistées:', taxErr);
+          toast.error(language === 'fr' ? 'La ventilation des taxes n\'a pas pu être enregistrée.' : 'Tax breakdown could not be saved.');
+        }
       }
 
       // Persist template selection

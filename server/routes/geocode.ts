@@ -69,8 +69,8 @@ router.post('/places/autocomplete', validate(placesAutocompleteSchema), async (r
       return res.status(429).json({ error: 'Too many requests.' });
     }
 
-    const { input, countries, language, sessionToken } = req.body as {
-      input: string; countries?: string[]; language?: string; sessionToken?: string;
+    const { input, countries, language, sessionToken, primaryTypes } = req.body as {
+      input: string; countries?: string[]; language?: string; sessionToken?: string; primaryTypes?: string[];
     };
     const bias = await getOrgBias(auth.client, auth.orgId);
 
@@ -79,6 +79,7 @@ router.post('/places/autocomplete', validate(placesAutocompleteSchema), async (r
       includedRegionCodes: countries?.length ? countries : ['ca'],
       languageCode: language || 'fr',
     };
+    if (primaryTypes?.length) body.includedPrimaryTypes = primaryTypes;
     if (sessionToken) body.sessionToken = sessionToken;
     if (bias) {
       body.locationBias = {
@@ -367,18 +368,27 @@ router.post('/geocode-batch', async (req, res) => {
       const geocoded = await geocodeAddress(addr);
 
       if (geocoded) {
-        await client.from('jobs').update({
+        // Le compteur doit refléter ce qui est RÉELLEMENT écrit : sans lire
+        // l'erreur, le lot annonçait « succeeded » pour des jobs restés sans
+        // coordonnées, et l'utilisateur relançait dans le vide.
+        const { error: okErr } = await client.from('jobs').update({
           latitude: geocoded.latitude,
           longitude: geocoded.longitude,
           geocode_status: 'ok',
           geocoded_at: new Date().toISOString(),
         }).eq('id', job.id).eq('org_id', orgId);
-        succeeded++;
+        if (okErr) {
+          console.error('[geocode-batch] job update failed:', { jobId: job.id, error: okErr.message });
+          failed++;
+        } else {
+          succeeded++;
+        }
       } else {
-        await client.from('jobs').update({
+        const { error: failErr } = await client.from('jobs').update({
           geocode_status: 'failed',
           geocoded_at: new Date().toISOString(),
         }).eq('id', job.id).eq('org_id', orgId);
+        if (failErr) console.error('[geocode-batch] job status update failed:', { jobId: job.id, error: failErr.message });
         failed++;
       }
 

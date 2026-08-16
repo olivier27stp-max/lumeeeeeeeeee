@@ -66,25 +66,36 @@ export async function syncPipelineStage(admin: SupabaseClient, input: SyncInput)
   // Find existing deal by lead_id or quote_id
   let existingDealId: string | null = null;
 
+  // Une erreur sur ces lectures (y compris le cas maybeSingle « plusieurs
+  // lignes ») ferait croire qu'aucun deal n'existe → création d'un doublon
+  // dans le Kanban. On abandonne le sync plutôt que de dupliquer.
   if (input.leadId) {
-    const { data } = await admin
+    const { data, error } = await admin
       .from('pipeline_deals')
       .select('id')
       .eq('org_id', input.orgId)
       .eq('lead_id', input.leadId)
       .is('deleted_at', null)
       .maybeSingle();
+    if (error) {
+      console.error(`[d2d-pipeline-sync] deal lookup by lead failed (org ${input.orgId}, lead ${input.leadId}, trigger ${input.trigger}):`, error.message);
+      return null;
+    }
     existingDealId = data?.id || null;
   }
 
   if (!existingDealId && input.quoteId) {
-    const { data } = await admin
+    const { data, error } = await admin
       .from('pipeline_deals')
       .select('id')
       .eq('org_id', input.orgId)
       .eq('quote_id', input.quoteId)
       .is('deleted_at', null)
       .maybeSingle();
+    if (error) {
+      console.error(`[d2d-pipeline-sync] deal lookup by quote failed (org ${input.orgId}, quote ${input.quoteId}, trigger ${input.trigger}):`, error.message);
+      return null;
+    }
     existingDealId = data?.id || null;
   }
 
@@ -106,10 +117,15 @@ export async function syncPipelineStage(admin: SupabaseClient, input: SyncInput)
       if (input.lostReason) updates.lost_reason = input.lostReason;
     }
 
-    await admin
+    const { error: updErr } = await admin
       .from('pipeline_deals')
       .update(updates)
       .eq('id', existingDealId);
+
+    if (updErr) {
+      console.error(`[d2d-pipeline-sync] deal update failed (org ${input.orgId}, deal ${existingDealId}, trigger ${input.trigger} → ${dbStage}):`, updErr.message);
+      return null;
+    }
 
     return existingDealId;
   } else {
@@ -147,7 +163,7 @@ export async function syncPipelineStage(admin: SupabaseClient, input: SyncInput)
       .maybeSingle();
 
     if (error) {
-      console.error('[d2d-pipeline-sync] Insert failed:', error.message);
+      console.error(`[d2d-pipeline-sync] deal insert failed (org ${input.orgId}, trigger ${input.trigger} → ${dbStage}, lead ${input.leadId ?? '-'}, quote ${input.quoteId ?? '-'}, job ${input.jobId ?? '-'}):`, error.message);
       return null;
     }
 

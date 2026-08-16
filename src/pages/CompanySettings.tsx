@@ -12,6 +12,7 @@ import {
   Star,
   ExternalLink,
   Target,
+  Palette,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { supabase } from '../lib/supabase';
@@ -23,6 +24,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import PermissionGate from '../components/PermissionGate';
 import FileUpload from '../components/FileUpload';
+import { DEFAULT_BRAND, readableOn, resolveBrand } from '../lib/brandColor';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import { STORAGE_BUCKETS, deleteFile } from '../lib/storage';
 
@@ -40,6 +42,8 @@ interface CompanyDetails {
   postal_code: string;
   country: string;
   logo_url: string;
+  /** Accent des documents client. Vide = encre noire, le défaut. */
+  brand_color: string;
   revenue_goal_cents: number;
   currency: string;
   google_review_url: string;
@@ -64,6 +68,7 @@ const EMPTY_COMPANY: CompanyDetails = {
   postal_code: '',
   country: '',
   logo_url: '',
+  brand_color: '',
   revenue_goal_cents: 0,
   currency: 'CAD',
   google_review_url: '',
@@ -127,6 +132,7 @@ export default function CompanySettings() {
             postal_code: data.postal_code || '',
             country: data.country || '',
             logo_url: data.logo_url || '',
+            brand_color: data.brand_color || '',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
             currency: data.currency || 'CAD',
             google_review_url: data.google_review_url || '',
@@ -195,6 +201,8 @@ export default function CompanySettings() {
         postal_code: form.postal_code.trim(),
         country: form.country.trim(),
         logo_url: form.logo_url.trim(),
+        // Vide → null : la colonne a un CHECK sur le format hex.
+        brand_color: form.brand_color.trim() || null,
         revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
         currency: form.currency || 'CAD',
         google_review_url: form.google_review_url.trim(),
@@ -246,6 +254,9 @@ export default function CompanySettings() {
       setForm((prev) => ({ ...prev, website, email }));
       queryClient.invalidateQueries({ queryKey: ['crm-revenue-goal'] });
       queryClient.invalidateQueries({ queryKey: ['org-revenue-goal'] });
+      // La météo de l'accueil dépend de la ville — sinon elle reste en cache
+      // (staleTime 30 min) et le changement de ville semble sans effet.
+      queryClient.invalidateQueries({ queryKey: ['home-weather'] });
       toast.success(language === 'fr' ? 'Paramètres de l\'entreprise enregistrés.' : 'Company settings saved.');
       setTimeout(() => setSaved(false), 2000);
     } catch (error: any) {
@@ -374,6 +385,62 @@ export default function CompanySettings() {
           )}
         </div>
 
+        {/* Couleur de marque — l'accent des documents envoyés au client */}
+        <div className="section-card p-6 space-y-4">
+          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+            <Palette size={12} /> {language === 'fr' ? 'Couleur de la marque' : 'Brand colour'}
+          </h3>
+          <p className="text-[12px] text-text-secondary -mt-1">
+            {language === 'fr'
+              ? "Utilisée sur ce que ton client reçoit : contrat, soumission, page de paiement. Le reste du CRM ne change pas."
+              : 'Used on what your client receives: contract, quote, payment page. The rest of the CRM is unchanged.'}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              type="color"
+              aria-label={language === 'fr' ? 'Choisir la couleur' : 'Pick the colour'}
+              value={resolveBrand(form.brand_color)}
+              onChange={(e) => update('brand_color', e.target.value)}
+              className="h-10 w-14 cursor-pointer rounded-lg border border-outline bg-surface-secondary p-1"
+            />
+            <input
+              type="text"
+              value={form.brand_color}
+              onChange={(e) => update('brand_color', e.target.value)}
+              placeholder={DEFAULT_BRAND}
+              spellCheck={false}
+              className="glass-input w-32 font-mono text-[13px] uppercase"
+            />
+            {form.brand_color ? (
+              <button
+                type="button"
+                onClick={() => update('brand_color', '')}
+                className="glass-button inline-flex items-center gap-1.5 text-[11px]"
+              >
+                <Trash2 size={11} />
+                {language === 'fr' ? 'Revenir au noir' : 'Back to black'}
+              </button>
+            ) : null}
+          </div>
+
+          {/* Aperçu du bouton que le client voit — la seule chose qui compte ici */}
+          <div className="flex items-center gap-3 pt-1">
+            <span
+              className="inline-flex items-center rounded-lg px-4 py-2.5 text-[13px] font-medium"
+              style={{
+                background: resolveBrand(form.brand_color),
+                color: readableOn(form.brand_color),
+              }}
+            >
+              {language === 'fr' ? 'Signer le contrat' : 'Sign the contract'}
+            </span>
+            <span className="text-[11px] text-text-tertiary">
+              {language === 'fr' ? 'Aperçu' : 'Preview'}
+            </span>
+          </div>
+        </div>
+
         {/* Company Info */}
         <div className="section-card p-6 space-y-4">
           <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary">
@@ -481,12 +548,27 @@ export default function CompanySettings() {
               <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.city}
               </label>
-              <input
-                type="text"
+              <AddressAutocomplete
                 value={form.city}
-                onChange={(e) => update('city', e.target.value)}
-                className="glass-input w-full mt-1"
+                onChange={(v) => update('city', v)}
+                onSelect={(addr: StructuredAddress) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    city: addr.city || prev.city,
+                    province: addr.province || prev.province,
+                    country: addr.country || prev.country,
+                  }));
+                  setDirty(true);
+                }}
+                primaryTypes={['locality']}
+                className="mt-1"
+                placeholder="Drummondville"
               />
+              <p className="text-[11px] text-text-tertiary mt-1">
+                {language === 'fr'
+                  ? 'Ville par défaut de toute l\'équipe — la météo de l\'accueil l\'utilise quand un profil n\'a pas de ville.'
+                  : 'Default city for the whole team — home weather uses it when a profile has no city.'}
+              </p>
             </div>
             <div>
               <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">

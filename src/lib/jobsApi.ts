@@ -5,7 +5,11 @@ import type { JobDraftInitialValues } from '../components/NewJobModal';
 import { calculateJobFinancials, type CalcLineItem, type TaxLine } from './jobCalc';
 import { resolveClientIdForLead } from './leadsApi';
 import { clientDisplayName } from './clientsApi';
-import { emitJobCompleted } from './automationEventsApi';
+import {
+  emitJobCompleted,
+  emitAppointmentCreated,
+  emitAppointmentRescheduled,
+} from './automationEventsApi';
 import { invalidateScheduleCache } from './scheduleApi';
 import { syncEntityPin } from './fieldSalesApi';
 
@@ -202,7 +206,7 @@ async function syncJobSchedule(payload: {
   endAt?: string | null;
 }) {
   if (payload.scheduledAt && payload.endAt) {
-    const { error, status } = await supabase.rpc('rpc_schedule_job', {
+    const { data, error, status } = await supabase.rpc('rpc_schedule_job', {
       p_job_id: payload.jobId,
       p_start_at: payload.scheduledAt,
       p_end_at: payload.endAt,
@@ -217,6 +221,35 @@ async function syncJobSchedule(payload: {
       end_at: payload.endAt,
     });
     if (error) throw error;
+
+    // Déclenche les automatisations de rendez-vous (confirmation immédiate,
+    // rappels J-7 / J-1 / 2h).
+    //
+    // Sans ça, un job créé avec sa date depuis le modal « Nouveau job » ne
+    // déclenchait RIEN : le client ne recevait ni confirmation ni rappel. Le
+    // même geste fait par glisser-déposer dans le calendrier
+    // (`scheduleUnscheduledJob`) ou par « ajouter une visite » (`addVisit`)
+    // émettait bien l'événement — d'où un comportement incohérent et
+    // invisible : sur un job à 3 visites, seules les visites 2 et 3
+    // déclenchaient les rappels.
+    //
+    // `rpc_schedule_job` renvoie `updated: true` quand il a DÉPLACÉ une visite
+    // existante plutôt que d'en créer une. La distinction est nécessaire :
+    // ré-émettre `created` sur un déplacement renverrait une confirmation au
+    // client et laisserait les anciens rappels calés sur l'ancienne date.
+    const eventRow = (data as any)?.event;
+    const eventId = eventRow?.id;
+    if (eventId) {
+      const params = {
+        eventId: String(eventId),
+        jobId: payload.jobId,
+        startTime: payload.scheduledAt,
+      };
+      // Non bloquant : une automatisation muette ne doit jamais faire échouer
+      // l'enregistrement du job.
+      if ((data as any)?.updated) emitAppointmentRescheduled(params);
+      else emitAppointmentCreated(params);
+    }
     return;
   }
 
@@ -848,6 +881,9 @@ export async function createJob(payload: {
       .filter((item) => item.name.trim())
       .map((item) => ({
         job_id: data.id,
+        // Explicite plutôt que via le trigger crm_enforce_scope : garantit
+        // l'org résolue par ce module (cohérence multi-org).
+        org_id: orgId,
         name: item.name.trim(),
         qty: item.qty,
         unit_price_cents: item.unit_price_cents,
@@ -904,7 +940,7 @@ export async function createJob(payload: {
       const depositCents = payload.deposit_type === 'percentage'
         ? Math.round(financials.total_cents * (payload.deposit_value || 0) / 100)
         : Math.round((payload.deposit_value || 0) * 100);
-      await supabase.from('jobs').update({
+      const { error: depErr } = await supabase.from('jobs').update({
         deposit_required: payload.deposit_required || false,
         deposit_type: payload.deposit_required ? (payload.deposit_type || null) : null,
         deposit_value: payload.deposit_required ? (payload.deposit_value || 0) : 0,
@@ -912,6 +948,7 @@ export async function createJob(payload: {
         require_payment_method: payload.require_payment_method || false,
         deposit_status: payload.deposit_required ? 'pending' : 'not_required',
       }).eq('id', data.id).eq('org_id', orgId);
+      if (depErr) throw depErr;
     }
 
     // Refresh data so returned job has correct values
@@ -1249,11 +1286,12 @@ export async function softDeleteJob(jobId: string): Promise<SoftDeleteJobResult>
 
   // Soft-delete associated schedule_events first
   const nowIso = new Date().toISOString();
-  await supabase
+  const { error: evErr } = await supabase
     .from('schedule_events')
     .update({ deleted_at: nowIso, updated_at: nowIso })
     .eq('job_id', jobId)
     .is('deleted_at', null);
+  if (evErr) throw evErr;
 
   const { data, error } = await supabase.rpc('soft_delete_job', {
     p_org_id: orgId,

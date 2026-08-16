@@ -498,7 +498,8 @@ export default function Jobs() {
           onClick: async () => {
             try {
               const undoOrgId = await getCurrentOrgIdOrThrow();
-              await supabase.from('jobs').update({ deleted_at: null, updated_at: new Date().toISOString() }).eq('id', jobToDelete.id).eq('org_id', undoOrgId);
+              const { error: undoErr } = await supabase.from('jobs').update({ deleted_at: null, updated_at: new Date().toISOString() }).eq('id', jobToDelete.id).eq('org_id', undoOrgId);
+              if (undoErr) throw undoErr;
               await loadJobs();
               toast.success(language === 'fr' ? 'Job restauré' : 'Job restored');
             } catch { toast.error(language === 'fr' ? 'Échec de la restauration' : 'Failed to restore'); }

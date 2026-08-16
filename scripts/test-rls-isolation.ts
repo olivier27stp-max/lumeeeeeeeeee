@@ -28,6 +28,19 @@ dotenv.config({ path: '.env.local' });
 const DB_URL = process.env.DB_URL || process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
 if (!DB_URL) { console.error('Set DB_URL (privileged/postgres connection).'); process.exit(2); }
 
+// Ce test ÉCRIT dans la base (création d'orgs et de lignes de contrôle). Il ne
+// doit jamais toucher la prod. `SUPABASE_DB_URL` a réellement pointé sur la
+// prod dans un .env.local, sans que rien ne le signale : le garde-fou vaut
+// mieux que la vigilance.
+const REF_PROD = process.env.SUPABASE_PROJECT_REF_PROD?.trim();
+if (REF_PROD && DB_URL.includes(REF_PROD)) {
+  console.error(
+    `REFUS : DB_URL pointe sur la PRODUCTION (${REF_PROD}).\n` +
+    `Ce test écrit dans la base. Faites-le pointer sur staging.`,
+  );
+  process.exit(2);
+}
+
 /**
  * Parse the connection string by hand rather than handing it to `pg`.
  *
@@ -154,7 +167,13 @@ async function main() {
   console.log(`Couverture lecture: ${conclusive} relation(s) testée(s) de façon concluante, ${inconclusive} sans donnée d'une autre org (NON testées).`);
   // Un jeu de données trop pauvre rend le résultat sans valeur : on le dit, et
   // on sort en code 2 (« fixture inadéquate »), distinct du code 1 (« fuite »).
-  const MIN_CONCLUSIVE = 10;
+  // Relevé de 10 à 80 le 2026-08-13, après peuplement de staging par
+  // `npm run seed:rls` : la couverture est passée de 28 à 96 relations
+  // concluantes. Un seuil laissé à 10 aurait laissé la fixture s'appauvrir
+  // sans bruit, et le « PASS » serait redevenu creux — c'est précisément le
+  // piège que ce compteur existe pour éviter. La marge sous 96 absorbe les
+  // variations normales du jeu de données.
+  const MIN_CONCLUSIVE = 80;
   if (conclusive < MIN_CONCLUSIVE) {
     console.error(`\n✗ FIXTURE INADÉQUATE : seulement ${conclusive} relation(s) concluante(s) (minimum ${MIN_CONCLUSIVE}).`);
     console.error('  La base de test doit contenir des données réparties sur au moins 2 organisations.');

@@ -56,6 +56,7 @@ export async function setHourlyRate(input: {
       email: input.email || '',
       first_name: parts[0] || '',
       last_name: parts.slice(1).join(' ') || '',
+      phone: '',
       hourly_rate_cents: cents,
     });
     if (error) throw error;

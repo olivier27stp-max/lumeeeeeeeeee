@@ -17,16 +17,17 @@ import {
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
-  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft,
-} from 'lucide-react';
+  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
+import MessageEditor from '../components/automations/MessageEditor';
 import {
   type AutomationRule,
   getAutomationRules,
   toggleAutomationRule,
+  getFailureCountsByRule,
 } from '../lib/automationRulesApi';
 
 // ── Automation name translations (for DB-seeded English names) ──
@@ -217,6 +218,7 @@ const PRESET_META: Record<string, {
   job_reminder_1d:          { icon: CalendarClock,  category: 'Jobs' },
   job_reminder_2h:          { icon: CalendarClock,  category: 'Jobs' },
   appointment_confirmation: { icon: CalendarClock,  category: 'Jobs' },
+  agreement_signed:         { icon: FileSignature, category: 'Jobs' },
   no_show_followup:         { icon: UserX,          category: 'Jobs' },
 
   // Invoices
@@ -225,11 +227,10 @@ const PRESET_META: Record<string, {
   invoice_sent_reminder_7d: { icon: FileText,       category: 'Invoices' },
   invoice_sent_reminder_14d:{ icon: AlertTriangle,  category: 'Invoices' },
   invoice_sent_reminder_30d:{ icon: AlertTriangle,  category: 'Invoices' },
-  invoice_reminder_1d:      { icon: FileText,       category: 'Invoices' },
-  invoice_reminder_3d:      { icon: FileText,       category: 'Invoices' },
-  invoice_reminder_5d:      { icon: FileText,       category: 'Invoices' },
-  invoice_reminder_15d:     { icon: AlertTriangle,  category: 'Invoices' },
-  invoice_reminder_30d:     { icon: AlertTriangle,  category: 'Invoices' },
+  // Les `invoice_reminder_*` (sans `sent_`) ont été retirés : anciens noms de
+  // presets qui n'existent plus, ni dans automationPresets.data.ts ni dans
+  // aucune règle en base (vérifié prod et staging : 0 occurrence). Ils
+  // laissaient croire à cinq relances de facture de plus qu'il n'y en a.
 
   // Payments
   payment_confirmation:     { icon: CreditCard,     category: 'Payments' },
@@ -332,6 +333,8 @@ export default function Automations() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  /** Échecs par règle sur 7 jours — alimente le badge d'alerte. */
+  const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   // ── Load (read only — no auto-seed) ──
@@ -348,6 +351,17 @@ export default function Automations() {
         return true;
       });
       setRules(deduped);
+
+      // Échecs des 7 derniers jours. Le moteur les journalisait déjà, mais
+      // aucune page ne lisait la table : une automatisation cassée restait
+      // affichée « active » avec un badge vert, et l'utilisateur n'apprenait
+      // jamais que ses clients n'avaient rien reçu.
+      // Non bloquant : la liste doit s'afficher même si ce chargement échoue.
+      try {
+        setFailureCounts(await getFailureCountsByRule());
+      } catch (e: any) {
+        console.error('Failed to load automation failures:', e.message);
+      }
     } catch (e: any) {
       console.error('Failed to load rules:', e.message);
       toast.error(language === 'fr' ? 'Impossible de charger les automatisations' : 'Failed to load automations');
@@ -606,6 +620,19 @@ export default function Automations() {
                                           {t.automations.optional}
                                         </span>
                                       )}
+                                      {/* Échecs récents : sans ce badge, une automatisation
+                                          cassée restait « active » en vert et l'utilisateur
+                                          ignorait que ses clients n'avaient rien reçu. */}
+                                      {(failureCounts[rule.id] || 0) > 0 && (
+                                        <span
+                                          title={fr
+                                            ? `${failureCounts[rule.id]} échec(s) dans les 7 derniers jours`
+                                            : `${failureCounts[rule.id]} failure(s) in the last 7 days`}
+                                          className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 shrink-0"
+                                        >
+                                          {fr ? `${failureCounts[rule.id]} échec` : `${failureCounts[rule.id]} failed`}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -709,6 +736,26 @@ export default function Automations() {
                                       </div>
                                     </div>
                                   </div>
+
+                                  {/* Le texte réellement envoyé au client, éditable.
+                                      La page n'affichait que le TYPE d'action
+                                      (« Envoyer un courriel ») : l'utilisateur ne
+                                      pouvait ni relire ni corriger ce qui partait en
+                                      son nom. */}
+                                  {rule.actions
+                                    .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
+                                    .map((a, i) => (
+                                      <MessageEditor
+                                        ruleName={localizeAutomationName(rule.name, language)}
+                                        key={`${rule.id}-${a.type}-${i}`}
+                                        ruleId={rule.id}
+                                        actionType={a.type as 'send_sms' | 'send_email'}
+                                        body={String(a.config?.body ?? '')}
+                                        subject={a.type === 'send_email' ? String(a.config?.subject ?? '') : undefined}
+                                        fr={fr}
+                                        onSaved={load}
+                                      />
+                                    ))}
                                 </td>
                               </tr>
                             )}

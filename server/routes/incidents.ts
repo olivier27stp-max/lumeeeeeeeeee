@@ -6,7 +6,7 @@
  * - GET  /api/incidents/:id                 detail + timeline
  * - PATCH /api/incidents/:id                update fields (status, risk, notification timestamps…)
  * - POST /api/incidents/:id/timeline        append timeline entry
- * - GET  /api/incidents/anomalies           detect brute-force / distributed attacks (admin)
+ * - POST /api/incidents/failed-login        journalise un échec de connexion (public)
  *
  * Loi 25 art. 3.5 / 3.8 — registre incidents + notifications CAI.
  * RGPD art. 33-34 — 72h CNIL + personnes concernées si risque élevé.
@@ -14,7 +14,6 @@
 
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { platformOwnerId } from '../lib/config';
 
 const router = Router();
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -135,13 +134,17 @@ router.patch('/incidents/:id', async (req, res) => {
     .from('security_incidents').update(patch).eq('id', id).select().single();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Timeline entry
-  await svc.from('incident_timeline').insert({
+  // Timeline entry — registre exige par la Loi 25 / RGPD art. 33 : un trou
+  // dans la chronologie n'est pas rattrapable apres coup, il doit se voir.
+  const { error: timelineErr } = await svc.from('incident_timeline').insert({
     incident_id: id,
     actor_id: auth.user.id,
     event_type: patch.status && patch.status !== existing.status ? 'status_change' : 'update',
     payload: patch,
   });
+  if (timelineErr) {
+    console.error('[incidents] timeline entry insert failed:', { incidentId: id, actorId: auth.user.id, error: timelineErr.message });
+  }
 
   return res.status(200).json({ incident: data });
 });
@@ -176,27 +179,21 @@ router.post('/incidents/:id/timeline', async (req, res) => {
   return res.status(201).json({ entry: data });
 });
 
-// ────────────────────────────────────────────────────────────────────
-// GET /api/incidents/anomalies?minutes=15
-// ────────────────────────────────────────────────────────────────────
-router.get('/incidents/anomalies', async (req, res) => {
-  const auth = await requireAuthedClient(req, res);
-  if (!auth) return;
-
-  // Login anomalies are platform-global telemetry: detect_login_anomalies
-  // aggregates failed_login_attempts across ALL tenants (that table has no
-  // org_id). An org admin must NOT see other tenants' failed-login emails/IPs,
-  // so this is restricted to the platform owner.
-  if (!platformOwnerId || auth.user.id !== platformOwnerId) {
-    return res.status(403).json({ error: 'Forbidden.' });
-  }
-
-  const svc = getServiceClient();
-  const minutes = Math.min(1440, Math.max(1, Number(req.query.minutes) || 15));
-  const { data, error } = await svc.rpc('detect_login_anomalies', { p_minutes: minutes });
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(200).json({ anomalies: data ?? [], window_minutes: minutes });
-});
+// GET /api/incidents/anomalies a été retiré avec le back-office Platform Admin.
+//
+// La route agrégeait `failed_login_attempts`, une table SANS org_id : elle
+// exposait donc les adresses courriel et IP de tous les locataires confondus.
+// C'était le dernier accès inter-tenants de l'application, conservé par
+// inadvertance parce qu'il vit dans un autre fichier que le back-office.
+//
+// Rien ne l'appelait (aucun client, aucune page) et elle n'était consultable
+// que depuis le Platform Admin, supprimé. Une détection que personne ne
+// regarde n'est pas une détection.
+//
+// La COLLECTE reste en place (POST /incidents/failed-login ci-dessous) : la
+// table continue de se remplir et `detect_login_anomalies` existe toujours.
+// Si le besoin d'alerter sur du bourrage d'identifiants revient, la bonne
+// forme est une notification automatique — pas une page à penser à ouvrir.
 
 // ────────────────────────────────────────────────────────────────────
 // POST /api/incidents/failed-login (no auth — called by frontend after login fail)
@@ -211,12 +208,16 @@ router.post('/incidents/failed-login', async (req, res) => {
   const ip = typeof fwd === 'string' ? fwd.split(',')[0]?.trim() : (req.ip || null);
 
   const svc = getServiceClient();
-  await svc.rpc('record_failed_login', {
+  // La reponse reste 204 (route publique, on ne renseigne pas l'attaquant),
+  // mais un echec silencieux ici aveugle detect_login_anomalies : plus aucune
+  // detection de force brute.
+  const { error } = await svc.rpc('record_failed_login', {
     p_email: email,
     p_ip: ip,
     p_user_agent: (req.headers['user-agent'] || '').toString().slice(0, 500),
     p_reason: reason ? String(reason).slice(0, 120) : 'invalid_credentials',
   });
+  if (error) console.error('[incidents] record_failed_login failed:', error.message);
   return res.status(204).end();
 });
 

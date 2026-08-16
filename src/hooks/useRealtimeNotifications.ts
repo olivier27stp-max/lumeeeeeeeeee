@@ -102,12 +102,13 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
       for (const t of entityTypes) for (const nav of ENTITY_TO_NAV[t]) delete next[nav];
       return next;
     });
-    await supabase
+    const { error } = await supabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('org_id', org)
       .eq('is_read', false)
       .in('entity_type', entityTypes);
+    if (error) console.error('[notifications] failed to mark nav notifications read', error.message);
     // Re-sync exact counts (realtime UPDATE events also do this, but they can
     // be dropped when the tab is backgrounded).
     fetchCounts();

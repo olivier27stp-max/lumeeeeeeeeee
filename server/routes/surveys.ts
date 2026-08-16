@@ -31,11 +31,12 @@ router.get('/survey/:token', async (req, res) => {
     if (!survey) return res.status(404).json({ error: 'Survey not found.' });
 
     // Track click on review link (update review_requests status)
-    await supabase
+    const { error: clickError } = await supabase
       .from('review_requests')
       .update({ status: 'clicked', clicked_at: new Date().toISOString() })
       .eq('survey_id', survey.id)
       .eq('status', 'sent');
+    if (clickError) console.error('[surveys] click tracking failed:', { surveyId: survey.id, error: clickError.message });
 
     // Fetch company info
     const { data: company } = await supabase
@@ -99,12 +100,14 @@ router.post('/survey/:token', async (req, res) => {
 
     if (updateError) throw updateError;
 
-    // Update review_requests tracking
-    await supabase
+    // Update review_requests tracking — la réponse du client est déjà
+    // enregistrée, on ne la fait pas échouer pour du suivi.
+    const { error: trackError } = await supabase
       .from('review_requests')
       .update({ status: 'submitted', submitted_at: new Date().toISOString() })
       .eq('survey_id', survey.id)
       .in('status', ['sent', 'clicked']);
+    if (trackError) console.error('[surveys] submit tracking failed:', { surveyId: survey.id, error: trackError.message });
 
     // Fetch company info for response
     const { data: company } = await supabase
@@ -139,27 +142,45 @@ router.post('/survey/:token', async (req, res) => {
     } else {
       // Rating <= 3: internal feedback, notify admin, create follow-up task
       // Log negative feedback activity
-      await supabase.from('activity_log').insert({
+      const { error: logError } = await supabase.from('activity_log').insert({
         org_id: survey.org_id,
         entity_type: survey.job_id ? 'job' : 'client',
         entity_id: survey.job_id || survey.client_id || survey.id,
         event_type: 'feedback_received',
         metadata: { rating, feedback, survey_id: survey.id },
       });
+      if (logError) console.error('[surveys] activity_log insert failed:', { surveyId: survey.id, error: logError.message });
 
       // Notification « Avis client reçu » : émise par le trigger DB sur
       // satisfaction_surveys (migration 20260747000000) — couvre toutes les
       // notes, la basse comme la bonne. On garde la tâche de suivi ici.
 
-      // Create follow-up task
-      await supabase.from('tasks').insert({
-        org_id: survey.org_id,
-        title: `Follow up on low satisfaction rating (${rating}/5)`,
-        description: `Client gave ${rating}/5 stars. Feedback: ${feedback || 'None'}`,
-        status: 'pending',
-        entity_type: survey.client_id ? 'client' : 'job',
-        entity_id: survey.client_id || survey.job_id || null,
-      });
+      // Create follow-up task — tasks.created_by est NOT NULL et cette route
+      // est publique (aucun user) : on attribue la tâche à l'owner de l'org.
+      const { data: taskOwner } = await supabase
+        .from('memberships')
+        .select('user_id')
+        .eq('org_id', survey.org_id)
+        .eq('role', 'owner')
+        .limit(1)
+        .maybeSingle();
+      if (taskOwner?.user_id) {
+        const { error: taskError } = await supabase.from('tasks').insert({
+          org_id: survey.org_id,
+          created_by: taskOwner.user_id,
+          title: `Follow up on low satisfaction rating (${rating}/5)`,
+          description: `Client gave ${rating}/5 stars. Feedback: ${feedback || 'None'}`,
+          // Colonnes reelles : linked_entity_* (pas entity_*), et le CHECK de
+          // tasks.status n'accepte que 'open' | 'done' — 'pending' faisait
+          // echouer l'insertion, donc aucune tache de suivi n'etait creee.
+          status: 'open',
+          linked_entity_type: survey.client_id ? 'client' : 'job',
+          linked_entity_id: survey.client_id || survey.job_id || null,
+        });
+        // Sans cette tâche, un client mécontent n'est relancé par personne : le
+        // sondage est déjà enregistré (rejouer donnerait un 409), donc on trace.
+        if (taskError) console.error('[surveys] follow-up task insert failed:', { surveyId: survey.id, orgId: survey.org_id, rating, error: taskError.message });
+      }
 
       return res.json({
         success: true,

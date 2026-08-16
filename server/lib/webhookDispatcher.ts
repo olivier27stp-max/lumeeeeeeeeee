@@ -153,28 +153,29 @@ export async function attemptDelivery(deliveryId: string): Promise<{
     .eq('id', (delivery as DeliveryRow).endpoint_id)
     .maybeSingle();
 
-  if (epErr || !endpoint) {
-    await admin
+  // Toute transition vers 'abandoned' doit etre lue : si elle echoue la
+  // livraison reste 'pending' avec next_attempt_at echu, donc le cron la
+  // reprend indefiniment sans jamais pouvoir aboutir.
+  const abandon = async (reason: string) => {
+    const { error } = await admin
       .from('webhook_deliveries')
-      .update({
-        status: 'abandoned',
-        error_message: 'endpoint missing',
-      })
+      .update({ status: 'abandoned', error_message: reason })
       .eq('id', deliveryId);
+    if (error) {
+      console.error(`[webhookDispatcher] failed to abandon delivery ${deliveryId} (${reason}):`, error.message);
+    }
+  };
+
+  if (epErr || !endpoint) {
+    await abandon('endpoint missing');
     return { ok: false, error: 'endpoint missing' };
   }
   if (!endpoint.is_active) {
-    await admin
-      .from('webhook_deliveries')
-      .update({ status: 'abandoned', error_message: 'endpoint inactive' })
-      .eq('id', deliveryId);
+    await abandon('endpoint inactive');
     return { ok: false, error: 'endpoint inactive' };
   }
   if (!isHttpUrl(endpoint.url)) {
-    await admin
-      .from('webhook_deliveries')
-      .update({ status: 'abandoned', error_message: 'invalid URL' })
-      .eq('id', deliveryId);
+    await abandon('invalid URL');
     return { ok: false, error: 'invalid URL' };
   }
 
@@ -219,7 +220,7 @@ export async function attemptDelivery(deliveryId: string): Promise<{
   const newAttemptCount = (delivery as DeliveryRow).attempt_count + 1;
 
   if (success) {
-    await admin
+    const { error: sentErr } = await admin
       .from('webhook_deliveries')
       .update({
         status: 'sent',
@@ -231,13 +232,21 @@ export async function attemptDelivery(deliveryId: string): Promise<{
         sent_at: new Date().toISOString(),
       })
       .eq('id', deliveryId);
-    await admin
+    if (sentErr) {
+      // La requete HTTP est PARTIE mais la livraison reste 'pending' : le cron
+      // la rejouera et l'abonne recevra l'evenement en double.
+      console.error(`[webhookDispatcher] CRITICAL: delivery ${deliveryId} sent but not marked — it will be re-delivered:`, sentErr.message);
+    }
+    const { error: statErr } = await admin
       .from('webhook_endpoints')
       .update({
         last_delivery_at: new Date().toISOString(),
         last_delivery_status: 'sent',
       })
       .eq('id', endpoint.id);
+    if (statErr) {
+      console.error(`[webhookDispatcher] endpoint ${endpoint.id} stats update failed:`, statErr.message);
+    }
     return { ok: true, status: httpStatus! };
   }
 
@@ -250,7 +259,7 @@ export async function attemptDelivery(deliveryId: string): Promise<{
     : new Date(Date.now() + backoffMin * 60_000).toISOString();
 
   const errMsg = networkErr || `HTTP ${httpStatus}`;
-  await admin
+  const { error: retryErr } = await admin
     .from('webhook_deliveries')
     .update({
       status: nextStatus,
@@ -261,14 +270,22 @@ export async function attemptDelivery(deliveryId: string): Promise<{
       next_attempt_at: nextAttemptAt,
     })
     .eq('id', deliveryId);
+  if (retryErr) {
+    // attempt_count/next_attempt_at non ecrits = plus de backoff ni de plafond
+    // a MAX_ATTEMPTS : le cron martelerait l'endpoint mort a chaque passage.
+    console.error(`[webhookDispatcher] CRITICAL: delivery ${deliveryId} retry state not written (backoff lost):`, retryErr.message);
+  }
 
-  await admin
+  const { error: statErr } = await admin
     .from('webhook_endpoints')
     .update({
       last_delivery_at: new Date().toISOString(),
       last_delivery_status: nextStatus === 'abandoned' ? 'abandoned' : 'failed',
     })
     .eq('id', endpoint.id);
+  if (statErr) {
+    console.error(`[webhookDispatcher] endpoint ${endpoint.id} stats update failed:`, statErr.message);
+  }
 
   return { ok: false, status: httpStatus ?? undefined, error: errMsg };
 }

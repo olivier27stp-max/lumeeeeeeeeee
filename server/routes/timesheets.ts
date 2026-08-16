@@ -116,12 +116,17 @@ router.post('/timesheets/punch-in', validate(punchInSchema), async (req, res) =>
     // GPS points start flowing once the client calls /tracking/points after
     // the user grants geolocation permission. The session row alone enables
     // the "punched but no GPS" badge on the dispatch map.
-    await admin
+    // Effets de bord GPS : le pointage lui-même est déjà enregistré, donc on ne
+    // fait pas échouer la requête — mais l'échec doit être tracé, sinon le
+    // membre apparaît « pointé sans GPS » sans explication.
+    const { error: expireErr } = await admin
       .from('tracking_sessions')
       .update({ status: 'expired', ended_at: iso })
       .eq('user_id', auth.user.id)
       .eq('status', 'active');
-    await admin
+    if (expireErr) console.error('[timesheets] expire stale tracking sessions failed:', { userId: auth.user.id, error: expireErr.message });
+
+    const { error: sessErr } = await admin
       .from('tracking_sessions')
       .insert({
         org_id: auth.orgId,
@@ -132,6 +137,7 @@ router.post('/timesheets/punch-in', validate(punchInSchema), async (req, res) =>
         status: 'active',
         started_at: iso,
       });
+    if (sessErr) console.error('[timesheets] tracking session create failed:', { entryId: data.id, userId: auth.user.id, error: sessErr.message });
 
     return res.json({ ok: true, entry: data });
   } catch (err: any) {
@@ -180,12 +186,16 @@ router.post('/timesheets/punch-out', validate(punchOutSchema), async (req, res) 
 
     if (error) return sendSafeError(res, error, 'Failed to punch out.', '[timesheets]');
 
-    // Stop any active tracking session linked to this entry
-    await admin
+    // Stop any active tracking session linked to this entry.
+    // Le pointage de sortie est enregistré : on ne rejoue pas la requête, mais
+    // une session restée « active » continue d'afficher le membre en service
+    // sur la carte de répartition — il faut le voir dans les journaux.
+    const { error: sessErr } = await admin
       .from('tracking_sessions')
       .update({ status: 'stopped', ended_at: iso })
       .eq('time_entry_id', entry.id)
       .eq('status', 'active');
+    if (sessErr) console.error('[timesheets] stop tracking session failed:', { entryId: entry.id, error: sessErr.message });
 
     return res.json({ ok: true, entry: data });
   } catch (err: any) {
@@ -215,7 +225,9 @@ router.post('/timesheets/break/start', validate(breakSchema), async (req, res) =
 
     const admin = getServiceClient();
     const { data, error } = await admin
-      .from('time_entries').update({ breaks, status: 'on_break', updated_at: iso })
+      // CHECK de time_entries.status : active | completed | paused.
+      // 'on_break' n'en fait pas partie — demarrer une pause echouait.
+      .from('time_entries').update({ breaks, status: 'paused', updated_at: iso })
       .eq('id', entry_id).eq('org_id', auth.orgId).select('*').single();
     if (error) return sendSafeError(res, error, 'Failed to start break.', '[timesheets]');
     return res.json({ ok: true, entry: data });

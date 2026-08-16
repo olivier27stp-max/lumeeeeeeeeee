@@ -104,9 +104,12 @@ export async function runOneSchedule(
   }
 
   // Recalculate totals (handles taxes / triggers)
-  try {
-    await svc.rpc('recalculate_invoice_totals', { p_invoice_id: invoice.id });
-  } catch { /* non-fatal */ }
+  // supabase-js ne leve pas : l'erreur doit etre lue, sinon une facture aux
+  // totaux faux (taxes absentes) part chez le client sans aucune trace.
+  const { error: totalsErr } = await svc.rpc('recalculate_invoice_totals', { p_invoice_id: invoice.id });
+  if (totalsErr) {
+    console.error(`[recurring-invoices] recalculate_invoice_totals failed for invoice ${invoice.id} (schedule ${schedule.id}):`, totalsErr.message);
+  }
 
   // auto_send: mark as sent (issued_at set) — actual email delivery is best
   // handled by the existing invoice reminder/email pipeline keyed off issued_at.
@@ -114,12 +117,15 @@ export async function runOneSchedule(
   // has none. For V1, flagging issued_at + sent_at signals the reminders engine
   // which can fan out the email via its own service-role mailer flow.
   if (schedule.auto_send) {
-    try {
-      const nowIso = new Date().toISOString();
-      await svc.from('invoices')
-        .update({ status: 'sent', issued_at: nowIso, sent_at: nowIso })
-        .eq('id', invoice.id);
-    } catch { /* non-fatal */ }
+    const nowIso = new Date().toISOString();
+    const { error: sendErr } = await svc.from('invoices')
+      .update({ status: 'sent', issued_at: nowIso, sent_at: nowIso })
+      .eq('id', invoice.id);
+    // Non fatal, mais sans issued_at la facture reste en brouillon : le moteur
+    // de relances ne la verra jamais et le client ne sera jamais sollicite.
+    if (sendErr) {
+      console.error(`[recurring-invoices] auto_send flag failed for invoice ${invoice.id} (schedule ${schedule.id}):`, sendErr.message);
+    }
   }
 
   // Advance next_run_date if requested

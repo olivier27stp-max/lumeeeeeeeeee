@@ -61,11 +61,12 @@ router.post('/tracking/start', validate(startSessionSchema), async (req, res) =>
     if (denial) return res.status(403).json(denial);
 
     // Expire any stale active sessions
-    await admin
+    const { error: expireErr } = await admin
       .from('tracking_sessions')
       .update({ status: 'expired', ended_at: new Date().toISOString() })
       .eq('user_id', auth.user.id)
       .eq('status', 'active');
+    if (expireErr) throw expireErr;
 
     const { data: session, error } = await admin
       .from('tracking_sessions')
@@ -82,8 +83,8 @@ router.post('/tracking/start', validate(startSessionSchema), async (req, res) =>
       .single();
     if (error) throw error;
 
-    // Log event
-    await admin.from('tracking_events').insert({
+    // Log event — journal d'audit du suivi GPS (Loi 25), non bloquant.
+    const { error: evtErr } = await admin.from('tracking_events').insert({
       org_id: auth.orgId,
       session_id: session.id,
       user_id: auth.user.id,
@@ -91,6 +92,7 @@ router.post('/tracking/start', validate(startSessionSchema), async (req, res) =>
       event_at: new Date().toISOString(),
       details: { source: source || 'web' },
     });
+    if (evtErr) console.error('[tracking/start] event log failed:', { sessionId: session.id, error: evtErr.message });
 
     return res.json({ session });
   } catch (error: any) {
@@ -108,13 +110,17 @@ router.post('/tracking/stop', validate(stopSessionSchema), async (req, res) => {
     const { sessionId, reason } = req.body;
     const now = new Date().toISOString();
 
-    await admin
+    // L'arrêt DOIT être fiable : une session restée « active » continue
+    // d'accepter les points GPS du membre alors qu'il croit avoir coupé le
+    // suivi. On répond 500 pour que le client rejoue l'arrêt (idempotent).
+    const { error: stopErr } = await admin
       .from('tracking_sessions')
       .update({ status: reason || 'stopped', ended_at: now })
       .eq('id', sessionId)
       .eq('user_id', auth.user.id);
+    if (stopErr) throw stopErr;
 
-    await admin.from('tracking_events').insert({
+    const { error: evtErr } = await admin.from('tracking_events').insert({
       org_id: auth.orgId,
       session_id: sessionId,
       user_id: auth.user.id,
@@ -122,12 +128,14 @@ router.post('/tracking/stop', validate(stopSessionSchema), async (req, res) => {
       event_at: now,
       details: { reason },
     });
+    if (evtErr) console.error('[tracking/stop] event log failed:', { sessionId, error: evtErr.message });
 
     // Mark offline
-    await admin
+    const { error: offlineErr } = await admin
       .from('tracking_live_locations')
       .update({ tracking_status: 'offline', session_id: null })
       .eq('user_id', auth.user.id);
+    if (offlineErr) throw offlineErr;
 
     return res.json({ ok: true });
   } catch (error: any) {
@@ -159,8 +167,9 @@ router.post('/tracking/point', validate(recordPointSchema), async (req, res) => 
       .maybeSingle();
     if (!session) return res.status(404).json({ error: 'No active session found.' });
 
-    // Insert point
-    await admin.from('tracking_points').insert({
+    // Insert point — même contrat que /points-batch : un point perdu est un
+    // trou dans le trajet, le client doit pouvoir le rejouer.
+    const { error: pointErr } = await admin.from('tracking_points').insert({
       org_id: auth.orgId,
       session_id: sessionId,
       user_id: auth.user.id,
@@ -174,15 +183,18 @@ router.post('/tracking/point', validate(recordPointSchema), async (req, res) => 
       job_id: job_id ?? null,
       recorded_at: now,
     });
+    if (pointErr) throw pointErr;
 
     // Update session
-    await admin
+    const { error: sessErr } = await admin
       .from('tracking_sessions')
       .update({ last_point_at: now })
       .eq('id', sessionId);
+    if (sessErr) console.error('[tracking/point] last_point_at update failed:', { sessionId, error: sessErr.message });
 
-    // Upsert live location
-    await admin.from('tracking_live_locations').upsert({
+    // Upsert live location — le point est déjà enregistré ; on ne relance pas
+    // (cela dupliquerait le point), mais la carte reste figée sans ce log.
+    const { error: liveErr } = await admin.from('tracking_live_locations').upsert({
       user_id: auth.user.id,
       org_id: auth.orgId,
       session_id: sessionId,
@@ -196,6 +208,7 @@ router.post('/tracking/point', validate(recordPointSchema), async (req, res) => 
       recorded_at: now,
       tracking_status: moving ? 'active' : 'idle',
     }, { onConflict: 'user_id' });
+    if (liveErr) console.error('[tracking/point] live location upsert failed:', { userId: auth.user.id, sessionId, error: liveErr.message });
 
     return res.json({ ok: true });
   } catch (error: any) {
@@ -244,13 +257,15 @@ router.post('/tracking/points-batch', validate(batchPointsSchema), async (req, r
 
     // Update session with latest point
     const latest = points[points.length - 1];
-    await admin
+    const { error: sessErr } = await admin
       .from('tracking_sessions')
       .update({ last_point_at: latest.recorded_at })
       .eq('id', sessionId);
+    if (sessErr) console.error('[tracking/points-batch] last_point_at update failed:', { sessionId, error: sessErr.message });
 
-    // Update live location with latest
-    await admin.from('tracking_live_locations').upsert({
+    // Update live location with latest — les points sont déjà écrits : on
+    // journalise sans échouer, sinon le client rejouerait tout le lot.
+    const { error: liveErr } = await admin.from('tracking_live_locations').upsert({
       user_id: auth.user.id,
       org_id: auth.orgId,
       session_id: sessionId,
@@ -264,6 +279,7 @@ router.post('/tracking/points-batch', validate(batchPointsSchema), async (req, r
       recorded_at: latest.recorded_at,
       tracking_status: 'active',
     }, { onConflict: 'user_id' });
+    if (liveErr) console.error('[tracking/points-batch] live location upsert failed:', { userId: auth.user.id, sessionId, error: liveErr.message });
 
     return res.json({ ok: true, count: rows.length });
   } catch (error: any) {
@@ -359,7 +375,9 @@ router.post('/tracking/event', async (req, res) => {
     const admin = getServiceClient();
     const { sessionId, eventType, latitude, longitude, details } = req.body;
 
-    await admin.from('tracking_events').insert({
+    // Écrire l'événement est le seul objet de cette route : un échec avalé
+    // renverrait ok:true pour un journal vide.
+    const { error } = await admin.from('tracking_events').insert({
       org_id: auth.orgId,
       session_id: sessionId || null,
       user_id: auth.user.id,
@@ -369,6 +387,7 @@ router.post('/tracking/event', async (req, res) => {
       longitude: longitude ?? null,
       details: details ?? null,
     });
+    if (error) throw error;
 
     return res.json({ ok: true });
   } catch (error: any) {

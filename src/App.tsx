@@ -70,14 +70,14 @@ import Subprocessors from './pages/Subprocessors';
 import { CookieBanner } from './components/CookieBanner';
 import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
-import { fetchCurrentBilling } from './lib/billingApi';
+import { fetchCurrentBilling, type GraceImpaye } from './lib/billingApi';
 import { countPendingQuotes } from './lib/quotesApi';
 import { countOverdueInvoices } from './lib/invoicesApi';
 import { User } from '@supabase/supabase-js';
 import Jobs from './pages/Jobs';
 import NotFound from './pages/NotFound';
 import JobDetails from './pages/JobDetails';
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { JobModalControllerProvider } from './contexts/JobModalController';
 import { useTranslation } from './i18n';
@@ -166,18 +166,14 @@ import { useLocationTrackingConsent } from './hooks/useLocationTrackingConsent';
 import LocationConsentModal from './components/LocationConsentModal';
 import { CompanySelectorPage, CompanySwitcher, NoCompanyState } from './components/CompanySelector';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
-import { usePlatformOwner } from './hooks/usePlatformOwner';
+import SessionTimeoutModal from './components/SessionTimeoutModal';
 
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
 import { useQueryClient } from '@tanstack/react-query';
 // Cross-cutting hooks previously inlined in App()
-import { useInactivityLogout } from './hooks/useInactivityLogout';
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
-
-// Platform Admin — lazy loaded, owner-only
-const PlatformAdmin = React.lazy(() => import('./pages/PlatformAdmin'));
 
 // Toasts (sonner) — pastille monochrome Lume, styles dans index.css (.lume-toast).
 // Partagé par les deux <Toaster> (VerifyEmailGate + AuthenticatedApp).
@@ -237,7 +233,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Auto-signout after 30 min of inactivity
+  // Auto-signout after 4 h of inactivity (warns 5 min ahead)
   useSessionTimeout(user?.id || null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -264,6 +260,9 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasSubscription, setHasSubscription] = useState<boolean | null>(null); // null = checking
   const [accessBlockedReason, setAccessBlockedReason] = useState<'no_membership' | 'no_subscription' | null>(null);
+  // Impayé en cours, accès encore ouvert : sert à afficher le bandeau
+  // d'avertissement. Null quand l'abonnement est en règle.
+  const [graceImpaye, setGraceImpaye] = useState<GraceImpaye | null>(null);
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [showMoreNav, setShowMoreNav] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -418,9 +417,6 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Auto-logout after 30 minutes of inactivity
-  useInactivityLogout(!!user);
-
   // Ctrl+K opens command palette
   useCommandPaletteShortcut(setCommandPaletteOpen);
 
@@ -442,16 +438,18 @@ export default function App() {
           // No membership — this is a brand new user who signed up via email/password or Google.
           // Create an org + membership for them so the rest of the app works.
           try {
-            const { data: newOrg } = await supabase
+            const { data: newOrg, error: orgErr } = await supabase
               .from('orgs')
               .insert({ name: user.email?.split('@')[0] || 'My Workspace', created_by: user.id })
               .select('id')
               .single();
+            if (orgErr) throw orgErr;
 
             if (newOrg) {
-              await supabase
+              const { error: memErr } = await supabase
                 .from('memberships')
                 .insert({ user_id: user.id, org_id: newOrg.id, role: 'owner' });
+              if (memErr) throw memErr;
               console.log('[App] Auto-provisioned org', newOrg.id, 'for user', user.id);
             }
           } catch (provErr: any) {
@@ -515,13 +513,24 @@ export default function App() {
         // d'un bureau secondaire ne peut pas lire la sub du bureau principal
         // (RLS). /billing/current la résout sur tout le company_group côté
         // serveur (service role), donc on passe par l'API.
-        const { subscription } = await fetchCurrentBilling();
+        const { subscription, grace } = await fetchCurrentBilling();
         if (subscription && ['active', 'trialing'].includes(subscription.status)) {
           setHasSubscription(true);
           setAccessBlockedReason(null);
+          setGraceImpaye(null);
+        } else if (subscription?.status === 'past_due' && grace?.actif) {
+          // Une carte expirée ne doit pas fermer le CRM le jour même : le
+          // client perdrait l'accès à ses clients et ses jobs en pleine
+          // journée de travail, sans avoir été prévenu. On garde l'accès
+          // ouvert pendant la fenêtre de relance de Stripe, avec un bandeau
+          // qui dit la date de fermeture.
+          setHasSubscription(true);
+          setAccessBlockedReason(null);
+          setGraceImpaye(grace);
         } else {
           setHasSubscription(false);
           setAccessBlockedReason('no_subscription');
+          setGraceImpaye(null);
         }
       } catch {
         // API indisponible → on ne bloque pas l'accès (fail-open, comme avant)
@@ -656,6 +665,7 @@ export default function App() {
       activityOpen={activityOpen}
       setActivityOpen={setActivityOpen}
       unreadSms={unreadSms}
+      graceImpaye={graceImpaye}
       navigate={navigate}
       location={location}
     />
@@ -683,6 +693,7 @@ function AuthenticatedApp({
   activityOpen,
   setActivityOpen,
   unreadSms,
+  graceImpaye,
   navigate,
   location,
 }: any) {
@@ -740,7 +751,12 @@ function AuthenticatedApp({
   }, [user, currentOrgId]);
   // usePermissions MUST be called inside CompanyProvider to get correct data
   const permsCtx = usePermissions();
-  const isPlatformOwner = usePlatformOwner();
+  // Les outils de développement (bascule de rôle / de forfait) étaient
+  // conditionnés par `usePlatformOwner`, supprimé avec le back-office
+  // Platform Admin. Ils ne donnent aucun accès inter-tenants — ils agissent
+  // uniquement sur la session courante — et sont désormais réservés au mode
+  // développement, donc invisibles en production.
+  const showDevTools = import.meta.env.DEV;
   const venteModule = useModuleAccess('module_vente');
 
   // Auto-locate every signed-in user (desktop + mobile web) for the whole
@@ -949,8 +965,8 @@ function AuthenticatedApp({
             </div>
           )}
 
-          {/* Dev tools (role + plan switch) — founder / platform-owner only, hidden from real customer accounts */}
-          {isPlatformOwner && (
+          {/* Dev tools (role + plan switch) — mode développement uniquement */}
+          {showDevTools && (
           <div className="px-2.5 pb-2">
             <DevRoleSwitcher expanded={sidebarExpanded} />
             {/* Temporary plan switcher — sits right under the role switcher */}
@@ -1180,6 +1196,26 @@ function AuthenticatedApp({
 
         {/* ─── Main content ─── */}
         <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Impayé en cours — l'accès est maintenu, mais pas indéfiniment.
+              Non refermable et présent sur toutes les pages : le client doit
+              apprendre la fermeture à venir ici, pas le jour où elle arrive. */}
+          {graceImpaye?.actif && (
+            <div className="shrink-0 flex flex-wrap items-center gap-x-2 gap-y-1 px-5 py-2 bg-amber-50 border-b border-amber-200 text-[13px] text-amber-900">
+              <AlertCircle size={15} className="shrink-0 text-amber-600" />
+              <span>
+                <strong>Votre dernier paiement n’est pas passé.</strong>{' '}
+                {graceImpaye.jours_restants <= 1
+                  ? 'Votre accès sera suspendu demain.'
+                  : `Il vous reste ${graceImpaye.jours_restants} jours pour mettre votre carte à jour.`}
+              </span>
+              <Link
+                to="/settings/billing"
+                className="font-semibold underline underline-offset-2 hover:text-amber-950"
+              >
+                Mettre à jour ma carte
+              </Link>
+            </div>
+          )}
           {/* Top bar — premium, elevated */}
           <header className="h-11 shrink-0 flex items-center gap-3 px-5 border-b border-border bg-surface-elevated">
             {(!isSidebarOpen || true) && (
@@ -1345,8 +1381,10 @@ function AuthenticatedApp({
                     {/* Email mailbox OAuth return — per-owner, no org permission gate. */}
                     <Route path="/email/callback" element={<EmailOAuthCallback />} />
                     {/* BillingCheckout removed — upgrade goes through /checkout */}
-{/* Platform Admin — owner-only, server enforces auth */}
-                    <Route path="/platform-admin" element={isPlatformOwner ? <React.Suspense fallback={null}><PageWrapper><PlatformAdmin /></PageWrapper></React.Suspense> : <Navigate to="/lume-agent" replace />} />
+                    {/* /platform-admin retiré : le back-office donnait une vue
+                        inter-tenants (orgs, utilisateurs, revenus) depuis
+                        l'application. L'URL redirige désormais comme toute
+                        route inconnue. */}
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>
@@ -1371,6 +1409,7 @@ function AuthenticatedApp({
         onAccept={locationConsent.accept}
         onDecline={locationConsent.decline}
       />
+      <SessionTimeoutModal language={language} />
     </JobModalControllerProvider>
   );
 }

@@ -2348,6 +2348,22 @@ export default function NewJobModal({
                     {!isCreatingNewClient && properties.length > 0 ? (
                       <div className="space-y-2">
                         <div className="relative">
+                          {propertyId && !propertyDropdownOpen ? (() => {
+                            const selectedProperty = properties.find((p) => p.id === propertyId);
+                            const selectedAddr = selectedProperty ? propertyAddressLabel(selectedProperty) : '';
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => { setPropertySearch(''); setPropertyDropdownOpen(true); }}
+                                className="w-full text-left px-3 py-2 rounded-xl border border-border bg-surface-secondary hover:bg-surface-tertiary transition-colors"
+                              >
+                                <div className="text-sm font-bold text-text-primary">{selectedProperty?.name || ''}</div>
+                                {selectedAddr ? (
+                                  <div className="text-xs text-text-tertiary">{selectedAddr}</div>
+                                ) : null}
+                              </button>
+                            );
+                          })() : (
                           <input
                             type="text"
                             value={propertySearch || (propertyId ? properties.find((p) => p.id === propertyId)?.name || '' : '')}
@@ -2365,8 +2381,10 @@ export default function NewJobModal({
                             className="glass-input w-full"
                             placeholder={t.modals.selectProperty}
                             autoComplete="off"
+                            autoFocus={propertyDropdownOpen}
                             disabled={propertiesLoading}
                           />
+                          )}
                           {propertyDropdownOpen && (
                             <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-outline bg-surface shadow-lg">
                               {properties
@@ -2411,13 +2429,6 @@ export default function NewJobModal({
                             </div>
                           )}
                         </div>
-                        {(() => {
-                          const selected = properties.find((p) => p.id === propertyId);
-                          const addr = selected ? propertyAddressLabel(selected) : '';
-                          return addr ? (
-                            <p className="text-[11px] text-text-tertiary px-1">{addr}</p>
-                          ) : null;
-                        })()}
                         {propertyDropdownOpen && (
                           <div className="fixed inset-0 z-40" onClick={() => setPropertyDropdownOpen(false)} />
                         )}

@@ -137,7 +137,10 @@ export const ARTICLES: Article[] = [
 ];
 
 export default function SupportDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
+  const ts = t.support;
+  // `isFr` reste nécessaire : les 12 articles ARTICLES sont bilingues en dur
+  // dans ce fichier (question et réponse gardées côte à côte, cf. en-tête).
   const isFr = language === 'fr';
   const navigate = useNavigate();
 
@@ -145,25 +148,57 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  /** Élément focalisé avant l'ouverture — on lui rend le focus à la fermeture. */
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
   // Reset to the browse view each time the drawer opens, so it never reopens
   // mid-form with stale state.
   useEffect(() => {
-    if (open) {
-      setQuery('');
-      setExpanded(null);
-      setShowForm(false);
-      setTimeout(() => searchRef.current?.focus(), 350);
-    }
+    if (!open) return;
+    setQuery('');
+    setExpanded(null);
+    setShowForm(false);
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
   }, [open]);
 
-  // Escape closes the form first, then the drawer.
+  // Rend le focus au déclencheur (le FAB) à la fermeture : sans ça, un
+  // utilisateur au clavier repart du début du document.
+  useEffect(() => {
+    if (open) return;
+    const target = returnFocusRef.current;
+    returnFocusRef.current = null;
+    if (target?.isConnected) target.focus();
+  }, [open]);
+
+  // Escape ferme le formulaire d'abord, le tiroir ensuite. Tab est confiné au
+  // panneau : `aria-modal="true"` annonce un modal, il faut donc que le focus
+  // ne puisse pas s'échapper vers l'arrière-plan, qui reste focalisable.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (showForm) setShowForm(false);
-      else onClose();
+      if (e.key === 'Escape') {
+        if (showForm) setShowForm(false);
+        else onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+      // Le panneau se re-rend (recherche, formulaire) : on relit la liste à
+      // chaque Tab plutôt que de la mémoriser.
+      if (e.shiftKey && (active === first || !panelRef.current.contains(active))) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -203,13 +238,23 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
           />
 
           <motion.aside
+            ref={panelRef}
             role="dialog"
             aria-modal="true"
-            aria-label={isFr ? 'Aide et support' : 'Help and support'}
+            aria-label={ts.title}
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 320, damping: 34 }}
+            // Focus la recherche quand l'animation est réellement finie : un
+            // spring n'a pas de durée fixe, un setTimeout calé à la main dessus
+            // se désynchronise. `definition` distingue l'entrée de la sortie —
+            // sans ce test, le panneau volerait le focus en se refermant et
+            // écraserait la restauration vers le FAB.
+            onAnimationComplete={(definition: unknown) => {
+              const x = (definition as { x?: number | string })?.x;
+              if (x === 0) searchRef.current?.focus();
+            }}
             style={{ zIndex: Z.supportDrawer }}
             className="fixed top-0 right-0 bottom-0 w-full sm:w-[420px] bg-surface-elevated border-l border-outline shadow-2xl flex flex-col"
           >
@@ -219,7 +264,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                 {showForm && (
                   <button
                     onClick={() => setShowForm(false)}
-                    aria-label={isFr ? 'Retour' : 'Back'}
+                    aria-label={ts.back}
                     className="w-7 h-7 rounded-lg hover:bg-surface-secondary flex items-center justify-center text-text-secondary transition-colors"
                   >
                     <ArrowLeft size={16} />
@@ -227,13 +272,13 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                 )}
                 <h2 className="text-[16px] font-bold text-text-primary">
                   {showForm
-                    ? (isFr ? 'Contacter le support' : 'Contact support')
-                    : (isFr ? 'Besoin d\'aide ?' : 'Need a hand?')}
+                    ? ts.contactTitle
+                    : ts.needHand}
                 </h2>
               </div>
               <button
                 onClick={onClose}
-                aria-label={isFr ? 'Fermer' : 'Close'}
+                aria-label={ts.close}
                 className="w-8 h-8 rounded-lg hover:bg-surface-secondary flex items-center justify-center text-text-tertiary hover:text-text-primary transition-colors"
               >
                 <X size={18} />
@@ -254,7 +299,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                       ref={searchRef}
                       value={query}
                       onChange={(e) => { setQuery(e.target.value); setExpanded(null); }}
-                      placeholder={isFr ? 'Rechercher dans l\'aide…' : 'Search our help…'}
+                      placeholder={ts.searchPlaceholder}
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-secondary border border-outline-subtle text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
                     />
                   </div>
@@ -264,19 +309,17 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                 <div className="flex-1 overflow-y-auto px-5 pb-4">
                   <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">
                     {query.trim()
-                      ? (isFr ? `${results.length} résultat${results.length > 1 ? 's' : ''}` : `${results.length} result${results.length > 1 ? 's' : ''}`)
-                      : (isFr ? 'Questions fréquentes' : 'Common questions')}
+                      ? `${results.length} ${results.length === 1 ? ts.resultCount : ts.resultCountPlural}`
+                      : ts.commonQuestions}
                   </p>
 
                   {results.length === 0 ? (
                     <div className="py-10 text-center">
                       <p className="text-[13px] text-text-tertiary mb-4">
-                        {isFr
-                          ? 'Aucune réponse ne correspond à votre recherche.'
-                          : 'Nothing matches your search.'}
+                        {ts.drawerNoMatch}
                       </p>
                       <button onClick={() => setShowForm(true)} className="glass-button-primary text-[13px]">
-                        {isFr ? 'Poser la question au support' : 'Ask support directly'}
+                        {ts.askSupport}
                       </button>
                     </div>
                   ) : (
@@ -326,7 +369,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                                         onClick={() => goTo(a.path!)}
                                         className="mt-2.5 text-[12px] font-semibold text-primary hover:underline"
                                       >
-                                        {isFr ? 'Aller à la page →' : 'Take me there →'}
+                                        {ts.goToPage}
                                       </button>
                                     )}
                                   </div>
@@ -343,16 +386,14 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                 {/* Footer CTA */}
                 <div className="px-5 py-4 border-t border-outline-subtle shrink-0">
                   <p className="text-[11px] text-text-tertiary mb-2.5 leading-relaxed">
-                    {isFr
-                      ? 'Vous ne trouvez pas ? Écrivez-nous, on répond vite.'
-                      : 'Can’t find it? Send us a message — we reply fast.'}
+                    {ts.drawerCantFind}
                   </p>
                   <button
                     onClick={() => setShowForm(true)}
                     className="w-full glass-button-primary inline-flex items-center justify-center gap-2 !py-2.5"
                   >
                     <LifeBuoy size={15} />
-                    {isFr ? 'Contacter le support' : 'Get support'}
+                    {ts.getSupport}
                   </button>
                 </div>
               </>

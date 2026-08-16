@@ -22,6 +22,7 @@ import { createClient } from '@supabase/supabase-js';
 // Import route modules
 import searchRouter from './routes/search';
 import geocodeRouter from './routes/geocode';
+import clientErrorsRouter from './routes/client-errors';
 import leadsRouter from './routes/leads';
 import paymentsRouter, { stripeWebhookHandler } from './routes/payments';
 import messagesRouter from './routes/messages';
@@ -40,6 +41,7 @@ import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
+import unsubscribeRouter from './routes/unsubscribe';
 import teamSuggestionsRouter from './routes/team-suggestions';
 import jobsRouter from './routes/jobs';
 import trackingRouter from './routes/tracking';
@@ -76,7 +78,6 @@ import commissionsRouter from './routes/commissions';
 import payrollRouter from './routes/payroll';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
-import platformAdminRouter from './routes/platform-admin';
 import authRouter from './routes/auth';
 import dsrRouter from './routes/dsr';
 import teamComplianceRouter from './routes/team-compliance';
@@ -93,7 +94,7 @@ import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
-import { initSentry, attachSentryErrorHandler, captureException } from './lib/sentry';
+import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure, withCronCheckIn } from './lib/sentry';
 
 const app = express();
 
@@ -233,6 +234,13 @@ app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   // External webhooks: signature-validated downstream, never carry CSRF headers.
   if (WEBHOOK_PATHS_EXEMPT_FROM_CSRF.includes(req.path)) return next();
+  // Désinscription en un clic : le POST est émis par le client de messagerie
+  // (bouton natif « Se désabonner » de Gmail/Outlook via List-Unsubscribe-Post),
+  // qui n'envoie aucun en-tête personnalisé. Le jeton de 32 octets dans l'URL
+  // tient lieu d'authentification, et l'action est idempotente et sans risque :
+  // le pire cas d'un CSRF réussi serait de désabonner quelqu'un — ce que la
+  // route est faite pour faire.
+  if (/^\/unsubscribe\/[a-f0-9]{64}$/.test(req.path)) return next();
   // API key requests are not vulnerable to CSRF
   if (req.headers['x-api-key']) return next();
   // Require either Authorization header or X-Requested-With (custom header = JS origin)
@@ -370,6 +378,7 @@ app.use(rbacMiddleware());
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);
 app.use('/api', geocodeRouter);
+app.use('/api', clientErrorsRouter);
 app.use('/api', routeOptimizationRouter);
 app.use('/api', leadsRouter);
 app.use('/api', paymentsRouter);
@@ -386,6 +395,8 @@ app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
+// Désinscription courriel — publique, authentifiée par le jeton de l'URL.
+app.use('/api', unsubscribeRouter);
 app.use('/api', featureFlagsRouter);
 app.use('/api', authRouter);
 app.use('/api', dsrRouter);
@@ -447,8 +458,11 @@ app.use('/api', orgsRouter);
 app.use('/api', rolePresetsRouter);
 app.use('/api', billingRouter);
 app.use('/api', referralsRouter);
-// In-app support: cap per IP so one tenant can't flood the support inbox.
-app.use('/api/support', rateLimit({ windowMs: 60_000, max: 5 }));
+// In-app support: cap per user so one tenant can't flood the support inbox.
+// Clé sur l'utilisateur, pas l'IP : plusieurs employés d'un même client
+// derrière un NAT partageaient le quota (faux positifs), et une rotation d'IP
+// le contournait. La route exige déjà une session, donc la clé est fiable.
+app.use('/api/support', rateLimit({ windowMs: 60_000, max: 5, keyFn: (req) => `support:${userKey(req)}` }));
 app.use('/api', supportRouter);
 app.use('/api', coursesRouter);
 app.use('/api/field-sales', fieldSalesRouter);
@@ -458,10 +472,13 @@ app.use('/api', payrollRouter);
 app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
 
-// Platform admin — tightly rate limited, owner-only routes enforce auth internally
-const platformAdminLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: (req) => `platform:${userKey(req)}` });
-app.use('/api/platform-admin', platformAdminLimiter);
-app.use('/api', platformAdminRouter);
+// Le back-office « Platform Admin » (page + 8 routes de lecture seule donnant
+// une vue inter-tenants) a été retiré à la demande du propriétaire. Un accès
+// transverse aux données de tous les locataires n'a pas sa place dans l'app.
+// GET /api/incidents/anomalies, dernier survivant de cette catégorie, a été
+// retiré ensuite : il exposait les courriels et IP de tous les locataires et
+// n'était consultable que depuis ce back-office. `PLATFORM_OWNER_ID` ne sert
+// donc plus qu'à la boîte de réception des demandes de démo (marketing.ts).
 
 // CSP violation reports — public endpoint, tight limit to prevent log flooding
 const cspReportLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP
@@ -682,8 +699,29 @@ app.get('*', (_req, res, next) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 // Health check endpoint
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
+// Sonde de disponibilité, destinée à un moniteur externe (UptimeRobot & co).
+//
+// Elle interroge la base : un serveur qui répond « ok » alors que Supabase est
+// injoignable est un faux positif — le moniteur reste vert pendant que
+// l'application est inutilisable pour tout le monde. Un 503 est renvoyé dans ce
+// cas, c'est ce que les moniteurs interprètent comme une panne.
+//
+// La requête est volontairement minuscule (une ligne, une colonne) et n'est PAS
+// mise en cache : elle tourne à chaque appel, toutes les 1 à 5 minutes.
+app.get('/api/health', async (_req, res) => {
+  const started = Date.now();
+  try {
+    const { getServiceClient } = await import('./lib/supabase.js');
+    const admin = getServiceClient();
+    const { error } = await admin.from('orgs').select('id').limit(1);
+    if (error) throw new Error(error.message);
+    res.json({ status: 'ok', uptime: process.uptime(), db_ms: Date.now() - started });
+  } catch (err: any) {
+    // Pas de captureCronFailure ici : la panne se répéterait à chaque sondage et
+    // noierait Sentry. Le moniteur externe est le bon canal d'alerte.
+    console.error('[health] base injoignable:', err?.message || err);
+    res.status(503).json({ status: 'degraded', error: 'database unreachable' });
+  }
 });
 
 // Global error handler — sanitized for ALL environments (no stack traces, no DB details)
@@ -788,27 +826,42 @@ app.listen(port, '0.0.0.0', () => {
     // Automated alerts — scan every 30 minutes
     import('./lib/alerts-engine').then(({ runAlertScan }) => {
       setInterval(async () => {
-        const res = await withAdvisoryLock('alerts-engine', () => runAlertScan()).catch((e: any) => {
-          console.error('[alerts] Lock error:', e?.message); return { acquired: true };
+        const res = await withAdvisoryLock('alerts-engine', () => withCronCheckIn('alerts-engine', () => runAlertScan())).catch((e: any) => {
+          captureCronFailure('alerts-engine', e); return { acquired: true };
         });
         if (!res.acquired) { /* another replica owns this tick */ }
       }, 30 * 60 * 1000);
       console.log('[alerts] Engine started (every 30min, lock-guarded)');
       setTimeout(() => withAdvisoryLock('alerts-engine-startup', () => runAlertScan())
-        .catch((e: any) => console.error('[alerts] Startup scan error:', e?.message)), 10_000);
-    });
+        .catch((e: any) => captureCronFailure('alerts-engine-startup', e)), 10_000);
+    // Un import() qui échoue laisse la tâche non démarrée, sans erreur ni trace :
+    // le cron ne tourne simplement jamais.
+    }).catch((e: any) => captureCronFailure('alerts-engine-import', e));
+
+    // Relance des impayés — J+3 rappel, J+7 suspension. Toutes les 6 heures :
+    // la granularité utile est le jour, inutile de scruter plus souvent.
+    Promise.all([import('./lib/dunning-engine'), import('./lib/supabase')]).then(
+      ([{ runDunningScan }, { getServiceClient }]) => {
+        const runDunning = () =>
+          withAdvisoryLock('dunning-engine', () => withCronCheckIn('dunning-engine', () => runDunningScan(getServiceClient())))
+            .catch((e: any) => captureCronFailure('dunning-engine', e));
+        setInterval(runDunning, 6 * 60 * 60 * 1000);
+        setTimeout(runDunning, 30_000);
+        console.log('[dunning] Cron started (every 6h, lock-guarded)');
+      },
+    ).catch((e: any) => captureCronFailure('dunning-engine-import', e));
 
     // Map pin repair — geocode request pins saved without coords, every 10 minutes
     Promise.all([import('./lib/fieldPinSync'), import('./lib/supabase')]).then(
       ([{ repairMissingPinCoords }, { getServiceClient }]) => {
         const runRepair = () =>
-          withAdvisoryLock('field-pin-repair', () => repairMissingPinCoords(getServiceClient()))
-            .catch((e: any) => console.error('[field-pin-repair] Lock error:', e?.message));
+          withAdvisoryLock('field-pin-repair', () => withCronCheckIn('field-pin-repair', () => repairMissingPinCoords(getServiceClient())))
+            .catch((e: any) => captureCronFailure('field-pin-repair', e));
         setInterval(runRepair, 10 * 60 * 1000);
         setTimeout(runRepair, 20_000);
         console.log('[field-pin-repair] Cron started (every 10min, lock-guarded)');
       },
-    );
+    ).catch((e: any) => captureCronFailure('field-pin-repair-import', e));
 
     // Surveillance des évènements de sécurité — le dernier maillon de la
     // détection installée le 2026-07-31. Les sondes et la télémétrie écrivaient
@@ -816,27 +869,27 @@ app.listen(port, '0.0.0.0', () => {
     // personne ne regarde équivaut à pas de détection.
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
-    }).catch((e: any) => console.error('[alerting] démarrage impossible:', e?.message));
+    }).catch((e: any) => captureCronFailure('security-alerting-startup', e));
 
     // Scheduled reports — check every hour
     import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
       setInterval(async () => {
-        const res = await withAdvisoryLock('scheduled-reports', async () => {
+        const res = await withAdvisoryLock('scheduled-reports', () => withCronCheckIn('scheduled-reports', async () => {
           const sent = await processScheduledReports();
           if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
-        }).catch((e: any) => { console.error('[scheduled-reports] Lock error:', e?.message); return { acquired: true }; });
+        })).catch((e: any) => { captureCronFailure('scheduled-reports', e); return { acquired: true }; });
         if (!res.acquired) { /* skipped */ }
       }, 60 * 60 * 1000);
       console.log('[scheduled-reports] Cron started (hourly, lock-guarded)');
-    });
+    }).catch((e: any) => captureCronFailure('scheduled-reports-import', e));
 
     // Security maintenance — every 15 minutes
     setInterval(() => {
-      withAdvisoryLock('security-maintenance', () => runSecurityMaintenance())
-        .catch((err: any) => console.error('[security] Lock error:', err?.message));
+      withAdvisoryLock('security-maintenance', () => withCronCheckIn('security-maintenance', () => runSecurityMaintenance()))
+        .catch((err: any) => captureCronFailure('security-maintenance', err));
     }, 15 * 60 * 1000);
     console.log('[security] Maintenance job started (every 15min, lock-guarded)');
     setTimeout(() => withAdvisoryLock('security-maintenance-startup', () => runSecurityMaintenance())
-      .catch((e: any) => console.error('[security] Startup maintenance error:', e?.message)), 15_000);
+      .catch((e: any) => captureCronFailure('security-maintenance-startup', e)), 15_000);
   });
 });

@@ -229,10 +229,11 @@ async function moveLeadDealToStage(leadId: string | null, targetDbSlug: string):
     if (!deal) return;
 
     // Move the deal via RPC
-    await supabase.rpc('set_deal_stage', {
+    const { error: stageErr } = await supabase.rpc('set_deal_stage', {
       p_deal_id: deal.id,
       p_stage: targetDbSlug,
     });
+    if (stageErr) throw stageErr;
   } catch (err) {
     console.warn('[quotePipelineAutomation] Failed to move deal:', err);
   }
@@ -363,7 +364,8 @@ export async function createQuote(payload: {
   }
 
   // 5. Recalculate totals
-  await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
+  const { error: recalcErr } = await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
+  if (recalcErr) console.error('[createQuote] recalculate failed:', recalcErr.message);
 
   // 6. Automation: new quote created → move deal to "New Prospect"
   moveLeadDealToStage(payload.lead_id || null, 'new_prospect');
@@ -489,13 +491,14 @@ export async function updateQuoteStatus(
 
   // Log status change
   const { data: { user } } = await supabase.auth.getUser();
-  await supabase.from('quote_status_history').insert({
+  const { error: histErr } = await supabase.from('quote_status_history').insert({
     quote_id: quoteId,
     old_status: current.status,
     new_status: newStatus,
     changed_by: user?.id || null,
     reason: reason || null,
   });
+  if (histErr) console.error('[updateQuoteStatus] status history insert failed:', histErr.message);
 
   // Automation: move pipeline deal based on quote status
   const quoteData = data as Quote;
@@ -544,13 +547,14 @@ export async function unarchiveQuote(quoteId: string): Promise<Quote> {
   if (error) throw error;
 
   const { data: { user } } = await supabase.auth.getUser();
-  await supabase.from('quote_status_history').insert({
+  const { error: histErr } = await supabase.from('quote_status_history').insert({
     quote_id: quoteId,
     old_status: 'archived',
     new_status: restoreTo,
     changed_by: user?.id || null,
     reason: 'Unarchived',
   });
+  if (histErr) console.error('[unarchiveQuote] status history insert failed:', histErr.message);
 
   return data as Quote;
 }
@@ -570,7 +574,8 @@ export async function updateQuote(
 
   // Recalculate totals if financial fields changed
   if (payload.tax_rate !== undefined || payload.discount_type !== undefined || payload.discount_value !== undefined) {
-    await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
+    const { error: recalcErr } = await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
+    if (recalcErr) throw recalcErr;
   }
 
   return data;
@@ -587,8 +592,10 @@ export async function saveQuoteLineItems(
   if (parentErr) throw parentErr;
   if (!parentQuote) throw new Error('Quote not found in current organization.');
 
-  // Delete existing items
-  await supabase.from('quote_line_items').delete().eq('quote_id', quoteId);
+  // Delete existing items — si ce DELETE échoue silencieusement, l'INSERT qui
+  // suit duplique toutes les lignes et gonfle le total du devis.
+  const { error: delErr } = await supabase.from('quote_line_items').delete().eq('quote_id', quoteId);
+  if (delErr) throw delErr;
 
   // Insert new items
   if (items.length > 0) {
@@ -612,7 +619,8 @@ export async function saveQuoteLineItems(
   }
 
   // Recalculate
-  await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
+  const { error: recalcErr } = await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
+  if (recalcErr) throw recalcErr;
 
   const { data } = await supabase
     .from('quote_line_items').select('*').eq('quote_id', quoteId).order('sort_order');

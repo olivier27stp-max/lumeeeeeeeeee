@@ -207,11 +207,26 @@ export async function autoBlockIP(ip: string, reason: string, durationMinutes = 
 
     try {
       const admin = getServiceClient();
-      await admin.from('ip_blocklist').upsert({
-        ip_address: ip,
-        reason,
-        expires_at: new Date(now + durationMinutes * 60_000).toISOString(),
-      }, { onConflict: 'ip_address' });
+      const expiresAt = new Date(now + durationMinutes * 60_000).toISOString();
+      // Blocage plateforme (org_id null). Pas d'upsert : l'unicité vit dans
+      // un index d'expression (ip, coalesce(org_id,…)) que ON CONFLICT ne
+      // peut pas cibler — update d'abord, insert sinon.
+      const { data: updated, error: updErr } = await admin
+        .from('ip_blocklist')
+        .update({ reason, expires_at: expiresAt })
+        .eq('ip_address', ip)
+        .is('org_id', null)
+        .select('id');
+      if (updErr) console.error('[Security] ip_blocklist update failed:', updErr.message);
+      if (!updated || updated.length === 0) {
+        const { error: insErr } = await admin.from('ip_blocklist').insert({
+          ip_address: ip,
+          org_id: null,
+          reason,
+          expires_at: expiresAt,
+        });
+        if (insErr) console.error('[Security] ip_blocklist insert failed:', insErr.message, insErr.code || '');
+      }
 
       logSecurityEvent({
         event_type: 'ip_auto_blocked',
@@ -504,7 +519,7 @@ const anomalyChecks: AnomalyCheck[] = [
       const { count } = await admin
         .from('audit_events')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('actor_id', userId)
         .eq('org_id', orgId)
         .in('action', ['export', 'bulk_export', 'download'])
         .gte('created_at', new Date(Date.now() - 10 * 60_000).toISOString());
@@ -521,7 +536,7 @@ const anomalyChecks: AnomalyCheck[] = [
       const { count } = await admin
         .from('audit_events')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('actor_id', userId)
         .eq('org_id', orgId)
         .eq('action', 'delete')
         .gte('created_at', new Date(Date.now() - 5 * 60_000).toISOString());
@@ -542,7 +557,7 @@ const anomalyChecks: AnomalyCheck[] = [
       const { count } = await admin
         .from('audit_events')
         .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('actor_id', userId)
         .in('action', ['role_change', 'member_invite', 'settings_update', 'delete'])
         .gte('created_at', new Date(Date.now() - 30 * 60_000).toISOString());
       return (count ?? 0) >= 3;
@@ -669,9 +684,26 @@ export async function recordLoginAttempt(params: {
     // échouée pouvait ne jamais être enregistrée sans que rien ne l'indique —
     // et c'est précisément cette table qui alimente la détection de force
     // brute juste en dessous.
+    // login_history.org_id est NOT NULL — sur un échec de login l'org n'est
+    // souvent pas résolue par l'appelant : on la retrouve via memberships,
+    // sinon on trace et on saute l'insertion plutôt que d'échouer en 23502.
+    let orgId: string | null = params.orgId || null;
+    if (!orgId) {
+      const { data: mem } = await admin
+        .from('memberships')
+        .select('org_id')
+        .eq('user_id', params.userId)
+        .limit(1)
+        .maybeSingle();
+      orgId = (mem?.org_id as string | undefined) ?? null;
+    }
+    if (!orgId) {
+      console.error('[Security] login_history NON enregistré: org introuvable pour user', params.userId);
+      return;
+    }
     const { error } = await admin.from('login_history').insert({
       user_id: params.userId,
-      org_id: params.orgId || null,
+      org_id: orgId,
       ip_address: ip,
       user_agent: params.req.headers['user-agent'] || null,
       device_fingerprint: deviceFp,

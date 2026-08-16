@@ -49,6 +49,7 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
   const [plans, setPlans] = useState<Plan[]>(cache.plans ?? []);
   const [subscription, setSubscription] = useState<Subscription | null>(cache.subscription);
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(cache.currentPlan);
+  const [billingUnavailable, setBillingUnavailable] = useState(false);
 
   useEffect(() => {
     const now = Date.now();
@@ -81,8 +82,10 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
           // Aucune information exploitable : on ne met RIEN en cache, pour que
           // le prochain montage retente au lieu de figer un etat degrade 30 s.
           // (`loading` est remis a false par le finally.)
+          setBillingUnavailable(true);
           return;
         }
+        setBillingUnavailable(false);
 
         const sub = billing.subscription;
         const plan = sub
@@ -118,7 +121,7 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
   // frontiere de securite.
   const hasFeature = currentPlan
     ? Boolean((currentPlan as any)[flag])
-    : loading;
+    : loading || billingUnavailable;
 
   // Find cheapest plan that grants this feature (for upsell CTA)
   const requiredPlan = plans

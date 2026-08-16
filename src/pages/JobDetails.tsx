@@ -81,6 +81,7 @@ import EntityNumberEditor from '../components/EntityNumberEditor';
 import TeamDayRoster from '../components/TeamDayRoster';
 import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
 import { getPins } from '../lib/fieldSalesApi';
+import { SignedLink } from '../components/ui/SignedMedia';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface ScheduleEvent {
@@ -327,7 +328,8 @@ export default function JobDetails() {
           // Append to job attachments
           const current = job.attachments || [];
           const updated = [...current, { name: file.name, url: publicUrl }];
-          await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id).eq('org_id', orgId);
+          const { error: linkErr } = await supabase.from('jobs').update({ attachments: updated, updated_at: new Date().toISOString() }).eq('id', job.id).eq('org_id', orgId);
+          if (linkErr) throw linkErr;
           setJob((prev) => prev ? { ...prev, attachments: updated } : prev);
           toast.success(language === 'fr' ? `${file.name} téléversé` : `${file.name} uploaded`);
         } catch (err: any) {
@@ -2255,16 +2257,16 @@ export default function JobDetails() {
             </div>
             <div className="p-5 space-y-2">
               {job.attachments.map((file) => (
-                <a
+                <SignedLink
                   key={file.url}
-                  href={file.url}
+                  url={file.url}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center gap-2 text-[13px] text-text-primary hover:underline"
                 >
                   <LinkIcon size={13} className="text-text-tertiary" />
                   {file.name}
-                </a>
+                </SignedLink>
               ))}
             </div>
           </div>

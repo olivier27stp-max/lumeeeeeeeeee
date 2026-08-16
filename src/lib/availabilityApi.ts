@@ -59,13 +59,14 @@ export async function createAvailability(input: AvailabilityInput): Promise<Avai
   const orgId = await getCurrentOrgIdOrThrow();
 
   // Remove existing entry for same team+weekday+start_minute (soft delete)
-  await supabase
+  const { error: dedupeErr } = await supabase
     .from('team_availability')
     .update({ deleted_at: new Date().toISOString() })
     .eq('team_id', input.team_id)
     .eq('weekday', input.weekday)
     .eq('start_minute', input.start_minute)
     .is('deleted_at', null);
+  if (dedupeErr) throw dedupeErr;
 
   const { data, error } = await supabase
     .from('team_availability')
@@ -96,11 +97,12 @@ export async function setDefaultAvailability(teamId: string): Promise<Availabili
   const orgId = await getCurrentOrgIdOrThrow();
 
   // Clear existing weekly availability for this team first
-  await supabase
+  const { error: clearErr } = await supabase
     .from('team_availability')
     .update({ deleted_at: new Date().toISOString() })
     .eq('team_id', teamId)
     .is('deleted_at', null);
+  if (clearErr) throw clearErr;
 
   // Default: Mon-Fri 8:00 - 17:00
   const rows = [1, 2, 3, 4, 5].map((weekday) => ({

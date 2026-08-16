@@ -120,10 +120,13 @@ export async function syncGmailInbox(accountId: string, max = 25): Promise<numbe
     upserted += await syncFolder(db, accessToken, account, f.label, f.folder, f.direction, max);
   }
 
-  await db
+  const { error: stampError } = await db
     .from('email_accounts')
     .update({ last_synced_at: new Date().toISOString(), status: 'connected' })
     .eq('id', accountId);
+  if (stampError) {
+    console.error(`[gmail-sync] failed to stamp last_synced_at (account ${accountId}, org ${account.org_id}):`, stampError.message);
+  }
 
   return upserted;
 }
@@ -166,7 +169,7 @@ async function syncFolder(
     const { html, text, attachments } = extractBody(msg.payload);
     const isRead = !(msg.labelIds || []).includes('UNREAD');
 
-    const { data: thread } = await db
+    const { data: thread, error: threadErr } = await db
       .from('email_threads')
       .upsert({
         account_id: account.id,
@@ -185,7 +188,13 @@ async function syncFolder(
       .select('id')
       .single();
 
-    if (!thread) continue;
+    if (threadErr || !thread) {
+      console.error(
+        `[gmail-sync] thread upsert failed (account ${account.id}, org ${account.org_id}, gmail thread ${msg.threadId}):`,
+        threadErr?.message || 'no row returned',
+      );
+      continue;
+    }
 
     const { error: msgErr } = await db
       .from('email_messages')
@@ -210,7 +219,14 @@ async function syncFolder(
         sent_at: sentAt,
       }, { onConflict: 'account_id,provider_message_id' });
 
-    if (!msgErr) upserted++;
+    if (msgErr) {
+      console.error(
+        `[gmail-sync] message upsert failed (account ${account.id}, org ${account.org_id}, message ${msg.id}):`,
+        msgErr.message,
+      );
+    } else {
+      upserted++;
+    }
   }
   return upserted;
 }
