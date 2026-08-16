@@ -2348,6 +2348,21 @@ export default function NewJobModal({
                     {!isCreatingNewClient && properties.length > 0 ? (
                       <div className="space-y-2">
                         <div className="relative">
+                          {propertyId && !propertyDropdownOpen ? (() => {
+                            const selectedProperty = properties.find((p) => p.id === propertyId);
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => { setPropertySearch(''); setPropertyDropdownOpen(true); }}
+                                className="w-full text-left px-3 py-2 rounded-xl border border-border bg-surface-secondary hover:bg-surface-tertiary transition-colors"
+                              >
+                                <div className="text-sm font-bold text-text-primary">{selectedProperty?.name || ''}</div>
+                                {selectedProperty?.address && (
+                                  <div className="text-xs text-text-tertiary">{selectedProperty.address}</div>
+                                )}
+                              </button>
+                            );
+                          })() : (
                           <input
                             type="text"
                             value={propertySearch || (propertyId ? properties.find((p) => p.id === propertyId)?.name || '' : '')}
@@ -2365,8 +2380,10 @@ export default function NewJobModal({
                             className="glass-input w-full"
                             placeholder={t.modals.selectProperty}
                             autoComplete="off"
+                            autoFocus={propertyDropdownOpen}
                             disabled={propertiesLoading}
                           />
+                          )}
                           {propertyDropdownOpen && (
                             <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-outline bg-surface shadow-lg">
                               {properties
@@ -2993,9 +3010,16 @@ export default function NewJobModal({
                     </p>
                   </div>
                 )}
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="text-sm">{language === 'fr' ? 'Exiger une méthode de paiement au dossier' : 'Require payment method on file'}</span>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
+                  <span>
+                    <span className="block text-sm">{language === 'fr' ? 'Demander un moyen de paiement au dossier' : 'Request a payment method on file'}</span>
+                    <span className="block text-xs text-text-tertiary mt-0.5">
+                      {language === 'fr'
+                        ? 'Le contrat envoyé au client inclura une section pour ajouter une carte de façon sécurisée (facultatif — il pourra aussi l’ajouter plus tard).'
+                        : 'The contract sent to the client will include a section to securely add a card (optional — they can also add it later).'}
+                    </span>
+                  </span>
                 </label>
               </Box>
               )}
@@ -3288,12 +3312,41 @@ export default function NewJobModal({
                     </div>
                   )}
 
+                  {/* Demande de moyen de paiement au dossier — ajoute la section
+                      « Payment Method » (carte via Stripe) au bas du contrat public;
+                      le client peut l'ajouter à la signature ou revenir plus tard. */}
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={jobRequirePaymentMethod}
+                      disabled={autoCharge}
+                      onChange={(event) => { setDirty(true); setJobRequirePaymentMethod(event.target.checked); }}
+                      className="h-4 w-4 mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm text-text-primary">
+                        {language === 'fr' ? 'Demander un moyen de paiement au dossier' : 'Request a payment method on file'}
+                      </span>
+                      <span className="block text-xs text-text-tertiary mt-0.5">
+                        {language === 'fr'
+                          ? 'Le contrat envoyé au client inclura une section pour ajouter une carte de façon sécurisée (facultatif — il pourra aussi l’ajouter plus tard).'
+                          : 'The contract sent to the client will include a section to securely add a card (optional — they can also add it later).'}
+                      </span>
+                    </span>
+                  </label>
+
                   {/* Paiement automatique sur la carte au dossier */}
                   <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
                     <input
                       type="checkbox"
                       checked={autoCharge}
-                      onChange={(event) => { setDirty(true); setAutoCharge(event.target.checked); }}
+                      onChange={(event) => {
+                        setDirty(true);
+                        setAutoCharge(event.target.checked);
+                        // Le charge automatique a besoin d'une carte au dossier —
+                        // la demande au client est donc activée d'office.
+                        if (event.target.checked) setJobRequirePaymentMethod(true);
+                      }}
                       className="h-4 w-4 mt-0.5"
                     />
                     <span>
