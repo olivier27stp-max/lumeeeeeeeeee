@@ -2350,6 +2350,7 @@ export default function NewJobModal({
                         <div className="relative">
                           {propertyId && !propertyDropdownOpen ? (() => {
                             const selectedProperty = properties.find((p) => p.id === propertyId);
+                            const selectedAddr = selectedProperty ? propertyAddressLabel(selectedProperty) : '';
                             return (
                               <button
                                 type="button"
@@ -2357,9 +2358,9 @@ export default function NewJobModal({
                                 className="w-full text-left px-3 py-2 rounded-xl border border-border bg-surface-secondary hover:bg-surface-tertiary transition-colors"
                               >
                                 <div className="text-sm font-bold text-text-primary">{selectedProperty?.name || ''}</div>
-                                {selectedProperty?.address && (
-                                  <div className="text-xs text-text-tertiary">{selectedProperty.address}</div>
-                                )}
+                                {selectedAddr ? (
+                                  <div className="text-xs text-text-tertiary">{selectedAddr}</div>
+                                ) : null}
                               </button>
                             );
                           })() : (
@@ -2428,13 +2429,6 @@ export default function NewJobModal({
                             </div>
                           )}
                         </div>
-                        {(() => {
-                          const selected = properties.find((p) => p.id === propertyId);
-                          const addr = selected ? propertyAddressLabel(selected) : '';
-                          return addr ? (
-                            <p className="text-[11px] text-text-tertiary px-1">{addr}</p>
-                          ) : null;
-                        })()}
                         {propertyDropdownOpen && (
                           <div className="fixed inset-0 z-40" onClick={() => setPropertyDropdownOpen(false)} />
                         )}
@@ -3010,16 +3004,9 @@ export default function NewJobModal({
                     </p>
                   </div>
                 )}
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
-                  <span>
-                    <span className="block text-sm">{language === 'fr' ? 'Demander un moyen de paiement au dossier' : 'Request a payment method on file'}</span>
-                    <span className="block text-xs text-text-tertiary mt-0.5">
-                      {language === 'fr'
-                        ? 'Le contrat envoyé au client inclura une section pour ajouter une carte de façon sécurisée (facultatif — il pourra aussi l’ajouter plus tard).'
-                        : 'The contract sent to the client will include a section to securely add a card (optional — they can also add it later).'}
-                    </span>
-                  </span>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
+                  <span className="text-sm">{language === 'fr' ? 'Exiger une méthode de paiement au dossier' : 'Require payment method on file'}</span>
                 </label>
               </Box>
               )}
@@ -3312,41 +3299,12 @@ export default function NewJobModal({
                     </div>
                   )}
 
-                  {/* Demande de moyen de paiement au dossier — ajoute la section
-                      « Payment Method » (carte via Stripe) au bas du contrat public;
-                      le client peut l'ajouter à la signature ou revenir plus tard. */}
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                    <input
-                      type="checkbox"
-                      checked={jobRequirePaymentMethod}
-                      disabled={autoCharge}
-                      onChange={(event) => { setDirty(true); setJobRequirePaymentMethod(event.target.checked); }}
-                      className="h-4 w-4 mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-sm text-text-primary">
-                        {language === 'fr' ? 'Demander un moyen de paiement au dossier' : 'Request a payment method on file'}
-                      </span>
-                      <span className="block text-xs text-text-tertiary mt-0.5">
-                        {language === 'fr'
-                          ? 'Le contrat envoyé au client inclura une section pour ajouter une carte de façon sécurisée (facultatif — il pourra aussi l’ajouter plus tard).'
-                          : 'The contract sent to the client will include a section to securely add a card (optional — they can also add it later).'}
-                      </span>
-                    </span>
-                  </label>
-
                   {/* Paiement automatique sur la carte au dossier */}
                   <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
                     <input
                       type="checkbox"
                       checked={autoCharge}
-                      onChange={(event) => {
-                        setDirty(true);
-                        setAutoCharge(event.target.checked);
-                        // Le charge automatique a besoin d'une carte au dossier —
-                        // la demande au client est donc activée d'office.
-                        if (event.target.checked) setJobRequirePaymentMethod(true);
-                      }}
+                      onChange={(event) => { setDirty(true); setAutoCharge(event.target.checked); }}
                       className="h-4 w-4 mt-0.5"
                     />
                     <span>
