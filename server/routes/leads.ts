@@ -455,6 +455,12 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
     const alreadyExists = Boolean((payload as any)?.already_exists);
     const status = String((payload as any)?.status || '').trim() || (sendNow ? 'sent' : 'draft');
 
+    // Visite sans services (plan personnalisé, poids nul) : la RPC saute la
+    // facture — on relaie tel quel pour que le client n'affiche pas d'erreur.
+    if ((payload as any)?.skipped) {
+      return res.json({ skipped: true, already_exists: false, status: 'skipped' });
+    }
+
     if (!invoiceId) {
       return res.status(500).json({ error: 'Invoice creation succeeded but invoice_id is missing.' });
     }

@@ -1744,6 +1744,10 @@ export default function NewJobModal({
         qty: Math.max(1, Number.parseFloat(item.qtyInput || '0') || 1),
         unit_price_cents: Math.max(0, Math.round((Number.parseFloat(item.unitPriceInput || '0') || 0) * 100)),
         included: item.included,
+        // Date de la visite du plan quand les services sont personnalisés —
+        // la facturation par visite pondère alors chaque facture selon les
+        // services de SA visite (create_invoice_from_visit).
+        visit_date: item.visitKey ? (planVisits.find((v) => v.key === item.visitKey)?.date || null) : null,
       }));
 
     // Human-readable services list stamped on each visit's calendar notes when
@@ -3225,8 +3229,8 @@ export default function NewJobModal({
                         key: 'per_visit' as const,
                         label: language === 'fr' ? 'Une facture par visite' : 'One invoice per visit',
                         hint: language === 'fr'
-                          ? 'Chaque visite a sa propre facture, créée quand la visite est terminée — comme des jobs individuelles.'
-                          : 'Each visit gets its own invoice, created when the visit is completed — like individual jobs.',
+                          ? 'Chaque visite a sa propre facture, créée quand la visite est terminée. Services personnalisés par visite : chaque facture reflète le prix des services de SA visite; sinon, part égale du total.'
+                          : 'Each visit gets its own invoice, created when the visit is completed. With per-visit services, each invoice reflects the price of ITS visit\'s services; otherwise, an equal share of the total.',
                       },
                       {
                         key: 'single' as const,

@@ -131,6 +131,8 @@ export interface CreateInvoiceFromJobResult {
   invoice_id: string;
   already_exists: boolean;
   status: string;
+  /** Visite sans services (plan personnalisé, poids nul) : aucune facture créée. */
+  skipped?: boolean;
   invoice: {
     id: string;
     invoice_number?: string | null;

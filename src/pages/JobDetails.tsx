@@ -489,7 +489,7 @@ export default function JobDetails() {
           if ((billingRow as any)?.billing_mode === 'per_visit') {
             const sendNow = Boolean((billingRow as any)?.auto_charge);
             const result = await createInvoiceForVisit({ jobId: job.id, visitId: visit.id, sendNow });
-            if (!result.already_exists) {
+            if (!result.already_exists && !result.skipped) {
               toast.success(sendNow
                 ? (language === 'fr' ? 'Facture de la visite créée et envoyée au client.' : 'Visit invoice created and sent to the client.')
                 : (language === 'fr' ? 'Facture de la visite créée (brouillon).' : 'Visit invoice created (draft).'));

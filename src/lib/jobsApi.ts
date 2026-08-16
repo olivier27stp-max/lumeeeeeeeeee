@@ -52,6 +52,8 @@ export interface JobLineItemInput {
   qty: number;
   unit_price_cents: number;
   included?: boolean;
+  /** Date (YYYY-MM-DD) de la visite du plan à laquelle la ligne s'applique — null = job entier. */
+  visit_date?: string | null;
 }
 
 export interface SalespersonOption {
@@ -902,15 +904,22 @@ export async function createJob(payload: {
         unit_price_cents: item.unit_price_cents,
         total_cents: Math.max(0, Math.round(item.qty * item.unit_price_cents)),
         included: item.included !== false,
+        visit_date: item.visit_date || null,
       }));
     if (rows.length > 0) {
       let { error: itemError, status: itemStatus } = await supabase.from('job_line_items').insert(rows);
-      // Migration 20260815000000 pas encore appliquée : réessaie sans la
-      // colonne description pour ne jamais bloquer la sauvegarde du job.
+      // Migrations pas encore appliquées : réessaie sans les colonnes récentes
+      // (description 20260815000000, visit_date 20260815100000) pour ne jamais
+      // bloquer la sauvegarde du job.
+      if (itemError && /visit_date/.test(itemError.message || '')) {
+        ({ error: itemError, status: itemStatus } = await supabase
+          .from('job_line_items')
+          .insert(rows.map(({ visit_date: _v, ...rest }) => rest)));
+      }
       if (itemError && /description/.test(itemError.message || '')) {
         ({ error: itemError, status: itemStatus } = await supabase
           .from('job_line_items')
-          .insert(rows.map(({ description: _d, ...rest }) => rest)));
+          .insert(rows.map(({ description: _d, visit_date: _v, ...rest }) => rest)));
       }
       devLogJobWrite('insert_line_items_response', {
         org_id: orgId,

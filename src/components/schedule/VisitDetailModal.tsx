@@ -196,7 +196,7 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
           if ((billingRow as any)?.billing_mode === 'per_visit') {
             const sendNow = Boolean((billingRow as any)?.auto_charge);
             const result = await createInvoiceForVisit({ jobId: ev.job_id, visitId: ev.id, sendNow });
-            if (!result.already_exists) {
+            if (!result.already_exists && !result.skipped) {
               toast.success(sendNow
                 ? (isFr ? 'Facture de la visite créée et envoyée au client.' : 'Visit invoice created and sent to the client.')
                 : (isFr ? 'Facture de la visite créée (brouillon).' : 'Visit invoice created (draft).'));
