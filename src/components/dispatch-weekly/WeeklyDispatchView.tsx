@@ -4,7 +4,7 @@ import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
 import { useJobTagColors } from '../../hooks/useJobTagColors';
@@ -15,7 +15,7 @@ import {
 import DailyCustomizePopover from '../dispatch-daily/DailyCustomizePopover';
 import VisitDetailModal from '../schedule/VisitDetailModal';
 import {
-  CARD_HEIGHT_PX, DRAG_THRESHOLD_PX, HEADER_HEIGHT_PX, RESOURCE_COL_PX, ROW_PAD_Y_PX,
+  CARD_HEIGHT_PX, DRAG_THRESHOLD_PX, HEADER_HEIGHT_PX, ROW_PAD_Y_PX,
 } from '../dispatch-daily/dailyGeometry';
 
 /**
@@ -43,8 +43,12 @@ interface WeeklyRow {
 /** Nombre de lignes d'exemple quand la semaine est entièrement vide. */
 const PLACEHOLDER_ROW_COUNT = 5;
 const UNASSIGNED_KEY = '__unassigned__';
-/** Largeur minimale d'une colonne jour — la grille défile horizontalement au besoin. */
-const DAY_COL_MIN_PX = 172;
+/** Plancher très bas : les 7 jours se compressent pour toujours tenir dans la
+    page (sidebar ouverte incluse); le scroll horizontal n'apparaît que sur une
+    fenêtre vraiment minuscule (110 + 7×90 = 740 px). */
+const DAY_COL_MIN_PX = 90;
+/** Colonne routes plus étroite qu'en vue Jour — priorité aux colonnes jour. */
+const WEEK_RESOURCE_COL_PX = 110;
 /** Hauteur minimale d'une ligne route (mêmes constantes que la vue Jour). */
 const ROW_MIN_HEIGHT_PX = ROW_PAD_Y_PX * 2 + CARD_HEIGHT_PX;
 /** Heure de début par défaut (clic sur cellule vide + drop du tiroir). */
@@ -65,6 +69,8 @@ interface WeeklyDispatchViewProps {
   onReschedule: (eventId: string, startAt: string, endAt: string, teamId: string | null) => Promise<void>;
   /** Instance DnD partagée — utilisée seulement pour les drops du tiroir « Jobs non planifiés ». */
   externalDnd: CalendarDnd;
+  /** Refetch parent après un changement de statut (visite terminée / job fermé). */
+  onEventsChanged?: () => void;
 }
 
 interface CellRef {
@@ -76,7 +82,6 @@ interface WeeklyDrag {
   ev: ScheduleEventRecord;
   originRowKey: string;
   originDayKey: string;
-  hasTeam: boolean;
   startClientX: number;
   startClientY: number;
   moved: boolean;
@@ -105,7 +110,7 @@ const sameCell = (a: CellRef | null, b: CellRef | null) =>
    Même gabarit que DailyVisitCard : rayon, bordure, ombre, typographie —
    avec le fond pastel de la couleur de route + barre gauche pleine. */
 const WeekVisitCard = React.memo(function WeekVisitCard({
-  ev, color, tagName, timeLabel, attention, dimmed, onOpen, onMoveStart,
+  ev, color, tagName, timeLabel, attention, dimmed, done, onOpen, onMoveStart,
 }: {
   ev: ScheduleEventRecord;
   color: string;
@@ -114,6 +119,8 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
   timeLabel: string;
   attention: boolean;
   dimmed: boolean;
+  /** Visite complétée ou job fermé — texte barré + carte atténuée. */
+  done: boolean;
   onOpen: () => void;
   onMoveStart: (e: React.PointerEvent) => void;
 }) {
@@ -131,6 +138,7 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
         dimmed
           ? 'opacity-40 shadow-none'
           : 'shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:z-10 hover:shadow-md cursor-grab active:cursor-grabbing',
+        !dimmed && done && 'opacity-60',
       )}
       style={{ minHeight: CARD_HEIGHT_PX, backgroundColor: toRgba(color, 0.12), borderLeft: `3px solid ${color}` }}
       onClick={(e) => { e.stopPropagation(); onOpen(); }}
@@ -144,8 +152,8 @@ const WeekVisitCard = React.memo(function WeekVisitCard({
         <span className="shrink-0 truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{timeLabel}</span>
         {attention && <AlertTriangle size={9} className="shrink-0 text-[#c2410c]" />}
       </div>
-      <div className="truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary">{clientName}</div>
-      {address && <div className="truncate text-[11px] leading-[1.4] text-text-secondary">{address}</div>}
+      <div className={cn('truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary', done && 'line-through')}>{clientName}</div>
+      {address && <div className={cn('truncate text-[11px] leading-[1.4] text-text-secondary', done && 'line-through')}>{address}</div>}
     </div>
   );
 });
@@ -164,7 +172,7 @@ function CellDropGhost({ label }: { label: string }) {
 
 export default function WeeklyDispatchView({
   weekDays, events, teams, visibleTeamIds, orgId, unassignedMode, isError,
-  onEventClick, onSlotClick, onReschedule, externalDnd,
+  onEventClick, onSlotClick, onReschedule, externalDnd, onEventsChanged,
 }: WeeklyDispatchViewProps) {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
@@ -203,6 +211,11 @@ export default function WeeklyDispatchView({
     [activeTeams, visibleTeamIds],
   );
 
+  /* ── Drags actifs — pendant un drag (carte ou tiroir), la ligne « Non
+     assigné » apparaît comme cible de dépôt même si elle est vide. ── */
+  const extActive = externalDnd.dragState.active?.type === 'unscheduled';
+  const [dragLive, setDragLive] = useState(false);
+
   const { rows, cellMap } = useMemo(() => {
     const teamIdSet = new Set(rowTeams.map((tm) => tm.id));
     // Dédup par id : le filtre serveur peut renvoyer un même event deux fois.
@@ -215,7 +228,7 @@ export default function WeeklyDispatchView({
       // Comparer sur la date LOCALE de l'event (start_at est en UTC).
       const dayKey = format(new Date(ev.start_at), 'yyyy-MM-dd');
       if (!dayByKey.has(dayKey)) continue;
-      const tid = ev.team_id || ev.job?.team_id || null;
+      const tid = ev.team_id || null;
       // Sans équipe, équipe désactivée ou hors filtre : jamais masquée
       // silencieusement — regroupée dans la ligne « Non assigné ».
       const rowKey = tid && teamIdSet.has(tid) ? tid : UNASSIGNED_KEY;
@@ -230,7 +243,7 @@ export default function WeeklyDispatchView({
     const list: WeeklyRow[] = unassignedMode
       ? []
       : rowTeams.map((tm) => ({ key: tm.id, teamId: tm.id, team: tm }));
-    if (unassignedMode || hasUnassigned) {
+    if (unassignedMode || hasUnassigned || dragLive || extActive) {
       list.push({ key: UNASSIGNED_KEY, teamId: null, team: null });
     }
     // Semaine entièrement vide : la grille reste complètement dessinée,
@@ -241,7 +254,7 @@ export default function WeeklyDispatchView({
       }
     }
     return { rows: list, cellMap: cells };
-  }, [effEvents, rowTeams, unassignedMode, dayByKey]);
+  }, [effEvents, rowTeams, unassignedMode, dayByKey, dragLive, extActive]);
 
   const rowByKey = useMemo(() => new Map(rows.map((r) => [r.key, r])), [rows]);
 
@@ -271,6 +284,7 @@ export default function WeeklyDispatchView({
   const finishDrag = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
+    setDragLive(false);
     bump();
     if (!d || !d.moved) return;
     // Le pointerup précède le click : on libère le flag juste après.
@@ -280,7 +294,7 @@ export default function WeeklyDispatchView({
     const targetRow = rowByKey.get(target.rowKey);
     const day = dayByKey.get(target.dayKey);
     if (!day) return;
-    const originTeam = d.ev.team_id || d.ev.job?.team_id || null;
+    const originTeam = d.ev.team_id || null;
     const targetTeam = targetRow && !targetRow.placeholderIndex ? targetRow.teamId : originTeam;
     if (target.dayKey === d.originDayKey && targetTeam === originTeam) return;
     // La carte garde son heure : seuls le jour et la route changent.
@@ -298,9 +312,9 @@ export default function WeeklyDispatchView({
     e.preventDefault();
     dragRef.current = {
       ev, originRowKey: rowKey, originDayKey: dayKey,
-      hasTeam: !!(ev.team_id || ev.job?.team_id),
       startClientX: e.clientX, startClientY: e.clientY, moved: false, target: null,
     };
+    setDragLive(true);
     const onMove = (pe: PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
@@ -310,12 +324,9 @@ export default function WeeklyDispatchView({
         d.moved = true;
         suppressClickRef.current = true;
       }
-      let next = cellFromPoint(pe.clientX, pe.clientY);
-      // Le RPC ne peut pas désassigner : une visite avec équipe ne se dépose
-      // pas sur la ligne « Non assigné » (elle reste sur sa route).
-      if (next && d.hasTeam && next.rowKey === UNASSIGNED_KEY) {
-        next = { rowKey: d.originRowKey, dayKey: next.dayKey };
-      }
+      // Déposer sur la ligne « Non assigné » désassigne cette visite (la
+      // désassignation passe par un update direct — voir rescheduleEvent).
+      const next = cellFromPoint(pe.clientX, pe.clientY);
       if (!sameCell(d.target, next)) { d.target = next; bump(); } else bump();
     };
     const cleanup = () => {
@@ -325,7 +336,7 @@ export default function WeeklyDispatchView({
       dragCleanupRef.current = null;
     };
     const onUp = () => { cleanup(); finishDrag(); };
-    const onCancel = () => { cleanup(); dragRef.current = null; bump(); };
+    const onCancel = () => { cleanup(); dragRef.current = null; setDragLive(false); bump(); };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
@@ -333,7 +344,6 @@ export default function WeeklyDispatchView({
   }, [finishDrag]);
 
   /* ── Drop externe : jobs non planifiés glissés depuis le tiroir ── */
-  const extActive = externalDnd.dragState.active?.type === 'unscheduled';
   const extTargetRef = useRef<CellRef | null>(null);
   useEffect(() => {
     if (!extActive) { extTargetRef.current = null; return; }
@@ -419,12 +429,12 @@ export default function WeeklyDispatchView({
         className="h-full overflow-auto overscroll-contain"
         style={{ touchAction: drag?.moved || extActive ? 'none' : 'auto' }}
       >
-        <div style={{ minWidth: RESOURCE_COL_PX + dayKeys.length * DAY_COL_MIN_PX }} className="w-full">
+        <div style={{ minWidth: WEEK_RESOURCE_COL_PX + dayKeys.length * DAY_COL_MIN_PX }} className="w-full">
           {/* ── En-tête des jours (sticky verticalement) ── */}
           <div className="sticky top-0 z-30 flex border-b border-border bg-surface" style={{ height: HEADER_HEIGHT_PX }}>
             <div
-              className="sticky left-0 z-10 flex shrink-0 items-center justify-between gap-1 border-r border-border bg-surface pl-3 pr-2"
-              style={{ width: RESOURCE_COL_PX }}
+              className="sticky left-0 z-10 flex shrink-0 items-center justify-between gap-1 border-r border-border bg-surface pl-2 pr-1.5"
+              style={{ width: WEEK_RESOURCE_COL_PX }}
             >
               <span className="truncate text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
                 {t.schedule.dailyResource}
@@ -470,8 +480,8 @@ export default function WeeklyDispatchView({
                 <div key={row.key} className="flex border-b border-border/70" style={{ minHeight: ROW_MIN_HEIGHT_PX }}>
                   {/* Colonne fixe de gauche (sticky horizontalement) */}
                   <div
-                    className="sticky left-0 z-20 flex shrink-0 flex-col justify-center gap-0.5 border-r border-border bg-surface px-3"
-                    style={{ width: RESOURCE_COL_PX }}
+                    className="sticky left-0 z-20 flex shrink-0 flex-col justify-center gap-0.5 border-r border-border bg-surface px-2"
+                    style={{ width: WEEK_RESOURCE_COL_PX }}
                   >
                     {secondaryRaw && secondaryAsEyebrow && (
                       <span className="truncate text-[9.5px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
@@ -520,6 +530,7 @@ export default function WeeklyDispatchView({
                               timeLabel={timeLabelFor(ev)}
                               attention={st === 'blocked' || st === 'late' || st === 'action_required'}
                               dimmed={!!(drag?.moved && drag.ev.id === ev.id)}
+                              done={isClosedVisit(ev)}
                               onOpen={() => openCard(ev)}
                               onMoveStart={(e) => handleMoveStart(ev, row.key, dayKey, e)}
                             />
@@ -541,7 +552,7 @@ export default function WeeklyDispatchView({
 
       {/* ── Détails de la visite — modale partagée avec la vue Mois ── */}
       {detailEv && (() => {
-        const tid = detailEv.team_id || detailEv.job?.team_id || null;
+        const tid = detailEv.team_id || null;
         const team = tid ? activeTeams.find((tm) => tm.id === tid) || teams.find((tm) => tm.id === tid) || null : null;
         const color = team && isHexColor(team.color_hex) ? team.color_hex : FALLBACK_TEAM_COLOR;
         return (
@@ -556,6 +567,7 @@ export default function WeeklyDispatchView({
               setDetailEv(null);
               if (jobId) onEventClick(jobId);
             }}
+            onStatusChanged={onEventsChanged}
           />
         );
       })()}

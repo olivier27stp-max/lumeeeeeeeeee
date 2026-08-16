@@ -75,6 +75,15 @@ export function anytimeLabel(fr: boolean): string {
   return fr ? "Pas d'heure précise" : 'No set time';
 }
 
+/** Visite « fermée » : complétée/annulée, ou dont le job est fermé — les
+ * cartes du calendrier l'affichent barrée. */
+export function isClosedVisit(ev: Pick<ScheduleEventRecord, 'status' | 'job'>): boolean {
+  const vs = (ev.status || '').toLowerCase();
+  const js = (ev.job?.status || '').toLowerCase();
+  return ['completed', 'cancelled', 'canceled'].includes(vs)
+    || ['completed', 'cancelled', 'canceled', 'archived'].includes(js);
+}
+
 const eventsCache = new Map<string, { cachedAt: number; rows: ScheduleEventRecord[] }>();
 
 function buildCacheKey(startAt: string, endAt: string, teamIds: string[]) {
@@ -91,7 +100,11 @@ function mapScheduleRow(row: any): ScheduleEventRecord {
   return {
     id: row.id,
     job_id: row.job_id,
-    team_id: row.team_id ?? row.job?.team_id ?? null,
+    // team_id NULL = visite explicitement non assignée. Aucun fallback sur
+    // jobs.team_id : chaque visite porte sa propre équipe (rpc_add_visit /
+    // rpc_schedule_job l'estampillent à la création), sinon la désassignation
+    // par visite rebondirait visuellement sur l'équipe du job.
+    team_id: row.team_id ?? null,
     start_at: row.start_at,
     end_at: row.end_at,
     timezone: row.timezone || DEFAULT_TIMEZONE,
@@ -112,6 +125,7 @@ function mapScheduleRow(row: any): ScheduleEventRecord {
           longitude: row.job.longitude == null ? null : Number(row.job.longitude),
           geocode_status: row.job.geocode_status ?? null,
           total_cents: row.job.total_cents == null ? null : Number(row.job.total_cents),
+          job_number: row.job.job_number == null ? null : String(row.job.job_number),
           tag_ids: Array.isArray(row.job.tag_ids) ? row.job.tag_ids : null,
         }
       : null,
@@ -178,7 +192,7 @@ export async function listScheduleEventsRange(params: {
   if (jobIds.length > 0) {
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,tag_ids,deleted_at')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,job_number,tag_ids,deleted_at')
       .in('id', jobIds);
     for (const j of jobs || []) {
       jobMap[j.id] = j;
@@ -193,14 +207,9 @@ export async function listScheduleEventsRange(params: {
     if (row.job && row.job.deleted_at) return false;
     return true;
   });
-  // Secondary team filter: for events with NULL team_id, check if the job's team_id matches
+  // Secondary team filter: unassigned visits (NULL team_id) show everywhere.
   if (teamIds.length > 0) {
-    activeRows = activeRows.filter((row: any) => {
-      if (row.team_id && teamIds.includes(row.team_id)) return true;
-      if (!row.team_id && row.job?.team_id && teamIds.includes(row.job.team_id)) return true;
-      if (!row.team_id && !row.job?.team_id) return true; // truly unassigned: show everywhere
-      return false;
-    });
+    activeRows = activeRows.filter((row: any) => !row.team_id || teamIds.includes(row.team_id));
   }
   const rows = activeRows.map(mapScheduleRow);
   eventsCache.set(key, { cachedAt: now, rows });
@@ -272,23 +281,36 @@ export async function rescheduleEvent(payload: {
   startAt: string;
   endAt: string;
   teamId?: string | null;
+  /** Désassigner la visite : le RPC coalesce p_team_id (null = « garder »),
+   * donc la désassignation passe par un update direct après le déplacement. */
+  clearTeam?: boolean;
   timezone?: string | null;
 }): Promise<{ event: ScheduleEventRecord; overlaps: number }> {
   const { data, error } = await supabase.rpc('rpc_reschedule_event', {
     p_event_id: payload.eventId,
     p_start_at: toIsoOrThrow(payload.startAt),
     p_end_at: toIsoOrThrow(payload.endAt),
-    p_team_id: payload.teamId ?? null,
+    p_team_id: payload.clearTeam ? null : (payload.teamId ?? null),
     p_timezone: payload.timezone ?? DEFAULT_TIMEZONE,
   });
   if (error) throw error;
+
+  const eventRow = (data as any)?.event || {};
+  if (payload.clearTeam && eventRow.team_id != null) {
+    const { error: clearErr } = await supabase
+      .from('schedule_events')
+      .update({ team_id: null, updated_at: new Date().toISOString() })
+      .eq('id', payload.eventId);
+    if (clearErr) throw clearErr;
+    eventRow.team_id = null;
+  }
   invalidateScheduleCache();
 
   // rpc_reschedule_event recomputes jobs.scheduled_at from the visit set
   // server-side (next upcoming visit), so no client-side sync is needed —
   // important now that a job can have several visits.
   return {
-    event: mapScheduleRow((data as any)?.event),
+    event: mapScheduleRow(eventRow),
     overlaps: Number((data as any)?.overlaps || 0),
   };
 }
@@ -345,7 +367,7 @@ export async function addVisit(payload: {
   };
 }
 
-/** Fetch all scheduled events where the job has no team assigned (team_id IS NULL on both event and job). */
+/** Fetch all scheduled events without a team (schedule_events.team_id IS NULL). */
 export async function listUnassignedScheduledEvents(params: {
   startAt: string;
   endAt: string;
@@ -375,7 +397,7 @@ export async function listUnassignedScheduledEvents(params: {
   if (jobIds.length > 0) {
     const { data: jobs } = await supabase
       .from('jobs')
-      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,tag_ids,deleted_at')
+      .select('id,title,status,client_id,client_name,property_address,lead_id,team_id,latitude,longitude,geocode_status,total_cents,job_number,tag_ids,deleted_at')
       .in('id', jobIds);
     for (const j of jobs || []) {
       jobMap[j.id] = j;
@@ -384,11 +406,7 @@ export async function listUnassignedScheduledEvents(params: {
 
   return eventRows
     .map((row: any) => ({ ...row, job: jobMap[row.job_id] || null }))
-    .filter((row: any) => {
-      if (row.job && row.job.deleted_at) return false;
-      if (row.job?.team_id) return false;
-      return true;
-    })
+    .filter((row: any) => !(row.job && row.job.deleted_at))
     .map(mapScheduleRow);
 }
 

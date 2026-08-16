@@ -69,6 +69,7 @@ export function buildAgreementDocData(params: {
   let propertyAddress: string | null;
   let docClientName = clientName;
   let servicePlan: AgreementDocData['servicePlan'] = null;
+  let paymentTerms: AgreementDocData['paymentTerms'] = null;
 
   if (agreement.snapshot) {
     const snap = agreement.snapshot;
@@ -82,6 +83,7 @@ export function buildAgreementDocData(params: {
     propertyAddress = snap.property_address ?? (job.property_address || null);
     docClientName = snap.client_name ?? clientName;
     servicePlan = snap.service_plan ?? null;
+    paymentTerms = snap.payment_terms ?? null;
   } else {
     items = lineItems
       .filter((it) => it.included)
@@ -101,6 +103,28 @@ export function buildAgreementDocData(params: {
     propertyAddress = job.property_address || null;
     servicePlan = serviceContract && serviceContract.visits.length > 0
       ? { year: serviceContract.year, visits: serviceContract.visits }
+      : null;
+    // Payment terms from the live job — the deposit amount is recomputed from
+    // the composed total so it always matches the amounts printed above it.
+    const depositRequired = job.deposit_required === true;
+    const depositType = depositRequired && (job.deposit_type === 'percentage' || job.deposit_type === 'fixed')
+      ? job.deposit_type
+      : null;
+    const depositValue = depositRequired ? Number(job.deposit_value || 0) : 0;
+    const depositCents = !depositRequired
+      ? 0
+      : depositType === 'percentage'
+        ? Math.round(totalCents * (depositValue / 100))
+        : Math.round(depositValue * 100);
+    const requirePaymentMethod = job.require_payment_method === true;
+    paymentTerms = (depositRequired || requirePaymentMethod)
+      ? {
+          deposit_required: depositRequired,
+          deposit_type: depositType,
+          deposit_value: depositValue,
+          deposit_cents: depositCents,
+          require_payment_method: requirePaymentMethod,
+        }
       : null;
   }
 
@@ -128,6 +152,7 @@ export function buildAgreementDocData(params: {
     taxLines,
     totalCents,
     servicePlan,
+    paymentTerms,
     signature: agreement.signature_data && agreement.signer_name
       ? { signerName: agreement.signer_name, signatureData: agreement.signature_data, signedAt: agreement.signed_at }
       : null,

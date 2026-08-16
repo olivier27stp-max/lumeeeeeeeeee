@@ -4,7 +4,7 @@ import { frCA, enCA } from 'date-fns/locale';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import { useJobTagColors } from '../../hooks/useJobTagColors';
 import { FALLBACK_TEAM_COLOR, isHexColor } from '../../lib/colorUtils';
@@ -42,6 +42,8 @@ interface MonthlyDispatchViewProps {
   onDayClick: (d: Date) => void;
   /** « Voir la visite » dans la modale → hub de la job. */
   onEventClick: (jobId: string) => void;
+  /** Refetch parent après un changement de statut (visite terminée / job fermé). */
+  onEventsChanged?: () => void;
 }
 
 /* ── Carte de visite (empilée dans une cellule jour) ──
@@ -49,7 +51,7 @@ interface MonthlyDispatchViewProps {
    rayon, barre gauche pleine à la couleur de route. Le hover assombrit
    légèrement le fond (150 ms) — mêmes jetons que le reste du calendrier. */
 const MonthVisitCard = React.memo(function MonthVisitCard({
-  ev, barColor, tagName, tagColor, timeLabel, attention, onOpen,
+  ev, barColor, tagName, tagColor, timeLabel, attention, done, onOpen,
 }: {
   ev: ScheduleEventRecord;
   /** Couleur de la barre gauche — TOUJOURS la couleur d'équipe assignée. */
@@ -59,6 +61,8 @@ const MonthVisitCard = React.memo(function MonthVisitCard({
   tagColor?: string | null;
   timeLabel: string;
   attention: boolean;
+  /** Visite complétée ou job fermé — texte barré + carte atténuée. */
+  done: boolean;
   onOpen: () => void;
 }) {
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
@@ -72,6 +76,7 @@ const MonthVisitCard = React.memo(function MonthVisitCard({
       className={cn(
         'flex w-full cursor-pointer select-none flex-col justify-center overflow-hidden rounded-md border border-border bg-surface py-0.5 pl-2 pr-1.5 text-left',
         'shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-colors duration-150 hover:bg-surface-secondary',
+        done && 'opacity-60',
       )}
       style={{ height: MONTH_CARD_PX, borderLeft: `3px solid ${barColor}` }}
       onClick={(e) => { e.stopPropagation(); onOpen(); }}
@@ -84,16 +89,16 @@ const MonthVisitCard = React.memo(function MonthVisitCard({
         <span className="shrink-0 truncate text-[10px] font-medium tabular-nums leading-[1.3] text-text-tertiary">{timeLabel}</span>
         {attention && <AlertTriangle size={9} className="shrink-0 text-[#c2410c]" />}
       </div>
-      <div className="truncate text-[12px] font-medium leading-[1.3] text-text-primary">{clientName}</div>
+      <div className={cn('truncate text-[12px] font-medium leading-[1.3] text-text-primary', done && 'line-through')}>{clientName}</div>
       {title && title !== clientName && (
-        <div className="truncate text-[11px] leading-[1.3] text-text-secondary">{title}</div>
+        <div className={cn('truncate text-[11px] leading-[1.3] text-text-secondary', done && 'line-through')}>{title}</div>
       )}
     </div>
   );
 });
 
 export default function MonthlyDispatchView({
-  date, events, teams, isError, onDayClick, onEventClick,
+  date, events, teams, isError, onDayClick, onEventClick, onEventsChanged,
 }: MonthlyDispatchViewProps) {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
@@ -137,7 +142,7 @@ export default function MonthlyDispatchView({
 
   /* ── Couleurs — couleur de route, remplacée par le 1er tag de la job ── */
   const teamColorFor = useCallback((ev: ScheduleEventRecord): string => {
-    const tid = ev.team_id || ev.job?.team_id || null;
+    const tid = ev.team_id || null;
     const team = tid ? teams.find((tm) => tm.id === tid) : null;
     return team && isHexColor(team.color_hex) ? team.color_hex : FALLBACK_TEAM_COLOR;
   }, [teams]);
@@ -250,6 +255,7 @@ export default function MonthlyDispatchView({
                         tagColor={tag?.hex ?? null}
                         timeLabel={startLabelFor(ev)}
                         attention={attentionFor(ev)}
+                        done={isClosedVisit(ev)}
                         onOpen={() => setDetailEv(ev)}
                       />
                     );
@@ -300,6 +306,7 @@ export default function MonthlyDispatchView({
                       tagColor={tag?.hex ?? null}
                       timeLabel={startLabelFor(ev)}
                       attention={attentionFor(ev)}
+                      done={isClosedVisit(ev)}
                       onOpen={() => { setMorePop(null); setDetailEv(ev); }}
                     />
                   );
@@ -312,7 +319,7 @@ export default function MonthlyDispatchView({
 
       {/* ── Détails de la visite — même modale que la vue Semaine ── */}
       {detailEv && (() => {
-        const tid = detailEv.team_id || detailEv.job?.team_id || null;
+        const tid = detailEv.team_id || null;
         const team = tid ? teams.find((tm) => tm.id === tid) || null : null;
         return (
           <VisitDetailModal
@@ -326,6 +333,7 @@ export default function MonthlyDispatchView({
               setDetailEv(null);
               if (jobId) onEventClick(jobId);
             }}
+            onStatusChanged={onEventsChanged}
           />
         );
       })()}

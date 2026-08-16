@@ -26,13 +26,15 @@ export interface DailyVisitCardProps {
   tagColor?: string | null;
   /** Nom du premier tag — affiché en haut de la carte dans sa couleur. */
   tagName?: string | null;
+  /** Visite complétée ou job fermé — texte barré + carte atténuée. */
+  done?: boolean;
   onOpen: () => void;
   onMoveStart: (e: React.PointerEvent) => void;
   onResizeStart: (e: React.PointerEvent) => void;
 }
 
 export default function DailyVisitCard({
-  ev, left, top, width, height, timeLabel, dimmed, anytime = false, tagColor, tagName, onOpen, onMoveStart, onResizeStart,
+  ev, left, top, width, height, timeLabel, dimmed, anytime = false, tagColor, tagName, done = false, onOpen, onMoveStart, onResizeStart,
 }: DailyVisitCardProps) {
   const clientName = ev.job?.client_name || ev.job?.title || 'Job';
   const city = shortAddress(ev.job?.property_address);
@@ -53,6 +55,7 @@ export default function DailyVisitCard({
               'shadow-[0_1px_2px_rgba(15,23,42,0.05)] hover:z-10 hover:shadow-md',
               anytime ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
             ),
+        !dimmed && done && 'opacity-60',
       )}
       style={{
         left, top, width, height,
@@ -88,9 +91,9 @@ export default function DailyVisitCard({
             )}
           </div>
         )}
-        <div className="truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary">{clientName}</div>
+        <div className={cn('truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary', done && 'line-through')}>{clientName}</div>
         {width >= 132 && city && (
-          <div className="truncate text-[11px] leading-[1.4] text-text-secondary">{city}</div>
+          <div className={cn('truncate text-[11px] leading-[1.4] text-text-secondary', done && 'line-through')}>{city}</div>
         )}
         {width >= 96 && jobNumber && (
           <div className="truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">{jobNumber}</div>

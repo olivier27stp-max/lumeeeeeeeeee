@@ -222,6 +222,26 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
   }
 
   // ── SERVICES TABLE ──
+  // Service plan: state explicitly that prices are the plan total, not per visit.
+  if (data.servicePlan && data.servicePlan.visits.length > 1) {
+    if (y > pageH - 120) {
+      doc.addPage();
+      y = 50;
+    }
+    const n = data.servicePlan.visits.length;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...midGray);
+    const noteLines = doc.splitTextToSize(
+      L(
+        `The prices below cover all ${n} planned visits of the plan — this is not a price charged per visit.`,
+        `Les prix ci-dessous couvrent la totalité des ${n} visites prévues au plan — il ne s'agit pas d'un prix facturé à chaque visite.`,
+      ),
+      contentW,
+    );
+    doc.text(noteLines, marginL, y);
+    y += noteLines.length * 10 + 8;
+  }
   const colX = {
     desc: marginL,
     qty: marginL + contentW * 0.6,
@@ -302,6 +322,48 @@ export function downloadAgreementPdf(data: AgreementDocData): void {
   doc.text('Total', labelsX, y + 4);
   doc.text(formatCents(data.totalCents), totalsX, y + 4, { align: 'right' });
   y += 26;
+
+  // ── PAYMENT TERMS ──
+  if (data.paymentTerms && (data.paymentTerms.deposit_required || data.paymentTerms.require_payment_method)) {
+    const pt = data.paymentTerms;
+    y += 6;
+    if (y > pageH - 120) {
+      doc.addPage();
+      y = 50;
+    }
+    doc.setDrawColor(238, 238, 238);
+    doc.line(marginL, y - 6, pageW - marginR, y - 6);
+    y += 4;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(...lightGray);
+    doc.text(L('PAYMENT TERMS', 'MODALITÉS DE PAIEMENT'), marginL, y);
+    y += 12;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...darkGray);
+    if (pt.deposit_required) {
+      const pct = pt.deposit_type === 'percentage' ? L(` (${pt.deposit_value}% of the total)`, ` (${pt.deposit_value} % du total)`) : '';
+      doc.text(
+        L(
+          `A deposit of ${formatCents(pt.deposit_cents)}${pct} is required to confirm this contract.`,
+          `Un dépôt de ${formatCents(pt.deposit_cents)}${pct} est requis pour confirmer ce contrat.`,
+        ),
+        marginL,
+        y,
+      );
+      y += 12;
+    }
+    if (pt.require_payment_method) {
+      doc.text(
+        L('A payment method on file is requested — it can be added securely from the contract page.', 'Un moyen de paiement au dossier est demandé — il peut être ajouté de façon sécurisée depuis la page du contrat.'),
+        marginL,
+        y,
+      );
+      y += 12;
+    }
+    y += 4;
+  }
 
   // ── TERMS & CONDITIONS ──
   if (data.terms) {

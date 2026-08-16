@@ -7,6 +7,13 @@ import { sendSafeError } from '../lib/error-handler';
 import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
 import { twilioClient } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
+import {
+  getPlatformStripe,
+  getConnectedAccount,
+  getClientPaymentProfile,
+  getOrCreatePlatformCustomerForClient,
+  saveCardOnFileFromIntent,
+} from '../lib/stripe-connect';
 
 const router = Router();
 
@@ -57,6 +64,14 @@ interface ComposedAgreementDoc {
   property_address: string | null;
   /** 12-month calendar of service-plan jobs (jobs.job_type = 'recurring'). */
   service_plan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
+  /** Deposit + payment-method-on-file requirements of the job, shown on the contract. */
+  payment_terms?: {
+    deposit_required: boolean;
+    deposit_type: 'percentage' | 'fixed' | null;
+    deposit_value: number;
+    deposit_cents: number;
+    require_payment_method: boolean;
+  } | null;
 }
 
 /**
@@ -70,7 +85,7 @@ interface ComposedAgreementDoc {
 async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgreementDoc> {
   const { data: job } = await admin
     .from('jobs')
-    .select('id, job_number, subtotal_cents, tax_lines, property_address, client_id')
+    .select('id, job_number, subtotal_cents, tax_lines, property_address, client_id, deposit_required, deposit_type, deposit_value, require_payment_method')
     .eq('id', agreement.job_id)
     .maybeSingle();
 
@@ -136,6 +151,29 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     if (visits.length > 0) servicePlan = { year: Number(sc.year), visits };
   }
 
+  // Payment terms — the deposit amount is recomputed from the composed total
+  // so the contract always matches the amounts printed above it.
+  const depositRequired = job?.deposit_required === true;
+  const depositType = depositRequired && (job?.deposit_type === 'percentage' || job?.deposit_type === 'fixed')
+    ? job.deposit_type
+    : null;
+  const depositValue = depositRequired ? Number(job?.deposit_value || 0) : 0;
+  const depositCents = !depositRequired
+    ? 0
+    : depositType === 'percentage'
+      ? Math.round(totalCents * (depositValue / 100))
+      : Math.round(depositValue * 100);
+  const requirePaymentMethod = job?.require_payment_method === true;
+  const paymentTerms = (depositRequired || requirePaymentMethod)
+    ? {
+        deposit_required: depositRequired,
+        deposit_type: depositType,
+        deposit_value: depositValue,
+        deposit_cents: depositCents,
+        require_payment_method: requirePaymentMethod,
+      }
+    : null;
+
   return {
     items,
     subtotal_cents: subtotalCents,
@@ -144,6 +182,7 @@ async function composeLiveDoc(admin: any, agreement: any): Promise<ComposedAgree
     client_name: clientName,
     property_address: job?.property_address || null,
     service_plan: servicePlan,
+    payment_terms: paymentTerms,
   };
 }
 
@@ -261,6 +300,46 @@ router.get('/agreements/public/:token', async (req, res) => {
       ? agreement.snapshot
       : await composeLiveDoc(admin, agreement);
 
+    // « Payment method on file » — statut vivant (jamais depuis le snapshot :
+    // le client doit pouvoir revenir ajouter sa carte après la signature, et
+    // la section doit refléter la carte réellement au dossier du client).
+    let paymentMethod: {
+      requested: boolean;
+      card: { brand: string | null; last4: string; exp_month: number | null; exp_year: number | null } | null;
+      available: boolean;
+    } | null = null;
+    try {
+      let requested = doc?.payment_terms?.require_payment_method === true;
+      if (agreement.job_id) {
+        const { data: jobRow } = await admin
+          .from('jobs')
+          .select('require_payment_method')
+          .eq('id', agreement.job_id)
+          .maybeSingle();
+        if (jobRow) requested = jobRow.require_payment_method === true;
+      }
+      if (requested && clientId) {
+        const profile = await getClientPaymentProfile(agreement.org_id, clientId);
+        const card = profile?.card_last4
+          ? {
+              brand: profile.card_brand || null,
+              last4: String(profile.card_last4),
+              exp_month: profile.card_exp_month || null,
+              exp_year: profile.card_exp_year || null,
+            }
+          : null;
+        let available = false;
+        if (!card && process.env.STRIPE_SECRET_KEY) {
+          const account = await getConnectedAccount(agreement.org_id).catch(() => null);
+          available = Boolean(account?.charges_enabled);
+        }
+        paymentMethod = { requested: true, card, available };
+      }
+    } catch (pmErr: any) {
+      // Best-effort : la section carte disparaît, le contrat reste consultable.
+      console.error('[agreements/public/get] payment method status failed:', pmErr?.message);
+    }
+
     return res.json({
       agreement: {
         id: agreement.id,
@@ -284,9 +363,156 @@ router.get('/agreements/public/:token', async (req, res) => {
       },
       client,
       doc,
+      payment_method: paymentMethod,
     });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to load agreement.', '[agreements/public/get]');
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+// PUBLIC: Payment method on file (no auth — uses view_token)
+//
+// Quand le job du contrat demande un moyen de paiement au dossier
+// (jobs.require_payment_method), la page publique offre d'ajouter une carte
+// via un SetupIntent Stripe sur le compte PLATEFORME (même architecture que
+// la carte au dossier du flux /pay : destination charges → le customer vit
+// côté plateforme). Aucune donnée de carte ne transite par nos serveurs.
+// ══════════════════════════════════════════════════════════════
+
+const publicSetupIntentSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+});
+const publicConfirmCardSchema = z.object({
+  view_token: z.string().regex(viewTokenRegex, 'Invalid view_token.'),
+  setup_intent_id: z.string().regex(/^seti_[a-zA-Z0-9]+$/, 'Invalid setup_intent_id.'),
+});
+
+/** Résout le contrat + org + client d'un view_token (mêmes règles que le GET public). */
+async function resolveAgreementForCard(admin: any, viewToken: string): Promise<
+  | { error: { status: number; message: string } }
+  | { agreement: any; clientId: string; requested: boolean }
+> {
+  const { data: agreement, error: aErr } = await admin
+    .from('job_agreements')
+    .select('id, org_id, job_id, client_id')
+    .eq('view_token', viewToken)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (aErr || !agreement) return { error: { status: 404, message: 'Agreement not found.' } };
+  if (!agreement.job_id) return { error: { status: 400, message: 'This agreement does not support payment methods.' } };
+
+  const { data: job } = await admin
+    .from('jobs')
+    .select('client_id, require_payment_method')
+    .eq('id', agreement.job_id)
+    .maybeSingle();
+  const clientId: string | null = agreement.client_id || job?.client_id || null;
+  if (!clientId) return { error: { status: 400, message: 'This agreement has no client attached.' } };
+  return { agreement, clientId, requested: job?.require_payment_method === true };
+}
+
+router.post('/agreements/public/payment-method/setup-intent', async (req, res) => {
+  try {
+    const parsed = publicSetupIntentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsed.error.issues.map(i => i.message) });
+    }
+    const admin = getServiceClient();
+    const resolved = await resolveAgreementForCard(admin, parsed.data.view_token);
+    if ('error' in resolved) return res.status(resolved.error.status).json({ error: resolved.error.message });
+    const { agreement, clientId, requested } = resolved;
+    if (!requested) return res.status(400).json({ error: 'No payment method was requested for this agreement.' });
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(503).json({ error: 'Payments are not configured.' });
+    }
+    const account = await getConnectedAccount(agreement.org_id).catch(() => null);
+    if (!account?.charges_enabled) {
+      return res.status(503).json({ error: 'This business has not finished connecting a payment provider.' });
+    }
+
+    // Le customer plateforme n'est créé qu'ici — au moment où le client
+    // consent explicitement à sauvegarder sa carte (Loi 25 — minimisation).
+    const customerId = await getOrCreatePlatformCustomerForClient(agreement.org_id, clientId);
+    const stripe = getPlatformStripe();
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      usage: 'off_session',
+      metadata: {
+        org_id: agreement.org_id,
+        client_id: clientId,
+        agreement_id: agreement.id,
+        job_id: agreement.job_id || '',
+        save_card: '1',
+        save_card_consented_at: new Date().toISOString(),
+        source: 'public_contract',
+      },
+    });
+
+    return res.json({
+      client_secret: setupIntent.client_secret,
+      setup_intent_id: setupIntent.id,
+      publishable_key: process.env.STRIPE_PUBLISHABLE_KEY || '',
+    });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to start card setup.', '[agreements/public/setup-intent]');
+  }
+});
+
+// Appelé après confirmSetup côté client — le webhook setup_intent.succeeded
+// sert de filet si le client ferme la page avant cette confirmation.
+router.post('/agreements/public/payment-method/confirm', async (req, res) => {
+  try {
+    const parsed = publicConfirmCardSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request body.', issues: parsed.error.issues.map(i => i.message) });
+    }
+    const admin = getServiceClient();
+    const resolved = await resolveAgreementForCard(admin, parsed.data.view_token);
+    if ('error' in resolved) return res.status(resolved.error.status).json({ error: resolved.error.message });
+    const { agreement, clientId } = resolved;
+
+    const stripe = getPlatformStripe();
+    const setupIntent = await stripe.setupIntents.retrieve(parsed.data.setup_intent_id);
+
+    // Le SetupIntent doit appartenir à CE contrat (anti-confusion entre tokens).
+    if (String(setupIntent.metadata?.agreement_id || '') !== String(agreement.id)) {
+      return res.status(403).json({ error: 'Setup intent does not belong to this agreement.' });
+    }
+    if (setupIntent.status !== 'succeeded') {
+      return res.status(402).json({ error: `Card setup not completed. Status: ${setupIntent.status}` });
+    }
+
+    const pmId = typeof setupIntent.payment_method === 'string'
+      ? setupIntent.payment_method
+      : (setupIntent.payment_method as any)?.id || null;
+    const customerId = typeof setupIntent.customer === 'string'
+      ? setupIntent.customer
+      : (setupIntent.customer as any)?.id || null;
+    if (!pmId || !customerId) return res.status(400).json({ error: 'Setup intent has no payment method.' });
+
+    const saved = await saveCardOnFileFromIntent({
+      orgId: agreement.org_id,
+      clientId,
+      stripeCustomerId: customerId,
+      paymentMethodId: pmId,
+      consentedAtIso: String(setupIntent.metadata?.save_card_consented_at || '') || null,
+      consentSource: 'public_contract',
+    });
+
+    return res.json({
+      ok: true,
+      card: {
+        brand: saved.brand,
+        last4: saved.last4,
+        exp_month: saved.expMonth,
+        exp_year: saved.expYear,
+      },
+    });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to save the payment method.', '[agreements/public/confirm-card]');
   }
 });
 

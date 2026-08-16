@@ -5,7 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
-import { isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
+import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import type { TeamRecord } from '../../lib/teamsApi';
 import { getRosterForDate, fetchMemberNames, firstNameOf } from '../../lib/teamScheduleApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
@@ -66,7 +66,7 @@ interface DailyDispatchViewProps {
 type DailyDrag =
   | {
       mode: 'move'; ev: ScheduleEventRecord; startClientX: number; startClientY: number;
-      grabOffsetMin: number; durationMin: number; originRowIndex: number; hasTeam: boolean;
+      grabOffsetMin: number; durationMin: number; originRowIndex: number;
       ghostStartMin: number; ghostRowIndex: number; moved: boolean;
     }
   | {
@@ -142,12 +142,17 @@ export default function DailyDispatchView({
     [activeTeams, visibleTeamIds],
   );
 
+  /* ── Drags actifs — pendant un drag de carte ou un drop du tiroir, la ligne
+     « Non assigné » apparaît comme cible de dépôt même si elle est vide. ── */
+  const extActive = externalDnd.dragState.active?.type === 'unscheduled';
+  const [dragLive, setDragLive] = useState(false);
+
   const { rows, rowLayouts, rowHeights } = useMemo(() => {
     const teamIdSet = new Set(rowTeams.map((tm) => tm.id));
     const byTeam = new Map<string, ScheduleEventRecord[]>();
     const unassigned: ScheduleEventRecord[] = [];
     for (const ev of effEvents) {
-      const tid = ev.team_id || ev.job?.team_id || null;
+      const tid = ev.team_id || null;
       if (tid && teamIdSet.has(tid)) {
         if (!byTeam.has(tid)) byTeam.set(tid, []);
         byTeam.get(tid)!.push(ev);
@@ -160,7 +165,7 @@ export default function DailyDispatchView({
     const list: DailyRow[] = unassignedMode
       ? []
       : rowTeams.map((tm) => ({ key: tm.id, teamId: tm.id, team: tm }));
-    if (unassignedMode || unassigned.length > 0) {
+    if (unassignedMode || unassigned.length > 0 || dragLive || extActive) {
       list.push({ key: '__unassigned__', teamId: null, team: null });
     }
     // Journée entièrement vide (aucune équipe, aucune visite) : la grille
@@ -175,7 +180,7 @@ export default function DailyDispatchView({
       assignLanes(row.placeholderIndex ? [] : row.teamId ? byTeam.get(row.teamId) || [] : unassigned));
     const heights = layouts.map((l) => rowHeightForLanes(l.laneCount));
     return { rows: list, rowLayouts: layouts, rowHeights: heights };
-  }, [effEvents, rowTeams, unassignedMode]);
+  }, [effEvents, rowTeams, unassignedMode, dragLive, extActive]);
 
   /* ── Plage horaire (défaut 07–19 h, étendue aux visites du jour) ── */
   const range = useMemo(() => computeDayRange(effEvents), [effEvents]);
@@ -212,6 +217,7 @@ export default function DailyDispatchView({
   const finishDrag = useCallback(() => {
     const d = dragRef.current;
     dragRef.current = null;
+    setDragLive(false);
     bumpDrag();
     if (!d || !d.moved) return;
     // Le pointerup précède le click : on libère le flag juste après.
@@ -221,8 +227,8 @@ export default function DailyDispatchView({
       const g = geomRef.current;
       const targetRow = g.rows[d.ghostRowIndex];
       const { startMin } = eventMinutes(d.ev);
-      const originTeam = d.ev.team_id || d.ev.job?.team_id || null;
-      const targetTeam = targetRow ? targetRow.teamId : originTeam;
+      const originTeam = d.ev.team_id || null;
+      const targetTeam = targetRow && !targetRow.placeholderIndex ? targetRow.teamId : originTeam;
       if (d.ghostStartMin === startMin && targetTeam === originTeam) return;
       const newStart = new Date(date);
       newStart.setHours(Math.floor(d.ghostStartMin / 60), d.ghostStartMin % 60, 0, 0);
@@ -244,6 +250,7 @@ export default function DailyDispatchView({
 
   const beginDrag = useCallback((init: DailyDrag) => {
     dragRef.current = init;
+    if (init.mode === 'move') setDragLive(true);
     bumpDrag();
 
     const onMove = (e: PointerEvent) => {
@@ -261,10 +268,9 @@ export default function DailyDispatchView({
         if (!p) return;
         let minute = snapMinutes(p.minute - d.grabOffsetMin);
         minute = Math.max(g.range.startMin, Math.min(minute, g.range.endMin - d.durationMin));
-        let row = p.rowIndex >= 0 ? p.rowIndex : p.y < 0 ? 0 : g.rows.length - 1;
-        // Le RPC ne peut pas désassigner : une visite avec équipe ne se
-        // dépose pas sur la ligne « Non assigné » (le fantôme reste chez elle).
-        if (d.hasTeam && g.rows[row]?.teamId === null) row = d.originRowIndex;
+        // Déposer sur la ligne « Non assigné » désassigne cette visite (la
+        // désassignation passe par un update direct — voir rescheduleEvent).
+        const row = p.rowIndex >= 0 ? p.rowIndex : p.y < 0 ? 0 : g.rows.length - 1;
         d.ghostStartMin = minute;
         d.ghostRowIndex = row;
       } else {
@@ -282,7 +288,7 @@ export default function DailyDispatchView({
       dragCleanupRef.current = null;
     };
     const onUp = () => { cleanup(); finishDrag(); };
-    const onCancel = () => { cleanup(); dragRef.current = null; bumpDrag(); };
+    const onCancel = () => { cleanup(); dragRef.current = null; setDragLive(false); bumpDrag(); };
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onCancel);
@@ -297,7 +303,7 @@ export default function DailyDispatchView({
     beginDrag({
       mode: 'move', ev, startClientX: e.clientX, startClientY: e.clientY,
       grabOffsetMin: p.minute - startMin, durationMin: endMin - startMin,
-      originRowIndex: rowIndex, hasTeam: !!(ev.team_id || ev.job?.team_id),
+      originRowIndex: rowIndex,
       ghostStartMin: startMin, ghostRowIndex: rowIndex, moved: false,
     });
   }, [beginDrag, pointFromClient]);
@@ -312,7 +318,6 @@ export default function DailyDispatchView({
   }, [beginDrag]);
 
   /* ── Drop externe : jobs non planifiés glissés depuis le tiroir ── */
-  const extActive = externalDnd.dragState.active?.type === 'unscheduled';
   const extGhostRef = useRef<{ rowIndex: number; startMin: number } | null>(null);
   useEffect(() => {
     if (!extActive) { extGhostRef.current = null; return; }
@@ -568,6 +573,7 @@ export default function DailyDispatchView({
                           timeLabel={anytime ? anytimeLabel(isFr) : timeLabelFor(cardStartMin, cardStartMin + durMin)}
                           anytime={anytime}
                           dimmed={isDraggingThis}
+                          done={isClosedVisit(p.ev)}
                           tagColor={tag?.hex ?? null}
                           tagName={tag?.name ?? null}
                           onOpen={() => openEvent(p.ev.job_id)}

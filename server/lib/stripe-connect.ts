@@ -239,7 +239,9 @@ export async function getOrCreatePlatformCustomerForClient(orgId: string, client
 /**
  * Sauvegarde la carte d'un paiement réussi comme carte au dossier du client.
  * Appelé par le webhook payment_intent.succeeded quand le payeur a coché
- * l'option (metadata.save_card = '1'). consented_at = preuve Loi 25.
+ * l'option (metadata.save_card = '1'), et par le flux « payment method on
+ * file » de la page publique de contrat (SetupIntent, consent_source
+ * 'public_contract'). consented_at = preuve Loi 25.
  */
 export async function saveCardOnFileFromIntent(params: {
   orgId: string;
@@ -247,6 +249,7 @@ export async function saveCardOnFileFromIntent(params: {
   stripeCustomerId: string;
   paymentMethodId: string;
   consentedAtIso?: string | null;
+  consentSource?: string;
 }) {
   const admin = getServiceClient();
   const stripe = getPlatformStripe();
@@ -273,7 +276,7 @@ export async function saveCardOnFileFromIntent(params: {
     card_exp_month: expMonth,
     card_exp_year: expYear,
     consented_at: params.consentedAtIso || new Date().toISOString(),
-    consent_source: 'public_pay',
+    consent_source: params.consentSource || 'public_pay',
     updated_at: new Date().toISOString(),
     deleted_at: null,
   };
@@ -295,6 +298,8 @@ export async function saveCardOnFileFromIntent(params: {
       .insert({ org_id: params.orgId, client_id: params.clientId, ...fields });
     if (error) throw error;
   }
+
+  return { brand, last4, expMonth, expYear };
 }
 
 /**

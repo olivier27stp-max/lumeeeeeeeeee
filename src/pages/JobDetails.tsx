@@ -58,6 +58,7 @@ import EventsPanel from '../components/events/EventsPanel';
 import { useDropZone } from '../hooks/useDropZone';
 import { getRecurrenceRule, createRecurrenceRule, deactivateRecurrenceRule, type RecurrenceRule, type RecurrenceFrequency } from '../lib/recurringJobsApi';
 import { getServiceContractByJob, type ServiceContract } from '../lib/serviceContractsApi';
+import { getClientCardOnFile, type ClientCardOnFile } from '../lib/cardOnFileApi';
 import { getJobAgreementByJob, sendAgreementEmail, sendAgreementSms, type JobAgreement } from '../lib/jobAgreementsApi';
 import { getQuoteForJob, getQuoteStatusLabel, type Quote } from '../lib/quotesApi';
 import { resolveApprovedDocument } from '../lib/approvedDocument';
@@ -184,14 +185,13 @@ export default function JobDetails() {
 
   const teamById = useMemo(() => new Map(teams.map((tm) => [tm.id, tm])), [teams]);
 
-  // Who's on a visit: the visit's own team first, else the job's team.
+  // Who's on a visit: the visit's own team only — NULL means the visit is
+  // explicitly unassigned (no fallback on the job's team, so per-visit
+  // unassignment from the calendar reads the same here).
   const getVisitAssignment = (visit: ScheduleEvent): { team: TeamRecord | undefined; label: string } => {
-    const visitTeam = visit.team_id ? teamById.get(visit.team_id) : undefined;
-    const jobTeam = !visit.team_id && job?.team_id ? teamById.get(job.team_id) : undefined;
-    const team = visitTeam || jobTeam;
-    const label = visitTeam?.name
+    const team = visit.team_id ? teamById.get(visit.team_id) : undefined;
+    const label = team?.name
       || (visit.team_id ? (language === 'fr' ? 'Équipe assignée' : 'Team assigned') : null)
-      || jobTeam?.name
       || (language === 'fr' ? 'Pas encore assignée' : 'Not assigned yet');
     return { team, label };
   };
@@ -263,6 +263,30 @@ export default function JobDetails() {
   // Source quote (the job was converted from it) — the signed quote IS the
   // job's approved contract: no agreement allowed, no second signature.
   const [sourceQuote, setSourceQuote] = useState<Quote | null>(null);
+
+  // « Payment method on file » — la vue jobs_active fige ses colonnes :
+  // require_payment_method se lit sur la TABLE jobs, la carte sur le client.
+  const [pmStatus, setPmStatus] = useState<{ requested: boolean; card: ClientCardOnFile | null } | null>(null);
+  useEffect(() => {
+    if (!job?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: row } = await supabase
+          .from('jobs')
+          .select('require_payment_method, client_id')
+          .eq('id', job.id)
+          .maybeSingle();
+        const requested = (row as any)?.require_payment_method === true;
+        const clientId = (row as any)?.client_id || job.client_id || null;
+        const card = clientId ? await getClientCardOnFile(clientId) : null;
+        if (!cancelled) setPmStatus({ requested, card });
+      } catch {
+        if (!cancelled) setPmStatus(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [job?.id]);
 
   // Public client-approval link offered in the SMS/email confirmation modals.
   // Same precedence as resolveApprovedDocument: the converted quote wins.
@@ -484,6 +508,16 @@ export default function JobDetails() {
           setEditingVisitId(null);
           setVisitMoreOpen(false);
           setFinalVisitPromptOpen('visit');
+        }
+      } else if (wasCompleted && job?.id) {
+        // Remise à faire : si le job a été fermé (prompt « dernière visite »),
+        // le rouvrir — sinon isClosedVisit garde la carte barrée au calendrier.
+        const js = (job.status || '').toLowerCase();
+        if (['completed', 'cancelled', 'canceled', 'archived'].includes(js)) {
+          try {
+            await updateJob(job.id, { status: 'scheduled' });
+            toast.success(language === 'fr' ? 'Job rouvert.' : 'Job reopened.');
+          } catch { /* best-effort */ }
         }
       }
       await handleVisitAdded();
@@ -1119,7 +1153,7 @@ export default function JobDetails() {
                 });
                 navigate(`/messages?${params.toString()}`);
               }}
-              className="glass-button-primary inline-flex items-center gap-1.5"
+              className="glass-button inline-flex items-center gap-1.5"
             >
               <MessageSquare size={14} /> {language === 'fr' ? 'Texter le client' : 'Text Client'}
             </button>
@@ -1132,9 +1166,9 @@ export default function JobDetails() {
               <button
                 onClick={() => setFinalVisitPromptOpen('complete')}
                 disabled={isClosing}
-                className="px-3 py-1.5 rounded-lg bg-primary text-white text-[12px] font-semibold hover:opacity-90 transition-all inline-flex items-center gap-1.5 disabled:opacity-50"
+                className="glass-button inline-flex items-center gap-1.5 disabled:opacity-50"
               >
-                <CheckCircle2 size={13} /> {language === 'fr' ? 'Compléter' : 'Complete'}
+                <CheckCircle2 size={14} /> {language === 'fr' ? 'Compléter' : 'Complete'}
               </button>
             )}
 
@@ -1259,6 +1293,14 @@ export default function JobDetails() {
                 )}
                 <JobDetailRow label={language === 'fr' ? 'Fréquence de facturation' : 'Billing frequency'} value={(job as any).requires_invoicing === false ? (language === 'fr' ? 'Sans facturation' : 'No invoicing') : (language === 'fr' ? 'À la fin du job' : 'Upon job completion')} />
                 <JobDetailRow label={language === 'fr' ? 'Dépôt' : 'Deposit'} value={(job as any).deposit_required ? `${(job as any).deposit_type === 'percentage' ? `${(job as any).deposit_value}%` : `$${(job as any).deposit_value}`}` : (language === 'fr' ? 'Aucun' : 'None')} />
+                {pmStatus && (pmStatus.requested || pmStatus.card) && (
+                  <JobDetailRow
+                    label={language === 'fr' ? 'Moyen de paiement au dossier' : 'Payment method on file'}
+                    value={pmStatus.card?.card_last4
+                      ? `${(pmStatus.card.card_brand || (language === 'fr' ? 'Carte' : 'Card')).replace(/^./, (c) => c.toUpperCase())} •••• ${pmStatus.card.card_last4}`
+                      : (language === 'fr' ? 'Demandé — non ajouté' : 'Requested — not added')}
+                  />
+                )}
                 <JobDetailRow label={language === 'fr' ? 'Vendeur' : 'Salesperson'} value={(job as any).salesperson_name || (job as any).salesperson?.full_name || '—'} isLast />
               </div>
             </div>
@@ -1709,6 +1751,9 @@ export default function JobDetails() {
                   title={agreement.snapshot
                     ? (language === 'fr' ? 'Services et prix (figés à la signature)' : 'Services and prices (frozen at signature)')
                     : (language === 'fr' ? 'Services et prix du job' : 'Job services and prices')}
+                  servicePlanVisitCount={agreement.snapshot
+                    ? (agreement.snapshot.service_plan?.visits?.length ?? 0)
+                    : (contract?.visits?.length ?? 0)}
                   data={agreement.snapshot
                     ? {
                         items: agreement.snapshot.items || [],

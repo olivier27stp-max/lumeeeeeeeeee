@@ -9,7 +9,8 @@ import { supabase } from '../../lib/supabase';
 import { invalidateScheduleCache, isAnytimeVisit, anytimeLabel, type ScheduleEventRecord } from '../../lib/scheduleApi';
 import { createInvoiceForVisit } from '../../lib/jobBillingApi';
 import { updateJob } from '../../lib/jobsApi';
-import { toRgba } from '../../lib/colorUtils';
+import { listTeams, type TeamRecord } from '../../lib/teamsApi';
+import { isHexColor, toRgba } from '../../lib/colorUtils';
 import FinalVisitDialog from './FinalVisitDialog';
 import AddVisitModal from '../AddVisitModal';
 
@@ -53,6 +54,54 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
   const [completed, setCompleted] = useState((ev.status || '').toLowerCase() === 'completed');
   const [lineItems, setLineItems] = useState<VisitLineItem[] | null>(null);
   const [memberNames, setMemberNames] = useState<string[] | null>(null);
+  // Équipe de CETTE visite seulement — la réassigner écrit schedule_events.team_id
+  // de cet event; jobs.team_id et les autres visites du job (service plan
+  // inclus) ne bougent jamais.
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
+  const [teamId, setTeamId] = useState<string | null>(ev.team_id || null);
+  const [teamBusy, setTeamBusy] = useState(false);
+
+  useEffect(() => {
+    setTeamId(ev.team_id || null);
+  }, [ev.id]);
+
+  useEffect(() => {
+    listTeams()
+      .then((rows) => setTeams(rows.filter((tm) => tm.is_active !== false)))
+      .catch(() => setTeams([]));
+  }, []);
+
+  const changeTeam = async (nextId: string | null) => {
+    if (teamBusy || nextId === teamId) return;
+    const prev = teamId;
+    setTeamBusy(true);
+    setTeamId(nextId);
+    try {
+      const { error } = await supabase
+        .from('schedule_events')
+        .update({ team_id: nextId, updated_at: new Date().toISOString() })
+        .eq('id', ev.id);
+      if (error) throw error;
+      invalidateScheduleCache();
+      toast.success(nextId
+        ? (isFr
+          ? 'Équipe de la visite mise à jour — les autres visites du job ne changent pas.'
+          : "Visit team updated — the job's other visits are unchanged.")
+        : (isFr
+          ? 'Visite désassignée — les autres visites du job ne changent pas.'
+          : "Visit unassigned — the job's other visits are unchanged."));
+      onStatusChanged?.();
+    } catch (err: any) {
+      setTeamId(prev);
+      toast.error(err?.message || (isFr ? "Impossible de changer l'équipe de la visite." : 'Could not change the visit team.'));
+    } finally {
+      setTeamBusy(false);
+    }
+  };
+
+  const selectedTeam = teamId ? teams.find((tm) => tm.id === teamId) || null : null;
+  const teamColor = selectedTeam && isHexColor(selectedTeam.color_hex) ? selectedTeam.color_hex : color;
+  const displayTeamName = selectedTeam?.name ?? teamName;
 
   // Détails Jobber-style : line items du job + membres de l'équipe assignée.
   useEffect(() => {
@@ -73,8 +122,13 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
         }
       } catch { if (!cancelled) setLineItems([]); }
     })();
+    return () => { cancelled = true; };
+  }, [ev.id, ev.job_id]);
+
+  // Membres de l'équipe sélectionnée — suit le select d'équipe de la visite.
+  useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      const teamId = ev.team_id || ev.job?.team_id || null;
       if (!teamId) { setMemberNames([]); return; }
       try {
         // Équipe permanente = memberships.team_id ∪ team_assignments (N→N).
@@ -95,7 +149,7 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
       } catch { if (!cancelled) setMemberNames([]); }
     })();
     return () => { cancelled = true; };
-  }, [ev.id, ev.job_id]);
+  }, [teamId, isFr]);
 
   const itemsTotalCents = (lineItems || []).reduce((sum, it) => sum + it.total_cents, 0);
   const totalCents = lineItems && lineItems.length ? itemsTotalCents : (ev.job?.total_cents || 0);
@@ -164,6 +218,21 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
             ['completed', 'cancelled'].includes(String(o.status || '').toLowerCase()));
           if (allDone) setFinalPromptOpen(true);
         } catch { /* best-effort */ }
+      } else if (!next && ev.job_id) {
+        // Remise à faire : si le job a été fermé (prompt « dernière visite »),
+        // le rouvrir — sinon isClosedVisit garde la carte barrée au calendrier.
+        try {
+          const { data: jobRow } = await supabase
+            .from('jobs')
+            .select('status')
+            .eq('id', ev.job_id)
+            .maybeSingle();
+          const js = String((jobRow as any)?.status || '').toLowerCase();
+          if (['completed', 'cancelled', 'canceled', 'archived'].includes(js)) {
+            await updateJob(ev.job_id, { status: 'scheduled' });
+            toast.success(isFr ? 'Job rouvert.' : 'Job reopened.');
+          }
+        } catch { /* best-effort */ }
       }
       onStatusChanged?.();
     } catch (err: any) {
@@ -218,13 +287,33 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
             <div className="flex items-start justify-between gap-3">
               <span className="shrink-0 text-[12px] text-text-tertiary">{isFr ? 'Équipe' : 'Team'}</span>
               <span className="min-w-0 text-right">
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold"
-                  style={{ backgroundColor: toRgba(color, 0.12), color }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
-                  {teamName || t.schedule.unassigned}
-                </span>
+                {teams.length > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                    style={{ backgroundColor: toRgba(teamColor, 0.12) }}
+                  >
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: teamColor }} />
+                    <select
+                      value={teamId ?? ''}
+                      disabled={teamBusy}
+                      onChange={(e) => void changeTeam(e.target.value || null)}
+                      className="max-w-[180px] cursor-pointer truncate border-0 p-0 text-[11px] font-semibold outline-none disabled:opacity-50"
+                      style={{ color: teamColor, background: 'transparent' }}
+                      title={isFr ? "Changer l'équipe de cette visite seulement" : 'Change the team for this visit only'}
+                    >
+                      <option value="">{t.schedule.unassigned}</option>
+                      {teams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
+                    </select>
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-semibold"
+                    style={{ backgroundColor: toRgba(teamColor, 0.12), color: teamColor }}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: teamColor }} />
+                    {displayTeamName || t.schedule.unassigned}
+                  </span>
+                )}
                 {memberNames && memberNames.length > 0 && (
                   <span className="mt-0.5 block text-[11px] leading-snug text-text-secondary">
                     {memberNames.length} {isFr ? (memberNames.length > 1 ? 'membres' : 'membre') : (memberNames.length > 1 ? 'members' : 'member')} · {memberNames.join(', ')}

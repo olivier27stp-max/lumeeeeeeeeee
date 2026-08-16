@@ -99,8 +99,8 @@ export default function ClientCardOnFile({ clientId, fr }: { clientId: string; f
         ) : (
           <p className="text-[13px] text-text-tertiary leading-relaxed">
             {fr
-              ? 'Aucune carte au dossier. Elle sera sauvegardée quand le client paiera une facture en ligne en cochant « Sauvegarder ma carte pour les paiements futurs ».'
-              : 'No card on file. It gets saved when the client pays an invoice online and checks “Save my card for future payments”.'}
+              ? 'Aucune carte au dossier. Elle sera sauvegardée quand le client l’ajoutera depuis la page de son contrat, ou paiera une facture en ligne en cochant « Sauvegarder ma carte pour les paiements futurs ».'
+              : 'No card on file. It gets saved when the client adds it from their contract page, or pays an invoice online and checks “Save my card for future payments”.'}
           </p>
         )}
       </div>

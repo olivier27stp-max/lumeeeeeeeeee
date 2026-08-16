@@ -4,6 +4,9 @@ import { getCurrentOrgIdOrThrow } from './orgApi';
 /** Unité de tarification d'un service : forfait, $/pi linéaire ou $/pi². */
 export type ServicePricingUnit = 'flat' | 'linear_ft' | 'sq_ft';
 
+/** Produit (bien vendu) ou service (main-d'œuvre) — deux types fixes, rien d'autre. */
+export type CatalogItemType = 'product' | 'service';
+
 export interface PredefinedService {
   id: string;
   org_id: string;
@@ -18,6 +21,10 @@ export interface PredefinedService {
   pricing_unit: ServicePricingUnit;
   /** Attaché automatiquement aux nouvelles mesures du type correspondant. */
   measure_default: boolean;
+  /** Absent tant que la migration 20260804000000 n'est pas appliquée. */
+  item_type?: CatalogItemType;
+  default_cost_cents?: number | null;
+  taxable?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +52,9 @@ export async function createPredefinedService(service: {
   default_duration_minutes?: number;
   pricing_unit?: ServicePricingUnit;
   measure_default?: boolean;
+  item_type?: CatalogItemType;
+  default_cost_cents?: number | null;
+  taxable?: boolean;
 }): Promise<PredefinedService> {
   // Use the ACTIVE org — resolving via `memberships … limit(1)` picked an
   // arbitrary org for multi-org users, so services landed in the wrong company.
@@ -64,12 +74,15 @@ export async function createPredefinedService(service: {
       ...base,
       pricing_unit: service.pricing_unit || 'flat',
       measure_default: service.measure_default ?? false,
+      item_type: service.item_type || 'service',
+      default_cost_cents: service.default_cost_cents ?? null,
+      taxable: service.taxable ?? true,
     })
     .select()
     .single();
-  // Migration 20260802100000 pas encore appliquée : on retombe sur les champs
-  // historiques pour ne jamais bloquer la création de services.
-  if (error && /pricing_unit|measure_default/.test(error.message || '')) {
+  // Migrations 20260802100000 / 20260804000000 pas encore appliquées : on
+  // retombe sur les champs historiques pour ne jamais bloquer la création.
+  if (error && /pricing_unit|measure_default|item_type|default_cost_cents|taxable/.test(error.message || '')) {
     ({ data, error } = await supabase.from('predefined_services').insert(base).select().single());
   }
   if (error) throw error;
@@ -86,6 +99,9 @@ export async function updatePredefinedService(id: string, updates: Partial<{
   sort_order: number;
   pricing_unit: ServicePricingUnit;
   measure_default: boolean;
+  item_type: CatalogItemType;
+  default_cost_cents: number | null;
+  taxable: boolean;
 }>): Promise<PredefinedService> {
   let { data, error } = await supabase
     .from('predefined_services')
@@ -93,10 +109,10 @@ export async function updatePredefinedService(id: string, updates: Partial<{
     .eq('id', id)
     .select()
     .single();
-  // Migration 20260802100000 pas encore appliquée : réessaie sans les champs
-  // d'unité de tarification pour ne jamais bloquer l'édition de services.
-  if (error && /pricing_unit|measure_default/.test(error.message || '')) {
-    const { pricing_unit: _pu, measure_default: _md, ...legacy } = updates as Record<string, unknown>;
+  // Migrations 20260802100000 / 20260804000000 pas encore appliquées :
+  // réessaie sans les champs récents pour ne jamais bloquer l'édition.
+  if (error && /pricing_unit|measure_default|item_type|default_cost_cents|taxable/.test(error.message || '')) {
+    const { pricing_unit: _pu, measure_default: _md, item_type: _it, default_cost_cents: _cc, taxable: _tx, ...legacy } = updates as Record<string, unknown>;
     ({ data, error } = await supabase
       .from('predefined_services')
       .update({ ...legacy, updated_at: new Date().toISOString() })

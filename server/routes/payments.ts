@@ -326,6 +326,39 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         }
       }
 
+      // ── Handle setup_intent.succeeded (payment method on file, page contrat) ──
+      // Filet de sécurité du POST /agreements/public/payment-method/confirm :
+      // si le client ferme la page entre confirmSetup et notre confirm, la
+      // carte est quand même sauvegardée ici. Idempotent (upsert par client).
+      if (event.type === 'setup_intent.succeeded') {
+        const setupIntent = event.data.object as Stripe.SetupIntent;
+        const siMeta = (setupIntent.metadata || {}) as Record<string, string>;
+        const siOrgId = String(siMeta.org_id || '').trim();
+        const siClientId = String(siMeta.client_id || '').trim();
+        if (String(siMeta.save_card || '') === '1' && siOrgId && siClientId) {
+          const pmId = typeof setupIntent.payment_method === 'string'
+            ? setupIntent.payment_method
+            : (setupIntent.payment_method as any)?.id || null;
+          const customerId = typeof setupIntent.customer === 'string'
+            ? setupIntent.customer
+            : (setupIntent.customer as any)?.id || null;
+          if (pmId && customerId) {
+            try {
+              await saveCardOnFileFromIntent({
+                orgId: siOrgId,
+                clientId: siClientId,
+                stripeCustomerId: customerId,
+                paymentMethodId: pmId,
+                consentedAtIso: String(siMeta.save_card_consented_at || '') || null,
+                consentSource: String(siMeta.source || '') || 'public_contract',
+              });
+            } catch (cofErr: any) {
+              console.error('[webhook/stripe] card-on-file save (setup intent) failed:', cofErr?.message);
+            }
+          }
+        }
+      }
+
       // ── Handle account.updated (Connect onboarding status changes) ──
       if (event.type === 'account.updated' && connectAccountId) {
         const account = event.data.object as Stripe.Account;

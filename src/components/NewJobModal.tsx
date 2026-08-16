@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, Calendar, ChevronDown, Clock3, Eye, MapPin, Package, Plus, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, ChevronDown, Clock3, Eye, EyeOff, MapPin, MoreVertical, Package, Plus, Trash2, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn, formatCurrency } from '../lib/utils';
 import { listClients, createClient } from '../lib/clientsApi';
@@ -44,6 +44,11 @@ interface LineItemForm {
   unitPriceInput: string;
   included: boolean;
   source_service_id?: string | null;
+  // Métadonnées héritées du catalogue (non éditables sur la ligne) — servent
+  // aux calculs futurs (marge, taxes par item) sans changer la sauvegarde.
+  item_type?: 'product' | 'service';
+  unit_cost_cents?: number | null;
+  taxable?: boolean;
 }
 
 // One visit row in the form. Jobs have no date of their own — the calendar
@@ -253,6 +258,14 @@ function sanitizeDecimalInput(value: string) {
   return `${head || '0'}.${rest.join('')}`;
 }
 
+// Adresse affichable d'une propriété : la colonne `address` quand elle est
+// remplie, sinon recomposée depuis les champs structurés (rue, ville, …).
+function propertyAddressLabel(p: PropertyRecord): string {
+  if (p.address?.trim()) return p.address.trim();
+  const street = [p.street_number, p.street_name].filter(Boolean).join(' ').trim();
+  return [street, p.city, p.province, p.postal_code].filter(Boolean).join(', ');
+}
+
 function normalizeDecimalInput(value: string) {
   const sanitized = sanitizeDecimalInput(value).trim();
   if (!sanitized) return '';
@@ -334,6 +347,8 @@ export default function NewJobModal({
   // the address fields below.
   const [properties, setProperties] = useState<PropertyRecord[]>([]);
   const [propertyId, setPropertyId] = useState('');
+  const [propertySearch, setPropertySearch] = useState('');
+  const [propertyDropdownOpen, setPropertyDropdownOpen] = useState(false);
   const [propertiesLoading, setPropertiesLoading] = useState(false);
   const [newPropertyName, setNewPropertyName] = useState('');
   const [isCreatingNewClient, setIsCreatingNewClient] = useState(false);
@@ -360,7 +375,7 @@ export default function NewJobModal({
   const [showOnLeaderboard, setShowOnLeaderboard] = useState(true);
   const [jobType, setJobType] = useState<'one_off' | 'recurring'>('one_off');
   // "Ask for a review" setup
-  const [askForReview, setAskForReview] = useState(false);
+  const [askForReview, setAskForReview] = useState(true);
   // startDate/startTime/endTime are DERIVED from the first visit (see the sync
   // effect below) and only feed TeamSuggestions/conflict checks + the service
   // plan's own time inputs. The source of truth for scheduling is `visitDrafts`.
@@ -381,11 +396,15 @@ export default function NewJobModal({
   const [serviceYears, setServiceYears] = useState<number[]>([new Date().getFullYear()]);
   const [planVisits, setPlanVisits] = useState<PlanVisitDraft[]>([]);
   const [createContract, setCreateContract] = useState(false);
-  // Per-visit customization of the service plan. Both boxes are checked by
-  // default ("apply to all visits"); unchecking one lets each planned visit
-  // carry its own time window / its own products & services (keyed by visit key).
-  const [applyTimesToAllVisits, setApplyTimesToAllVisits] = useState(true);
+  // Per-visit customization of the service plan. Hours: the Rule's time window
+  // is the default for every visit; editing a visit's hours stores an override
+  // in serviceVisitTimes (keyed by visit key). Items: the box is checked by
+  // default ("apply to all visits"); unchecking it lets each planned visit
+  // carry its own products & services.
   const [applyItemsToAllVisits, setApplyItemsToAllVisits] = useState(true);
+  // Visit currently shown in the items editor when personalization is on —
+  // driven by the "Applies to" droplist above Products / Services.
+  const [itemsVisitKey, setItemsVisitKey] = useState<string | null>(null);
   const [serviceVisitTimes, setServiceVisitTimes] = useState<Record<string, { startTime: string; endTime: string }>>({});
   const [serviceVisitItems, setServiceVisitItems] = useState<Record<string, LineItemForm[]>>({});
   // Visit whose list the catalog picker is currently feeding (null = the
@@ -438,10 +457,16 @@ export default function NewJobModal({
   const [servicePickerOpen, setServicePickerOpen] = useState(false);
   // Per-line catalog picker: id of the line whose product/service is being chosen
   const [lineEditId, setLineEditId] = useState<string | null>(null);
+  // Line whose "⋮" actions menu is open (one at a time)
+  const [lineMenuId, setLineMenuId] = useState<string | null>(null);
   const [addedServiceIds, setAddedServiceIds] = useState<Set<string>>(new Set());
   const [orgCurrency, setOrgCurrency] = useState('CAD');
   const [resolvedTaxConfigs, setResolvedTaxConfigs] = useState<TaxConfig[]>([]);
   const [taxConfigured, setTaxConfigured] = useState<boolean | null>(null);
+  // Échec de CHARGEMENT (réseau/serveur) — distinct de « aucune taxe configurée »
+  const [taxLoadFailed, setTaxLoadFailed] = useState(false);
+  const [taxClientExempt, setTaxClientExempt] = useState(false);
+  const taxResolveArgsRef = useRef<{ clientId: string | null; leadId: string | null }>({ clientId: null, leadId: null });
   const [tpsEnabled, setTpsEnabled] = useState(true);
   const [tpsRate, setTpsRate] = useState(5);
   const [tvqEnabled, setTvqEnabled] = useState(true);
@@ -499,15 +524,6 @@ export default function NewJobModal({
   // list (or another month's) — updates would otherwise cross lists.
   const cloneLineItems = (items: LineItemForm[]): LineItemForm[] =>
     items.map((item) => ({ ...item, id: crypto.randomUUID() }));
-  const seedVisitTimes = (keys: string[]) => {
-    setServiceVisitTimes((prev) => {
-      const next = { ...prev };
-      for (const k of keys) {
-        if (!next[k]) next[k] = { startTime: startTime || '09:00', endTime: endTime || '10:00' };
-      }
-      return next;
-    });
-  };
   const seedVisitItems = (keys: string[]) => {
     setServiceVisitItems((prev) => {
       const next = { ...prev };
@@ -526,7 +542,6 @@ export default function NewJobModal({
     setDirty(true);
     const visit = newPlanVisit(year, month);
     setPlanVisits((prev) => [...prev, visit]);
-    if (!applyTimesToAllVisits) seedVisitTimes([visit.key]);
     if (!applyItemsToAllVisits) seedVisitItems([visit.key]);
   };
   const toggleServiceMonth = (year: number, month: number) => {
@@ -550,13 +565,20 @@ export default function NewJobModal({
     if (!date) return;
     setPlanVisits((prev) => prev.map((v) => (v.key === key ? { ...v, date } : v)));
   };
-  const toggleApplyTimesToAllVisits = (checked: boolean) => {
-    setApplyTimesToAllVisits(checked);
-    if (!checked) seedVisitTimes(planVisits.map((v) => v.key));
-  };
-  const toggleApplyItemsToAllVisits = (checked: boolean) => {
-    setApplyItemsToAllVisits(checked);
-    if (!checked) seedVisitItems(planVisits.map((v) => v.key));
+  // "Applies to" droplist: 'all' = one shared list for every visit; a visit
+  // key = per-visit lists (all visits get seeded, the chosen one is edited).
+  const selectItemsScope = (value: string) => {
+    setDirty(true);
+    if (value === 'all') {
+      setApplyItemsToAllVisits(true);
+      setItemsVisitKey(null);
+    } else {
+      if (applyItemsToAllVisits) {
+        setApplyItemsToAllVisits(false);
+        seedVisitItems(planVisits.map((v) => v.key));
+      }
+      setItemsVisitKey(value);
+    }
   };
   const setVisitTime = (key: string, patch: Partial<{ startTime: string; endTime: string }>) => {
     setServiceVisitTimes((prev) => ({
@@ -577,8 +599,13 @@ export default function NewJobModal({
   const removeVisitItem = (key: string, id: string) => {
     setServiceVisitItems((prev) => {
       const list = prev[key] || [];
-      if (list.length <= 1) return prev;
-      return { ...prev, [key]: list.filter((item) => item.id !== id) };
+      const next = list.filter((item) => item.id !== id);
+      return {
+        ...prev,
+        [key]: next.length > 0
+          ? next
+          : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }],
+      };
     });
   };
   const addVisitItemRow = (key: string) => {
@@ -588,9 +615,10 @@ export default function NewJobModal({
       [key]: [...(prev[key] || []), { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }],
     }));
   };
-  // Effective time window of one planned visit (personalized or global).
+  // Effective time window of one planned visit: its own override if the user
+  // edited it, otherwise the Rule's hours.
   const visitTimeFor = (key: string) => {
-    const custom = !applyTimesToAllVisits ? serviceVisitTimes[key] : null;
+    const custom = serviceVisitTimes[key];
     return {
       start: custom?.startTime || startTime || '09:00',
       end: custom?.endTime || endTime || '10:00',
@@ -708,10 +736,9 @@ export default function NewJobModal({
     setServiceYears(out.length > 0
       ? [...new Set(out.map((v) => v.year))].sort((a, b) => a - b)
       : [ruleStartParts.y]);
-    // La personnalisation par visite suit les nouvelles clés.
-    setServiceVisitTimes(applyTimesToAllVisits
-      ? {}
-      : Object.fromEntries(out.map((v) => [v.key, { startTime: startTime || '09:00', endTime: endTime || '10:00' }])));
+    // La personnalisation par visite suit les nouvelles clés : les heures
+    // repartent sur celles de la Règle (aucun override conservé).
+    setServiceVisitTimes({});
     setServiceVisitItems(applyItemsToAllVisits
       ? {}
       : Object.fromEntries(out.map((v) => [v.key, cloneLineItems(lineItems)])));
@@ -755,6 +782,44 @@ export default function NewJobModal({
       if (row?.eventId) setRemovedVisitIds((ids) => (ids.includes(row.eventId!) ? ids : [...ids, row.eventId!]));
       return prev.filter((v) => v.key !== key);
     });
+  };
+
+  // Résout les taxes applicables (Paramètres → région/groupe par défaut).
+  // Un échec réseau/serveur ≠ « aucune taxe configurée » : on retente une fois,
+  // puis on affiche une erreur de chargement avec bouton Réessayer.
+  const loadResolvedTaxes = (clientId: string | null, leadId: string | null) => {
+    taxResolveArgsRef.current = { clientId, leadId };
+    setTaxLoadFailed(false);
+    setTaxClientExempt(false);
+    setTaxConfigured(null);
+    resolveTaxes(clientId, leadId)
+      .catch(() => new Promise((r) => setTimeout(r, 800)).then(() => resolveTaxes(clientId, leadId)))
+      .then((res) => {
+        const taxes = res.taxes || [];
+        if (taxes.length > 0) {
+          setResolvedTaxConfigs(taxes);
+          setTaxConfigured(true);
+          const t1 = taxes[0]; const t2 = taxes[1];
+          setTpsEnabled(t1 ? t1.is_active : false);
+          setTpsRate(t1 ? t1.rate : 0);
+          setTvqEnabled(t2 ? t2.is_active : false);
+          setTvqRate(t2 ? t2.rate : 0);
+          setCustomTaxEnabled(false); setCustomTaxRate(0);
+        } else if (res.exempt) {
+          // Client exonéré : les taxes SONT configurées, elles ne s'appliquent pas.
+          setResolvedTaxConfigs([]);
+          setTaxClientExempt(true);
+          setTaxConfigured(true);
+          setTpsEnabled(false); setTpsRate(0);
+          setTvqEnabled(false); setTvqRate(0);
+          setCustomTaxEnabled(false); setCustomTaxRate(0);
+        } else {
+          setTaxConfigured(false);
+          setTpsEnabled(false); setTpsRate(0);
+          setTvqEnabled(false); setTvqRate(0);
+        }
+      })
+      .catch(() => { setTaxConfigured(null); setTaxLoadFailed(true); });
   };
 
   useEffect(() => {
@@ -802,7 +867,7 @@ export default function NewJobModal({
     setJobType(initialValues?.job_type || 'one_off');
     // Review (best-effort field — may be absent on the draft)
     const iv = initialValues as any;
-    setAskForReview(Boolean(iv?.ask_for_review));
+    setAskForReview(iv?.ask_for_review == null ? true : Boolean(iv.ask_for_review));
     setSaleDate(initialValues?.sale_date || new Date().toISOString().slice(0, 10));
     setShowOnLeaderboard(initialValues?.show_on_leaderboard !== false);
     setServiceYears([new Date().getFullYear()]);
@@ -817,7 +882,6 @@ export default function NewJobModal({
     setInstallmentAmount('');
     setAutoCharge(false);
     setCreateContract(false);
-    setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
     setServiceVisitItems({});
@@ -918,26 +982,12 @@ export default function NewJobModal({
       setCustomTaxLabel(initialCustom?.label || 'Custom tax');
       setCustomTaxRate(initialCustom?.rate ?? 0);
       setResolvedTaxConfigs(initialTaxes.map((t: any) => ({ id: t.code, org_id: '', name: t.label, rate: t.rate, type: 'percentage' as const, region: '', country: '', is_compound: false, is_active: t.enabled, sort_order: 0 })));
+      setTaxLoadFailed(false);
+      setTaxClientExempt(false);
       setTaxConfigured(true);
     } else {
       // New job: resolve from Settings
-      setTaxConfigured(null);
-      resolveTaxes(initialValues?.client_id || null, initialValues?.lead_id || null).then(({ taxes }) => {
-        if (taxes.length > 0) {
-          setResolvedTaxConfigs(taxes);
-          setTaxConfigured(true);
-          const t1 = taxes[0]; const t2 = taxes[1];
-          setTpsEnabled(t1 ? t1.is_active : false);
-          setTpsRate(t1 ? t1.rate : 0);
-          setTvqEnabled(t2 ? t2.is_active : false);
-          setTvqRate(t2 ? t2.rate : 0);
-          setCustomTaxEnabled(false); setCustomTaxRate(0);
-        } else {
-          setTaxConfigured(false);
-          setTpsEnabled(false); setTpsRate(0);
-          setTvqEnabled(false); setTvqRate(0);
-        }
-      }).catch(() => { setTaxConfigured(false); });
+      loadResolvedTaxes(initialValues?.client_id || null, initialValues?.lead_id || null);
     }
 
     listClients({ page: 1, pageSize: 200, sort: 'name_asc' })
@@ -1019,6 +1069,7 @@ export default function NewJobModal({
     if (!clientId) {
       setProperties([]);
       setPropertyId('');
+      setPropertySearch('');
       return;
     }
     setPropertiesLoading(true);
@@ -1026,6 +1077,7 @@ export default function NewJobModal({
       .then((list) => {
         if (!active) return;
         setProperties(list);
+        setPropertySearch('');
         setPropertyId((prev) => {
           if (prev && list.some((p) => p.id === prev)) return prev;
           const fallback = list.find((p) => p.is_primary) || (list.length === 1 ? list[0] : null);
@@ -1054,6 +1106,12 @@ export default function NewJobModal({
   // Items that actually bill: the job-level list, or — when the service plan's
   // products/services are personalized — every planned visit's own list.
   const personalizedItems = isServicePlan && !applyItemsToAllVisits;
+  // Visit whose list is being edited (stale/absent key falls back to the
+  // first planned visit — e.g. after the Rule regenerated the plan).
+  const selectedItemsVisit = personalizedItems
+    ? (sortedPlanVisits.find((v) => v.key === itemsVisitKey) ?? sortedPlanVisits[0] ?? null)
+    : null;
+  const selectedItemsVisitList = selectedItemsVisit ? (serviceVisitItems[selectedItemsVisit.key] || []) : [];
   const billableLineItems = useMemo<Array<LineItemForm & { visitKey?: string }>>(() => {
     if (!personalizedItems) return lineItems;
     return sortedPlanVisits.flatMap((visit) =>
@@ -1152,11 +1210,25 @@ export default function NewJobModal({
           visits: sortedPlanVisits.map((v) => ({ month: v.month, date: v.date, year: v.year })),
         }
       : null,
+    paymentTerms: (jobDepositRequired || jobRequirePaymentMethod)
+      ? {
+          deposit_required: jobDepositRequired,
+          deposit_type: jobDepositRequired ? jobDepositType : null,
+          deposit_value: jobDepositRequired ? (parseFloat(jobDepositValue) || 0) : 0,
+          deposit_cents: !jobDepositRequired
+            ? 0
+            : jobDepositType === 'percentage'
+              ? Math.round(grandTotalCents * ((parseFloat(jobDepositValue) || 0) / 100))
+              : Math.round((parseFloat(jobDepositValue) || 0) * 100),
+          require_payment_method: jobRequirePaymentMethod,
+        }
+      : null,
   }), [
     jobNumber, nextJobNumber, isCreatingNewClient, newClientFirst, newClientLast, newClientCompany,
     newClientEmail, newClientPhone, selectedClient, addressLine1, addressLine2, addressCity,
     addressProvince, addressPostalCode, prefilledAddress, billableLineItems, taxLines, effectiveSubtotalCents,
     isServicePlan, sortedPlanVisits, monthNames,
+    jobDepositRequired, jobDepositType, jobDepositValue, jobRequirePaymentMethod, grandTotalCents,
   ]);
 
   const resetForm = () => {
@@ -1166,6 +1238,8 @@ export default function NewJobModal({
     setClientId('');
     setProperties([]);
     setPropertyId('');
+    setPropertySearch('');
+    setPropertyDropdownOpen(false);
     setNewPropertyName('');
     setClientSearch('');
     setClientDropdownOpen(false);
@@ -1193,7 +1267,6 @@ export default function NewJobModal({
     setInstallmentsCount('');
     setInstallmentAmount('');
     setAutoCharge(false);
-    setApplyTimesToAllVisits(true);
     setApplyItemsToAllVisits(true);
     setServiceVisitTimes({});
     setServiceVisitItems({});
@@ -1218,24 +1291,7 @@ export default function NewJobModal({
     setCustomTaxLabel('Custom tax');
     setCustomTaxRate(0);
     // Load taxes from settings
-    setTaxConfigured(null);
-    resolveTaxes(null, null).then(({ taxes }) => {
-      if (taxes.length > 0) {
-        setResolvedTaxConfigs(taxes);
-        setTaxConfigured(true);
-        // Map resolved taxes to existing TPS/TVQ state for backward compat
-        const t1 = taxes[0];
-        const t2 = taxes[1];
-        setTpsEnabled(t1 ? t1.is_active : false);
-        setTpsRate(t1 ? t1.rate : 0);
-        setTvqEnabled(t2 ? t2.is_active : false);
-        setTvqRate(t2 ? t2.rate : 0);
-      } else {
-        setTaxConfigured(false);
-        setTpsEnabled(false); setTpsRate(0);
-        setTvqEnabled(false); setTvqRate(0);
-      }
-    }).catch(() => { setTaxConfigured(false); });
+    loadResolvedTaxes(null, null);
   };
 
   const handleClose = (reason: 'cancel' | 'created' = 'cancel') => {
@@ -1276,7 +1332,10 @@ export default function NewJobModal({
       if (item?.source_service_id) {
         setAddedServiceIds((s) => { const n = new Set(s); n.delete(item.source_service_id!); return n; });
       }
-      return prev.length > 1 ? prev.filter((i) => i.id !== id) : prev;
+      const next = prev.filter((i) => i.id !== id);
+      return next.length > 0
+        ? next
+        : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }];
     });
   };
 
@@ -1290,6 +1349,9 @@ export default function NewJobModal({
       unitPriceInput: String(service.default_price_cents / 100),
       included: true,
       source_service_id: service.id,
+      item_type: service.item_type || 'service',
+      unit_cost_cents: service.default_cost_cents ?? null,
+      taxable: service.taxable ?? true,
     };
     if (emptyIdx !== -1) {
       const updated = [...prev];
@@ -1321,6 +1383,9 @@ export default function NewJobModal({
       source_service_id: service.id,
       name: service.name,
       unitPriceInput: String(service.default_price_cents / 100),
+      item_type: service.item_type || 'service',
+      unit_cost_cents: service.default_cost_cents ?? null,
+      taxable: service.taxable ?? true,
     } : item;
     // Row ids are unique across the job-level list and every visit's list, so
     // mapping them all only ever fills the targeted line.
@@ -1373,15 +1438,19 @@ export default function NewJobModal({
     return teamSuggestions.find(s => s.team_id === teamSelection) || null;
   }, [teamSelection, teamSuggestions]);
 
+  // Job multi-visites (plan de service ou plusieurs visites ponctuelles) —
+  // les libellés de disponibilité passent au pluriel.
+  const multiVisit = isServicePlan ? serviceVisitDates.length > 1 : visitDrafts.length > 1;
+
   const teamConflictWarning = useMemo((): string | null => {
     if (!selectedTeamSuggestion) return null;
     const { status, availability_windows, reasons } = selectedTeamSuggestion;
 
     if (status === 'unavailable') {
-      return t.teamSuggestions.teamUnavailableDay;
+      return multiVisit ? t.teamSuggestions.teamUnavailableDays : t.teamSuggestions.teamUnavailableDay;
     }
     if (status === 'busy') {
-      return t.teamSuggestions.teamFullyBooked;
+      return multiVisit ? t.teamSuggestions.teamFullyBookedDays : t.teamSuggestions.teamFullyBooked;
     }
     if (status === 'partially_available' && startTime && endTime) {
       // Check if the selected time fits in any available window
@@ -1398,7 +1467,7 @@ export default function NewJobModal({
       }
     }
     return null;
-  }, [selectedTeamSuggestion, startTime, endTime, t]);
+  }, [selectedTeamSuggestion, startTime, endTime, t, multiVisit]);
 
   // Agreement section: prefill default T&C on first enable + resolve the
   // company logo (Settings → Company details) used as the contract default.
@@ -1483,11 +1552,11 @@ export default function NewJobModal({
     if (selectedTeamSuggestion && teamSelection !== UNASSIGNED_TEAM_VALUE) {
       const { status } = selectedTeamSuggestion;
       if (status === 'unavailable') {
-        setInlineError(t.teamSuggestions.teamUnavailableDay);
+        setInlineError(multiVisit ? t.teamSuggestions.teamUnavailableDays : t.teamSuggestions.teamUnavailableDay);
         return;
       }
       if (status === 'busy') {
-        setInlineError(t.teamSuggestions.teamFullyBooked);
+        setInlineError(multiVisit ? t.teamSuggestions.teamFullyBookedDays : t.teamSuggestions.teamFullyBooked);
         return;
       }
       if (teamConflictWarning && status === 'partially_available') {
@@ -1824,7 +1893,8 @@ export default function NewJobModal({
                 month: visit.month,
                 date: visit.date,
                 year: visit.year,
-                ...(applyTimesToAllVisits ? {} : { start_time: visitTimeFor(visit.key).start, end_time: visitTimeFor(visit.key).end }),
+                start_time: visitTimeFor(visit.key).start,
+                end_time: visitTimeFor(visit.key).end,
                 ...(personalizedItems
                   ? {
                       items: (serviceVisitItems[visit.key] || [])
@@ -1936,81 +2006,114 @@ export default function NewJobModal({
 
   // One product/service row — shared between the job-level list and each
   // visit's own list when the service plan is personalized per visit.
+  // Column header shared by every line-item list (md+; mobile rows are self-explanatory)
+  const renderLineItemsHeader = () => (
+    <div className="hidden md:flex items-center gap-2 px-2.5 pb-1 text-[11px] font-medium text-text-tertiary uppercase tracking-wide">
+      <span className="flex-1 min-w-0">{t.modals.nameCol}</span>
+      <span className="w-[64px] text-center">{t.modals.qtyCol}</span>
+      <span className="w-[104px] text-right">{t.modals.unitPriceCol}</span>
+      <span className="w-[88px] text-right">{t.modals.totalCol}</span>
+      <span className="w-[60px]" />
+    </div>
+  );
+
+  // One compact row: name · qty · unit price · total · "⋮" menu · delete
   const renderLineItemRow = (
     item: LineItemForm,
-    handlers: { update: (patch: Partial<LineItemForm>) => void; remove: () => void; removeDisabled: boolean },
+    handlers: { update: (patch: Partial<LineItemForm>) => void; remove: () => void },
   ) => (
     <div
       key={item.id}
       className={cn(
-        'grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-lg border p-3 transition-all',
+        'flex flex-wrap md:flex-nowrap items-center gap-2 rounded-lg border px-2.5 py-2 transition-all',
         item.included
           ? 'border-outline-subtle/40 bg-surface-secondary/20'
-          : 'border-outline-subtle/20 bg-surface-secondary/5 opacity-50'
+          : 'border-outline-subtle/20 bg-surface-secondary/5 opacity-60'
       )}
     >
-      <div className="md:col-span-5 space-y-1">
-        <label className="text-xs font-medium text-text-tertiary">{t.modals.nameCol}</label>
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={item.included}
-            onChange={() => handlers.update({ included: !item.included })}
-            className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
-            title={item.included
-              ? (language === 'fr' ? 'Cliquez pour exclure du total' : 'Click to exclude from total')
-              : (language === 'fr' ? 'Cliquez pour inclure dans le total' : 'Click to include in total')}
-          />
+      <button
+        type="button"
+        onClick={() => setLineEditId(item.id)}
+        className={cn('glass-input !py-1.5 !px-2.5 w-full md:w-auto md:flex-1 min-w-0 text-left flex items-center justify-between gap-2',
+          !item.included && 'line-through',
+          !item.name.trim() && 'text-text-tertiary')}
+      >
+        <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
+        <Package size={12} className="text-text-tertiary shrink-0" />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={item.qtyInput}
+        onChange={(event) => handlers.update({ qtyInput: sanitizeIntegerInput(event.target.value) })}
+        onBlur={(event) => {
+          const normalized = sanitizeIntegerInput(event.target.value);
+          handlers.update({ qtyInput: normalized || '1' });
+        }}
+        aria-label={t.modals.qtyCol}
+        title={t.modals.qtyCol}
+        className="glass-input !py-1.5 !px-2 w-[52px] md:w-[64px] text-center tabular-nums"
+      />
+      <input
+        type="text"
+        inputMode="decimal"
+        value={item.unitPriceInput}
+        onChange={(event) =>
+          handlers.update({ unitPriceInput: sanitizeDecimalInput(event.target.value) })
+        }
+        onBlur={(event) =>
+          handlers.update({ unitPriceInput: normalizeDecimalInput(event.target.value) || '0' })
+        }
+        aria-label={t.modals.unitPriceCol}
+        title={t.modals.unitPriceCol}
+        className="glass-input !py-1.5 !px-2 w-[84px] md:w-[104px] text-right tabular-nums"
+      />
+      <span className={cn('flex-1 md:flex-none md:w-[88px] text-right text-[13px] font-semibold tabular-nums', item.included ? 'text-text-primary' : 'text-text-tertiary line-through')}>
+        {formatCurrency(Math.round((parseFloat(item.qtyInput || '0') || 0) * (parseFloat(item.unitPriceInput || '0') || 0)))}
+      </span>
+      <div className="flex items-center gap-0.5 shrink-0 w-[60px] justify-end">
+        <div className="relative">
           <button
             type="button"
-            onClick={() => setLineEditId(item.id)}
-            className={cn('glass-input w-full text-left flex items-center justify-between gap-2',
-              !item.included && 'line-through',
-              !item.name.trim() && 'text-text-tertiary')}
+            onClick={() => setLineMenuId((prev) => (prev === item.id ? null : item.id))}
+            title={language === 'fr' ? 'Actions' : 'Actions'}
+            className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
           >
-            <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
-            <Package size={13} className="text-text-tertiary shrink-0" />
+            <MoreVertical size={14} />
           </button>
+          {lineMenuId === item.id && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setLineMenuId(null)} />
+              <div className="absolute right-0 top-full mt-1 z-50 w-60 rounded-lg border border-outline bg-surface shadow-lg py-1">
+                <button
+                  type="button"
+                  onClick={() => { setLineMenuId(null); setLineEditId(item.id); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors text-left"
+                >
+                  <Package size={13} className="text-text-tertiary" />
+                  {language === 'fr' ? 'Choisir du catalogue' : 'Choose from catalog'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setLineMenuId(null); handlers.update({ included: !item.included }); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-text-primary hover:bg-surface-secondary transition-colors text-left"
+                >
+                  {item.included
+                    ? <EyeOff size={13} className="text-text-tertiary" />
+                    : <Eye size={13} className="text-text-tertiary" />}
+                  {item.included
+                    ? (language === 'fr' ? 'Exclure du total' : 'Exclude from total')
+                    : (language === 'fr' ? 'Inclure dans le total' : 'Include in total')}
+                </button>
+              </div>
+            </>
+          )}
         </div>
-      </div>
-      <div className="md:col-span-2 space-y-1">
-        <label className="text-xs font-medium text-text-tertiary">{t.modals.qtyCol}</label>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={item.qtyInput}
-          onChange={(event) => handlers.update({ qtyInput: sanitizeIntegerInput(event.target.value) })}
-          onBlur={(event) => {
-            const normalized = sanitizeIntegerInput(event.target.value);
-            handlers.update({ qtyInput: normalized || '1' });
-          }}
-          className="glass-input w-full"
-        />
-      </div>
-      <div className="md:col-span-3 space-y-1">
-        <label className="text-xs font-medium text-text-tertiary">{t.modals.unitPriceCol}</label>
-        <input
-          type="text"
-          inputMode="decimal"
-          value={item.unitPriceInput}
-          onChange={(event) =>
-            handlers.update({ unitPriceInput: sanitizeDecimalInput(event.target.value) })
-          }
-          onBlur={(event) =>
-            handlers.update({ unitPriceInput: normalizeDecimalInput(event.target.value) || '0' })
-          }
-          className="glass-input w-full"
-        />
-      </div>
-      <div className="md:col-span-2 flex justify-end items-center gap-1">
-        <span className={cn('text-[13px] font-semibold tabular-nums mr-1 hidden md:block', item.included ? 'text-text-primary' : 'text-text-tertiary line-through')}>
-          {formatCurrency(Math.round((parseFloat(item.qtyInput || '0') || 0) * (parseFloat(item.unitPriceInput || '0') || 0)))}
-        </span>
         <button
           type="button"
           onClick={handlers.remove}
+          title={language === 'fr' ? 'Supprimer la ligne' : 'Remove line'}
           className="p-1.5 rounded-md text-text-tertiary hover:text-danger hover:bg-danger/10 transition-colors"
-          disabled={handlers.removeDisabled}
         >
           <Trash2 size={13} />
         </button>
@@ -2234,65 +2337,124 @@ export default function NewJobModal({
                     )}
                   </div>
                 )}
-              </Box>
 
-              {/* Property — a job must be assigned to one of the client's properties */}
-              {(clientId || isCreatingNewClient) && (
-                <Box title={t.modals.property} subtitle={language === 'fr' ? 'Requis' : 'Required'}>
-                  {!isCreatingNewClient && properties.length > 0 ? (
-                    <select
-                      value={propertyId}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setPropertyId(v);
-                        if (!v) {
-                          setNewPropertyName('');
-                          setAddressLine1(''); setAddressCity(''); setAddressProvince('');
-                          setAddressPostalCode(''); setAddressSearch(''); setAddressPlaceId(null);
-                        }
-                      }}
-                      className="glass-input w-full"
-                      disabled={propertiesLoading}
-                    >
-                      {properties.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}{p.address ? ` — ${p.address}` : ''}
-                        </option>
-                      ))}
-                      <option value="">＋ {t.modals.addPropertyInline}</option>
-                    </select>
-                  ) : (
-                    <p className="text-[11px] text-text-tertiary">{t.modals.noPropertiesForClient}</p>
-                  )}
-                  {!propertyId && (
-                    <input
-                      value={newPropertyName}
-                      onChange={(e) => setNewPropertyName(e.target.value)}
-                      className="glass-input w-full"
-                      placeholder={t.modals.propertyNamePlaceholder}
-                    />
-                  )}
-                  {/* New property needs an address; when creating a new client
-                      the address field already lives in the client box above. */}
-                  {!propertyId && !isCreatingNewClient && (
-                    <AddressAutocomplete
-                      value={addressSearch}
-                      onChange={setAddressSearch}
-                      onSelect={(addr: StructuredAddress) => {
-                        const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
-                        setAddressLine1(line1 || addr.formatted_address);
-                        setAddressCity(addr.city);
-                        setAddressProvince(addr.province);
-                        setAddressPostalCode(addr.postal_code);
-                        setAddressCountry(addr.country || 'Canada');
-                        setAddressPlaceId(addr.place_id || null);
-                        setAddressSearch(addr.formatted_address);
-                      }}
-                      placeholder={language === 'fr' ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
-                    />
-                  )}
-                </Box>
-              )}
+                {/* Property — a job must be assigned to one of the client's properties */}
+                {(clientId || isCreatingNewClient) && (
+                  <div className="space-y-3 pt-4 border-t border-border">
+                    <div>
+                      <h4 className="text-[13px] font-bold tracking-tight text-text-primary">{t.modals.property}</h4>
+                      <p className="text-[11px] text-text-tertiary mt-0.5">{language === 'fr' ? 'Requis' : 'Required'}</p>
+                    </div>
+                    {!isCreatingNewClient && properties.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={propertySearch || (propertyId ? properties.find((p) => p.id === propertyId)?.name || '' : '')}
+                            onChange={(e) => {
+                              setPropertySearch(e.target.value);
+                              setPropertyDropdownOpen(true);
+                              if (!e.target.value) {
+                                setPropertyId('');
+                                setNewPropertyName('');
+                                setAddressLine1(''); setAddressCity(''); setAddressProvince('');
+                                setAddressPostalCode(''); setAddressSearch(''); setAddressPlaceId(null);
+                              }
+                            }}
+                            onFocus={() => setPropertyDropdownOpen(true)}
+                            className="glass-input w-full"
+                            placeholder={t.modals.selectProperty}
+                            autoComplete="off"
+                            disabled={propertiesLoading}
+                          />
+                          {propertyDropdownOpen && (
+                            <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-outline bg-surface shadow-lg">
+                              {properties
+                                .filter((p) => {
+                                  const q = propertySearch.trim().toLowerCase();
+                                  if (!q) return true;
+                                  return p.name.toLowerCase().includes(q) || propertyAddressLabel(p).toLowerCase().includes(q);
+                                })
+                                .map((p) => {
+                                  const addr = propertyAddressLabel(p);
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => { setPropertyId(p.id); setPropertySearch(p.name); setPropertyDropdownOpen(false); }}
+                                      className={cn(
+                                        'w-full text-left px-3 py-2 hover:bg-surface-secondary transition-colors',
+                                        p.id === propertyId && 'bg-surface-tertiary'
+                                      )}
+                                    >
+                                      <div className="text-sm font-bold text-text-primary">{p.name}</div>
+                                      {addr && (
+                                        <div className="text-xs text-text-tertiary">{addr}</div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPropertyDropdownOpen(false);
+                                  setPropertyId('');
+                                  setPropertySearch('');
+                                  setNewPropertyName('');
+                                  setAddressLine1(''); setAddressCity(''); setAddressProvince('');
+                                  setAddressPostalCode(''); setAddressSearch(''); setAddressPlaceId(null);
+                                }}
+                                className="w-full text-left px-3 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors border-t border-outline"
+                              >
+                                ＋ {t.modals.addPropertyInline}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        {(() => {
+                          const selected = properties.find((p) => p.id === propertyId);
+                          const addr = selected ? propertyAddressLabel(selected) : '';
+                          return addr ? (
+                            <p className="text-[11px] text-text-tertiary px-1">{addr}</p>
+                          ) : null;
+                        })()}
+                        {propertyDropdownOpen && (
+                          <div className="fixed inset-0 z-40" onClick={() => setPropertyDropdownOpen(false)} />
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-text-tertiary">{t.modals.noPropertiesForClient}</p>
+                    )}
+                    {!propertyId && (
+                      <input
+                        value={newPropertyName}
+                        onChange={(e) => setNewPropertyName(e.target.value)}
+                        className="glass-input w-full"
+                        placeholder={t.modals.propertyNamePlaceholder}
+                      />
+                    )}
+                    {/* New property needs an address; when creating a new client
+                        the address field already lives in the client fields above. */}
+                    {!propertyId && !isCreatingNewClient && (
+                      <AddressAutocomplete
+                        value={addressSearch}
+                        onChange={setAddressSearch}
+                        onSelect={(addr: StructuredAddress) => {
+                          const line1 = [addr.street_number, addr.street_name].filter(Boolean).join(' ').trim();
+                          setAddressLine1(line1 || addr.formatted_address);
+                          setAddressCity(addr.city);
+                          setAddressProvince(addr.province);
+                          setAddressPostalCode(addr.postal_code);
+                          setAddressCountry(addr.country || 'Canada');
+                          setAddressPlaceId(addr.place_id || null);
+                          setAddressSearch(addr.formatted_address);
+                        }}
+                        placeholder={language === 'fr' ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
+                      />
+                    )}
+                  </div>
+                )}
+              </Box>
 
               <Box title={t.modals.jobType}>
                   <div className="inline-flex rounded-xl bg-surface-secondary border border-border p-1">
@@ -2386,23 +2548,17 @@ export default function NewJobModal({
                       <label className="text-xs font-medium text-text-tertiary">
                         {language === 'fr' ? 'Se répète' : 'Repeats on'}
                       </label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      <select
+                        value={repeatMode}
+                        onChange={(event) => { setDirty(true); setRepeatMode(event.target.value as typeof repeatMode); }}
+                        className="glass-input w-full"
+                      >
                         {repeatOptions.map((opt) => (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            onClick={() => { setDirty(true); setRepeatMode(opt.key); }}
-                            className={cn(
-                              'px-3 py-2 rounded-lg border text-sm font-medium text-left transition-colors',
-                              repeatMode === opt.key
-                                ? 'border-primary bg-primary/10 text-primary'
-                                : 'border-outline-subtle bg-surface-secondary/30 text-text-tertiary hover:text-text-secondary'
-                            )}
-                          >
+                          <option key={opt.key} value={opt.key}>
                             {opt.label}
-                          </button>
+                          </option>
                         ))}
-                      </div>
+                      </select>
                     </div>
 
                     {/* Fin de la récurrence */}
@@ -2441,27 +2597,6 @@ export default function NewJobModal({
                       </div>
                     )}
 
-                    {/* Assignation — l'équipe peut être assignée même sans
-                        horaire créé ni disponibilité vérifiée */}
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
-                      <TeamSelectDropdown
-                        teams={teams}
-                        value={teamSelection}
-                        onChange={setTeamSelection}
-                        date={ruleStartDate || startDate}
-                        fr={language === 'fr'}
-                        suggestions={teamSuggestions}
-                        placeholder={t.modals.selectTeam}
-                        unassignedLabel={t.modals.unassignedOption}
-                        unassignedValue={UNASSIGNED_TEAM_VALUE}
-                      />
-                      <p className="text-[11px] text-text-tertiary">
-                        {language === 'fr'
-                          ? 'L’équipe peut être assignée même si elle n’est pas disponible ou que son horaire n’a pas encore été créé — le job portera l’étiquette « Not scheduled yet ».'
-                          : 'The team can be assigned even if unavailable or without a schedule yet — the job will carry the “Not scheduled yet” tag.'}
-                      </p>
-                    </div>
                   </div>
 
                   {serviceYears.map((year, yearIdx) => {
@@ -2525,8 +2660,8 @@ export default function NewJobModal({
                         </div>
 
                         {/* Exact visit date(s) inside each planned month — "+" adds
-                            another visit in the same month (+ each visit's own hours
-                            when the time window is personalized per visit) */}
+                            another visit in the same month. Each visit shows its
+                            hours (Rule's hours by default, editable per visit). */}
                         {yearMonths.length > 0 && (
                           <div className="space-y-2">
                             <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanDates}</label>
@@ -2550,54 +2685,40 @@ export default function NewJobModal({
                                       </button>
                                     </div>
                                     {visits.map((visit) => (
-                                      <div key={visit.key} className="space-y-3">
-                                        <div className="flex items-center gap-2">
-                                          <DatePickerInput
-                                            className="flex-1"
-                                            value={visit.date}
-                                            min={`${year}-${mm}-01`}
-                                            max={`${year}-${mm}-${lastDay}`}
-                                            language={language === 'fr' ? 'fr' : 'en'}
-                                            onChange={(date) => setPlanVisitDate(visit.key, date)}
-                                          />
-                                          {visits.length > 1 && (
-                                            <button
-                                              type="button"
-                                              onClick={() => removePlanVisit(visit.key)}
-                                              className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-danger-light transition-colors"
-                                              aria-label={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
-                                            >
-                                              <X size={14} />
-                                            </button>
-                                          )}
-                                        </div>
-                                        {!applyTimesToAllVisits && (
-                                          <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1">
-                                              <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
-                                              <div className="relative">
-                                                <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                                <input
-                                                  type="time"
-                                                  value={serviceVisitTimes[visit.key]?.startTime || startTime || '09:00'}
-                                                  onChange={(event) => setVisitTime(visit.key, { startTime: event.target.value })}
-                                                  className="glass-input w-full pl-10"
-                                                />
-                                              </div>
-                                            </div>
-                                            <div className="space-y-1">
-                                              <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
-                                              <div className="relative">
-                                                <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                                                <input
-                                                  type="time"
-                                                  value={serviceVisitTimes[visit.key]?.endTime || endTime || '10:00'}
-                                                  onChange={(event) => setVisitTime(visit.key, { endTime: event.target.value })}
-                                                  className="glass-input w-full pl-10"
-                                                />
-                                              </div>
-                                            </div>
-                                          </div>
+                                      <div key={visit.key} className="flex items-center gap-2">
+                                        <DatePickerInput
+                                          className="flex-1 min-w-0"
+                                          value={visit.date}
+                                          min={`${year}-${mm}-01`}
+                                          max={`${year}-${mm}-${lastDay}`}
+                                          language={language === 'fr' ? 'fr' : 'en'}
+                                          onChange={(date) => setPlanVisitDate(visit.key, date)}
+                                        />
+                                        {/* Heures compactes dans la même barre que la date */}
+                                        <input
+                                          type="time"
+                                          value={visitTimeFor(visit.key).start}
+                                          onChange={(event) => setVisitTime(visit.key, { startTime: event.target.value })}
+                                          className="glass-input shrink-0 w-[86px] px-2 py-1.5 text-xs"
+                                          aria-label={t.modals.startTime}
+                                        />
+                                        <span className="shrink-0 text-xs text-text-tertiary">–</span>
+                                        <input
+                                          type="time"
+                                          value={visitTimeFor(visit.key).end}
+                                          onChange={(event) => setVisitTime(visit.key, { endTime: event.target.value })}
+                                          className="glass-input shrink-0 w-[86px] px-2 py-1.5 text-xs"
+                                          aria-label={t.modals.endTime}
+                                        />
+                                        {visits.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => removePlanVisit(visit.key)}
+                                            className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-danger-light transition-colors"
+                                            aria-label={language === 'fr' ? 'Retirer cette visite' : 'Remove this visit'}
+                                          >
+                                            <X size={14} />
+                                          </button>
                                         )}
                                       </div>
                                     ))}
@@ -2621,23 +2742,6 @@ export default function NewJobModal({
                     {language === 'fr' ? 'Ajouter année suivante' : 'Add next year'}
                   </button>
 
-                  {/* Fenêtre horaire des visites : celle de la Règle ci-dessus
-                      pour toutes, ou personnalisée visite par visite */}
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                    <input
-                      type="checkbox"
-                      checked={applyTimesToAllVisits}
-                      onChange={(event) => toggleApplyTimesToAllVisits(event.target.checked)}
-                      className="h-4 w-4 mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-sm text-text-primary">{t.modals.servicePlanApplyAllLabel}</span>
-                      <span className="block text-xs text-text-tertiary mt-0.5">
-                        {applyTimesToAllVisits ? t.modals.servicePlanTimesApplyAllHint : t.modals.servicePlanTimesCustomHint}
-                      </span>
-                    </span>
-                  </label>
-
                   {/* Optional contract */}
                   <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
                     <input
@@ -2654,149 +2758,6 @@ export default function NewJobModal({
                     <span>
                       <span className="block text-sm text-text-primary">{t.modals.servicePlanCreateContract}</span>
                       <span className="block text-xs text-text-tertiary mt-0.5">{t.modals.servicePlanCreateContractHint}</span>
-                    </span>
-                  </label>
-              </Box>
-              )}
-
-              {/* ═══ BILLING AND PAYMENTS — comment le plan de service se facture ═══ */}
-              {isServicePlan && (
-              <Box
-                title={language === 'fr' ? 'Facturation et paiements' : 'Billing and Payments'}
-                subtitle={language === 'fr'
-                  ? 'Choisissez comment les visites du plan se facturent.'
-                  : 'Choose how the plan’s visits get billed.'}
-              >
-                  <div className="space-y-2">
-                    {([
-                      {
-                        key: 'per_visit' as const,
-                        label: language === 'fr' ? 'Une facture par visite' : 'One invoice per visit',
-                        hint: language === 'fr'
-                          ? 'Chaque visite a sa propre facture, créée quand la visite est terminée — comme des jobs individuelles.'
-                          : 'Each visit gets its own invoice, created when the visit is completed — like individual jobs.',
-                      },
-                      {
-                        key: 'single' as const,
-                        label: language === 'fr' ? 'Une facture pour toutes les visites' : 'One invoice for all visits',
-                        hint: language === 'fr'
-                          ? 'Une seule facture couvre l’ensemble du plan.'
-                          : 'A single invoice covers the whole plan.',
-                      },
-                      {
-                        key: 'installments' as const,
-                        label: language === 'fr' ? 'Plusieurs paiements' : 'Multiple payments',
-                        hint: language === 'fr'
-                          ? 'Choisissez le nombre de paiements et le montant de chacun.'
-                          : 'Choose the number of payments and the amount of each.',
-                      },
-                    ]).map((opt) => (
-                      <button
-                        key={opt.key}
-                        type="button"
-                        onClick={() => { setDirty(true); setPlanBillingMode(opt.key); }}
-                        className={cn(
-                          'w-full px-3 py-2.5 rounded-lg border text-left transition-colors',
-                          planBillingMode === opt.key
-                            ? 'border-primary bg-primary/10'
-                            : 'border-outline-subtle bg-surface-secondary/30 hover:border-outline-strong'
-                        )}
-                      >
-                        <span className={cn(
-                          'block text-sm font-medium',
-                          planBillingMode === opt.key ? 'text-primary' : 'text-text-primary'
-                        )}>
-                          {opt.label}
-                        </span>
-                        <span className="block text-xs text-text-tertiary mt-0.5">{opt.hint}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Échéancier : N paiements × montant + balance vs total du job */}
-                  {planBillingMode === 'installments' && (
-                    <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">
-                            {language === 'fr' ? 'Nombre de paiements' : 'Number of payments'}
-                          </label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={installmentsCount}
-                            onChange={(event) => { setDirty(true); setInstallmentsCount(event.target.value); }}
-                            placeholder="4"
-                            className="glass-input w-full tabular-nums"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">
-                            {language === 'fr' ? 'Montant par paiement' : 'Amount per payment'}
-                          </label>
-                          <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">$</span>
-                            <input
-                              inputMode="decimal"
-                              value={installmentAmount}
-                              onChange={(event) => { setDirty(true); setInstallmentAmount(event.target.value.replace(/[^\d.]/g, '')); }}
-                              placeholder="500"
-                              className="glass-input w-full pl-7 tabular-nums"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      {installmentsPlan && (
-                        <div className="space-y-1 text-[12px] tabular-nums">
-                          <p className="text-text-secondary">
-                            {installmentsPlan.count} {language === 'fr' ? 'paiements de' : 'payments of'} {formatCurrency(installmentsPlan.amountCents / 100)}
-                            {' = '}{formatCurrency(installmentsPlan.coveredCents / 100)}
-                            <span className="text-text-tertiary"> · {language === 'fr' ? 'total du job' : 'job total'} {formatCurrency(grandTotalCents / 100)}</span>
-                          </p>
-                          {installmentsPlan.remainderCents > 0 ? (
-                            <p className="font-semibold text-warning">
-                              {language === 'fr'
-                                ? `Balance : il reste ${formatCurrency(installmentsPlan.remainderCents / 100)} à faire payer — un paiement « Solde » sera ajouté pour couvrir le reste.`
-                                : `Balance: ${formatCurrency(installmentsPlan.remainderCents / 100)} left to collect — a “Balance” payment will be added to cover it.`}
-                            </p>
-                          ) : installmentsPlan.remainderCents < 0 ? (
-                            <p className="font-semibold text-danger">
-                              {language === 'fr'
-                                ? `Les paiements dépassent le total du job de ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`
-                                : `Payments exceed the job total by ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`}
-                            </p>
-                          ) : (
-                            <p className="font-semibold text-success">
-                              {language === 'fr' ? 'Le total du job est entièrement couvert.' : 'The job total is fully covered.'}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Paiement automatique sur la carte au dossier */}
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                    <input
-                      type="checkbox"
-                      checked={autoCharge}
-                      onChange={(event) => { setDirty(true); setAutoCharge(event.target.checked); }}
-                      className="h-4 w-4 mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-sm text-text-primary">
-                        {language === 'fr' ? 'Se faire payer automatiquement' : 'Get paid automatically'}
-                      </span>
-                      {autoCharge && (
-                        <span className="block text-xs text-primary font-medium mt-1">
-                          {language === 'fr' ? 'Request a payment on file' : 'Request a payment on file'}
-                          <span className="block text-text-tertiary font-normal mt-0.5">
-                            {language === 'fr'
-                              ? 'Le paiement sera demandé automatiquement sur la carte au dossier du client à chaque facture émise.'
-                              : 'Payment will be requested automatically on the client’s card on file each time an invoice is issued.'}
-                          </span>
-                        </span>
-                      )}
                     </span>
                   </label>
               </Box>
@@ -2937,6 +2898,7 @@ export default function NewJobModal({
                     onChange={setTeamSelection}
                     date={startDate}
                     fr={language === 'fr'}
+                    plural={multiVisit}
                     suggestions={teamSuggestions}
                     placeholder={t.modals.selectTeam}
                     unassignedLabel={t.modals.unassignedOption}
@@ -2950,7 +2912,7 @@ export default function NewJobModal({
                   ) : null}
                   {/* Membres de l'équipe choisie pour la journée de la 1re visite */}
                   {teamSelection && teamSelection !== UNASSIGNED_TEAM_VALUE && (
-                    <TeamDayRoster teamId={teamSelection} date={startDate} fr={language === 'fr'} />
+                    <TeamDayRoster teamId={teamSelection} date={startDate} fr={language === 'fr'} plural={multiVisit} />
                   )}
                   {/* Team availability — always visible when a date is set */}
                   <TeamSuggestions
@@ -2962,6 +2924,7 @@ export default function NewJobModal({
                     onSuggestionsLoaded={setTeamSuggestions}
                     selectedTeamId={teamSelection === UNASSIGNED_TEAM_VALUE ? null : teamSelection || null}
                     compact
+                    visitCount={isServicePlan ? serviceVisitDates.length : visitDrafts.length}
                   />
                   {/* Conflict warning */}
                   {teamConflictWarning && (
@@ -2970,9 +2933,19 @@ export default function NewJobModal({
                       <span>{teamConflictWarning}</span>
                     </div>
                   )}
+                  {/* Service plan : l'équipe peut être assignée même sans
+                      horaire créé ni disponibilité vérifiée */}
+                  {isServicePlan && (
+                    <p className="text-[11px] text-text-tertiary">
+                      {language === 'fr'
+                        ? 'L’équipe peut être assignée même si elle n’est pas disponible ou que son horaire n’a pas encore été créé — le job portera l’étiquette « Not scheduled yet ».'
+                        : 'The team can be assigned even if unavailable or without a schedule yet — the job will carry the “Not scheduled yet” tag.'}
+                    </p>
+                  )}
                 </div>
               </Box>
 
+              {!isServicePlan && (
               <Box title={t.modals.billing}>
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
@@ -2992,7 +2965,47 @@ export default function NewJobModal({
                   />
                   <span className="text-sm">{t.modals.splitInvoices}</span>
                 </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
+                  <span className="text-sm">{t.modals.requireDeposit}</span>
+                </label>
+                {jobDepositRequired && (
+                  <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
+                    <div className="flex items-center gap-3">
+                      <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
+                        className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
+                        <option value="percentage">{t.modals.percentageOption}</option>
+                        <option value="fixed">{t.modals.fixedAmountOption}</option>
+                      </select>
+                      <input value={jobDepositValue} onChange={e => setJobDepositValue(e.target.value.replace(/[^\d.]/g, ''))}
+                        className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
+                        placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
+                      {jobDepositType === 'percentage' && (
+                        <span className="text-xs text-text-tertiary">
+                          = {formatCurrency(grandTotalCents / 100 * (parseFloat(jobDepositValue) || 0) / 100)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12px] text-text-tertiary">
+                      {jobDepositType === 'percentage'
+                        ? (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} %` : `Client must pay ${jobDepositValue || 0}% deposit`)
+                        : (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} $` : `Client must pay $${jobDepositValue || 0} deposit`)}
+                    </p>
+                  </div>
+                )}
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
+                  <span>
+                    <span className="block text-sm">{language === 'fr' ? 'Demander un moyen de paiement au dossier' : 'Request a payment method on file'}</span>
+                    <span className="block text-xs text-text-tertiary mt-0.5">
+                      {language === 'fr'
+                        ? 'Le contrat envoyé au client inclura une section pour ajouter une carte de façon sécurisée (facultatif — il pourra aussi l’ajouter plus tard).'
+                        : 'The contract sent to the client will include a section to securely add a card (optional — they can also add it later).'}
+                    </span>
+                  </span>
+                </label>
               </Box>
+              )}
 
               <Box
                 title={language === 'fr' ? 'Produits / Services' : 'Products / Services'}
@@ -3009,20 +3022,26 @@ export default function NewJobModal({
               >
                 {/* Service plan: same services on every visit, or per visit */}
                 {isServicePlan && (
-                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
-                    <input
-                      type="checkbox"
-                      checked={applyItemsToAllVisits}
-                      onChange={(event) => toggleApplyItemsToAllVisits(event.target.checked)}
-                      className="h-4 w-4 mt-0.5"
-                    />
-                    <span>
-                      <span className="block text-sm text-text-primary">{t.modals.servicePlanApplyAllLabel}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <div className="min-w-0">
+                      <span className="block text-sm text-text-primary">{t.modals.servicePlanAppliesToLabel}</span>
                       <span className="block text-xs text-text-tertiary mt-0.5">
-                        {applyItemsToAllVisits ? t.modals.servicePlanItemsApplyAllHint : t.modals.servicePlanItemsCustomHint}
+                        {personalizedItems ? t.modals.servicePlanItemsCustomHint : t.modals.servicePlanItemsApplyAllHint}
                       </span>
-                    </span>
-                  </label>
+                    </div>
+                    <select
+                      value={selectedItemsVisit?.key ?? 'all'}
+                      onChange={(event) => selectItemsScope(event.target.value)}
+                      className="glass-input !w-auto capitalize"
+                    >
+                      <option value="all">{t.modals.servicePlanAllVisitsOption}</option>
+                      {sortedPlanVisits.map((visit) => (
+                        <option key={visit.key} value={visit.key}>
+                          {monthNames[visit.month - 1]} {visit.year} — {visit.date}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 {personalizedItems ? (
@@ -3031,103 +3050,101 @@ export default function NewJobModal({
                       <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
                       <p className="text-sm text-text-secondary">{t.modals.servicePlanItemsNoMonths}</p>
                     </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {sortedPlanVisits.map((visit) => {
-                        const visitItems = serviceVisitItems[visit.key] || [];
-                        return (
-                          <div key={visit.key} className="rounded-xl border border-outline-subtle/40 p-3 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-sm font-semibold capitalize text-text-primary">
-                                {monthNames[visit.month - 1]} {visit.year}
-                                <span className="ml-2 text-xs font-normal tabular-nums text-text-tertiary">{visit.date}</span>
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => { setPickerVisitKey(visit.key); setServicePickerOpen(true); }}
-                                className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
-                              >
-                                <Package size={13} />
-                                {t.modals.addFromCatalog}
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {visitItems.map((item) => renderLineItemRow(item, {
-                                update: (patch) => updateVisitItem(visit.key, item.id, patch),
-                                remove: () => removeVisitItem(visit.key, item.id),
-                                removeDisabled: visitItems.length <= 1,
-                              }))}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => addVisitItemRow(visit.key)}
-                              className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
-                            >
-                              <Plus size={13} />
-                              {t.modals.addLineItem}
-                            </button>
-                          </div>
-                        );
-                      })}
+                  ) : selectedItemsVisit && (
+                    <div key={selectedItemsVisit.key} className="rounded-xl border border-outline-subtle/40 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold capitalize text-text-primary">
+                          {monthNames[selectedItemsVisit.month - 1]} {selectedItemsVisit.year}
+                          <span className="ml-2 text-xs font-normal tabular-nums text-text-tertiary">{selectedItemsVisit.date}</span>
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => { setPickerVisitKey(selectedItemsVisit.key); setServicePickerOpen(true); }}
+                          className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
+                        >
+                          <Package size={13} />
+                          {t.modals.addFromCatalog}
+                        </button>
+                      </div>
+                      <div>
+                        {renderLineItemsHeader()}
+                        <div className="space-y-1.5">
+                          {selectedItemsVisitList.map((item) => renderLineItemRow(item, {
+                            update: (patch) => updateVisitItem(selectedItemsVisit.key, item.id, patch),
+                            remove: () => removeVisitItem(selectedItemsVisit.key, item.id),
+                          }))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => addVisitItemRow(selectedItemsVisit.key)}
+                        className="glass-button !py-1.5 !px-3 inline-flex items-center gap-2 text-xs"
+                      >
+                        <Plus size={13} />
+                        {t.modals.addLineItem}
+                      </button>
                     </div>
                   )
                 ) : (
                 <>
-                {/* Line items list */}
-                {lineItems.length === 1 && !lineItems[0].name.trim() ? (
-                  <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
-                    <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
-                    <p className="text-sm text-text-secondary">{t.modals.noLineItemsYet}</p>
-                    <p className="text-xs text-text-tertiary mt-1">{t.modals.addFromCatalogHint}</p>
-                    <button
-                      type="button"
-                      onClick={() => { setPickerVisitKey(null); setServicePickerOpen(true); }}
-                      className="mt-3 text-xs font-semibold text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      <Plus size={11} /> {t.modals.browseServices}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
+                {/* Line items — compact single-line rows (an empty first line shows by default) */}
+                <div>
+                  {renderLineItemsHeader()}
+                  <div className="space-y-1.5">
                     {lineItems.map((item) => renderLineItemRow(item, {
                       update: (patch) => updateLineItem(item.id, patch),
                       remove: () => removeLineItem(item.id),
-                      removeDisabled: lineItems.length === 1,
                     }))}
                   </div>
-                )}
-
-                {/* Action buttons */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setLineItems((prev) => [...prev, { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }])
-                    }
-                    className="glass-button !py-2 !px-4 inline-flex items-center gap-2 text-sm"
-                  >
-                    <Plus size={14} />
-                    {t.modals.addLineItem}
-                  </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLineItems((prev) => [...prev, { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }])
+                  }
+                  className="glass-button !py-1.5 !px-3 inline-flex items-center gap-1.5 text-[13px]"
+                >
+                  <Plus size={13} />
+                  {t.modals.addLineItem}
+                </button>
                 </>
                 )}
-              </Box>
 
-              <Box title={t.modals.taxes}>
-                {taxConfigured === null ? (
-                  <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Chargement des taxes...' : 'Loading taxes...'}</p>
-                ) : taxConfigured === false ? (
-                  <div className="rounded-lg border border-danger/30 bg-danger-light p-4">
-                    <p className="text-[13px] font-semibold text-danger">{language === 'fr' ? 'Aucune taxe configurée' : 'No taxes configured'}</p>
-                    <p className="text-[12px] text-text-secondary mt-1">{language === 'fr' ? 'Vous devez configurer votre région de taxes dans les Paramètres avant de créer des jobs.' : 'You need to configure your tax region in Settings before creating jobs.'}</p>
-                    <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">{language === 'fr' ? 'Aller aux paramètres de taxes' : 'Go to Tax Settings'}</a>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {resolvedTaxConfigs.map((tax, idx) => (
-                      <div key={tax.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-surface-secondary">
-                        <div className="flex items-center gap-2">
+                {/* ── Taxes et totaux ── */}
+                <div className="border-t border-outline-subtle/40 pt-4 space-y-3">
+                  {taxConfigured === null ? (
+                    taxLoadFailed ? (
+                      <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+                        <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                        <span className="text-[12px] text-amber-800">
+                          {language === 'fr' ? 'Impossible de charger les taxes.' : 'Could not load taxes.'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => loadResolvedTaxes(taxResolveArgsRef.current.clientId, taxResolveArgsRef.current.leadId)}
+                          className="text-[12px] font-medium text-primary hover:underline"
+                        >
+                          {language === 'fr' ? 'Réessayer' : 'Retry'}
+                        </button>
+                      </div>
+                    ) : (
+                    <p className="text-[12px] text-text-tertiary">{language === 'fr' ? 'Chargement des taxes...' : 'Loading taxes...'}</p>
+                    )
+                  ) : taxConfigured === false ? (
+                    <div className="rounded-lg border border-danger/30 bg-danger-light p-4">
+                      <p className="text-[13px] font-semibold text-danger">{language === 'fr' ? 'Aucune taxe configurée' : 'No taxes configured'}</p>
+                      <p className="text-[12px] text-text-secondary mt-1">{language === 'fr' ? 'Vous devez configurer votre région de taxes dans les Paramètres avant de créer des jobs.' : 'You need to configure your tax region in Settings before creating jobs.'}</p>
+                      <a href="/settings/taxes" className="inline-block mt-2 text-[12px] font-medium text-primary hover:underline">{language === 'fr' ? 'Aller aux paramètres de taxes' : 'Go to Tax Settings'}</a>
+                    </div>
+                  ) : taxClientExempt ? (
+                    <p className="text-[12px] text-text-tertiary">
+                      {language === 'fr' ? 'Client exonéré de taxes — aucune taxe appliquée.' : 'Tax-exempt client — no taxes applied.'}
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                      {resolvedTaxConfigs.map((tax, idx) => (
+                        <label key={tax.id} className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox"
                             checked={idx === 0 ? tpsEnabled : idx === 1 ? tvqEnabled : customTaxEnabled}
                             onChange={(e) => {
@@ -3136,33 +3153,235 @@ export default function NewJobModal({
                               else setCustomTaxEnabled(e.target.checked);
                             }}
                             className="h-4 w-4" />
-                          <span className="text-[13px] font-medium text-text-primary">{tax.name}</span>
-                        </div>
-                        <span className="text-[13px] text-text-secondary tabular-nums">{tax.rate}%</span>
-                      </div>
-                    ))}
-                    <p className="text-[10px] text-text-tertiary">{language === 'fr' ? <>Taxes provenant de vos <a href="/settings/taxes" className="text-primary hover:underline">paramètres de taxes</a></> : <>Taxes from your <a href="/settings/taxes" className="text-primary hover:underline">Tax Settings</a></>}</p>
+                          <span className="text-[13px] font-medium text-text-primary">{tax.name} <span className="font-normal text-text-tertiary tabular-nums">{tax.rate}%</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <div className="rounded-xl border border-border bg-surface/70 p-4 text-sm">
+                    <label className="mb-2 block space-y-1">
+                      <span className="text-xs font-medium text-text-tertiary">{t.modals.totalBeforeTaxes}</span>
+                      <input
+                        value={totalInput}
+                        onChange={(event) => setTotalInput(sanitizeMoneyInput(event.target.value))}
+                        onBlur={(event) => setTotalInput(normalizeMoneyInput(event.target.value))}
+                        inputMode="decimal"
+                        className="glass-input w-full"
+                        placeholder={lineItemsSubtotalValue.toFixed(2)}
+                      />
+                    </label>
+                    <p className="flex items-center justify-between"><span>{t.modals.subtotalLabel}</span><span>{formatCurrency(effectiveSubtotalValue)}</span></p>
+                    <p className="mt-1 flex items-center justify-between"><span>{t.modals.taxesLabel}</span><span>{formatCurrency(taxTotalCents / 100)}</span></p>
+                    <p className="mt-2 border-t border-border pt-2 flex items-center justify-between font-semibold text-base">
+                      <span>{t.modals.totalLabel}</span><span>{formatCurrency(grandTotalCents / 100)}</span>
+                    </p>
                   </div>
-                )}
-                <div className="rounded-xl border border-border bg-surface/70 p-4 text-sm">
-                  <label className="mb-2 block space-y-1">
-                    <span className="text-xs font-medium text-text-tertiary">{t.modals.totalBeforeTaxes}</span>
-                    <input
-                      value={totalInput}
-                      onChange={(event) => setTotalInput(sanitizeMoneyInput(event.target.value))}
-                      onBlur={(event) => setTotalInput(normalizeMoneyInput(event.target.value))}
-                      inputMode="decimal"
-                      className="glass-input w-full"
-                      placeholder={lineItemsSubtotalValue.toFixed(2)}
-                    />
-                  </label>
-                  <p className="flex items-center justify-between"><span>{t.modals.subtotalLabel}</span><span>{formatCurrency(effectiveSubtotalValue)}</span></p>
-                  <p className="mt-1 flex items-center justify-between"><span>{t.modals.taxesLabel}</span><span>{formatCurrency(taxTotalCents / 100)}</span></p>
-                  <p className="mt-2 border-t border-border pt-2 flex items-center justify-between font-semibold text-base">
-                    <span>{t.modals.totalLabel}</span><span>{formatCurrency(grandTotalCents / 100)}</span>
-                  </p>
                 </div>
               </Box>
+
+              {/* ═══ BILLING AND PAYMENTS — comment le plan de service se facture ═══ */}
+              {isServicePlan && (
+              <Box
+                title={language === 'fr' ? 'Facturation et paiements' : 'Billing and Payments'}
+                subtitle={language === 'fr'
+                  ? 'Choisissez comment les visites du plan se facturent.'
+                  : 'Choose how the plan’s visits get billed.'}
+              >
+                  <div className="space-y-2">
+                    {([
+                      {
+                        key: 'per_visit' as const,
+                        label: language === 'fr' ? 'Une facture par visite' : 'One invoice per visit',
+                        hint: language === 'fr'
+                          ? 'Chaque visite a sa propre facture, créée quand la visite est terminée — comme des jobs individuelles.'
+                          : 'Each visit gets its own invoice, created when the visit is completed — like individual jobs.',
+                      },
+                      {
+                        key: 'single' as const,
+                        label: language === 'fr' ? 'Une facture pour toutes les visites' : 'One invoice for all visits',
+                        hint: language === 'fr'
+                          ? 'Une seule facture couvre l’ensemble du plan.'
+                          : 'A single invoice covers the whole plan.',
+                      },
+                      {
+                        key: 'installments' as const,
+                        label: language === 'fr' ? 'Plusieurs paiements' : 'Multiple payments',
+                        hint: language === 'fr'
+                          ? 'Choisissez le nombre de paiements et le montant de chacun.'
+                          : 'Choose the number of payments and the amount of each.',
+                      },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => { setDirty(true); setPlanBillingMode(opt.key); }}
+                        className={cn(
+                          'w-full px-3 py-2.5 rounded-lg border text-left transition-colors',
+                          planBillingMode === opt.key
+                            ? 'border-primary bg-primary/10'
+                            : 'border-outline-subtle bg-surface-secondary/30 hover:border-outline-strong'
+                        )}
+                      >
+                        <span className={cn(
+                          'block text-sm font-medium',
+                          planBillingMode === opt.key ? 'text-primary' : 'text-text-primary'
+                        )}>
+                          {opt.label}
+                        </span>
+                        <span className="block text-xs text-text-tertiary mt-0.5">{opt.hint}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Échéancier : N paiements × montant + balance vs total du job */}
+                  {planBillingMode === 'installments' && (
+                    <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">
+                            {language === 'fr' ? 'Nombre de paiements' : 'Number of payments'}
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={installmentsCount}
+                            onChange={(event) => { setDirty(true); setInstallmentsCount(event.target.value); }}
+                            placeholder="4"
+                            className="glass-input w-full tabular-nums"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium text-text-tertiary">
+                            {language === 'fr' ? 'Montant par paiement' : 'Amount per payment'}
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">$</span>
+                            <input
+                              inputMode="decimal"
+                              value={installmentAmount}
+                              onChange={(event) => { setDirty(true); setInstallmentAmount(event.target.value.replace(/[^\d.]/g, '')); }}
+                              placeholder="500"
+                              className="glass-input w-full pl-7 tabular-nums"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      {installmentsPlan && (
+                        <div className="space-y-1 text-[12px] tabular-nums">
+                          <p className="text-text-secondary">
+                            {installmentsPlan.count} {language === 'fr' ? 'paiements de' : 'payments of'} {formatCurrency(installmentsPlan.amountCents / 100)}
+                            {' = '}{formatCurrency(installmentsPlan.coveredCents / 100)}
+                            <span className="text-text-tertiary"> · {language === 'fr' ? 'total du job' : 'job total'} {formatCurrency(grandTotalCents / 100)}</span>
+                          </p>
+                          {installmentsPlan.remainderCents > 0 ? (
+                            <p className="font-semibold text-warning">
+                              {language === 'fr'
+                                ? `Balance : il reste ${formatCurrency(installmentsPlan.remainderCents / 100)} à faire payer — un paiement « Solde » sera ajouté pour couvrir le reste.`
+                                : `Balance: ${formatCurrency(installmentsPlan.remainderCents / 100)} left to collect — a “Balance” payment will be added to cover it.`}
+                            </p>
+                          ) : installmentsPlan.remainderCents < 0 ? (
+                            <p className="font-semibold text-danger">
+                              {language === 'fr'
+                                ? `Les paiements dépassent le total du job de ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`
+                                : `Payments exceed the job total by ${formatCurrency(Math.abs(installmentsPlan.remainderCents) / 100)}.`}
+                            </p>
+                          ) : (
+                            <p className="font-semibold text-success">
+                              {language === 'fr' ? 'Le total du job est entièrement couvert.' : 'The job total is fully covered.'}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Demande de moyen de paiement au dossier — ajoute la section
+                      « Payment Method » (carte via Stripe) au bas du contrat public;
+                      le client peut l'ajouter à la signature ou revenir plus tard. */}
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={jobRequirePaymentMethod}
+                      disabled={autoCharge}
+                      onChange={(event) => { setDirty(true); setJobRequirePaymentMethod(event.target.checked); }}
+                      className="h-4 w-4 mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm text-text-primary">
+                        {language === 'fr' ? 'Demander un moyen de paiement au dossier' : 'Request a payment method on file'}
+                      </span>
+                      <span className="block text-xs text-text-tertiary mt-0.5">
+                        {language === 'fr'
+                          ? 'Le contrat envoyé au client inclura une section pour ajouter une carte de façon sécurisée (facultatif — il pourra aussi l’ajouter plus tard).'
+                          : 'The contract sent to the client will include a section to securely add a card (optional — they can also add it later).'}
+                      </span>
+                    </span>
+                  </label>
+
+                  {/* Paiement automatique sur la carte au dossier */}
+                  <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={autoCharge}
+                      onChange={(event) => {
+                        setDirty(true);
+                        setAutoCharge(event.target.checked);
+                        // Le charge automatique a besoin d'une carte au dossier —
+                        // la demande au client est donc activée d'office.
+                        if (event.target.checked) setJobRequirePaymentMethod(true);
+                      }}
+                      className="h-4 w-4 mt-0.5"
+                    />
+                    <span>
+                      <span className="block text-sm text-text-primary">
+                        {language === 'fr' ? 'Se faire payer automatiquement' : 'Get paid automatically'}
+                      </span>
+                      {autoCharge && (
+                        <span className="block text-xs text-primary font-medium mt-1">
+                          {language === 'fr' ? 'Request a payment on file' : 'Request a payment on file'}
+                          <span className="block text-text-tertiary font-normal mt-0.5">
+                            {language === 'fr'
+                              ? 'Le paiement sera demandé automatiquement sur la carte au dossier du client à chaque facture émise.'
+                              : 'Payment will be requested automatically on the client’s card on file each time an invoice is issued.'}
+                          </span>
+                        </span>
+                      )}
+                    </span>
+                  </label>
+
+                  {/* Dépôt initial */}
+                  <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={jobDepositRequired} onChange={e => { setDirty(true); setJobDepositRequired(e.target.checked); }} className="h-4 w-4 rounded" />
+                      <span className="text-sm text-text-primary">{t.modals.requireDeposit}</span>
+                    </label>
+                    {jobDepositRequired && (
+                      <div className="ml-7 space-y-2">
+                        <div className="flex items-center gap-3">
+                          <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
+                            className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
+                            <option value="percentage">{t.modals.percentageOption}</option>
+                            <option value="fixed">{t.modals.fixedAmountOption}</option>
+                          </select>
+                          <input value={jobDepositValue} onChange={e => { setDirty(true); setJobDepositValue(e.target.value.replace(/[^\d.]/g, '')); }}
+                            className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
+                            placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
+                          {jobDepositType === 'percentage' && (
+                            <span className="text-xs text-text-tertiary">
+                              = {formatCurrency(grandTotalCents / 100 * (parseFloat(jobDepositValue) || 0) / 100)}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[12px] text-text-tertiary">
+                          {jobDepositType === 'percentage'
+                            ? (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} %` : `Client must pay ${jobDepositValue || 0}% deposit`)
+                            : (language === 'fr' ? `Le client doit payer un dépôt de $${jobDepositValue || 0}` : `Client must pay $${jobDepositValue || 0} deposit`)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+              </Box>
+              )}
 
               {/* ── Agreement (written contract) — new jobs only ── */}
               {!isEditMode && (
@@ -3274,6 +3493,7 @@ export default function NewJobModal({
                       {/* Live recap — always mirrors the items/prices entered on this page */}
                       <AgreementServicesSummary
                         title={language === 'fr' ? 'Services et prix du job — inclus au contrat' : 'Job services and prices — included on the contract'}
+                        servicePlanVisitCount={isServicePlan ? sortedPlanVisits.length : 0}
                         data={{
                           items: agreementPreviewData.items,
                           subtotalCents: effectiveSubtotalCents,
@@ -3310,42 +3530,6 @@ export default function NewJobModal({
                   )}
                 </Box>
               )}
-
-              {/* ── Deposit & Payment Settings ── */}
-              <Box title={t.modals.depositSettings}>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={jobDepositRequired} onChange={e => setJobDepositRequired(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="text-[13px] text-text-primary">{t.modals.requireDeposit}</span>
-                </label>
-                {jobDepositRequired && (
-                  <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
-                    <div className="flex items-center gap-3">
-                      <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
-                        className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
-                        <option value="percentage">{t.modals.percentageOption}</option>
-                        <option value="fixed">{t.modals.fixedAmountOption}</option>
-                      </select>
-                      <input value={jobDepositValue} onChange={e => setJobDepositValue(e.target.value.replace(/[^\d.]/g, ''))}
-                        className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
-                        placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
-                      {jobDepositType === 'percentage' && (
-                        <span className="text-xs text-text-tertiary">
-                          = {formatCurrency(grandTotalCents / 100 * (parseFloat(jobDepositValue) || 0) / 100)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[12px] text-text-tertiary">
-                      {jobDepositType === 'percentage'
-                        ? (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} %` : `Client must pay ${jobDepositValue || 0}% deposit`)
-                        : (language === 'fr' ? `Le client doit payer un dépôt de ${jobDepositValue || 0} $` : `Client must pay $${jobDepositValue || 0} deposit`)}
-                    </p>
-                  </div>
-                )}
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={jobRequirePaymentMethod} onChange={e => setJobRequirePaymentMethod(e.target.checked)} className="h-4 w-4 rounded" />
-                  <span className="text-[13px] text-text-primary">{language === 'fr' ? 'Exiger une méthode de paiement au dossier' : 'Require payment method on file'}</span>
-                </label>
-              </Box>
 
               {/* ── Notes ── */}
               <Box

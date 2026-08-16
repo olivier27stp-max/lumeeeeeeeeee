@@ -63,37 +63,6 @@ router.post('/cron/purge-audit', async (req, res) => {
   return res.status(200).json({ ok: true, purged: data });
 });
 
-router.post('/cron/campaigns', async (req, res) => {
-  if (!checkCronAuth(req, res)) return;
-  try {
-    const svc = getServiceClient();
-    const nowIso = new Date().toISOString();
-    const { data: due, error } = await svc
-      .from('email_campaigns')
-      .select('*')
-      .eq('status', 'scheduled')
-      .lte('scheduled_at', nowIso)
-      .limit(20);
-    if (error) return sendSafeError(res, error, 'Cron job failed.', '[cron/campaigns]');
-
-    const { processCampaign } = await import('./campaigns.js');
-    const results: any[] = [];
-    for (const c of due || []) {
-      try {
-        const r = await processCampaign(svc, c);
-        results.push({ id: c.id, ok: true, ...r });
-      } catch (err: any) {
-        await svc.from('email_campaigns').update({ status: 'failed' }).eq('id', c.id);
-        results.push({ id: c.id, ok: false, error: err?.message });
-      }
-    }
-    console.log('[cron/campaigns]', JSON.stringify({ processed: results.length }));
-    return res.status(200).json({ ok: true, processed: results.length, results });
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Cron job failed.', '[cron/campaigns]');
-  }
-});
-
 router.post('/cron/recurring-invoices', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   try {

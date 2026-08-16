@@ -11,7 +11,7 @@ import {
   Clock,
   FileText,
   Briefcase,
-  DollarSign,
+  Banknote,
   ReceiptText,
   Plus,
   ChevronDown,
@@ -107,21 +107,6 @@ interface ScheduleEvent {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
-function buildGoogleMapsUrl(client: ClientRecord): string {
-  const lat = client.latitude || (client as any).lat;
-  const lng = client.longitude || (client as any).lng;
-  if (lat && lng) {
-    return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-  }
-  const addr = [
-    client.address || [client.street_number, client.street_name].filter(Boolean).join(' '),
-    client.city,
-    client.province,
-    client.postal_code,
-  ].filter(Boolean).join(', ');
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
-}
-
 function buildGoogleMapsDirectionsUrl(client: ClientRecord): string {
   const lat = client.latitude || (client as any).lat;
   const lng = client.longitude || (client as any).lng;
@@ -767,7 +752,7 @@ export default function ClientDetails() {
                 <span className="text-text-tertiary">—</span>
               )}
             </div>
-            <div className="grid grid-cols-[140px_1fr] items-center py-2.5 border-b border-outline-subtle md:border-b-0 text-[13px] md:col-start-1 md:row-start-2">
+            <div className="grid grid-cols-[140px_1fr] items-center py-2.5 border-b border-outline-subtle text-[13px] md:col-start-1 md:row-start-2">
               <span className="text-text-secondary">{t.clientDetails.mainEmail}</span>
               {client.email ? (
                 <span className="flex items-center gap-1.5 font-medium text-text-primary min-w-0">
@@ -780,6 +765,10 @@ export default function ClientDetails() {
                 <span className="text-text-tertiary">—</span>
               )}
             </div>
+            <div className="grid grid-cols-[140px_1fr] items-center py-2.5 border-b border-outline-subtle md:border-b-0 text-[13px] md:col-start-1 md:row-start-3">
+              <span className="text-text-secondary">{t.clientDetails.clientSince}</span>
+              <span className="font-medium text-text-primary">{formatDate(client.created_at)}</span>
+            </div>
             <div className="grid grid-cols-[140px_1fr] items-center py-2.5 border-b border-outline-subtle text-[13px] md:col-start-2 md:row-start-1">
               <span className="text-text-secondary">{t.clientDetails.leadSource}</span>
               {leads[0]?.source ? (
@@ -790,18 +779,41 @@ export default function ClientDetails() {
             </div>
             <div className="grid grid-cols-[140px_1fr] items-center py-2.5 text-[13px] md:col-start-2 md:row-start-2">
               <span className="text-text-secondary">{t.clientDetails.tags}</span>
-              {tags.length > 0 ? (
-                <span className="flex flex-wrap gap-1.5">
-                  {tags.map((tag) => (
-                    <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-tertiary text-[11px] font-medium text-text-secondary border border-outline-subtle">
-                      <Tag size={9} className="text-text-tertiary" />
-                      {tag}
-                    </span>
-                  ))}
-                </span>
-              ) : (
-                <span className="text-text-tertiary">—</span>
-              )}
+              <span className="flex flex-wrap items-center gap-1.5 min-w-0">
+                {tags.map((tag) => (
+                  <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-tertiary text-[11px] font-medium text-text-secondary border border-outline-subtle group">
+                    <Tag size={9} className="text-text-tertiary" />
+                    {tag}
+                    <button onClick={() => handleRemoveTag(tag)} className="text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity" title={isFr ? 'Retirer' : 'Remove'}>
+                      <X size={9} />
+                    </button>
+                  </span>
+                ))}
+                {showTagInput ? (
+                  <span className="inline-flex items-center gap-1">
+                    <input
+                      type="text"
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddTag();
+                        if (e.key === 'Escape') { setShowTagInput(false); setNewTag(''); }
+                      }}
+                      onBlur={() => { if (!newTag.trim()) { setShowTagInput(false); setNewTag(''); } }}
+                      placeholder={t.clientDetails.tagNamePlaceholder}
+                      className="h-6 px-2.5 w-36 bg-surface border border-outline rounded-full text-[11px] text-text-primary placeholder:text-text-tertiary focus:outline-none"
+                      autoFocus
+                    />
+                    <button onMouseDown={(e) => e.preventDefault()} onClick={handleAddTag} className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary text-white hover:bg-primary-hover transition-colors" title={t.clientDetails.addTag}>
+                      <Plus size={11} />
+                    </button>
+                  </span>
+                ) : (
+                  <button onClick={() => setShowTagInput(true)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed border-outline text-[11px] text-text-tertiary hover:text-text-primary transition-colors">
+                    <Plus size={9} /> {t.clientDetails.addTag}
+                  </button>
+                )}
+              </span>
             </div>
           </div>
         </div>
@@ -1117,84 +1129,6 @@ export default function ClientDetails() {
         <div className="space-y-6 lg:sticky lg:top-5">
           {/* Events / activity center */}
           <EventsPanel entityType="client" entityId={id!} />
-          {/* Contact Info */}
-          <div className="section-card">
-            <div className="px-5 py-3.5 border-b border-outline">
-              <h2 className="text-[13px] font-semibold text-text-primary">{t.clientDetails.contactInformation}</h2>
-            </div>
-            <div className="p-5 space-y-5">
-              {/* Phone */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Phone size={12} className="text-text-tertiary" />
-                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.common.phone}</p>
-                </div>
-                {client.phone ? (
-                  <div className="flex items-center gap-2 pl-5">
-                    <a href={`tel:${client.phone}`} className="md:hidden text-[13px] font-medium text-text-primary hover:text-primary transition-colors">{displayPhone(client.phone)}</a>
-                    <span className="hidden md:inline text-[13px] font-medium text-text-primary">{displayPhone(client.phone)}</span>
-                    <button onClick={() => copyToClipboard(client.phone!, isFr)} className="text-text-tertiary hover:text-text-primary transition-colors" title={isFr ? 'Copier' : 'Copy'}>
-                      <Copy size={11} />
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-[13px] text-text-tertiary pl-5">{t.common.noPhone}</p>
-                )}
-              </div>
-              {/* Email */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Mail size={12} className="text-text-tertiary" />
-                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.common.email}</p>
-                </div>
-                {client.email ? (
-                  <div className="flex items-center gap-2 pl-5 min-w-0">
-                    <a href={`mailto:${client.email}`} className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors truncate">{displayEmail(client.email)}</a>
-                    <button onClick={() => copyToClipboard(client.email!, isFr)} className="text-text-tertiary hover:text-text-primary transition-colors flex-shrink-0" title={isFr ? 'Copier' : 'Copy'}>
-                      <Copy size={11} />
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-[13px] text-text-tertiary pl-5">{t.common.noEmail}</p>
-                )}
-              </div>
-              {/* Address */}
-              {fullAddress && (
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <MapPin size={12} className="text-text-tertiary" />
-                    <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Adresse' : 'Address'}</p>
-                  </div>
-                  <a
-                    href={buildGoogleMapsUrl(client)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[13px] font-medium text-text-primary hover:text-primary transition-colors pl-5 block"
-                  >
-                    {fullAddress}
-                  </a>
-                </div>
-              )}
-              {/* Lead source */}
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <User size={12} className="text-text-tertiary" />
-                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.clientDetails.leadSource}</p>
-                </div>
-                <p className="text-[13px] font-medium text-text-primary pl-5">
-                  {leads[0]?.source || <span className="text-text-tertiary font-normal">{language === 'fr' ? 'Non spécifié' : 'Not specified'}</span>}
-                </p>
-              </div>
-              {/* Client since */}
-              <div className="pt-3 border-t border-outline/50">
-                <div className="flex items-center gap-2 mb-1">
-                  <Calendar size={12} className="text-text-tertiary" />
-                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">{t.clientDetails.clientSince}</p>
-                </div>
-                <p className="text-[13px] font-medium text-text-primary pl-5">{formatDate(client.created_at)}</p>
-              </div>
-            </div>
-          </div>
 
           {/* Notes Section */}
           <div className="section-card">
@@ -1222,54 +1156,6 @@ export default function ClientDetails() {
                 className="w-full bg-transparent text-[13px] text-text-primary placeholder:text-text-tertiary resize-none min-h-[80px] focus:outline-none"
                 rows={4}
               />
-            </div>
-          </div>
-
-          {/* Tags Section */}
-          <div className="section-card">
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline">
-              <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <Tag size={15} className="text-text-secondary" />
-                {t.clientDetails.tags}
-              </h2>
-              <button onClick={() => setShowTagInput(true)} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors">
-                <Plus size={12} /> {t.clientDetails.addTag}
-              </button>
-            </div>
-            <div className="p-5">
-              {showTagInput && (
-                <div className="flex items-center gap-2 mb-3">
-                  <input
-                    type="text"
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddTag();
-                      if (e.key === 'Escape') { setShowTagInput(false); setNewTag(''); }
-                    }}
-                    placeholder={t.clientDetails.tagNamePlaceholder}
-                    className="glass-input text-[13px] flex-1"
-                    autoFocus
-                  />
-                  <button onClick={handleAddTag} className="inline-flex items-center gap-1 h-7 px-2.5 bg-primary text-white rounded-md text-[12px] font-medium hover:bg-primary-hover transition-colors !text-[12px] !px-2.5 !py-1">{t.clientDetails.addTag}</button>
-                  <button onClick={() => { setShowTagInput(false); setNewTag(''); }} className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors !text-[12px] !px-2.5 !py-1"><X size={12} /></button>
-                </div>
-              )}
-              {tags.length === 0 && !showTagInput ? (
-                <p className="text-[13px] text-text-tertiary">{t.clientDetails.noTagsAdded}</p>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {tags.map((tag) => (
-                    <span key={tag} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-surface-tertiary text-[12px] font-medium text-text-secondary border border-outline-subtle group">
-                      <Tag size={10} className="text-text-tertiary" />
-                      {tag}
-                      <button onClick={() => handleRemoveTag(tag)} className="ml-0.5 text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity">
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 
@@ -1319,7 +1205,7 @@ export default function ClientDetails() {
           <div className="section-card">
             <div className="px-5 py-3.5 border-b border-outline">
               <h2 className="text-[13px] font-semibold text-text-primary flex items-center gap-2">
-                <DollarSign size={15} className="text-text-secondary" />
+                <Wallet size={15} className="text-text-secondary" />
                 {t.clientDetails.billingHistory}
               </h2>
             </div>
@@ -1373,7 +1259,7 @@ export default function ClientDetails() {
                       >
                         <div>
                           <p className="text-[13px] font-medium text-text-primary flex items-center gap-1.5">
-                            <DollarSign size={12} className="text-success" /> {isFr ? 'Paiement' : 'Payment'}
+                            <Banknote size={12} className="text-success" /> {isFr ? 'Paiement' : 'Payment'}
                             {(item.data as PaymentRecord).method && (
                               <span className="text-[11px] text-text-tertiary font-normal">({(item.data as PaymentRecord).method})</span>
                             )}

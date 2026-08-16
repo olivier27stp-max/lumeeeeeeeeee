@@ -62,7 +62,7 @@ export default function Dashboard() {
     return () => { if (tmr) clearTimeout(tmr); void supabase.removeChannel(ch); };
   }, [refreshData, currentOrgId]);
 
-  const { data: quoteKpis } = useQuery({ queryKey: ['dashboard-quote-kpis'], queryFn: fetchQuoteKpis, staleTime: 30_000 });
+  const { data: quoteKpis } = useQuery({ queryKey: ['dashboard-quote-kpis'], queryFn: () => fetchQuoteKpis(), staleTime: 30_000 });
 
   /* ── Loading ── */
   if (loading) {

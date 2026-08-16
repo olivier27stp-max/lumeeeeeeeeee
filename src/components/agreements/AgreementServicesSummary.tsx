@@ -17,15 +17,32 @@ export interface AgreementSummaryData {
  * agreement visibly matches its page. The public document renders the same
  * numbers via AgreementDocument (snapshot once signed).
  */
-export default function AgreementServicesSummary({ data, title }: { data: AgreementSummaryData; title?: string }) {
+export default function AgreementServicesSummary({
+  data,
+  title,
+  servicePlanVisitCount,
+}: {
+  data: AgreementSummaryData;
+  title?: string;
+  /** Visit count of a service-plan job — shows the "plan total, not per visit" note when > 1. */
+  servicePlanVisitCount?: number | null;
+}) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const planVisits = servicePlanVisitCount ?? 0;
 
   return (
     <div className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-3.5 py-3">
       <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-[0.05em] mb-2">
         {title || (fr ? 'Services et prix au contrat' : 'Services and prices on the contract')}
       </p>
+      {planVisits > 1 && (
+        <p className="text-[11px] text-text-tertiary leading-snug mb-2">
+          {fr
+            ? `Prix pour la totalité des ${planVisits} visites du plan — pas un prix par visite. Le contrat l'indique au client.`
+            : `Prices cover all ${planVisits} visits of the plan — not a per-visit price. The contract states this to the client.`}
+        </p>
+      )}
       <div className="space-y-1.5">
         {data.items.length === 0 ? (
           <p className="text-[12px] text-text-tertiary py-0.5">

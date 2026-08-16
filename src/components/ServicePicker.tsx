@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Search, X, Plus, Package, Check, Loader2, Minus } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
-import { listPredefinedServices, createPredefinedService, PredefinedService } from '../lib/servicesApi';
+import { listPredefinedServices, createPredefinedService, PredefinedService, CatalogItemType } from '../lib/servicesApi';
 import { useTranslation } from '../i18n';
 
 interface ServicePickerProps {
@@ -24,9 +24,11 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [newType, setNewType] = useState<CatalogItemType>('service');
   const [newName, setNewName] = useState('');
-  const [newDesc, setNewDesc] = useState('');
   const [newPrice, setNewPrice] = useState('');
+  const [newCost, setNewCost] = useState('');
+  const [newTaxable, setNewTaxable] = useState(true);
   const [newCategory, setNewCategory] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -80,18 +82,23 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
     if (!newName.trim() || creating) return;
     setCreating(true);
     try {
-      const priceCents = Math.round((parseFloat(newPrice) || 0) * 100);
+      const priceCents = Math.round((parseFloat(newPrice.replace(',', '.')) || 0) * 100);
+      const costValue = parseFloat(newCost.replace(',', '.'));
       const created = await createPredefinedService({
         name: newName.trim(),
-        description: newDesc.trim() || undefined,
         default_price_cents: priceCents,
         category: newCategory.trim() || undefined,
+        item_type: newType,
+        default_cost_cents: Number.isFinite(costValue) ? Math.round(costValue * 100) : null,
+        taxable: newTaxable,
       });
       setServices((prev) => [...prev, created]);
       onSelect(created);
+      setNewType('service');
       setNewName('');
-      setNewDesc('');
       setNewPrice('');
+      setNewCost('');
+      setNewTaxable(true);
       setNewCategory('');
       setShowCreate(false);
       if (singleSelect) onClose();
@@ -180,37 +187,91 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               exit={{ height: 0, opacity: 0 }}
               className="overflow-hidden border-b border-outline-subtle/60"
             >
-              <div className="p-4 space-y-3 bg-surface-secondary/30">
+              <div className="p-4 space-y-3.5 bg-surface-secondary/30">
                 <p className="text-xs font-medium text-text-tertiary uppercase tracking-wider">{tp.newProductService}</p>
-                <div className="grid grid-cols-2 gap-2">
+
+                {/* Type — deux options fixes, une seule active à la fois */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium text-text-tertiary">{tp.typeLabel}</label>
+                  <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-surface border border-outline-subtle">
+                    {([
+                      { key: 'product' as const, label: tp.typeProduct },
+                      { key: 'service' as const, label: tp.typeService },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setNewType(opt.key)}
+                        className={cn(
+                          'py-1.5 rounded-md text-[12.5px] font-semibold transition-colors',
+                          newType === opt.key
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'text-text-secondary hover:text-text-primary hover:bg-surface-secondary'
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-medium text-text-tertiary">{tp.nameLabel} <span className="text-danger">*</span></label>
                   <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    placeholder={tp.namePlaceholder}
-                    className="col-span-2 bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
-                  />
-                  <input
-                    value={newDesc}
-                    onChange={(e) => setNewDesc(e.target.value)}
-                    placeholder={tp.descPlaceholder}
-                    className="col-span-2 bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
-                  />
-                  <input
-                    value={newPrice}
-                    onChange={(e) => setNewPrice(e.target.value)}
-                    placeholder={tp.pricePlaceholder}
-                    type="text"
-                    inputMode="decimal"
-                    className="bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
-                  />
-                  <input
-                    value={newCategory}
-                    onChange={(e) => setNewCategory(e.target.value)}
-                    placeholder={tp.categoryPlaceholder}
-                    className="bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
+                    placeholder={newType === 'product' ? tp.typeProduct : tp.typeService}
+                    className="w-full bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
                   />
                 </div>
-                <div className="flex justify-end gap-2">
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-text-tertiary">{tp.priceLabel} <span className="text-danger">*</span></label>
+                    <input
+                      value={newPrice}
+                      onChange={(e) => setNewPrice(e.target.value)}
+                      placeholder="0.00"
+                      type="text"
+                      inputMode="decimal"
+                      className="w-full bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary tabular-nums focus:outline-none focus:border-primary/40"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-text-tertiary">{tp.costLabel} <span className="normal-case text-text-tertiary/70">({tp.optionalTag})</span></label>
+                    <input
+                      value={newCost}
+                      onChange={(e) => setNewCost(e.target.value)}
+                      placeholder="0.00"
+                      type="text"
+                      inputMode="decimal"
+                      className="w-full bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary tabular-nums focus:outline-none focus:border-primary/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 items-end">
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-medium text-text-tertiary">{tp.categoryLabel} <span className="normal-case text-text-tertiary/70">({tp.optionalTag})</span></label>
+                    <input
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      placeholder={tp.categoryPlaceholder}
+                      className="w-full bg-surface border border-outline-subtle rounded-lg px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2.5 cursor-pointer rounded-lg border border-outline-subtle bg-surface px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={newTaxable}
+                      onChange={(e) => setNewTaxable(e.target.checked)}
+                      className="h-4 w-4 rounded accent-primary"
+                    />
+                    <span className="text-[13px] font-medium text-text-primary">{tp.taxableLabel}</span>
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-0.5">
                   <button onClick={() => setShowCreate(false)} className="glass-button !text-[12px] !py-1.5">{tp.cancel}</button>
                   <button
                     onClick={handleCreate}

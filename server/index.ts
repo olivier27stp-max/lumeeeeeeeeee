@@ -301,6 +301,7 @@ const leadCreateLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) =>
 const publicPayLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — public payment page (tighter)
 const portalLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP — client portal (tighter to prevent token brute-force)
 const quoteLimiterStrict = rateLimit({ windowMs: 60_000, max: 15 }); // per IP — quote track-view
+const agreementPublicLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP — public contract page (view/sign/card setup)
 const automationLimiter = rateLimit({ windowMs: 60_000, max: 30, keyFn: (req) => `auto:${userKey(req)}` });
 // Per-user limiters for cost-bearing / compliance-sensitive endpoints. Keyed on
 // the JWT `sub` (userKey), so they're immune to X-Forwarded-For spoofing. These
@@ -321,6 +322,7 @@ if (!useRedis) {
   app.use('/api/pay', publicPayLimiter);
   app.use('/api/portal', portalLimiter);
   app.use('/api/quotes', quoteLimiterStrict);
+  app.use('/api/agreements/public', agreementPublicLimiter);
   app.use('/api/automations/events', automationLimiter);
   app.use('/api/agent', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
@@ -341,6 +343,7 @@ app.use('/api/emails', redisRateLimit({ preset: 'strict', keyFn: (req) => `email
 app.use('/api/email/', redisRateLimit({ preset: 'standard', keyFn: (req) => `emailbox:${userKey(req)}` }));
 app.use('/api/payments', redisRateLimit({ preset: 'standard', keyFn: (req) => `pay:${userKey(req)}` }));
 app.use('/api/pay', redisRateLimit({ preset: 'public' }));
+app.use('/api/agreements/public', redisRateLimit({ preset: 'public' }));
 app.use('/api/portal', redisRateLimit({ preset: 'auth' }));
 // Public form submissions — tight rate limit to prevent abuse
 app.use('/api/public/form', redisRateLimit({ preset: 'auth' }));

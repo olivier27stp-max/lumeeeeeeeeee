@@ -1,13 +1,14 @@
 /**
  * Revenue series for the Home (CRM Workspace) revenue overview card.
  *
- * Two measures, bucketed over a chosen period:
- *  - collected : paid invoices, by `paid_at`
- *  - scheduled : outstanding expected revenue (sent / partial invoices with a
- *                positive balance), by `due_date`. Invoices already overdue
- *                (or without a due date) are still money we expect to collect,
- *                so they are clamped into the current-time bucket instead of
- *                being dropped.
+ * Two measures over the same base — the visits (schedule_events) booked in
+ * the window, bucketed by `start_at`:
+ *  - scheduled : each visit is worth its share of its job's total
+ *                (job total ÷ number of visits, the same rule as per-visit
+ *                billing). Cancelled visits are ignored.
+ *  - collected : the already-paid portion of that scheduled amount — the
+ *                visit share × the job's paid ratio (invoices paid_cents ÷
+ *                job total, capped at 100%). Always ⊆ scheduled.
  *
  * Period drives both the date window and the bucket granularity:
  *  - today : 24 hourly buckets
@@ -115,60 +116,92 @@ export async function getRevenueSeries(period: RevenuePeriod): Promise<RevenueSe
   const w = buildWindow(period, now);
   const startIso = w.start.toISOString();
   const endIso = w.end.toISOString();
-  const endYmd = ymd(w.end);
-  const nowIdx = w.bucketOf(now);
-
-  const [collectedRes, scheduledRes] = await Promise.all([
-    // Collected — paid invoices by paid_at
-    supabase
-      .from('invoices')
-      .select('total_cents, paid_at')
-      .eq('org_id', orgId)
-      .is('deleted_at', null)
-      .eq('status', 'paid')
-      .gte('paid_at', startIso)
-      .lte('paid_at', endIso),
-    // Scheduled — outstanding (sent / partial) invoices due by the end of the
-    // window. Overdue and undated invoices are kept (clamped to "now" below).
-    supabase
-      .from('invoices')
-      .select('balance_cents, due_date')
-      .eq('org_id', orgId)
-      .is('deleted_at', null)
-      .in('status', ['sent', 'partial'])
-      .gt('balance_cents', 0)
-      .or(`due_date.is.null,due_date.lte.${endYmd}`),
-  ]);
-
-  if (collectedRes.error) throw collectedRes.error;
-  if (scheduledRes.error) throw scheduledRes.error;
+  const visitsRes = await supabase
+    .from('schedule_events')
+    .select('id, job_id, start_at, status')
+    .eq('org_id', orgId)
+    .is('deleted_at', null)
+    .not('job_id', 'is', null)
+    .gte('start_at', startIso)
+    .lte('start_at', endIso);
+  if (visitsRes.error) throw visitsRes.error;
 
   let collectedTotal = 0;
   let scheduledTotal = 0;
 
-  for (const row of collectedRes.data || []) {
-    if (!row.paid_at) continue;
-    const idx = w.bucketOf(new Date(row.paid_at as string));
-    if (idx < 0) continue;
-    const amount = Number(row.total_cents || 0) / 100;
-    w.buckets[idx].collected += amount;
-    collectedTotal += amount;
-  }
+  const isCancelled = (s: unknown) =>
+    ['cancelled', 'canceled'].includes(String(s || '').toLowerCase());
+  const visits = (visitsRes.data || []).filter(
+    (v) => v.job_id && v.start_at && !isCancelled(v.status),
+  );
 
-  for (const row of scheduledRes.data || []) {
-    // due_date is a YYYY-MM-DD date — parse at local midnight
-    const due = row.due_date ? new Date(`${row.due_date as string}T00:00:00`) : null;
-    let idx = due ? w.bucketOf(due) : -1;
-    if (idx < 0) {
-      if (due && due.getTime() > w.end.getTime()) continue;
-      // Overdue before the window (or no due date): still expected revenue,
-      // attach it to the current bucket.
-      idx = nowIdx;
+  if (visits.length > 0) {
+    const jobIds = Array.from(new Set(visits.map((v) => v.job_id as string)));
+    const [jobsRes, allVisitsRes, invoicesRes] = await Promise.all([
+      supabase
+        .from('jobs_active')
+        .select('id, total_cents, total_amount')
+        .eq('org_id', orgId)
+        .in('id', jobIds),
+      // All visits of those jobs (not just the window) — needed to split the
+      // job total across its visits, per-visit-billing style.
+      supabase
+        .from('schedule_events')
+        .select('id, job_id, status')
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .in('job_id', jobIds),
+      // What has been paid on those jobs so far (partial payments included).
+      supabase
+        .from('invoices')
+        .select('job_id, paid_cents')
+        .eq('org_id', orgId)
+        .is('deleted_at', null)
+        .gt('paid_cents', 0)
+        .in('job_id', jobIds),
+    ]);
+    if (jobsRes.error) throw jobsRes.error;
+    if (allVisitsRes.error) throw allVisitsRes.error;
+    if (invoicesRes.error) throw invoicesRes.error;
+
+    // total_cents est la source de vérité; total_amount = colonne héritée
+    const jobTotal = new Map<string, number>();
+    for (const j of jobsRes.data || []) {
+      const dollars =
+        typeof j.total_cents === 'number'
+          ? j.total_cents / 100
+          : Number(j.total_amount || 0);
+      jobTotal.set(j.id as string, dollars);
     }
-    if (idx < 0) continue;
-    const amount = Number(row.balance_cents || 0) / 100;
-    w.buckets[idx].scheduled += amount;
-    scheduledTotal += amount;
+
+    const visitCount = new Map<string, number>();
+    for (const v of allVisitsRes.data || []) {
+      if (isCancelled(v.status)) continue;
+      const jobId = v.job_id as string;
+      visitCount.set(jobId, (visitCount.get(jobId) || 0) + 1);
+    }
+
+    const jobPaid = new Map<string, number>();
+    for (const inv of invoicesRes.data || []) {
+      const jobId = inv.job_id as string;
+      jobPaid.set(jobId, (jobPaid.get(jobId) || 0) + Number(inv.paid_cents || 0) / 100);
+    }
+
+    for (const v of visits) {
+      const jobId = v.job_id as string;
+      const total = jobTotal.get(jobId) || 0;
+      const share = total / Math.max(visitCount.get(jobId) || 1, 1);
+      if (share <= 0) continue;
+      const paidRatio = Math.min((jobPaid.get(jobId) || 0) / total, 1);
+      const collected = share * paidRatio;
+      scheduledTotal += share;
+      collectedTotal += collected;
+      const idx = w.bucketOf(new Date(v.start_at as string));
+      if (idx >= 0) {
+        w.buckets[idx].scheduled += share;
+        w.buckets[idx].collected += collected;
+      }
+    }
   }
 
   return { points: w.buckets, collectedTotal, scheduledTotal };

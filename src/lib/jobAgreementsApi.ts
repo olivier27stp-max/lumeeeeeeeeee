@@ -43,6 +43,14 @@ export interface AgreementSnapshot {
   property_address?: string | null;
   /** 12-month calendar of service-plan jobs — frozen with the rest of the document. */
   service_plan?: { year: number; visits: Array<{ month: number; date: string; year?: number }> } | null;
+  /** Deposit + payment-method-on-file requirements — frozen with the rest of the document. */
+  payment_terms?: {
+    deposit_required: boolean;
+    deposit_type: 'percentage' | 'fixed' | null;
+    deposit_value: number;
+    deposit_cents: number;
+    require_payment_method: boolean;
+  } | null;
 }
 
 export interface JobAgreement {

@@ -536,10 +536,19 @@ function formatMoney(cents: number, currency: string | null | undefined, fr = fa
   }).format(cents / 100);
 }
 
+// True when the query matched the subtitle (email or phone) rather than the
+// title — phone comparison is digits-only so "514-555-1234" matches "(514) 555-1234".
+function queryMatchesContact(subtitle: string, query: string) {
+  if (subtitle.toLowerCase().includes(query.toLowerCase())) return true;
+  const queryDigits = query.replace(/\D/g, '');
+  if (queryDigits.length < 4) return false;
+  return subtitle.replace(/\D/g, '').includes(queryDigits);
+}
+
 // One line per result: "Title (Client)". Bare numbers get their type as a
 // prefix ("658" → "Invoice #658"); payments show their amount
 // ("Payment – $1,092.26"); clients show their name alone.
-function entityRowText(item: SuggestionAction, fr: boolean): { main: string; context: string | null } {
+function entityRowText(item: SuggestionAction, fr: boolean, query = ''): { main: string; context: string | null } {
   const typeLabel = item.entityType ? ENTITY_TYPE_LABELS[item.entityType][fr ? 'fr' : 'en'] : '';
   let main = item.label;
   const bareNumber = main.trim().match(/^#?(\d+)$/);
@@ -552,7 +561,11 @@ function entityRowText(item: SuggestionAction, fr: boolean): { main: string; con
   }
 
   if (item.entityType === 'client' || item.entityType === 'lead') {
-    return { main, context: null };
+    // Name alone — unless the match came from the email/phone subtitle
+    // (search by contact info), which is then shown to explain the hit.
+    const contactContext =
+      item.subtitle && query && queryMatchesContact(item.subtitle, query) ? item.subtitle : null;
+    return { main, context: contactContext };
   }
   const context =
     item.clientName && item.clientName !== item.label
@@ -593,7 +606,7 @@ function SearchResultRow({
           : Search;
 
   const { main, context } = item.kind === 'entity'
-    ? entityRowText(item, fr)
+    ? entityRowText(item, fr, query)
     : { main: item.label, context: null };
 
   return (

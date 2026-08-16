@@ -46,6 +46,14 @@ export interface AgreementDocData {
   totalCents: number;
   signature: { signerName: string; signatureData: string; signedAt: string | null } | null;
   servicePlan?: AgreementServicePlan | null;
+  /** Deposit + payment-method-on-file requirements of the job — shown under the totals. */
+  paymentTerms?: {
+    deposit_required: boolean;
+    deposit_type: 'percentage' | 'fixed' | null;
+    deposit_value: number;
+    deposit_cents: number;
+    require_payment_method: boolean;
+  } | null;
 }
 
 function fmtDate(iso: string | null | undefined, language: 'en' | 'fr'): string {
@@ -238,6 +246,19 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
 
       {/* ── SERVICES TABLE ── */}
       <div className="px-8 py-6">
+        {/* Service plan: state explicitly that prices are the plan total, not per visit */}
+        {plan && allPlanVisits.length > 1 && (
+          <div className="mb-4 rounded-lg border border-[#e5e5e5] bg-[#fafafa] px-3.5 py-2.5">
+            <p className="text-[12px] font-semibold text-[#333]">
+              {fr ? 'Prix du plan de service' : 'Service plan pricing'}
+            </p>
+            <p className="text-[11.5px] text-[#777] mt-0.5 leading-relaxed">
+              {fr
+                ? `Les prix ci-dessous couvrent la totalité des ${allPlanVisits.length} visites prévues au plan — il ne s'agit pas d'un prix facturé à chaque visite.`
+                : `The prices below cover all ${allPlanVisits.length} planned visits of the plan — this is not a price charged per visit.`}
+            </p>
+          </div>
+        )}
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-[#e5e5e5]">
@@ -302,6 +323,34 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
           </div>
         </div>
       </div>
+
+      {/* ── PAYMENT TERMS ── */}
+      {data.paymentTerms && (data.paymentTerms.deposit_required || data.paymentTerms.require_payment_method) && (
+        <>
+          <div className="border-t border-[#eee]" />
+          <div className="px-8 py-5">
+            <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">
+              {fr ? 'Modalités de paiement' : 'Payment terms'}
+            </p>
+            <div className="space-y-1">
+              {data.paymentTerms.deposit_required && (
+                <p className="text-[12px] text-[#555] leading-relaxed">
+                  {fr
+                    ? `Un dépôt de ${formatCents(data.paymentTerms.deposit_cents)}${data.paymentTerms.deposit_type === 'percentage' ? ` (${data.paymentTerms.deposit_value} % du total)` : ''} est requis pour confirmer ce contrat.`
+                    : `A deposit of ${formatCents(data.paymentTerms.deposit_cents)}${data.paymentTerms.deposit_type === 'percentage' ? ` (${data.paymentTerms.deposit_value}% of the total)` : ''} is required to confirm this contract.`}
+                </p>
+              )}
+              {data.paymentTerms.require_payment_method && (
+                <p className="text-[12px] text-[#555] leading-relaxed">
+                  {fr
+                    ? 'Un moyen de paiement au dossier est demandé — il peut être ajouté de façon sécurisée au bas de cette page.'
+                    : 'A payment method on file is requested — it can be added securely at the bottom of this page.'}
+                </p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── TERMS & CONDITIONS ── */}
       {data.terms && (
