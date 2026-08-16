@@ -1365,6 +1365,9 @@ export default function JobDetails() {
                         <tr key={item.id} className="border-b border-border-light">
                           <td className="py-3 pr-3">
                             <span className="text-[13px] font-semibold text-text-primary">{item.name}</span>
+                            {item.description && (
+                              <p className="text-xs text-text-tertiary mt-0.5 whitespace-pre-line">{item.description}</p>
+                            )}
                           </td>
                           <td className="px-3 py-3 text-[13px] text-text-secondary text-center tabular-nums">{item.qty}</td>
                           {canSeeMargins && <td className="px-3 py-3 text-[13px] text-text-secondary text-right tabular-nums">{formatCents((item as any).cost_cents || 0)}</td>}

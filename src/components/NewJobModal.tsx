@@ -40,6 +40,7 @@ import { toast } from 'sonner';
 interface LineItemForm {
   id: string;
   name: string;
+  description?: string;
   qtyInput: string;
   unitPriceInput: string;
   included: boolean;
@@ -103,6 +104,7 @@ function draftTimes(v: VisitDraft): { start: string; end: string } {
 
 export interface JobDraftLineItem {
   name: string;
+  description?: string | null;
   qty?: number;
   unit_price_cents?: number;
   included?: boolean;
@@ -178,7 +180,7 @@ interface NewJobModalProps {
     currency: string;
     requires_invoicing: boolean;
     billing_split: boolean;
-    line_items: Array<{ name: string; qty: number; unit_price_cents: number; included?: boolean }>;
+    line_items: Array<{ name: string; description?: string | null; qty: number; unit_price_cents: number; included?: boolean }>;
     deposit_required?: boolean;
     deposit_type?: 'percentage' | 'fixed' | null;
     deposit_value?: number;
@@ -963,6 +965,7 @@ export default function NewJobModal({
         initialValues.line_items.map((item) => ({
           id: crypto.randomUUID(),
           name: item.name || '',
+          description: item.description || undefined,
           qtyInput: String(Math.max(1, Number(item.qty || 1))),
           unitPriceInput: String(Math.max(0, Number(item.unit_price_cents || 0) / 100)),
           included: item.included !== false,
@@ -1351,6 +1354,7 @@ export default function NewJobModal({
     const newItem: LineItemForm = {
       id: crypto.randomUUID(),
       name: service.name,
+      description: service.description || undefined,
       qtyInput: '1',
       unitPriceInput: String(service.default_price_cents / 100),
       included: true,
@@ -1388,6 +1392,7 @@ export default function NewJobModal({
       ...item,
       source_service_id: service.id,
       name: service.name,
+      description: service.description ?? item.description,
       unitPriceInput: String(service.default_price_cents / 100),
       item_type: service.item_type || 'service',
       unit_cost_cents: service.default_cost_cents ?? null,
@@ -1735,6 +1740,7 @@ export default function NewJobModal({
       .filter((item) => item.name.trim() || (Number.parseFloat(item.unitPriceInput || '0') || 0) > 0)
       .map((item) => ({
         name: billableItemName(item),
+        description: item.description?.trim() || null,
         qty: Math.max(1, Number.parseFloat(item.qtyInput || '0') || 1),
         unit_price_cents: Math.max(0, Math.round((Number.parseFloat(item.unitPriceInput || '0') || 0) * 100)),
         included: item.included,
@@ -2031,12 +2037,13 @@ export default function NewJobModal({
     <div
       key={item.id}
       className={cn(
-        'flex flex-wrap md:flex-nowrap items-center gap-2 rounded-lg border px-2.5 py-2 transition-all',
+        'rounded-lg border px-2.5 py-2 transition-all space-y-1.5',
         item.included
           ? 'border-outline-subtle/40 bg-surface-secondary/20'
           : 'border-outline-subtle/20 bg-surface-secondary/5 opacity-60'
       )}
     >
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
       <button
         type="button"
         onClick={() => setLineEditId(item.id)}
@@ -2124,6 +2131,14 @@ export default function NewJobModal({
           <Trash2 size={13} />
         </button>
       </div>
+      </div>
+      <textarea
+        value={item.description || ''}
+        onChange={(event) => handlers.update({ description: event.target.value })}
+        placeholder="Description"
+        rows={1}
+        className={cn('glass-input w-full !py-1.5 !px-2.5 min-h-[34px] text-xs resize-none', !item.included && 'line-through')}
+      />
     </div>
   );
 
