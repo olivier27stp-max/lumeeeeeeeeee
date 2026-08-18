@@ -21,12 +21,20 @@ interface ModuleGateProps {
  */
 export default function ModuleGate({ moduleKey, moduleName, children }: ModuleGateProps) {
   const { t } = useTranslation();
-  const { isEnabled, loading, activate, activating } = useModuleAccess(moduleKey);
+  const { isEnabled, loading, indetermine, activate, activating } = useModuleAccess(moduleKey);
   const { currentRole } = useCompany();
   const canActivate = currentRole === 'owner' || currentRole === 'admin';
 
   if (loading) {
     return null; // Parent layout already shows loading state
+  }
+
+  // L'etat n'a pas pu etre lu (reseau, 500, timeout). Reafficher l'ecran
+  // d'activation ferait croire que le module s'est desactive tout seul et
+  // pousserait a le « reactiver » inutilement. On laisse passer : les donnees
+  // restent protegees par la RLS et les permissions cote serveur.
+  if (indetermine) {
+    return <>{children}</>;
   }
 
   if (!isEnabled) {

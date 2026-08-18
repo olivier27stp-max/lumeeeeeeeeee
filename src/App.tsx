@@ -848,7 +848,13 @@ function AuthenticatedApp({
     },
     {
       label: t.nav.d2d,
-      items: venteModule.isEnabled
+      // `loading` et `indetermine` comptent autant que `isEnabled` : pendant le
+      // chargement de /api/features — ou si l'appel echoue — l'etat n'est pas
+      // « desactive », il est INCONNU. Afficher le cadenas dans ce cas donnait
+      // l'impression que le module s'etait desactive tout seul, alors qu'il
+      // etait bien actif en base. On garde le menu deploye ; les pages restent
+      // protegees par ModuleGate, qui refera la verification.
+      items: (venteModule.isEnabled || venteModule.loading || venteModule.indetermine)
         ? [
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
             { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
