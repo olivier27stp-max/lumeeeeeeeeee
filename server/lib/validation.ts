@@ -288,6 +288,7 @@ export const automationEventSchema = z.object({
   startTime: z.string().trim().optional(),
   title: z.string().trim().optional(),
   address: z.string().trim().optional(),
+  suppressImmediate: z.boolean().optional(),
 }).passthrough();
 
 // ─── Notifications ───────────────────────────────────────────────────────────

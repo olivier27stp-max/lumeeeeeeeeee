@@ -209,6 +209,24 @@ async function syncJobSchedule(payload: {
   endAt?: string | null;
 }) {
   if (payload.scheduledAt && payload.endAt) {
+    // Photo des visites AVANT le RPC : `rpc_schedule_job` répond
+    // `updated: true` même quand il n'a rien changé (no-op à ≥ 2 visites, ou
+    // re-save du job à la même date). Sans cette photo, CHAQUE sauvegarde du
+    // job ré-émettait « rendez-vous déplacé » et le client recevait une
+    // nouvelle confirmation à chaque clic sur Enregistrer (constaté en prod :
+    // 3 saves d'un plan de service = 3 confirmations en 6 secondes).
+    let visitesAvant: Array<{ id: string; start_at: string | null; end_at: string | null }> = [];
+    try {
+      const { data: avant } = await supabase
+        .from('schedule_events')
+        .select('id, start_at, end_at')
+        .eq('job_id', payload.jobId)
+        .is('deleted_at', null);
+      visitesAvant = (avant as any[]) || [];
+    } catch {
+      // Photo impossible : on retombe sur l'ancien comportement (émettre).
+    }
+
     const { data, error, status } = await supabase.rpc('rpc_schedule_job', {
       p_job_id: payload.jobId,
       p_start_at: payload.scheduledAt,
@@ -236,10 +254,16 @@ async function syncJobSchedule(payload: {
     // invisible : sur un job à 3 visites, seules les visites 2 et 3
     // déclenchaient les rappels.
     //
-    // `rpc_schedule_job` renvoie `updated: true` quand il a DÉPLACÉ une visite
-    // existante plutôt que d'en créer une. La distinction est nécessaire :
-    // ré-émettre `created` sur un déplacement renverrait une confirmation au
-    // client et laisserait les anciens rappels calés sur l'ancienne date.
+    // `rpc_schedule_job` renvoie `updated: true` quand il a touché une visite
+    // existante plutôt que d'en créer une — mais il le renvoie AUSSI quand il
+    // n'a rien changé. On croise donc avec la photo d'avant :
+    //   · aucune visite avant           → création réelle → `created` ;
+    //   · ≥ 2 visites avant             → le RPC est no-op → ne rien émettre ;
+    //   · 1 visite avant, même dates    → re-save sans changement → silence ;
+    //   · 1 visite avant, dates changées→ vrai déplacement → `rescheduled`.
+    // Ré-émettre sur un no-op renvoyait une confirmation au client à chaque
+    // sauvegarde du job ; ne pas émettre sur un vrai déplacement laisserait
+    // les rappels calés sur l'ancienne date.
     const eventRow = (data as any)?.event;
     const eventId = eventRow?.id;
     if (eventId) {
@@ -248,10 +272,28 @@ async function syncJobSchedule(payload: {
         jobId: payload.jobId,
         startTime: payload.scheduledAt,
       };
+      const memeInstant = (a: string | null | undefined, b: string | null | undefined) => {
+        if (!a || !b) return false;
+        const ta = new Date(a).getTime();
+        const tb = new Date(b).getTime();
+        return Number.isFinite(ta) && Number.isFinite(tb) && ta === tb;
+      };
       // Non bloquant : une automatisation muette ne doit jamais faire échouer
       // l'enregistrement du job.
-      if ((data as any)?.updated) emitAppointmentRescheduled(params);
-      else emitAppointmentCreated(params);
+      if (!(data as any)?.updated) {
+        emitAppointmentCreated(params);
+      } else if (visitesAvant.length === 1) {
+        const avant = visitesAvant[0];
+        const inchangee = memeInstant(avant.start_at, payload.scheduledAt)
+          && memeInstant(avant.end_at, payload.endAt);
+        if (!inchangee) emitAppointmentRescheduled(params);
+      } else if (visitesAvant.length === 0) {
+        // Photo vide mais RPC dit « update » : course ou photo échouée — on
+        // préserve le comportement historique plutôt que de rester muet.
+        emitAppointmentRescheduled(params);
+      }
+      // ≥ 2 visites avant : rpc_schedule_job n'a rien déplacé (no-op garanti
+      // par le RPC) — les déplacements réels passent par rescheduleEvent.
     }
     return;
   }

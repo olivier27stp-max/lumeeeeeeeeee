@@ -413,6 +413,14 @@ async function handleEvent(event: CRMEvent) {
         if (!evaluateConditions(rule.conditions, event)) continue;
         if (rule.delay_seconds !== 0) {
           await scheduleDelayedActions(rule, event, engineConfig);
+        } else if (event.metadata?.suppress_immediate) {
+          // Visite créée en lot (plan de service, job multi-visites) : seule la
+          // PREMIÈRE visite déclenche la confirmation immédiate — sans ce
+          // garde, un plan de 10 visites envoyait 10 confirmations d'un coup
+          // au client. Les rappels datés (délai négatif) ne sont pas touchés :
+          // ils passent par scheduleDelayedActions ci-dessus et restent calés
+          // sur la date de CHAQUE visite.
+          console.log(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
         } else {
           await executeRuleActions(rule, event, engineConfig);
         }

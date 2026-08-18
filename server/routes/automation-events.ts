@@ -24,7 +24,7 @@ router.post('/automations/events/appointment-created', validate(automationEventS
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
 
-    const { eventId, jobId, clientId, startTime, title, address } = req.body;
+    const { eventId, jobId, clientId, startTime, title, address, suppressImmediate } = req.body;
     if (!eventId) return res.status(400).json({ error: 'eventId is required' });
 
     // Fetch details for variable resolution
@@ -75,6 +75,9 @@ router.post('/automations/events/appointment-created', validate(automationEventS
         client_email: clientEmail,
         client_phone: clientPhone,
         job_name: jobName,
+        // Visite créée en lot : le moteur saute les règles immédiates
+        // (confirmation) mais planifie normalement les rappels datés.
+        ...(suppressImmediate ? { suppress_immediate: true } : {}),
       },
       relatedEntityType: jobId ? 'job' : undefined,
       relatedEntityId: jobId || undefined,

@@ -356,6 +356,9 @@ export async function addVisit(payload: {
   teamId?: string | null;
   timezone?: string | null;
   notes?: string | null;
+  /** Visite créée en lot : pas de confirmation immédiate au client (les
+   * rappels datés de la visite restent planifiés normalement). */
+  suppressConfirmation?: boolean;
 }): Promise<{ event: ScheduleEventRecord; overlaps: number }> {
   const { data, error } = await supabase.rpc('rpc_add_visit', {
     p_job_id: payload.jobId,
@@ -375,6 +378,7 @@ export async function addVisit(payload: {
     eventId: event.id,
     jobId: payload.jobId,
     startTime: payload.startAt,
+    suppressImmediate: payload.suppressConfirmation === true,
   });
 
   return {

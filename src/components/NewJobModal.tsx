@@ -1854,7 +1854,10 @@ export default function NewJobModal({
           const vEnd = buildDateTime(v.date, vTimes.end);
           if (!vStart || !vEnd) continue;
           try {
-            await addVisit({ jobId: createdJob.id, startAt: vStart, endAt: vEnd, teamId: teamIdPayload, timezone });
+            // suppressConfirmation : la 1re visite (créée avec le job) a déjà
+            // confirmé au client — les visites suivantes gardent seulement
+            // leurs rappels datés, sinon N visites = N confirmations d'un coup.
+            await addVisit({ jobId: createdJob.id, startAt: vStart, endAt: vEnd, teamId: teamIdPayload, timezone, suppressConfirmation: true });
           } catch (err) {
             console.error('[jobs] failed to add extra visit', v.date, err);
           }
@@ -1893,6 +1896,9 @@ export default function NewJobModal({
               teamId: teamIdPayload,
               timezone,
               notes: visitNotesFor(visit.key),
+              // La confirmation part une seule fois (1re visite du plan) ; les
+              // visites du plan gardent chacune leurs rappels J-7 / J-1 / 2 h.
+              suppressConfirmation: true,
             });
           } catch (err) {
             console.error('[jobs] failed to add service plan visit', visit.date, err);

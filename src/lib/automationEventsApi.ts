@@ -40,6 +40,13 @@ export function emitAppointmentCreated(params: {
   startTime?: string;
   title?: string;
   address?: string;
+  /**
+   * Visite créée en lot (plan de service, job multi-visites) : le moteur
+   * saute la confirmation immédiate mais planifie normalement les rappels
+   * datés (J-7 / J-1 / 2 h) de la visite. Sans ce flag, un plan de 10
+   * visites envoyait 10 confirmations d'un coup au client.
+   */
+  suppressImmediate?: boolean;
 }) {
   fireEvent('appointment-created', params);
 }
