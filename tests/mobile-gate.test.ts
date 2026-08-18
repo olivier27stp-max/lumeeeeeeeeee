@@ -135,12 +135,24 @@ describe('la page de téléchargement', () => {
     // L'app est en bêta fermée. Un bouton « Télécharger » qui ne mène nulle
     // part est pire que pas de bouton du tout.
     expect(page).toContain('ios: null');
-    expect(page).toContain("L'application arrive bientôt");
+    expect(page).toContain('Elle arrive bientôt');
   });
 
-  it('rassure sur les données', () => {
-    // La question de quelqu'un qui voit son CRM remplacé par une page.
-    expect(page).toContain('Vos données sont intactes');
+  it('promet ce que l’app apporte, au lieu de lister une limite', () => {
+    // « Le terrain dans l'app » vend le bénéfice ; « votre CRM ne marche pas
+    // ici » ne fait qu'annoncer une contrainte. Quand on redirige quelqu'un,
+    // mieux vaut lui dire ce qu'il gagne.
+    expect(page).toContain("Le terrain dans");
+    expect(page).toContain("faite pour le camion");
+  });
+
+  it('le fond est blanc, quel que soit le thème du téléphone', () => {
+    // `bg-surface` suivrait le mode sombre du système : la page ne
+    // ressemblerait plus à Lume.
+    expect(page).toContain('bg-white');
+    // On vise la classe REELLEMENT appliquee, pas une mention en commentaire :
+    // le test lit le fichier brut, commentaires compris.
+    expect(page).not.toMatch(/className="[^"]*bg-surface/);
   });
 
   it('dit quoi faire en attendant', () => {

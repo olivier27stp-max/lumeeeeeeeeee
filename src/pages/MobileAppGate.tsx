@@ -49,82 +49,51 @@ export default function MobileAppGate() {
   const lienDirect = os === 'ios' ? (LIENS_APP.ios ?? LIENS_APP.testflight) : os === 'android' ? LIENS_APP.android : null;
 
   return (
-    <div className="min-h-screen bg-surface text-text-primary antialiased flex flex-col">
-      {/* ── En-tête ── */}
-      <header className="px-6 pt-10 pb-2 flex justify-center">
-        <img src="/lume-logo.png" alt="Lume" className="h-16 w-auto mix-blend-multiply" />
-      </header>
+    // Fond blanc assumé, pas `bg-surface` : la page doit ressembler a Lume
+    // quel que soit le thème système du telephone.
+    <div className="min-h-screen bg-white text-[#141518] antialiased flex flex-col justify-center px-8 py-12">
+      <div className="w-full max-w-sm mx-auto text-center">
+        <img
+          src="/lume-logo-new.png"
+          alt="Lume"
+          className="h-14 w-auto mx-auto mb-9"
+        />
 
-      {/* ── Contenu ── */}
-      <main className="flex-1 flex flex-col justify-center px-7 pb-10 max-w-md mx-auto w-full">
-        <div className="space-y-7 text-center">
-          <div className="flex justify-center">
-            <div className="relative">
-              <div className="w-16 h-16 rounded-2xl bg-black/[0.04] flex items-center justify-center">
-                <Smartphone size={28} strokeWidth={1.25} className="text-text-primary" />
-              </div>
-            </div>
-          </div>
+        <h1 className="text-2xl font-light tracking-tight leading-[1.28] text-balance">
+          Le bureau sur l'ordi.
+          <br />
+          Le terrain dans <span className="italic">l'app</span>.
+        </h1>
 
-          <div className="space-y-3">
-            <h1 className="text-3xl font-extralight tracking-tight leading-tight">
-              Lume, c'est <span className="italic">mieux</span> dans l'app
-            </h1>
-            <p className="text-text-tertiary text-[15px] font-light leading-relaxed">
-              Votre CRM est conçu pour le grand écran. Sur téléphone, on vous
-              donne une application faite pour le terrain — pas une page web
-              rétrécie.
+        <p className="mt-3.5 text-sm text-[#71747B] leading-relaxed max-w-[30ch] mx-auto">
+          Votre CRM travaille mieux sur un grand écran. L'application mobile,
+          elle, est faite pour le camion.
+        </p>
+
+        {lienDirect ? (
+          <a
+            href={lienDirect}
+            className="mt-8 flex items-center justify-center gap-2.5 w-full h-[52px] rounded-2xl bg-[#141518] text-white font-medium text-[15px] active:scale-[0.98] transition-transform"
+          >
+            {os === 'ios' ? <Apple size={18} strokeWidth={1.5} /> : <Smartphone size={18} strokeWidth={1.5} />}
+            Télécharger l'application
+          </a>
+        ) : (
+          <>
+            {/* Aucun lien de magasin : on le dit franchement plutôt que
+                d'afficher un bouton qui ne mène nulle part. */}
+            <div className="w-7 h-px bg-black/10 mx-auto my-7" />
+            <p className="text-[12.5px] text-[#A8ABB2] leading-[1.65]">
+              Elle arrive bientôt.
+              <br />
+              D'ici là, retrouvez tout sur{' '}
+              <span className="text-[#141518] font-medium">lumecrm.net</span>
+              <br />
+              depuis votre ordinateur.
             </p>
-          </div>
-
-          {/* ── Action ── */}
-          <div className="pt-1 space-y-3">
-            {lienDirect ? (
-              <a
-                href={lienDirect}
-                className="flex items-center justify-center gap-2.5 w-full h-[52px] rounded-2xl bg-text-primary text-surface font-medium text-[15px] active:scale-[0.98] transition-transform"
-              >
-                {os === 'ios' ? <Apple size={18} strokeWidth={1.5} /> : <Smartphone size={18} strokeWidth={1.5} />}
-                Télécharger l'application
-              </a>
-            ) : (
-              /* Aucun lien encore : on le dit franchement plutôt que d'afficher
-                 un bouton inerte. */
-              <div className="rounded-2xl border border-black/[0.07] bg-white px-5 py-6 space-y-2.5">
-                <p className="text-[15px] font-normal">L'application arrive bientôt</p>
-                <p className="text-text-tertiary text-[13.5px] font-light leading-relaxed">
-                  Elle est en test auprès des premiers utilisateurs. En attendant,
-                  ouvrez <span className="text-text-primary font-normal">lumecrm.net</span> sur
-                  votre ordinateur pour accéder à votre CRM.
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* ── Rappel ordinateur ── */}
-          <div className="pt-2 flex items-start gap-3 text-left rounded-2xl bg-black/[0.025] px-4 py-3.5">
-            <Monitor size={17} strokeWidth={1.4} className="text-text-tertiary shrink-0 mt-0.5" />
-            <p className="text-text-tertiary text-[13px] font-light leading-relaxed">
-              Vos données sont intactes et vous attendent. Rien n'est perdu :
-              connectez-vous depuis un ordinateur et vous retrouverez tout.
-            </p>
-          </div>
-
-          <div className="pt-1">
-            <a
-              href="mailto:support@lumecrm.net"
-              className="inline-flex items-center gap-2 text-text-tertiary text-[13px] font-light hover:text-text-primary transition-colors"
-            >
-              <Mail size={14} strokeWidth={1.4} />
-              Besoin d'aide ? Écrivez-nous
-            </a>
-          </div>
-        </div>
-      </main>
-
-      <footer className="px-6 pb-7 text-center">
-        <p className="text-text-tertiary/60 text-[11px] font-light tracking-[0.15em] uppercase">Lume</p>
-      </footer>
+          </>
+        )}
+      </div>
     </div>
   );
 }
