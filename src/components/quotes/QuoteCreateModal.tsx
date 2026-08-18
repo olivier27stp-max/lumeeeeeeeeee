@@ -809,7 +809,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                       <Package size={13} className="text-text-tertiary shrink-0" />
                     </button>
                     <textarea value={item.description} onChange={e => updateLine(item.id, { description: e.target.value })}
-                      className={cn(inputCls, 'py-1.5 text-xs min-h-[40px] resize-none')} placeholder={tq.description} />
+                      className={cn(inputCls, 'py-1.5 text-xs min-h-[72px] resize-none')} placeholder={tq.description} />
                   </div>
                   <div className="col-span-2">
                     <label className="text-xs font-medium text-text-tertiary">{tq.quantity}</label>

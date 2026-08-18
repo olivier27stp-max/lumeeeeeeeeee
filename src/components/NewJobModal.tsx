@@ -2140,8 +2140,8 @@ export default function NewJobModal({
         value={item.description || ''}
         onChange={(event) => handlers.update({ description: event.target.value })}
         placeholder="Description"
-        rows={1}
-        className={cn('glass-input w-full !py-1.5 !px-2.5 min-h-[34px] text-xs resize-none', !item.included && 'line-through')}
+        rows={3}
+        className={cn('glass-input w-full !py-1.5 !px-2.5 min-h-[72px] text-xs resize-none', !item.included && 'line-through')}
       />
     </div>
   );

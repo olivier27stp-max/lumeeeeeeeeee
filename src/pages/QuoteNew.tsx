@@ -1109,7 +1109,7 @@ export default function QuoteNew() {
                   <textarea
                     value={item.description}
                     onChange={e => updateLine(item.id, { description: e.target.value })}
-                    className={cn(TEXTAREA, 'mt-1.5 min-h-[40px] py-1.5 text-[12px] resize-none')}
+                    className={cn(TEXTAREA, 'mt-1.5 min-h-[72px] py-1.5 text-[12px] resize-none')}
                     placeholder={tq.description}
                   />
                 </div>
