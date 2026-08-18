@@ -135,6 +135,7 @@ import SatisfactionSurvey from './pages/SatisfactionSurvey';
 import ClientPortal from './pages/ClientPortal';
 import PublicPayment from './pages/PublicPayment';
 import MobileAppGate from './pages/MobileAppGate';
+import { afficherPorteMobile } from './lib/mobileGate';
 import PublicRequestForm from './pages/PublicRequestForm';
 import Requests from './pages/Requests';
 import RequestDetails from './pages/RequestDetails';
@@ -582,6 +583,19 @@ export default function App() {
   const formKeyMatch = location.pathname.match(/^\/form\/([a-f0-9]{32,})$/i);
   if (formKeyMatch) {
     return <PublicRequestForm apiKey={formKeyMatch[1]} />;
+  }
+
+  // ── Porte mobile ──
+  // Placee APRES toutes les routes publiques, jamais avant : un client qui
+  // ouvre une soumission recue par texto doit passer, il n'a pas de compte
+  // Lume et n'installera jamais l'application. `afficherPorteMobile` porte
+  // cette liste blanche, et ses tests la croisent avec `detectTokenKind`.
+  //
+  // Placee AVANT le gate d'authentification : sur telephone, on n'affiche meme
+  // pas l'ecran de connexion — se connecter pour tomber sur un CRM inutilisable
+  // serait pire que la porte elle-meme.
+  if (afficherPorteMobile(location.pathname)) {
+    return <MobileAppGate />;
   }
 
   if (!user) {

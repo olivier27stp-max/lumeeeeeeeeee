@@ -183,9 +183,30 @@ describe('la route d’aperçu', () => {
     expect(bloc).not.toMatch(/estTelephone|afficherPorteMobile/);
   });
 
-  it('la porte n’est toujours PAS branchée', () => {
-    // Garde-fou du lot : tant que le texte n'est pas validé, aucun utilisateur
-    // ne doit être redirigé. Ce test tombera volontairement au lot suivant.
-    expect(app).not.toContain('afficherPorteMobile(');
+  it('la porte est branchée', () => {
+    expect(app).toContain('afficherPorteMobile(location.pathname)');
+    expect(app).toContain('<MobileAppGate />');
+  });
+
+  it('la porte vient APRÈS toutes les routes publiques', () => {
+    // L'ordre est le cœur de la sûreté : placée avant, elle intercepterait la
+    // soumission qu'un client ouvre depuis son texto. La liste blanche
+    // protège déjà, mais l'ordre est une seconde barrière — et c'est celle
+    // qu'on casse sans s'en apercevoir en réorganisant le fichier.
+    const porte = app.indexOf('afficherPorteMobile(location.pathname)');
+    expect(app.indexOf('detectTokenKind(location.pathname)')).toBeLessThan(porte);
+    expect(app.indexOf('PublicRequestForm apiKey')).toBeLessThan(porte);
+    expect(app.indexOf("location.pathname === '/checkout'")).toBeLessThan(porte);
+  });
+
+  it('la porte vient AVANT l’écran de connexion', () => {
+    // Se connecter pour tomber sur un CRM inutilisable serait pire que la
+    // porte elle-même.
+    // On vise le bloc de RENDU (celui qui affiche <Auth />), pas les
+    // occurrences de `if (!user)` dans les effets, plus haut dans le fichier.
+    const porte = app.indexOf('afficherPorteMobile(location.pathname)');
+    const rendu = app.indexOf("if (view === 'auth')");
+    expect(rendu).toBeGreaterThan(-1);
+    expect(porte).toBeLessThan(rendu);
   });
 });
