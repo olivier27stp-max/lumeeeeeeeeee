@@ -134,6 +134,7 @@ const LumeAgentIcon = ({ size = 20, className = '' }: { size?: number; className
 import SatisfactionSurvey from './pages/SatisfactionSurvey';
 import ClientPortal from './pages/ClientPortal';
 import PublicPayment from './pages/PublicPayment';
+import MobileAppGate from './pages/MobileAppGate';
 import PublicRequestForm from './pages/PublicRequestForm';
 import Requests from './pages/Requests';
 import RequestDetails from './pages/RequestDetails';
@@ -561,6 +562,13 @@ export default function App() {
   }
   if (location.pathname === '/checkout') {
     return <OnboardingFlow />;
+  }
+
+  // Aperçu de la porte mobile — visible sans compte, pour la regarder sur un
+  // vrai téléphone avant de la brancher pour de bon. Ne bloque rien : c'est
+  // une page qu'on choisit d'ouvrir, pas une redirection.
+  if (location.pathname === '/apercu-mobile') {
+    return <MobileAppGate />;
   }
 
   // Public token pages (no auth required) — quote, survey, portal, pay, invite

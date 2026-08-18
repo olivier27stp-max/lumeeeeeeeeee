@@ -152,3 +152,28 @@ describe('la page de téléchargement', () => {
     expect(page).not.toMatch(/Download the app|Coming soon|Your data is safe/);
   });
 });
+
+describe('la route d’aperçu', () => {
+  const app = read('src/App.tsx');
+
+  it('existe et ne demande aucun compte', () => {
+    // Le but est de la regarder sur un vrai téléphone, où l'on n'est pas
+    // forcément connecté.
+    expect(app).toContain("location.pathname === '/apercu-mobile'");
+    expect(app).toContain('<MobileAppGate />');
+  });
+
+  it('ne redirige personne — elle s’ouvre volontairement', () => {
+    // Un aperçu qui bloquerait l'accès au CRM serait exactement ce qu'on
+    // cherche à éviter tant que la porte n'est pas validée.
+    const i = app.indexOf("location.pathname === '/apercu-mobile'");
+    const bloc = app.slice(i, i + 200);
+    expect(bloc).not.toMatch(/estTelephone|afficherPorteMobile/);
+  });
+
+  it('la porte n’est toujours PAS branchée', () => {
+    // Garde-fou du lot : tant que le texte n'est pas validé, aucun utilisateur
+    // ne doit être redirigé. Ce test tombera volontairement au lot suivant.
+    expect(app).not.toContain('afficherPorteMobile(');
+  });
+});
