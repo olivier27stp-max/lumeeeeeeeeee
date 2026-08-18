@@ -50,6 +50,10 @@ interface LineItemForm {
   item_type?: 'product' | 'service';
   unit_cost_cents?: number | null;
   taxable?: boolean;
+  // Copie par visite d'une ligne « Toutes les visites » : id de la ligne de
+  // base qu'elle reflète. Éditer/supprimer la ligne de base se propage aux
+  // copies; les lignes propres à une visite n'en ont pas.
+  sharedId?: string;
 }
 
 // One visit row in the form. Jobs have no date of their own — the calendar
@@ -523,9 +527,11 @@ export default function NewJobModal({
   };
   const lastDayOfMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
   // Fresh ids so a month's list never shares row identities with the job-level
-  // list (or another month's) — updates would otherwise cross lists.
+  // list (or another month's) — updates would otherwise cross lists. Each copy
+  // keeps a sharedId link to its base row so "All visits" edits keep
+  // propagating after personalization.
   const cloneLineItems = (items: LineItemForm[]): LineItemForm[] =>
-    items.map((item) => ({ ...item, id: crypto.randomUUID() }));
+    items.map((item) => ({ ...item, id: crypto.randomUUID(), sharedId: item.id }));
   const seedVisitItems = (keys: string[]) => {
     setServiceVisitItems((prev) => {
       const next = { ...prev };
@@ -567,12 +573,15 @@ export default function NewJobModal({
     if (!date) return;
     setPlanVisits((prev) => prev.map((v) => (v.key === key ? { ...v, date } : v)));
   };
-  // "Applies to" droplist: 'all' = one shared list for every visit; a visit
-  // key = per-visit lists (all visits get seeded, the chosen one is edited).
+  // "Applies to" droplist. Before any personalization, 'all' = one shared
+  // list for every visit. Picking a visit seeds per-visit lists (linked to the
+  // base rows) and edits that visit only. Once personalized, going back to
+  // "All visits" does NOT drop the per-visit lists: it shows the base list as
+  // a broadcast editor — adds/edits/removals there propagate to every visit's
+  // copy while each visit keeps its own customizations.
   const selectItemsScope = (value: string) => {
     setDirty(true);
     if (value === 'all') {
-      setApplyItemsToAllVisits(true);
       setItemsVisitKey(null);
     } else {
       if (applyItemsToAllVisits) {
@@ -593,9 +602,12 @@ export default function NewJobModal({
     }));
   };
   const updateVisitItem = (key: string, id: string, patch: Partial<LineItemForm>) => {
+    // Editing a line from one visit detaches it from its "All visits" base row
+    // (sharedId dropped): later broadcast edits keep flowing to the other
+    // visits without overwriting this visit's customization.
     setServiceVisitItems((prev) => ({
       ...prev,
-      [key]: (prev[key] || []).map((item) => (item.id === id ? { ...item, ...patch } : item)),
+      [key]: (prev[key] || []).map((item) => (item.id === id ? { ...item, ...patch, sharedId: undefined } : item)),
     }));
   };
   const removeVisitItem = (key: string, id: string) => {
@@ -1115,10 +1127,11 @@ export default function NewJobModal({
   // Items that actually bill: the job-level list, or — when the service plan's
   // products/services are personalized — every planned visit's own list.
   const personalizedItems = isServicePlan && !applyItemsToAllVisits;
-  // Visit whose list is being edited (stale/absent key falls back to the
-  // first planned visit — e.g. after the Rule regenerated the plan).
-  const selectedItemsVisit = personalizedItems
-    ? (sortedPlanVisits.find((v) => v.key === itemsVisitKey) ?? sortedPlanVisits[0] ?? null)
+  // Visit whose list is being edited. Null = the "All visits" broadcast view
+  // (also the fallback when the key went stale — e.g. after the Rule
+  // regenerated the plan).
+  const selectedItemsVisit = personalizedItems && itemsVisitKey
+    ? (sortedPlanVisits.find((v) => v.key === itemsVisitKey) ?? null)
     : null;
   const selectedItemsVisitList = selectedItemsVisit ? (serviceVisitItems[selectedItemsVisit.key] || []) : [];
   const billableLineItems = useMemo<Array<LineItemForm & { visitKey?: string }>>(() => {
@@ -1333,6 +1346,17 @@ export default function NewJobModal({
 
   const updateLineItem = (id: string, patch: Partial<LineItemForm>) => {
     setLineItems((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    // Personalized service plan: the base list is the "All visits" broadcast
+    // editor — mirror the edit onto every visit's linked copy.
+    if (personalizedItems) {
+      setServiceVisitItems((prev) => {
+        const next: Record<string, LineItemForm[]> = {};
+        for (const [key, list] of Object.entries(prev)) {
+          next[key] = list.map((item) => (item.sharedId === id ? { ...item, ...patch } : item));
+        }
+        return next;
+      });
+    }
   };
 
   const removeLineItem = (id: string) => {
@@ -1346,30 +1370,63 @@ export default function NewJobModal({
         ? next
         : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }];
     });
+    if (personalizedItems) {
+      setServiceVisitItems((prev) => {
+        const next: Record<string, LineItemForm[]> = {};
+        for (const [key, list] of Object.entries(prev)) {
+          const filtered = list.filter((item) => item.sharedId !== id);
+          next[key] = filtered.length > 0
+            ? filtered
+            : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }];
+        }
+        return next;
+      });
+    }
   };
 
-  // Replace the first empty line item or add a new one
-  const addServiceToList = (prev: LineItemForm[], service: PredefinedService): LineItemForm[] => {
-    const emptyIdx = prev.findIndex((item) => !item.name.trim());
-    const newItem: LineItemForm = {
-      id: crypto.randomUUID(),
-      name: service.name,
-      description: service.description || undefined,
-      qtyInput: '1',
-      unitPriceInput: String(service.default_price_cents / 100),
-      included: true,
-      source_service_id: service.id,
-      item_type: service.item_type || 'service',
-      unit_cost_cents: service.default_cost_cents ?? null,
-      taxable: service.taxable ?? true,
-    };
+  // "+ Add line" in the "All visits" view of a personalized plan: the blank
+  // row lands on the base list AND on every visit (linked), so typing in it
+  // broadcasts like any other base row.
+  const addBaseItemRow = () => {
+    const row: LineItemForm = { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true };
+    setLineItems((prev) => [...prev, row]);
+    if (personalizedItems) {
+      setServiceVisitItems((prev) => {
+        const next: Record<string, LineItemForm[]> = {};
+        for (const [key, list] of Object.entries(prev)) {
+          next[key] = [...list, { ...row, id: crypto.randomUUID(), sharedId: row.id }];
+        }
+        return next;
+      });
+    }
+  };
+
+  const buildServiceItem = (service: PredefinedService): LineItemForm => ({
+    id: crypto.randomUUID(),
+    name: service.name,
+    description: service.description || undefined,
+    qtyInput: '1',
+    unitPriceInput: String(service.default_price_cents / 100),
+    included: true,
+    source_service_id: service.id,
+    item_type: service.item_type || 'service',
+    unit_cost_cents: service.default_cost_cents ?? null,
+    taxable: service.taxable ?? true,
+  });
+
+  // Place a catalog item on a list: replace the first empty line or append
+  const placeServiceItem = (prev: LineItemForm[], item: LineItemForm): LineItemForm[] => {
+    const emptyIdx = prev.findIndex((existing) => !existing.name.trim());
     if (emptyIdx !== -1) {
       const updated = [...prev];
-      updated[emptyIdx] = newItem;
+      updated[emptyIdx] = item;
       return updated;
     }
-    return [...prev, newItem];
+    return [...prev, item];
   };
+
+  const addServiceToList = (prev: LineItemForm[], service: PredefinedService): LineItemForm[] =>
+    placeServiceItem(prev, buildServiceItem(service));
 
   const handleServiceSelected = (service: PredefinedService) => {
     if (pickerVisitKey != null) {
@@ -1381,14 +1438,26 @@ export default function NewJobModal({
       }));
       return;
     }
-    setLineItems((prev) => addServiceToList(prev, service));
+    const baseRow = buildServiceItem(service);
+    setLineItems((prev) => placeServiceItem(prev, baseRow));
     setAddedServiceIds((prev) => new Set([...prev, service.id]));
+    // Personalized plan, "All visits" scope: broadcast the new service to every
+    // visit's list, linked to the base row so later base edits keep following.
+    if (personalizedItems) {
+      setServiceVisitItems((prev) => {
+        const next: Record<string, LineItemForm[]> = {};
+        for (const [key, list] of Object.entries(prev)) {
+          next[key] = placeServiceItem(list, { ...baseRow, id: crypto.randomUUID(), sharedId: baseRow.id });
+        }
+        return next;
+      });
+    }
   };
 
   // Fill a single line with the chosen catalog product/service (name, default price)
   const handleServiceForLine = (service: PredefinedService) => {
     if (!lineEditId) return;
-    const fill = (item: LineItemForm): LineItemForm => item.id === lineEditId ? {
+    const fillFields = (item: LineItemForm): LineItemForm => ({
       ...item,
       source_service_id: service.id,
       name: service.name,
@@ -1397,13 +1466,26 @@ export default function NewJobModal({
       item_type: service.item_type || 'service',
       unit_cost_cents: service.default_cost_cents ?? null,
       taxable: service.taxable ?? true,
-    } : item;
+    });
+    const fill = (item: LineItemForm): LineItemForm => (item.id === lineEditId ? fillFields(item) : item);
     // Row ids are unique across the job-level list and every visit's list, so
-    // mapping them all only ever fills the targeted line.
+    // mapping them all only ever fills the targeted line. Filling a base row
+    // of a personalized plan ("All visits" view) also fills every visit's
+    // linked copy.
+    const isBaseLine = lineItems.some((item) => item.id === lineEditId);
+    const fillLinked = (item: LineItemForm): LineItemForm => {
+      if (item.id === lineEditId) {
+        // Refilling a line from one visit's editor detaches it from its base
+        // row — same rule as any other per-visit edit.
+        const filled = fillFields(item);
+        return isBaseLine ? filled : { ...filled, sharedId: undefined };
+      }
+      return personalizedItems && isBaseLine && item.sharedId === lineEditId ? fillFields(item) : item;
+    };
     setLineItems((prev) => prev.map(fill));
     setServiceVisitItems((prev) => {
       const next: Record<string, LineItemForm[]> = {};
-      for (const [key, list] of Object.entries(prev)) next[key] = list.map(fill);
+      for (const [key, list] of Object.entries(prev)) next[key] = list.map(fillLinked);
       return next;
     });
     // The global "added" checkmarks only mirror the job-level list.
@@ -1431,6 +1513,20 @@ export default function NewJobModal({
       return filtered.length > 0 ? filtered : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }];
     });
     setAddedServiceIds((prev) => { const n = new Set(prev); n.delete(serviceId); return n; });
+    // "All visits" scope of a personalized plan: unchecking the service pulls
+    // it from every visit too (linked copies and per-visit adds alike).
+    if (personalizedItems) {
+      setServiceVisitItems((prev) => {
+        const next: Record<string, LineItemForm[]> = {};
+        for (const [key, list] of Object.entries(prev)) {
+          const filtered = list.filter((item) => item.source_service_id !== serviceId);
+          next[key] = filtered.length > 0
+            ? filtered
+            : [{ id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }];
+        }
+        return next;
+      });
+    }
   };
 
   // Checkmarks shown in the catalog picker for the list it is currently feeding.
@@ -3051,7 +3147,7 @@ export default function NewJobModal({
 
               <Box
                 title={language === 'fr' ? 'Produits / Services' : 'Products / Services'}
-                right={!personalizedItems ? (
+                right={!selectedItemsVisit ? (
                   <button
                     type="button"
                     onClick={() => { setPickerVisitKey(null); setServicePickerOpen(true); }}
@@ -3068,7 +3164,11 @@ export default function NewJobModal({
                     <div className="min-w-0">
                       <span className="block text-sm text-text-primary">{t.modals.servicePlanAppliesToLabel}</span>
                       <span className="block text-xs text-text-tertiary mt-0.5">
-                        {personalizedItems ? t.modals.servicePlanItemsCustomHint : t.modals.servicePlanItemsApplyAllHint}
+                        {!personalizedItems
+                          ? t.modals.servicePlanItemsApplyAllHint
+                          : selectedItemsVisit
+                            ? t.modals.servicePlanItemsCustomHint
+                            : t.modals.servicePlanItemsBroadcastHint}
                       </span>
                     </div>
                     <select
@@ -3086,13 +3186,12 @@ export default function NewJobModal({
                   </div>
                 )}
 
-                {personalizedItems ? (
-                  sortedPlanVisits.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
-                      <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
-                      <p className="text-sm text-text-secondary">{t.modals.servicePlanItemsNoMonths}</p>
-                    </div>
-                  ) : selectedItemsVisit && (
+                {personalizedItems && sortedPlanVisits.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-outline-subtle bg-surface-secondary/30 p-6 text-center">
+                    <Package size={24} className="text-text-tertiary mx-auto mb-2 opacity-40" />
+                    <p className="text-sm text-text-secondary">{t.modals.servicePlanItemsNoMonths}</p>
+                  </div>
+                ) : selectedItemsVisit ? (
                     <div key={selectedItemsVisit.key} className="rounded-xl border border-outline-subtle/40 p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold capitalize text-text-primary">
@@ -3126,7 +3225,6 @@ export default function NewJobModal({
                         {t.modals.addLineItem}
                       </button>
                     </div>
-                  )
                 ) : (
                 <>
                 {/* Line items — compact single-line rows (an empty first line shows by default) */}
@@ -3142,9 +3240,7 @@ export default function NewJobModal({
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setLineItems((prev) => [...prev, { id: crypto.randomUUID(), name: '', qtyInput: '1', unitPriceInput: '0', included: true }])
-                  }
+                  onClick={addBaseItemRow}
                   className="glass-button !py-1.5 !px-3 inline-flex items-center gap-1.5 text-[13px]"
                 >
                   <Plus size={13} />
