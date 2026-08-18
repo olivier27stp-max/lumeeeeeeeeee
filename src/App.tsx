@@ -22,7 +22,6 @@ import {
   Search,
   UserCircle2,
   Contact,
-  HelpCircle,
   Timer,
   Bell,
   Zap,
@@ -117,6 +116,9 @@ import Register from './pages/Register';
 import AccessBlocked from './pages/AccessBlocked';
 import VerifyEmail from './pages/VerifyEmail';
 import VerifyEmailGate from './components/auth/VerifyEmailGate';
+// Conserves volontairement bien que non montes : ils permettent de remettre
+// Lume Agent en service en restaurant sa route et son entree de menu.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
 import TasksPage from './pages/Tasks';
@@ -839,7 +841,6 @@ function AuthenticatedApp({
       label: null,
       items: [
         { id: 'day', label: t.nav.crm, icon: Home, path: '/day', tileColor: 'blue' },
-        { id: 'ai-helper', label: 'Lume Agent', icon: LumeAgentIcon as any, path: '/lume-agent', tileColor: 'blue', requiredPermission: 'external_agent.use', requiredPlanFlag: 'includes_ai' },
       ],
     },
     {
@@ -1259,13 +1260,6 @@ function AuthenticatedApp({
                   </span>
                 )}
               </button>
-              <button
-                onClick={() => navigate('/lume-agent')}
-                title="Lume Agent"
-                className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-all"
-              >
-                <HelpCircle size={17} strokeWidth={1.75} />
-              </button>
               <div className="ml-1.5 avatar-sm">
                 <UserCircle2 size={15} strokeWidth={1.75} />
               </div>
@@ -1280,8 +1274,13 @@ function AuthenticatedApp({
                   <Routes>
                     <Route path="/" element={<Navigate to="/day" replace />} />
                     <Route path="/pricing" element={<Navigate to="/settings/billing" replace />} />
-                    <Route path="/lume-agent" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><PageWrapper><MrLumePage /></PageWrapper></PlanFeatureGate></Gated>} />
-                    <Route path="/dashboard" element={<Navigate to="/lume-agent" replace />} />
+                    {/* Lume Agent masque — la fonctionnalite n'est pas encore ouverte aux
+                        utilisateurs. La route est REDIRIGEE plutot que supprimee : un favori
+                        ou un lien deja partage ne doit pas tomber sur une page blanche.
+                        Pour la remettre : restaurer l'element d'origine (MrLumePage est
+                        toujours importe) et l'entree de menu 'ai-helper'. */}
+                    <Route path="/lume-agent" element={<Navigate to="/day" replace />} />
+                    <Route path="/dashboard" element={<Navigate to="/day" replace />} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
                     <Route path="/messages" element={<Gated permission="messages.read"><PlanFeatureGate flag="includes_sms"><PageWrapper><Messages /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />
