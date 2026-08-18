@@ -26,7 +26,6 @@ import {
   Timer,
   Bell,
   Zap,
-  Sparkles,
   MessageSquare,
   StickyNote,
   ClipboardList,
@@ -122,7 +121,6 @@ import MrLumePage from './features/agent/components/MrLumeChat';
 import Messages from './pages/Messages';
 import TasksPage from './pages/Tasks';
 import PlanFeatureGate from './components/PlanFeatureGate';
-import ExploreFeaturesModal from './components/ExploreFeaturesModal';
 import { useCurrentPlan } from './hooks/usePlanFeature';
 import Courses from './pages/Courses';
 import CourseView from './pages/CourseView';
@@ -746,11 +744,6 @@ function AuthenticatedApp({
   // `planLoading` est indispensable : sans lui, on ne peut pas distinguer
   // « plan pas encore charge » de « plan sans cette feature ».
   const { currentPlan, loading: planLoading } = useCurrentPlan();
-  // Hide "Discover features" on the top plan (nothing left to unlock).
-  // Mirrors the feature flags surfaced by ExploreFeaturesModal.
-  const DISCOVER_FEATURE_FLAGS = ['includes_sms', 'includes_ai', 'includes_d2d', 'includes_courses', 'includes_api'] as const;
-  const allFeaturesUnlocked = !!currentPlan && DISCOVER_FEATURE_FLAGS.every((f) => Boolean((currentPlan as any)[f]));
-  const [exploreFeaturesOpen, setExploreFeaturesOpen] = useState(false);
 
   // Sidebar counters: pending quotes + overdue invoices
   const [pendingQuotes, setPendingQuotes] = useState(0);
@@ -1158,26 +1151,6 @@ function AuthenticatedApp({
           <div className="p-2.5 space-y-0.5 border-t border-sidebar-text/10">
             {/* Company switcher — only visible for multi-company users */}
             {sidebarExpanded && <CompanySwitcher />}
-            {/* Discover premium features — surfaces locked tabs as a polished modal.
-                Hidden on the top plan, where everything is already unlocked. */}
-            {!allFeaturesUnlocked && (
-              <button
-                onClick={() => setExploreFeaturesOpen(true)}
-                title={!sidebarExpanded ? (language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features') : undefined}
-                className={cn(
-                  "group w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors",
-                  "bg-gradient-to-r from-primary/10 via-primary/5 to-transparent hover:from-primary/15 hover:via-primary/10 text-text-primary border border-primary/20 hover:border-primary/40",
-                  !sidebarExpanded && "justify-center"
-                )}
-              >
-                <Sparkles size={16} strokeWidth={2} className="text-primary shrink-0" />
-                {sidebarExpanded && (
-                  <span className="truncate">
-                    {language === 'fr' ? 'Découvrir les fonctionnalités' : 'Discover features'}
-                  </span>
-                )}
-              </button>
-            )}
             <button
               onClick={() => setIsDark(!isDark)}
               title={!sidebarExpanded ? (isDark ? t.nav.lightMode : t.nav.darkMode) : undefined}
@@ -1430,7 +1403,6 @@ function AuthenticatedApp({
           <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} language={language} />
         )}
       </AnimatePresence>
-      <ExploreFeaturesModal open={exploreFeaturesOpen} onClose={() => setExploreFeaturesOpen(false)} />
       <LocationConsentModal
         open={locationConsent.needsPrompt}
         language={language}
