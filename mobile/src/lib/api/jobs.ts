@@ -201,6 +201,8 @@ export async function getJob(id: string, access?: JobAccess): Promise<Job | null
 
 export interface JobLineItem {
   name: string;
+  /** Description de la ligne — celle du catalogue, ou saisie à la main. */
+  description?: string | null;
   qty: number;
   unit_price_cents: number;
 }
@@ -208,6 +210,7 @@ export interface JobLineItem {
 export interface JobLineItemRow {
   id: string;
   name: string;
+  description: string | null;
   qty: number;
   unit_price_cents: number;
   total_cents: number;
@@ -217,7 +220,7 @@ export interface JobLineItemRow {
 export async function listJobLineItems(jobId: string): Promise<JobLineItemRow[]> {
   const { data, error } = await supabase
     .from('job_line_items')
-    .select('id, name, qty, unit_price_cents, total_cents')
+    .select('id, name, description, qty, unit_price_cents, total_cents')
     .eq('job_id', jobId)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
@@ -423,6 +426,7 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       job_id: job.id,
       created_by: createdBy,
       name: it.name || 'Item',
+      description: it.description?.trim() || null,
       qty: it.qty,
       unit_price_cents: it.unit_price_cents,
       total_cents: Math.round(it.qty * it.unit_price_cents),

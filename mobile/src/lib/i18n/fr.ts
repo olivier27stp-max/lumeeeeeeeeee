@@ -4610,6 +4610,7 @@ const fr: TranslationKeys = {
     // LineItemsEditor
     items: 'Articles',
     itemService: 'Article / service',
+    itemDescriptionPlaceholder: 'Description',
     qty: 'Qté',
     unitPrice: 'Prix unitaire ($)',
     fromCatalog: 'Du catalogue',

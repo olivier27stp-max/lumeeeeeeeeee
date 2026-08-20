@@ -9,10 +9,11 @@ import { listServices } from '@/lib/api/services';
 import { useTranslation } from '@/lib/i18n';
 import { usePermissions } from '@/lib/usePermissions';
 
-type Row = { id: string; name: string; qty: string; price: string };
+type Row = { id: string; name: string; description: string; qty: string; price: string };
 
 let counter = 0;
-const newRow = (name = '', price = ''): Row => ({ id: `r${counter++}`, name, qty: '1', price });
+const newRow = (name = '', price = '', description = ''): Row =>
+  ({ id: `r${counter++}`, name, description, qty: '1', price });
 
 export function LineItemsEditor({
   onChange,
@@ -38,6 +39,7 @@ export function LineItemsEditor({
         seed.map((s) => ({
           id: `r${counter++}`,
           name: s.name,
+          description: s.description ?? '',
           qty: String(s.qty || 1),
           price: (s.unit_price_cents / 100).toFixed(2),
         })),
@@ -63,9 +65,12 @@ export function LineItemsEditor({
       if (seedKey) return;
     }
     const items: LineItemInput[] = rows
-      .filter((r) => r.name.trim() || r.price.trim())
+      // La description compte comme du contenu : une ligne où seule la
+      // description est remplie ne doit pas disparaître en silence.
+      .filter((r) => r.name.trim() || r.price.trim() || r.description.trim())
       .map((r) => ({
         name: r.name.trim(),
+        description: r.description.trim() || null,
         qty: parseFloat(r.qty) || 0,
         unit_price_cents: Math.round((parseFloat(r.price) || 0) * 100),
       }));
@@ -76,10 +81,12 @@ export function LineItemsEditor({
   const update = (id: string, k: keyof Row, v: string) =>
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, [k]: v } : r)));
   const remove = (id: string) => setRows((rs) => (rs.length > 1 ? rs.filter((r) => r.id !== id) : rs));
-  const addFromService = (name: string, priceCents: number) => {
+  const addFromService = (name: string, priceCents: number, description: string | null) => {
     setRows((rs) => {
-      const blank = rs.find((r) => !r.name.trim() && !r.price.trim());
-      const filled = newRow(name, (priceCents / 100).toFixed(2));
+      const blank = rs.find((r) => !r.name.trim() && !r.price.trim() && !r.description.trim());
+      // La description du catalogue arrive pré-remplie — c'est celle du
+      // produit/service, modifiable ensuite ligne par ligne.
+      const filled = newRow(name, (priceCents / 100).toFixed(2), description ?? '');
       return blank ? rs.map((r) => (r.id === blank.id ? { ...filled, id: r.id } : r)) : [...rs, filled];
     });
     setCatalogOpen(false);
@@ -114,6 +121,18 @@ export function LineItemsEditor({
               <TextInput value={r.price} onChangeText={(v) => update(r.id, 'price', v)} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor="#A3A3A3" className="rounded-lg border border-surface-border px-2 py-1.5 text-sm text-ink" />
             </View>
           </View>
+          {/* Description de la ligne — sous la qté et le prix, où le web la
+              met aussi (textarea de 3 lignes sous chaque ligne d'article). */}
+          <TextInput
+            value={r.description}
+            onChangeText={(v) => update(r.id, 'description', v)}
+            placeholder={c.itemDescriptionPlaceholder}
+            placeholderTextColor="#A3A3A3"
+            multiline
+            numberOfLines={3}
+            style={{ height: 76, textAlignVertical: 'top' }}
+            className="rounded-lg border border-surface-border px-2 py-1.5 text-sm leading-5 text-ink"
+          />
         </View>
       ))}
 
@@ -140,7 +159,7 @@ export function LineItemsEditor({
           {(services ?? []).map((s) => (
             <Pressable
               key={s.id}
-              onPress={() => addFromService(s.name, s.default_price_cents)}
+              onPress={() => addFromService(s.name, s.default_price_cents, s.description)}
               className="flex-row items-center justify-between gap-3 border-b border-surface-border py-2.5"
             >
               {/* Nom, puis la description du service en sous-titre — comme le

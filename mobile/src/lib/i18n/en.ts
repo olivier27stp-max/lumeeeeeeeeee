@@ -4618,6 +4618,7 @@ const en = {
     // LineItemsEditor
     items: 'Items',
     itemService: 'Item / service',
+    itemDescriptionPlaceholder: 'Description',
     qty: 'Qty',
     unitPrice: 'Unit price ($)',
     fromCatalog: 'From catalog',

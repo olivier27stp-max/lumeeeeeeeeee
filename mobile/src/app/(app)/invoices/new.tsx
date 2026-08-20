@@ -77,6 +77,7 @@ export default function NewInvoice() {
   });
   const seed: LineItemInput[] = (jobItems ?? []).map((it) => ({
     name: it.name,
+    description: it.description,
     qty: it.qty,
     unit_price_cents: it.unit_price_cents,
   }));

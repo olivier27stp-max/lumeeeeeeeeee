@@ -279,6 +279,8 @@ export interface LineItemInput {
   name: string;
   qty: number;
   unit_price_cents: number;
+  /** Description de la ligne — reprise du catalogue, ou écrite à la main. */
+  description?: string | null;
 }
 
 function computeTotals(items: LineItemInput[], taxRatePct: number) {
@@ -351,6 +353,7 @@ export async function createQuote(params: {
     const rows = params.items.map((it, idx) => ({
       quote_id: quoteId,
       name: it.name || 'Item',
+      description: it.description?.trim() || null,
       quantity: it.qty,
       unit_price_cents: it.unit_price_cents,
       total_cents: Math.round(it.qty * it.unit_price_cents),
@@ -410,7 +413,11 @@ export async function createInvoice(params: {
     const rows = params.items.map((it) => ({
       org_id: params.orgId,
       invoice_id: invoiceId,
-      description: it.name || 'Item',
+      // invoice_items.description porte le LIBELLÉ de la ligne (c'est le champ
+      // que la facture affiche). La description saisie est donc accolée au
+      // nom, exactement comme le serveur le fait en convertissant une
+      // soumission en facture (server/routes/quotes.ts).
+      description: [it.name || 'Item', it.description?.trim()].filter(Boolean).join(' — '),
       qty: it.qty,
       unit_price_cents: it.unit_price_cents,
       line_total_cents: Math.round(it.qty * it.unit_price_cents),
