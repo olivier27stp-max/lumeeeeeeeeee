@@ -141,9 +141,16 @@ export function LineItemsEditor({
             <Pressable
               key={s.id}
               onPress={() => addFromService(s.name, s.default_price_cents)}
-              className="flex-row items-center justify-between border-b border-surface-border py-2.5"
+              className="flex-row items-center justify-between gap-3 border-b border-surface-border py-2.5"
             >
-              <Text className="flex-1 text-sm text-ink" numberOfLines={1}>{s.name}</Text>
+              {/* Nom, puis la description du service en sous-titre — comme le
+                  sélecteur du web, qui l'affiche sous le nom. */}
+              <View className="flex-1">
+                <Text className="text-sm text-ink" numberOfLines={1}>{s.name}</Text>
+                {s.description ? (
+                  <Text className="pt-0.5 text-xs text-ink-subtle" numberOfLines={2}>{s.description}</Text>
+                ) : null}
+              </View>
               <Text className="text-sm text-ink-muted">${(s.default_price_cents / 100).toFixed(2)}</Text>
             </Pressable>
           ))}
