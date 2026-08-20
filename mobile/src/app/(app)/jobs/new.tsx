@@ -135,7 +135,11 @@ export default function NewJob() {
   // Plan de service, même principe que le web : la règle (répétition + durée)
   // génère les vrais rendez-vous, tous aux heures choisies plus bas.
   const [repeatMode, setRepeatMode] = useState<'weekly' | 'biweekly' | 'monthly' | 'custom'>('weekly');
-  const [endsAfterCount, setEndsAfterCount] = useState('');
+  // Durée par défaut de la règle : sans elle, choisir « Plan de service » et
+  // une date de départ n'affichait AUCUNE visite — il fallait deviner qu'un
+  // champ vide bloquait la génération. 12 mois, la valeur que le web suggère
+  // déjà en filigrane dans ce champ.
+  const [endsAfterCount, setEndsAfterCount] = useState('12');
   const [endsAfterUnit, setEndsAfterUnit] = useState<'days' | 'weeks' | 'months' | 'years'>('months');
   // « Pas d'heure précise » : même convention que le web (00:00 → 23:59).
   const [anytime, setAnytime] = useState(false);
@@ -309,7 +313,10 @@ export default function NewJob() {
   useEffect(() => {
     if (jobType !== 'recurring' || repeatMode === 'custom') return;
     const count = parseInt(endsAfterCount, 10);
-    if (!Number.isFinite(count) || count <= 0) { setPlanVisits([]); return; }
+    // Champ vidé le temps d'une correction : on garde le plan déjà affiché au
+    // lieu de l'effacer. L'effacer faisait disparaître toutes les visites — et
+    // les mois cochés à la main avec — dès qu'on retouchait la date de départ.
+    if (!Number.isFinite(count) || count <= 0) return;
 
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
@@ -743,6 +750,21 @@ export default function NewJob() {
       setEnvoiContrat(null);
     }
   };
+
+  /** Description du produit/service — une grosse boîte, posée dans la section
+   *  « Produits / Services ». Sans accès aux prix cette section n'est pas
+   *  rendue : la boîte est alors affichée seule, pour ne pas perdre le champ. */
+  const boiteDescription = (
+    <Input
+      label={t.mobileJobs.description}
+      value={description}
+      onChangeText={setDescription}
+      placeholder={t.mobileJobs.descriptionPlaceholder}
+      multiline
+      numberOfLines={7}
+      style={{ height: 160, textAlignVertical: 'top', paddingTop: 12 }}
+    />
+  );
 
   if (!canCreateJobs) return <Redirect href="/(app)/(tabs)" />;
 
@@ -1272,15 +1294,7 @@ export default function NewJob() {
         </View>
       )}
 
-      <Input
-        label={t.mobileJobs.description}
-        value={description}
-        onChangeText={setDescription}
-        placeholder={t.mobileJobs.descriptionPlaceholder}
-        multiline
-        numberOfLines={3}
-        style={{ height: 80, textAlignVertical: 'top', paddingTop: 12 }}
-      />
+      {canSeePricing ? null : boiteDescription}
 
       {/* Pricing (admin) */}
       {canSeePricing ? (
@@ -1392,6 +1406,7 @@ export default function NewJob() {
           ) : (
             <LineItemsEditor onChange={setItems} />
           )}
+          {boiteDescription}
           <Input label={t.mobileJobs.taxRate} value={taxRate} onChangeText={setTaxRate} keyboardType="decimal-pad" placeholder={DEFAULT_TAX} />
           <View className="gap-1 rounded-2xl bg-white p-4">
             <Row label={t.mobileJobs.subtotal} value={formatCurrencyCents(totals.subtotal, 'CAD')} />
