@@ -203,6 +203,13 @@ export interface JobLineItem {
   name: string;
   /** Description de la ligne — celle du catalogue, ou saisie à la main. */
   description?: string | null;
+  /**
+   * Date (locale, AAAA-MM-JJ) de la visite du plan à laquelle la ligne
+   * s'applique. null = la ligne couvre le job entier. Quand des lignes sont
+   * rattachées, create_invoice_from_visit facture chaque visite au prorata
+   * de SES services au lieu de diviser le total en parts égales.
+   */
+  visit_date?: string | null;
   qty: number;
   unit_price_cents: number;
 }
@@ -427,6 +434,7 @@ export async function createJob(orgId: string, input: JobInput): Promise<Job> {
       created_by: createdBy,
       name: it.name || 'Item',
       description: it.description?.trim() || null,
+      visit_date: it.visit_date ?? null,
       qty: it.qty,
       unit_price_cents: it.unit_price_cents,
       total_cents: Math.round(it.qty * it.unit_price_cents),

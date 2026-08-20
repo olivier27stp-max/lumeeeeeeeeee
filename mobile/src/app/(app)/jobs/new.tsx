@@ -440,14 +440,22 @@ export default function NewJob() {
 
   /** Ce qui est réellement facturé : les lignes du plan, ou la somme de toutes
    *  les visites quand les services sont personnalisés. */
-  const billableItems = useMemo<LineItemInput[]>(() => {
+  const billableItems = useMemo<Array<LineItemInput & { visit_date?: string | null }>>(() => {
     if (!itemsPersonnalises) return items;
     return [...planVisits]
       .sort((a, b) => a.date.localeCompare(b.date))
       .flatMap((v) =>
         itemsDeVisite(v.key)
           .filter((it) => (it.name?.trim() || it.unit_price_cents > 0))
-          .map((it) => ({ ...it, name: `${it.name?.trim() || 'Service'} — ${etiquetteVisite(v)}` })));
+          // Le mois reste dans le nom (la ligne doit rester identifiable une
+          // fois aplatie au niveau du job) ET la ligne est rattachée à sa
+          // visite : c'est ce rattachement qui permet à la facture d'une
+          // visite de refléter SES services plutôt qu'une part égale.
+          .map((it) => ({
+            ...it,
+            name: `${it.name?.trim() || 'Service'} — ${etiquetteVisite(v)}`,
+            visit_date: v.date,
+          })));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemsPersonnalises, items, planVisits, visitItems, language]);
 
