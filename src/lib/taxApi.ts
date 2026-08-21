@@ -2,12 +2,23 @@ import { supabase } from './supabase';
 
 const API = '/api';
 
+// getSession peut rester suspendu indéfiniment (deadlock connu de supabase-js
+// via le Navigator LockManager — multi-onglets, retour de veille). Sans borne,
+// l'appelant reste bloqué en « Chargement... » pour toujours : on abandonne
+// après 10 s pour que son retry/bouton Réessayer reprenne la main.
+function getSessionBounded() {
+  return Promise.race([
+    supabase.auth.getSession(),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('getSession timeout')), 10_000)),
+  ]);
+}
+
 async function headers() {
-  let session = (await supabase.auth.getSession()).data.session;
+  let session = (await getSessionBounded()).data.session;
   // Retry once if session not ready yet
   if (!session?.access_token) {
     await new Promise(r => setTimeout(r, 500));
-    session = (await supabase.auth.getSession()).data.session;
+    session = (await getSessionBounded()).data.session;
   }
   if (!session?.access_token) throw new Error('Not authenticated');
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` };
@@ -103,7 +114,9 @@ export async function resolveTaxes(clientId?: string | null, leadId?: string | n
   if (leadId) params.set('lead_id', leadId);
   const qs = params.toString();
   const url = qs ? `${API}/taxes/resolve?${qs}` : `${API}/taxes/resolve`;
-  const res = await fetch(url, { headers: h });
+  // Connexion qui stalle (redéploiement Railway) : sans timeout, la tentative
+  // ne se termine jamais et le retry du job form n'avance plus.
+  const res = await fetch(url, { headers: h, signal: AbortSignal.timeout(15_000) });
   const body = await jsonOrEmpty(res);
   if (!res.ok) throw new Error(body?.error || 'Failed');
   return body;
