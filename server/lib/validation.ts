@@ -487,3 +487,104 @@ export const nonEmptyBodySchema = z.object({}).passthrough()
 export const idRequiredSchema = z.object({
   id: z.string().trim().min(1, 'id is required.'),
 }).passthrough();
+
+// ─── Migration assistée (console interne + portail temporaire) ───────────
+
+const migrationCategoryEnum = z.enum([
+  'clients', 'properties', 'services', 'quotes', 'jobs', 'visits',
+  'invoices', 'payments', 'notes', 'attachments', 'team_members', 'custom_fields',
+]);
+
+const migrationSourceCrmEnum = z.enum([
+  'jobber', 'housecall_pro', 'servicetitan', 'gohighlevel', 'quickbooks', 'other', 'custom_files',
+]);
+
+export const migrationCreateSchema = z.object({
+  org_id: z.string().uuid('org_id must be a valid UUID.'),
+  source_crm: migrationSourceCrmEnum.optional(),
+  categories: z.array(migrationCategoryEnum).min(1).max(12).optional(),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  internal_notes: z.string().max(4000).optional().nullable(),
+  invited_email: z.string().trim().email().max(200).optional().nullable(),
+  invited_user_id: z.string().uuid().optional().nullable(),
+  assigned_admin: z.string().uuid().optional().nullable(),
+  assigned_assistant: z.string().uuid().optional().nullable(),
+});
+
+export const migrationPatchSchema = z.object({
+  source_crm: migrationSourceCrmEnum.optional(),
+  categories: z.array(migrationCategoryEnum).min(1).max(12).optional(),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
+  internal_notes: z.string().max(4000).optional().nullable(),
+  invited_email: z.string().trim().email().max(200).optional().nullable(),
+  invited_user_id: z.string().uuid().optional().nullable(),
+  assigned_admin: z.string().uuid().optional().nullable(),
+  assigned_assistant: z.string().uuid().optional().nullable(),
+  freeze_start: z.string().optional().nullable(),
+  freeze_end: z.string().optional().nullable(),
+}).refine((obj) => Object.keys(obj).length > 0, 'Request body cannot be empty.');
+
+export const migrationInvitationSchema = z.object({
+  ttl_hours: z.number().int().min(1).max(720).optional(),
+});
+
+export const migrationStatusChangeSchema = z.object({
+  to: z.enum([
+    'draft', 'invitation_sent', 'waiting_for_files', 'files_uploaded', 'parsing', 'mapping',
+    'human_review', 'waiting_for_client', 'ready_for_test', 'testing', 'test_review',
+    'waiting_for_approval', 'approved', 'ready_for_final_import', 'importing',
+    'post_import_validation', 'completed', 'completed_with_warnings', 'failed',
+    'rolled_back', 'cancelled',
+  ]),
+});
+
+const migrationTargetEntityEnum = z.enum([
+  'client', 'property', 'service', 'quote', 'job', 'visit', 'invoice', 'line_item', 'payment',
+]);
+
+export const migrationMappingDecisionSchema = z.object({
+  status: z.enum(['confirmed', 'corrected', 'rejected', 'needs_review']),
+  target_entity: migrationTargetEntityEnum.optional().nullable(),
+  target_field: z.string().trim().max(80).optional().nullable(),
+});
+
+export const migrationIssueCreateSchema = z.object({
+  type: z.string().trim().min(1).max(60),
+  severity: z.enum(['info', 'warning', 'error', 'blocking']).optional(),
+  title: z.string().trim().min(1).max(300),
+  client_visible: z.boolean().optional(),
+  options: z.array(z.string().max(120)).max(10).optional(),
+});
+
+export const migrationIssueResolveSchema = z.object({
+  resolution: z.string().trim().min(1).max(2000),
+});
+
+export const migrationDuplicateDecisionSchema = z.object({
+  decision: z.enum(['create_new', 'merge', 'skip', 'review']),
+});
+
+export const migrationFinalImportSchema = z.object({
+  confirm_org_name: z.string().trim().min(1).max(200),
+});
+
+export const migrationMessageSchema = z.object({
+  body: z.string().trim().min(1).max(4000),
+});
+
+export const migrationPortalApprovalSchema = z.object({
+  decision: z.enum(['approved', 'refused', 'changes_requested']),
+  confirmed_text: z.string().max(300).optional(),
+  comment: z.string().max(4000).optional(),
+});
+
+export const migrationPortalMappingSchema = z.object({
+  target_entity: migrationTargetEntityEnum.nullable(),
+  target_field: z.string().trim().max(80).nullable(),
+});
+
+export const migrationPortalAnswerSchema = z.object({
+  answer: z.string().trim().min(1).max(4000),
+});

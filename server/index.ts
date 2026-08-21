@@ -87,6 +87,8 @@ import remindersCronRouter from './routes/reminders-cron';
 import remindersRouter from './routes/reminders';
 import meRouter from './routes/me';
 import onboardingRouter from './routes/onboarding';
+import migrationAdminRouter from './routes/migration-admin';
+import migrationPortalRouter from './routes/migration-portal';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
@@ -479,6 +481,21 @@ app.use('/api', fieldSessionsRouter);
 // retiré ensuite : il exposait les courriels et IP de tous les locataires et
 // n'était consultable que depuis ce back-office. `PLATFORM_OWNER_ID` ne sert
 // donc plus qu'à la boîte de réception des demandes de démo (marketing.ts).
+
+// Migration assistée — deux surfaces volontairement séparées du CRM quotidien :
+// 1) Console interne (/api/migration-admin/*) : réservée à PLATFORM_OWNER_ID,
+//    chaque handler se garde lui-même (requirePlatformAdmin). Périmètre limité
+//    aux projets de migration — pas de vues analytiques inter-tenants.
+// 2) Portail client temporaire (/api/migration-portal/*) : jeton haché +
+//    session Lume + membership owner/admin revalidés à CHAQUE requête.
+const migrationAdminLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `migadmin:${userKey(req)}` });
+app.use('/api/migration-admin', migrationAdminLimiter);
+app.use('/api', migrationAdminRouter);
+const migrationPortalLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `migportal:${userKey(req)}` });
+app.use('/api/migration-portal', migrationPortalLimiter);
+// Anti force-brute sur la résolution du jeton : limite serrée par IP (Redis si dispo).
+app.use('/api/migration-portal/session', redisRateLimit({ preset: 'auth', keyFn: (req) => `migtoken:${req.ip}` }));
+app.use('/api', migrationPortalRouter);
 
 // CSP violation reports — public endpoint, tight limit to prevent log flooding
 const cspReportLimiter = rateLimit({ windowMs: 60_000, max: 20 }); // per IP
@@ -891,5 +908,15 @@ app.listen(port, '0.0.0.0', () => {
     console.log('[security] Maintenance job started (every 15min, lock-guarded)');
     setTimeout(() => withAdvisoryLock('security-maintenance-startup', () => runSecurityMaintenance())
       .catch((e: any) => captureCronFailure('security-maintenance-startup', e)), 15_000);
+
+    // Migration assistée — nettoyage quotidien (fichiers > 30 j après clôture,
+    // staging purgé, jetons expirés anonymisés). Jamais les données importées.
+    Promise.all([import('./lib/migration/cleanup'), import('./lib/supabase')]).then(([{ runMigrationCleanup }, { getServiceClient }]) => {
+      const run = () => withAdvisoryLock('migration-cleanup', () => withCronCheckIn('migration-cleanup', () => runMigrationCleanup(getServiceClient())))
+        .catch((e: any) => captureCronFailure('migration-cleanup', e));
+      setInterval(run, 24 * 60 * 60 * 1000);
+      setTimeout(run, 60_000);
+      console.log('[migration-cleanup] Cron started (daily, lock-guarded)');
+    }).catch((e: any) => captureCronFailure('migration-cleanup-import', e));
   });
 });

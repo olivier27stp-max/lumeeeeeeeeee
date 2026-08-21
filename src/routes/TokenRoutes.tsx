@@ -6,8 +6,9 @@ import SatisfactionSurvey from '../pages/SatisfactionSurvey';
 import ClientPortal from '../pages/ClientPortal';
 import PublicPayment from '../pages/PublicPayment';
 import AcceptInvitation from '../pages/AcceptInvitation';
+import MigrationPortal from '../pages/MigrationPortal';
 
-type TokenKind = 'quote' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite';
+type TokenKind = 'quote' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite' | 'migration';
 
 const ELEMENTS: Record<TokenKind, { path: string; element: ReactElement }> = {
   quote: { path: '/quote/:token', element: <QuoteView /> },
@@ -16,6 +17,9 @@ const ELEMENTS: Record<TokenKind, { path: string; element: ReactElement }> = {
   portal: { path: '/portal/:token', element: <ClientPortal /> },
   pay: { path: '/pay/:token', element: <PublicPayment /> },
   invite: { path: '/invite/:token', element: <AcceptInvitation /> },
+  // Portail de migration assistée : lien temporaire, mais session Lume requise
+  // (la page gère elle-même l'invite de connexion — pas le shell).
+  migration: { path: '/migration/invite/:token', element: <MigrationPortal /> },
 };
 
 /**
@@ -40,5 +44,6 @@ export function detectTokenKind(pathname: string): TokenKind | null {
   if (pathname.startsWith('/portal/')) return 'portal';
   if (pathname.startsWith('/pay/')) return 'pay';
   if (pathname.startsWith('/invite/')) return 'invite';
+  if (pathname.startsWith('/migration/invite/')) return 'migration';
   return null;
 }

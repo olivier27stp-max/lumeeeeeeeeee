@@ -105,6 +105,9 @@ import RequestFormSettings from './pages/RequestFormSettings';
 import QuotePresets from './pages/QuotePresets';
 const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
 const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
+// Console interne des migrations assistées — la page se gate elle-même via
+// GET /api/migration-admin/check (PLATFORM_OWNER_ID) et redirige sinon.
+const AdminMigrations = React.lazy(() => import('./pages/AdminMigrations'));
 import TaxSettings from './pages/TaxSettings';
 import OAuthCallback from './pages/OAuthCallback';
 import EmailOAuthCallback from './pages/EmailOAuthCallback';
@@ -1385,6 +1388,10 @@ function AuthenticatedApp({
                         inter-tenants (orgs, utilisateurs, revenus) depuis
                         l'application. L'URL redirige désormais comme toute
                         route inconnue. */}
+                    {/* Console interne des migrations assistées — hors nav,
+                        réservée à PLATFORM_OWNER_ID (guard serveur + gate dans
+                        la page). Périmètre limité aux projets de migration. */}
+                    <Route path="/admin/migrations" element={<React.Suspense fallback={null}><AdminMigrations /></React.Suspense>} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>

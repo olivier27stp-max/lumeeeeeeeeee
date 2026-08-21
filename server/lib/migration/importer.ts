@@ -1,0 +1,860 @@
+// Import test (dry-run) et import final de la migration assistée.
+// Principes non négociables :
+//  - runDryRun n'écrit JAMAIS dans les tables actives du workspace ;
+//  - l'import final est idempotent : chaque entité créée porte un id
+//    déterministe (migration + ligne de staging + table) et un
+//    migration_import_records — une reprise ne duplique rien ;
+//  - le rollback ne touche QUE les entités créées par le lot (soft-delete),
+//    jamais les dossiers fusionnés ni les données préexistantes.
+
+import crypto from 'crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeAddressKey } from './normalize';
+import type {
+  DryRunReport,
+  EntityCounts,
+  MigrationRow,
+  PostImportValidation,
+  TargetEntity,
+} from './types';
+
+export const IMPORT_ORDER: TargetEntity[] = ['service', 'client', 'property', 'job', 'visit', 'invoice'];
+
+export const TABLE_BY_ENTITY: Record<string, string> = {
+  service: 'predefined_services',
+  client: 'clients',
+  property: 'properties',
+  job: 'jobs',
+  visit: 'schedule_events',
+  invoice: 'invoices',
+};
+
+const CATEGORY_BY_ENTITY: Record<string, string> = {
+  service: 'services',
+  client: 'clients',
+  property: 'properties',
+  job: 'jobs',
+  visit: 'visits',
+  invoice: 'invoices',
+};
+
+const CHUNK = 200;
+const STAGING_PAGE = 1000;
+
+/** UUID déterministe façon v5 (sha1), version/variant conformes RFC 4122. */
+export function deterministicEntityId(migrationId: string, stagingRecordId: string, entityTable: string): string {
+  const digest = crypto
+    .createHash('sha1')
+    .update(`lume-migration:${migrationId}:${stagingRecordId}:${entityTable}`)
+    .digest();
+  const bytes = Buffer.from(digest.subarray(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Aides internes
+
+interface StagingRow {
+  id: string;
+  row_number: number;
+  entity_type: string;
+  external_id: string | null;
+  normalized: Record<string, unknown> | null;
+  relations: Record<string, string> | null;
+  status: string;
+}
+
+interface DupDecision {
+  decision: string;
+  existingId: string;
+  score: number;
+}
+
+function str(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function refKey(v: string): string {
+  return v.trim().toLowerCase();
+}
+
+function fullNameOf(n: Record<string, unknown>): string {
+  const name = `${str(n.first_name)} ${str(n.last_name)}`.trim() || str(n.company) || str(n.full_name);
+  return refKey(name);
+}
+
+async function loadStaging(admin: SupabaseClient, migrationId: string, entity: TargetEntity, statuses: string[]): Promise<StagingRow[]> {
+  const out: StagingRow[] = [];
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('migration_staging_records')
+      .select('id, row_number, entity_type, external_id, normalized, relations, status')
+      .eq('migration_id', migrationId)
+      .eq('entity_type', entity)
+      .in('status', statuses)
+      .order('id', { ascending: true })
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) {
+      console.error('[migration-importer] staging fetch failed:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    out.push(...(data as StagingRow[]));
+    if (data.length < STAGING_PAGE) break;
+  }
+  return out;
+}
+
+/** Meilleure décision de doublon par ligne de staging (score le plus haut). */
+async function loadDuplicateDecisions(admin: SupabaseClient, migrationId: string): Promise<Map<string, DupDecision>> {
+  const map = new Map<string, DupDecision>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('migration_duplicate_candidates')
+      .select('staging_record_id, existing_id, decision, score')
+      .eq('migration_id', migrationId)
+      .order('score', { ascending: false })
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) {
+      console.error('[migration-importer] decisions fetch failed:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    for (const d of data as { staging_record_id: string; existing_id: string; decision: string; score: number }[]) {
+      const current = map.get(d.staging_record_id);
+      const decided = d.decision === 'merge' || d.decision === 'skip' || d.decision === 'create_new';
+      const currentDecided = current && (current.decision === 'merge' || current.decision === 'skip' || current.decision === 'create_new');
+      if (!current || (decided && !currentDecided)) {
+        map.set(d.staging_record_id, { decision: d.decision, existingId: d.existing_id, score: d.score });
+      }
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+  return map;
+}
+
+/** Clés de référence sous lesquelles une ligne peut être retrouvée par ses enfants. */
+function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
+  const n = rec.normalized ?? {};
+  const r = rec.relations ?? {};
+  const keys: string[] = [];
+  const push = (v: string) => {
+    const k = refKey(v);
+    if (k) keys.push(k);
+  };
+  if (rec.external_id) push(rec.external_id);
+  if (r.external_id) push(r.external_id);
+  if (entity === 'client') {
+    push(str(n.email));
+    const name = fullNameOf(n);
+    if (name) keys.push(name);
+  } else if (entity === 'property') {
+    const addr = normalizeAddressKey(str(n.address));
+    if (addr) keys.push(addr);
+  } else if (entity === 'job') {
+    push(str(n.job_number));
+    push(str(n.title));
+  } else if (entity === 'invoice') {
+    push(str(n.invoice_number));
+  }
+  return Array.from(new Set(keys));
+}
+
+function lookupRef(map: Map<string, string>, raw: string | undefined, extra?: (v: string) => string): string | null {
+  if (!raw) return null;
+  const direct = map.get(refKey(raw));
+  if (direct) return direct;
+  if (extra) {
+    const alt = map.get(extra(raw));
+    if (alt) return alt;
+  }
+  return null;
+}
+
+function mapJobStatus(source: string): string {
+  const s = source.toLowerCase();
+  if (/(complet|done|closed|term|ferm|finish)/.test(s)) return 'completed';
+  if (/(cancel|annul)/.test(s)) return 'archived';
+  return 'scheduled';
+}
+
+function mapInvoiceStatus(source: string, paidCents: number | null, totalCents: number | null): string {
+  const s = source.toLowerCase();
+  if (/(paid|pay[ée]e?)/.test(s) && !/(unpaid|impay|partial)/.test(s)) return 'paid';
+  if (/partial/.test(s)) return 'partial';
+  if (/draft|brouillon/.test(s)) return 'draft';
+  if (paidCents !== null && totalCents !== null && totalCents > 0 && paidCents >= totalCents) return 'paid';
+  return 'sent';
+}
+
+function mapVisitStatus(source: string): string {
+  const s = source.toLowerCase();
+  if (/(complet|done|term)/.test(s)) return 'completed';
+  if (/(cancel|annul)/.test(s)) return 'cancelled';
+  return 'scheduled';
+}
+
+interface BuildContext {
+  migration: MigrationRow;
+  createdBy: string;
+  clientIdByRef: Map<string, string>;
+  propertyIdByRef: Map<string, string>;
+  jobIdByRef: Map<string, string>;
+}
+
+// NB: `reason` est déclaré sur les deux branches (undefined côté succès) car le
+// tsconfig du repo n'active pas `strict` — sans strictNullChecks, TS ne
+// narrowe pas l'union via `!built.ok` et l'accès à `reason` serait rejeté.
+type BuildResult =
+  | { ok: true; row: Record<string, unknown>; reason?: undefined }
+  | { ok: false; row?: undefined; reason: 'orphan' | 'invalid' };
+
+/** Construit la rangée à insérer dans la table active. */
+function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: BuildContext): BuildResult {
+  const n = rec.normalized ?? {};
+  const r = rec.relations ?? {};
+  const orgId = ctx.migration.org_id;
+
+  if (entity === 'service') {
+    const name = str(n.name);
+    if (!name) return { ok: false, reason: 'invalid' };
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        name,
+        description: str(n.description) || null,
+        default_price_cents: num(n.price_cents),
+        is_active: true,
+      },
+    };
+  }
+
+  if (entity === 'client') {
+    const hasIdentity = str(n.first_name) || str(n.last_name) || str(n.company) || str(n.full_name) || str(n.email);
+    if (!hasIdentity) return { ok: false, reason: 'invalid' };
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        first_name: str(n.first_name) || null,
+        last_name: str(n.last_name) || null,
+        company: str(n.company) || null,
+        email: str(n.email) || null,
+        phone: str(n.phone) || null,
+        address: str(n.address) || null,
+        city: str(n.city) || null,
+        province: str(n.province) || null,
+        postal_code: str(n.postal_code) || null,
+        notes: str(n.notes) || null,
+        lead_source: str(n.lead_source) || null,
+        status: 'active',
+        created_by: ctx.createdBy,
+      },
+    };
+  }
+
+  if (entity === 'property') {
+    const address = str(n.address);
+    if (!address) return { ok: false, reason: 'invalid' };
+    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    if (!clientId) return { ok: false, reason: 'orphan' };
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        client_id: clientId,
+        address,
+        city: str(n.city) || null,
+        province: str(n.province) || null,
+        postal_code: str(n.postal_code) || null,
+        name: str(n.name) || null,
+        is_primary: false,
+        created_by: ctx.createdBy,
+      },
+    };
+  }
+
+  if (entity === 'job') {
+    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    if (!clientId) return { ok: false, reason: 'orphan' };
+    const propertyId = r.property_ref
+      ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
+      : null;
+    const title = str(n.title) || str(n.description).slice(0, 120) || `Job importé ${str(n.job_number) || rec.external_id || `#${rec.row_number}`}`;
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        client_id: clientId,
+        property_id: propertyId,
+        title,
+        description: str(n.description) || null,
+        notes: str(n.notes) || null,
+        job_number: str(n.job_number) || null,
+        status: mapJobStatus(str(n.status)),
+        total_cents: num(n.total_cents),
+        subtotal_cents: num(n.subtotal_cents),
+        sale_date: str(n.sale_date) || str(n.created_date) || null,
+        start_at: str(n.start_at) || (str(n.start_date) ? `${str(n.start_date)}T00:00:00` : null),
+        created_by: ctx.createdBy,
+      },
+    };
+  }
+
+  if (entity === 'visit') {
+    const jobId = lookupRef(ctx.jobIdByRef, r.job_ref);
+    if (!jobId) return { ok: false, reason: 'orphan' };
+    const startAt = str(n.start_at);
+    if (!startAt) return { ok: false, reason: 'invalid' };
+    let endAt = str(n.end_at);
+    if (!endAt || endAt <= startAt) {
+      // convention « pas d'heure précise » : 00:00 → 23:59, sinon +1 h
+      endAt = startAt.endsWith('T00:00:00')
+        ? `${startAt.slice(0, 10)}T23:59:00`
+        : new Date(new Date(`${startAt}Z`).getTime() + 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '');
+    }
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        job_id: jobId,
+        title: str(n.title) || 'Visite importée',
+        start_at: startAt,
+        end_at: endAt,
+        start_time: startAt,
+        end_time: endAt,
+        status: mapVisitStatus(str(n.status)),
+        notes: str(n.notes) || null,
+        timezone: 'America/Montreal',
+        created_by: ctx.createdBy,
+      },
+    };
+  }
+
+  if (entity === 'invoice') {
+    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    if (!clientId) return { ok: false, reason: 'orphan' };
+    const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
+    const subtotal = num(n.subtotal_cents);
+    const tax = num(n.tax_cents);
+    let total = num(n.total_cents);
+    if (total === null && subtotal !== null) total = subtotal + (tax ?? 0);
+    if (total === null) return { ok: false, reason: 'invalid' };
+    const paid = num(n.paid_amount_cents);
+    const status = mapInvoiceStatus(str(n.status), paid, total);
+    const paidCents = status === 'paid' ? total : paid ?? 0;
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        client_id: clientId,
+        job_id: jobId,
+        invoice_number: str(n.invoice_number) || null,
+        status,
+        issued_at: str(n.issued_date) ? `${str(n.issued_date)}T12:00:00` : null,
+        due_date: str(n.due_date) || null,
+        subtotal_cents: subtotal ?? total,
+        tax_cents: tax ?? 0,
+        total_cents: total,
+        paid_cents: paidCents,
+        balance_cents: Math.max(0, total - paidCents),
+        notes: str(n.notes) || null,
+        created_by: ctx.createdBy,
+      },
+    };
+  }
+
+  return { ok: false, reason: 'invalid' };
+}
+
+function emptyCounts(): EntityCounts {
+  return { wouldCreate: 0, wouldMerge: 0, ignored: 0, errors: 0, warnings: 0 };
+}
+
+function entitiesForMigration(migration: MigrationRow): TargetEntity[] {
+  const categories = new Set(migration.categories ?? []);
+  return IMPORT_ORDER.filter((e) => categories.has(CATEGORY_BY_ENTITY[e]));
+}
+
+// ---------------------------------------------------------------------------
+// Dry-run — aucune écriture dans les tables actives
+
+export async function runDryRun(admin: SupabaseClient, migration: MigrationRow): Promise<DryRunReport> {
+  const decisions = await loadDuplicateDecisions(admin, migration.id);
+  const entities = entitiesForMigration(migration);
+  const byEntity: Partial<Record<TargetEntity, EntityCounts>> = {};
+  const notes: string[] = [];
+  let orphans = 0;
+  let revenueCents = 0;
+  let sourceRows = 0;
+
+  const ctx: BuildContext = {
+    migration,
+    createdBy: migration.invited_user_id ?? migration.created_by,
+    clientIdByRef: new Map(),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map(),
+  };
+
+  for (const entity of entities) {
+    const counts = emptyCounts();
+    byEntity[entity] = counts;
+    const rows = await loadStaging(admin, migration.id, entity, ['ready', 'duplicate', 'orphan', 'imported', 'merged']);
+    const { count: errCount } = await admin
+      .from('migration_staging_records')
+      .select('id', { count: 'exact', head: true })
+      .eq('migration_id', migration.id)
+      .eq('entity_type', entity)
+      .eq('status', 'error');
+    counts.errors = errCount ?? 0;
+    sourceRows += rows.length + counts.errors;
+
+    for (const rec of rows) {
+      const decision = decisions.get(rec.id);
+      const registerRefs = (targetId: string) => {
+        const mapByEntity =
+          entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+        if (!mapByEntity) return;
+        for (const key of refKeysOf(entity, rec)) {
+          if (!mapByEntity.has(key)) mapByEntity.set(key, targetId);
+        }
+      };
+
+      if (decision?.decision === 'skip') {
+        counts.ignored += 1;
+        registerRefs(decision.existingId);
+        continue;
+      }
+      if (decision?.decision === 'merge') {
+        counts.wouldMerge += 1;
+        registerRefs(decision.existingId);
+        continue;
+      }
+      if (decision && decision.decision !== 'create_new' && decision.score >= 90) {
+        // doublon fort non tranché : averti au dry-run, bloqué à l'import final
+        counts.warnings += 1;
+      }
+
+      const built = buildEntityRow(entity, rec, ctx);
+      if (!built.ok) {
+        if (built.reason === 'orphan') {
+          orphans += 1;
+          counts.ignored += 1;
+        } else {
+          counts.errors += 1;
+        }
+        continue;
+      }
+      counts.wouldCreate += 1;
+      registerRefs(deterministicEntityId(migration.id, rec.id, TABLE_BY_ENTITY[entity]));
+      if (entity === 'invoice') {
+        const total = num((built.row as Record<string, unknown>).total_cents);
+        if (total !== null) revenueCents += total;
+      }
+    }
+
+    if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) seront fusionnés avec des dossiers existants.`);
+    if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} en erreur (valeurs invalides) — voir les problèmes.`);
+  }
+
+  if (orphans > 0) notes.push(`${orphans} ligne(s) sans relation résoluble (ex. job sans client) seront exclues.`);
+
+  const dupCounts = { pending: 0, merge: 0, createNew: 0, skip: 0, review: 0 };
+  for (const d of decisions.values()) {
+    if (d.decision === 'merge') dupCounts.merge += 1;
+    else if (d.decision === 'create_new') dupCounts.createNew += 1;
+    else if (d.decision === 'skip') dupCounts.skip += 1;
+    else if (d.decision === 'review') dupCounts.review += 1;
+    else dupCounts.pending += 1;
+  }
+
+  const { count: openIssues } = await admin
+    .from('migration_issues')
+    .select('id', { count: 'exact', head: true })
+    .eq('migration_id', migration.id)
+    .is('resolved_at', null);
+
+  const totals = {
+    sourceRows,
+    wouldCreate: Object.values(byEntity).reduce((acc, c) => acc + (c?.wouldCreate ?? 0), 0),
+    wouldMerge: Object.values(byEntity).reduce((acc, c) => acc + (c?.wouldMerge ?? 0), 0),
+    ignored: Object.values(byEntity).reduce((acc, c) => acc + (c?.ignored ?? 0), 0),
+    blockingErrors: Object.values(byEntity).reduce((acc, c) => acc + (c?.errors ?? 0), 0),
+    warnings: Object.values(byEntity).reduce((acc, c) => acc + (c?.warnings ?? 0), 0),
+    revenueCents,
+  };
+
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    byEntity,
+    totals,
+    duplicates: dupCounts,
+    orphans,
+    openIssues: openIssues ?? 0,
+    notes,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Import final — idempotent, repris sans doublon
+
+interface ImportRecordRow {
+  batch_id: string;
+  migration_id: string;
+  staging_record_id: string;
+  entity_table: string;
+  entity_id: string;
+  action: 'created' | 'merged' | 'skipped';
+}
+
+async function upsertImportRecords(admin: SupabaseClient, records: ImportRecordRow[]): Promise<void> {
+  for (let i = 0; i < records.length; i += CHUNK) {
+    const { error } = await admin
+      .from('migration_import_records')
+      .upsert(records.slice(i, i + CHUNK), { onConflict: 'migration_id,staging_record_id,entity_table', ignoreDuplicates: true });
+    if (error) console.error('[migration-importer] import_records upsert failed:', error.message);
+  }
+}
+
+async function setStagingStatus(admin: SupabaseClient, migrationId: string, ids: string[], status: string): Promise<void> {
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { error } = await admin
+      .from('migration_staging_records')
+      .update({ status })
+      .eq('migration_id', migrationId)
+      .in('id', ids.slice(i, i + CHUNK));
+    if (error) console.error('[migration-importer] staging status update failed:', error.message);
+  }
+}
+
+export async function runFinalImport(
+  admin: SupabaseClient,
+  migration: MigrationRow,
+  batchId: string,
+  actorId: string,
+): Promise<DryRunReport> {
+  const decisions = await loadDuplicateDecisions(admin, migration.id);
+  const entities = entitiesForMigration(migration);
+
+  // Reprise : ce qui a déjà été importé pour cette migration.
+  const already = new Map<string, { entity_id: string; action: string; entity_table: string }>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('migration_import_records')
+      .select('staging_record_id, entity_id, action, entity_table')
+      .eq('migration_id', migration.id)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) {
+      console.error('[migration-importer] import_records fetch failed:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    for (const rec of data as { staging_record_id: string; entity_id: string; action: string; entity_table: string }[]) {
+      already.set(`${rec.staging_record_id}|${rec.entity_table}`, rec);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+
+  const ctx: BuildContext = {
+    migration,
+    createdBy: migration.invited_user_id ?? migration.created_by,
+    clientIdByRef: new Map(),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map(),
+  };
+
+  const byEntity: Partial<Record<TargetEntity, EntityCounts>> = {};
+  const notes: string[] = [];
+  let orphans = 0;
+  let revenueCents = 0;
+  let sourceRows = 0;
+
+  for (const entity of entities) {
+    const table = TABLE_BY_ENTITY[entity];
+    const counts = emptyCounts();
+    byEntity[entity] = counts;
+    const rows = await loadStaging(admin, migration.id, entity, ['ready', 'duplicate', 'orphan', 'imported', 'merged']);
+    sourceRows += rows.length;
+
+    const toInsert: { rec: StagingRow; row: Record<string, unknown>; id: string }[] = [];
+    const importRecords: ImportRecordRow[] = [];
+    const mergedIds: string[] = [];
+    const ignoredIds: string[] = [];
+    const orphanIds: string[] = [];
+    const errorIds: string[] = [];
+
+    const registerRefs = (rec: StagingRow, targetId: string) => {
+      const mapByEntity =
+        entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+      if (!mapByEntity) return;
+      for (const key of refKeysOf(entity, rec)) {
+        if (!mapByEntity.has(key)) mapByEntity.set(key, targetId);
+      }
+    };
+
+    for (const rec of rows) {
+      // Reprise : déjà traité lors d'un passage précédent.
+      const prior = already.get(`${rec.id}|${table}`);
+      if (prior) {
+        if (prior.action === 'created') counts.wouldCreate += 1;
+        else if (prior.action === 'merged') counts.wouldMerge += 1;
+        else counts.ignored += 1;
+        registerRefs(rec, prior.entity_id);
+        continue;
+      }
+
+      const decision = decisions.get(rec.id);
+      if (decision?.decision === 'skip') {
+        counts.ignored += 1;
+        ignoredIds.push(rec.id);
+        importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: rec.id, entity_table: table, entity_id: decision.existingId, action: 'skipped' });
+        registerRefs(rec, decision.existingId);
+        continue;
+      }
+      if (decision?.decision === 'merge') {
+        counts.wouldMerge += 1;
+        mergedIds.push(rec.id);
+        importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: rec.id, entity_table: table, entity_id: decision.existingId, action: 'merged' });
+        registerRefs(rec, decision.existingId);
+        continue;
+      }
+      if (decision && decision.decision !== 'create_new' && decision.score >= 90) {
+        // Doublon fort jamais tranché : on n'importe pas, on signale.
+        counts.warnings += 1;
+        counts.ignored += 1;
+        ignoredIds.push(rec.id);
+        continue;
+      }
+
+      const built = buildEntityRow(entity, rec, ctx);
+      if (!built.ok) {
+        if (built.reason === 'orphan') {
+          orphans += 1;
+          counts.ignored += 1;
+          orphanIds.push(rec.id);
+        } else {
+          counts.errors += 1;
+          errorIds.push(rec.id);
+        }
+        continue;
+      }
+      const id = deterministicEntityId(migration.id, rec.id, table);
+      toInsert.push({ rec, row: { id, ...built.row }, id });
+    }
+
+    // Insertion par lots, idempotente ; en cas d'échec de lot, repli par ligne
+    // pour isoler la rangée fautive (ex. collision de numéro unique).
+    const importedIds: string[] = [];
+    for (let i = 0; i < toInsert.length; i += CHUNK) {
+      const chunk = toInsert.slice(i, i + CHUNK);
+      const { error } = await admin.from(table).upsert(chunk.map((c) => c.row), { onConflict: 'id', ignoreDuplicates: true });
+      if (!error) {
+        for (const c of chunk) {
+          counts.wouldCreate += 1;
+          importedIds.push(c.rec.id);
+          importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: c.rec.id, entity_table: table, entity_id: c.id, action: 'created' });
+          registerRefs(c.rec, c.id);
+          if (entity === 'invoice') {
+            const total = num(c.row.total_cents);
+            if (total !== null) revenueCents += total;
+          }
+        }
+        continue;
+      }
+      console.error(`[migration-importer] chunk upsert failed on ${table}, retry per row:`, error.message);
+      for (const c of chunk) {
+        const { error: rowErr } = await admin.from(table).upsert([c.row], { onConflict: 'id', ignoreDuplicates: true });
+        if (rowErr) {
+          counts.errors += 1;
+          errorIds.push(c.rec.id);
+          const { error: markErr } = await admin
+            .from('migration_staging_records')
+            .update({ status: 'error', error: `import_failed:${rowErr.code ?? 'unknown'}` })
+            .eq('id', c.rec.id);
+          if (markErr) console.error('[migration-importer] staging error mark failed:', markErr.message);
+        } else {
+          counts.wouldCreate += 1;
+          importedIds.push(c.rec.id);
+          importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: c.rec.id, entity_table: table, entity_id: c.id, action: 'created' });
+          registerRefs(c.rec, c.id);
+          if (entity === 'invoice') {
+            const total = num(c.row.total_cents);
+            if (total !== null) revenueCents += total;
+          }
+        }
+      }
+    }
+
+    await upsertImportRecords(admin, importRecords);
+    await setStagingStatus(admin, migration.id, importedIds, 'imported');
+    await setStagingStatus(admin, migration.id, mergedIds, 'merged');
+    await setStagingStatus(admin, migration.id, ignoredIds, 'ignored');
+    await setStagingStatus(admin, migration.id, orphanIds, 'orphan');
+
+    if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) fusionnés avec des dossiers existants.`);
+    if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} rejetées à l'import — voir le staging.`);
+  }
+
+  if (orphans > 0) notes.push(`${orphans} ligne(s) exclues faute de relation (dossiers orphelins).`);
+
+  const totals = {
+    sourceRows,
+    wouldCreate: Object.values(byEntity).reduce((acc, c) => acc + (c?.wouldCreate ?? 0), 0),
+    wouldMerge: Object.values(byEntity).reduce((acc, c) => acc + (c?.wouldMerge ?? 0), 0),
+    ignored: Object.values(byEntity).reduce((acc, c) => acc + (c?.ignored ?? 0), 0),
+    blockingErrors: Object.values(byEntity).reduce((acc, c) => acc + (c?.errors ?? 0), 0),
+    warnings: Object.values(byEntity).reduce((acc, c) => acc + (c?.warnings ?? 0), 0),
+    revenueCents,
+  };
+
+  const { count: openIssues } = await admin
+    .from('migration_issues')
+    .select('id', { count: 'exact', head: true })
+    .eq('migration_id', migration.id)
+    .is('resolved_at', null);
+
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    byEntity,
+    totals,
+    duplicates: { pending: 0, merge: totals.wouldMerge, createNew: totals.wouldCreate, skip: totals.ignored, review: 0 },
+    orphans,
+    openIssues: openIssues ?? 0,
+    notes,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Rollback — uniquement les entités créées par le lot
+
+export async function rollbackFinalBatch(
+  admin: SupabaseClient,
+  batchId: string,
+  actorId: string,
+): Promise<{ softDeleted: number; deactivated: number }> {
+  let softDeleted = 0;
+  let deactivated = 0;
+
+  const byTable = new Map<string, string[]>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('migration_import_records')
+      .select('entity_table, entity_id, action')
+      .eq('batch_id', batchId)
+      .eq('action', 'created')
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) {
+      console.error('[migration-importer] rollback fetch failed:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    for (const rec of data as { entity_table: string; entity_id: string }[]) {
+      const arr = byTable.get(rec.entity_table) ?? [];
+      arr.push(rec.entity_id);
+      byTable.set(rec.entity_table, arr);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+
+  for (const [table, ids] of byTable) {
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const chunk = ids.slice(i, i + CHUNK);
+      if (table === 'predefined_services') {
+        const { data, error } = await admin.from(table).update({ is_active: false }).in('id', chunk).select('id');
+        if (error) console.error('[migration-importer] rollback deactivate failed:', error.message);
+        else deactivated += (data ?? []).length;
+      } else {
+        const patch: Record<string, unknown> = { deleted_at: new Date().toISOString() };
+        if (table === 'clients' || table === 'jobs' || table === 'invoices') patch.deleted_by = actorId;
+        const { data, error } = await admin.from(table).update(patch).in('id', chunk).is('deleted_at', null).select('id');
+        if (error) console.error('[migration-importer] rollback soft-delete failed:', error.message);
+        else softDeleted += (data ?? []).length;
+      }
+    }
+  }
+
+  const { error: batchErr } = await admin
+    .from('migration_import_batches')
+    .update({ status: 'rolled_back', rolled_back_at: new Date().toISOString(), rolled_back_by: actorId })
+    .eq('id', batchId);
+  if (batchErr) console.error('[migration-importer] batch rollback mark failed:', batchErr.message);
+
+  return { softDeleted, deactivated };
+}
+
+// ---------------------------------------------------------------------------
+// Validation post-import
+
+export async function runPostImportValidation(
+  admin: SupabaseClient,
+  migration: MigrationRow,
+  batchId: string,
+): Promise<PostImportValidation> {
+  const checks: PostImportValidation['checks'] = [];
+  const notes: string[] = [];
+
+  const entities = entitiesForMigration(migration);
+  for (const entity of entities) {
+    const table = TABLE_BY_ENTITY[entity];
+    const [{ count: expected }, { count: actual }] = await Promise.all([
+      admin
+        .from('migration_staging_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('migration_id', migration.id)
+        .eq('entity_type', entity)
+        .in('status', ['imported', 'merged']),
+      admin
+        .from('migration_import_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('migration_id', migration.id)
+        .eq('entity_table', table)
+        .in('action', ['created', 'merged']),
+    ]);
+    checks.push({ name: `count:${entity}`, expected: expected ?? 0, actual: actual ?? 0, ok: (expected ?? 0) === (actual ?? 0) });
+  }
+
+  // Relations : aucun job/facture créé ne doit rester sans client.
+  for (const table of ['jobs', 'invoices']) {
+    const ids: string[] = [];
+    const { data } = await admin
+      .from('migration_import_records')
+      .select('entity_id')
+      .eq('batch_id', batchId)
+      .eq('entity_table', table)
+      .eq('action', 'created')
+      .limit(5000);
+    for (const rec of (data ?? []) as { entity_id: string }[]) ids.push(rec.entity_id);
+    let missing = 0;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const { count } = await admin
+        .from(table)
+        .select('id', { count: 'exact', head: true })
+        .in('id', ids.slice(i, i + CHUNK))
+        .is('client_id', null);
+      missing += count ?? 0;
+    }
+    checks.push({ name: `relation:${table}.client_id`, expected: 0, actual: missing, ok: missing === 0 });
+  }
+
+  const failed = checks.filter((c) => !c.ok);
+  let outcome: PostImportValidation['outcome'] = 'passed';
+  if (failed.length > 0) {
+    const severe = failed.some((c) => {
+      const base = Math.max(1, c.expected);
+      return Math.abs(c.expected - c.actual) / base > 0.02;
+    });
+    outcome = severe ? 'review_required' : 'passed_with_warnings';
+    notes.push(`${failed.length} vérification(s) en écart — voir le détail.`);
+  }
+  return { outcome, checks, notes };
+}

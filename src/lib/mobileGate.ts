@@ -29,6 +29,7 @@ export const CHEMINS_PUBLICS = [
   '/portal/',    // portail client
   '/pay/',       // paiement de facture
   '/invite/',    // invitation d'un employé — souvent ouverte au téléphone
+  '/migration/invite/', // portail temporaire de migration assistée
   '/form/',      // formulaire public de demande de soumission
   '/checkout',   // parcours d'abonnement, y compris /checkout/success
   '/privacy',    // obligations légales : joignables partout, toujours
