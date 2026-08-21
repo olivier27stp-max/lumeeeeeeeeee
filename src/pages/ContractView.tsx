@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle, CreditCard, FileText, Loader2, PenLine } from 'lucide-react';
+import { AlertCircle, CheckCircle, CreditCard, FileText, Loader2, Lock, PenLine } from 'lucide-react';
 import { loadStripe, type Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import AgreementDocument, { type AgreementDocData } from '../components/agreements/AgreementDocument';
@@ -686,10 +686,15 @@ export default function ContractView() {
         {/* ── PAYMENT METHOD ON FILE ── */}
         {showPaymentMethod && (
           <div className="bg-white rounded-lg border border-[#e5e5e5] shadow-sm mt-5 px-8 py-6 no-print">
-            <h3 className="text-[14px] font-semibold text-[#111] flex items-center gap-2">
-              <CreditCard size={16} />
-              {fr ? 'Moyen de paiement' : 'Payment Method'}
-            </h3>
+            {/* L'état initial (pas de carte, pas encore d'action) porte son
+                propre en-tête riche — le titre simple ne s'affiche que pour
+                les autres états. */}
+            {(Boolean(savedCard) || pmView !== 'idle') && (
+              <h3 className="text-[14px] font-semibold text-[#111] flex items-center gap-2">
+                <CreditCard size={16} />
+                {fr ? 'Moyen de paiement' : 'Payment Method'}
+              </h3>
+            )}
 
             {savedCard ? (
               <>
@@ -721,28 +726,53 @@ export default function ContractView() {
               </p>
             ) : (
               <>
-                <p className="text-[13px] text-[#666] mt-2 leading-relaxed">
-                  {fr
-                    ? 'Ajoutez un moyen de paiement pour faciliter les paiements futurs liés à ce service.'
-                    : 'Add a payment method to make future payments for this service easier.'}
-                </p>
+                {pmView !== 'idle' && (
+                  <p className="text-[13px] text-[#666] mt-2 leading-relaxed">
+                    {fr
+                      ? 'Ajoutez un moyen de paiement pour faciliter les paiements futurs liés à ce service.'
+                      : 'Add a payment method to make future payments for this service easier.'}
+                  </p>
+                )}
 
                 {pmView === 'idle' && (
-                  <div className="flex gap-3 mt-4">
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="h-[38px] w-[38px] rounded-[10px] bg-[#f6f6f4] border border-[#ececea] flex items-center justify-center shrink-0">
+                        <CreditCard size={18} className="text-[#111]" />
+                      </div>
+                      <div>
+                        <h3 className="text-[15px] font-semibold text-[#111]">{fr ? 'Moyen de paiement' : 'Payment Method'}</h3>
+                        <p className="text-[12px] text-[#999] mt-0.5">{fr ? 'Facultatif · environ 30 secondes' : 'Optional · about 30 seconds'}</p>
+                      </div>
+                    </div>
+                    <p className="text-[13px] text-[#666] mt-3.5 leading-relaxed">
+                      {fr
+                        ? 'Enregistrez votre carte une seule fois — vos prochaines factures se règlent ensuite sans effort.'
+                        : 'Save your card once — your future invoices are then settled effortlessly.'}
+                    </p>
+                    <div className="flex items-center gap-2 border-y border-[#f0f0ee] py-2.5 mt-4">
+                      <Lock size={14} className="text-[#777] shrink-0" />
+                      <span className="text-[12px] text-[#777] leading-snug">
+                        {fr
+                          ? `Chiffrée et conservée par Stripe — jamais par ${data.company.name || 'l’entreprise'}`
+                          : `Encrypted and stored by Stripe — never by ${data.company.name || 'the business'}`}
+                      </span>
+                      <span className="ml-auto flex gap-1.5 shrink-0"><CardBrandLogos /></span>
+                    </div>
                     <button
                       onClick={() => { setPmError(''); setPmConsent(false); setPmView('consent'); }}
-                      className="flex-1 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors flex items-center justify-center gap-2"
+                      className="w-full mt-4 bg-[#111] text-white py-3 rounded-lg font-medium text-[14px] hover:bg-[#222] transition-colors flex items-center justify-center gap-2"
                     >
                       <CreditCard size={16} />
                       {fr ? 'Ajouter un moyen de paiement' : 'Add Payment Method'}
                     </button>
                     <button
                       onClick={() => setPmView('skipped')}
-                      className="px-5 bg-white border border-[#ddd] text-[#555] py-3 rounded-lg font-medium text-[14px] hover:bg-[#f8f8f8] transition-colors"
+                      className="block w-full text-center text-[13px] text-[#999] mt-3 underline underline-offset-2 decoration-[#ddd] hover:text-[#666] transition-colors"
                     >
                       {fr ? 'Passer pour l’instant' : 'Skip for now'}
                     </button>
-                  </div>
+                  </>
                 )}
 
                 {(pmView === 'consent' || pmView === 'loading') && (
@@ -833,6 +863,31 @@ export default function ContractView() {
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * Marques de cartes acceptées — tracés SVG simplifiés inline : la page
+ * publique ne charge aucun asset externe.
+ */
+function CardBrandLogos() {
+  return (
+    <>
+      <svg width="30" height="19" viewBox="0 0 30 19" aria-label="Visa">
+        <rect x="0.5" y="0.5" width="29" height="18" rx="3" fill="#fff" stroke="#e5e5e5" />
+        <text x="15" y="12.5" textAnchor="middle" fontFamily="Helvetica, Arial, sans-serif" fontSize="8" fontWeight="800" fontStyle="italic" fill="#1A1F71" letterSpacing="0.2">VISA</text>
+      </svg>
+      <svg width="30" height="19" viewBox="0 0 30 19" aria-label="Mastercard">
+        <rect x="0.5" y="0.5" width="29" height="18" rx="3" fill="#fff" stroke="#e5e5e5" />
+        <circle cx="11.5" cy="9.5" r="6" fill="#EB001B" />
+        <circle cx="18.5" cy="9.5" r="6" fill="#F79E1B" />
+        <path d="M15 4.63 A6 6 0 0 1 15 14.37 A6 6 0 0 1 15 4.63 Z" fill="#FF5F00" />
+      </svg>
+      <svg width="30" height="19" viewBox="0 0 30 19" aria-label="American Express">
+        <rect x="0.5" y="0.5" width="29" height="18" rx="3" fill="#006FCF" stroke="#006FCF" />
+        <text x="15" y="12" textAnchor="middle" fontFamily="Helvetica, Arial, sans-serif" fontSize="6.5" fontWeight="800" fill="#fff" letterSpacing="0.4">AMEX</text>
+      </svg>
+    </>
   );
 }
 
