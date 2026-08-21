@@ -10,7 +10,6 @@ import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import {
   getPlatformStripe,
-  getConnectedAccount,
   getClientPaymentProfile,
   getOrCreatePlatformCustomerForClient,
   saveCardOnFileFromIntent,
@@ -334,11 +333,10 @@ router.get('/agreements/public/:token', async (req, res) => {
               exp_year: profile.card_exp_year || null,
             }
           : null;
-        let available = false;
-        if (!card && process.env.STRIPE_SECRET_KEY) {
-          const account = await getConnectedAccount(agreement.org_id).catch(() => null);
-          available = Boolean(account?.charges_enabled);
-        }
+        // La carte est collectée par SetupIntent sur le compte PLATEFORME :
+        // l'onboarding Stripe Connect de l'org n'est requis que pour la
+        // charger (destination charge), pas pour l'enregistrer au dossier.
+        const available = !card && Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PUBLISHABLE_KEY);
         paymentMethod = { requested: true, card, available };
       }
     } catch (pmErr: any) {
@@ -435,12 +433,8 @@ router.post('/agreements/public/payment-method/setup-intent', async (req, res) =
     const { agreement, clientId, requested } = resolved;
     if (!requested) return res.status(400).json({ error: 'No payment method was requested for this agreement.' });
 
-    if (!process.env.STRIPE_SECRET_KEY) {
+    if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_PUBLISHABLE_KEY) {
       return res.status(503).json({ error: 'Payments are not configured.' });
-    }
-    const account = await getConnectedAccount(agreement.org_id).catch(() => null);
-    if (!account?.charges_enabled) {
-      return res.status(503).json({ error: 'This business has not finished connecting a payment provider.' });
     }
 
     // Le customer plateforme n'est créé qu'ici — au moment où le client
