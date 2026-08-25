@@ -22,7 +22,7 @@ import {
   migrationFinalImportSchema,
   migrationMessageSchema,
 } from '../lib/validation';
-import { platformOwnerId, getBaseUrl } from '../lib/config';
+import { platformAdminIds, getBaseUrl } from '../lib/config';
 import { assertTransition, canTransition, InvalidTransitionError } from '../lib/migration/state-machine';
 import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
@@ -37,15 +37,16 @@ const router = Router();
 
 type Authed = NonNullable<Awaited<ReturnType<typeof requireAuthedClient>>>;
 
-/** Garde plateforme : identique au pattern historique du back-office interne. */
+/** Garde plateforme : pattern historique du back-office, étendu à une liste
+ *  d'admins (platformAdminIds = PLATFORM_OWNER_ID ∪ PLATFORM_ADMIN_IDS). */
 async function requirePlatformAdmin(req: express.Request, res: express.Response): Promise<Authed | null> {
-  if (!platformOwnerId) {
+  if (platformAdminIds.size === 0) {
     res.status(503).json({ error: 'Console de migration non configurée.' });
     return null;
   }
   const auth = await requireAuthedClient(req, res);
   if (!auth) return null;
-  if (auth.user.id !== platformOwnerId) {
+  if (!platformAdminIds.has(auth.user.id)) {
     res.status(403).json({ error: 'Accès refusé.' });
     return null;
   }
@@ -66,10 +67,10 @@ async function getMigration(admin: ReturnType<typeof getServiceClient>, id: stri
 // Sonde d'identité douce pour le gate frontend — ne 401 jamais.
 router.get('/migration-admin/check', async (req, res) => {
   try {
-    if (!platformOwnerId) return res.json({ isPlatformAdmin: false });
+    if (platformAdminIds.size === 0) return res.json({ isPlatformAdmin: false });
     const client = buildSupabaseWithAuth(req.header('authorization'));
     const { data } = await client.auth.getUser();
-    return res.json({ isPlatformAdmin: data?.user?.id === platformOwnerId });
+    return res.json({ isPlatformAdmin: !!data?.user?.id && platformAdminIds.has(data.user.id) });
   } catch {
     return res.json({ isPlatformAdmin: false });
   }

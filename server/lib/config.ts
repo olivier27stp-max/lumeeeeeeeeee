@@ -100,5 +100,14 @@ export const supportEmail = process.env.SUPPORT_EMAIL || 'support@lumecrm.net';
 // Platform admin
 export const platformOwnerId = process.env.PLATFORM_OWNER_ID || '';
 
+// Admins plateforme (console des migrations assistées) : union de
+// PLATFORM_OWNER_ID et de la liste optionnelle PLATFORM_ADMIN_IDS
+// (UUID séparés par des virgules). Ensemble vide = console désactivée (503).
+export const platformAdminIds: ReadonlySet<string> = new Set(
+  [platformOwnerId, ...(process.env.PLATFORM_ADMIN_IDS || '').split(',')]
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0),
+);
+
 // Re-export Twilio for webhook validation
 export { default as Twilio } from 'twilio';

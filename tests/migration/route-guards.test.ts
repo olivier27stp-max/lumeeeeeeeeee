@@ -35,9 +35,10 @@ describe('console interne — chaque handler est gardé', () => {
     expect(unguarded).toBe(0);
   });
 
-  it('la garde compare auth.user.id à platformOwnerId et 503 sans config', () => {
+  it('la garde vérifie auth.user.id contre platformAdminIds et 503 sans config', () => {
     const guard = routeBody(adminSrc, 'async function requirePlatformAdmin');
-    expect(guard).toContain('platformOwnerId');
+    expect(guard).toContain('platformAdminIds');
+    expect(guard).toContain('platformAdminIds.has(auth.user.id)');
     expect(guard).toContain('503');
     expect(guard).toContain('403');
   });

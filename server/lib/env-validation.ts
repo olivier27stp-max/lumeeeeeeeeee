@@ -79,6 +79,11 @@ const optionalEnvSchema = z.object({
 
   // Platform admin
   PLATFORM_OWNER_ID: z.string().uuid('PLATFORM_OWNER_ID must be a valid UUID').optional(),
+  PLATFORM_ADMIN_IDS: z.string().optional()
+    .refine(
+      (v) => !v || v.split(',').every((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim())),
+      'PLATFORM_ADMIN_IDS must be a comma-separated list of UUIDs',
+    ),
 
   // External agent JWT signing key (optional in dev — falls back to
   // an ephemeral random key generated at startup. REQUIRED in production
