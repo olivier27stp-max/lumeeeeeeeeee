@@ -129,3 +129,29 @@ describe('buildEntityRow — contraintes NOT NULL de prod (leçon E2E 2026-08-24
     expect(row.status).toBe('paid');
   });
 });
+
+describe('mapJobStatus — respecte jobs_status_check de prod (leçon E2E round 3)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' },
+    createdBy: 'user-1',
+    clientIdByRef: new Map([['marc tremblay', 'client-1']]),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map(),
+  } as any;
+  const rowFor = (status: string) => (buildEntityRow('job', {
+    id: 's9', row_number: 9, entity_type: 'job', external_id: null, status: 'ready',
+    normalized: { title: 'T', status },
+    relations: { client_ref: 'Marc Tremblay' },
+  } as any, ctx) as any).row;
+
+  it('toutes les valeurs produites sont dans la contrainte CHECK', () => {
+    const allowed = new Set(['draft', 'scheduled', 'in_progress', 'completed', 'cancelled']);
+    for (const src of ['Complete', 'Cancelled', 'Canceled', 'Annulé', 'Scheduled', 'In Progress', 'Draft', 'Fermé', 'n\'importe quoi']) {
+      const st = rowFor(src).status;
+      expect(allowed.has(st), `${src} → ${st}`).toBe(true);
+    }
+    expect(rowFor('Cancelled').status).toBe('cancelled');
+    expect(rowFor('Complete').status).toBe('completed');
+  });
+});

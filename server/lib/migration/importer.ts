@@ -178,10 +178,14 @@ function lookupRef(map: Map<string, string>, raw: string | undefined, extra?: (v
   return null;
 }
 
+// Contrainte prod jobs_status_check (20260429000000) :
+// draft | scheduled | in_progress | completed | cancelled — rien d'autre.
 function mapJobStatus(source: string): string {
   const s = source.toLowerCase();
   if (/(complet|done|closed|term|ferm|finish)/.test(s)) return 'completed';
-  if (/(cancel|annul)/.test(s)) return 'archived';
+  if (/(cancel|annul)/.test(s)) return 'cancelled';
+  if (/(progress|en cours)/.test(s)) return 'in_progress';
+  if (/draft|brouillon/.test(s)) return 'draft';
   return 'scheduled';
 }
 
