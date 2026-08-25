@@ -57,7 +57,7 @@ export function deterministicEntityId(migrationId: string, stagingRecordId: stri
 // ---------------------------------------------------------------------------
 // Aides internes
 
-interface StagingRow {
+export interface StagingRow {
   id: string;
   row_number: number;
   entity_type: string;
@@ -201,7 +201,7 @@ function mapVisitStatus(source: string): string {
   return 'scheduled';
 }
 
-interface BuildContext {
+export interface BuildContext {
   migration: MigrationRow;
   createdBy: string;
   clientIdByRef: Map<string, string>;
@@ -216,8 +216,9 @@ type BuildResult =
   | { ok: true; row: Record<string, unknown>; reason?: undefined }
   | { ok: false; row?: undefined; reason: 'orphan' | 'invalid' };
 
-/** Construit la rangée à insérer dans la table active. */
-function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: BuildContext): BuildResult {
+/** Construit la rangée à insérer dans la table active. Exportée pour les tests
+ *  (pure) : les contraintes NOT NULL de prod y sont encodées. */
+export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: BuildContext): BuildResult {
   const n = rec.normalized ?? {};
   const r = rec.relations ?? {};
   const orgId = ctx.migration.org_id;
@@ -289,21 +290,27 @@ function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: BuildContext
       ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
       : null;
     const title = str(n.title) || str(n.description).slice(0, 120) || `Job importé ${str(n.job_number) || rec.external_id || `#${rec.row_number}`}`;
+    // jobs.total_cents/subtotal_cents sont NOT NULL en prod : jamais de null
+    // explicite (il court-circuite les DEFAULT). Leçon du test E2E 2026-08-24.
+    const totalCents = num(n.total_cents) ?? 0;
+    const startAt = str(n.start_at) || (str(n.start_date) ? `${str(n.start_date)}T00:00:00` : null);
     return {
       ok: true,
       row: {
         org_id: orgId,
         client_id: clientId,
+        client_name: str(r.client_ref) || null, // colonne héritée affichée par le calendrier
         property_id: propertyId,
         title,
         description: str(n.description) || null,
         notes: str(n.notes) || null,
         job_number: str(n.job_number) || null,
         status: mapJobStatus(str(n.status)),
-        total_cents: num(n.total_cents),
-        subtotal_cents: num(n.subtotal_cents),
+        total_cents: totalCents,
+        subtotal_cents: num(n.subtotal_cents) ?? totalCents,
         sale_date: str(n.sale_date) || str(n.created_date) || null,
-        start_at: str(n.start_at) || (str(n.start_date) ? `${str(n.start_date)}T00:00:00` : null),
+        start_at: startAt,
+        scheduled_at: startAt,
         created_by: ctx.createdBy,
       },
     };
@@ -804,6 +811,28 @@ export async function runPostImportValidation(
   const notes: string[] = [];
 
   const entities = entitiesForMigration(migration);
+
+  // 1) Aucune ligne de staging en erreur d'import : un échec massif d'une
+  //    catégorie ne doit JAMAIS aboutir à un statut « terminé » silencieux
+  //    (angle mort attrapé par le test E2E du 2026-08-24 : 28 jobs rejetés,
+  //    statut completed quand même).
+  const { count: stagingErrors } = await admin
+    .from('migration_staging_records')
+    .select('id', { count: 'exact', head: true })
+    .eq('migration_id', migration.id)
+    .eq('status', 'error');
+  checks.push({ name: 'staging_errors', expected: 0, actual: stagingErrors ?? 0, ok: (stagingErrors ?? 0) === 0 });
+
+  // 2) Le réel doit correspondre au rapport APPROUVÉ par le client.
+  const { data: approval } = await admin
+    .from('migration_approvals')
+    .select('report')
+    .eq('migration_id', migration.id)
+    .eq('decision', 'approved')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const approvedByEntity = (approval?.report as DryRunReport | null)?.byEntity ?? null;
   for (const entity of entities) {
     const table = TABLE_BY_ENTITY[entity];
     const [{ count: expected }, { count: actual }] = await Promise.all([
@@ -821,6 +850,11 @@ export async function runPostImportValidation(
         .in('action', ['created', 'merged']),
     ]);
     checks.push({ name: `count:${entity}`, expected: expected ?? 0, actual: actual ?? 0, ok: (expected ?? 0) === (actual ?? 0) });
+
+    if (approvedByEntity && approvedByEntity[entity]) {
+      const promised = (approvedByEntity[entity]?.wouldCreate ?? 0) + (approvedByEntity[entity]?.wouldMerge ?? 0);
+      checks.push({ name: `approved:${entity}`, expected: promised, actual: actual ?? 0, ok: promised === (actual ?? 0) });
+    }
   }
 
   // Relations : aucun job/facture créé ne doit rester sans client.

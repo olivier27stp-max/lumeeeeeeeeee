@@ -79,3 +79,53 @@ describe('ordre d\'import', () => {
     for (const e of IMPORT_ORDER) expect(TABLE_BY_ENTITY[e], e).toBeTruthy();
   });
 });
+
+describe('buildEntityRow — contraintes NOT NULL de prod (leçon E2E 2026-08-24)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const MIG = { org_id: 'org-1' } as any;
+  const ctx = {
+    migration: MIG,
+    createdBy: 'user-1',
+    clientIdByRef: new Map([['marc tremblay', 'client-1']]),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map(),
+  } as any;
+
+  it('job sans sous-total : jamais de null sur les colonnes monétaires', () => {
+    const res = buildEntityRow('job', {
+      id: 's1', row_number: 1, entity_type: 'job', external_id: null, status: 'ready',
+      normalized: { title: 'Lavage', total_cents: 15000, status: 'Complete' },
+      relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx);
+    expect(res.ok).toBe(true);
+    const row = (res as any).row;
+    expect(row.total_cents).toBe(15000);
+    expect(row.subtotal_cents).toBe(15000); // retombe sur le total, jamais null
+    expect(row.client_name).toBe('Marc Tremblay'); // colonne héritée remplie
+    expect(row.status).toBe('completed');
+  });
+
+  it('job sans aucun montant : 0, pas null', () => {
+    const res = buildEntityRow('job', {
+      id: 's2', row_number: 2, entity_type: 'job', external_id: null, status: 'ready',
+      normalized: { title: 'Entretien' },
+      relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx);
+    const row = (res as any).row;
+    expect(row.total_cents).toBe(0);
+    expect(row.subtotal_cents).toBe(0);
+  });
+
+  it('facture : montants toujours non nuls et cohérents', () => {
+    const res = buildEntityRow('invoice', {
+      id: 's3', row_number: 3, entity_type: 'invoice', external_id: null, status: 'ready',
+      normalized: { invoice_number: '501', total_cents: 17246, subtotal_cents: 15000, tax_cents: 2246, status: 'Paid' },
+      relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx);
+    const row = (res as any).row;
+    expect(row.total_cents).toBe(17246);
+    expect(row.paid_cents).toBe(17246);
+    expect(row.balance_cents).toBe(0);
+    expect(row.status).toBe('paid');
+  });
+});
