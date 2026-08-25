@@ -51,9 +51,10 @@ describe('console interne — chaque handler est gardé', () => {
     expect(body).toContain('blocking');
   });
 
-  it('la route générique de statut ne permet jamais de démarrer un import', () => {
+  it('la route générique de statut ne permet ni import ni rollback direct', () => {
     const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/status'");
     expect(body).toContain("to === 'importing'");
+    expect(body).toContain("to === 'rolled_back'");
     expect(body).toContain('assertTransition');
   });
 

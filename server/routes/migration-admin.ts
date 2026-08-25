@@ -294,9 +294,12 @@ router.post('/migration-admin/migrations/:id/status', validate(migrationStatusCh
       }
       throw err;
     }
-    // L'import final ne passe JAMAIS par cette route générique.
-    if (to === 'importing' || to === 'post_import_validation') {
-      return res.status(409).json({ error: 'L\'import final passe par la route dédiée avec confirmation.' });
+    // L'import final et le rollback ne passent JAMAIS par cette route
+    // générique : marquer « rolled_back » sans exécuter le rollback réel
+    // laisserait les données importées en place (faille attrapée par le
+    // test E2E round 4).
+    if (to === 'importing' || to === 'post_import_validation' || to === 'rolled_back') {
+      return res.status(409).json({ error: 'Cette transition passe par sa route dédiée avec confirmation.' });
     }
     const { data, error } = await admin
       .from('data_migrations')
