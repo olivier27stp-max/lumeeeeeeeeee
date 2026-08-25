@@ -28,11 +28,15 @@ export type MigrationStatus = (typeof MIGRATION_STATUSES)[number];
 
 export const TERMINAL_STATUSES: MigrationStatus[] = ['completed', 'completed_with_warnings', 'rolled_back', 'cancelled'];
 
-/** Statuts pendant lesquels le portail client accepte encore des téléversements. */
+/** Statuts pendant lesquels le portail client accepte encore des téléversements.
+ *  `parsing` en fait partie : l'analyse d'un fichier est asynchrone et par
+ *  fichier — bloquer l'upload pendant qu'un autre fichier s'analyse créait une
+ *  course (bug attrapé par le test de bout en bout du 2026-08-24). */
 export const UPLOAD_ALLOWED_STATUSES: MigrationStatus[] = [
   'invitation_sent',
   'waiting_for_files',
   'files_uploaded',
+  'parsing',
   'mapping',
   'human_review',
   'waiting_for_client',
