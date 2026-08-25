@@ -250,7 +250,6 @@ const CATEGORY_OPTIONS = [
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [orgId, setOrgId] = useState('');
   const [email, setEmail] = useState('');
-  const [crm, setCrm] = useState('jobber');
   const [categories, setCategories] = useState<string[]>(['clients', 'properties', 'jobs', 'visits', 'invoices']);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
@@ -267,12 +266,9 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <label className="block text-text-secondary font-medium mb-1">Courriel du client invité</label>
             <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="proprietaire@entreprise.com" className="w-full h-9 px-3 bg-surface border border-outline rounded-md" />
           </div>
-          <div>
-            <label className="block text-text-secondary font-medium mb-1">Ancien CRM</label>
-            <select value={crm} onChange={(e) => setCrm(e.target.value)} className="w-full h-9 px-2 bg-surface border border-outline rounded-md">
-              {Object.entries(CRM_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </div>
+          {/* Choix de l'ancien CRM retiré volontairement : pas de lien direct
+              pour l'instant — toute migration part en mode générique (fichiers).
+              Réactivable plus tard via PATCH source_crm côté serveur. */}
           <div>
             <label className="block text-text-secondary font-medium mb-1">Catégories à migrer</label>
             <div className="flex flex-wrap gap-2">
@@ -303,7 +299,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
               try {
                 const created = await createMigration({
                   org_id: orgId,
-                  source_crm: crm,
+                  source_crm: 'custom_files',
                   categories,
                   invited_email: email.trim() || null,
                   internal_notes: notes.trim() || null,
