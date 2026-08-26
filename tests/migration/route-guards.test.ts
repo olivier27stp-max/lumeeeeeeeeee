@@ -200,3 +200,27 @@ describe('post-audit — téléversements volumineux non bloqués par maxBodySiz
     expect(guards).toContain("req.path === '/migration-portal/files'");
   });
 });
+
+describe('P1 déclenchés — nouveaux endpoints gardés et sûrs', () => {
+  it('export des rejets : CSV en pièce jointe, cellules anti-injection, journalisé', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/rejects.csv'");
+    expect(body).toContain('requirePlatformAdmin');
+    expect(body).toContain('text/csv');
+    expect(body).toContain('rejects.export');
+    expect(body).toMatch(/\^\[=\+/); // neutralisation des préfixes de formule
+  });
+  it('retry-errors ne relance QUE les échecs d\'insertion (import_failed:%)', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/retry-errors'");
+    expect(body).toContain("'import_failed:%'");
+  });
+  it('gabarits : jamais d\'écrasement d\'une décision humaine', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/apply-template'");
+    expect(body).toContain("m.status !== 'suggested' && m.status !== 'needs_review'");
+    expect(body).toContain('normalizeHeader');
+  });
+  it('correspondance employés : upsert par (migration, source_key), 503 clair sans la table', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/staff-map'");
+    expect(body).toContain("onConflict: 'migration_id,source_key'");
+    expect(body).toContain('not_provisioned');
+  });
+});

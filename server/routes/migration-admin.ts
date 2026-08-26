@@ -21,6 +21,9 @@ import {
   migrationDuplicateDecisionSchema,
   migrationFinalImportSchema,
   migrationMessageSchema,
+  migrationStaffMapSchema,
+  migrationTemplateSaveSchema,
+  migrationTemplateApplySchema,
 } from '../lib/validation';
 import { platformAdminIds, getBaseUrl } from '../lib/config';
 import { assertTransition, canTransition, InvalidTransitionError } from '../lib/migration/state-machine';
@@ -30,6 +33,7 @@ import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/m
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise } from '../lib/migration/importer';
 import { getCrmConfig } from '../lib/migration/instructions';
+import { normalizeHeader } from '../lib/migration/mapping';
 import { DEFAULT_INVITE_TTL_HOURS, IMPORTABLE_CATEGORIES } from '../lib/migration/types';
 import type { MigrationRow, MigrationStatus, TargetEntity } from '../lib/migration/types';
 
@@ -676,7 +680,7 @@ router.post('/migration-admin/migrations/:id/test-import', async (req, res) => {
       try {
         await prepareStaging(admin, migration);
         // détection des doublons contre les données actives (lecture seule)
-        const entities: TargetEntity[] = ['client', 'property', 'job', 'invoice'];
+        const entities: TargetEntity[] = ['client', 'property', 'job', 'quote', 'invoice'];
         for (const entity of entities) {
           const { data: records } = await admin
             .from('migration_staging_records')
@@ -1003,6 +1007,346 @@ router.post('/migration-admin/migrations/:id/close', async (req, res) => {
     return res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Fermeture impossible.', '[migration-admin]');
+  }
+});
+
+
+// ── Boucle qualité : export des rejets + relance des lignes en erreur ──
+router.get('/migration-admin/migrations/:id/rejects.csv', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+
+    const { data: files } = await admin
+      .from('migration_files')
+      .select('id, original_name')
+      .eq('migration_id', migration.id);
+    const fileName = new Map((files ?? []).map((f: { id: string; original_name: string }) => [f.id, f.original_name]));
+
+    const esc = (v: unknown) => {
+      const str = String(v ?? '');
+      // anti-injection de formule + guillemets CSV
+      const safe = /^[=+\-@\t\r]/.test(str) && !/^-?\d/.test(str) ? `'${str}` : str;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    const lines: string[] = ['fichier,ligne,entite,statut,erreur,donnees_source_json'];
+    for (let offset = 0; ; offset += 1000) {
+      const { data: rows, error } = await admin
+        .from('migration_staging_records')
+        .select('file_id, row_number, entity_type, status, error, payload')
+        .eq('migration_id', migration.id)
+        .in('status', ['error', 'orphan'])
+        .order('file_id')
+        .order('row_number')
+        .range(offset, offset + 999);
+      if (error) throw error;
+      if (!rows || rows.length === 0) break;
+      for (const r of rows) {
+        lines.push([
+          esc(fileName.get(r.file_id) ?? r.file_id),
+          esc(r.row_number),
+          esc(r.entity_type),
+          esc(r.status),
+          esc(r.error ?? ''),
+          esc(JSON.stringify(r.payload ?? {})),
+        ].join(','));
+      }
+      if (rows.length < 1000) break;
+    }
+    await logMigrationAudit(admin, {
+      migrationId: migration.id,
+      action: 'rejects.export',
+      actorId: auth.user.id,
+      actorRole: 'platform_admin',
+      meta: { rows: lines.length - 1 },
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="rejets-migration-${migration.id.slice(0, 8)}.csv"`);
+    return res.send(`\uFEFF${lines.join('\n')}`);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Export des rejets impossible.', '[migration-admin]');
+  }
+});
+
+router.post('/migration-admin/migrations/:id/retry-errors', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    // Seules les lignes tombées à l'INSERT (import_failed:*) sont relançables
+    // telles quelles ; les erreurs de valeurs exigent un fichier corrigé.
+    const { data, error } = await admin
+      .from('migration_staging_records')
+      .update({ status: 'ready', error: null })
+      .eq('migration_id', migration.id)
+      .eq('status', 'error')
+      .like('error', 'import_failed:%')
+      .select('id');
+    if (error) throw error;
+    const count = (data ?? []).length;
+    await logMigrationAudit(admin, {
+      migrationId: migration.id,
+      action: 'staging.retry_errors',
+      actorId: auth.user.id,
+      actorRole: 'platform_admin',
+      meta: { rows: count },
+    });
+    return res.json({ ok: true, reset: count });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Relance impossible.', '[migration-admin]');
+  }
+});
+
+// ── Employés historiques : détection + correspondance vers des membres ──
+router.get('/migration-admin/migrations/:id/staff', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+
+    const counts = new Map<string, { label: string; count: number }>();
+    for (let offset = 0; ; offset += 1000) {
+      const { data: rows, error } = await admin
+        .from('migration_staging_records')
+        .select('entity_type, normalized')
+        .eq('migration_id', migration.id)
+        .in('entity_type', ['job', 'visit'])
+        .range(offset, offset + 999);
+      if (error) throw error;
+      if (!rows || rows.length === 0) break;
+      for (const r of rows as { entity_type: string; normalized: Record<string, unknown> | null }[]) {
+        const raw = String((r.normalized ?? {})[r.entity_type === 'job' ? 'salesperson' : 'assigned_to'] ?? '').trim();
+        if (!raw) continue;
+        const key = raw.toLowerCase();
+        const cur = counts.get(key) ?? { label: raw, count: 0 };
+        cur.count += 1;
+        counts.set(key, cur);
+      }
+      if (rows.length < 1000) break;
+    }
+    let mappings: { source_key: string; user_id: string | null }[] = [];
+    const { data: existing, error: mapErr } = await admin
+      .from('migration_staff_mappings')
+      .select('source_key, user_id')
+      .eq('migration_id', migration.id);
+    if (mapErr) {
+      if (/relation|schema cache|does not exist/i.test(mapErr.message)) {
+        return res.status(503).json({ error: 'Table migration_staff_mappings absente — appliquez le SQL 20260826000000.', code: 'not_provisioned' });
+      }
+      throw mapErr;
+    }
+    mappings = existing ?? [];
+    const byKey = new Map(mappings.map((m) => [m.source_key, m.user_id]));
+    return res.json({
+      staff: Array.from(counts.entries()).map(([key, v]) => ({ source_key: key, label: v.label, count: v.count, user_id: byKey.get(key) ?? null })),
+    });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Détection des employés impossible.', '[migration-admin]');
+  }
+});
+
+router.post('/migration-admin/migrations/:id/staff-map', validate(migrationStaffMapSchema), async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const body = req.body as { mappings: { source: string; user_id: string | null }[] };
+    const rows = body.mappings.map((m) => ({
+      migration_id: migration.id,
+      source_key: m.source.trim().toLowerCase(),
+      source_label: m.source.trim(),
+      user_id: m.user_id,
+      created_by: auth.user.id,
+    }));
+    const { error } = await admin
+      .from('migration_staff_mappings')
+      .upsert(rows, { onConflict: 'migration_id,source_key' });
+    if (error) {
+      if (/relation|schema cache|does not exist/i.test(error.message)) {
+        return res.status(503).json({ error: 'Table migration_staff_mappings absente — appliquez le SQL 20260826000000.', code: 'not_provisioned' });
+      }
+      throw error;
+    }
+    await logMigrationAudit(admin, {
+      migrationId: migration.id,
+      action: 'staff.map',
+      actorId: auth.user.id,
+      actorRole: 'platform_admin',
+      meta: { count: rows.length },
+    });
+    return res.json({ ok: true, saved: rows.length });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Enregistrement de la correspondance impossible.', '[migration-admin]');
+  }
+});
+
+router.get('/migration-admin/migrations/:id/members', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const { data: members, error } = await admin
+      .from('memberships')
+      .select('user_id, role, full_name, status')
+      .eq('org_id', migration.org_id);
+    if (error) throw error;
+    const active = (members ?? []).filter((m: any) => m.status === 'active' || m.status === null);
+    const ids = active.map((m: any) => m.user_id);
+    const { data: profiles } = ids.length
+      ? await admin.from('profiles').select('id, full_name').in('id', ids)
+      : { data: [] };
+    const nameById = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name]));
+    return res.json(active.map((m: any) => ({
+      user_id: m.user_id,
+      role: m.role,
+      name: nameById.get(m.user_id) || m.full_name || m.user_id.slice(0, 8),
+    })));
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Membres indisponibles.', '[migration-admin]');
+  }
+});
+
+// ── Gabarits de correspondance réutilisables par CRM source ──
+router.get('/migration-admin/templates', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    let query = admin.from('migration_mapping_templates').select('id, source_crm, name, created_at').order('created_at', { ascending: false }).limit(50);
+    if (typeof req.query.source_crm === 'string' && req.query.source_crm) query = query.eq('source_crm', req.query.source_crm);
+    const { data, error } = await query;
+    if (error) {
+      if (/relation|schema cache|does not exist/i.test(error.message)) {
+        return res.status(503).json({ error: 'Table migration_mapping_templates absente — appliquez le SQL 20260826000000.', code: 'not_provisioned' });
+      }
+      throw error;
+    }
+    return res.json(data ?? []);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Gabarits indisponibles.', '[migration-admin]');
+  }
+});
+
+router.post('/migration-admin/migrations/:id/save-template', validate(migrationTemplateSaveSchema), async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const [cols, maps] = await Promise.all([
+      admin.from('migration_file_columns').select('id, header').eq('migration_id', migration.id),
+      admin.from('migration_field_mappings').select('column_id, target_entity, target_field, confidence, status').eq('migration_id', migration.id),
+    ]);
+    if (cols.error) throw cols.error;
+    if (maps.error) throw maps.error;
+    const headerById = new Map((cols.data ?? []).map((c: any) => [c.id, c.header]));
+    const headersMap: Record<string, { entity: string; field: string }> = {};
+    for (const m of (maps.data ?? []) as any[]) {
+      const usable = m.target_entity && m.target_field &&
+        (m.status === 'confirmed' || m.status === 'corrected' || (m.status === 'suggested' && m.confidence >= 70));
+      if (!usable) continue;
+      const header = headerById.get(m.column_id);
+      if (!header) continue;
+      headersMap[normalizeHeader(header)] = { entity: m.target_entity, field: m.target_field };
+    }
+    const name = (req.body as { name: string }).name.trim();
+    const { data, error } = await admin
+      .from('migration_mapping_templates')
+      .upsert(
+        { source_crm: migration.source_crm, name, headers_map: headersMap, created_by: auth.user.id },
+        { onConflict: 'source_crm,name' },
+      )
+      .select('id')
+      .single();
+    if (error) {
+      if (/relation|schema cache|does not exist/i.test(error.message)) {
+        return res.status(503).json({ error: 'Table migration_mapping_templates absente — appliquez le SQL 20260826000000.', code: 'not_provisioned' });
+      }
+      throw error;
+    }
+    await logMigrationAudit(admin, {
+      migrationId: migration.id,
+      action: 'template.save',
+      actorId: auth.user.id,
+      actorRole: 'platform_admin',
+      meta: { template_id: data.id, headers: Object.keys(headersMap).length },
+    });
+    return res.status(201).json({ ok: true, template_id: data.id, headers: Object.keys(headersMap).length });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Sauvegarde du gabarit impossible.', '[migration-admin]');
+  }
+});
+
+router.post('/migration-admin/migrations/:id/apply-template', validate(migrationTemplateApplySchema), async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const { data: tpl, error: tplErr } = await admin
+      .from('migration_mapping_templates')
+      .select('id, headers_map')
+      .eq('id', (req.body as { template_id: string }).template_id)
+      .maybeSingle();
+    if (tplErr) {
+      if (/relation|schema cache|does not exist/i.test(tplErr.message)) {
+        return res.status(503).json({ error: 'Table migration_mapping_templates absente — appliquez le SQL 20260826000000.', code: 'not_provisioned' });
+      }
+      throw tplErr;
+    }
+    if (!tpl) return res.status(404).json({ error: 'Gabarit introuvable.' });
+    const headersMap = (tpl.headers_map ?? {}) as Record<string, { entity: string; field: string }>;
+    const [cols, maps] = await Promise.all([
+      admin.from('migration_file_columns').select('id, header').eq('migration_id', migration.id),
+      admin.from('migration_field_mappings').select('id, column_id, status').eq('migration_id', migration.id),
+    ]);
+    if (cols.error) throw cols.error;
+    if (maps.error) throw maps.error;
+    const headerById = new Map((cols.data ?? []).map((c: any) => [c.id, c.header]));
+    let applied = 0;
+    for (const m of (maps.data ?? []) as any[]) {
+      if (m.status !== 'suggested' && m.status !== 'needs_review') continue; // ne jamais écraser une décision humaine
+      const header = headerById.get(m.column_id);
+      if (!header) continue;
+      const target = headersMap[normalizeHeader(header)];
+      if (!target) continue;
+      const { error } = await admin
+        .from('migration_field_mappings')
+        .update({
+          target_entity: target.entity,
+          target_field: target.field,
+          status: 'confirmed',
+          decided_by: auth.user.id,
+          decided_role: 'template',
+          decided_at: new Date().toISOString(),
+        })
+        .eq('id', m.id);
+      if (error) console.error('[migration-admin] template apply row failed:', error.message);
+      else applied += 1;
+    }
+    await logMigrationAudit(admin, {
+      migrationId: migration.id,
+      action: 'template.apply',
+      actorId: auth.user.id,
+      actorRole: 'platform_admin',
+      meta: { template_id: tpl.id, applied },
+    });
+    return res.json({ ok: true, applied });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Application du gabarit impossible.', '[migration-admin]');
   }
 });
 

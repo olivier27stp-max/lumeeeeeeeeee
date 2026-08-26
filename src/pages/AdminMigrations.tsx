@@ -17,7 +17,9 @@ import {
   generateInvitation, revokeInvitation, extendInvitation, decideMapping, resolveIssue,
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
   rollbackMigration, closeMigration, sendAdminMessage, getMigrationAudit, getFileDownloadUrl,
-  reanalyzeFile, rejectFile, type AdminMigrationListItem,
+  reanalyzeFile, rejectFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
+  getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate,
+  type AdminMigrationListItem, type MigrationStaffEntry,
 } from '../lib/migrationAdminApi';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -250,7 +252,7 @@ const CATEGORY_OPTIONS = [
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [orgId, setOrgId] = useState('');
   const [email, setEmail] = useState('');
-  const [categories, setCategories] = useState<string[]>(['clients', 'properties', 'jobs', 'visits', 'invoices']);
+  const [categories, setCategories] = useState<string[]>(['clients', 'properties', 'services', 'quotes', 'jobs', 'visits', 'invoices']);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   return (
@@ -428,11 +430,32 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
       {m.status === 'test_review' && (
         <button type="button" className={primary} onClick={() => act(() => requestApproval(m.id), 'Approbation demandée au client')}>Demander l'approbation</button>
       )}
-      {m.status === 'approved' && (
+      {(m.status === 'approved' || m.status === 'completed_with_warnings') && (
         <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'ready_for_final_import'), 'Migration prête pour l\'import final')}>
-          Marquer prête pour l'import
+          {m.status === 'approved' ? 'Marquer prête pour l\'import' : 'Préparer l\'import complémentaire'}
         </button>
       )}
+      {['failed', 'completed_with_warnings'].includes(m.status) && (
+        <button type="button" className={subtle} onClick={() => act(async () => { const r = await retryErrors(m.id); toast.success(`${r.reset} ligne(s) remises en file`); }, 'Lignes en erreur relancées')}>
+          Relancer les lignes en erreur
+        </button>
+      )}
+      <button
+        type="button"
+        className={subtle}
+        onClick={async () => {
+          try {
+            const csv = await downloadRejectsCsv(m.id);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `rejets-${m.id.slice(0, 8)}.csv`; a.click();
+            URL.revokeObjectURL(url);
+          } catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+        }}
+      >
+        Exporter les rejets (CSV)
+      </button>
       {m.status === 'ready_for_final_import' && (
         <button type="button" className={danger} onClick={() => setConfirmKind('final')}>Lancer l'import final</button>
       )}
@@ -492,6 +515,71 @@ function StrongConfirmModal({ kind, orgName, summary, onClose, onConfirm }: {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StaffCard({ migrationId }: { migrationId: string }) {
+  const qc = useQueryClient();
+  const staffQ = useQuery({ queryKey: ['migration-staff', migrationId], queryFn: () => getMigrationStaff(migrationId), retry: false, refetchOnWindowFocus: false });
+  const membersQ = useQuery({ queryKey: ['migration-members', migrationId], queryFn: () => getMigrationMembers(migrationId), refetchOnWindowFocus: false });
+  const [draft, setDraft] = useState<Record<string, string | null>>({});
+  if (staffQ.isError) {
+    return (
+      <div className="section-card p-5">
+        <h3 className="text-[14px] font-bold text-text-primary mb-2">Employés historiques</h3>
+        <p className="text-[12px] text-amber-700">{(staffQ.error as any)?.message ?? 'Indisponible'}</p>
+      </div>
+    );
+  }
+  const staff = staffQ.data?.staff ?? [];
+  if (staff.length === 0) {
+    return (
+      <div className="section-card p-5">
+        <h3 className="text-[14px] font-bold text-text-primary mb-2">Employés historiques</h3>
+        <p className="text-[13px] text-text-tertiary">Aucune colonne « assigné à / vendeur » détectée dans les fichiers.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="section-card p-5">
+      <h3 className="text-[14px] font-bold text-text-primary mb-1">Employés historiques</h3>
+      <p className="text-[12px] text-text-tertiary mb-3">
+        Associez chaque nom trouvé dans les fichiers à un membre actuel — ou laissez « Non assigné » (aucun compte n'est créé).
+      </p>
+      <div className="space-y-2">
+        {staff.map((entry: MigrationStaffEntry) => (
+          <div key={entry.source_key} className="flex items-center gap-3 text-[13px]">
+            <span className="w-[180px] truncate font-medium text-text-primary">{entry.label}</span>
+            <span className="text-[11px] text-text-tertiary w-[70px]">{entry.count} ligne(s)</span>
+            <select
+              value={(entry.source_key in draft ? draft[entry.source_key] : entry.user_id) ?? ''}
+              onChange={(e) => setDraft((prev) => ({ ...prev, [entry.source_key]: e.target.value || null }))}
+              className="h-8 px-2 bg-surface border border-outline rounded-md flex-1 max-w-[260px]"
+            >
+              <option value="">— Historique non assigné —</option>
+              {(membersQ.data ?? []).map((mb) => <option key={mb.user_id} value={mb.user_id}>{mb.name} ({mb.role})</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="mt-3 h-9 px-4 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md text-[13px] font-medium"
+        onClick={async () => {
+          try {
+            const mappings = staff.map((entry) => ({
+              source: entry.label,
+              user_id: (entry.source_key in draft ? draft[entry.source_key] : entry.user_id) ?? null,
+            }));
+            const r = await saveStaffMap(migrationId, mappings);
+            toast.success(`${r.saved} correspondance(s) enregistrée(s) — relancez l'import test pour les appliquer`);
+            qc.invalidateQueries({ queryKey: ['migration-staff', migrationId] });
+          } catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+        }}
+      >
+        Enregistrer les correspondances
+      </button>
     </div>
   );
 }
@@ -598,6 +686,7 @@ function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
           {m.internal_notes && <p>Notes : {m.internal_notes}</p>}
         </div>
       </div>
+      <div className="lg:col-span-2"><StaffCard migrationId={m.id} /></div>
     </div>
   );
 }
@@ -679,6 +768,44 @@ function FileAdminRow({ f, cell, migrationId, onChanged }: { f: any; cell: strin
   );
 }
 
+function TemplateControls({ migrationId, sourceCrm, onChanged }: { migrationId: string; sourceCrm: string; onChanged: () => void }) {
+  const tplQ = useQuery({ queryKey: ['migration-templates', sourceCrm], queryFn: () => listMappingTemplates(sourceCrm), retry: false, refetchOnWindowFocus: false });
+  const [selected, setSelected] = useState('');
+  const [name, setName] = useState('');
+  return (
+    <div className="flex items-center gap-2 flex-wrap mb-4 text-[13px]">
+      <select value={selected} onChange={(e) => setSelected(e.target.value)} className="h-9 px-2 bg-surface border border-outline rounded-md">
+        <option value="">{tplQ.isError ? 'Gabarits non provisionnés (SQL requis)' : 'Choisir un gabarit…'}</option>
+        {(tplQ.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+      </select>
+      <button
+        type="button"
+        disabled={!selected}
+        className="h-9 px-4 border border-outline rounded-md text-text-secondary hover:bg-surface-secondary disabled:opacity-40"
+        onClick={async () => {
+          try { const r = await applyMappingTemplate(migrationId, selected); toast.success(`Gabarit appliqué : ${r.applied} colonne(s) confirmée(s)`); onChanged(); }
+          catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+        }}
+      >
+        Appliquer
+      </button>
+      <span className="text-text-tertiary">·</span>
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du gabarit (ex. Jobber v1)" className="h-9 px-3 bg-surface border border-outline rounded-md w-[200px]" />
+      <button
+        type="button"
+        disabled={!name.trim()}
+        className="h-9 px-4 border border-outline rounded-md text-text-secondary hover:bg-surface-secondary disabled:opacity-40"
+        onClick={async () => {
+          try { const r = await saveMappingTemplate(migrationId, name.trim()); toast.success(`Gabarit sauvegardé (${r.headers} colonnes)`); setName(''); }
+          catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+        }}
+      >
+        Sauvegarder le mappage actuel
+      </button>
+    </div>
+  );
+}
+
 function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   const m = d.migration;
   const colById = new Map((d.columns ?? []).map((c: any) => [c.id, c]));
@@ -691,6 +818,7 @@ function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   if (rows.length === 0) return <div className="section-card p-5 text-[13px] text-text-tertiary">Aucune correspondance (analyse pas encore faite).</div>;
   return (
     <div className="section-card p-5">
+      <TemplateControls migrationId={m.id} sourceCrm={m.source_crm} onChanged={onChanged} />
       <div className="border border-outline rounded-md overflow-x-auto">
         <div className="grid min-w-[900px] text-[12px]" style={{ gridTemplateColumns: '1fr 1fr 1.2fr 70px 110px 160px' }}>
           {['Fichier', 'Colonne', 'Aperçu masqué', 'Conf.', 'Statut', 'Décision'].map((h) => (

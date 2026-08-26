@@ -68,8 +68,8 @@ describe('deterministicEntityId — idempotence', () => {
 });
 
 describe('ordre d\'import', () => {
-  it('respecte les dépendances (services → clients → propriétés → jobs → visites → factures)', () => {
-    expect(IMPORT_ORDER).toEqual(['service', 'client', 'property', 'job', 'visit', 'invoice']);
+  it('respecte les dépendances (services → clients → propriétés → jobs → soumissions → visites → factures)', () => {
+    expect(IMPORT_ORDER).toEqual(['service', 'client', 'property', 'job', 'quote', 'visit', 'invoice']);
     expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('property'));
     expect(IMPORT_ORDER.indexOf('job')).toBeLessThan(IMPORT_ORDER.indexOf('visit'));
     expect(IMPORT_ORDER.indexOf('job')).toBeLessThan(IMPORT_ORDER.indexOf('invoice'));
@@ -246,5 +246,56 @@ describe('post-audit — jobs migrés hors leaderboard (décision propriétaire)
       normalized: { title: 'T', total_cents: 100 }, relations: { client_ref: 'Marc Tremblay' },
     } as any, ctx) as any;
     expect(res.row.show_on_leaderboard).toBe(false);
+  });
+});
+
+describe('P1 déclenchés — soumissions et employés historiques', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'o' }, createdBy: 'invite',
+    clientIdByRef: new Map([['marc tremblay', 'c1']]),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map([['1001', 'j1']]),
+    staffIdBySource: new Map([['marc employe', 'u-marc']]),
+  } as any;
+
+  it('soumission : statuts mappés au workflow Lume, client requis', () => {
+    const q = (status: string) => (buildEntityRow('quote', {
+      id: 'q1', row_number: 1, entity_type: 'quote', external_id: null, status: 'ready',
+      normalized: { quote_number: '77', total_cents: 5000, status },
+      relations: { client_ref: 'Marc Tremblay', job_ref: '1001' },
+    } as any, ctx) as any);
+    expect(q('Approved').row.status).toBe('approved');
+    expect(q('Sent').row.status).toBe('awaiting_response');
+    expect(q('Draft').row.status).toBe('draft');
+    expect(q('Declined').row.status).toBe('archived');
+    expect(q('Converted').row.status).toBe('converted');
+    expect(q('Approved').row.job_id).toBe('j1');
+    const orphan = buildEntityRow('quote', {
+      id: 'q2', row_number: 2, entity_type: 'quote', external_id: null, status: 'ready',
+      normalized: { quote_number: '78', total_cents: 100 }, relations: {},
+    } as any, ctx) as any;
+    expect(orphan.ok).toBe(false);
+    expect(orphan.reason).toBe('orphan');
+  });
+
+  it('job : le vendeur historique mappé devient salesperson_id, sinon null', () => {
+    const j = (salesperson?: string) => (buildEntityRow('job', {
+      id: 'jx', row_number: 1, entity_type: 'job', external_id: null, status: 'ready',
+      normalized: { title: 'T', ...(salesperson ? { salesperson } : {}) },
+      relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx) as any).row;
+    expect(j('Marc Employe').salesperson_id).toBe('u-marc');
+    expect(j('Inconnu Dupont').salesperson_id).toBeNull();
+    expect(j().salesperson_id).toBeNull();
+  });
+
+  it('visite : le membre assigné historique mappé devient assigned_user', () => {
+    const v = (buildEntityRow('visit', {
+      id: 'vx', row_number: 1, entity_type: 'visit', external_id: null, status: 'ready',
+      normalized: { start_at: '2024-05-01T09:00:00', assigned_to: 'Marc Employe' },
+      relations: { job_ref: '1001' },
+    } as any, ctx) as any).row;
+    expect(v.assigned_user).toBe('u-marc');
   });
 });

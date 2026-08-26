@@ -179,3 +179,41 @@ export function sendAdminMessage(id: string, body: string): Promise<any> {
 export function getMigrationAudit(id: string, page = 1): Promise<{ data: any[]; total: number; page: number; pageSize: number }> {
   return apiFetch(`/migrations/${id}/audit?page=${page}`);
 }
+
+// ── Boucle qualité, employés historiques et gabarits (post-audit) ──
+
+export async function downloadRejectsCsv(id: string): Promise<string> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE}/migration-admin/migrations/${id}/rejects.csv`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+export function retryErrors(id: string): Promise<{ ok: boolean; reset: number }> {
+  return apiFetch(`/migrations/${id}/retry-errors`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export interface MigrationStaffEntry { source_key: string; label: string; count: number; user_id: string | null }
+export function getMigrationStaff(id: string): Promise<{ staff: MigrationStaffEntry[] }> {
+  return apiFetch(`/migrations/${id}/staff`);
+}
+
+export function saveStaffMap(id: string, mappings: { source: string; user_id: string | null }[]): Promise<{ ok: boolean; saved: number }> {
+  return apiFetch(`/migrations/${id}/staff-map`, { method: 'POST', body: JSON.stringify({ mappings }) });
+}
+
+export function getMigrationMembers(id: string): Promise<{ user_id: string; role: string; name: string }[]> {
+  return apiFetch(`/migrations/${id}/members`);
+}
+
+export function listMappingTemplates(sourceCrm?: string): Promise<{ id: string; source_crm: string; name: string; created_at: string }[]> {
+  return apiFetch(`/templates${sourceCrm ? `?source_crm=${encodeURIComponent(sourceCrm)}` : ''}`);
+}
+
+export function saveMappingTemplate(id: string, name: string): Promise<{ ok: boolean; template_id: string; headers: number }> {
+  return apiFetch(`/migrations/${id}/save-template`, { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+export function applyMappingTemplate(id: string, templateId: string): Promise<{ ok: boolean; applied: number }> {
+  return apiFetch(`/migrations/${id}/apply-template`, { method: 'POST', body: JSON.stringify({ template_id: templateId }) });
+}

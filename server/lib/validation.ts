@@ -588,3 +588,18 @@ export const migrationPortalMappingSchema = z.object({
 export const migrationPortalAnswerSchema = z.object({
   answer: z.string().trim().min(1).max(4000),
 });
+
+export const migrationStaffMapSchema = z.object({
+  mappings: z.array(z.object({
+    source: z.string().trim().min(1).max(120),
+    user_id: z.string().uuid().nullable(),
+  })).min(1).max(200),
+});
+
+export const migrationTemplateSaveSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+});
+
+export const migrationTemplateApplySchema = z.object({
+  template_id: z.string().uuid(),
+});

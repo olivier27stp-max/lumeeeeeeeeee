@@ -18,13 +18,14 @@ import type {
   TargetEntity,
 } from './types';
 
-export const IMPORT_ORDER: TargetEntity[] = ['service', 'client', 'property', 'job', 'visit', 'invoice'];
+export const IMPORT_ORDER: TargetEntity[] = ['service', 'client', 'property', 'job', 'quote', 'visit', 'invoice'];
 
 export const TABLE_BY_ENTITY: Record<string, string> = {
   service: 'predefined_services',
   client: 'clients',
   property: 'properties',
   job: 'jobs',
+  quote: 'quotes',
   visit: 'schedule_events',
   invoice: 'invoices',
 };
@@ -34,6 +35,7 @@ const CATEGORY_BY_ENTITY: Record<string, string> = {
   client: 'clients',
   property: 'properties',
   job: 'jobs',
+  quote: 'quotes',
   visit: 'visits',
   invoice: 'invoices',
 };
@@ -211,6 +213,9 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   } else if (entity === 'invoice') {
     const num = refKey(str(n.invoice_number));
     if (num) keys.push(`i:${num}`);
+  } else if (entity === 'quote') {
+    const num = refKey(str(n.quote_number));
+    if (num) keys.push(`q:${num}`);
   } else if (entity === 'service') {
     const name = refKey(str(n.name));
     if (name) keys.push(`s:${name}`);
@@ -271,6 +276,18 @@ function mapInvoiceStatus(source: string, paidCents: number | null, totalCents: 
   return 'sent';
 }
 
+// Workflow quotes de Lume : draft / awaiting_response / changes_requested /
+// approved / converted / archived (migration 20260713000000).
+function mapQuoteStatus(source: string): string {
+  const s = source.toLowerCase();
+  if (/(convert)/.test(s)) return 'converted';
+  if (/(approv|accept|won|sign)/.test(s)) return 'approved';
+  if (/(chang|revis)/.test(s)) return 'changes_requested';
+  if (/(sent|await|open|pending|envoy)/.test(s)) return 'awaiting_response';
+  if (/(archiv|declin|lost|refus|expir|cancel|annul)/.test(s)) return 'archived';
+  return 'draft';
+}
+
 function mapVisitStatus(source: string): string {
   const s = source.toLowerCase();
   if (/(complet|done|term)/.test(s)) return 'completed';
@@ -284,6 +301,8 @@ export interface BuildContext {
   clientIdByRef: Map<string, string>;
   propertyIdByRef: Map<string, string>;
   jobIdByRef: Map<string, string>;
+  /** refKey(nom source) → user_id Lume (migration_staff_mappings). Absent/null = non assigné. */
+  staffIdBySource?: Map<string, string>;
 }
 
 // NB: `reason` est déclaré sur les deux branches (undefined côté succès) car le
@@ -394,6 +413,34 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         // Décision propriétaire (audit 2026-08-25) : les jobs migrés ne
         // comptent JAMAIS au leaderboard (created_by = invité, pas le vendeur).
         show_on_leaderboard: false,
+        salesperson_id: ctx.staffIdBySource?.get(refKey(str(n.salesperson))) ?? null,
+        created_by: ctx.createdBy,
+      },
+    };
+  }
+
+  if (entity === 'quote') {
+    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    if (!clientId) return { ok: false, reason: 'orphan' };
+    const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
+    const subtotal = num(n.subtotal_cents);
+    const tax = num(n.tax_cents);
+    let total = num(n.total_cents);
+    if (total === null && subtotal !== null) total = subtotal + (tax ?? 0);
+    return {
+      ok: true,
+      row: {
+        org_id: ctx.migration.org_id,
+        client_id: clientId,
+        job_id: jobId,
+        quote_number: str(n.quote_number) || null,
+        title: str(n.title) || null,
+        status: mapQuoteStatus(str(n.status)),
+        subtotal_cents: subtotal ?? total ?? 0,
+        tax_cents: tax ?? 0,
+        total_cents: total ?? 0,
+        valid_until: str(n.valid_until) || null,
+        notes: str(n.notes) || null,
         created_by: ctx.createdBy,
       },
     };
@@ -424,6 +471,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         status: mapVisitStatus(str(n.status)),
         notes: str(n.notes) || null,
         timezone: 'America/Montreal',
+        assigned_user: ctx.staffIdBySource?.get(refKey(str(n.assigned_to))) ?? null,
         created_by: ctx.createdBy,
       },
     };
@@ -483,11 +531,33 @@ function entitiesForMigration(migration: MigrationRow): TargetEntity[] {
   return IMPORT_ORDER.filter((e) => categories.has(CATEGORY_BY_ENTITY[e]));
 }
 
+
+/** Charge la correspondance employés (migration_staff_mappings). Table absente = map vide. */
+async function loadStaffMap(admin: SupabaseClient, migrationId: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const { data, error } = await admin
+    .from('migration_staff_mappings')
+    .select('source_key, user_id')
+    .eq('migration_id', migrationId)
+    .limit(500);
+  if (error) {
+    if (!/relation|schema cache|does not exist/i.test(error.message)) {
+      console.error('[migration-importer] staff map load failed:', error.message);
+    }
+    return map;
+  }
+  for (const r of (data ?? []) as { source_key: string; user_id: string | null }[]) {
+    if (r.user_id) map.set(r.source_key, r.user_id);
+  }
+  return map;
+}
+
 // ---------------------------------------------------------------------------
 // Dry-run — aucune écriture dans les tables actives
 
 export async function runDryRun(admin: SupabaseClient, migration: MigrationRow): Promise<DryRunReport> {
   const decisions = await loadDuplicateDecisions(admin, migration.id);
+  const staffIdBySource = await loadStaffMap(admin, migration.id);
   const entities = entitiesForMigration(migration);
   const byEntity: Partial<Record<TargetEntity, EntityCounts>> = {};
   const notes: string[] = [];
@@ -690,6 +760,7 @@ export async function runFinalImport(
   actorId: string,
 ): Promise<DryRunReport> {
   const decisions = await loadDuplicateDecisions(admin, migration.id);
+  const staffIdBySource = await loadStaffMap(admin, migration.id);
   const entities = entitiesForMigration(migration);
 
   // Reprise : ce qui a déjà été importé pour cette migration.
@@ -717,6 +788,7 @@ export async function runFinalImport(
     clientIdByRef: new Map(),
     propertyIdByRef: new Map(),
     jobIdByRef: new Map(),
+    staffIdBySource,
   };
 
   const byEntity: Partial<Record<TargetEntity, EntityCounts>> = {};

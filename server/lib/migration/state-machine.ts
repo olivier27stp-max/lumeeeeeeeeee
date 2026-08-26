@@ -24,7 +24,8 @@ const TRANSITIONS: Record<MigrationStatus, MigrationStatus[]> = {
   post_import_validation: ['completed', 'completed_with_warnings', 'failed'],
   failed: ['rolled_back', 'ready_for_final_import', 'mapping', 'cancelled'],
   completed: ['rolled_back'],
-  completed_with_warnings: ['rolled_back'],
+  // reprise complémentaire : corriger les lignes en erreur puis relancer
+  completed_with_warnings: ['rolled_back', 'ready_for_final_import'],
   rolled_back: ['mapping', 'cancelled'],
   // Une migration annulée ne repart que par action administrative explicite.
   cancelled: ['draft'],

@@ -64,3 +64,10 @@ describe('machine à états — transitions interdites (spec)', () => {
     expect(isTerminal('mapping')).toBe(false);
   });
 });
+
+describe('reprise complémentaire après avertissements', () => {
+  it('completed_with_warnings peut repasser en ready_for_final_import (relance des erreurs)', () => {
+    expect(canTransition('completed_with_warnings', 'ready_for_final_import')).toBe(true);
+    expect(canTransition('completed', 'ready_for_final_import')).toBe(false);
+  });
+});

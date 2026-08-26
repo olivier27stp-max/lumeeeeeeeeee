@@ -86,6 +86,7 @@ export const IMPORTABLE_CATEGORIES: MigrationCategory[] = [
   'services',
   'clients',
   'properties',
+  'quotes',
   'jobs',
   'visits',
   'invoices',

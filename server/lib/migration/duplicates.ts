@@ -185,6 +185,22 @@ export async function findDuplicatesForEntity(
     return matches;
   }
 
+  if (entity === 'quote') {
+    const existing = await fetchAll<{ id: string; quote_number: string | null }>(admin, 'quotes', 'id, quote_number', orgId);
+    const byNumber = new Map<string, string>();
+    for (const q of existing) {
+      const num = (q.quote_number ?? '').trim();
+      if (num && !byNumber.has(num)) byNumber.set(num, q.id);
+    }
+    for (const r of records) {
+      const num = str((r.normalized ?? {}).quote_number) || str((r.relations ?? {}).external_id);
+      if (!num) continue;
+      const hit = byNumber.get(num);
+      if (hit) matches.push({ stagingRecordId: r.id, existingTable: 'quotes', existingId: hit, matchReasons: ['quote_number'], score: 95 });
+    }
+    return matches;
+  }
+
   if (entity === 'invoice') {
     const existing = await fetchAll<{ id: string; invoice_number: string | null; total_cents: number | null }>(
       admin, 'invoices', 'id, invoice_number, total_cents', orgId,
