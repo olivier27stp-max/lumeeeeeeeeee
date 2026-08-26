@@ -188,3 +188,10 @@ describe('post-audit — garde-fous et neutralité des données migrées', () =>
     expect(importer).toContain("'money:invoices_total_cents'");
   });
 });
+
+describe('post-audit — téléversements volumineux non bloqués par maxBodySize', () => {
+  it('le garde partagé exempte le portail de migration (limite propre 25 Mo à la route)', () => {
+    const guards = read('server/lib/validation-guards.ts');
+    expect(guards).toContain("req.path === '/migration-portal/files'");
+  });
+});

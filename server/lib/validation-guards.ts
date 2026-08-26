@@ -19,6 +19,11 @@ export function maxBodySize(maxBytes = 1_048_576) {
   return (req: Request, res: Response, next: NextFunction) => {
     const contentType = String(req.headers['content-type'] || '');
     if (contentType.startsWith('image/')) return next();
+    // Téléversements du portail de migration : CSV/PDF jusqu'à 25 Mo, gardés
+    // par leur propre express.raw({ limit }) au niveau de la route — même
+    // logique d'exemption que les images ci-dessus. (Les routers appliquant ce
+    // garde sont montés sur /api AVANT le portail, la fuite le bloquait à 1 Mio.)
+    if (req.method === 'POST' && req.path === '/migration-portal/files') return next();
     const contentLen = Number(req.headers['content-length'] || 0);
     if (contentLen > maxBytes) {
       return res.status(413).json({ error: 'Payload too large' });
