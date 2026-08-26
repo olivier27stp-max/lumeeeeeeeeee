@@ -224,3 +224,12 @@ describe('P1 déclenchés — nouveaux endpoints gardés et sûrs', () => {
     expect(body).toContain('not_provisioned');
   });
 });
+
+describe('déterminisme du dossier primaire (bug loterie round 8b)', () => {
+  it('loadStaging trie par ordre source (fichier, ligne), jamais par uuid', () => {
+    const importer = read('server/lib/migration/importer.ts');
+    expect(importer).toContain(".order('file_id', { ascending: true })");
+    expect(importer).toContain(".order('row_number', { ascending: true })");
+    expect(importer).not.toMatch(/entity_type[\s\S]{0,200}\.order\('id', \{ ascending: true \}\)/);
+  });
+});

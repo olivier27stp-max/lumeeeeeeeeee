@@ -61,6 +61,7 @@ export function deterministicEntityId(migrationId: string, stagingRecordId: stri
 
 export interface StagingRow {
   id: string;
+  file_id?: string;
   row_number: number;
   entity_type: string;
   external_id: string | null;
@@ -97,11 +98,16 @@ async function loadStaging(admin: SupabaseClient, migrationId: string, entity: T
   for (let offset = 0; ; offset += STAGING_PAGE) {
     const { data, error } = await admin
       .from('migration_staging_records')
-      .select('id, row_number, entity_type, external_id, normalized, relations, status') // payload volontairement exclu : inutile à l'import, lourd à 50 k lignes
+      .select('id, file_id, row_number, entity_type, external_id, normalized, relations, status') // payload volontairement exclu : inutile à l'import, lourd à 50 k lignes
       .eq('migration_id', migrationId)
       .eq('entity_type', entity)
       .in('status', statuses)
-      .order('id', { ascending: true })
+      // Ordre SOURCE (fichier puis ligne) : le dossier « primaire » d'un
+      // doublon interne doit être déterministe — trier par id (uuid aléatoire)
+      // faisait gagner la mauvaise rangée une fois sur deux (bug round 8b :
+      // la facture #501 à 1,15 $ fusionnait la vraie à 172,46 $).
+      .order('file_id', { ascending: true })
+      .order('row_number', { ascending: true })
       .range(offset, offset + STAGING_PAGE - 1);
     if (error) {
       console.error('[migration-importer] staging fetch failed:', error.message);

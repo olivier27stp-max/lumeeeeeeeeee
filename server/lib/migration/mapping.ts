@@ -343,6 +343,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
 
   quote: [
     {
+      field: 'job_ref',
+      labelFr: 'Job lié',
+      labelEn: 'Linked job',
+      types: ['id', 'number', 'text'],
+      synonyms: [
+        'job number', 'job no', 'job', 'job id', 'work order', 'wo',
+        'numero de job', 'no de job', 'numero de travail',
+      ],
+    },
+    {
       field: 'quote_number',
       labelFr: 'Numéro de soumission',
       labelEn: 'Quote number',
@@ -572,6 +582,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'salesperson', 'sales person', 'sales rep', 'rep', 'sold by', 'account manager',
         'vendeur', 'representant', 'vendu par', 'commercial', 'conseiller',
+        'assigned to', 'assigned', 'technician', 'technicien', 'employee', 'employe', 'assigne a',
       ],
     },
     {

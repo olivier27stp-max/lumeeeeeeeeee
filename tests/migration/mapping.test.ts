@@ -89,3 +89,16 @@ describe('précision du catalogue (leçons E2E)', () => {
     expect(s.confidence).toBeGreaterThanOrEqual(95);
   });
 });
+
+describe('trous de catalogue attrapés au round 8b', () => {
+  it('« Assigned To » d\'un job → job.salesperson', () => {
+    const [s] = suggestMappings('jobs', [col('Assigned To', 'name')], 'jobs.csv');
+    expect(s.targetField).toBe('salesperson');
+    expect(s.confidence).toBeGreaterThanOrEqual(90);
+  });
+  it('« Job # » d\'une soumission → quote.job_ref', () => {
+    const [s] = suggestMappings('quotes', [col('Job #', 'id')], 'quotes.csv');
+    expect(s.targetField).toBe('job_ref');
+    expect(s.confidence).toBeGreaterThanOrEqual(90);
+  });
+});
