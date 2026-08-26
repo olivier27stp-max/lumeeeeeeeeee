@@ -299,3 +299,20 @@ describe('P1 déclenchés — soumissions et employés historiques', async () =>
     expect(v.assigned_user).toBe('u-marc');
   });
 });
+
+describe('quotes.title NOT NULL (leçon E2E round 8)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = { migration: { org_id: 'o' }, createdBy: 'u', clientIdByRef: new Map([['marc tremblay', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map() } as any;
+  it('le titre est toujours rempli, même absent de la source', () => {
+    const r = (buildEntityRow('quote', {
+      id: 'q', row_number: 1, entity_type: 'quote', external_id: null, status: 'ready',
+      normalized: { quote_number: 'Q-101', total_cents: 100 }, relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx) as any).row;
+    expect(r.title).toBe('Soumission Q-101');
+    const r2 = (buildEntityRow('quote', {
+      id: 'q2', row_number: 2, entity_type: 'quote', external_id: null, status: 'ready',
+      normalized: { total_cents: 100 }, relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx) as any).row;
+    expect(r2.title).toBe('Soumission importée');
+  });
+});

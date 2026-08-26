@@ -434,7 +434,8 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         client_id: clientId,
         job_id: jobId,
         quote_number: str(n.quote_number) || null,
-        title: str(n.title) || null,
+        // quotes.title est NOT NULL en prod (leçon E2E round 8)
+        title: str(n.title) || (str(n.quote_number) ? `Soumission ${str(n.quote_number)}` : 'Soumission importée'),
         status: mapQuoteStatus(str(n.status)),
         subtotal_cents: subtotal ?? total ?? 0,
         tax_cents: tax ?? 0,
