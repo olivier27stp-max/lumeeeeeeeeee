@@ -955,6 +955,19 @@ router.post('/migration-admin/migrations/:id/rollback', validate(migrationFinalI
     if (!batch) return res.status(404).json({ error: 'Aucun lot final à annuler.' });
 
     const result = await rollbackFinalBatch(admin, batch.id, auth.user.id);
+    // Les soft-deletes du rollback re-déclenchent les triggers d'activité
+    // (AFTER UPDATE, 20260747000000) — constaté à la répétition volumétrique :
+    // 15 000 notifications recréées. Purge ciblée une seconde fois.
+    const noisePurged = await purgeImportActivityNoise(admin, migration, batch.id);
+    if (noisePurged > 0) {
+      await logMigrationAudit(admin, {
+        migrationId: migration.id,
+        action: 'import.noise_purged',
+        actorRole: 'system',
+        target: `batch:${batch.id}`,
+        meta: { notifications_purged: noisePurged, phase: 'rollback' },
+      });
+    }
     await admin.from('data_migrations').update({ status: 'rolled_back' }).eq('id', migration.id);
     await logMigrationAudit(admin, {
       migrationId: migration.id,

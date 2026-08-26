@@ -177,6 +177,11 @@ describe('post-audit — garde-fous et neutralité des données migrées', () =>
     expect(body).toContain('import.noise_purged');
   });
 
+  it('le rollback purge aussi le bruit re-déclenché par les soft-deletes', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/rollback'");
+    expect(body).toContain('purgeImportActivityNoise');
+  });
+
   it('le moteur du leaderboard applique la case show_on_leaderboard sur ses 3 requêtes jobs', () => {
     const engine = read('server/lib/field-sales/leaderboard-engine.ts');
     const matches = engine.match(/or\('show_on_leaderboard\.is\.null,show_on_leaderboard\.eq\.true'\)/g) ?? [];
