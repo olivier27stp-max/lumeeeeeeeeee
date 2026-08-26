@@ -233,3 +233,18 @@ describe('client — date d\'origine préservée sans null explicite', async () 
     expect('created_at' in cl({ first_name: 'A' })).toBe(false);
   });
 });
+
+describe('post-audit — jobs migrés hors leaderboard (décision propriétaire)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'o' }, createdBy: 'u',
+    clientIdByRef: new Map([['marc tremblay', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+  } as any;
+  it('tout job importé porte show_on_leaderboard=false', () => {
+    const res = buildEntityRow('job', {
+      id: 'x', row_number: 1, entity_type: 'job', external_id: null, status: 'ready',
+      normalized: { title: 'T', total_cents: 100 }, relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx) as any;
+    expect(res.row.show_on_leaderboard).toBe(false);
+  });
+});

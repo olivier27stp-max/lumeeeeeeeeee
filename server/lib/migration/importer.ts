@@ -95,7 +95,7 @@ async function loadStaging(admin: SupabaseClient, migrationId: string, entity: T
   for (let offset = 0; ; offset += STAGING_PAGE) {
     const { data, error } = await admin
       .from('migration_staging_records')
-      .select('id, row_number, entity_type, external_id, normalized, relations, status')
+      .select('id, row_number, entity_type, external_id, normalized, relations, status') // payload volontairement exclu : inutile à l'import, lourd à 50 k lignes
       .eq('migration_id', migrationId)
       .eq('entity_type', entity)
       .in('status', statuses)
@@ -391,6 +391,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         sale_date: str(n.sale_date) || str(n.created_date) || null,
         start_at: startAt,
         scheduled_at: startAt,
+        // Décision propriétaire (audit 2026-08-25) : les jobs migrés ne
+        // comptent JAMAIS au leaderboard (created_by = invité, pas le vendeur).
+        show_on_leaderboard: false,
         created_by: ctx.createdBy,
       },
     };
@@ -909,6 +912,48 @@ export async function runFinalImport(
   };
 }
 
+
+/**
+ * Purge les notifications du fil d'activité générées par les triggers
+ * (20260747000000) lors de l'insertion massive des entités importées.
+ * Décision audit 2026-08-25 : l'historique migré ne doit pas inonder le fil.
+ * Ne touche qu'aux notifications dont reference_id ∈ entités créées par le lot.
+ */
+export async function purgeImportActivityNoise(
+  admin: SupabaseClient,
+  migration: MigrationRow,
+  batchId: string,
+): Promise<number> {
+  let purged = 0;
+  const ids: string[] = [];
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('migration_import_records')
+      .select('entity_id')
+      .eq('batch_id', batchId)
+      .eq('action', 'created')
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) {
+      console.error('[migration-importer] noise purge fetch failed:', error.message);
+      break;
+    }
+    if (!data || data.length === 0) break;
+    for (const r of data as { entity_id: string }[]) ids.push(r.entity_id);
+    if (data.length < STAGING_PAGE) break;
+  }
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data, error } = await admin
+      .from('notifications')
+      .delete()
+      .eq('org_id', migration.org_id)
+      .in('reference_id', ids.slice(i, i + CHUNK))
+      .select('id');
+    if (error) console.error('[migration-importer] noise purge delete failed:', error.message);
+    else purged += (data ?? []).length;
+  }
+  return purged;
+}
+
 // ---------------------------------------------------------------------------
 // Rollback — uniquement les entités créées par le lot
 
@@ -1046,6 +1091,34 @@ export async function runPostImportValidation(
       missing += count ?? 0;
     }
     checks.push({ name: `relation:${table}.client_id`, expected: 0, actual: missing, ok: missing === 0 });
+  }
+
+  // Somme monétaire : les factures réellement créées doivent totaliser
+  // exactement les revenus du rapport approuvé par le client (au cent près).
+  const approvedRevenue = (approval?.report as DryRunReport | null)?.totals?.revenueCents;
+  if (typeof approvedRevenue === 'number') {
+    const invoiceIds: string[] = [];
+    for (let offset = 0; ; offset += STAGING_PAGE) {
+      const { data } = await admin
+        .from('migration_import_records')
+        .select('entity_id')
+        .eq('migration_id', migration.id)
+        .eq('entity_table', 'invoices')
+        .eq('action', 'created')
+        .range(offset, offset + STAGING_PAGE - 1);
+      if (!data || data.length === 0) break;
+      for (const r of data as { entity_id: string }[]) invoiceIds.push(r.entity_id);
+      if (data.length < STAGING_PAGE) break;
+    }
+    let actualCents = 0;
+    for (let i = 0; i < invoiceIds.length; i += CHUNK) {
+      const { data } = await admin
+        .from('invoices')
+        .select('total_cents')
+        .in('id', invoiceIds.slice(i, i + CHUNK));
+      for (const r of (data ?? []) as { total_cents: number | null }[]) actualCents += r.total_cents ?? 0;
+    }
+    checks.push({ name: 'money:invoices_total_cents', expected: approvedRevenue, actual: actualCents, ok: approvedRevenue === actualCents });
   }
 
   const failed = checks.filter((c) => !c.ok);

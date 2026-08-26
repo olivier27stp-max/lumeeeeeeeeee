@@ -69,6 +69,10 @@ export async function getLeaderboard(
     .select('id, salesperson_id, created_by, total_cents, created_at')
     .in('org_id', orgIds)
     .is('deleted_at', null)
+    // Sémantique de la case « compter au leaderboard » (20260742000000) —
+    // jamais filtrée jusqu'ici. NULL = legacy = visible ; false = exclu
+    // (jobs décochés à la main ET jobs importés par migration).
+    .or('show_on_leaderboard.is.null,show_on_leaderboard.eq.true')
     .gte('created_at', range.start)
     .lte('created_at', range.end);
   if (error) throw new Error(error.message);
@@ -105,6 +109,7 @@ export async function getLeaderboard(
       .select('salesperson_id, created_by, total_cents')
       .in('org_id', orgIds)
       .is('deleted_at', null)
+      .or('show_on_leaderboard.is.null,show_on_leaderboard.eq.true')
       .gte('created_at', prevRange.start)
       .lte('created_at', prevRange.end),
     // doors_knocked / conversion baseline: count leads created in the period per rep
@@ -276,6 +281,7 @@ export async function getRepPerformance(
       .select('id, status, salesperson_id, created_by, created_at, total_cents')
       .in('org_id', orgIds)
       .is('deleted_at', null)
+      .or('show_on_leaderboard.is.null,show_on_leaderboard.eq.true')
       .gte('created_at', fromIso)
       .lte('created_at', toIso),
   ]);

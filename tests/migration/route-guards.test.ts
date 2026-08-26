@@ -163,3 +163,28 @@ describe('SQL — RLS deny-all et bucket privé', () => {
     expect(sql).toMatch(/insert into storage\.buckets[^;]*false/s);
   });
 });
+
+describe('post-audit — garde-fous et neutralité des données migrées', () => {
+  it('la demande d\'approbation refuse fichiers tronqués et colonnes non tranchées', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/request-approval'");
+    expect(body).toContain("'truncated'");
+    expect(body).toContain("'needs_review'");
+  });
+
+  it('l\'import final purge le bruit d\'activité après validation', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/final-import'");
+    expect(body).toContain('purgeImportActivityNoise');
+    expect(body).toContain('import.noise_purged');
+  });
+
+  it('le moteur du leaderboard applique la case show_on_leaderboard sur ses 3 requêtes jobs', () => {
+    const engine = read('server/lib/field-sales/leaderboard-engine.ts');
+    const matches = engine.match(/or\('show_on_leaderboard\.is\.null,show_on_leaderboard\.eq\.true'\)/g) ?? [];
+    expect(matches.length).toBe(3);
+  });
+
+  it('la validation post-import vérifie la somme monétaire contre le rapport approuvé', () => {
+    const importer = read('server/lib/migration/importer.ts');
+    expect(importer).toContain("'money:invoices_total_cents'");
+  });
+});

@@ -28,7 +28,7 @@ import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
 import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
-import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation } from '../lib/migration/importer';
+import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise } from '../lib/migration/importer';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { DEFAULT_INVITE_TTL_HOURS, IMPORTABLE_CATEGORIES } from '../lib/migration/types';
 import type { MigrationRow, MigrationStatus, TargetEntity } from '../lib/migration/types';
@@ -761,6 +761,34 @@ router.post('/migration-admin/migrations/:id/request-approval', async (req, res)
       .maybeSingle();
     if (!batch) return res.status(409).json({ error: 'Aucun import test complété.' });
 
+    // Garde-fous anti-perte silencieuse (audit 2026-08-25, Q117) :
+    // 1) un fichier tronqué signifie des lignes jamais analysées — on ne fait
+    //    pas approuver un rapport incomplet : scinder le fichier d'abord.
+    const { data: truncated } = await admin
+      .from('migration_files')
+      .select('original_name')
+      .eq('migration_id', migration.id)
+      .eq('parse_error', 'truncated')
+      .is('deleted_at', null)
+      .limit(5);
+    if ((truncated ?? []).length > 0) {
+      return res.status(409).json({
+        error: `Fichier(s) tronqué(s) (limite de lignes) : ${(truncated ?? []).map((f) => f.original_name).join(', ')} — scindez les exports puis ré-analysez.`,
+      });
+    }
+    // 2) des colonnes « À vérifier » non tranchées = données qui n'entreront
+    //    pas dans l'import sans que personne ne l'ait décidé.
+    const { count: pendingMappings } = await admin
+      .from('migration_field_mappings')
+      .select('id', { count: 'exact', head: true })
+      .eq('migration_id', migration.id)
+      .eq('status', 'needs_review');
+    if ((pendingMappings ?? 0) > 0) {
+      return res.status(409).json({
+        error: `${pendingMappings} colonne(s) « À vérifier » non tranchée(s) — confirmez ou rejetez chaque correspondance avant de demander l'approbation.`,
+      });
+    }
+
     const { error } = await admin
       .from('data_migrations')
       .update({ status: 'waiting_for_approval' })
@@ -847,6 +875,18 @@ router.post('/migration-admin/migrations/:id/final-import', validate(migrationFi
         migration.status = 'post_import_validation';
 
         const validation = await runPostImportValidation(admin, migration, batch.id);
+        // Le fil d'activité ne doit pas être inondé par l'historique migré
+        // (triggers AFTER INSERT de 20260747000000) — purge ciblée par lot.
+        const noisePurged = await purgeImportActivityNoise(admin, migration, batch.id);
+        if (noisePurged > 0) {
+          await logMigrationAudit(admin, {
+            migrationId: migration.id,
+            action: 'import.noise_purged',
+            actorRole: 'system',
+            target: `batch:${batch.id}`,
+            meta: { notifications_purged: noisePurged },
+          });
+        }
         const finalStatus: MigrationStatus =
           validation.outcome === 'passed' ? 'completed'
           : validation.outcome === 'passed_with_warnings' ? 'completed_with_warnings'
