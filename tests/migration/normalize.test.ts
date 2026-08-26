@@ -89,3 +89,36 @@ describe('normalizeRow', () => {
     expect(good.normalized.email).toBe('marc@exemple.com');
   });
 });
+
+describe('inférence de convention de date par colonne (précision)', async () => {
+  const { inferDateConvention, parseDateFlexible, normalizeRow } = await import('../../server/lib/migration/normalize');
+
+  it('détecte JJ/MM quand un jour dépasse 12', () => {
+    expect(inferDateConvention(['05/04/2024', '25/03/2024', '01/02/2024'])).toBe('dmy');
+  });
+  it('détecte MM/JJ quand un deuxième segment dépasse 12', () => {
+    expect(inferDateConvention(['03/15/2024', '05/01/2024'])).toBe('mdy');
+  });
+  it('ambigu sans preuve, incohérent si les deux', () => {
+    expect(inferDateConvention(['03/05/2024', '01/02/2024'])).toBe('ambiguous');
+    expect(inferDateConvention(['25/03/2024', '03/15/2024'])).toBe('mixed');
+    expect(inferDateConvention(['2024-01-05'])).toBe('none');
+  });
+  it('la convention force l\'interprétation des valeurs ambiguës', () => {
+    expect(parseDateFlexible('05/04/2024', 'dmy')).toBe('2024-04-05');
+    expect(parseDateFlexible('05/04/2024', 'mdy')).toBe('2024-05-04');
+    expect(parseDateFlexible('25/03/2024', 'mdy')).toBe('2024-03-25'); // preuve > convention
+  });
+  it('normalizeRow applique la convention et récupère l\'heure de start_date', () => {
+    const res = normalizeRow(
+      'job',
+      { 'Scheduled Start': '05/12/2024 9:00 AM', 'Due': '05/04/2024' },
+      { 'Scheduled Start': 'start_date', Due: 'due_date' },
+      { start_date: 'mdy', due_date: 'dmy' },
+    );
+    expect(res.normalized.start_date).toBe('2024-05-12');
+    expect(res.normalized.start_at).toBe('2024-05-12T09:00:00'); // heure récupérée
+    expect(res.normalized.due_date).toBe('2024-04-05'); // convention dmy respectée
+    expect(res.problems).toEqual([]);
+  });
+});

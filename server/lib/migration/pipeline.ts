@@ -6,7 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { analyzeCsvBuffer, detectCategory, looksBinary, sniffIsPdf } from './analyzer';
 import { entityForCategory, suggestMappings } from './mapping';
-import { normalizeRow } from './normalize';
+import { inferDateConvention, normalizeRow, type DateConvention } from './normalize';
 import { logMigrationAudit, touchMigrationActivity } from './audit';
 import { canTransition } from './state-machine';
 import type { MigrationCategory, MigrationRow, MigrationStatus, TargetEntity } from './types';
@@ -282,6 +282,65 @@ export async function prepareStaging(admin: SupabaseClient, migration: Migration
     fieldByHeaderByFile.set(m.file_id, bucket);
   }
 
+  // ── Inférence de la convention de date PAR COLONNE (MM/JJ vs JJ/MM) ──
+  // Décider valeur par valeur rend une colonne incohérente ; on scanne un
+  // échantillon de chaque colonne de date et on fige la convention du fichier.
+  const DATE_TARGETS = new Set(['created_date', 'sale_date', 'start_date', 'end_date', 'issued_date', 'due_date', 'valid_until', 'date']);
+  const samplesByFileField = new Map<string, string[]>();
+  for (let offset = 0; ; offset += STAGING_BATCH) {
+    const { data: rows, error } = await admin
+      .from('migration_staging_records')
+      .select('file_id, payload')
+      .eq('migration_id', migration.id)
+      .order('id', { ascending: true })
+      .range(offset, offset + STAGING_BATCH - 1);
+    if (error || !rows || rows.length === 0) break;
+    for (const r of rows as { file_id: string; payload: Record<string, string> | null }[]) {
+      const fieldByHeader = fieldByHeaderByFile.get(r.file_id) ?? {};
+      for (const [header, field] of Object.entries(fieldByHeader)) {
+        if (!DATE_TARGETS.has(field)) continue;
+        const value = (r.payload ?? {})[header];
+        if (!value) continue;
+        const key = `${r.file_id}|${field}`;
+        const arr = samplesByFileField.get(key) ?? [];
+        if (arr.length < 500) arr.push(value);
+        samplesByFileField.set(key, arr);
+      }
+    }
+    if (rows.length < STAGING_BATCH) break;
+  }
+  const conventionByFileField = new Map<string, DateConvention>();
+  for (const [key, values] of samplesByFileField) {
+    const inferred = inferDateConvention(values);
+    if (inferred === 'dmy') conventionByFileField.set(key, 'dmy');
+    if (inferred === 'ambiguous' || inferred === 'mixed') {
+      const [fileId, field] = key.split('|');
+      const title = inferred === 'mixed'
+        ? `Dates incohérentes dans la colonne « ${field} » (MM/JJ et JJ/MM mélangés)`
+        : `Format de date ambigu pour « ${field} » — convention MM/JJ appliquée, à valider`;
+      const { data: existing } = await admin
+        .from('migration_issues')
+        .select('id')
+        .eq('migration_id', migration.id)
+        .eq('type', 'date_format')
+        .eq('title', title)
+        .is('resolved_at', null)
+        .limit(1)
+        .maybeSingle();
+      if (!existing) {
+        const { error: issueErr } = await admin.from('migration_issues').insert({
+          migration_id: migration.id,
+          type: 'date_format',
+          severity: inferred === 'mixed' ? 'error' : 'warning',
+          title,
+          details_masked: { file_id: fileId, field, inferred },
+          options: ['confirm_mdy', 'confirm_dmy'],
+        });
+        if (issueErr) console.error('[migration-pipeline] date issue insert failed:', issueErr.message);
+      }
+    }
+  }
+
   let prepared = 0;
   let errors = 0;
   const PAGE = STAGING_BATCH;
@@ -302,7 +361,12 @@ export async function prepareStaging(admin: SupabaseClient, migration: Migration
 
     const updates = rows.map((r: any) => {
       const fieldByHeader = fieldByHeaderByFile.get(r.file_id) ?? {};
-      const res = normalizeRow(r.entity_type, r.payload ?? {}, fieldByHeader);
+      const conventions: Record<string, DateConvention> = {};
+      for (const field of Object.values(fieldByHeader)) {
+        const hinted = conventionByFileField.get(`${r.file_id}|${field}`);
+        if (hinted) conventions[field] = hinted;
+      }
+      const res = normalizeRow(r.entity_type, r.payload ?? {}, fieldByHeader, conventions);
       const hasBlocking = res.problems.length > 0 && Object.keys(res.normalized).length === 0;
       if (hasBlocking) errors += 1;
       else prepared += 1;

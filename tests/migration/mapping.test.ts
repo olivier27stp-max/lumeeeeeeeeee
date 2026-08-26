@@ -81,3 +81,11 @@ describe('catalogue de champs', () => {
     }
   });
 });
+
+describe('précision du catalogue (leçons E2E)', () => {
+  it('« Notes » d\'un job va dans job.notes, pas dans description', () => {
+    const [s] = suggestMappings('jobs', [col('Notes', 'text')], 'jobs.csv');
+    expect(s.targetField).toBe('notes');
+    expect(s.confidence).toBeGreaterThanOrEqual(95);
+  });
+});

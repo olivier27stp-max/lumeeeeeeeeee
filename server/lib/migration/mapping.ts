@@ -458,8 +458,18 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       types: ['text'],
       synonyms: [
         'description', 'job description', 'details', 'scope of work', 'work description',
-        'instructions', 'notes', 'note', 'memo',
-        'description des travaux', 'commentaires', 'remarques',
+        'instructions',
+        'description des travaux',
+      ],
+    },
+    {
+      field: 'notes',
+      labelFr: 'Notes',
+      labelEn: 'Notes',
+      types: ['text'],
+      synonyms: [
+        'notes', 'note', 'internal notes', 'memo', 'remarks', 'comments',
+        'commentaires', 'commentaire', 'remarques',
       ],
     },
     {

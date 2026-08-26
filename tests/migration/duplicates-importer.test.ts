@@ -155,3 +155,81 @@ describe('mapJobStatus — respecte jobs_status_check de prod (leçon E2E round 
     expect(rowFor('Complete').status).toBe('completed');
   });
 });
+
+describe('planIntraDedupe — doublons internes et homonymes (précision)', async () => {
+  const { planIntraDedupe } = await import('../../server/lib/migration/importer');
+  const rec = (id: string, normalized: Record<string, unknown>) => ({
+    id, row_number: 1, entity_type: 'client', external_id: null, status: 'ready',
+    normalized, relations: {},
+  } as any);
+
+  it('même client exporté deux fois → fusionné (courriel identique)', () => {
+    const plan = planIntraDedupe('client', [
+      rec('a', { first_name: 'Marc', last_name: 'Tremblay', email: 'marc@exemple.com' }),
+      rec('b', { first_name: 'Marc', last_name: 'Tremblay', email: 'marc@exemple.com' }),
+    ]);
+    expect(plan.siblingOf.get('b')).toBe('a');
+    expect(plan.ambiguousKeys.size).toBe(0);
+  });
+
+  it('homonymes DISTINCTS (courriels différents) → jamais fusionnés, clé ambiguë', () => {
+    const plan = planIntraDedupe('client', [
+      rec('a', { first_name: 'Jean', last_name: 'Dupont', email: 'jean1@exemple.com', address: '1 rue A' }),
+      rec('b', { first_name: 'Jean', last_name: 'Dupont', email: 'jean2@exemple.com', address: '99 rue B' }),
+    ]);
+    expect(plan.siblingOf.size).toBe(0);
+    expect(plan.ambiguousKeys.has('jean dupont')).toBe(true);
+  });
+
+  it('jobs au même numéro → fusionnés, factures au même numéro aussi', () => {
+    const j = (id: string, job_number: string) => ({ id, row_number: 1, entity_type: 'job', external_id: null, status: 'ready', normalized: { job_number }, relations: {} } as any);
+    const plan = planIntraDedupe('job', [j('a', '1001'), j('b', '1001'), j('c', '1002')]);
+    expect(plan.siblingOf.get('b')).toBe('a');
+    expect(plan.siblingOf.has('c')).toBe(false);
+  });
+});
+
+describe('facture — le solde source fait foi (précision au cent)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' }, createdBy: 'u',
+    clientIdByRef: new Map([['marc tremblay', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+  } as any;
+  const inv = (extra: Record<string, unknown>) => (buildEntityRow('invoice', {
+    id: 'x', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+    normalized: { invoice_number: '77', total_cents: 10000, ...extra },
+    relations: { client_ref: 'Marc Tremblay' },
+  } as any, ctx) as any).row;
+
+  it('solde partiel → statut partial et payé exact', () => {
+    const row = inv({ balance_cents: 4000, status: 'Awaiting Payment' });
+    expect(row.status).toBe('partial');
+    expect(row.paid_cents).toBe(6000);
+    expect(row.balance_cents).toBe(4000);
+  });
+  it('solde zéro → payé, même si le statut source dit autre chose', () => {
+    const row = inv({ balance_cents: 0, status: 'Awaiting Payment' });
+    expect(row.status).toBe('paid');
+    expect(row.paid_cents).toBe(10000);
+  });
+  it('solde plein → sent (rien payé)', () => {
+    const row = inv({ balance_cents: 10000, status: 'Awaiting Payment' });
+    expect(row.status).toBe('sent');
+    expect(row.paid_cents).toBe(0);
+  });
+});
+
+describe('client — date d\'origine préservée sans null explicite', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = { migration: { org_id: 'o' }, createdBy: 'u', clientIdByRef: new Map(), propertyIdByRef: new Map(), jobIdByRef: new Map() } as any;
+  const cl = (normalized: Record<string, unknown>) => (buildEntityRow('client', {
+    id: 'x', row_number: 1, entity_type: 'client', external_id: null, status: 'ready', normalized, relations: {},
+  } as any, ctx) as any).row;
+
+  it('created_date → created_at midi (pas de décalage de jour)', () => {
+    expect(cl({ first_name: 'A', created_date: '2023-06-01' }).created_at).toBe('2023-06-01T12:00:00');
+  });
+  it('sans created_date : la clé est ABSENTE (le DEFAULT now() agit)', () => {
+    expect('created_at' in cl({ first_name: 'A' })).toBe(false);
+  });
+});

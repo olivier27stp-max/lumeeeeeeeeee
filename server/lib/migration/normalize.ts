@@ -66,7 +66,9 @@ function ymd(y: number, m: number, d: number): string | null {
  * lorsque non ambigu (jour > 12), et mois textuels fr/en ('Mar 5, 2024',
  * '5 mars 2024'). null si invalide.
  */
-export function parseDateFlexible(v: string): string | null {
+export type DateConvention = 'mdy' | 'dmy';
+
+export function parseDateFlexible(v: string, convention: DateConvention = 'mdy'): string | null {
   if (typeof v !== 'string') return null;
   const s = v.trim();
   if (!s) return null;
@@ -79,8 +81,9 @@ export function parseDateFlexible(v: string): string | null {
     const a = Number(m[1]);
     const b = Number(m[2]);
     const y = Number(m[3]);
-    if (a > 12 && b <= 12) return ymd(y, b, a); // DD/MM/YYYY certain
-    return ymd(y, a, b); // défaut MM/DD/YYYY (exports nord-américains)
+    if (a > 12 && b <= 12) return ymd(y, b, a); // JJ/MM certain quel que soit l'indice
+    if (b > 12 && a <= 12) return ymd(y, a, b); // MM/JJ certain
+    return convention === 'dmy' ? ymd(y, b, a) : ymd(y, a, b);
   }
 
   m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2})$/);
@@ -89,7 +92,8 @@ export function parseDateFlexible(v: string): string | null {
     const b = Number(m[2]);
     const y = 2000 + Number(m[3]);
     if (a > 12 && b <= 12) return ymd(y, b, a);
-    return ymd(y, a, b);
+    if (b > 12 && a <= 12) return ymd(y, a, b);
+    return convention === 'dmy' ? ymd(y, b, a) : ymd(y, a, b);
   }
 
   // 'Mar 5, 2024' | 'March 5 2024'
@@ -111,21 +115,21 @@ export function parseDateFlexible(v: string): string | null {
  * → ISO datetime. Date seule → 'T00:00:00' (convention « pas d'heure précise »
  * gérée en aval). Heures 'h:mm AM/PM' et 'HH:mm' supportées.
  */
-export function parseDateTimeFlexible(v: string): string | null {
+export function parseDateTimeFlexible(v: string, convention: DateConvention = 'mdy'): string | null {
   if (typeof v !== 'string') return null;
   const s = v.trim();
   if (!s) return null;
 
   const iso = s.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (iso) {
-    const date = parseDateFlexible(iso[1]);
+    const date = parseDateFlexible(iso[1], convention);
     if (!date) return null;
     return `${date}T${pad2(Number(iso[2]))}:${iso[3]}:${iso[4] ?? '00'}`;
   }
 
   const withTime = s.match(/^(.*?)\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM|am|pm)?$/);
   if (withTime) {
-    const date = parseDateFlexible(withTime[1].replace(/,\s*$/, ''));
+    const date = parseDateFlexible(withTime[1].replace(/,\s*$/, ''), convention);
     if (date) {
       let h = Number(withTime[2]);
       const min = withTime[3];
@@ -137,7 +141,7 @@ export function parseDateTimeFlexible(v: string): string | null {
     }
   }
 
-  const dateOnly = parseDateFlexible(s);
+  const dateOnly = parseDateFlexible(s, convention);
   if (dateOnly) return `${dateOnly}T00:00:00`;
   return null;
 }
@@ -163,6 +167,33 @@ export function normalizeAddressKey(v: string): string {
     .join(' ');
 }
 
+
+/**
+ * Infère la convention de date d'une COLONNE entière : si un premier segment
+ * dépasse 12, la colonne est JJ/MM ; si un deuxième segment dépasse 12, MM/JJ.
+ * 'mixed' = contradiction (données incohérentes), 'ambiguous' = aucune preuve
+ * (validation humaine recommandée), 'none' = pas de dates à barres oblique.
+ */
+export function inferDateConvention(values: string[]): 'mdy' | 'dmy' | 'ambiguous' | 'mixed' | 'none' {
+  let sawSlash = false;
+  let firstGT12 = false;
+  let secondGT12 = false;
+  const re = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?:\s|$)/;
+  for (const raw of values) {
+    const v = (raw ?? '').trim();
+    const m = v.match(re);
+    if (!m) continue;
+    sawSlash = true;
+    if (Number(m[1]) > 12) firstGT12 = true;
+    if (Number(m[2]) > 12) secondGT12 = true;
+  }
+  if (!sawSlash) return 'none';
+  if (firstGT12 && secondGT12) return 'mixed';
+  if (firstGT12) return 'dmy';
+  if (secondGT12) return 'mdy';
+  return 'ambiguous';
+}
+
 export interface NormalizedRecord {
   normalized: Record<string, unknown>;
   relations: Record<string, string>;
@@ -182,6 +213,7 @@ export function normalizeRow(
   entity: TargetEntity,
   row: Record<string, string>,
   fieldByHeader: Record<string, string>,
+  dateConventionByField: Record<string, DateConvention> = {},
 ): NormalizedRecord {
   const normalized: Record<string, unknown> = {};
   const relations: Record<string, string> = {};
@@ -209,15 +241,27 @@ export function normalizeRow(
       continue;
     }
     if (DATETIME_FIELDS.has(field)) {
-      const dt = parseDateTimeFlexible(value);
+      const dt = parseDateTimeFlexible(value, dateConventionByField[field] ?? 'mdy');
       if (dt === null) problems.push(`invalid_datetime:${field}`);
       else normalized[field] = dt;
       continue;
     }
     if (DATE_FIELDS.has(field)) {
-      const d = parseDateFlexible(value);
-      if (d === null) problems.push(`invalid_date:${field}`);
-      else normalized[field] = d;
+      const convention = dateConventionByField[field] ?? 'mdy';
+      const d = parseDateFlexible(value, convention);
+      if (d !== null) {
+        normalized[field] = d;
+        continue;
+      }
+      // valeur avec heure (« 05/12/2024 9:00 AM ») : on récupère date ET heure
+      const dt = parseDateTimeFlexible(value, convention);
+      if (dt === null) {
+        problems.push(`invalid_date:${field}`);
+      } else {
+        normalized[field] = dt.slice(0, 10);
+        if (field === 'start_date') normalized.start_at = dt;
+        if (field === 'end_date') normalized.end_at = dt;
+      }
       continue;
     }
     if (field === 'email') {

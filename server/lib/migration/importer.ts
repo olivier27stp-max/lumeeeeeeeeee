@@ -159,8 +159,9 @@ function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     const addr = normalizeAddressKey(str(n.address));
     if (addr) keys.push(addr);
   } else if (entity === 'job') {
+    // Le titre n'est PAS une clé : « Lavage de vitres » ×20 rattacherait les
+    // visites/factures au mauvais job. Numéro et id externe seulement.
     push(str(n.job_number));
-    push(str(n.title));
   } else if (entity === 'invoice') {
     push(str(n.invoice_number));
   }
@@ -176,6 +177,78 @@ function lookupRef(map: Map<string, string>, raw: string | undefined, extra?: (v
     if (alt) return alt;
   }
   return null;
+}
+
+
+// ---------------------------------------------------------------------------
+// Doublons INTERNES au lot importé (même dossier exporté deux fois) et clés
+// ambiguës (deux dossiers distincts partageant une clé de référence).
+
+export interface IntraPlan {
+  /** stagingId → stagingId du dossier primaire (même dossier en double). */
+  siblingOf: Map<string, string>;
+  /** Clés de référence portées par ≥2 dossiers DISTINCTS — jamais devinées. */
+  ambiguousKeys: Set<string>;
+}
+
+function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
+  const n = rec.normalized ?? {};
+  const keys: string[] = [];
+  if (entity === 'client') {
+    const email = refKey(str(n.email));
+    if (email) keys.push(`e:${email}`);
+    const phone = str(n.phone_digits);
+    if (phone.length >= 7) keys.push(`t:${phone.slice(-10)}`);
+    const name = fullNameOf(n);
+    const addr = normalizeAddressKey(str(n.address));
+    if (name && addr) keys.push(`na:${name}|${addr}`);
+  } else if (entity === 'property') {
+    const addr = normalizeAddressKey(str(n.address));
+    if (addr) keys.push(`a:${addr}`);
+  } else if (entity === 'job') {
+    const num = refKey(str(n.job_number));
+    if (num) keys.push(`j:${num}`);
+  } else if (entity === 'invoice') {
+    const num = refKey(str(n.invoice_number));
+    if (num) keys.push(`i:${num}`);
+  } else if (entity === 'service') {
+    const name = refKey(str(n.name));
+    if (name) keys.push(`s:${name}`);
+  }
+  return keys;
+}
+
+export function planIntraDedupe(entity: TargetEntity, rows: StagingRow[]): IntraPlan {
+  const siblingOf = new Map<string, string>();
+  const primaryByKey = new Map<string, string>();
+  const nameOwner = new Map<string, string>(); // nom seul → premier dossier distinct
+  const ambiguousKeys = new Set<string>();
+
+  for (const rec of rows) {
+    const keys = strongKeysOf(entity, rec);
+    let primary: string | null = null;
+    for (const k of keys) {
+      const seen = primaryByKey.get(k);
+      if (seen) { primary = siblingOf.get(seen) ?? seen; break; }
+    }
+    if (primary) {
+      siblingOf.set(rec.id, primary);
+      for (const k of keys) if (!primaryByKey.has(k)) primaryByKey.set(k, primary);
+      continue;
+    }
+    for (const k of keys) primaryByKey.set(k, rec.id);
+
+    // homonymes : même nom complet porté par deux dossiers DISTINCTS
+    if (entity === 'client') {
+      const name = fullNameOf(rec.normalized ?? {});
+      if (name) {
+        const owner = nameOwner.get(name);
+        if (owner && owner !== rec.id) ambiguousKeys.add(name);
+        else nameOwner.set(name, rec.id);
+      }
+    }
+  }
+  return { siblingOf, ambiguousKeys };
 }
 
 // Contrainte prod jobs_status_check (20260429000000) :
@@ -262,6 +335,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         lead_source: str(n.lead_source) || null,
         status: 'active',
         created_by: ctx.createdBy,
+        // date d'origine préservée (fidélité historique) — clé ABSENTE sinon,
+        // pour laisser agir le DEFAULT now() (jamais de null explicite)
+        ...(str(n.created_date) ? { created_at: `${str(n.created_date)}T12:00:00` } : {}),
       },
     };
   }
@@ -360,8 +436,17 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     if (total === null && subtotal !== null) total = subtotal + (tax ?? 0);
     if (total === null) return { ok: false, reason: 'invalid' };
     const paid = num(n.paid_amount_cents);
-    const status = mapInvoiceStatus(str(n.status), paid, total);
-    const paidCents = status === 'paid' ? total : paid ?? 0;
+    const balance = num(n.balance_cents);
+    let status: string;
+    let paidCents: number;
+    if (balance !== null) {
+      // Le solde exporté fait foi : paiements partiels fidèles au cent près.
+      paidCents = Math.min(Math.max(total - balance, 0), total);
+      status = balance <= 0 ? 'paid' : paidCents > 0 ? 'partial' : mapInvoiceStatus(str(n.status), paidCents, total);
+    } else {
+      status = mapInvoiceStatus(str(n.status), paid, total);
+      paidCents = status === 'paid' ? total : paid ?? 0;
+    }
     return {
       ok: true,
       row: {
@@ -415,6 +500,8 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
     jobIdByRef: new Map(),
   };
 
+  let intraMerged = 0;
+  const allAmbiguousKeys: string[] = [];
   for (const entity of entities) {
     const counts = emptyCounts();
     byEntity[entity] = counts;
@@ -428,16 +515,37 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
     counts.errors = errCount ?? 0;
     sourceRows += rows.length + counts.errors;
 
+    const intra = planIntraDedupe(entity, rows);
+    for (const k of intra.ambiguousKeys) allAmbiguousKeys.push(`${entity}:${k}`);
+    const targetByStagingId = new Map<string, string>();
+    const mapByEntity =
+      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+
     for (const rec of rows) {
       const decision = decisions.get(rec.id);
       const registerRefs = (targetId: string) => {
-        const mapByEntity =
-          entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+        targetByStagingId.set(rec.id, targetId);
         if (!mapByEntity) return;
         for (const key of refKeysOf(entity, rec)) {
-          if (!mapByEntity.has(key)) mapByEntity.set(key, targetId);
+          if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
+          const existing = mapByEntity.get(key);
+          if (existing === undefined) mapByEntity.set(key, targetId);
+          else if (existing !== targetId) {
+            // collision entre dossiers distincts → clé retirée, relations en revue
+            mapByEntity.delete(key);
+            allAmbiguousKeys.push(`${entity}:${key}`);
+          }
         }
       };
+
+      // doublon INTERNE au fichier : fusionné avec son dossier primaire
+      const primaryId = intra.siblingOf.get(rec.id);
+      if (primaryId && targetByStagingId.has(primaryId)) {
+        counts.wouldMerge += 1;
+        intraMerged += 1;
+        registerRefs(targetByStagingId.get(primaryId)!);
+        continue;
+      }
 
       if (decision?.decision === 'skip') {
         counts.ignored += 1;
@@ -472,11 +580,36 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
       }
     }
 
-    if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) seront fusionnés avec des dossiers existants.`);
+    if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) seront fusionnés (doublons internes ou dossiers existants).`);
     if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} en erreur (valeurs invalides) — voir les problèmes.`);
   }
 
-  if (orphans > 0) notes.push(`${orphans} ligne(s) sans relation résoluble (ex. job sans client) seront exclues.`);
+  if (intraMerged > 0) notes.push(`${intraMerged} doublon(s) interne(s) aux fichiers fusionnés automatiquement (mêmes courriel/téléphone/numéro).`);
+  if (allAmbiguousKeys.length > 0) {
+    notes.push(`${allAmbiguousKeys.length} clé(s) de référence ambiguë(s) (ex. homonymes) — les dossiers liés sont exclus en attendant validation.`);
+    const title = 'Références ambiguës détectées (homonymes ou numéros partagés)';
+    const { data: existingIssue } = await admin
+      .from('migration_issues')
+      .select('id')
+      .eq('migration_id', migration.id)
+      .eq('type', 'ambiguous_relation')
+      .is('resolved_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (!existingIssue) {
+      const { error: issueErr } = await admin.from('migration_issues').insert({
+        migration_id: migration.id,
+        type: 'ambiguous_relation',
+        severity: 'warning',
+        title,
+        details_masked: { keys: allAmbiguousKeys.slice(0, 20) },
+        options: ['review'],
+      });
+      if (issueErr) console.error('[migration-importer] ambiguous issue insert failed:', issueErr.message);
+    }
+  }
+
+  if (orphans > 0) notes.push(`${orphans} ligne(s) sans relation résoluble (ex. job sans client, homonymes) seront exclues.`);
 
   const dupCounts = { pending: 0, merge: 0, createNew: 0, skip: 0, review: 0 };
   for (const d of decisions.values()) {
@@ -603,12 +736,20 @@ export async function runFinalImport(
     const orphanIds: string[] = [];
     const errorIds: string[] = [];
 
+    const intra = planIntraDedupe(entity, rows);
+    const targetByStagingId = new Map<string, string>();
+    const siblings: StagingRow[] = [];
+    const mapByEntity =
+      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+
     const registerRefs = (rec: StagingRow, targetId: string) => {
-      const mapByEntity =
-        entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+      targetByStagingId.set(rec.id, targetId);
       if (!mapByEntity) return;
       for (const key of refKeysOf(entity, rec)) {
-        if (!mapByEntity.has(key)) mapByEntity.set(key, targetId);
+        if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
+        const existing = mapByEntity.get(key);
+        if (existing === undefined) mapByEntity.set(key, targetId);
+        else if (existing !== targetId) mapByEntity.delete(key); // collision → relation en revue (orphan)
       }
     };
 
@@ -620,6 +761,13 @@ export async function runFinalImport(
         else if (prior.action === 'merged') counts.wouldMerge += 1;
         else counts.ignored += 1;
         registerRefs(rec, prior.entity_id);
+        continue;
+      }
+
+      // Doublon INTERNE au fichier : traité après les insertions, fusionné
+      // vers son dossier primaire (jamais créé en double).
+      if (intra.siblingOf.has(rec.id)) {
+        siblings.push(rec);
         continue;
       }
 
@@ -659,6 +807,7 @@ export async function runFinalImport(
         continue;
       }
       const id = deterministicEntityId(migration.id, rec.id, table);
+      targetByStagingId.set(rec.id, id);
       toInsert.push({ rec, row: { id, ...built.row }, id });
     }
 
@@ -703,6 +852,21 @@ export async function runFinalImport(
           }
         }
       }
+    }
+
+    // Doublons internes : fusion vers le dossier primaire réellement importé.
+    for (const rec of siblings) {
+      const primaryId = intra.siblingOf.get(rec.id)!;
+      const target = targetByStagingId.get(primaryId);
+      if (!target || errorIds.includes(primaryId)) {
+        counts.errors += 1;
+        errorIds.push(rec.id);
+        continue;
+      }
+      counts.wouldMerge += 1;
+      mergedIds.push(rec.id);
+      importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: rec.id, entity_table: table, entity_id: target, action: 'merged' });
+      registerRefs(rec, target);
     }
 
     await upsertImportRecords(admin, importRecords);
