@@ -1,5 +1,9 @@
 
 import express from 'express';
+import crypto from 'node:crypto';
+// Base publique canonique : lue depuis la configuration, JAMAIS derivee des
+// en-tetes de la requete (voir helpers.ts).
+import { resolvePublicBaseUrl } from './lib/helpers';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
@@ -289,6 +293,192 @@ app.post('/api/webhooks/stripe-connect', express.raw({ type: 'application/json',
 // ── Global body parsing (after stripe webhook raw route) ──
 app.use(express.json({ limit: '512kb' }));
 app.use(express.urlencoded({ extended: false })); // For Twilio webhook form data
+
+// ─────────────────────────────────────────────────────────────────────────
+// GET /api/auth/from-kairo — connexion automatique depuis Kairo
+//
+// Kairo (autre application, autre projet Supabase) affiche des liens
+// « Ouvrir dans Lume ». Il signe un jeton court avec un secret partagé ;
+// Lume le vérifie, retrouve l'utilisateur par courriel, et lui ouvre une
+// session sans qu'il ait à se reconnecter.
+//
+// ⚠️ CE QUE CE SECRET PERMET
+// `KAIRO_LUME_HANDOFF_SECRET` ne doit JAMAIS atteindre un navigateur, un
+// commit, ni un canal de discussion. Quiconque le détient peut forger un
+// jeton pour n'importe quelle adresse et ouvrir une session Lume à ce nom :
+// il vaut un mot de passe administrateur, pas une clé d'API.
+//
+// La signature prouve « ce jeton vient de Kairo » — PAS « le porteur de ce
+// lien est bien cette personne ». Le lien lui-même est donc un identifiant :
+// il fuit par l'historique du navigateur, les journaux de proxy et l'en-tête
+// Referer. C'est la raison du TTL de 60 secondes et de l'usage unique.
+//
+// PROTECTIONS EN PLACE
+//   · TTL de 60 s, borné par `exp` dans le jeton ;
+//   · usage unique via `jti`, mémorisé le temps de sa validité ;
+//   · comparaison de signature à temps constant ;
+//   · l'adhésion à l'organisation doit être ACTIVE — un employé congédié ne
+//     doit pas entrer par cette porte ;
+//   · chaque échange est journalisé dans `audit_events`.
+//
+// ⚠️ LIMITE CONNUE — le garde anti-rejeu vit EN MÉMOIRE. Avec plusieurs
+// instances, un jeton rejoué sur une autre instance passerait. Le jour où
+// l'on met à l'échelle horizontalement, il faut déplacer `jetonsVus` dans
+// Redis, ou dans une table portant un index unique sur `jti`.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Jetons déjà consommés → date d'expiration. Purgé à chaque appel. */
+const jetonsVus = new Map<string, number>();
+
+/** Préfixes de destination autorisés — tout le reste est refusé. */
+const DESTINATIONS_AUTORISEES = [
+  '/invoices/', '/jobs/', '/clients/', '/deals/', '/quotes/', '/messages/', '/leads/',
+];
+
+/** Un jeton légitime fait quelques centaines d'octets. */
+const TAILLE_MAX_JETON = 4096;
+
+app.get('/api/auth/from-kairo', async (req, res) => {
+  const refuser = (code: number, motif: string) => {
+    // Le motif reste dans les journaux du serveur : le renvoyer au client
+    // aiderait à deviner ce qui manque pour forger un jeton valide.
+    console.warn('[from-kairo] refusé :', motif);
+    return res.status(code).json({ error: 'Lien invalide ou expiré.' });
+  };
+
+  try {
+    const jeton = typeof req.query.token === 'string' ? req.query.token : '';
+    if (!jeton) return refuser(400, 'jeton absent');
+    if (jeton.length > TAILLE_MAX_JETON) return refuser(400, 'jeton trop long');
+
+    const sep = jeton.lastIndexOf('.');
+    if (sep <= 0 || sep === jeton.length - 1) return refuser(400, 'format attendu corps.signature');
+    const corpsB64 = jeton.slice(0, sep);
+    const signatureB64 = jeton.slice(sep + 1);
+
+    const secret = process.env.KAIRO_LUME_HANDOFF_SECRET;
+    if (!secret) {
+      // 503 et non 400 : le problème est de notre côté, pas dans la requête.
+      console.error('[from-kairo] KAIRO_LUME_HANDOFF_SECRET absent de la configuration');
+      return res.status(503).json({ error: 'Connexion depuis Kairo non configurée.' });
+    }
+
+    // ── Signature ──
+    const attendue = crypto.createHmac('sha256', secret).update(corpsB64).digest();
+    const fournie = Buffer.from(signatureB64, 'base64url');
+    // `timingSafeEqual` exige des longueurs égales : on teste avant, sinon il
+    // lève une exception au lieu de renvoyer false.
+    if (fournie.length !== attendue.length) return refuser(401, 'signature de longueur inattendue');
+    if (!crypto.timingSafeEqual(fournie, attendue)) return refuser(401, 'signature invalide');
+
+    // ── Contenu ──
+    let charge: any;
+    try {
+      charge = JSON.parse(Buffer.from(corpsB64, 'base64url').toString('utf8'));
+    } catch {
+      return refuser(400, 'corps illisible');
+    }
+    if (!charge || typeof charge !== 'object') return refuser(400, 'corps non conforme');
+
+    const { email, lume_org_id: orgId, target, exp, jti, iss } = charge;
+    if (iss !== 'kairo') return refuser(401, 'émetteur inattendu');
+    if (typeof jti !== 'string' || !jti) return refuser(400, 'jti manquant');
+    if (typeof email !== 'string' || !email.includes('@')) return refuser(400, 'courriel manquant');
+    if (typeof orgId !== 'string' || !orgId) return refuser(400, 'organisation manquante');
+    if (typeof target !== 'string' || !target) return refuser(400, 'destination manquante');
+
+    const maintenant = Math.floor(Date.now() / 1000);
+    if (typeof exp !== 'number' || exp < maintenant) return refuser(401, 'jeton expiré');
+
+    // ── Usage unique ──
+    for (const [cle, fin] of jetonsVus) if (fin < maintenant) jetonsVus.delete(cle);
+    if (jetonsVus.has(jti)) return refuser(401, 'jeton déjà utilisé');
+    // Marqué AVANT la suite : deux requêtes simultanées portant le même jti ne
+    // doivent pas passer toutes les deux.
+    jetonsVus.set(jti, exp);
+
+    // ── Destination ──
+    // `//evil.com` est une URL protocol-relative, que le navigateur suivrait
+    // vers un autre domaine. Un schéma absolu (`https:`, `javascript:`) est
+    // refusé pour la même raison.
+    if (target.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(target)) {
+      return refuser(400, 'destination absolue refusée');
+    }
+    if (!DESTINATIONS_AUTORISEES.some((p) => target.startsWith(p))) {
+      return refuser(400, 'destination hors liste blanche');
+    }
+
+    // ── Utilisateur et adhésion ──
+    const { getServiceClient } = await import('./lib/supabase.js');
+    const admin = getServiceClient();
+
+    const courriel = email.toLowerCase();
+    const { data: liste, error: errListe } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    if (errListe) {
+      console.error('[from-kairo] lecture des comptes impossible :', errListe.message);
+      return res.status(503).json({ error: 'Service momentanément indisponible.' });
+    }
+    const utilisateur = (liste?.users || []).find((u: any) => (u.email || '').toLowerCase() === courriel);
+    if (!utilisateur) return refuser(403, 'aucun compte Lume pour ce courriel');
+
+    // `status` compte autant que l'existence du lien : une adhésion révoquée
+    // reste en base, et sans ce filtre un employé congédié entrerait encore.
+    const { data: adhesion, error: errAdhesion } = await admin
+      .from('memberships')
+      .select('user_id, status')
+      .eq('user_id', utilisateur.id)
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .maybeSingle();
+    // supabase-js ne lève pas : sans ce test, une erreur de lecture passerait
+    // pour « pas membre » et donnerait un refus trompeur.
+    if (errAdhesion) {
+      console.error('[from-kairo] lecture adhésion impossible :', errAdhesion.message);
+      return res.status(503).json({ error: 'Service momentanément indisponible.' });
+    }
+    if (!adhesion) return refuser(403, 'utilisateur non membre actif de cette organisation');
+
+    // ── Journal ──
+    // Le secret vaut un mot de passe administrateur : chaque usage doit laisser
+    // une trace exploitable. Best-effort — un journal en échec ne doit pas
+    // bloquer une connexion légitime.
+    admin.from('audit_events').insert({
+      org_id: orgId,
+      user_id: utilisateur.id,
+      action: 'auth.from_kairo',
+      entity_type: 'session',
+      metadata: { jti, target, email: courriel },
+    }).then(({ error }: { error: any }) => {
+      if (error) console.error('[from-kairo] journal non écrit :', error.message);
+    });
+
+    // ── Lien de connexion ──
+    // `resolvePublicBaseUrl` ignore délibérément les en-têtes de la requête :
+    // dériver la base d'un en-tête Host permettrait de rediriger la session
+    // fraîchement ouverte vers un domaine contrôlé par l'attaquant.
+    const publicBase = resolvePublicBaseUrl(req);
+    const { data: lien, error: errLien } = await admin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: courriel,
+      options: { redirectTo: `${publicBase}${target}` },
+    });
+    if (errLien) {
+      console.error('[from-kairo] génération du lien impossible :', errLien.message);
+      return res.status(503).json({ error: 'Connexion impossible pour le moment.' });
+    }
+
+    const actionLink = (lien as any)?.properties?.action_link || (lien as any)?.action_link;
+    if (!actionLink) {
+      console.error('[from-kairo] aucun action_link renvoyé par Supabase');
+      return res.status(503).json({ error: 'Connexion impossible pour le moment.' });
+    }
+
+    return res.redirect(302, actionLink);
+  } catch (err: any) {
+    console.error('[from-kairo] échec inattendu :', err?.message);
+    return res.status(500).json({ error: 'Erreur interne.' });
+  }
+});
 
 // ── Security middleware (after body parsing so sanitization can inspect bodies) ──
 applySecurityMiddleware(app);
