@@ -340,10 +340,33 @@ const TAILLE_MAX_JETON = 4096;
 
 app.get('/api/auth/from-kairo', async (req, res) => {
   const refuser = (code: number, motif: string) => {
-    // Le motif reste dans les journaux du serveur : le renvoyer au client
-    // aiderait à deviner ce qui manque pour forger un jeton valide.
+    // Le motif complet reste dans les journaux du serveur. Le client ne reçoit
+    // qu'un code court : assez pour qu'un intégrateur sache quoi corriger, trop
+    // vague pour indiquer ce qui manque à un jeton forgé.
+    //
+    // Sans lui, toute erreur d'intégration se présentait comme le même « Lien
+    // invalide », impossible à diagnostiquer depuis l'autre service.
     console.warn('[from-kairo] refusé :', motif);
-    return res.status(code).json({ error: 'Lien invalide ou expiré.' });
+    const codes: Record<string, string> = {
+      'jeton absent': 'NO_TOKEN',
+      'jeton trop long': 'TOKEN_TOO_LONG',
+      'format attendu corps.signature': 'BAD_FORMAT',
+      'signature invalide': 'BAD_SIGNATURE',
+      'corps illisible': 'BAD_BODY',
+      'corps non conforme': 'BAD_BODY',
+      'émetteur inattendu': 'BAD_ISSUER',
+      'jti manquant': 'MISSING_JTI',
+      'courriel manquant': 'MISSING_EMAIL',
+      'organisation manquante': 'MISSING_ORG',
+      'destination manquante': 'MISSING_TARGET',
+      'jeton expiré': 'EXPIRED',
+      'jeton déjà utilisé': 'ALREADY_USED',
+      'destination absolue refusée': 'TARGET_NOT_RELATIVE',
+      'destination hors liste blanche': 'TARGET_NOT_ALLOWED',
+      'aucun compte Lume pour ce courriel': 'NO_LUME_ACCOUNT',
+      'utilisateur non membre actif de cette organisation': 'NOT_ORG_MEMBER',
+    };
+    return res.status(code).json({ error: 'Lien invalide ou expiré.', code: codes[motif] || 'REJECTED' });
   };
 
   try {
