@@ -208,9 +208,22 @@ describe('les garde-fous côté serveur', () => {
     expect(bloc).toContain('errListe');
   });
 
-  it('le motif de refus ne fuit pas vers le client', () => {
-    // Détailler ce qui manque aiderait à forger un jeton valide.
+  it('le motif détaillé ne fuit pas vers le client', () => {
+    // Détailler ce qui manque aiderait à forger un jeton valide : le client ne
+    // reçoit qu'un code court, le motif complet reste dans les journaux.
     expect(bloc).toContain("error: 'Lien invalide ou expiré.'");
+    expect(bloc).toContain("console.warn('[from-kairo] refusé :', motif)");
+  });
+
+  it('chaque motif de refus porte un code de diagnostic', () => {
+    // Sans code, toute erreur d'intégration se présente comme le même « Lien
+    // invalide » — impossible à diagnostiquer depuis l'autre service. Un motif
+    // ajouté sans son code retomberait sur REJECTED, donc sur rien.
+    const motifs = new Set([...bloc.matchAll(/refuser\(\d+,\s*'([^']+)'\)/g)].map((m) => m[1]));
+    const table = new Set([...bloc.matchAll(/^\s*'([^']+)':\s*'[A-Z_]+',/gm)].map((m) => m[1]));
+    expect(motifs.size, 'aucun motif extrait — le test ne vérifie rien').toBeGreaterThan(10);
+    const sansCode = [...motifs].filter((m) => !table.has(m));
+    expect(sansCode, `motifs sans code : ${sansCode.join(', ')}`).toEqual([]);
   });
 
   it('chaque échange est journalisé', () => {
