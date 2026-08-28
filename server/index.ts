@@ -367,11 +367,27 @@ app.get('/api/auth/from-kairo', async (req, res) => {
 
     // ── Signature ──
     const attendue = crypto.createHmac('sha256', secret).update(corpsB64).digest();
-    const fournie = Buffer.from(signatureB64, 'base64url');
-    // `timingSafeEqual` exige des longueurs égales : on teste avant, sinon il
-    // lève une exception au lieu de renvoyer false.
-    if (fournie.length !== attendue.length) return refuser(401, 'signature de longueur inattendue');
-    if (!crypto.timingSafeEqual(fournie, attendue)) return refuser(401, 'signature invalide');
+    // Les trois encodages ci-dessous portent la MEME preuve cryptographique :
+    // seule la representation change. Les bibliotheques HMAC rendent
+    // naturellement de l'hexadecimal (Node `.digest('hex')`, Python
+    // `.hexdigest()`) ou du base64 standard ; n'accepter que le base64url
+    // faisait echouer une integration correcte pour une raison purement
+    // cosmetique, avec un 401 impossible a diagnostiquer depuis l'autre cote.
+    // Accepter les trois ne diminue en rien la securite.
+    const candidats: Buffer[] = [];
+    if (/^[0-9a-f]{64}$/i.test(signatureB64)) {
+      candidats.push(Buffer.from(signatureB64, 'hex'));
+    } else {
+      candidats.push(Buffer.from(signatureB64, 'base64url'));
+      // base64 standard : `+` et `/` la ou base64url met `-` et `_`.
+      if (/[+/=]/.test(signatureB64)) candidats.push(Buffer.from(signatureB64, 'base64'));
+    }
+    // `timingSafeEqual` exige des longueurs egales : on teste avant, sinon il
+    // leve une exception au lieu de renvoyer false.
+    const valide = candidats.some(
+      (c) => c.length === attendue.length && crypto.timingSafeEqual(c, attendue),
+    );
+    if (!valide) return refuser(401, 'signature invalide');
 
     // ── Contenu ──
     let charge: any;
