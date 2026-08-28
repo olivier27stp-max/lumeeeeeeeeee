@@ -103,10 +103,20 @@ describe('la signature ne peut pas être contournée', () => {
   it('compare en temps constant', () => {
     // Une comparaison naïve laisserait deviner la signature octet par octet.
     expect(bloc).toContain('crypto.timingSafeEqual');
-    // `timingSafeEqual` lève si les longueurs diffèrent : le test de longueur
-    // doit venir AVANT, sinon un jeton mal formé provoque une 500.
-    expect(bloc.indexOf('fournie.length !== attendue.length'))
-      .toBeLessThan(bloc.indexOf('crypto.timingSafeEqual'));
+    // `timingSafeEqual` lève si les longueurs diffèrent : la comparaison de
+    // longueur doit être évaluée AVANT, dans le même `&&`, sinon un jeton mal
+    // formé provoque une 500 au lieu d'un refus propre.
+    expect(bloc).toContain('c.length === attendue.length && crypto.timingSafeEqual');
+  });
+
+  it('accepte les trois encodages de signature', () => {
+    // hex et base64 standard portent la MÊME preuve que base64url : les
+    // bibliothèques HMAC rendent naturellement l'un ou l'autre. Les refuser
+    // faisait échouer une intégration correcte avec un 401 indéchiffrable
+    // depuis l'autre côté.
+    expect(bloc).toContain("/^[0-9a-f]{64}$/i.test(signatureB64)");
+    expect(bloc).toContain("Buffer.from(signatureB64, 'base64url')");
+    expect(bloc).toContain("Buffer.from(signatureB64, 'base64')");
   });
 });
 
