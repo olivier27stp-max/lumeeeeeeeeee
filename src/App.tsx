@@ -6,6 +6,7 @@ import {
   Inbox,
   Settings,
   LogOut,
+  Sparkles,
   Menu,
   X,
   Calendar as CalendarIcon,
@@ -179,7 +180,8 @@ import SessionTimeoutModal from './components/SessionTimeoutModal';
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { checkCreatorAccess } from './lib/creatorSpaceApi';
 // Cross-cutting hooks previously inlined in App()
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
 
@@ -726,6 +728,15 @@ function AuthenticatedApp({
   location,
 }: any) {
   const queryClient = useQueryClient();
+  // Lien Creator Space dans la sidebar — visible seulement pour les comptes
+  // de platformAdminIds (sonde serveur /api/creator-space/check, jamais une
+  // décision locale) ; la page et chaque endpoint se re-gardent de toute façon.
+  const creatorAccess = useQuery({
+    queryKey: ['creator-space', 'check'],
+    queryFn: checkCreatorAccess,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
   // Bumping this remounts GlobalSearch (it holds local state, not react-query),
   // so a logo click resets the search bar to a clean state.
   const [searchResetKey, setSearchResetKey] = useState(0);
@@ -1158,6 +1169,27 @@ function AuthenticatedApp({
           <div className="p-2.5 space-y-0.5 border-t border-sidebar-text/10">
             {/* Company switcher — only visible for multi-company users */}
             {sidebarExpanded && <CompanySwitcher />}
+            {creatorAccess.data === true && (
+              <button
+                onClick={() => navigate('/creator-space')}
+                title={!sidebarExpanded ? 'Creator Space' : undefined}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors relative",
+                  isActive('/creator-space')
+                    ? "bg-sidebar-active text-sidebar-text-active font-semibold"
+                    : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active",
+                  !sidebarExpanded && "justify-center"
+                )}
+              >
+                {isActive('/creator-space') && (
+                  <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-sidebar-accent" />
+                )}
+                <Sparkles size={17} strokeWidth={isActive('/creator-space') ? 2.2 : 1.8} className={cn(
+                  isActive('/creator-space') ? "text-sidebar-text-active" : "text-sidebar-text"
+                )} />
+                {sidebarExpanded && <span>Creator Space</span>}
+              </button>
+            )}
             <button
               onClick={() => setIsDark(!isDark)}
               title={!sidebarExpanded ? (isDark ? t.nav.lightMode : t.nav.darkMode) : undefined}

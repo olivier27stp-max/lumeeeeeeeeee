@@ -59,10 +59,14 @@ describe('montage serveur et surface SPA', () => {
     expect(indexSrc).toContain("app.use('/api', creatorSpaceRouter)");
   });
 
-  it('la route SPA existe mais reste hors navigation', () => {
+  it('la route SPA existe, hors nav statique ; le lien sidebar est gaté par la sonde serveur', () => {
     expect(appSrc).toContain('path="/creator-space/*"');
     const navSlice = appSrc.slice(appSrc.indexOf('navSections'), appSrc.indexOf('navSections') + 6000);
     expect(navSlice).not.toContain('/creator-space');
+    // Le lien n'apparaît que si /api/creator-space/check répond vrai —
+    // jamais une décision prise côté navigateur.
+    expect(appSrc).toContain('creatorAccess.data === true && (');
+    expect(appSrc).toContain('checkCreatorAccess');
   });
 
   it('la page se gate via la sonde /check (jamais de décision côté navigateur seul)', () => {
