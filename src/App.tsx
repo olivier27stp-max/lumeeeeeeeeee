@@ -7,6 +7,8 @@ import {
   Settings,
   LogOut,
   Sparkles,
+  ExternalLink,
+  RotateCw,
   Menu,
   X,
   Calendar as CalendarIcon,
@@ -180,7 +182,7 @@ import SessionTimeoutModal from './components/SessionTimeoutModal';
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkCreatorAccess } from './lib/creatorSpaceApi';
 // Cross-cutting hooks previously inlined in App()
 import { useCommandPaletteShortcut } from './hooks/useCommandPaletteShortcut';
@@ -703,6 +705,85 @@ export default function App() {
   );
 }
 
+// ── Fine barre Creator Space (au-dessus du header principal) ───────────
+// Très mince et discrète ; à gauche l'entrée vers le Creator Space, à
+// droite les actions Open New Tab / Refresh / Close quand on est dedans.
+
+function CreatorSpaceBar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const fetching = useIsFetching({ queryKey: ['creator-space'] }) > 0;
+  const inSpace = location.pathname.startsWith('/creator-space');
+
+  // Close : ferme la vue interne ouverte (panneau ?org=), sinon revient à
+  // l'écran principal du Creator Space, sinon quitte vers le CRM — jamais
+  // de page vide. Ferme l'onglet seulement si le navigateur le permet.
+  const closeCreator = () => {
+    if (location.search.includes('org=')) {
+      navigate(location.pathname, { replace: true });
+      return;
+    }
+    if (location.pathname !== '/creator-space') {
+      navigate('/creator-space');
+      return;
+    }
+    if (window.opener && window.history.length <= 1) {
+      window.close();
+      return;
+    }
+    navigate('/');
+  };
+
+  const actionCls =
+    'inline-flex items-center gap-1 h-5 px-1.5 rounded text-[10.5px] font-medium text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40';
+
+  return (
+    <div className="shrink-0 h-6 flex items-center gap-2 px-4 border-b border-outline bg-surface-elevated">
+      <button
+        type="button"
+        onClick={() => navigate('/creator-space')}
+        title="Ouvrir le Creator Space"
+        className={cn(
+          'inline-flex items-center gap-1.5 h-5 px-1.5 rounded text-[10.5px] font-semibold tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40',
+          inSpace ? 'text-text-primary' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary',
+        )}
+      >
+        <Sparkles size={11} />
+        Creator Space
+      </button>
+      {inSpace && (
+        <span className="text-[9.5px] text-text-tertiary border border-outline rounded-full px-1.5 leading-[14px]">Console interne</span>
+      )}
+      <div className="flex-1" />
+      {inSpace && (
+        <>
+          <button
+            type="button"
+            onClick={() => window.open(location.pathname + location.search, '_blank', 'noopener')}
+            className={actionCls}
+            title="Ouvrir cette page dans un nouvel onglet"
+          >
+            <ExternalLink size={10} /> Open New Tab
+          </button>
+          <button
+            type="button"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['creator-space'] })}
+            className={actionCls}
+            title="Actualiser les données"
+            disabled={fetching}
+          >
+            <RotateCw size={10} className={cn(fetching && 'animate-spin')} /> Refresh
+          </button>
+          <button type="button" onClick={closeCreator} className={actionCls} title="Fermer la vue actuelle">
+            <X size={10} /> Close
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Authenticated App Shell (inside CompanyProvider) ──────────────────
 
 function AuthenticatedApp({
@@ -1169,27 +1250,6 @@ function AuthenticatedApp({
           <div className="p-2.5 space-y-0.5 border-t border-sidebar-text/10">
             {/* Company switcher — only visible for multi-company users */}
             {sidebarExpanded && <CompanySwitcher />}
-            {creatorAccess.data === true && (
-              <button
-                onClick={() => navigate('/creator-space')}
-                title={!sidebarExpanded ? 'Creator Space' : undefined}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-2.5 py-[8px] rounded-lg text-[14px] font-medium transition-colors relative",
-                  isActive('/creator-space')
-                    ? "bg-sidebar-active text-sidebar-text-active font-semibold"
-                    : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active",
-                  !sidebarExpanded && "justify-center"
-                )}
-              >
-                {isActive('/creator-space') && (
-                  <div className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-sidebar-accent" />
-                )}
-                <Sparkles size={17} strokeWidth={isActive('/creator-space') ? 2.2 : 1.8} className={cn(
-                  isActive('/creator-space') ? "text-sidebar-text-active" : "text-sidebar-text"
-                )} />
-                {sidebarExpanded && <span>Creator Space</span>}
-              </button>
-            )}
             <button
               onClick={() => setIsDark(!isDark)}
               title={!sidebarExpanded ? (isDark ? t.nav.lightMode : t.nav.darkMode) : undefined}
@@ -1236,6 +1296,13 @@ function AuthenticatedApp({
 
         {/* ─── Main content ─── */}
         <main className="flex-1 flex flex-col overflow-hidden">
+          {/* Fine barre Creator Space au-dessus du header principal — rendue
+              seulement quand la sonde serveur /api/creator-space/check répond
+              vrai (les 2 comptes plateforme) ; la page et chaque endpoint se
+              re-gardent côté serveur de toute façon. */}
+          {creatorAccess.data === true && (
+            <CreatorSpaceBar />
+          )}
           {/* Impayé en cours — l'accès est maintenu, mais pas indéfiniment.
               Non refermable et présent sur toutes les pages : le client doit
               apprendre la fermeture à venir ici, pas le jour où elle arrive. */}
