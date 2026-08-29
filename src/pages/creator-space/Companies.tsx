@@ -74,6 +74,8 @@ export default function Companies() {
           </div>
         ) : (
           <div className="rounded-lg border border-outline bg-surface-card overflow-hidden">
+            <div className="overflow-x-auto">
+            <div className="min-w-[640px]">
             <div className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1.5fr)_90px_110px_90px] gap-3 px-4 py-2.5 border-b border-outline text-[11px] uppercase tracking-wide text-text-tertiary font-semibold">
               <span>Compagnie</span>
               <span>Propriétaire</span>
@@ -110,6 +112,8 @@ export default function Companies() {
                 </li>
               ))}
             </ul>
+            </div>
+            </div>
             <Paginator page={page} total={query.data?.total ?? 0} pageSize={query.data?.page_size ?? 25} onPage={setPage} />
           </div>
         )}
