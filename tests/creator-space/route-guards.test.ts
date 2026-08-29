@@ -61,8 +61,13 @@ describe('montage serveur et surface SPA', () => {
 
   it('la route SPA existe, hors nav statique ; le lien sidebar est gaté par la sonde serveur', () => {
     expect(appSrc).toContain('path="/creator-space/*"');
-    const navSlice = appSrc.slice(appSrc.indexOf('navSections'), appSrc.indexOf('navSections') + 6000);
-    expect(navSlice).not.toContain('/creator-space');
+    // Fenêtre exacte des données de navigation statiques (navSections →
+    // moreNavItems) : aucune entrée Creator Space ne doit s'y trouver.
+    const navStart = appSrc.indexOf('navSections');
+    const navEnd = appSrc.indexOf('moreNavItems', navStart);
+    expect(navStart).toBeGreaterThan(-1);
+    expect(navEnd).toBeGreaterThan(navStart);
+    expect(appSrc.slice(navStart, navEnd)).not.toContain('/creator-space');
     // Le lien n'apparaît que si /api/creator-space/check répond vrai —
     // jamais une décision prise côté navigateur.
     expect(appSrc).toContain('creatorAccess.data === true && (');

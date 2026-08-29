@@ -735,25 +735,27 @@ function CreatorSpaceBar() {
     navigate('/');
   };
 
+  // Beige du bouton « Nouvelle job » (#d8d0c2, hover #cabfad) — couleur fixe
+  // quel que soit le thème, comme le bouton lui-même.
   const actionCls =
-    'inline-flex items-center gap-1 h-5 px-1.5 rounded text-[10.5px] font-medium text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40';
+    'inline-flex items-center gap-1 h-5 px-1.5 rounded text-[10.5px] font-medium text-[#4a4436] hover:text-black hover:bg-[#cabfad] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30';
 
   return (
-    <div className="shrink-0 h-6 flex items-center gap-2 px-4 border-b border-outline bg-surface-elevated">
+    <div className="shrink-0 h-6 flex items-center gap-2 px-4 border-b border-[#cabfad] bg-[#d8d0c2]">
       <button
         type="button"
         onClick={() => navigate('/creator-space')}
         title="Ouvrir le Creator Space"
         className={cn(
-          'inline-flex items-center gap-1.5 h-5 px-1.5 rounded text-[10.5px] font-semibold tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40',
-          inSpace ? 'text-text-primary' : 'text-text-tertiary hover:text-text-primary hover:bg-surface-secondary',
+          'inline-flex items-center gap-1.5 h-5 px-1.5 rounded text-[10.5px] font-semibold tracking-wide transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/30',
+          inSpace ? 'text-black' : 'text-[#3a3428] hover:text-black hover:bg-[#cabfad]',
         )}
       >
         <Sparkles size={11} />
         Creator Space
       </button>
       {inSpace && (
-        <span className="text-[9.5px] text-text-tertiary border border-outline rounded-full px-1.5 leading-[14px]">Console interne</span>
+        <span className="text-[9.5px] text-[#5a5142] border border-[#b5a992] rounded-full px-1.5 leading-[14px]">Console interne</span>
       )}
       <div className="flex-1" />
       {inSpace && (
@@ -1011,7 +1013,15 @@ function AuthenticatedApp({
         toastOptions={lumeToastOptions}
       />
       <CookieBanner />
-      <div className="flex h-screen overflow-hidden bg-surface">
+      <div className="flex flex-col h-screen overflow-hidden bg-surface">
+        {/* Fine barre Creator Space — pleine largeur (au-dessus de la sidebar
+            ET du header), rendue seulement quand la sonde serveur
+            /api/creator-space/check répond vrai (les 2 comptes plateforme) ;
+            la page et chaque endpoint se re-gardent côté serveur. */}
+        {creatorAccess.data === true && (
+          <CreatorSpaceBar />
+        )}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* ─── Mobile sidebar overlay ─── */}
         {isSidebarOpen && (
           <div
@@ -1296,13 +1306,6 @@ function AuthenticatedApp({
 
         {/* ─── Main content ─── */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Fine barre Creator Space au-dessus du header principal — rendue
-              seulement quand la sonde serveur /api/creator-space/check répond
-              vrai (les 2 comptes plateforme) ; la page et chaque endpoint se
-              re-gardent côté serveur de toute façon. */}
-          {creatorAccess.data === true && (
-            <CreatorSpaceBar />
-          )}
           {/* Impayé en cours — l'accès est maintenu, mais pas indéfiniment.
               Non refermable et présent sur toutes les pages : le client doit
               apprendre la fermeture à venir ici, pas le jour où elle arrive. */}
@@ -1504,6 +1507,7 @@ function AuthenticatedApp({
             </div>
           </div>
         </main>
+        </div>
       </div>
       {/* HelpChat removed — ? button now navigates to Lume Agent */}
       <SupportFAB />
