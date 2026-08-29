@@ -108,6 +108,9 @@ const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
 // Console interne des migrations assistées — la page se gate elle-même via
 // GET /api/migration-admin/check (PLATFORM_OWNER_ID) et redirige sinon.
 const AdminMigrations = React.lazy(() => import('./pages/AdminMigrations'));
+// Creator Space — espace interne plateforme (platformAdminIds), la page se
+// gate elle-même via GET /api/creator-space/check et redirige sinon.
+const CreatorSpace = React.lazy(() => import('./pages/creator-space/CreatorSpace'));
 import TaxSettings from './pages/TaxSettings';
 import OAuthCallback from './pages/OAuthCallback';
 import EmailOAuthCallback from './pages/EmailOAuthCallback';
@@ -1392,6 +1395,10 @@ function AuthenticatedApp({
                         réservée à PLATFORM_OWNER_ID (guard serveur + gate dans
                         la page). Périmètre limité aux projets de migration. */}
                     <Route path="/admin/migrations" element={<React.Suspense fallback={null}><AdminMigrations /></React.Suspense>} />
+                    {/* Creator Space — hors nav, réservé à platformAdminIds
+                        (guard serveur par-handler + gate dans la page).
+                        Lecture seule : vues plateforme inter-compagnies. */}
+                    <Route path="/creator-space/*" element={<React.Suspense fallback={null}><CreatorSpace /></React.Suspense>} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
             </ErrorBoundary>
