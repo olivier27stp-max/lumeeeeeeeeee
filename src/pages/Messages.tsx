@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -289,6 +289,8 @@ export default function Messages() {
   // validation des scopes Gmail côté Google Cloud Console).
   const EMAIL_INBOX_ENABLED = false;
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const initialScrollDoneRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Load conversations
@@ -402,9 +404,22 @@ export default function Messages() {
     return () => { cancelled = true; };
   }, [selectedConvo?.id]);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom.
+  // À l'ouverture d'une conversation : saut instantané (avant le paint, aucun défilement visible).
+  // Ensuite : défilement fluide pour les nouveaux messages.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    initialScrollDoneRef.current = false;
+  }, [selectedConvo?.id]);
+
+  useLayoutEffect(() => {
+    if (messages.length === 0) return;
+    if (!initialScrollDoneRef.current) {
+      const el = messagesContainerRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+      initialScrollDoneRef.current = true;
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   // Send message
@@ -667,7 +682,7 @@ export default function Messages() {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-1">
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-1">
                 {loadingMessages ? (
                   <div className="flex items-center justify-center py-12">
                     <div className="w-5 h-5 border-2 border-border border-t-text-primary rounded-full animate-spin" />
