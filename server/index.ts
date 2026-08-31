@@ -94,6 +94,7 @@ import onboardingRouter from './routes/onboarding';
 import migrationAdminRouter from './routes/migration-admin';
 import migrationPortalRouter from './routes/migration-portal';
 import creatorSpaceRouter from './routes/creator-space';
+import creatorSpaceAuditRouter, { creatorSpaceViewLogger } from './routes/creator-space-audit';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
@@ -724,9 +725,13 @@ app.use('/api', migrationAdminRouter);
 // Creator Space (/api/creator-space/*) : espace interne plateforme réservé à
 // platformAdminIds, lecture seule, chaque handler se garde lui-même
 // (requireCreatorSpace). Hors RBAC tenant, comme la console des migrations.
+// Chaque consultation réussie est journalisée (creator_space_view) et la
+// révélation d'un nom passe par creator-space-audit (raison journalisée).
 const creatorSpaceLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `creator:${userKey(req)}` });
 app.use('/api/creator-space', creatorSpaceLimiter);
+app.use('/api/creator-space', creatorSpaceViewLogger());
 app.use('/api', creatorSpaceRouter);
+app.use('/api', creatorSpaceAuditRouter);
 const migrationPortalLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `migportal:${userKey(req)}` });
 app.use('/api/migration-portal', migrationPortalLimiter);
 // Anti force-brute sur la résolution du jeton : limite serrée par IP (Redis si dispo).

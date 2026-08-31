@@ -10,7 +10,7 @@ import { cn } from '../../lib/utils';
 import { getLogs, type LogSource } from '../../lib/creatorSpaceApi';
 import { TableSkeleton } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
-import { ErrorState, Paginator, fmtDateTime, useDebounced } from './shared';
+import { ErrorState, MaskedActor, Paginator, fmtDateTime, useDebounced } from './shared';
 
 const SOURCES: Array<{ id: LogSource; label: string }> = [
   { id: 'audit', label: 'Audit' },
@@ -123,7 +123,9 @@ export default function Logs() {
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-text-secondary truncate max-w-[200px]">{r.org_name ?? '—'}</td>
-                    <td className="px-4 py-2.5 text-text-secondary truncate max-w-[160px]">{r.actor_name ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-text-secondary whitespace-nowrap">
+                      <MaskedActor userId={r.actor_id} />
+                    </td>
                     <td className="px-4 py-2.5 text-text-tertiary truncate max-w-[260px]">
                       {r.entity_type ? `${r.entity_type}` : ''}
                       {r.resolved != null && (r.resolved ? ' · résolu' : ' · non résolu')}

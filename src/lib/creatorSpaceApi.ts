@@ -19,9 +19,13 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-org-id': activeOrg };
 }
 
-async function apiFetch<T>(path: string): Promise<T> {
+async function apiFetch<T>(path: string, init?: { method?: string; body?: unknown }): Promise<T> {
   const headers = await getAuthHeaders();
-  const res = await fetch(`${BASE}${path}`, { headers });
+  const res = await fetch(`${BASE}${path}`, {
+    headers,
+    method: init?.method ?? 'GET',
+    ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+  });
   let body: any = null;
   try {
     body = await res.json();
@@ -63,7 +67,7 @@ export interface CreatorOverview {
     id: string;
     org_id: string;
     org_name: string | null;
-    actor_name: string | null;
+    actor_id: string | null;
     action: string | null;
     entity_type: string | null;
     created_at: string;
@@ -76,7 +80,7 @@ export interface CreatorLogRow {
   id: string;
   org_id: string | null;
   org_name: string | null;
-  actor_name: string | null;
+  actor_id: string | null;
   action?: string | null;
   event_type?: string | null;
   entity_type?: string | null;
@@ -207,7 +211,7 @@ export interface CompanyEngagement {
     id: string;
     event_type: string;
     entity_type: string;
-    actor_name: string | null;
+    actor_id: string | null;
     created_at: string;
   }>;
   caveats: string[];
@@ -263,6 +267,13 @@ export function getCompanyBilling(orgId: string): Promise<CompanyBilling> {
 
 export function getCompanyPermissions(orgId: string): Promise<CompanyPermissions> {
   return apiFetch(`/companies/${orgId}/permissions`);
+}
+
+/** Révèle le nom derrière un identifiant d'utilisateur d'un autre tenant.
+ *  La raison est obligatoire et journalisée côté serveur
+ *  (creator_space_reveal) — pas de trace, pas de révélation. */
+export function revealActor(userId: string, reason: string): Promise<{ user_id: string; name: string | null }> {
+  return apiFetch('/reveal-actor', { method: 'POST', body: { user_id: userId, reason } });
 }
 
 export function getCompanyEngagement(orgId: string): Promise<CompanyEngagement> {

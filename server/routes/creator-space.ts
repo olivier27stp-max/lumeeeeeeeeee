@@ -6,6 +6,11 @@
 // Lecture seule : aucun endpoint n'écrit quoi que ce soit. Les identifiants
 // Stripe, adresses IP, user-agents et données de facturation confidentielles
 // ne sortent jamais d'ici — voir tests/creator-space/route-guards.test.ts.
+// Les journaux (Logs, Overview, Engagement compagnie) n'exposent AUCUN nom de
+// personne d'un autre tenant : identifiants seulement — la révélation d'un
+// nom passe par creator-space-audit.ts (raison requise, journalisée). Chaque
+// consultation est consignée par creatorSpaceViewLogger (même fichier), via
+// res.locals.creatorSpaceUserId posé par la garde ci-dessous.
 
 import { Router } from 'express';
 import type express from 'express';
@@ -20,8 +25,10 @@ type Admin = ReturnType<typeof getServiceClient>;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Garde plateforme : même pattern que la console des migrations assistées. */
-async function requireCreatorSpace(req: express.Request, res: express.Response): Promise<Authed | null> {
+/** Garde plateforme : même pattern que la console des migrations assistées.
+ *  Exportée pour creator-space-audit.ts (reveal-actor) — toute route qui
+ *  l'utilise hérite du même contrôle platformAdminIds. */
+export async function requireCreatorSpace(req: express.Request, res: express.Response): Promise<Authed | null> {
   if (platformAdminIds.size === 0) {
     res.status(503).json({ error: 'Creator Space non configuré.' });
     return null;
@@ -32,6 +39,9 @@ async function requireCreatorSpace(req: express.Request, res: express.Response):
     res.status(403).json({ error: 'Accès refusé.' });
     return null;
   }
+  // Identité pour le journal d'accès (creatorSpaceViewLogger) — posée
+  // seulement une fois l'appartenance à platformAdminIds vérifiée.
+  res.locals.creatorSpaceUserId = auth.user.id;
   return auth;
 }
 
@@ -207,7 +217,6 @@ router.get('/creator-space/overview', async (req, res) => {
     ]);
 
     const displayNames = new Map(workspaces.map((w: any) => [w.id, w.name]));
-    const actorNames = await loadActorNames(admin, (recentEventsResult.data ?? []).map((e: any) => e.actor_id));
 
     const subs = subsResult.data ?? [];
     return res.json({
@@ -221,11 +230,13 @@ router.get('/creator-space/overview', async (req, res) => {
         subscriptions_active: subs.filter((s: any) => s.status === 'active' || s.status === 'trialing').length,
         subscriptions_past_due: subs.filter((s: any) => s.status === 'past_due').length,
       },
+      // Jamais de nom de personne ici : identifiant seulement (Loi 25 —
+      // révélation via reveal-actor, journalisée avec raison).
       recent_events: (recentEventsResult.data ?? []).map((e: any) => ({
         id: e.id,
         org_id: e.org_id,
         org_name: displayNames.get(e.org_id) ?? null,
-        actor_name: (e.actor_id && actorNames.get(e.actor_id)) || null,
+        actor_id: e.actor_id ?? null,
         action: e.action,
         entity_type: e.entity_type,
         created_at: e.created_at,
@@ -272,13 +283,14 @@ router.get('/creator-space/logs', async (req, res) => {
 
     const rows = (data ?? []) as any[];
     const { displayNameById } = await loadOrgDirectory(admin);
-    const actorNames = await loadActorNames(admin, rows.map((r) => r.actor_id ?? r.user_id));
 
     return res.json({
+      // Jamais de nom de personne : actor_id seulement — le nom se révèle via
+      // reveal-actor (raison requise, journalisée).
       data: rows.map((r) => ({
         ...r,
         org_name: (r.org_id && displayNameById.get(r.org_id)) ?? null,
-        actor_name: actorNames.get(r.actor_id ?? r.user_id) ?? null,
+        actor_id: r.actor_id ?? r.user_id ?? null,
       })),
       total: count ?? rows.length,
       page,
@@ -626,7 +638,6 @@ router.get('/creator-space/companies/:orgId/engagement', async (req, res) => {
     const lastJob = jobs30.data?.[0]?.created_at ?? null;
     const lastActivityLog = recentActivity.data?.[0]?.created_at ?? null;
     const lastActivity = [lastLogin, lastJob, lastActivityLog].filter(Boolean).sort().pop() ?? null;
-    const actorNames = await loadActorNames(admin, (recentActivity.data ?? []).map((a: any) => a.actor_id));
 
     return res.json({
       last_activity: lastActivity,
@@ -639,11 +650,12 @@ router.get('/creator-space/companies/:orgId/engagement', async (req, res) => {
         quotes: quotesCount.count ?? 0,
         invoices: invoicesCount.count ?? 0,
       },
+      // Identifiant seulement, jamais de nom (révélation via reveal-actor).
       recent_activity: (recentActivity.data ?? []).map((a: any) => ({
         id: a.id,
         event_type: a.event_type,
         entity_type: a.entity_type,
-        actor_name: (a.actor_id && actorNames.get(a.actor_id)) || null,
+        actor_id: a.actor_id ?? null,
         created_at: a.created_at,
       })),
       // Limites connues des signaux (voir sync_auth_telemetry) : seules les

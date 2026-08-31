@@ -451,7 +451,7 @@ interface SecurityEventInput {
   user_id?: string;
   event_type: string;
   severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
-  source: 'api' | 'auth' | 'webhook' | 'rls' | 'system';
+  source: 'api' | 'auth' | 'webhook' | 'rls' | 'system' | 'creator-space';
   ip_address?: string;
   user_agent?: string;
   details?: Record<string, any>;

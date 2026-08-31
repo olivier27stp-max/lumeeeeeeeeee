@@ -8,7 +8,7 @@ import { Activity, Building2 } from 'lucide-react';
 import { getOverview } from '../../lib/creatorSpaceApi';
 import { CardSkeleton, TableSkeleton } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
-import { ErrorState, StatTile, fmtDateTime } from './shared';
+import { ErrorState, MaskedActor, StatTile, fmtDateTime } from './shared';
 
 export default function Overview() {
   const query = useQuery({
@@ -69,7 +69,11 @@ export default function Overview() {
               <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-outline last:border-b-0 text-[13px]">
                 <span className="font-medium text-text-primary truncate max-w-[220px]">{e.org_name ?? 'Compagnie inconnue'}</span>
                 <span className="text-text-secondary truncate">{e.action ?? e.entity_type ?? '—'}</span>
-                {e.actor_name && <span className="text-text-tertiary truncate">par {e.actor_name}</span>}
+                {e.actor_id && (
+                  <span className="text-text-tertiary truncate">
+                    par <MaskedActor userId={e.actor_id} />
+                  </span>
+                )}
                 <span className="ml-auto shrink-0 text-[12px] text-text-tertiary">{fmtDateTime(e.created_at)}</span>
               </li>
             ))}

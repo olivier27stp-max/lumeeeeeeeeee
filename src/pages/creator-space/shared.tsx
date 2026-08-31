@@ -1,9 +1,10 @@
 // Petits blocs partagés du Creator Space (helpers de format, badge
-// d'engagement, tuile de stat, pagination). Interne plateforme seulement.
+// d'engagement, tuile de stat, pagination, acteur masqué). Interne
+// plateforme seulement.
 
 import React, { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
-import type { EngagementLevel } from '../../lib/creatorSpaceApi';
+import { revealActor, type EngagementLevel } from '../../lib/creatorSpaceApi';
 
 export function useDebounced(value: string, delay = 300): string {
   const [debounced, setDebounced] = useState(value);
@@ -121,6 +122,90 @@ export function Paginator({ page, total, pageSize, onPage }: { page: number; tot
         </button>
       </div>
     </div>
+  );
+}
+
+// ── Acteur masqué (Loi 25) ────────────────────────────────────────────────
+// Les journaux n'affichent jamais le nom d'une personne d'un autre tenant :
+// identifiant abrégé par défaut, « Révéler » demande une raison qui est
+// journalisée côté serveur (creator_space_reveal) avant de retourner le nom.
+
+const revealedNames = new Map<string, string | null>();
+
+export function shortId(id: string | null | undefined): string {
+  return id ? id.slice(0, 8) : '—';
+}
+
+export function MaskedActor({ userId }: { userId: string | null | undefined }) {
+  const [state, setState] = useState<'idle' | 'asking' | 'loading' | 'error'>('idle');
+  const [reason, setReason] = useState('');
+  const [, forceRender] = useState(0);
+
+  if (!userId) return <span className="text-text-tertiary">—</span>;
+
+  const revealed = revealedNames.get(userId);
+  if (revealed !== undefined) {
+    return <span title={userId}>{revealed ?? shortId(userId)}</span>;
+  }
+
+  async function onReveal() {
+    if (!userId || reason.trim().length < 5) return;
+    setState('loading');
+    try {
+      const { name } = await revealActor(userId, reason.trim());
+      revealedNames.set(userId, name);
+      setState('idle');
+      setReason('');
+      forceRender((n) => n + 1);
+    } catch {
+      setState('error');
+    }
+  }
+
+  if (state === 'asking' || state === 'loading' || state === 'error') {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <input
+          type="text"
+          autoFocus
+          value={reason}
+          disabled={state === 'loading'}
+          onChange={(e) => setReason(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onReveal();
+            if (e.key === 'Escape') { setState('idle'); setReason(''); }
+          }}
+          placeholder="Raison (journalisée)…"
+          aria-label="Raison de la révélation, journalisée"
+          className={cn(
+            'h-6 w-40 px-2 rounded border bg-surface text-[12px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-blue-500/40',
+            state === 'error' ? 'border-red-300' : 'border-outline',
+          )}
+        />
+        <button
+          type="button"
+          onClick={onReveal}
+          disabled={state === 'loading' || reason.trim().length < 5}
+          className="h-6 px-2 rounded border border-outline bg-surface text-[11px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {state === 'loading' ? '…' : 'OK'}
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="font-mono text-[12px]" title="Identifiant utilisateur (nom masqué)">{shortId(userId)}</span>
+      <button
+        type="button"
+        onClick={() => setState('asking')}
+        className="text-[11px] text-text-tertiary underline decoration-dotted hover:text-text-primary transition-colors"
+        title="Afficher le nom — une raison est requise et journalisée"
+      >
+        Révéler
+      </button>
+    </span>
   );
 }
 

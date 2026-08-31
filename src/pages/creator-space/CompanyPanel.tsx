@@ -16,7 +16,7 @@ import {
   getCompanyUsers,
 } from '../../lib/creatorSpaceApi';
 import EmptyState from '../../components/ui/EmptyState';
-import { EngagementBadge, ErrorState, SubStatusBadge, fmtDate, fmtDateTime, fmtMoney } from './shared';
+import { EngagementBadge, ErrorState, MaskedActor, SubStatusBadge, fmtDate, fmtDateTime, fmtMoney } from './shared';
 
 type Tab = 'users' | 'billing' | 'permissions' | 'engagement';
 
@@ -316,7 +316,12 @@ function EngagementTab({ orgId }: { orgId: string }) {
               <li key={a.id} className="flex items-center justify-between gap-2 text-[12.5px]">
                 <span className="text-text-secondary truncate">
                   {a.event_type} · {a.entity_type}
-                  {a.actor_name && <span className="text-text-tertiary"> · {a.actor_name}</span>}
+                  {a.actor_id && (
+                    <span className="text-text-tertiary">
+                      {' · '}
+                      <MaskedActor userId={a.actor_id} />
+                    </span>
+                  )}
                 </span>
                 <span className="shrink-0 text-text-tertiary">{fmtDateTime(a.created_at)}</span>
               </li>

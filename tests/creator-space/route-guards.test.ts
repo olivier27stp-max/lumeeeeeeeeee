@@ -10,6 +10,7 @@ const root = resolve(__dirname, '..', '..');
 const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
 const routerSrc = read('server/routes/creator-space.ts');
+const auditSrc = read('server/routes/creator-space-audit.ts');
 const indexSrc = read('server/index.ts');
 const appSrc = read('src/App.tsx');
 
@@ -51,12 +52,43 @@ describe('Creator Space — chaque handler est gardé', () => {
     expect(routerSrc).toContain('.slice(0, 120)');
     expect(routerSrc).not.toContain('.or(');
   });
+
+  it("aucun nom de personne d'un autre tenant dans les journaux : actor_id seulement (Loi 25)", () => {
+    // Les flux Logs / Overview / Engagement compagnie ne retournent jamais
+    // actor_name — la révélation passe par creator-space-audit.ts.
+    expect(routerSrc).not.toContain('actor_name');
+    expect(routerSrc).toContain('actor_id');
+  });
+});
+
+describe('Creator Space — journal d’accès et révélation (creator-space-audit)', () => {
+  it('reveal-actor est gardé par requireCreatorSpace et exige une raison journalisée', () => {
+    expect(auditSrc).toContain('requireCreatorSpace(req, res)');
+    expect(auditSrc).toContain('reason.length < 5');
+    expect(auditSrc).toContain('creator_space_reveal');
+    // Journalisation AVANT la réponse : un échec d'écriture refuse la révélation.
+    expect(auditSrc).toContain('Journalisation impossible — révélation refusée.');
+  });
+
+  it('seule table écrite : security_events (un seul insert, aucun update/upsert/delete)', () => {
+    expect((auditSrc.match(/\.insert\(/g) ?? []).length).toBe(1);
+    expect(auditSrc).toContain(".from('security_events').insert(");
+    expect(auditSrc).not.toMatch(/\.(update|upsert|delete)\(/);
+  });
+
+  it("chaque consultation est journalisée (creator_space_view) avec l'identité posée par la garde", () => {
+    expect(auditSrc).toContain('creator_space_view');
+    expect(auditSrc).toContain('res.locals.creatorSpaceUserId');
+    expect(routerSrc).toContain('res.locals.creatorSpaceUserId = auth.user.id');
+  });
 });
 
 describe('montage serveur et surface SPA', () => {
-  it('le routeur est monté avec rate limiting dédié', () => {
+  it('le routeur est monté avec rate limiting dédié, le journal d’accès et le routeur audit', () => {
     expect(indexSrc).toContain("app.use('/api/creator-space', creatorSpaceLimiter)");
+    expect(indexSrc).toContain("app.use('/api/creator-space', creatorSpaceViewLogger())");
     expect(indexSrc).toContain("app.use('/api', creatorSpaceRouter)");
+    expect(indexSrc).toContain("app.use('/api', creatorSpaceAuditRouter)");
   });
 
   it('la route SPA existe, hors nav statique ; le lien sidebar est gaté par la sonde serveur', () => {
