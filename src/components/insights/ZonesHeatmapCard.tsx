@@ -139,11 +139,13 @@ function FitTopCity({ top, topPoly, center }: { top: Zone | null; topPoly: Geome
   const map = useMap();
   useEffect(() => {
     if (!top) { map.setView(center, 9); return; }
+    // Wide regional view, centred on the top city (its boundary centre once
+    // loaded, its jobs' centroid meanwhile).
     if (topPoly) {
       const b = L.geoJSON(topPoly).getBounds();
-      if (b.isValid()) { map.fitBounds(b, { padding: [30, 30], maxZoom: 12 }); return; }
+      if (b.isValid()) { map.setView(b.getCenter(), 8); return; }
     }
-    map.setView([top.lat, top.lng], 11);
+    map.setView([top.lat, top.lng], 8);
   }, [top, topPoly, center, map]);
   return null;
 }
