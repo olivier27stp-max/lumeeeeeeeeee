@@ -5,12 +5,13 @@
  * polygon is always the municipality the jobs are actually in), cached in
  * localStorage; a city whose boundary can't be resolved falls back to the old
  * proportional circle. Hover a city → a themed bubble shows how much you made
- * and how many jobs; the top cities carry permanent labels. Framed color legend
- * (revenue buckets). Only realized jobs count. Reuses the app's Leaflet stack
- * (leaflet CSS is imported in main.tsx).
+ * and how many jobs; city names come from the basemap itself (no overlay labels —
+ * they duplicated the tile labels). Framed color legend (revenue buckets). Only
+ * realized jobs count. Reuses the app's Leaflet stack (leaflet CSS is imported
+ * in main.tsx).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, GeoJSON, CircleMarker, Marker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, CircleMarker, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import type { Geometry } from 'geojson';
 import { useQuery } from '@tanstack/react-query';
@@ -29,8 +30,6 @@ const OPACITIES = [0.3, 0.45, 0.6, 0.78, 0.95];
 const MAP_CSS = `
 .leaflet-tooltip.zone-tip{background:var(--color-surface-card);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:7px 11px;font-weight:600;font-family:inherit;}
 .leaflet-tooltip.zone-tip::before{display:none;}
-.zone-name{background:transparent!important;border:0!important;box-shadow:none!important;}
-.zone-name>div{transform:translateY(-15px);font-weight:800;font-size:11px;letter-spacing:-.01em;color:var(--color-text-primary);white-space:nowrap;text-shadow:0 0 3px var(--color-surface),0 1px 2px var(--color-surface),0 0 2px var(--color-surface);}
 `;
 
 function isDone(status?: string | null): boolean {
@@ -209,7 +208,6 @@ export default function ZonesHeatmapCard({
   const empty = !q.isLoading && zones.length === 0;
   const bucket = (rev: number) => Math.min(4, Math.max(0, Math.ceil((rev / maxRev) * 5) - 1));
   const legend = [4, 3, 2, 1, 0].map((i) => ({ i, lo: (maxRev * i) / 5, hi: (maxRev * (i + 1)) / 5 }));
-  const labelNames = new Set(stats.top.map((z) => z.name));
 
   const boundaries = useCityBoundaries(zones);
   // Two parsed spellings can resolve to the same municipality — the richest
@@ -298,14 +296,6 @@ export default function ZonesHeatmapCard({
                 </CircleMarker>
               );
             })}
-            {zones.filter((z) => labelNames.has(z.name)).map((z) => (
-              <Marker
-                key={`${z.name}-label`}
-                position={[z.lat, z.lng]}
-                interactive={false}
-                icon={L.divIcon({ className: 'zone-name', html: `<div>${z.name}</div>`, iconSize: [0, 0], iconAnchor: [0, 0] })}
-              />
-            ))}
           </MapContainer>
 
           {/* framed color legend */}
