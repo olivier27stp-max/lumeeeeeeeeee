@@ -1,13 +1,18 @@
 /**
- * Revenue by city — a proportional-symbol map: one monochrome circle per city on
- * a Leaflet basemap, sized & shaded by the revenue realized there. Hover a city →
- * a themed bubble shows how much you made and how many jobs; the top cities carry
- * permanent labels. Framed color legend (revenue buckets). Only realized jobs
- * count. Reuses the app's Leaflet stack (leaflet CSS is imported in main.tsx).
+ * Revenue by city — a choropleth: each city is drawn with its real municipal
+ * boundary (à la Google Maps city search), shaded by the revenue realized there.
+ * Boundaries come from Nominatim (reverse-geocode at the jobs' centroid, so the
+ * polygon is always the municipality the jobs are actually in), cached in
+ * localStorage; a city whose boundary can't be resolved falls back to the old
+ * proportional circle. Hover a city → a themed bubble shows how much you made
+ * and how many jobs; the top cities carry permanent labels. Framed color legend
+ * (revenue buckets). Only realized jobs count. Reuses the app's Leaflet stack
+ * (leaflet CSS is imported in main.tsx).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Marker, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, CircleMarker, Marker, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import type { Geometry } from 'geojson';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
 import { fetchMapJobsInRange } from '../../lib/mapApi';
@@ -58,6 +63,75 @@ function cityFromAddress(addr?: string | null): string | null {
 }
 
 interface Zone { name: string; lat: number; lng: number; rev: number; jobs: number; }
+
+// ── City boundary polygons (Nominatim / OSM) ─────────────────────
+// ref = OSM relation id, used to dedupe two parsed spellings ("Montréal" /
+// "Montreal") that resolve to the same municipality.
+interface CityBoundary { geom: Geometry; ref: string }
+interface NominatimHit { osm_type?: string; osm_id?: number; geojson?: Geometry; boundingbox?: string[] }
+
+const POLY_CACHE = 'lume-city-poly:v1:';
+const polyCacheKey = (z: Zone) => `${POLY_CACHE}${z.name.toLowerCase()}|${z.lat.toFixed(1)},${z.lng.toFixed(1)}`;
+const isPoly = (g?: Geometry): g is Geometry => !!g && (g.type === 'Polygon' || g.type === 'MultiPolygon');
+
+async function nominatim(path: string): Promise<unknown> {
+  const r = await fetch(`https://nominatim.openstreetmap.org/${path}&format=jsonv2&polygon_geojson=1&polygon_threshold=0.001&accept-language=fr`);
+  if (!r.ok) throw new Error(`nominatim ${r.status}`);
+  return r.json();
+}
+
+/** Resolve the municipal boundary for a zone. Reverse-geocode at the jobs'
+ * centroid first (no name ambiguity — the point is inside the city); fall back
+ * to a name search restricted to Canada whose bbox must contain the centroid
+ * (never trust a bare city-name match). Returns null on a definitive miss,
+ * throws on network errors (so misses are cached but failures are retried). */
+async function fetchCityBoundary(z: Zone): Promise<CityBoundary | null> {
+  const rev = (await nominatim(`reverse?lat=${z.lat}&lon=${z.lng}&zoom=10`)) as NominatimHit;
+  if (isPoly(rev?.geojson)) return { geom: rev.geojson, ref: `${rev.osm_type}/${rev.osm_id}` };
+  await new Promise((r) => setTimeout(r, 1100));
+  const hits = (await nominatim(`search?city=${encodeURIComponent(z.name)}&countrycodes=ca&limit=3`)) as NominatimHit[];
+  for (const hit of hits || []) {
+    const bb = (hit.boundingbox || []).map(Number); // [latMin, latMax, lonMin, lonMax]
+    const contains = bb.length === 4 && z.lat >= bb[0] && z.lat <= bb[1] && z.lng >= bb[2] && z.lng <= bb[3];
+    if (contains && isPoly(hit.geojson)) return { geom: hit.geojson, ref: `${hit.osm_type}/${hit.osm_id}` };
+  }
+  return null;
+}
+
+/** Progressively load the boundary of each zone: localStorage first, then one
+ * Nominatim request per second (their usage policy) for the missing ones. */
+function useCityBoundaries(zones: Zone[]) {
+  const [polys, setPolys] = useState<Record<string, CityBoundary | null>>({});
+  useEffect(() => {
+    let cancelled = false;
+    const cached: Record<string, CityBoundary | null> = {};
+    const missing: Zone[] = [];
+    for (const z of zones) {
+      if (z.name === 'Autres' || z.name === 'Other') { cached[z.name] = null; continue; }
+      try {
+        const raw = localStorage.getItem(polyCacheKey(z));
+        if (raw) { cached[z.name] = JSON.parse(raw); continue; }
+      } catch {}
+      missing.push(z);
+    }
+    setPolys(cached);
+    if (!missing.length) return;
+    (async () => {
+      for (const z of missing) {
+        if (cancelled) return;
+        let entry: CityBoundary | null = null;
+        let definitive = true;
+        try { entry = await fetchCityBoundary(z); } catch { definitive = false; }
+        if (cancelled) return;
+        if (definitive) { try { localStorage.setItem(polyCacheKey(z), JSON.stringify(entry)); } catch {} }
+        setPolys((p) => ({ ...p, [z.name]: entry }));
+        await new Promise((r) => setTimeout(r, 1100));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [zones]);
+  return polys;
+}
 
 /** Frame the account's work zone: fit the cities, but never zoom out past the
  * regional (Québec) level; centre on the work zone when there's nothing to fit. */
@@ -137,6 +211,21 @@ export default function ZonesHeatmapCard({
   const legend = [4, 3, 2, 1, 0].map((i) => ({ i, lo: (maxRev * i) / 5, hi: (maxRev * (i + 1)) / 5 }));
   const labelNames = new Set(stats.top.map((z) => z.name));
 
+  const boundaries = useCityBoundaries(zones);
+  // Two parsed spellings can resolve to the same municipality — the richest
+  // zone (zones are sorted by revenue) keeps the polygon, the other falls back
+  // to its circle so fills never stack.
+  const zonePoly = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Record<string, Geometry | null> = {};
+    for (const z of zones) {
+      const e = boundaries[z.name];
+      if (e && !seen.has(e.ref)) { seen.add(e.ref); out[z.name] = e.geom; }
+      else out[z.name] = null;
+    }
+    return out;
+  }, [zones, boundaries]);
+
   return (
     <div className="flex flex-col">
       <div className="flex items-end justify-between gap-3 px-6 pb-3 border-b border-border">
@@ -167,6 +256,32 @@ export default function ZonesHeatmapCard({
             <FitBounds zones={zones} center={center} />
             {zones.map((z) => {
               const b = bucket(z.rev);
+              const poly = zonePoly[z.name];
+              const tip = (
+                <Tooltip sticky direction="top" offset={[0, -6]} opacity={1} className="zone-tip">
+                  <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
+                    <div style={{ fontWeight: 800, fontSize: 12.5 }}>{z.name}</div>
+                    <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} jobs</div>
+                  </div>
+                </Tooltip>
+              );
+              if (poly) {
+                return (
+                  <GeoJSON
+                    // react-leaflet's GeoJSON doesn't restyle on prop change — key on
+                    // theme + bucket so a switch re-renders the layer.
+                    key={`${z.name}-${dark}-${b}`}
+                    data={poly}
+                    style={{ color: `rgba(${ink},0.9)`, weight: 1.5, fillColor: `rgb(${ink})`, fillOpacity: OPACITIES[b] }}
+                    eventHandlers={{
+                      mouseover: (e) => (e.target as L.GeoJSON).setStyle({ weight: 3, fillOpacity: Math.min(1, OPACITIES[b] + 0.12) }),
+                      mouseout: (e) => (e.target as L.GeoJSON).setStyle({ weight: 1.5, fillOpacity: OPACITIES[b] }),
+                    }}
+                  >
+                    {tip}
+                  </GeoJSON>
+                );
+              }
               const radius = 10 + (z.rev / maxRev) * 22;
               return (
                 <CircleMarker
@@ -179,12 +294,7 @@ export default function ZonesHeatmapCard({
                     mouseout: (e) => (e.target as L.CircleMarker).setStyle({ weight: 1.5, fillOpacity: OPACITIES[b] }),
                   }}
                 >
-                  <Tooltip direction="top" offset={[0, -radius - 2]} opacity={1} className="zone-tip">
-                    <div style={{ textAlign: 'center', lineHeight: 1.4 }}>
-                      <div style={{ fontWeight: 800, fontSize: 12.5 }}>{z.name}</div>
-                      <div style={{ fontSize: 12 }}>{kc(z.rev)} · {z.jobs} jobs</div>
-                    </div>
-                  </Tooltip>
+                  {tip}
                 </CircleMarker>
               );
             })}
