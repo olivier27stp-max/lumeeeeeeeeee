@@ -169,7 +169,9 @@ export default function MigrationPortal() {
             ? 'Pour ouvrir ce portail de migration, connectez-vous d\'abord à votre compte Lume, puis revenez sur ce lien.'
             : 'To open this migration portal, sign in to your Lume account first, then come back to this link.'}
           action={
-            <a href={`/login?next=${encodeURIComponent(`/migration/invite/${token}`)}`} className="inline-flex items-center h-10 px-5 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md text-[14px] font-medium">
+            {/* la page de connexion de l'app vit à /auth — bug « /login → 404
+                marketing » attrapé par le smoke navigateur du 2026-08-30 */}
+            <a href="/auth" className="inline-flex items-center h-10 px-5 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md text-[14px] font-medium">
               {fr ? 'Se connecter' : 'Sign in'}
             </a>
           }

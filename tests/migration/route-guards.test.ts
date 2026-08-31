@@ -244,3 +244,11 @@ describe('déterminisme du dossier primaire (bug loterie round 8b)', () => {
     expect(importer).not.toMatch(/entity_type[\s\S]{0,200}\.order\('id', \{ ascending: true \}\)/);
   });
 });
+
+describe('portail — le bouton de connexion pointe vers la vraie page', () => {
+  it('« Se connecter » mène à /auth (la route /login n\'existe pas)', () => {
+    const portalPage = read('src/pages/MigrationPortal.tsx');
+    expect(portalPage).toContain('href="/auth"');
+    expect(portalPage).not.toContain('/login?next=');
+  });
+});
