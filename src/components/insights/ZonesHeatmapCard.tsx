@@ -132,19 +132,19 @@ function useCityBoundaries(zones: Zone[]) {
   return polys;
 }
 
-/** Frame the account's work zone: fit the cities, but never zoom out past the
- * regional (Québec) level; centre on the work zone when there's nothing to fit. */
-function FitBounds({ zones, center }: { zones: Zone[]; center: L.LatLngTuple }) {
+/** Open the map centred on the top-revenue city: fit its municipal boundary
+ * once it's loaded (the top city is always fetched first), centre on its jobs'
+ * centroid meanwhile; centre on the work zone when there's nothing to show. */
+function FitTopCity({ top, topPoly, center }: { top: Zone | null; topPoly: Geometry | null; center: L.LatLngTuple }) {
   const map = useMap();
   useEffect(() => {
-    if (zones.length > 0) {
-      const b = L.latLngBounds(zones.map((z) => [z.lat, z.lng] as L.LatLngTuple));
-      map.fitBounds(b, { padding: [55, 55], maxZoom: 12 });
-      if (map.getZoom() < 8) map.setView(center, 8);
-    } else {
-      map.setView(center, 9);
+    if (!top) { map.setView(center, 9); return; }
+    if (topPoly) {
+      const b = L.geoJSON(topPoly).getBounds();
+      if (b.isValid()) { map.fitBounds(b, { padding: [30, 30], maxZoom: 12 }); return; }
     }
-  }, [zones, center, map]);
+    map.setView([top.lat, top.lng], 11);
+  }, [top, topPoly, center, map]);
   return null;
 }
 
@@ -251,7 +251,7 @@ export default function ZonesHeatmapCard({
         <div className="lg:col-span-2 relative isolate h-[420px] rounded-xl overflow-hidden border border-border">
           <MapContainer center={center} zoom={DEFAULT_ZOOM} minZoom={6} className="h-full w-full" scrollWheelZoom={false} attributionControl={false} style={{ background: dark ? '#0a0a0a' : '#f0f0f0' }}>
             <TileLayer url={dark ? TILE_DARK : TILE_LIGHT} attribution={TILE_ATTR} maxZoom={19} />
-            <FitBounds zones={zones} center={center} />
+            <FitTopCity top={zones[0] || null} topPoly={zones.length ? zonePoly[zones[0].name] : null} center={center} />
             {zones.map((z) => {
               const b = bucket(z.rev);
               const poly = zonePoly[z.name];
