@@ -12,6 +12,7 @@ export interface HourlyWeather {
   code: number;        // WMO weather code
   isDay: boolean;
   precipProb: number;  // precipitation probability %
+  precipMm: number;    // precipitation amount (mm)
   windKmh: number;     // wind speed km/h
 }
 
@@ -42,7 +43,7 @@ const CA_PROVINCES: Record<string, string> = {
 // Homonyms are common (e.g. Wickham exists in Australia, England AND Québec),
 // so we fetch several candidates and pick the one matching the org's
 // province/country instead of blindly taking the first result.
-async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number } | null> {
+async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number; countryCode: string } | null> {
   const orgId = await getCurrentOrgIdOrThrow();
   // The company's address lives in company_settings (not orgs).
   const { data, error } = await supabase
@@ -80,7 +81,12 @@ async function getOrgLocation(): Promise<{ city: string; lat: number; lng: numbe
     if (score > bestScore) { bestScore = score; hit = r; }
   }
 
-  return { city: hit.name || query, lat: hit.latitude, lng: hit.longitude };
+  return {
+    city: hit.name || query,
+    lat: hit.latitude,
+    lng: hit.longitude,
+    countryCode: String(hit.country_code || '').toUpperCase(),
+  };
 }
 
 /**
@@ -91,11 +97,15 @@ export async function getOrgHourlyWeather(hours = 12): Promise<WeatherForecast |
   const loc = await getOrgLocation();
   if (!loc) return null;
 
+  // For Canadian orgs, force Environment Canada's GEM models (incl. HRDPS,
+  // 2.5 km resolution) instead of the generic global blend — precipitation is
+  // dramatically more accurate. Elsewhere, keep Open-Meteo's best match.
+  const models = loc.countryCode === 'CA' ? '&models=gem_seamless' : '';
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}` +
-    `&hourly=temperature_2m,weather_code,is_day,precipitation_probability,wind_speed_10m` +
+    `&hourly=temperature_2m,weather_code,is_day,precipitation_probability,precipitation,wind_speed_10m` +
     `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max` +
-    `&timezone=auto&forecast_days=2`;
+    `&timezone=auto&forecast_days=2${models}`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = await res.json();
@@ -117,6 +127,7 @@ export async function getOrgHourlyWeather(hours = 12): Promise<WeatherForecast |
       code: Number(h.weather_code?.[i] ?? 0),
       isDay: Number(h.is_day?.[i] ?? 1) === 1,
       precipProb: Math.round(Number(h.precipitation_probability?.[i] ?? 0)),
+      precipMm: Math.round(Number(h.precipitation?.[i] ?? 0) * 10) / 10,
       windKmh: Math.round(Number(h.wind_speed_10m?.[i] ?? 0)),
     });
   }
@@ -168,7 +179,8 @@ export function weatherLabel(code: number, fr: boolean): string {
 // WMO weather code → emoji + short label (fr/en). Day/night aware for clear sky.
 export function weatherIcon(code: number, isDay: boolean): string {
   if (code === 0) return isDay ? '☀️' : '🌙';
-  if (code <= 2) return isDay ? '🌤️' : '☁️';
+  if (code === 1) return isDay ? '🌤️' : '🌙';
+  if (code === 2) return isDay ? '⛅' : '☁️';
   if (code === 3) return '☁️';
   if (code >= 45 && code <= 48) return '🌫️';
   if (code >= 51 && code <= 57) return '🌦️';

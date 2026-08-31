@@ -78,7 +78,7 @@ export default function HomeWeatherStrip() {
               <span className="text-[26px] leading-none">{weatherIcon(h.code, h.isDay)}</span>
               <span className="text-[16px] font-bold text-text-primary">{h.tempC}°</span>
               <span className="text-[11px] font-medium text-blue-500">
-                {h.precipProb >= 30 ? `${h.precipProb}%` : ' '}
+                {h.precipMm >= 0.2 ? `${h.precipMm} mm` : h.precipProb >= 30 ? `${h.precipProb}%` : ' '}
               </span>
             </div>
           ))}
