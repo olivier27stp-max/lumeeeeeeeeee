@@ -213,10 +213,21 @@ describe('P1 déclenchés — nouveaux endpoints gardés et sûrs', () => {
     const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/retry-errors'");
     expect(body).toContain("'import_failed:%'");
   });
-  it('gabarits : jamais d\'écrasement d\'une décision humaine', () => {
+  it('gabarits : jamais d\'écrasement d\'une décision humaine, résolution PAR CATÉGORIE', () => {
     const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/apply-template'");
     expect(body).toContain("m.status !== 'suggested' && m.status !== 'needs_review'");
     expect(body).toContain('normalizeHeader');
+    // « Job # » de jobs ≠ « Job # » de quotes : la catégorie du fichier fait foi
+    expect(body).toContain('catByFile');
+    expect(body).toContain('entityForCategory');
+    const save = routeBody(adminSrc, "'/migration-admin/migrations/:id/save-template'");
+    expect(save).toContain('catByFile');
+  });
+
+  it('détection des employés : repli sur les données brutes avant la normalisation', () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/staff'");
+    expect(body).toContain('staffHeadersByFile');
+    expect(body).toContain('payload');
   });
   it('correspondance employés : upsert par (migration, source_key), 503 clair sans la table', () => {
     const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/staff-map'");

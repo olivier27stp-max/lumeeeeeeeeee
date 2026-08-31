@@ -33,7 +33,7 @@ import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/m
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise } from '../lib/migration/importer';
 import { getCrmConfig } from '../lib/migration/instructions';
-import { normalizeHeader } from '../lib/migration/mapping';
+import { entityForCategory, normalizeHeader } from '../lib/migration/mapping';
 import { DEFAULT_INVITE_TTL_HOURS, IMPORTABLE_CATEGORIES } from '../lib/migration/types';
 import type { MigrationRow, MigrationStatus, TargetEntity } from '../lib/migration/types';
 
@@ -1111,18 +1111,41 @@ router.get('/migration-admin/migrations/:id/staff', async (req, res) => {
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
 
+    // En-têtes mappés vers vendeur/assigné par fichier — repli sur le payload
+    // brut tant que la normalisation (1er dry-run) n'a pas tourné (banc round 9).
+    const [colsRes, mapsRes] = await Promise.all([
+      admin.from('migration_file_columns').select('id, header, file_id').eq('migration_id', migration.id),
+      admin.from('migration_field_mappings').select('column_id, target_field').eq('migration_id', migration.id).in('target_field', ['salesperson', 'assigned_to']),
+    ]);
+    if (colsRes.error) throw colsRes.error;
+    if (mapsRes.error) throw mapsRes.error;
+    const colById2 = new Map((colsRes.data ?? []).map((c: any) => [c.id, c]));
+    const staffHeadersByFile = new Map<string, string[]>();
+    for (const m of (mapsRes.data ?? []) as any[]) {
+      const col = colById2.get(m.column_id) as any;
+      if (!col) continue;
+      const arr = staffHeadersByFile.get(col.file_id) ?? [];
+      arr.push(col.header);
+      staffHeadersByFile.set(col.file_id, arr);
+    }
     const counts = new Map<string, { label: string; count: number }>();
     for (let offset = 0; ; offset += 1000) {
       const { data: rows, error } = await admin
         .from('migration_staging_records')
-        .select('entity_type, normalized')
+        .select('entity_type, normalized, payload, file_id')
         .eq('migration_id', migration.id)
         .in('entity_type', ['job', 'visit'])
         .range(offset, offset + 999);
       if (error) throw error;
       if (!rows || rows.length === 0) break;
-      for (const r of rows as { entity_type: string; normalized: Record<string, unknown> | null }[]) {
-        const raw = String((r.normalized ?? {})[r.entity_type === 'job' ? 'salesperson' : 'assigned_to'] ?? '').trim();
+      for (const r of rows as { entity_type: string; normalized: Record<string, unknown> | null; payload: Record<string, unknown> | null; file_id: string }[]) {
+        let raw = String((r.normalized ?? {})[r.entity_type === 'job' ? 'salesperson' : 'assigned_to'] ?? '').trim();
+        if (!raw) {
+          for (const header of staffHeadersByFile.get(r.file_id) ?? []) {
+            const v = String((r.payload ?? {})[header] ?? '').trim();
+            if (v) { raw = v; break; }
+          }
+        }
         if (!raw) continue;
         const key = raw.toLowerCase();
         const cur = counts.get(key) ?? { label: raw, count: 0 };
@@ -1245,21 +1268,30 @@ router.post('/migration-admin/migrations/:id/save-template', validate(migrationT
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
-    const [cols, maps] = await Promise.all([
-      admin.from('migration_file_columns').select('id, header').eq('migration_id', migration.id),
+    const [cols, maps, files] = await Promise.all([
+      admin.from('migration_file_columns').select('id, header, file_id').eq('migration_id', migration.id),
       admin.from('migration_field_mappings').select('column_id, target_entity, target_field, confidence, status').eq('migration_id', migration.id),
+      admin.from('migration_files').select('id, category_detected').eq('migration_id', migration.id),
     ]);
     if (cols.error) throw cols.error;
     if (maps.error) throw maps.error;
-    const headerById = new Map((cols.data ?? []).map((c: any) => [c.id, c.header]));
-    const headersMap: Record<string, { entity: string; field: string }> = {};
+    if (files.error) throw files.error;
+    const colById = new Map((cols.data ?? []).map((c: any) => [c.id, c]));
+    const catByFile = new Map((files.data ?? []).map((f: any) => [f.id, f.category_detected]));
+    // Indexé par CATÉGORIE de fichier : « Job # » d'un fichier jobs et « Job # »
+    // d'un fichier quotes sont deux colonnes différentes (défaut attrapé par le
+    // banc round 9 — un gabarit plat écrasait l'une par l'autre).
+    const headersMap: Record<string, Record<string, string>> = {};
     for (const m of (maps.data ?? []) as any[]) {
       const usable = m.target_entity && m.target_field &&
         (m.status === 'confirmed' || m.status === 'corrected' || (m.status === 'suggested' && m.confidence >= 70));
       if (!usable) continue;
-      const header = headerById.get(m.column_id);
-      if (!header) continue;
-      headersMap[normalizeHeader(header)] = { entity: m.target_entity, field: m.target_field };
+      const col = colById.get(m.column_id) as any;
+      if (!col) continue;
+      const category = catByFile.get(col.file_id);
+      if (!category) continue;
+      headersMap[category] = headersMap[category] ?? {};
+      headersMap[category][normalizeHeader(col.header)] = m.target_field;
     }
     const name = (req.body as { name: string }).name.trim();
     const { data, error } = await admin
@@ -1281,9 +1313,9 @@ router.post('/migration-admin/migrations/:id/save-template', validate(migrationT
       action: 'template.save',
       actorId: auth.user.id,
       actorRole: 'platform_admin',
-      meta: { template_id: data.id, headers: Object.keys(headersMap).length },
+      meta: { template_id: data.id, headers: Object.values(headersMap).reduce((acc, m) => acc + Object.keys(m).length, 0) },
     });
-    return res.status(201).json({ ok: true, template_id: data.id, headers: Object.keys(headersMap).length });
+    return res.status(201).json({ ok: true, template_id: data.id, headers: Object.values(headersMap).reduce((acc, m) => acc + Object.keys(m).length, 0) });
   } catch (err: any) {
     return sendSafeError(res, err, 'Sauvegarde du gabarit impossible.', '[migration-admin]');
   }
@@ -1308,26 +1340,31 @@ router.post('/migration-admin/migrations/:id/apply-template', validate(migration
       throw tplErr;
     }
     if (!tpl) return res.status(404).json({ error: 'Gabarit introuvable.' });
-    const headersMap = (tpl.headers_map ?? {}) as Record<string, { entity: string; field: string }>;
-    const [cols, maps] = await Promise.all([
-      admin.from('migration_file_columns').select('id, header').eq('migration_id', migration.id),
+    const headersMap = (tpl.headers_map ?? {}) as Record<string, Record<string, string>>;
+    const [cols, maps, files] = await Promise.all([
+      admin.from('migration_file_columns').select('id, header, file_id').eq('migration_id', migration.id),
       admin.from('migration_field_mappings').select('id, column_id, status').eq('migration_id', migration.id),
+      admin.from('migration_files').select('id, category_detected').eq('migration_id', migration.id),
     ]);
     if (cols.error) throw cols.error;
     if (maps.error) throw maps.error;
-    const headerById = new Map((cols.data ?? []).map((c: any) => [c.id, c.header]));
+    if (files.error) throw files.error;
+    const colById = new Map((cols.data ?? []).map((c: any) => [c.id, c]));
+    const catByFile = new Map((files.data ?? []).map((f: any) => [f.id, f.category_detected]));
     let applied = 0;
     for (const m of (maps.data ?? []) as any[]) {
       if (m.status !== 'suggested' && m.status !== 'needs_review') continue; // ne jamais écraser une décision humaine
-      const header = headerById.get(m.column_id);
-      if (!header) continue;
-      const target = headersMap[normalizeHeader(header)];
-      if (!target) continue;
+      const col = colById.get(m.column_id) as any;
+      if (!col) continue;
+      const category = catByFile.get(col.file_id);
+      const entity = entityForCategory(category ?? null);
+      const field = category ? headersMap[category]?.[normalizeHeader(col.header)] : undefined;
+      if (!entity || !field) continue;
       const { error } = await admin
         .from('migration_field_mappings')
         .update({
-          target_entity: target.entity,
-          target_field: target.field,
+          target_entity: entity,
+          target_field: field,
           status: 'confirmed',
           decided_by: auth.user.id,
           decided_role: 'template',
