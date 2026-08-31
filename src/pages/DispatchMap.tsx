@@ -22,11 +22,12 @@ import { useSearchParams } from 'react-router-dom';
 import JobPopup from '../components/map/JobPopup';
 import { supabase } from '../lib/supabase';
 import { Briefcase, Calendar as CalendarIcon } from 'lucide-react';
+import { BASEMAP_STREETS, BASEMAP_ATTR } from '../lib/basemap';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
 const DEFAULT_ZOOM = 11;
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const TILE_ATTR = '&copy; OpenStreetMap &copy; CARTO';
+const TILE_URL = BASEMAP_STREETS;
+const TILE_ATTR = BASEMAP_ATTR;
 
 // ── Technician marker icon ──────────────────────────────────────
 function createTechIcon(color: string, initials: string): L.DivIcon {

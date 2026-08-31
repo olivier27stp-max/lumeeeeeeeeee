@@ -13,12 +13,13 @@ import { useTranslation } from '../../i18n';
 import { fetchMapJobsInRange } from '../../lib/mapApi';
 import PeriodSelector from './PeriodSelector';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
+import { BASEMAP_LIGHT, BASEMAP_DARK, BASEMAP_ATTR } from '../../lib/basemap';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
 const DEFAULT_ZOOM = 9;
-const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
+const TILE_LIGHT = BASEMAP_LIGHT;
+const TILE_DARK = BASEMAP_DARK;
+const TILE_ATTR = BASEMAP_ATTR;
 const OPACITIES = [0.3, 0.45, 0.6, 0.78, 0.95];
 const MAP_CSS = `
 .leaflet-tooltip.zone-tip{background:var(--color-surface-card);color:var(--color-text-primary);border:1px solid var(--color-border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.22);padding:7px 11px;font-weight:600;font-family:inherit;}

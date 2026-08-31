@@ -4,11 +4,12 @@ import L from 'leaflet';
 import { cn } from '../../lib/utils';
 import type { MapJobPin } from '../../lib/mapApi';
 import JobPopup from './JobPopup';
+import { BASEMAP_STREETS, BASEMAP_ATTR } from '../../lib/basemap';
 
 const DEFAULT_CENTER: L.LatLngTuple = [45.5017, -73.5673];
 const DEFAULT_ZOOM = 10;
-const OSM_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
+const OSM_URL = BASEMAP_STREETS;
+const OSM_ATTR = BASEMAP_ATTR;
 // Satellite tiles (Esri) — same basemap as the Field Sales map.
 const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 // Place/city labels only (no highway shields, no airports) — keeps geographic

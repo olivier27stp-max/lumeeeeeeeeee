@@ -4,9 +4,10 @@ import L from 'leaflet';
 import { X, ChevronLeft, ChevronRight, Loader2, Play, Pause, MapPin } from 'lucide-react';
 import { getTrackingPointsForDay } from '../lib/trackingApi';
 import type { TrackingPoint } from '../lib/trackingApi';
+import { BASEMAP_STREETS, BASEMAP_ATTR } from '../lib/basemap';
 
-const TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const TILE_ATTR = '&copy; OpenStreetMap &copy; CARTO';
+const TILE_URL = BASEMAP_STREETS;
+const TILE_ATTR = BASEMAP_ATTR;
 
 interface Props {
   userId: string;
