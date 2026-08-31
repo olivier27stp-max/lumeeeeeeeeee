@@ -32,7 +32,7 @@ const STORAGE_KEY = 'lume.cookieConsent.v1';
 // → triggers re-consent on next visit.
 export const CURRENT_COOKIE_POLICY_VERSION = 'cookie-policy-2026-07-23';
 export const CURRENT_PRIVACY_POLICY_VERSION = 'privacy-policy-2026-07-23';
-export const CURRENT_TOS_VERSION = 'tos-2026-04-21';
+export const CURRENT_TOS_VERSION = 'tos-2026-08-30';
 
 // Re-consent every 13 months (RGPD/CNIL guidance)
 const REVALIDATE_AFTER_MS = 13 * 30 * 24 * 60 * 60 * 1000;

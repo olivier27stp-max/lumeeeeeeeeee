@@ -10,7 +10,7 @@ import { LEGAL_LABELS } from '../content/legal';
  * ⚠️ Template content — must be reviewed by legal counsel before production use.
  */
 
-const LAST_UPDATED = '2026-04-21';
+const LAST_UPDATED = '2026-08-30';
 const CONTACT_EMAIL = 'willhebert30@gmail.com';
 
 const SECTIONS = {
@@ -20,13 +20,14 @@ const SECTIONS = {
     { id: 'compte', label: '3. Votre compte' },
     { id: 'usage', label: '4. Utilisation acceptable' },
     { id: 'donnees', label: '5. Vos données' },
-    { id: 'paiement', label: '6. Paiement' },
-    { id: 'disponibilite', label: '7. Disponibilité' },
-    { id: 'resiliation', label: '8. Résiliation' },
-    { id: 'responsabilite', label: '9. Responsabilité' },
-    { id: 'droit', label: '10. Droit applicable' },
-    { id: 'modifications', label: '11. Modifications' },
-    { id: 'contact', label: '12. Contact' },
+    { id: 'sous-traitance', label: '6. Traitement des renseignements personnels' },
+    { id: 'paiement', label: '7. Paiement' },
+    { id: 'disponibilite', label: '8. Disponibilité' },
+    { id: 'resiliation', label: '9. Résiliation' },
+    { id: 'responsabilite', label: '10. Responsabilité' },
+    { id: 'droit', label: '11. Droit applicable' },
+    { id: 'modifications', label: '12. Modifications' },
+    { id: 'contact', label: '13. Contact' },
   ],
   en: [
     { id: 'accord', label: '1. Agreement' },
@@ -34,13 +35,14 @@ const SECTIONS = {
     { id: 'compte', label: '3. Your account' },
     { id: 'usage', label: '4. Acceptable use' },
     { id: 'donnees', label: '5. Your data' },
-    { id: 'paiement', label: '6. Payment' },
-    { id: 'disponibilite', label: '7. Availability' },
-    { id: 'resiliation', label: '8. Termination' },
-    { id: 'responsabilite', label: '9. Liability' },
-    { id: 'droit', label: '10. Governing law' },
-    { id: 'modifications', label: '11. Changes' },
-    { id: 'contact', label: '12. Contact' },
+    { id: 'sous-traitance', label: '6. Personal information processing' },
+    { id: 'paiement', label: '7. Payment' },
+    { id: 'disponibilite', label: '8. Availability' },
+    { id: 'resiliation', label: '9. Termination' },
+    { id: 'responsabilite', label: '10. Liability' },
+    { id: 'droit', label: '11. Governing law' },
+    { id: 'modifications', label: '12. Changes' },
+    { id: 'contact', label: '13. Contact' },
   ],
 } as const;
 
@@ -166,7 +168,48 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section id="paiement" title={sections[5].label}>
+          <Section id="sous-traitance" title={sections[5].label}>
+            <p>
+              {fr ? (
+                <>En utilisant le Service, votre organisation nous confie des renseignements personnels concernant ses utilisateurs, ses clients et ses prospects. La présente section constitue le mandat écrit exigé par l'article 18.3 de la <em>Loi sur la protection des renseignements personnels dans le secteur privé</em> (Québec) : Lume CRM agit comme fournisseur de services et s'engage envers vous à ce qui suit.</>
+              ) : (
+                <>By using the Service, your organization entrusts us with personal information about its users, customers, and leads. This section constitutes the written mandate required by section 18.3 of Québec's <em>Act respecting the protection of personal information in the private sector</em>: Lume CRM acts as a service provider and commits to you as follows.</>
+              )}
+            </p>
+            <ul className="space-y-2 list-disc pl-5 marker:text-gray-300">
+              {(fr
+                ? [
+                    "Finalités limitées : nous n'utilisons ces renseignements que pour exploiter le Service, fournir le soutien technique et assurer la sécurité de la plateforme — jamais à d'autres fins, et jamais pour notre propre compte.",
+                    'Confidentialité : seules les personnes autorisées de Lume y ont accès, liées par des obligations de confidentialité ; chaque accès de la plateforme aux données de votre espace est journalisé.',
+                    "Mesures de protection : chiffrement en transit et au repos, isolation par locataire (sécurité au niveau des lignes), contrôle d'accès par rôles et journaux d'audit — détaillées dans notre Politique de confidentialité.",
+                    'Sous-traitants : la liste est publiée sur notre page Sous-traitants ; tout ajout fait l’objet d’un préavis de 30 jours.',
+                    "Incidents de confidentialité : nous vous avisons sans délai — au plus 48 heures après en avoir pris connaissance — de tout incident touchant vos renseignements, et nous collaborons à vos obligations d'avis (registre, CAI, personnes concernées).",
+                    "Demandes des personnes concernées : nous vous assistons pour répondre aux demandes d'accès, de rectification, de retrait de consentement et de portabilité.",
+                    "Fin du contrat : à la résiliation, les renseignements sont retournés sur demande (export), puis supprimés ou anonymisés selon la section Résiliation — nous n'en conservons aucune copie au-delà des obligations légales.",
+                    'Vérification : nous mettons à votre disposition l’information raisonnablement nécessaire pour démontrer le respect de ces engagements ; une entente de traitement des données (DPA) détaillée est disponible sur demande.',
+                  ]
+                : [
+                    'Limited purposes: we use this information only to operate the Service, provide technical support, and secure the platform — never for other purposes, and never for our own account.',
+                    'Confidentiality: only authorized Lume personnel, bound by confidentiality obligations, may access it; every platform access to your workspace data is logged.',
+                    'Safeguards: encryption in transit and at rest, per-tenant isolation (row-level security), role-based access control, and audit logs — detailed in our Privacy Policy.',
+                    'Subprocessors: the list is published on our Subprocessors page; any addition is preceded by 30 days’ notice.',
+                    'Confidentiality incidents: we notify you without delay — at most 48 hours after becoming aware — of any incident affecting your information, and assist with your notification duties (register, regulators, affected persons).',
+                    'Data-subject requests: we assist you in responding to access, rectification, consent-withdrawal, and portability requests.',
+                    'End of contract: on termination, information is returned on request (export), then deleted or anonymized per the Termination section — we keep no copy beyond legal obligations.',
+                    'Verification: we make available the information reasonably needed to demonstrate compliance with these commitments; a detailed Data Processing Agreement (DPA) is available on request.',
+                  ]
+              ).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+            <p>
+              {fr ? (
+                <>Voir aussi notre <Link to="/privacy" className="text-black underline hover:text-gray-600">Politique de confidentialité</Link> et la liste de nos <Link to="/subprocessors" className="text-black underline hover:text-gray-600">sous-traitants</Link>.</>
+              ) : (
+                <>See also our <Link to="/privacy" className="text-black underline hover:text-gray-600">Privacy Policy</Link> and our list of <Link to="/subprocessors" className="text-black underline hover:text-gray-600">subprocessors</Link>.</>
+              )}
+            </p>
+          </Section>
+
+          <Section id="paiement" title={sections[6].label}>
             <p>
               {fr
                 ? "Les frais sont facturés mensuellement ou annuellement, à l'avance, et ne sont pas remboursables sauf lorsque la loi l'exige. Un paiement en retard peut entraîner une suspension après 14 jours."
@@ -174,7 +217,7 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section id="disponibilite" title={sections[6].label}>
+          <Section id="disponibilite" title={sections[7].label}>
             <p>
               {fr
                 ? "Nous visons une disponibilité mensuelle de 99,5 %. La maintenance planifiée est annoncée au moins 48 heures à l'avance lorsque possible."
@@ -182,7 +225,7 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section id="resiliation" title={sections[7].label}>
+          <Section id="resiliation" title={sections[8].label}>
             <p>
               {fr
                 ? "Vous pouvez fermer votre compte à tout moment. À la résiliation, nous conservons des registres anonymisés tel qu'exigé par la loi (fiscalité, audit) et supprimons ou anonymisons les données personnelles dans un délai de 90 jours, sauf si une conservation plus longue est légalement obligatoire."
@@ -190,7 +233,7 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section id="responsabilite" title={sections[8].label}>
+          <Section id="responsabilite" title={sections[9].label}>
             <p>
               {fr
                 ? "Dans la mesure maximale permise par la loi, notre responsabilité globale est limitée aux frais que vous avez payés au cours des 12 mois précédant la réclamation. Nous ne sommes pas responsables des dommages indirects, accessoires ou consécutifs."
@@ -198,7 +241,7 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section id="droit" title={sections[9].label}>
+          <Section id="droit" title={sections[10].label}>
             <p>
               {fr
                 ? "Les présentes conditions sont régies par les lois du Québec et les lois applicables du Canada. Tout litige sera porté devant les tribunaux du district de Montréal."
@@ -206,7 +249,7 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section id="modifications" title={sections[10].label}>
+          <Section id="modifications" title={sections[11].label}>
             <p>
               {fr
                 ? "Toute modification importante est annoncée dans l'application au moins 30 jours avant son entrée en vigueur."
@@ -214,7 +257,7 @@ export default function Terms() {
             </p>
           </Section>
 
-          <Section id="contact" title={sections[11].label}>
+          <Section id="contact" title={sections[12].label}>
             <div className="rounded-xl border border-gray-200 bg-white p-6">
               <a href={`mailto:${CONTACT_EMAIL}`} className="flex items-center gap-2 text-sm text-gray-700 hover:text-black transition-colors">
                 <Mail size={16} className="text-gray-400" />
