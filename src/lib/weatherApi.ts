@@ -24,47 +24,61 @@ export interface WeatherForecast {
   todayMaxWindKmh: number; // peak wind gust-ish today (km/h)
 }
 
-// Read the user's city (profile first, company fallback). Coordinates aren't
-// stored, so we geocode the city name with Open-Meteo's free geocoding API.
+// Normalize for accent/case-insensitive comparison ("Québec" === "quebec").
+function normalizePlace(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+}
+
+// Canadian province abbreviations → full names, so "QC" matches admin1 "Québec".
+const CA_PROVINCES: Record<string, string> = {
+  qc: 'quebec', on: 'ontario', bc: 'british columbia', ab: 'alberta',
+  mb: 'manitoba', sk: 'saskatchewan', ns: 'nova scotia', nb: 'new brunswick',
+  nl: 'newfoundland and labrador', pe: 'prince edward island',
+  yt: 'yukon', nt: 'northwest territories', nu: 'nunavut',
+};
+
+// Read the org's city (fallback to address). Coordinates aren't stored on the
+// org, so we geocode the city name with Open-Meteo's free geocoding API.
+// Homonyms are common (e.g. Wickham exists in Australia, England AND Québec),
+// so we fetch several candidates and pick the one matching the org's
+// province/country instead of blindly taking the first result.
 async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number } | null> {
   const orgId = await getCurrentOrgIdOrThrow();
-
-  // La ville du PROFIL de l'usager prime : un employé qui travaille dans un
-  // autre secteur voit la météo de son coin, pas celle du bureau.
-  let profileCity = '';
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: tm } = await supabase
-        .from('team_members')
-        .select('city')
-        .eq('user_id', user.id)
-        .eq('org_id', orgId)
-        .limit(1)
-        .maybeSingle();
-      profileCity = String(tm?.city || '').trim();
-    }
-  } catch { /* profil sans fiche team_members — on retombe sur l'entreprise */ }
-
   // The company's address lives in company_settings (not orgs).
   const { data, error } = await supabase
     .from('company_settings')
-    .select('city, street1, postal_code')
+    .select('city, street1, postal_code, province, country')
     .eq('org_id', orgId)
     .limit(1)
     .maybeSingle();
-  if (!profileCity && (error || !data)) return null;
+  if (error || !data) return null;
 
-  const query = profileCity || String(data?.city || data?.street1 || '').trim();
+  const query = String(data.city || data.street1 || '').trim();
   if (!query) return null;
 
   const geoUrl =
-    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=fr&format=json`;
+    `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=fr&format=json`;
   const geoRes = await fetch(geoUrl);
   if (!geoRes.ok) return null;
   const geo = await geoRes.json();
-  const hit = geo?.results?.[0];
-  if (!hit) return null;
+  const results: any[] = geo?.results || [];
+  if (!results.length) return null;
+
+  const rawProvince = normalizePlace(String(data.province || ''));
+  const wantProvince = CA_PROVINCES[rawProvince] || rawProvince;
+  const wantCountry = normalizePlace(String(data.country || ''));
+
+  let hit = results[0];
+  let bestScore = -1;
+  for (const r of results) {
+    const admin1 = normalizePlace(String(r.admin1 || ''));
+    const country = normalizePlace(String(r.country || ''));
+    const cc = normalizePlace(String(r.country_code || ''));
+    let score = 0;
+    if (wantProvince && (admin1 === wantProvince || admin1.includes(wantProvince) || wantProvince.includes(admin1))) score += 3;
+    if (wantCountry && (country === wantCountry || cc === wantCountry)) score += 2;
+    if (score > bestScore) { bestScore = score; hit = r; }
+  }
 
   return { city: hit.name || query, lat: hit.latitude, lng: hit.longitude };
 }
