@@ -74,6 +74,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
 import SpecificNotes from '../components/SpecificNotes';
 import JobTagsCard from '../components/JobTagsCard';
+import JobExpensesCard from '../components/expenses/JobExpensesCard';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import EntityHubHeader from '../components/EntityHubHeader';
@@ -2154,6 +2155,9 @@ export default function JobDetails() {
           tagIds={job.tag_ids || []}
           onChange={(ids) => setJob((prev) => (prev ? { ...prev, tag_ids: ids } : prev))}
         />
+
+        {/* ═══ DÉPENSES ═══ */}
+        <JobExpensesCard jobId={id!} />
 
         {/* ═══ NOTES + CLIENT SALES-MAP PIN ═══ */}
         <div className="grid gap-4 md:grid-cols-2">
