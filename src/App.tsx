@@ -63,6 +63,7 @@ import LocationSettings from './pages/settings/LocationSettings';
 import ArchivesPanel from './components/ArchivesPanel';
 import SupportPage from './components/SupportPage';
 import PayrollPage from './pages/settings/PayrollPage';
+import ApiMcpSettings from './pages/settings/ApiMcpSettings';
 import Auth from './pages/Auth';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -1443,6 +1444,11 @@ function AuthenticatedApp({
                       <Route path="location" element={<Gated permission="settings.read"><LocationSettings /></Gated>} />
                       <Route path="archives" element={<Gated permission="settings.read"><div className="max-w-2xl"><ArchivesPanel /></div></Gated>} />
                       <Route path="marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />
+                      {/* API & MCP — clés machine + connexion d'un client MCP.
+                          `integrations.update` : la page crée des identifiants
+                          d'accès, la lecture seule n'y a pas sa place. Le serveur
+                          re-vérifie owner/admin (requireAdmin + RLS api_keys). */}
+                      <Route path="api" element={<Gated permission="integrations.update"><ApiMcpSettings /></Gated>} />
                       {/* Parrainage: route retirée tant que la récompense (crédit
                           Stripe au parrain) n'est pas validée par un vrai paiement.
                           Fermée pour tout le monde, propriétaire inclus. L'API
