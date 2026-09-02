@@ -68,6 +68,7 @@ import activityNotesRouter from './routes/activity-notes';
 import orgKnowledgeRouter from './routes/org-knowledge';
 import agentAuthRouter from './routes/agent-auth';
 import agentRouter from './routes/agent';
+import mcpRouter from './routes/mcp';
 import invitationsRouter from './routes/invitations';
 import orgsRouter from './routes/orgs';
 import rolePresetsRouter from './routes/role-presets';
@@ -601,6 +602,22 @@ app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
 // AI agent (Gemini tool-loop) — cap per-user cost abuse
 app.use('/api/agent', redisRateLimit({ preset: 'standard', keyFn: (req) => `agent:${userKey(req)}` }));
+// ── MCP server — read-only CRM tools for external MCP clients (Claude, Cursor…) ──
+// Auth par requête via X-API-Key + scope `mcp` ; le routeur porte sa propre auth,
+// comme agentAuthRouter.
+//
+// Monté ICI, avant `mfaSmsRouter` et `mfaEnforcementMiddleware()`, pour deux
+// raisons distinctes :
+//   1. mfaSmsRouter est monté nu sur '/api' et fait `router.use(guardCommonShape)` ;
+//      ce garde s'applique donc à TOUTE requête /api qui le traverse. Il valide
+//      `id` comme UUID, alors que JSON-RPC utilise un `id` numérique — 100 % des
+//      appels MCP repartaient en 400 (cf. le même piège documenté en C4-01).
+//   2. Un appelant par clé API n'a pas de session, donc pas de MFA à faire valoir :
+//      la passer par la porte MFA le bloquerait sans recours.
+//
+// Limité par IP : sans session, userKey() n'a rien à lire.
+app.use('/api/mcp', rateLimit({ windowMs: 60_000, max: 60 }), mcpRouter);
+
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 // SMS 2FA enrollment/challenge routes must stay reachable (they authenticate
 // the user themselves) — mount before the MFA/RBAC gates so a step-up flow

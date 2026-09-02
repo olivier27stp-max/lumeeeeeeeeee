@@ -16,6 +16,7 @@ import {
   Calendar as CalendarIcon,
   LifeBuoy,
   Store,
+  Plug,
   ArrowLeft,
   type LucideIcon,
 } from 'lucide-react';
@@ -89,6 +90,7 @@ export function useSettingsNav(): NavGroup[] {
       items: [
         { path: '/settings/archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
         { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
+        { path: '/settings/api', label: isFr ? 'API & MCP' : 'API & MCP', icon: Plug },
         // Parrainage retiré du menu: la récompense (crédit Stripe au parrain)
         // n'a pas été validée par un vrai paiement de bout en bout. Masqué pour
         // tout le monde, propriétaire inclus. Réactivation: REFERRALS_ENABLED.
