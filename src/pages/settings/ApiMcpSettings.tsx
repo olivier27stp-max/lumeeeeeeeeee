@@ -19,11 +19,14 @@ import {
   createApiKey,
   revokeApiKey,
   getMcpInfo,
+  listConnectedApps,
+  revokeConnectedApp,
   buildClaudeCliCommand,
   buildMcpJsonConfig,
   type ApiKey,
   type CreatedApiKey,
   type McpInfo,
+  type ConnectedApp,
 } from '../../lib/mcpApi';
 
 function fmtDate(iso: string | null, fr: boolean): string {
@@ -66,6 +69,8 @@ export default function ApiMcpSettings() {
 
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [mcp, setMcp] = useState<McpInfo | null>(null);
+  const [apps, setApps] = useState<ConnectedApp[]>([]);
+  const [revokingApp, setRevokingApp] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -79,10 +84,16 @@ export default function ApiMcpSettings() {
     setLoading(true);
     setError('');
     try {
-      // MCP info is nice-to-have: a failure there must not hide the keys.
-      const [k, m] = await Promise.all([listApiKeys(), getMcpInfo().catch(() => null)]);
+      // Infos MCP et applications connectées sont accessoires : leur échec
+      // ne doit pas masquer la liste des clés.
+      const [k, m, a] = await Promise.all([
+        listApiKeys(),
+        getMcpInfo().catch(() => null),
+        listConnectedApps().catch(() => []),
+      ]);
       setKeys(k);
       setMcp(m);
+      setApps(a);
     } catch (err: any) {
       setError(err?.message || (fr ? 'Échec du chargement' : 'Failed to load'));
     } finally {
@@ -132,6 +143,25 @@ export default function ApiMcpSettings() {
     }
   }
 
+  async function handleRevokeApp(app: ConnectedApp) {
+    const ok = window.confirm(
+      fr
+        ? `Retirer l’accès de « ${app.client_name} » ? L’application devra être réautorisée pour consulter vos données.`
+        : `Remove access for "${app.client_name}"? The application will need to be authorized again.`,
+    );
+    if (!ok) return;
+    setRevokingApp(app.id);
+    try {
+      await revokeConnectedApp(app.id);
+      toast.success(fr ? 'Accès retiré' : 'Access removed');
+      await load();
+    } catch (err: any) {
+      toast.error(err?.message || (fr ? 'Retrait impossible' : 'Could not remove access'));
+    } finally {
+      setRevokingApp(null);
+    }
+  }
+
   const activeKeys = keys.filter((k) => !isInactive(k));
   const mcpUrl = mcp?.url || '';
 
@@ -151,6 +181,71 @@ export default function ApiMcpSettings() {
       </div>
 
       {error && <div className="section-card p-4 text-[13px] text-danger">{error}</div>}
+
+      {/* ── Connexion recommandée : OAuth ── */}
+      {mcp?.enabled && mcpUrl && (
+        <div className="section-card p-4 space-y-3">
+          <div>
+            <h3 className="text-[13px] font-semibold text-text-primary">
+              {fr ? 'Connecter un assistant' : 'Connect an assistant'}
+            </h3>
+            <p className="mt-1 text-[12.5px] text-text-secondary leading-relaxed">
+              {fr
+                ? 'Dans Claude : Réglages › Connecteurs › Ajouter un connecteur personnalisé, puis collez cette adresse. Vous vous connecterez avec votre compte Lume — aucune clé à copier.'
+                : 'In Claude: Settings › Connectors › Add custom connector, then paste this address. You sign in with your Lume account — no key to copy.'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg bg-surface-secondary border border-outline/50 px-3 py-2">
+            <code className="text-[12px] font-mono text-text-primary break-all flex-1">{mcpUrl}</code>
+            <CopyButton value={mcpUrl} label={fr ? 'Copier l’adresse' : 'Copy address'} />
+          </div>
+        </div>
+      )}
+
+      {/* ── Applications connectées (OAuth) ── */}
+      {apps.length > 0 && (
+        <div className="section-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-outline/30">
+            <span className="text-[13px] font-semibold text-text-primary">
+              {fr ? 'Applications connectées' : 'Connected applications'}
+            </span>
+            <p className="mt-0.5 text-[11.5px] text-text-tertiary">
+              {fr ? 'Autorisées avec votre compte.' : 'Authorized with your account.'}
+            </p>
+          </div>
+          <div className="divide-y divide-outline/30">
+            {apps.map((app) => (
+              <div key={app.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
+                    {app.logo_uri
+                      ? <img src={app.logo_uri} alt="" className="w-5 h-5 rounded" />
+                      : <Plug size={14} className="text-text-tertiary" />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-medium text-text-primary truncate">{app.client_name}</div>
+                    <div className="text-[11.5px] text-text-tertiary">
+                      {fr ? 'Autorisée le ' : 'Authorized '}{fmtDate(app.created_at, fr)}
+                      {' · '}
+                      {fr ? 'utilisée : ' : 'last used: '}
+                      {app.last_used_at ? fmtDate(app.last_used_at, fr) : (fr ? 'jamais' : 'never')}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRevokeApp(app)}
+                  disabled={revokingApp === app.id}
+                  className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-surface-secondary transition disabled:opacity-50 shrink-0"
+                  title={fr ? 'Retirer l’accès' : 'Remove access'}
+                >
+                  {revokingApp === app.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Raw key, shown once ── */}
       {justCreated && (
@@ -185,7 +280,14 @@ export default function ApiMcpSettings() {
         <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-outline/30">
           <div className="flex items-center gap-2">
             <KeyRound size={15} className="text-text-tertiary" />
-            <span className="text-[13px] font-semibold text-text-primary">{fr ? 'Clés d’accès' : 'Access keys'}</span>
+            <div>
+              <span className="text-[13px] font-semibold text-text-primary">{fr ? 'Clés d’accès' : 'Access keys'}</span>
+              <p className="text-[11.5px] text-text-tertiary">
+                {fr
+                  ? 'Pour les scripts et outils en ligne de commande. Partagées par l’organisation.'
+                  : 'For scripts and command-line tools. Shared across the organization.'}
+              </p>
+            </div>
           </div>
           {!showForm && (
             <button

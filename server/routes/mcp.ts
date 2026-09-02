@@ -32,6 +32,7 @@ import { getServiceClient, requireAuthedClient } from '../lib/supabase';
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { AGENT_TOOLS, TOOLS_BY_NAME, type AgentTool } from '../lib/agent/tools';
+import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ } from '../lib/oauth';
 
 const router = Router();
 
@@ -63,19 +64,82 @@ function rpcError(id: JsonRpcId, code: number, message: string) {
 }
 
 // ── Auth ──
+// Deux modes coexistent, par ordre de préférence :
+//   • OAuth Bearer  → le jeton porte un user_id : RLS redevient actif.
+//   • Clé X-API-Key → identifiant partagé par l'org, RLS inactif.
+// La clé reste acceptée pour ne rien casser chez ceux qui l'utilisent
+// déjà, mais OAuth est le chemin recommandé (et le seul qui pourra
+// un jour porter des écritures).
 interface McpAuth {
   orgId: string;
-  keyId: string;
+  /** Présent en OAuth uniquement — permet un client RLS et un audit nominatif. */
+  userId?: string;
+  /** Identifiant de la clé (mode clé) ou du jeton (mode OAuth). */
+  credentialId: string;
+  mode: 'oauth' | 'api_key';
 }
 
 /**
- * Authenticate the caller from its API key and require the `mcp` scope.
- * Responds and returns null on failure.
+ * En-tête exigé par la spec MCP sur un 401 : c'est LUI qui déclenche
+ * la découverte OAuth côté client. Sans cet en-tête, Claude ne sait
+ * pas où trouver le serveur d'autorisation et ne propose jamais de
+ * se connecter.
+ */
+function challengeHeader(): string {
+  let metadata: string;
+  try {
+    metadata = `${baseUrl()}/.well-known/oauth-protected-resource`;
+  } catch {
+    // PUBLIC_BASE_URL absent : on ne peut pas annoncer d'URL correcte.
+    return `Bearer scope="${SCOPE_MCP_READ}"`;
+  }
+  return `Bearer resource_metadata="${metadata}", scope="${SCOPE_MCP_READ}"`;
+}
+
+/**
+ * Authentifie l'appelant (OAuth Bearer ou clé d'API).
+ * Répond et renvoie null en cas d'échec.
  */
 async function authenticate(req: any, res: any): Promise<McpAuth | null> {
+  // ── 1. OAuth Bearer (préféré) ──
+  const authz = (req.headers['authorization'] as string | undefined)?.trim();
+  if (authz && /^Bearer\s+/i.test(authz)) {
+    const token = authz.replace(/^Bearer\s+/i, '').trim();
+    const validated = await validateAccessToken(token, canonicalResource());
+    if (!validated) {
+      logSecurityEvent({
+        event_type: 'mcp_oauth_token_invalid',
+        severity: 'medium',
+        source: 'api',
+        ip_address: extractIP(req),
+        details: { reason: 'invalide, expiré, révoqué ou audience incorrecte' },
+      });
+      res.setHeader('WWW-Authenticate', challengeHeader());
+      res.status(401).json({ error: 'Invalid or expired access token.' });
+      return null;
+    }
+    if (!validated.scopes.includes(SCOPE_MCP_READ)) {
+      res.setHeader(
+        'WWW-Authenticate',
+        `Bearer error="insufficient_scope", scope="${SCOPE_MCP_READ}"`,
+      );
+      res.status(403).json({ error: 'insufficient_scope' });
+      return null;
+    }
+    return {
+      orgId: validated.orgId,
+      userId: validated.userId,
+      credentialId: validated.tokenId,
+      mode: 'oauth',
+    };
+  }
+
+  // ── 2. Clé d'API (rétrocompatibilité) ──
   const raw = (req.headers['x-api-key'] as string | undefined)?.trim();
   if (!raw) {
-    res.status(401).json({ error: 'Missing X-API-Key header.' });
+    // Aucune preuve d'identité : c'est ici que le parcours OAuth démarre.
+    res.setHeader('WWW-Authenticate', challengeHeader());
+    res.status(401).json({ error: 'Authorization required.' });
     return null;
   }
 
@@ -88,6 +152,7 @@ async function authenticate(req: any, res: any): Promise<McpAuth | null> {
       ip_address: extractIP(req),
       details: { key_prefix: raw.slice(0, 12) },
     });
+    res.setHeader('WWW-Authenticate', challengeHeader());
     res.status(401).json({ error: 'Invalid, expired or revoked API key.' });
     return null;
   }
@@ -106,7 +171,7 @@ async function authenticate(req: any, res: any): Promise<McpAuth | null> {
     return null;
   }
 
-  return { orgId: key.orgId, keyId: key.keyId };
+  return { orgId: key.orgId, credentialId: key.keyId, mode: 'api_key' };
 }
 
 /**
@@ -204,7 +269,9 @@ router.post('/', async (req, res) => {
       const result = await tool.handler(args, {
         client: buildToolClient(),
         orgId: auth.orgId,
-        userId: auth.keyId, // no human user behind an API key — the key identifies the caller
+        // En OAuth, l'identité réelle du porteur ; en clé d'API, l'identifiant
+        // de la clé (aucun humain derrière). L'audit sait ainsi qui a demandé.
+        userId: auth.userId ?? auth.credentialId,
       });
 
       // MCP returns tool output as content parts; JSON goes in a text part.

@@ -69,6 +69,7 @@ import orgKnowledgeRouter from './routes/org-knowledge';
 import agentAuthRouter from './routes/agent-auth';
 import agentRouter from './routes/agent';
 import mcpRouter from './routes/mcp';
+import oauthRouter, { protectedResourceMetadata, authorizationServerMetadata } from './routes/oauth';
 import invitationsRouter from './routes/invitations';
 import orgsRouter from './routes/orgs';
 import rolePresetsRouter from './routes/role-presets';
@@ -602,6 +603,30 @@ app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
 // AI agent (Gemini tool-loop) — cap per-user cost abuse
 app.use('/api/agent', redisRateLimit({ preset: 'standard', keyFn: (req) => `agent:${userKey(req)}` }));
+// ── OAuth 2.1 — Lume est le serveur d'autorisation du serveur MCP ──
+// Monté avec le MCP (mêmes raisons : guardCommonShape des routers nus, et
+// porte MFA — un échange de jeton n'a pas de session à faire valoir).
+//
+// Les deux documents de découverte vivent à la RACINE du domaine, pas sous
+// /api : RFC 9728 et RFC 8414 imposent le chemin `/.well-known/…`, et c'est
+// là que le client va les chercher.
+app.get('/.well-known/oauth-protected-resource', (_req, res) => {
+  try { res.json(protectedResourceMetadata()); }
+  catch { res.status(503).json({ error: 'PUBLIC_BASE_URL non configuré.' }); }
+});
+app.get('/.well-known/oauth-authorization-server', (_req, res) => {
+  try { res.json(authorizationServerMetadata()); }
+  catch { res.status(503).json({ error: 'PUBLIC_BASE_URL non configuré.' }); }
+});
+// Certains clients suffixent le chemin de la ressource — on répond pareil.
+app.get('/.well-known/oauth-protected-resource/api/mcp', (_req, res) => {
+  try { res.json(protectedResourceMetadata()); }
+  catch { res.status(503).json({ error: 'PUBLIC_BASE_URL non configuré.' }); }
+});
+// L'échange de jeton est public par nature (le client n'a pas encore de
+// session) mais reste une cible de force brute : limité par IP.
+app.use('/api/oauth', rateLimit({ windowMs: 60_000, max: 30 }), oauthRouter);
+
 // ── MCP server — read-only CRM tools for external MCP clients (Claude, Cursor…) ──
 // Auth par requête via X-API-Key + scope `mcp` ; le routeur porte sa propre auth,
 // comme agentAuthRouter.
