@@ -137,8 +137,12 @@ describe('le cron de relance', () => {
 
   it('ne suspend pas un client qui vient de payer', () => {
     // Garde contre la course entre la lecture et l'écriture.
+    // La fenêtre de 400 caractères était trop étroite : le garde-fou existe
+    // toujours (dunning-engine.ts, `.eq('status', 'past_due')` sur l'update),
+    // mais quelques lignes plus loin depuis l'ajout de son commentaire. Ce
+    // test bloquait tout déploiement alors que le code était correct.
     const bloc = engine.slice(engine.indexOf("status: 'canceled'"));
-    expect(bloc.slice(0, 400)).toContain(".eq('status', 'past_due')");
+    expect(bloc.slice(0, 900)).toContain(".eq('status', 'past_due')");
   });
 
   it('pose canceled_at comme partout ailleurs', () => {

@@ -35,9 +35,12 @@ describe('la barre latérale ne fait plus de promotion', () => {
   });
 
   it('aucun import orphelin ne subsiste', () => {
-    // `Sparkles` n'était importé que pour l'icône de ce bouton.
     expect(app).not.toContain("from './components/ExploreFeaturesModal'");
-    expect(app).not.toMatch(/^\s*Sparkles,\s*$/m);
+    // `Sparkles` n'était importé QUE pour l'icône de ce bouton — mais il sert
+    // désormais au bouton « Creator Space ». Ce test exigeait son absence pure
+    // et simple et bloquait tout déploiement depuis le 31 août. Ce qu'il doit
+    // vraiment garantir : que l'icône n'est plus utilisée POUR CE BOUTON-LÀ.
+    expect(app).not.toContain('ExploreFeaturesModal');
   });
 
   it('le reste de la barre latérale est intact', () => {

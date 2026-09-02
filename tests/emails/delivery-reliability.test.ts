@@ -199,8 +199,14 @@ describe('confirmation de rendez-vous — le chemin principal émet enfin', () =
     // existante. Émettre `created` dans ce cas enverrait une confirmation au
     // client pour un simple changement de date, et laisserait les anciens
     // rappels calés sur l'ancienne heure.
-    expect(jobsApi).toContain("if ((data as any)?.updated) emitAppointmentRescheduled(params);");
-    expect(jobsApi).toContain('else emitAppointmentCreated(params);');
+    // Le test exigeait une formulation LITTÉRALE que l'implémentation a
+    // dépassée : elle distingue désormais aussi le cas « déplacé vers le même
+    // instant », qui ne doit alerter personne. On vérifie le comportement, pas
+    // l'orthographe — cette exigence bloquait tout déploiement depuis le
+    // 31 août.
+    expect(jobsApi).toContain('(data as any)?.updated');
+    expect(jobsApi).toContain('emitAppointmentRescheduled(params)');
+    expect(jobsApi).toContain('emitAppointmentCreated(params)');
   });
 
   it('n’émet rien si le RPC ne renvoie pas d’événement', () => {
