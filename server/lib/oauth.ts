@@ -15,7 +15,10 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import crypto from 'crypto';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from './supabase';
+import { supabaseUrl, supabaseAnonKey } from './config';
+import { encryptSecret, decryptSecret } from '../../src/lib/crypto';
 
 /** Durées de vie. Court pour l'accès, long pour le rafraîchissement. */
 export const ACCESS_TOKEN_TTL_S = 60 * 60;              // 1 h
@@ -56,8 +59,24 @@ export function safeEqual(a: string, b: string): boolean {
   try { return crypto.timingSafeEqual(ba, bb); } catch { return false; }
 }
 
+/**
+ * Jeton aléatoire en base32 (chiffres + lettres majuscules uniquement).
+ *
+ * PAS de base64url : son alphabet contient `-`, et deux tirets consécutifs
+ * ressemblent à un commentaire SQL (`--`). Le détecteur d'injection global
+ * bloquait alors la requête — mesuré à 2 % des jetons générés, soit une
+ * connexion sur cinquante qui échouait AU HASARD avec « L'autorisation a
+ * échoué », sans que l'utilisateur puisse comprendre pourquoi.
+ *
+ * L'entropie est préservée : 32 octets → 51 caractères base32, bien au-delà
+ * des 128 bits recommandés pour un jeton d'accès.
+ */
 function randomToken(bytes = 32): string {
-  return crypto.randomBytes(bytes).toString('base64url');
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; // base32 (RFC 4648, sans padding)
+  const buf = crypto.randomBytes(bytes);
+  let out = '';
+  for (let i = 0; i < buf.length; i++) out += ALPHABET[buf[i] % 32];
+  return out;
 }
 
 // ── PKCE (RFC 7636) ────────────────────────────────────────────────
@@ -211,6 +230,14 @@ export interface IssueTokensParams {
   resource: string;
   /** Rotation : conserver la famille du jeton rafraîchi. */
   familyId?: string;
+  /**
+   * Jeton de rafraîchissement de la session Supabase de l'utilisateur, capturé
+   * au consentement. Sans lui, le serveur MCP interroge la base en `service_role`
+   * — donc sans `auth.uid()` — et toute RPC `SECURITY DEFINER` qui vérifie
+   * l'appartenance à l'org refuse l'appel (« Not allowed for this organization »).
+   * C'est ce qui rendait get_revenue_summary et get_overdue_payments inutilisables.
+   */
+  supabaseRefreshToken?: string | null;
 }
 
 export async function issueTokens(p: IssueTokensParams): Promise<IssuedTokens> {
@@ -231,6 +258,17 @@ export async function issueTokens(p: IssueTokensParams): Promise<IssuedTokens> {
     refresh_token_expires_at: new Date(now + REFRESH_TOKEN_TTL_S * 1000).toISOString(),
   };
   if (p.familyId) row.family_id = p.familyId;
+  if (p.supabaseRefreshToken) {
+    // Chiffré au repos (AES-256-GCM) : la colonne ne contient jamais de valeur
+    // exploitable. Un échec de chiffrement ne doit pas bloquer l'autorisation —
+    // on perd seulement l'accès aux outils qui exigent une identité.
+    try {
+      row.supabase_refresh_token_chiffre = encryptSecret(p.supabaseRefreshToken);
+      row.supabase_session_maj_le = new Date().toISOString();
+    } catch (e: any) {
+      console.error('[oauth] chiffrement de la session Supabase impossible :', e?.message || e);
+    }
+  }
 
   const { error } = await db.from('oauth_tokens').insert(row);
   if (error) throw new Error(`Émission des jetons impossible : ${error.message}`);
@@ -311,7 +349,7 @@ export async function rotateRefreshToken(
   const db = getServiceClient();
   const { data } = await db
     .from('oauth_tokens')
-    .select('id, family_id, user_id, org_id, client_id, scopes, resource, refresh_token_expires_at, revoked')
+    .select('id, family_id, user_id, org_id, client_id, scopes, resource, refresh_token_expires_at, revoked, supabase_refresh_token_chiffre')
     .eq('refresh_token_hash', sha256(refreshToken))
     .maybeSingle();
 
@@ -335,6 +373,13 @@ export async function rotateRefreshToken(
     .update({ revoked: true, revoked_at: new Date().toISOString(), revoked_reason: 'rotated' })
     .eq('id', data.id);
 
+  // La session Supabase suit la famille : sans ce report, rafraîchir son jeton
+  // OAuth ferait perdre l'identité et recasserait les outils à RPC.
+  let sessionSuivie: string | null = null;
+  if (data.supabase_refresh_token_chiffre) {
+    try { sessionSuivie = decryptSecret(data.supabase_refresh_token_chiffre); } catch { /* session perdue */ }
+  }
+
   const tokens = await issueTokens({
     clientId: data.client_id,
     userId: data.user_id,
@@ -342,9 +387,70 @@ export async function rotateRefreshToken(
     scopes: data.scopes,
     resource: data.resource,
     familyId: data.family_id,
+    supabaseRefreshToken: sessionSuivie,
   });
 
   return { tokens, userId: data.user_id, orgId: data.org_id };
+}
+
+/**
+ * Construit un client Supabase À L'IDENTITÉ de l'utilisateur qui a autorisé.
+ *
+ * Pourquoi : le serveur MCP interroge normalement la base en `service_role`,
+ * qui n'a pas d'`auth.uid()`. Toute RPC `SECURITY DEFINER` vérifiant
+ * `has_org_membership(auth.uid(), org)` refuse alors l'appel — c'est ce qui
+ * rendait get_revenue_summary et get_overdue_payments inutilisables.
+ *
+ * On rejoue donc la session Supabase capturée au consentement. Supabase fait
+ * TOURNER le jeton de rafraîchissement à chaque usage : on restocke aussitôt
+ * le nouveau, sinon l'autorisation se casse au deuxième appel.
+ *
+ * Renvoie null si la session n'est plus valide (mot de passe changé, session
+ * révoquée…). L'appelant retombe alors sur le service client : les outils
+ * simples continuent de fonctionner, seuls ceux à RPC échouent.
+ */
+export async function buildUserScopedClient(tokenId: string): Promise<SupabaseClient | null> {
+  const db = getServiceClient();
+  const { data } = await db
+    .from('oauth_tokens')
+    .select('supabase_refresh_token_chiffre')
+    .eq('id', tokenId)
+    .maybeSingle();
+  if (!data?.supabase_refresh_token_chiffre) return null;
+
+  let refresh: string;
+  try {
+    refresh = decryptSecret(data.supabase_refresh_token_chiffre);
+  } catch (e: any) {
+    console.error('[oauth] déchiffrement de la session impossible :', e?.message || e);
+    return null;
+  }
+
+  try {
+    const anon = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: sess, error } = await anon.auth.refreshSession({ refresh_token: refresh });
+    if (error || !sess?.session?.access_token) return null;
+
+    // Rotation : le jeton précédent est mort, il faut garder le nouveau.
+    if (sess.session.refresh_token && sess.session.refresh_token !== refresh) {
+      try {
+        await db.from('oauth_tokens').update({
+          supabase_refresh_token_chiffre: encryptSecret(sess.session.refresh_token),
+          supabase_session_maj_le: new Date().toISOString(),
+        }).eq('id', tokenId);
+      } catch (e: any) {
+        console.error('[oauth] restockage du jeton tourné impossible :', e?.message || e);
+      }
+    }
+
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${sess.session.access_token}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  } catch (e: any) {
+    console.error('[oauth] session utilisateur injouable :', e?.message || e);
+    return null;
+  }
 }
 
 /** Révoque un jeton (accès ou rafraîchissement). Silencieux par design. */
