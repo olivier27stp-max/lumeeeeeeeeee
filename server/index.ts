@@ -255,6 +255,19 @@ app.use('/api', (req, res, next) => {
   // le pire cas d'un CSRF réussi serait de désabonner quelqu'un — ce que la
   // route est faite pour faire.
   if (/^\/unsubscribe\/[a-f0-9]{64}$/.test(req.path)) return next();
+  // Endpoints OAuth appelés de SERVEUR à SERVEUR (Claude, Cursor…) : la spec
+  // OAuth impose `application/x-www-form-urlencoded` sur /token et /revoke, et
+  // /register est un appel machine. Aucun de ces trois ne porte d'en-tête de
+  // navigateur, donc le garde CSRF les rejetait en 403 — 100 % des connexions
+  // échouaient juste après « Autoriser », sans trace côté base (le code
+  // d'autorisation n'était jamais consommé).
+  //
+  // Les exempter est sans risque : un CSRF suppose un navigateur qui rejoue une
+  // requête avec les cookies de la victime. Ces routes n'utilisent AUCUN cookie
+  // ni session — /token exige le code + le `code_verifier` PKCE que seul le
+  // client légitime possède, /revoke ne révèle rien (200 systématique), et
+  // /register ne crée qu'une inscription publique sans privilège.
+  if (['/oauth/token', '/oauth/revoke', '/oauth/register'].includes(req.path)) return next();
   // API key requests are not vulnerable to CSRF
   if (req.headers['x-api-key']) return next();
   // Require either Authorization header or X-Requested-With (custom header = JS origin)
