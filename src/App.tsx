@@ -64,6 +64,7 @@ import ArchivesPanel from './components/ArchivesPanel';
 import SupportPage from './components/SupportPage';
 import PayrollPage from './pages/settings/PayrollPage';
 import ApiMcpSettings from './pages/settings/ApiMcpSettings';
+import OAuthConsent from './pages/OAuthConsent';
 import Auth from './pages/Auth';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
@@ -415,6 +416,17 @@ export default function App() {
       // reloads fresh instead of showing the previous session's cache.
       if (event === 'SIGNED_IN') {
         void queryClient.invalidateQueries();
+        // Reprise d'une autorisation OAuth interrompue par la connexion :
+        // l'écran de consentement a mémorisé sa demande avant de renvoyer
+        // vers /auth. Sans cette reprise, l'utilisateur atterrit sur
+        // l'accueil et le client MCP attend un code qui n'arrivera jamais.
+        try {
+          const retour = sessionStorage.getItem('lume-oauth-retour');
+          if (retour && retour.startsWith('/oauth/consent')) {
+            sessionStorage.removeItem('lume-oauth-retour');
+            window.location.replace(retour);
+          }
+        } catch { /* stockage indisponible : sans effet */ }
       }
       // Session expired or user signed out in another tab
       if (event === 'SIGNED_OUT' && prev) {
@@ -645,6 +657,17 @@ export default function App() {
         <VerifyEmailGate email={user.email || ''} />
       </>
     );
+  }
+
+  // ── Consentement OAuth ──
+  // Écran AUTONOME : ni barre latérale, ni widget d'onboarding, ni bandeau
+  // témoins. C'est le moment où l'utilisateur accorde à une application
+  // l'accès à ses données — tout autre élément est du bruit, et le bandeau
+  // témoins recouvrait littéralement le bouton « Autoriser ».
+  // Placé avant le garde d'abonnement : autoriser (ou retirer) un accès doit
+  // rester possible même quand l'abonnement bloque le reste de l'application.
+  if (window.location.pathname === '/oauth/consent') {
+    return <OAuthConsent />;
   }
 
   // ── Subscription guard ──

@@ -92,6 +92,40 @@ export async function getMcpInfo(): Promise<McpInfo> {
   return authedFetch('/api/mcp/info');
 }
 
+/* ── Applications connectées via OAuth ────────────────────────────
+   Chaque ligne est une autorisation accordée par CET utilisateur à une
+   application. Lues directement en base : la vue `oauth_autorisations_actives`
+   n'expose aucun hachage et RLS la restreint déjà au porteur de la session. */
+
+export interface ConnectedApp {
+  id: string;
+  client_id: string;
+  client_name: string;
+  logo_uri: string | null;
+  client_uri: string | null;
+  scopes: string[];
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export async function listConnectedApps(): Promise<ConnectedApp[]> {
+  const { data, error } = await supabase
+    .from('oauth_autorisations_actives')
+    .select('id, client_id, client_name, logo_uri, client_uri, scopes, created_at, last_used_at')
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data || []) as ConnectedApp[];
+}
+
+/** Retire une autorisation. RLS restreint déjà la mise à jour à ses propres lignes. */
+export async function revokeConnectedApp(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('oauth_tokens')
+    .update({ revoked: true, revoked_at: new Date().toISOString(), revoked_reason: 'user_revoked' })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 /** Ready-to-paste `claude mcp add` command for this org's server. */
 export function buildClaudeCliCommand(url: string, key = '<YOUR_KEY>'): string {
   return `claude mcp add --transport http lume ${url} --header "X-API-Key: ${key}"`;

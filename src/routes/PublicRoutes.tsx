@@ -16,6 +16,7 @@ import MarketingContact from '../pages/marketing/Contact';
 import MarketingPricing from '../pages/marketing/Pricing';
 import CheckoutSuccess from '../pages/CheckoutSuccess';
 import OnboardingFlow from '../pages/OnboardingFlow';
+import OAuthConsent from '../pages/OAuthConsent';
 import React from 'react';
 
 type PublicRoutesProps = {
@@ -46,6 +47,11 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/subprocessors" element={<Subprocessors />} />
+      {/* Consentement OAuth : la page doit exister AUSSI hors session — elle
+          mémorise la demande puis renvoie vers /auth, et le retour la rejoue.
+          Sans cette route, un utilisateur déconnecté verrait la page d'accueil
+          marketing et le client MCP attendrait un code qui n'arrive jamais. */}
+      <Route path="/oauth/consent" element={<OAuthConsent />} />
       <Route element={<MarketingLayout />}>
         <Route index element={<MarketingHome />} />
         <Route path="features" element={<MarketingFeatures />} />
