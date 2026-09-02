@@ -101,7 +101,17 @@ try {
 }
 
 // Relations that are GLOBAL by design (not tenant data) — allowed to be shared/anon-visible.
-const GLOBAL = new Set(['plans', 'promo_codes']);
+// Tables VOLONTAIREMENT globales : elles n'ont pas d'org_id parce que la
+// notion d'organisation n'existe pas encore au moment où on y écrit.
+//   • plans, promo_codes         — catalogue partagé, lecture seule
+//   • failed_login_attempts      — une tentative de connexion échouée précède
+//     l'identification de l'entreprise : on ne sait pas encore à qui elle
+//     appartient. Sa politique réserve déjà la lecture aux owner/admin
+//     (failed_login_attempts_admin_read), et le contrôle « control plane »
+//     ci-dessous vérifie qu'aucun client ne peut y écrire.
+// Sans cette déclaration, le contrôle « CHILD partage des lignes » la
+// signalait à chaque exécution et bloquait tout déploiement.
+const GLOBAL = new Set(['plans', 'promo_codes', 'failed_login_attempts']);
 
 const c = new Client({ ...conn, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
 
