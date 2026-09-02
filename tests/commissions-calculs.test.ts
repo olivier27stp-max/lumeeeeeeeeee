@@ -21,15 +21,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { calculateCommissionAmount } from '../server/lib/field-sales/commission-engine';
+import { calculateCommissionAmount, type CalcInput } from '../server/lib/field-sales/commission-engine';
 
-const entree = (over: Partial<{
-  invoiceTotalCents: number;
-  lineItems: Array<{ total_cents: number; category?: string }>;
-  repPeriodRevenueCents: number;
-  repPeriodSaleCount: number;
-}> = {}) => ({
+// `CalcInput` exige `invoicePaidAt`, et `category` accepte `null` : la
+// fabrique reprend le type reel plutot que de le paraphraser, sinon les
+// tests passent sous vitest mais `tsc --noEmit` refuse le fichier.
+const entree = (over: Partial<CalcInput> = {}): CalcInput => ({
   invoiceTotalCents: 100000,
+  invoicePaidAt: '2026-09-02T12:00:00.000Z',
   lineItems: [],
   repPeriodRevenueCents: 0,
   repPeriodSaleCount: 0,
