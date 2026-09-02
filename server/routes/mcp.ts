@@ -32,7 +32,7 @@ import { getServiceClient, requireAuthedClient } from '../lib/supabase';
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { AGENT_TOOLS, TOOLS_BY_NAME, type AgentTool } from '../lib/agent/tools';
-import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ } from '../lib/oauth';
+import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ, buildUserScopedClient } from '../lib/oauth';
 
 const router = Router();
 
@@ -266,8 +266,17 @@ router.post('/', async (req, res) => {
         return res.json(rpcError(id, -32602, `Unknown or unavailable tool: ${name}`));
       }
 
+      // En OAuth, on interroge la base À L'IDENTITÉ du porteur : RLS
+      // redevient actif et les RPC `SECURITY DEFINER` qui vérifient
+      // `has_org_membership(auth.uid(), org)` acceptent enfin l'appel.
+      // Repli sur le service client si la session n'est plus rejouable :
+      // les outils simples continuent alors de répondre.
+      const clientOutil = auth.mode === 'oauth'
+        ? (await buildUserScopedClient(auth.credentialId)) ?? buildToolClient()
+        : buildToolClient();
+
       const result = await tool.handler(args, {
-        client: buildToolClient(),
+        client: clientOutil,
         orgId: auth.orgId,
         // En OAuth, l'identité réelle du porteur ; en clé d'API, l'identifiant
         // de la clé (aucun humain derrière). L'audit sait ainsi qui a demandé.

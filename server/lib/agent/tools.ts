@@ -140,15 +140,55 @@ const searchLeads: AgentTool = {
   },
 };
 
+// Le statut que l'utilisateur VOIT dans Lume n'est pas `jobs.status` mais
+// `jobs_active.derived_status` : un état calculé par la vue (migration
+// 20260714000000) qui tient compte de l'avancement des visites. Un job
+// `scheduled` dont la date est passée s'affiche « Late » dans l'application.
+//
+// Sans cette correspondance, l'agent et l'interface parlaient deux langues :
+// on demandait « mes jobs en retard », l'agent ne connaissait que
+// `scheduled`/`completed` et devait deviner en comparant des dates.
+const ETIQUETTES_DERIVED: Record<string, string> = {
+  upcoming: 'Upcoming',
+  late: 'Late',
+  action_required: 'Action Required',
+  archived: 'Archived',
+  requires_invoicing: 'Requires Invoicing',
+};
+
+/** Accepte aussi bien le vocabulaire de l'interface que le statut brut. */
+function normaliserStatutJob(valeur: string): { champ: 'derived_status' | 'status'; valeur: string } {
+  const v = valeur.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const alias: Record<string, string> = {
+    late: 'late', overdue: 'late', en_retard: 'late', retard: 'late',
+    upcoming: 'upcoming', a_venir: 'upcoming', prochain: 'upcoming', prochains: 'upcoming',
+    action_required: 'action_required', action: 'action_required',
+    requires_invoicing: 'requires_invoicing', a_facturer: 'requires_invoicing',
+    archived: 'archived', archive: 'archived', archives: 'archived',
+  };
+  if (alias[v]) return { champ: 'derived_status', valeur: alias[v] };
+  return { champ: 'status', valeur: v };
+}
+
 const listJobs: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_jobs',
-    description: 'List jobs (work orders) in the CRM, optionally filtered by status or a search term. Returns job number, title, client, address, schedule, status and total.',
+    description:
+      'List jobs (work orders) in the CRM, optionally filtered by status or a search term. '
+      + 'Returns job number, title, client, address, schedule, total, and TWO statuses: '
+      + '`display_status` — what the user actually sees in Lume (Upcoming, Late, Action Required, '
+      + 'Requires Invoicing, Archived) — and `raw_status` (scheduled, completed, draft, in_progress). '
+      + 'Prefer display_status when answering the user: it is what their screen shows.',
     parameters: {
       type: 'object',
       properties: {
-        status: { type: 'string', description: "Optional status filter, e.g. 'scheduled', 'completed', 'draft', 'in_progress'." },
+        status: {
+          type: 'string',
+          description:
+            "Optional filter. Accepts what the user sees ('late', 'upcoming', 'action_required', "
+            + "'requires_invoicing', 'archived') or a raw status ('scheduled', 'completed', 'draft', 'in_progress').",
+        },
         query: { type: 'string', description: 'Optional search text (job number, title, address, client).' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
@@ -158,11 +198,14 @@ const listJobs: AgentTool = {
     const limit = clamp(args.limit, 15, 30);
     let q = ctx.client
       .from('jobs_active')
-      .select('id, job_number, title, client_name, property_address, scheduled_at, end_at, status, total_cents, currency')
+      .select('id, job_number, title, client_name, property_address, scheduled_at, end_at, status, derived_status, total_cents, currency')
       .eq('org_id', ctx.orgId)
       .order('scheduled_at', { ascending: false, nullsFirst: false })
       .limit(limit);
-    if (args.status) q = q.eq('status', String(args.status));
+    if (args.status) {
+      const { champ, valeur } = normaliserStatutJob(String(args.status));
+      q = q.eq(champ, valeur);
+    }
     const term = String(args.query || '').trim();
     if (term) {
       const t = term.replace(/[%,()]/g, ' ');
@@ -170,7 +213,17 @@ const listJobs: AgentTool = {
     }
     const { data, error } = await q;
     if (error) return toolError('db', error);
-    return { count: data?.length || 0, jobs: data || [] };
+    return {
+      count: data?.length || 0,
+      jobs: (data || []).map((j: any) => {
+        const { derived_status, status, ...reste } = j;
+        return {
+          ...reste,
+          display_status: ETIQUETTES_DERIVED[derived_status] || derived_status || status,
+          raw_status: status,
+        };
+      }),
+    };
   },
 };
 

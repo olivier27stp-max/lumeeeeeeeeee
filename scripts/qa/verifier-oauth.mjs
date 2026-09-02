@@ -51,6 +51,9 @@ async function parcours(session, clientId, redirectUri, opts = {}) {
     body: JSON.stringify({
       client_id: clientId, redirect_uri: redirectUri, code_challenge: challenge,
       scope: 'mcp:read', resource: opts.resource || RESOURCE,
+      // Comme le fait l'écran de consentement : c'est cette session qui donne
+      // une identité au serveur, sans laquelle tous les outils à RPC échouent.
+      supabase_refresh_token: session.refresh_token,
     }),
   });
   const cj = await consent.json().catch(() => ({}));
@@ -130,6 +133,36 @@ async function parcours(session, clientId, redirectUri, opts = {}) {
   verifier(Array.isArray(appel?.result?.tools) && appel.result.tools.length > 0,
     'Le jeton OAuth ouvre la session MCP', appel?.result ? `${appel.result.tools.length} outils` : JSON.stringify(appel).slice(0, 120));
   verifier(!appel?.result?.tools?.some((t) => /^(create_|send_)/.test(t.name)), 'Aucun outil d\'écriture exposé');
+
+  // ── La session Supabase est-elle réellement STOCKÉE ? ──
+  // Sans elle, le serveur interroge la base sans identité et TOUS les outils
+  // passant par une RPC (revenus, factures) échouent — silencieusement, car
+  // le chiffrement échouait dans un catch. En production, PAYMENTS_ENCRYPTION_KEY
+  // n'était pas définie : l'autorisation semblait réussir et la moitié des
+  // outils restaient muets. Ce test-là ferme cette porte.
+  const { data: ligneJeton } = await admin
+    .from('oauth_tokens')
+    .select('supabase_refresh_token_chiffre')
+    .eq('client_id', CID)
+    .not('supabase_refresh_token_chiffre', 'is', null)
+    .limit(1)
+    .maybeSingle();
+  verifier(!!ligneJeton?.supabase_refresh_token_chiffre,
+    'La session Supabase est stockée avec le jeton',
+    'sans elle, revenus et factures restent muets');
+
+  // Et elle doit permettre d'appeler une RPC qui vérifie auth.uid().
+  const revenus = await fetch(`${API}/api/mcp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jetonA}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'tools/call',
+      params: { name: 'get_revenue_summary', arguments: { period: 'this_month' } } }),
+  }).then((r) => r.json());
+  let revJson = {};
+  try { revJson = JSON.parse(revenus.result.content[0].text); } catch { /* laissé vide */ }
+  verifier(!revJson.error && typeof revJson.revenue_cents === 'number',
+    'get_revenue_summary répond (RPC + identité)',
+    revJson.error ? 'RPC refusée : identité absente' : '');
 
   // ── ISOLATION : le jeton de A ne voit que l'org de A ──
   const rB = await parcours(sB, CID, RURI);
@@ -218,6 +251,36 @@ async function parcours(session, clientId, redirectUri, opts = {}) {
     body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/list' }),
   });
   verifier(apresRevoc.status === 401, 'Jeton révoqué refusé immédiatement');
+
+  // ── form-urlencoded sur /token (ce que Claude envoie réellement) ──
+  // La spec OAuth impose ce Content-Type. Le garde CSRF global le rejetait en
+  // 403 : toutes les connexions échouaient juste après « Autoriser », sans
+  // laisser de trace en base (le code n'était jamais consommé). Ce test-là
+  // aurait attrapé le bug — l'ancienne suite ne testait qu'en JSON.
+  const pk = pkce();
+  const consentForm = await fetch(`${API}/api/oauth/consent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sA.access_token}` },
+    body: JSON.stringify({
+      client_id: CID, redirect_uri: RURI, code_challenge: pk.challenge,
+      scope: 'mcp:read', resource: RESOURCE,
+    }),
+  }).then((r) => r.json());
+  const codeForm = new URL(consentForm.redirect_to).searchParams.get('code');
+
+  const formResp = await fetch(`${API}/api/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code', code: codeForm, client_id: CID,
+      redirect_uri: RURI, code_verifier: pk.verifier, resource: RESOURCE,
+    }).toString(),
+  });
+  const formJson = await formResp.json().catch(() => ({}));
+  verifier(formResp.status !== 403, 'Le garde CSRF ne bloque pas /oauth/token',
+    formResp.status === 403 ? '403 — Claude ne pourra jamais échanger son code' : '');
+  verifier(!!formJson.access_token, 'Échange en form-urlencoded (comme Claude)',
+    JSON.stringify(formJson).slice(0, 110));
 
   // ── La clé d'API doit continuer de fonctionner (non-régression) ──
   const { data: m0 } = await admin.from('memberships').select('user_id, org_id').eq('status', 'active').limit(1).single();

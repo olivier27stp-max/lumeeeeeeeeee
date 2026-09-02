@@ -95,6 +95,12 @@ export default function OAuthConsent() {
           scope,
           resource,
           state,
+          // Transmet la session Supabase pour que le serveur puisse interroger
+          // la base à VOTRE identité. Sans elle, il l'interroge en service_role
+          // (sans auth.uid()) et les RPC qui vérifient l'appartenance à l'org
+          // refusent : le chiffre d'affaires et les impayés deviennent
+          // inaccessibles. Le jeton est chiffré au repos, jamais exposé.
+          supabase_refresh_token: session.refresh_token,
         }),
       });
       const json = await r.json().catch(() => ({}));

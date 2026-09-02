@@ -36,6 +36,33 @@ import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
 const json = express.json({ limit: '16kb' });
+
+/**
+ * Sessions Supabase en attente, le temps que le client échange son code.
+ * En mémoire volontairement : elles vivent 60 s (la durée du code) et ne
+ * doivent jamais toucher le disque. Un redémarrage pendant ces 60 s fait
+ * perdre la session — l'autorisation reste valide, seuls les outils à RPC
+ * seront dégradés, et une reconnexion répare.
+ */
+const sessionsEnAttente = new Map<string, { valeur: string; expire: number }>();
+
+function memoriserSession(code: string, refreshToken: string) {
+  sessionsEnAttente.set(sha256(code), { valeur: refreshToken, expire: Date.now() + AUTH_CODE_TTL_S * 1000 });
+}
+
+function reprendreSession(code: string): string | null {
+  const cle = sha256(code);
+  const e = sessionsEnAttente.get(cle);
+  sessionsEnAttente.delete(cle);
+  if (!e || e.expire < Date.now()) return null;
+  return e.valeur;
+}
+
+// Purge des sessions jamais réclamées (client qui abandonne après « Autoriser »).
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of sessionsEnAttente) if (v.expire < now) sessionsEnAttente.delete(k);
+}, 60_000).unref();
 const form = express.urlencoded({ extended: false, limit: '16kb' });
 
 /** Réponse d'erreur OAuth normalisée (RFC 6749 §5.2). */
@@ -250,6 +277,15 @@ router.post('/consent', json, async (req, res) => {
       resource: res_,
     });
 
+    // La session Supabase du navigateur est transmise ici par l'écran de
+    // consentement. Elle est mise de côté le temps que le client échange son
+    // code (60 s), puis rattachée au jeton émis : c'est elle qui donnera au
+    // serveur MCP une identité, et donc l'accès aux RPC qui vérifient
+    // `has_org_membership(auth.uid(), org)`.
+    const sessionNavigateur = typeof req.body?.supabase_refresh_token === 'string'
+      ? req.body.supabase_refresh_token : null;
+    if (sessionNavigateur) memoriserSession(code, sessionNavigateur);
+
     logSecurityEvent({
       org_id: orgId,
       user_id: user.id,
@@ -337,6 +373,7 @@ router.post('/token', form, json, async (req, res) => {
         orgId: consumed.org_id,
         scopes: consumed.scopes,
         resource: consumed.resource,
+        supabaseRefreshToken: reprendreSession(code),
       });
 
       getServiceClient().from('oauth_clients')
