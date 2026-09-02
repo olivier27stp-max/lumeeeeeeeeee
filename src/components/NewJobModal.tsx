@@ -1058,17 +1058,25 @@ export default function NewJobModal({
       .then(setSalespeople)
       .catch(() => setSalespeople([]));
 
-    // Fetch org currency (scoped to current org)
+    // La devise de l'org vit sur `company_settings`. `org_billing_settings`
+    // ne porte PAS de colonne `currency` : la lire renvoie un 400 et, comme
+    // supabase-js ne lève rien, le modal retombait en silence sur la devise
+    // par défaut. Corrigé une première fois (a7da488), puis réintroduit par
+    // une résolution de fusion (bd81fcf) — d'où ce commentaire, pour que le
+    // prochain conflit ne le ramène pas une troisième fois.
     import('../lib/orgApi').then(({ getCurrentOrgIdOrThrow }) =>
       getCurrentOrgIdOrThrow().then(oid =>
         supabase
-          .from('org_billing_settings')
+          .from('company_settings')
           .select('currency')
           .eq('org_id', oid)
           .limit(1)
           .maybeSingle()
-          .then(({ data: billing }) => {
-            if (billing?.currency) setOrgCurrency(billing.currency);
+          .then(({ data: settings, error }) => {
+            // Ne pas avaler l'erreur : c'est ce silence qui a laissé le bug
+            // vivre en production sans que personne le voie.
+            if (error) console.error('[NewJobModal] devise de l’org non lue :', error.message);
+            if (settings?.currency) setOrgCurrency(settings.currency);
           })
       )
     ).catch(() => {});
