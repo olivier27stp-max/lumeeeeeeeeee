@@ -111,7 +111,15 @@ try {
 //     ci-dessous vérifie qu'aucun client ne peut y écrire.
 // Sans cette déclaration, le contrôle « CHILD partage des lignes » la
 // signalait à chaque exécution et bloquait tout déploiement.
-const GLOBAL = new Set(['plans', 'promo_codes', 'failed_login_attempts']);
+//   - `oauth_clients` : registre des APPLICATIONS autorisées à se connecter
+//     au CRM (Claude, Zapier…). La table n'a ni `org_id` ni `user_id` —
+//     partager ses lignes entre organisations est son fonctionnement normal.
+//     Le secret n'y figure jamais en clair (`client_secret_hash`), et les
+//     autorisations rattachées à une organisation vivent dans `oauth_tokens`
+//     / `oauth_autorisations_actives`, qui restent contrôlées, elles.
+//     Sans cette déclaration, le contrôle signale une fuite à chaque
+//     exécution depuis l'arrivée du serveur OAuth (PR #183/#184).
+const GLOBAL = new Set(['plans', 'promo_codes', 'failed_login_attempts', 'oauth_clients']);
 
 const c = new Client({ ...conn, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
 
