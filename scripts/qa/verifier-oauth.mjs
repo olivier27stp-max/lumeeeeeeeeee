@@ -219,6 +219,36 @@ async function parcours(session, clientId, redirectUri, opts = {}) {
   });
   verifier(apresRevoc.status === 401, 'Jeton révoqué refusé immédiatement');
 
+  // ── form-urlencoded sur /token (ce que Claude envoie réellement) ──
+  // La spec OAuth impose ce Content-Type. Le garde CSRF global le rejetait en
+  // 403 : toutes les connexions échouaient juste après « Autoriser », sans
+  // laisser de trace en base (le code n'était jamais consommé). Ce test-là
+  // aurait attrapé le bug — l'ancienne suite ne testait qu'en JSON.
+  const pk = pkce();
+  const consentForm = await fetch(`${API}/api/oauth/consent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sA.access_token}` },
+    body: JSON.stringify({
+      client_id: CID, redirect_uri: RURI, code_challenge: pk.challenge,
+      scope: 'mcp:read', resource: RESOURCE,
+    }),
+  }).then((r) => r.json());
+  const codeForm = new URL(consentForm.redirect_to).searchParams.get('code');
+
+  const formResp = await fetch(`${API}/api/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'authorization_code', code: codeForm, client_id: CID,
+      redirect_uri: RURI, code_verifier: pk.verifier, resource: RESOURCE,
+    }).toString(),
+  });
+  const formJson = await formResp.json().catch(() => ({}));
+  verifier(formResp.status !== 403, 'Le garde CSRF ne bloque pas /oauth/token',
+    formResp.status === 403 ? '403 — Claude ne pourra jamais échanger son code' : '');
+  verifier(!!formJson.access_token, 'Échange en form-urlencoded (comme Claude)',
+    JSON.stringify(formJson).slice(0, 110));
+
   // ── La clé d'API doit continuer de fonctionner (non-régression) ──
   const { data: m0 } = await admin.from('memberships').select('user_id, org_id').eq('status', 'active').limit(1).single();
   const raw = 'lk_live_' + crypto.randomBytes(24).toString('base64url');
