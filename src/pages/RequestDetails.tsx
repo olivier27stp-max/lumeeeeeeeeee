@@ -96,7 +96,17 @@ export default function RequestDetails() {
       setSubmission(sub);
       setForm(formCfg);
     } catch (err: any) {
-      setError(err.message || (fr ? 'Impossible de charger la demande.' : 'Unable to load request.'));
+      // Un identifiant mal formé (vieux lien, faute de frappe) remonte le
+      // message brut de la base — « Invalid input format », « invalid input
+      // syntax for type uuid ». L'utilisateur n'y comprend rien : c'est un
+      // lien invalide, pas une panne.
+      const brut = String(err?.message || '');
+      const lienInvalide = /invalid input (syntax|format)|uuid|22P02/i.test(brut);
+      setError(
+        lienInvalide
+          ? (fr ? 'Demande introuvable — le lien est peut-être rompu.' : 'Request not found — the link may be broken.')
+          : brut || (fr ? 'Impossible de charger la demande.' : 'Unable to load request.'),
+      );
     } finally {
       setLoading(false);
     }

@@ -173,9 +173,22 @@ export default function Clients() {
     return () => window.removeEventListener('crm:open-new-client', handler);
   }, [navigate]);
 
+  // Un identifiant de route doit être un UUID. Sans ce contrôle, un vieux
+  // lien ou une faute de frappe (« /clients/identifiant-casse ») partait tel
+  // quel vers la base : quatre requêtes échouaient en 22P02 et le message
+  // brut de PostgreSQL — « invalid input syntax for type uuid » — s'affichait
+  // à l'écran. On refuse en amont plutôt que d'exposer la tuyauterie.
+  const estUuid = (v?: string) =>
+    !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
   useEffect(() => {
     async function syncSelectedClientFromRoute() {
       if (!clientIdFromRoute) {
+        setSelected(null);
+        return;
+      }
+
+      if (!estUuid(clientIdFromRoute)) {
         setSelected(null);
         return;
       }

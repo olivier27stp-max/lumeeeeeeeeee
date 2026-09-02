@@ -60,6 +60,9 @@ async function processRule(sb: ReturnType<typeof getServiceClient>, rule: AlertR
     case 'low_pipeline':
       await checkLowPipeline(sb, rule);
       break;
+    case 'job_overdue':
+      await checkJobOverdue(sb, rule);
+      break;
     default:
       // Unknown rule type — skip
       break;
@@ -89,6 +92,55 @@ async function checkInvoiceOverdue(sb: ReturnType<typeof getServiceClient>, rule
       body: `This invoice has been overdue for more than ${days} days.`,
       entity_type: 'invoice',
       entity_id: inv.id,
+    });
+  }
+}
+
+/**
+ * Un job dont la date prévue est passée sans qu'il soit terminé.
+ *
+ * Cette alerte manquait. Elle existait dans l'ancien constructeur de workflows
+ * (« Late job alert - not completed on time », créé en mars 2026) — marquée
+ * active, mais son moteur avait été retiré : personne n'a jamais été prévenu.
+ * Trouvé par l'audit du 2026-09-01.
+ *
+ * Seuil par défaut à 1 jour : un job de la veille encore ouvert mérite un
+ * regard, contrairement aux factures où l'on tolère plusieurs semaines.
+ */
+async function checkJobOverdue(sb: ReturnType<typeof getServiceClient>, rule: AlertRule): Promise<void> {
+  const days = rule.threshold_days || 1;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+
+  const { data: jobs, error } = await sb
+    .from('jobs')
+    .select('id, title, job_number, scheduled_at, status')
+    .eq('org_id', rule.org_id)
+    // `draft` n'est pas encore planifié, `completed` est terminé : ni l'un ni
+    // l'autre n'est « en retard ».
+    .in('status', ['scheduled', 'in_progress'])
+    .not('scheduled_at', 'is', null)
+    .lt('scheduled_at', cutoff.toISOString())
+    .is('deleted_at', null)
+    .limit(100);
+
+  // Sans ce garde, une erreur de requête passerait inaperçue et l'alerte
+  // resterait muette — exactement le défaut qu'on cherche à éliminer.
+  if (error) {
+    console.error(`[alerts] job_overdue org ${rule.org_id}:`, error.message);
+    return;
+  }
+  if (!jobs || jobs.length === 0) return;
+
+  for (const job of jobs) {
+    await createNotificationIfNotExists(sb, {
+      org_id: rule.org_id,
+      type: 'alert',
+      category: 'job_overdue',
+      title: `Job ${job.job_number || job.title || job.id} en retard`,
+      body: `Ce job était prévu le ${String(job.scheduled_at).slice(0, 10)} et n'est toujours pas terminé.`,
+      entity_type: 'job',
+      entity_id: job.id,
     });
   }
 }

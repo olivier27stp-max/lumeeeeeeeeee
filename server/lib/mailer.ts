@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { redirigerEmail } from './qa-redirect';
 
 /**
  * Centralized email sender using Nodemailer + Gmail SMTP.
@@ -65,13 +66,20 @@ export interface SendEmailResult {
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const defaultFrom = process.env.EMAIL_FROM || `Lume CRM <${process.env.SMTP_USER}>`;
 
+  // Mode QA : quand QA_REDIRECT_EMAIL est défini, tout courriel part vers cette
+  // adresse et le destinataire d'origine passe dans l'objet. Passe-plat sinon.
+  const qa = redirigerEmail(params.to, params.subject);
+  if (qa.redirige) {
+    console.warn(`[qa] courriel redirigé : ${qa.destinataireOrigine} → ${qa.to}`);
+  }
+
   try {
     const transport = getTransporter();
     const info = await transport.sendMail({
       from: params.from || defaultFrom,
-      to: Array.isArray(params.to) ? params.to.join(', ') : params.to,
+      to: Array.isArray(qa.to) ? qa.to.join(', ') : qa.to,
       replyTo: params.replyTo,
-      subject: params.subject,
+      subject: qa.subject,
       html: params.html,
       ...(params.headers ? { headers: params.headers } : {}),
     });

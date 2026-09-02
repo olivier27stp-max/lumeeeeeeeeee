@@ -246,8 +246,21 @@ export default function ClientDetails() {
   const { openJobModal } = useJobModalController();
 
   // ─── Data Loading ────────────────────────────────────────────────
+  // Un identifiant de route doit être un UUID. Sans ce contrôle, un vieux lien
+  // ou une faute de frappe (« /clients/identifiant-casse ») partait tel quel
+  // vers la base : les requêtes échouaient en 22P02 et le message brut de
+  // PostgreSQL — « invalid input syntax for type uuid » — s'affichait à
+  // l'écran. On refuse en amont plutôt que d'exposer la tuyauterie.
+  const estUuid = (v?: string) =>
+    !!v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
   useEffect(() => {
     if (!id) return;
+    if (!estUuid(id)) {
+      setError(language === 'fr' ? 'Client introuvable — le lien est peut-être rompu.' : 'Client not found — the link may be broken.');
+      setLoading(false);
+      return;
+    }
     loadAllData(id);
   }, [id]);
 
@@ -338,7 +351,15 @@ export default function ClientDetails() {
         setTags([]);
       }
     } catch (err: any) {
-      setError(err?.message || (language === 'fr' ? 'Échec du chargement des données du client.' : 'Failed to load client data.'));
+      // Filet de sécurité : même si un identifiant mal formé passait le
+      // contrôle en amont, on n'expose jamais le message brut de la base.
+      const brut = String(err?.message || '');
+      const lienInvalide = /invalid input (syntax|format)|uuid|22P02/i.test(brut);
+      setError(
+        lienInvalide
+          ? (language === 'fr' ? 'Client introuvable — le lien est peut-être rompu.' : 'Client not found — the link may be broken.')
+          : brut || (language === 'fr' ? 'Échec du chargement des données du client.' : 'Failed to load client data.'),
+      );
     } finally {
       setLoading(false);
     }

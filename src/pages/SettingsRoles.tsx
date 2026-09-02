@@ -121,8 +121,10 @@ export default function SettingsRoles() {
 
   const togglePermission = useCallback((key: PermissionKey) => {
     if (isOwner) return; // owner is locked
-    // Block technician financial toggles
-    if (selectedRole === 'technician' && FINANCIAL_PERMISSION_KEYS.includes(key)) return;
+    // Les interrupteurs financiers du technicien étaient ignorés ici : ils
+    // s'affichaient mais ne réagissaient pas. C'est le choix de l'entrepreneur
+    // — certaines entreprises veulent que leur contremaître voie les prix.
+    // Le refus reste le défaut, et la base l'applique (20260901220000).
 
     setPermsByRole((prev) => {
       const currentVal = prev[selectedRole][key] === true;
@@ -276,8 +278,9 @@ export default function SettingsRoles() {
                     <div className="border-t border-border px-4 py-2 space-y-1">
                       {group.permissions.map((perm) => {
                         const enabled = current[perm.key] === true;
-                        const financialLocked = selectedRole === 'technician' && FINANCIAL_PERMISSION_KEYS.includes(perm.key);
-                        const disabled = isOwner || financialLocked;
+                        // Sensible, pas verrouillé : on prévient sans interdire.
+                        const financierSensible = selectedRole === 'technician' && FINANCIAL_PERMISSION_KEYS.includes(perm.key);
+                        const disabled = isOwner;
                         return (
                           <label
                             key={perm.key}
@@ -285,11 +288,15 @@ export default function SettingsRoles() {
                               'flex items-center justify-between py-1.5 px-1 rounded',
                               disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-bg-secondary/40'
                             )}
-                            title={financialLocked ? (fr ? 'Verrouillé : les techniciens ne peuvent pas accéder aux données financières' : 'Locked: technicians cannot access financial data') : undefined}
+                            title={financierSensible
+                              ? (fr
+                                  ? 'Donnée financière — désactivé par défaut pour les techniciens. Activez-le si vous voulez qu’ils voient les montants.'
+                                  : 'Financial data — off by default for technicians. Turn it on if you want them to see amounts.')
+                              : undefined}
                           >
                             <span className="text-[12px] text-text-secondary flex items-center gap-1.5">
                               {fr ? (perm.label_fr || perm.label_en) : (perm.label_en || perm.label_fr)}
-                              {financialLocked && <Lock size={10} className="text-text-tertiary" />}
+                              {financierSensible && <Lock size={10} className="text-amber-500" />}
                             </span>
                             <button
                               type="button"

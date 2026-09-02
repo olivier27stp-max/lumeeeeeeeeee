@@ -14,6 +14,7 @@ const __dirname = path.dirname(__filename);
 
 // Import config (initializes dotenv, validates env vars)
 import { supabaseUrl, supabaseServiceRoleKey, twilioClient, twilioPhoneNumber, getBaseUrl } from './lib/config';
+import { qaRedirectActif, qaRedirectResume } from './lib/qa-redirect';
 
 // ── Validate environment at startup ──
 import { validateEnvironment } from './lib/env-validation';
@@ -1055,6 +1056,19 @@ process.on('uncaughtException', (err: Error) => {
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`API listening on 0.0.0.0:${port}`);
+
+  // Mode QA : impossible de l'oublier armé. Sans cette bannière, on pourrait
+  // croire que les messages partent aux clients alors qu'ils sont tous détournés
+  // — ou l'inverse, bien plus grave, croire qu'ils sont détournés alors que non.
+  if (qaRedirectActif()) {
+    console.warn('');
+    console.warn('  ╔════════════════════════════════════════════════════════════╗');
+    console.warn('  ║  MODE QA ACTIF — les envois réels sont DÉTOURNÉS           ║');
+    console.warn(`  ║  ${qaRedirectResume().padEnd(58)}║`);
+    console.warn('  ║  Aucun client ne recevra de message.                       ║');
+    console.warn('  ╚════════════════════════════════════════════════════════════╝');
+    console.warn('');
+  }
 
   // Start automation scheduler
   startScheduler(supabaseUrl, supabaseServiceRoleKey, {

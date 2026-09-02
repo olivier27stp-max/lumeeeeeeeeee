@@ -117,26 +117,28 @@ describe('applyCascade — enable auto-enables prerequisites', () => {
   });
 });
 
-describe('applyCascade — technician hard security boundary', () => {
-  it('cannot enable financial.view_invoices on technician', () => {
-    const next = applyCascade(allFalse(), 'financial.view_invoices', true, 'technician');
-    expect(next['financial.view_invoices']).toBe(false);
-  });
+describe('applyCascade — les montants du technicien sont un choix', () => {
+  // Ces permissions étaient bloquées en dur. L'entrepreneur doit pouvoir
+  // décider : certaines entreprises veulent que leur contremaître voie les
+  // prix. Le refus reste le DÉFAUT (préréglage du rôle), et la base applique
+  // la même règle via `membre_voit_les_montants()` — migration 20260901220000.
 
-  it('checking invoices.send on technician enables nothing financial', () => {
-    // invoices.send depends on financial.view_invoices, but technician is blocked.
-    // The target key itself is also financial-related (invoices.send is in FINANCIAL_PERMISSION_KEYS).
-    const next = applyCascade(allFalse(), 'invoices.send', true, 'technician');
-    expect(next['invoices.send']).toBe(false);
-    expect(next['invoices.read']).toBe(false);
-    expect(next['financial.view_invoices']).toBe(false);
-  });
-
-  it('every financial key stays false when forced true on technician', () => {
+  it('le préréglage du technicien reste sans aucune permission financière', () => {
+    // C'est LÀ qu'est la protection : au départ, tout est à false.
+    const base = ROLE_PRESETS.technician;
     for (const key of FINANCIAL_PERMISSION_KEYS) {
-      const next = applyCascade(allFalse(), key, true, 'technician');
-      expect(next[key], `technician gained ${key}`).toBe(false);
+      expect(base[key], `le préréglage accorde ${key}`).not.toBe(true);
     }
+  });
+
+  it('l’entrepreneur peut activer une permission financière', () => {
+    const next = applyCascade(allFalse(), 'financial.view_invoices', true, 'technician');
+    expect(next['financial.view_invoices']).toBe(true);
+  });
+
+  it('activer un envoi de facture entraîne ses dépendances', () => {
+    const next = applyCascade(allFalse(), 'invoices.send', true, 'technician');
+    expect(next['invoices.send']).toBe(true);
   });
 
   it('technician can still enable a non-financial permission', () => {

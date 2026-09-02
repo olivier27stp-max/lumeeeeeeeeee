@@ -93,17 +93,19 @@ export async function resendPaymentRequest(invoiceId: string, sendVia: string = 
   });
 }
 
-// ── Refunds ──
-
-export async function refundPayment(paymentId: string, amountCents?: number, reason?: string) {
-  return fetchApiJson<{ ok: boolean; refund_id: string; refund_amount: number; refund_status: string; full_refund: boolean }>(
-    '/api/payments/refund',
-    {
-      method: 'POST',
-      body: JSON.stringify({ paymentId, amountCents: amountCents || undefined, reason }),
-    }
-  );
-}
+// ── Remboursements ──
+// Les remboursements se font depuis le tableau de bord Stripe, pas depuis Lume
+// (décision du 2026-09-01). Le client `refundPayment` qui vivait ici n'était
+// appelé par AUCUNE page : il laissait croire que l'application savait
+// rembourser, alors qu'aucun bouton ne l'a jamais déclenché.
+//
+// La route serveur `POST /api/payments/refund` est CONSERVÉE : elle fonctionne,
+// elle est protégée par la permission `financial.view_payments`, et elle
+// annule correctement le paiement dans la facture. Elle reste disponible si un
+// bouton devait être ajouté un jour.
+//
+// L'affichage d'un paiement remboursé (badge, icône, traductions) reste utile :
+// un remboursement fait dans Stripe redescend par le webhook.
 
 export async function getPaymentRequestsForInvoice(invoiceId: string): Promise<{ payment_requests: PaymentRequest[] }> {
   return fetchApiJson(`/api/payment-requests/${invoiceId}/status`);

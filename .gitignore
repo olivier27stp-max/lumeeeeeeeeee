@@ -39,3 +39,9 @@ scripts/.env*
 # Email inbox — local mockups/preview (not committed)
 plan-email-preview.html
 maquette-email-messages.html
+
+# Sorties du robot de recette — régénérables (npm run qa:carte)
+qa-carte.json
+qa-carte-boutons.json
+qa-rapport.md
+qa-captures/

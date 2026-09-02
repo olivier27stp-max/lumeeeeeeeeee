@@ -20,6 +20,22 @@ export default function AcceptInvitation() {
 
   const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
 
+  // Les messages d'erreur du serveur sont en anglais uniquement. Les afficher
+  // tels quels donne « Invitation not found. » à un client francophone, sous
+  // un titre pourtant traduit. On les rend dans sa langue.
+  const messageLisible = (brut: string, repli: string): string => {
+    const m = String(brut || '').toLowerCase();
+    if (!m) return repli;
+    if (!isFr) return brut;
+    if (m.includes('too many requests')) return 'Trop de tentatives. Réessayez dans quelques instants.';
+    if (m.includes('not found') || m.includes('already used')) return "Cette invitation est introuvable ou a déjà été utilisée.";
+    if (m.includes('expired')) return 'Cette invitation a expiré.';
+    if (m.includes('invalid')) return "Ce lien d'invitation est invalide.";
+    if (m.includes('network') || m.includes('failed to fetch')) return 'Connexion impossible. Vérifiez votre accès à Internet.';
+    return repli;
+  };
+
+
   useEffect(() => {
     if (!token) {
       setState('error');
@@ -36,7 +52,7 @@ export default function AcceptInvitation() {
         setState('form');
       } catch (err: any) {
         setState('error');
-        setErrorMessage(err.message || (isFr ? 'Cette invitation est invalide ou a expiré.' : 'This invitation is invalid or has expired.'));
+        setErrorMessage(messageLisible(err?.message, isFr ? 'Cette invitation est invalide ou a expiré.' : 'This invitation is invalid or has expired.'));
       }
     })();
   }, [token]);
@@ -62,7 +78,7 @@ export default function AcceptInvitation() {
       await acceptInvitation(token!, password, fullName.trim());
       setState('success');
     } catch (err: any) {
-      setErrorMessage(err.message || (isFr ? "Échec de l'acceptation de l'invitation." : 'Failed to accept invitation.'));
+      setErrorMessage(messageLisible(err?.message, isFr ? "Échec de l'acceptation de l'invitation." : 'Failed to accept invitation.'));
       setState('error');
     } finally {
       setSubmitting(false);

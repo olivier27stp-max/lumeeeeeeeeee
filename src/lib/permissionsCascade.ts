@@ -95,8 +95,9 @@ export function applyCascade(
   function enable(k: PermissionKey) {
     if (visited.has(k)) return;
     visited.add(k);
-    // Hard security: technician can never gain financial perms.
-    if (role === 'technician' && FINANCIAL_PERMISSION_KEYS.includes(k)) return;
+    // Les permissions financières d'un technicien étaient bloquées ici aussi.
+    // L'entrepreneur doit pouvoir décider : voir permissions.ts et la
+    // migration 20260901220000. Le refus reste le défaut, la base l'applique.
     next[k] = true;
     for (const dep of DEPENDS_ON[k] ?? []) enable(dep);
   }
