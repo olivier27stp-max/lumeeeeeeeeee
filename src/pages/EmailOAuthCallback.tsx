@@ -30,19 +30,21 @@ export default function EmailOAuthCallback() {
           ? 'la boîte email'
           : 'the email inbox';
 
+  // Le décompte ne fait QUE décompter. La fonction passée à setCountdown doit
+  // rester pure : y appeler navigate() modifiait le routeur pendant le rendu de
+  // ce composant, ce que React signale par « Cannot update a component while
+  // rendering a different component » (repéré par le robot de recette).
   useEffect(() => {
     const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          navigate(RETURN_TO, { replace: true });
-          return 0;
-        }
-        return prev - 1;
-      });
+      setCountdown((prev) => (prev <= 1 ? 0 : prev - 1));
     }, 1000);
     return () => clearInterval(timer);
-  }, [navigate]);
+  }, []);
+
+  // La redirection est un effet du compteur arrivé à zéro, pas de sa mise à jour.
+  useEffect(() => {
+    if (countdown === 0) navigate(RETURN_TO, { replace: true });
+  }, [countdown, navigate]);
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">

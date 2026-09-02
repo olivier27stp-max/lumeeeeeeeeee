@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import Stripe from 'stripe';
 import Twilio from 'twilio';
+import { envelopperTwilio } from './qa-redirect';
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -24,9 +25,16 @@ export const paypalEnv = String(process.env.PAYPAL_ENV || 'sandbox').toLowerCase
 export const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || '';
 export const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || '';
 export const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER || ''; // E.164 format
-export const twilioClient = twilioAccountSid && twilioAuthToken && twilioAccountSid.startsWith('AC')
-  ? Twilio(twilioAccountSid, twilioAuthToken)
-  : null;
+// Le client est enveloppé par le mode QA : quand QA_REDIRECT_TO est défini, tout
+// `messages.create` part vers ce numéro au lieu du client réel. On enveloppe ici,
+// à l'unique point d'instanciation, plutôt qu'aux 8 sites d'appel dispersés — un
+// neuvième appelant est ainsi couvert d'office. Sans la variable, `envelopperTwilio`
+// renvoie le client inchangé.
+export const twilioClient = envelopperTwilio(
+  twilioAccountSid && twilioAuthToken && twilioAccountSid.startsWith('AC')
+    ? Twilio(twilioAccountSid, twilioAuthToken)
+    : null,
+);
 
 /**
  * URL du callback de statut Twilio, à passer à CHAQUE `messages.create`.

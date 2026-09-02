@@ -111,23 +111,34 @@ describe('Technician — ZERO financial access', () => {
   });
 });
 
-describe('Financial permission override protection', () => {
-  it('should block financial permission overrides for technician', () => {
-    const overrides: Record<string, boolean> = {
-      'financial.view_pricing': true,
-      'financial.view_invoices': true,
-      'invoices.read': true,
-      'payments.read': true,
-      'reports.read': true,
-    };
-
-    const resolved = resolvePermissions('technician', overrides);
+describe('Les montants pour un technicien : refusés par défaut, activables', () => {
+  // Ces permissions étaient bloquées en dur, sans recours. C'était imposer une
+  // règle à l'entrepreneur : certaines entreprises veulent que leur
+  // contremaître voie les prix sur place, d'autres non. Le choix lui revient
+  // désormais, via l'écran des rôles — mais le refus reste le DÉFAUT, et la
+  // base applique la même règle (migration 20260901220000).
+  it('sans réglage, un technicien ne voit aucun montant', () => {
+    const resolved = resolvePermissions('technician');
 
     expect(resolved['financial.view_pricing']).toBe(false);
     expect(resolved['financial.view_invoices']).toBe(false);
     expect(resolved['invoices.read']).toBe(false);
     expect(resolved['payments.read']).toBe(false);
     expect(resolved['reports.read']).toBe(false);
+  });
+
+  it('l’entrepreneur peut les activer explicitement', () => {
+    const overrides: Record<string, boolean> = {
+      'financial.view_pricing': true,
+      'invoices.read': true,
+    };
+
+    const resolved = resolvePermissions('technician', overrides);
+
+    expect(resolved['financial.view_pricing']).toBe(true);
+    expect(resolved['invoices.read']).toBe(true);
+    // Ce qu'il n'a PAS activé reste refusé.
+    expect(resolved['payments.read']).toBe(false);
   });
 
   it('should allow non-financial overrides for technician', () => {

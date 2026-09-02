@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from '../i18n';
 import {
   InvoiceTemplate,
   InvoiceTemplateInput,
@@ -38,6 +39,7 @@ function emptyTax(): TaxForm {
 }
 
 export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, template }: Props) {
+  const { t } = useTranslation();
   const isEditMode = !!template;
 
   const [name, setName] = useState('');
@@ -386,7 +388,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
             {/* Footer */}
             <div className="flex items-center justify-between border-t border-outline bg-surface/70 px-5 py-4 sticky bottom-0 rounded-b-2xl">
               <button type="button" onClick={onClose} className="glass-button">
-                Cancel
+                {t.common.cancel}
               </button>
               <button
                 type="button"

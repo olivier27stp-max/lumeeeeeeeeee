@@ -31,9 +31,17 @@ export function maxBodySize(maxBytes = 1_048_576) {
 // All fields optional / nullable — the guard's job is to reject the WRONG
 // *types* when a field is present, not to enforce required fields.
 const commonFieldsSchema = z.object({
-  id: z.string().uuid().optional(),
-  orgId: z.string().uuid().optional(),
-  org_id: z.string().uuid().optional(),
+  // `.nullable()` est indispensable : un client qui envoie explicitement
+  // `org_id: null` (visiteur anonyme, entité sans organisation) est légitime.
+  // Sans lui, Zod refuse le corps entier avec un 400 et l'appel échoue en
+  // silence. C'est ce qui empêchait TOUT enregistrement de consentement aux
+  // témoins : `submitCookieConsent` envoie `orgId ?? null` et les 4 appels
+  // repartaient en 400 sans que l'utilisateur voie quoi que ce soit.
+  // Règle du CLAUDE.md : « Zod nullable() requis pour les champs pouvant
+  // recevoir null des clients ».
+  id: z.string().uuid().optional().nullable(),
+  orgId: z.string().uuid().optional().nullable(),
+  org_id: z.string().uuid().optional().nullable(),
   client_id: z.string().uuid().optional().nullable(),
   lead_id: z.string().uuid().optional().nullable(),
   job_id: z.string().uuid().optional().nullable(),

@@ -7,6 +7,24 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { fetchPublicPaymentData, createPublicPaymentIntent } from '../lib/connectApi';
 import type { PublicPaymentData, CreatePublicPaymentIntentResponse } from '../lib/connectApi';
 
+/**
+ * Les erreurs du serveur sont en anglais uniquement. Sur une page que le
+ * client ouvre pour payer, « Too many requests. Please try again later. »
+ * n'aide personne : on rend le message dans sa langue.
+ */
+function messageLisible(brut: unknown, isFr: boolean, repli: string): string {
+  const m = String(brut || '').toLowerCase();
+  if (!m) return repli;
+  if (!isFr) return String(brut);
+  if (m.includes('too many requests')) return 'Trop de tentatives. Réessayez dans quelques instants.';
+  if (m.includes('not found')) return 'Ce lien de paiement est introuvable.';
+  if (m.includes('expired')) return 'Ce lien de paiement a expiré.';
+  if (m.includes('invalid')) return 'Ce lien de paiement est invalide.';
+  if (m.includes('already paid') || m.includes('already been paid')) return 'Cette facture a déjà été payée.';
+  if (m.includes('network') || m.includes('failed to fetch')) return 'Connexion impossible. Vérifiez votre accès à Internet.';
+  return repli;
+}
+
 // ── Language detection (public page — no auth context) ──
 const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
 
@@ -55,7 +73,7 @@ export default function PublicPayment() {
           setStripePromise(loadStripe(intent.publishable_key));
         }
       } catch (err: any) {
-        setError(err?.message || (isFr ? 'Échec du chargement de la page de paiement.' : 'Failed to load payment page.'));
+        setError(messageLisible(err?.message, isFr, isFr ? 'Échec du chargement de la page de paiement.' : 'Failed to load payment page.'));
       } finally {
         setLoading(false);
       }

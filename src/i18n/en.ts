@@ -107,6 +107,11 @@ const en = {
     next: 'Next',
 
   },
+  notifications: {
+    titre: 'Notifications',
+    toutMarquerLu: 'Mark all read',
+    aucune: 'No notifications yet',
+  },
 
   // Dashboard
   dashboard: {

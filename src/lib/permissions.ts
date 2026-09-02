@@ -493,10 +493,16 @@ export function resolvePermissions(role: TeamRole, overrides?: Record<string, bo
   if (!overrides) return base;
   for (const [key, val] of Object.entries(overrides)) {
     if (key in base) {
-      // Hard block: technician can never gain financial permissions
-      if (role === 'technician' && FINANCIAL_PERMISSION_KEYS.includes(key as PermissionKey) && val === true) {
-        continue;
-      }
+      // Les permissions financières d'un technicien étaient auparavant
+      // bloquées en dur, sans recours. C'était imposer une règle à
+      // l'entrepreneur : certaines entreprises veulent que leur contremaître
+      // voie les prix sur place, d'autres non. Le choix lui revient, et il
+      // s'exprime dans l'écran des rôles (/settings/roles).
+      //
+      // Le refus reste le DÉFAUT : sans réglage explicite, un technicien ne
+      // voit aucun montant — un oubli ne peut pas exposer les chiffres. La
+      // base applique la même règle via `membre_voit_les_montants()`
+      // (20260901220000), donc lever ce blocage n'ouvre rien tout seul.
       (base as any)[key] = val;
     }
   }

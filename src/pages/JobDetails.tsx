@@ -340,7 +340,20 @@ export default function JobDetails() {
         updateRecentLabel(`/jobs/${id}`, `#${jobData.job_number} ${jobData.title || ''}`);
         setLineItems(items);
       })
-      .catch((err) => setError(err.message || (language === 'fr' ? 'Échec du chargement du job' : 'Failed to load job')))
+      .catch((err) => {
+        // Un identifiant mal formé (vieux lien, faute de frappe) fait échouer
+        // la requête avec un message de PostgreSQL : « invalid input syntax
+        // for type uuid ». L'afficher tel quel expose la tuyauterie à
+        // l'utilisateur, qui n'y comprend rien. C'est un lien invalide, pas
+        // une panne : on le traite comme un job introuvable.
+        const brut = String(err?.message || '');
+        const lienInvalide = /invalid input syntax|uuid|22P02/i.test(brut);
+        setError(
+          lienInvalide
+            ? t.jobs.jobNotFound
+            : brut || (language === 'fr' ? 'Échec du chargement du job' : 'Failed to load job'),
+        );
+      })
       .finally(() => setLoading(false));
   }, [id]);
 

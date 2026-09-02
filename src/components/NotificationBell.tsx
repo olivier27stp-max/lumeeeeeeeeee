@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { Bell, Check, X, AlertTriangle, Info, CheckCircle2, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase } from '../lib/supabase';
-import { cn } from '../lib/utils';
+import { cn, timeAgo } from '../lib/utils';
+import { useTranslation } from '../i18n';
 
 interface Notification {
   id: string;
@@ -25,6 +26,7 @@ async function getAuthHeaders() {
 }
 
 export default function NotificationBell() {
+  const { t, language } = useTranslation();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -111,15 +113,6 @@ export default function NotificationBell() {
     return <Info size={14} className="text-text-secondary" />;
   };
 
-  const timeAgo = (date: string) => {
-    const diff = Date.now() - new Date(date).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-  };
 
   return (
     <>
@@ -148,11 +141,11 @@ export default function NotificationBell() {
           >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-outline">
-              <h3 className="text-sm font-bold text-text-primary">Notifications</h3>
+              <h3 className="text-sm font-bold text-text-primary">{t.notifications.titre}</h3>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
                   <button onClick={markAllRead} className="text-[11px] text-primary font-medium hover:underline">
-                    Mark all read
+                    {t.notifications.toutMarquerLu}
                   </button>
                 )}
                 <button onClick={() => setOpen(false)} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary">
@@ -164,12 +157,12 @@ export default function NotificationBell() {
             {/* List */}
             <div className="max-h-[420px] overflow-y-auto">
               {loading && notifications.length === 0 && (
-                <div className="p-6 text-center text-text-tertiary text-sm">Loading...</div>
+                <div className="p-6 text-center text-text-tertiary text-sm">{t.common.loading}</div>
               )}
               {!loading && notifications.length === 0 && (
                 <div className="p-8 text-center">
                   <Bell size={28} className="mx-auto text-text-tertiary opacity-30 mb-2" />
-                  <p className="text-sm text-text-tertiary">No notifications yet</p>
+                  <p className="text-sm text-text-tertiary">{t.notifications.aucune}</p>
                 </div>
               )}
               {notifications.map((notif) => (
@@ -191,7 +184,7 @@ export default function NotificationBell() {
                       </button>
                     </div>
                     {notif.body && <p className="text-[11px] text-text-tertiary mt-0.5 line-clamp-2">{notif.body}</p>}
-                    <p className="text-[10px] text-text-tertiary mt-1">{timeAgo(notif.created_at)}</p>
+                    <p className="text-[10px] text-text-tertiary mt-1">{timeAgo(notif.created_at, language === 'fr')}</p>
                   </div>
                   {!notif.read_at && <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />}
                 </div>

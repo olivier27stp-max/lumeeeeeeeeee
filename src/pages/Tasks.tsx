@@ -340,8 +340,20 @@ export default function Tasks() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const loading = tasksQuery.isLoading;
 
-  // Clear selection when data changes
-  useEffect(() => { setSelected(new Set()); }, [rows]);
+  // Vider la sélection quand les données changent.
+  //
+  // La dépendance était `rows`, qui vaut `data?.rows || []` : tant que les
+  // données ne sont pas chargées, ce `[]` est un NOUVEAU tableau à chaque
+  // rendu. React le voit comme une valeur différente, relance l'effet, qui
+  // appelle setSelected, qui provoque un rendu — boucle infinie, signalée par
+  // « Maximum update depth exceeded ». Le défaut était intermittent (environ
+  // une fois sur quatre), donc invisible à l'œil nu : trouvé par la campagne
+  // de passages répétés du 2026-09-01.
+  //
+  // On dépend maintenant de l'IDENTITÉ des lignes, pas de la référence du
+  // tableau : la sélection se vide quand les tâches changent vraiment.
+  const idsAffiches = rows.map((r: { id: string }) => r.id).join(',');
+  useEffect(() => { setSelected(new Set()); }, [idsAffiches]);
 
   // ── Selection ──
   const allSelected = rows.length > 0 && selected.size === rows.length;

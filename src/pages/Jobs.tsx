@@ -57,6 +57,8 @@ import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
+import { usePermissions } from '../hooks/usePermissions';
+import { hasPermission } from '../lib/permissions';
 
 // ─── View mode ───────────────────────────────────────────────────
 type ViewMode = 'grid' | 'list';
@@ -475,7 +477,16 @@ export default function Jobs() {
     }
   };
 
+  // Un technicien ne doit voir aucun prix dans la liste : la page JobDetails
+  // applique déjà ce contrôle (ligne 144), pas celle-ci — 450 $, 850 $ et
+  // 675 $ s'affichaient encore. Vérifié le 2026-09-01 en session technicien.
+  // Le droit suit le réglage de l'entreprise (écran des rôles).
+  const permsCtx = usePermissions();
+  const peutVoirLesPrix = permsCtx.role === 'owner' || permsCtx.role === 'admin' ||
+    hasPermission(permsCtx.permissions, 'financial.view_pricing', permsCtx.role ?? undefined);
+
   const formatMoney = (job: Job) => {
+    if (!peutVoirLesPrix) return '';
     const amount = Math.round(job.total_cents / 100);
     if (!job.currency || job.currency === 'USD') return formatCurrency(amount);
     return new Intl.NumberFormat(language === 'fr' ? 'fr-CA' : 'en-US', { style: 'currency', currency: job.currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);

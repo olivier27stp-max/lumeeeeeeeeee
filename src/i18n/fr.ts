@@ -109,6 +109,11 @@ const fr: TranslationKeys = {
     next: 'Suivant',
 
   },
+  notifications: {
+    titre: 'Notifications',
+    toutMarquerLu: 'Tout marquer comme lu',
+    aucune: 'Aucune notification',
+  },
 
   // Dashboard
   dashboard: {

@@ -131,6 +131,27 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
             }
           }
         }
+
+        // Dernier recours : le nom porté par l'organisation elle-même.
+        // Sans lui, une organisation créée mais dont les réglages ne sont pas
+        // encore remplis s'affiche « Bureau sans nom » alors que son nom
+        // existe bel et bien — c'est le cas de tout nouveau compte, avant le
+        // premier passage dans les réglages d'entreprise.
+        const sansNom = orgIds.filter((id: string) => !companyNames[id]);
+        if (sansNom.length > 0) {
+          const { data: orgs } = await supabase
+            .from('orgs')
+            .select('id, name')
+            .in('id', sansNom);
+
+          if (orgs) {
+            for (const o of orgs) {
+              if (o.id && o.name) {
+                companyNames[o.id] = o.name;
+              }
+            }
+          }
+        }
       }
 
       // 3. Build CompanyMembership objects
