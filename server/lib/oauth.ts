@@ -18,7 +18,43 @@ import crypto from 'crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from './supabase';
 import { supabaseUrl, supabaseAnonKey } from './config';
-import { encryptSecret, decryptSecret } from '../../src/lib/crypto';
+
+/**
+ * Chiffrement de la session Supabase rattachée à une autorisation.
+ *
+ * On N'UTILISE PAS le helper des paiements : il dépend de
+ * PAYMENTS_ENCRYPTION_KEY, variable OPTIONNELLE que le serveur accepte de
+ * démarrer sans. En production elle n'était pas définie — le chiffrement
+ * échouait, l'erreur était avalée (pour ne pas casser l'autorisation), et la
+ * session n'était jamais stockée. Résultat : tous les outils passant par une
+ * RPC restaient muets, sans le moindre message.
+ *
+ * La clé est dérivée d'AGENT_JWT_SECRET, dont l'absence empêche le serveur de
+ * démarrer : impossible d'échouer silencieusement à nouveau. La dérivation
+ * (HKDF avec un label dédié) garantit qu'un même secret ne sert pas à deux
+ * usages cryptographiques distincts.
+ */
+function cleSession(): Buffer {
+  const base = process.env.AGENT_JWT_SECRET;
+  if (!base) throw new Error('AGENT_JWT_SECRET requis pour chiffrer la session OAuth.');
+  return Buffer.from(
+    crypto.hkdfSync('sha256', Buffer.from(base), Buffer.alloc(0), Buffer.from('lume-oauth-session-v1'), 32),
+  );
+}
+
+function chiffrerSession(clair: string): string {
+  const iv = crypto.randomBytes(12);
+  const c = crypto.createCipheriv('aes-256-gcm', cleSession(), iv);
+  const enc = Buffer.concat([c.update(clair, 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
+
+function dechiffrerSession(charge: string): string {
+  const buf = Buffer.from(charge, 'base64');
+  const d = crypto.createDecipheriv('aes-256-gcm', cleSession(), buf.subarray(0, 12));
+  d.setAuthTag(buf.subarray(12, 28));
+  return Buffer.concat([d.update(buf.subarray(28)), d.final()]).toString('utf8');
+}
 
 /** Durées de vie. Court pour l'accès, long pour le rafraîchissement. */
 export const ACCESS_TOKEN_TTL_S = 60 * 60;              // 1 h
@@ -263,10 +299,15 @@ export async function issueTokens(p: IssueTokensParams): Promise<IssuedTokens> {
     // exploitable. Un échec de chiffrement ne doit pas bloquer l'autorisation —
     // on perd seulement l'accès aux outils qui exigent une identité.
     try {
-      row.supabase_refresh_token_chiffre = encryptSecret(p.supabaseRefreshToken);
+      row.supabase_refresh_token_chiffre = chiffrerSession(p.supabaseRefreshToken);
       row.supabase_session_maj_le = new Date().toISOString();
     } catch (e: any) {
+      // Un échec ici prive l'utilisateur de tous les outils passant par une
+      // RPC (revenus, factures) SANS message visible : c'est exactement ce qui
+      // s'est produit en production. On refuse donc plutôt que de laisser
+      // filer une autorisation à moitié fonctionnelle.
       console.error('[oauth] chiffrement de la session Supabase impossible :', e?.message || e);
+      throw new Error('Session non chiffrable — autorisation refusée.');
     }
   }
 
@@ -377,7 +418,7 @@ export async function rotateRefreshToken(
   // OAuth ferait perdre l'identité et recasserait les outils à RPC.
   let sessionSuivie: string | null = null;
   if (data.supabase_refresh_token_chiffre) {
-    try { sessionSuivie = decryptSecret(data.supabase_refresh_token_chiffre); } catch { /* session perdue */ }
+    try { sessionSuivie = dechiffrerSession(data.supabase_refresh_token_chiffre); } catch { /* session perdue */ }
   }
 
   const tokens = await issueTokens({
@@ -420,7 +461,7 @@ export async function buildUserScopedClient(tokenId: string): Promise<SupabaseCl
 
   let refresh: string;
   try {
-    refresh = decryptSecret(data.supabase_refresh_token_chiffre);
+    refresh = dechiffrerSession(data.supabase_refresh_token_chiffre);
   } catch (e: any) {
     console.error('[oauth] déchiffrement de la session impossible :', e?.message || e);
     return null;
@@ -435,7 +476,7 @@ export async function buildUserScopedClient(tokenId: string): Promise<SupabaseCl
     if (sess.session.refresh_token && sess.session.refresh_token !== refresh) {
       try {
         await db.from('oauth_tokens').update({
-          supabase_refresh_token_chiffre: encryptSecret(sess.session.refresh_token),
+          supabase_refresh_token_chiffre: chiffrerSession(sess.session.refresh_token),
           supabase_session_maj_le: new Date().toISOString(),
         }).eq('id', tokenId);
       } catch (e: any) {
