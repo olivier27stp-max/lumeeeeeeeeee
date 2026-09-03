@@ -1197,6 +1197,20 @@ app.listen(port, '0.0.0.0', () => {
         setTimeout(runDunning, 30_000);
         console.log('[dunning] Cron started (every 6h, lock-guarded)');
 
+        // Abonnements figés — période dépassée alors que le statut reste
+        // `active`. Ne suspend RIEN : pose une trace dans security_events.
+        // Constat du 2026-09-03 : les 7 abonnements de prod étaient dans ce
+        // cas, jusqu'à 109 jours, sans que rien ne le signale.
+        import('./lib/abonnements-figes').then(({ detecterAbonnementsFiges }) => {
+          const runFiges = () =>
+            withAdvisoryLock('abonnements-figes', () =>
+              withCronCheckIn('abonnements-figes', () => detecterAbonnementsFiges(getServiceClient())))
+              .catch((e: any) => captureCronFailure('abonnements-figes', e));
+          setInterval(runFiges, 24 * 60 * 60 * 1000);
+          setTimeout(runFiges, 45_000);
+          console.log('[abonnements-figes] Cron started (daily, lock-guarded)');
+        }).catch((e: any) => captureCronFailure('abonnements-figes-import', e));
+
     // Ménage OAuth : codes périmés et jetons morts (fonction oauth_menage,
     // migration 20260903090000). Sans ce cron, la fonction existait mais
     // n'était appelée par RIEN — les tables grossissaient sans fin.
