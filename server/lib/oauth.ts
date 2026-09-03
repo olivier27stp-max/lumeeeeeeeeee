@@ -458,7 +458,12 @@ export async function rotateRefreshToken(
  * révoquée…). L'appelant retombe alors sur le service client : les outils
  * simples continuent de fonctionner, seuls ceux à RPC échouent.
  */
-export async function buildUserScopedClient(tokenId: string): Promise<SupabaseClient | null> {
+export interface UserSession {
+  client: SupabaseClient;
+  accessToken: string;
+}
+
+export async function buildUserScopedClient(tokenId: string): Promise<UserSession | null> {
   const db = getServiceClient();
   const { data } = await db
     .from('oauth_tokens')
@@ -492,10 +497,16 @@ export async function buildUserScopedClient(tokenId: string): Promise<SupabaseCl
       }
     }
 
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${sess.session.access_token}` } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    return {
+      client: createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${sess.session.access_token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      }),
+      // Le jeton brut sert aux outils qui rappellent les ROUTES de
+      // l'application au nom de l'utilisateur (envoi de devis/facture) :
+      // même moteur, mêmes modèles, mêmes relances — zéro duplication.
+      accessToken: sess.session.access_token,
+    };
   } catch (e: any) {
     console.error('[oauth] session utilisateur injouable :', e?.message || e);
     return null;
