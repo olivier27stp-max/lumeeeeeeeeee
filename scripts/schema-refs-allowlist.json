@@ -12,6 +12,24 @@
       "table": "pipeline_deals",
       "ref": "stage=new",
       "reason": "Repli volontaire et documenté : réessai avec l'ancien slug si la base n'a pas encore la migration 20260703200000 (le CHECK renvoie alors 23514)."
+    },
+    {
+      "file": "server/lib/migration/importer.ts",
+      "table": "migration_import_records",
+      "ref": "is_active",
+      "reason": "Faux positif d'attribution : la table est une VARIABLE (`admin.from(table)` dans la boucle `for (const [table, ids] of byTable)`), pas `migration_import_records`. Les colonnes visées (is_active sur predefined_services, deleted_at/client_id sur clients|jobs|invoices) existent bien sur leurs tables réelles. Vérifié le 2026-09-03."
+    },
+    {
+      "file": "server/lib/migration/importer.ts",
+      "table": "migration_import_records",
+      "ref": "deleted_at",
+      "reason": "Faux positif d'attribution : la table est une VARIABLE (`admin.from(table)` dans la boucle `for (const [table, ids] of byTable)`), pas `migration_import_records`. Les colonnes visées (is_active sur predefined_services, deleted_at/client_id sur clients|jobs|invoices) existent bien sur leurs tables réelles. Vérifié le 2026-09-03."
+    },
+    {
+      "file": "server/lib/migration/importer.ts",
+      "table": "migration_import_records",
+      "ref": "client_id",
+      "reason": "Faux positif d'attribution : la table est une VARIABLE (`admin.from(table)` dans la boucle `for (const [table, ids] of byTable)`), pas `migration_import_records`. Les colonnes visées (is_active sur predefined_services, deleted_at/client_id sur clients|jobs|invoices) existent bien sur leurs tables réelles. Vérifié le 2026-09-03."
     }
   ]
 }
