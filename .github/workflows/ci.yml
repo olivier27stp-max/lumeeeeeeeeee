@@ -24,9 +24,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
 
       - name: Install dependencies
@@ -46,6 +46,14 @@ jobs:
   # Catches the class of bug fixed 2026-07-08 (properties_active, team_members…).
   # Set the RLS_TEST_DB_URL secret to a STAGING DB seeded with >=2 orgs to enable;
   # skips (green) until then, fails the build on any leak once wired.
+  #
+  # DEUX USERS MONO-ORG STABLES REQUIS. Le test a besoin de deux utilisateurs
+  # appartenant chacun à UNE seule org distincte. Il pioche en priorité la
+  # fixture dédiée (rlsfix.user0/1@fixture.lume.test), semée une fois par
+  # `npm run seed:rls` et JAMAIS touchée par les suites QA — sans elle, il
+  # retombait sur des memberships aléatoires que le QA crée/supprime, d'où un
+  # flake « Need >=2 single-org users » sur des PR sans rapport. La fixture est
+  # persistante dans staging ; re-semer seulement après un `db:clone-staging`.
   rls-isolation:
     name: RLS cross-tenant isolation
     runs-on: ubuntu-latest
@@ -56,7 +64,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
       - name: Install dependencies
         run: npm ci
@@ -80,9 +88,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
       - name: npm audit (high severity)
         run: npm audit --audit-level=high
