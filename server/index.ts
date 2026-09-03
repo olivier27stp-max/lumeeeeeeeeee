@@ -506,7 +506,10 @@ app.get('/api/auth/from-kairo', async (req, res) => {
     // bloquer une connexion légitime.
     admin.from('audit_events').insert({
       org_id: orgId,
-      user_id: utilisateur.id,
+      // La colonne s'appelle `actor_id`, pas `user_id`. Avec PostgREST une
+      // seule colonne inexistante fait échouer TOUTE la requête, et
+      // supabase-js ne lève jamais : le journal partait dans le vide.
+      actor_id: utilisateur.id,
       action: 'auth.from_kairo',
       entity_type: 'session',
       metadata: { jti, target, email: courriel },

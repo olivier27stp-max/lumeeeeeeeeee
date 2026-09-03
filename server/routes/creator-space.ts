@@ -67,7 +67,11 @@ function safeSubscription(sub: any, plan: any | null) {
     amount_cents: sub.amount_cents,
     current_period_start: sub.current_period_start,
     current_period_end: sub.current_period_end,
-    trial_end: sub.trial_end ?? null,
+    // `subscriptions` n'a PAS de colonne trial_end (vérifié sur prod et staging).
+    // La demander faisait échouer TOUTE la requête — PostgREST rejette la
+    // requête entière pour une seule colonne inconnue, et supabase-js ne lève
+    // jamais : le panneau Compagnie restait vide, en silence.
+    trial_end: null,
     cancel_at_period_end: sub.cancel_at_period_end,
     canceled_at: sub.canceled_at,
     created_at: sub.created_at,
@@ -440,7 +444,7 @@ router.get('/creator-space/companies/:orgId', async (req, res) => {
       admin.from('orgs').select('id, name, created_at').in('id', ids),
       admin
         .from('subscriptions')
-        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, trial_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
+        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
         .in('org_id', ids)
         .order('created_at', { ascending: false })
         .limit(1),
@@ -547,7 +551,7 @@ router.get('/creator-space/companies/:orgId/billing', async (req, res) => {
       loadPlansById(admin),
       admin
         .from('subscriptions')
-        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, trial_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
+        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
         .in('org_id', ids)
         .order('created_at', { ascending: false }),
       admin
