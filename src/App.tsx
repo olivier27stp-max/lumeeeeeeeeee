@@ -132,6 +132,7 @@ import Register from './pages/Register';
 import AccessBlocked from './pages/AccessBlocked';
 import VerifyEmail from './pages/VerifyEmail';
 import VerifyEmailGate from './components/auth/VerifyEmailGate';
+import ResetPassword from './pages/ResetPassword';
 // Conserves volontairement bien que non montes : ils permettent de remettre
 // Lume Agent en service en restaurant sa route et son entree de menu.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -589,6 +590,13 @@ export default function App() {
   }
   if (location.pathname === '/checkout') {
     return <OnboardingFlow />;
+  }
+
+  // Nouveau mot de passe depuis le lien reçu par courriel. Rendu tel quel,
+  // session ou pas, et AVANT la porte mobile : le lien est souvent ouvert sur
+  // le téléphone, pas sur l'ordinateur qui l'a demandé.
+  if (location.pathname === '/reset-password') {
+    return <ResetPassword />;
   }
 
   // Aperçu de la porte mobile — visible sans compte, pour la regarder sur un

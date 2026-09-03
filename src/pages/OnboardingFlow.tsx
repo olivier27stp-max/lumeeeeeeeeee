@@ -310,7 +310,10 @@ export default function OnboardingFlow() {
     } catch (err: any) {
       const msg = err.message || '';
       if (msg.includes('Invalid login')) {
-        toast.error(isFr ? 'Mot de passe incorrect' : 'Invalid password');
+        // Ce courriel a déjà un compte et le mot de passe ne colle pas — ou le
+        // compte a été créé avec Google et n'en a pas. Même indice que sur la
+        // page de connexion : bouton Google, ou « mot de passe oublié ».
+        toast.error(t.auth.invalidCredentials, { description: t.auth.invalidCredentialsHint, duration: 10000 });
       } else {
         toast.error(msg);
       }

@@ -1,6 +1,7 @@
 import { Route, Routes } from 'react-router-dom';
 import Auth from '../pages/Auth';
 import Register from '../pages/Register';
+import ResetPassword from '../pages/ResetPassword';
 import VerifyEmail from '../pages/VerifyEmail';
 import Privacy from '../pages/Privacy';
 import Terms from '../pages/Terms';
@@ -43,6 +44,7 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
       )}
       <Route path="/auth" element={<Auth onBack={onAuthBack} />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />

@@ -24,6 +24,7 @@ import {
 import { motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { forgotPassword } from '../lib/authApi';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
 import { PageHeader, Modal } from '../components/ui';
@@ -240,10 +241,9 @@ export default function TeamMemberDetails() {
   // ── Password reset ─────────────────────────────────────
   const handlePasswordReset = async () => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
-        redirectTo: `${window.location.origin}/settings`,
-      });
-      if (error) throw error;
+      // Notre propre lien (src/lib/authApi.ts) : celui de Supabase renvoyait
+      // le membre sur l'accueil sans aucun formulaire de mot de passe.
+      await forgotPassword(form.email);
       toast.success(t.teamMember.passwordResetEmailSentToFormemail);
     } catch {
       toast.error(isFr ? 'Erreur lors de l\'envoi du courriel de réinitialisation.' : 'Failed to send password reset email.');
