@@ -57,6 +57,8 @@ async function q(sql) {
 const MARQUEUR = 'RLSFIX';
 
 if (NETTOYER) {
+  // Les users fixture d'abord (leurs memberships tombent en cascade).
+  await q(`delete from auth.users where email like 'rlsfix.user%@fixture.lume.test'`).catch(() => {});
   // Le nettoyage se fait par table, en ignorant les échecs : une table dont la
   // colonne texte a disparu ne doit pas bloquer les suivantes.
   const cibles = await q(`
@@ -111,6 +113,40 @@ if (orgs.length < 2) {
   process.exit(1);
 }
 console.log(`Organisations : ${orgs[0].slice(0, 8)}… et ${orgs[1].slice(0, 8)}…\n`);
+
+// ── 1b. Deux UTILISATEURS dédiés, un par org fixture ─────────────────────
+// Le test RLS a besoin de « deux users mono-org d'orgs distinctes ». Avant,
+// il piochait des memberships aléatoires du staging — que les tests QA
+// (qui créent/suppriment des membres) faisaient disparaître par intermittence,
+// d'où un check RLS qui flakait sur des PR sans rapport. Ces users-ci portent
+// le marqueur RLSFIX : stables, isolés, jamais touchés par le QA.
+for (let i = 0; i < 2; i++) {
+  const email = `rlsfix.user${i}@fixture.lume.test`;
+  // Idempotent : réutilise le user s'il existe déjà (par email dans auth.users).
+  const [ex] = await q(`select id from auth.users where email = '${email}' limit 1`);
+  let uid = ex?.id;
+  if (!uid) {
+    // Insertion directe dans auth.users (le seed écrit en SQL, pas via l'API
+    // auth) : un compte minimal suffit — le test ne fait que set request.jwt.claims
+    // avec son id, il ne se connecte jamais vraiment.
+    const [nu] = await q(`
+      insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
+        email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+      values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated',
+        'authenticated', '${email}', '', now(), now(), now(),
+        '{"provider":"email","providers":["email"],"rlsfix":true}'::jsonb, '{}'::jsonb)
+      returning id`);
+    uid = nu?.id;
+    if (!uid) { const [again] = await q(`select id from auth.users where email='${email}' limit 1`); uid = again?.id; }
+  }
+  if (!uid) { console.error(`Impossible de créer/retrouver ${email}`); process.exit(1); }
+  // Membership UNIQUE dans son org (mono-org, ce que le test exige).
+  await q(`
+    insert into public.memberships (org_id, user_id, role, status)
+    values ('${orgs[i]}', '${uid}', 'owner', 'active')
+    on conflict do nothing`);
+}
+console.log('Utilisateurs fixture : 2 users mono-org [RLSFIX] prêts.\n');
 
 // ── 2. Colonnes obligatoires de chaque table org-scopée ──────────────────
 const colonnes = await q(`

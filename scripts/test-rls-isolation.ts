@@ -101,25 +101,13 @@ try {
 }
 
 // Relations that are GLOBAL by design (not tenant data) — allowed to be shared/anon-visible.
-// Tables VOLONTAIREMENT globales : elles n'ont pas d'org_id parce que la
-// notion d'organisation n'existe pas encore au moment où on y écrit.
-//   • plans, promo_codes         — catalogue partagé, lecture seule
-//   • failed_login_attempts      — une tentative de connexion échouée précède
-//     l'identification de l'entreprise : on ne sait pas encore à qui elle
-//     appartient. Sa politique réserve déjà la lecture aux owner/admin
-//     (failed_login_attempts_admin_read), et le contrôle « control plane »
-//     ci-dessous vérifie qu'aucun client ne peut y écrire.
-// Sans cette déclaration, le contrôle « CHILD partage des lignes » la
-// signalait à chaque exécution et bloquait tout déploiement.
-//   - `oauth_clients` : registre des APPLICATIONS autorisées à se connecter
-//     au CRM (Claude, Zapier…). La table n'a ni `org_id` ni `user_id` —
-//     partager ses lignes entre organisations est son fonctionnement normal.
-//     Le secret n'y figure jamais en clair (`client_secret_hash`), et les
-//     autorisations rattachées à une organisation vivent dans `oauth_tokens`
-//     / `oauth_autorisations_actives`, qui restent contrôlées, elles.
-//     Sans cette déclaration, le contrôle signale une fuite à chaque
-//     exécution depuis l'arrivée du serveur OAuth (PR #183/#184).
-const GLOBAL = new Set(['plans', 'promo_codes', 'failed_login_attempts', 'oauth_clients']);
+// failed_login_attempts / login_history : anti-brute-force, GLOBALES par
+// conception (une IP est bloquée pour tous, pas par org). Confirmé par la PR
+// #195 (« failed_login_attempts est volontairement globale »). Elles sont déjà
+// dans CONTROL_PLANE ci-dessous, mais le test des tables ENFANT consulte cette
+// liste-ci — d'où le faux positif « shares rows between two orgs » qu'un
+// scan complet (fixture stable) finit par atteindre.
+const GLOBAL = new Set(['plans', 'promo_codes', 'failed_login_attempts', 'login_history']);
 
 const c = new Client({ ...conn, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 });
 
@@ -137,22 +125,27 @@ async function main() {
   await c.query("set statement_timeout='120s'");
   const leaks: string[] = [];
 
-  // Two distinct single-org users.
-  const users = (await c.query(`
+  // Two distinct single-org users. On PRÉFÈRE les users de fixture dédiés
+  // (rlsfix.user%@fixture.lume.test, créés par `npm run seed:rls`) : stables,
+  // jamais touchés par les tests QA qui manipulent les memberships. Repli sur
+  // n'importe quels users mono-org si la fixture n'a pas été semée.
+  let users = (await c.query(`
     select distinct on (m.org_id) m.user_id, m.org_id from memberships m
-    where exists(select 1 from auth.users u where u.id=m.user_id)
+    join auth.users u on u.id = m.user_id
+    where u.email like 'rlsfix.user%@fixture.lume.test'
       and (select count(*) from memberships mm where mm.user_id=m.user_id)=1
+    order by m.org_id
     limit 2`)).rows;
   if (users.length < 2) {
-    // Pas une fuite : il n'y a simplement pas deux locataires à comparer.
-    // Cas réel du 2026-09-03 — après le nettoyage des organisations de test,
-    // la production n'en comptait plus qu'une seule, et ce contrôle passait
-    // au rouge sur CHAQUE pull request. Un test d'isolation qui échoue faute
-    // de données ressemble à une brèche : il faut le distinguer, sinon on
-    // apprend à ignorer l'alarme qui compte vraiment.
-    console.log(`Isolation non vérifiable : ${users.length} organisation(s) mono-utilisateur, il en faut 2.`);
-    console.log('Aucune fuite constatée — contrôle sauté, pas échoué.');
-    process.exit(0);
+    users = (await c.query(`
+      select distinct on (m.org_id) m.user_id, m.org_id from memberships m
+      where exists(select 1 from auth.users u where u.id=m.user_id)
+        and (select count(*) from memberships mm where mm.user_id=m.user_id)=1
+      limit 2`)).rows;
+  }
+  if (users.length < 2) {
+    console.error('Need >=2 single-org users seeded. Run `npm run seed:rls` against staging.');
+    process.exit(2);
   }
   const [A, B] = users;
   const claimsA = JSON.stringify({ sub: A.user_id, role: 'authenticated' });
