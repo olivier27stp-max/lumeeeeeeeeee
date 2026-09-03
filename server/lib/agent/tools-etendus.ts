@@ -31,8 +31,23 @@ import {
   computePayPeriod, periodToIsoRange, computeEntryHours, DEFAULT_PAYROLL_SETTINGS,
   type PayrollSettings,
 } from '../payroll';
-import { calculateJobFinancials, type TaxLine } from '../../../src/lib/jobCalc';
 import type { AgentTool, ToolContext } from './tools';
+
+interface TaxLine { code: string; label: string; rate: number; enabled: boolean }
+
+function calculerFinancesJob(
+  items: Array<{ qty: number; unit_price_cents: number }>,
+  taxLines: TaxLine[],
+): { subtotal_cents: number; tax_cents: number; total_cents: number } {
+  const subtotal_cents = items.reduce(
+    (s, it) => s + Math.max(0, Math.round((Number(it.qty) || 0) * (Number(it.unit_price_cents) || 0))),
+    0,
+  );
+  const tax_cents = taxLines
+    .filter((t) => t.enabled && t.rate > 0)
+    .reduce((s, t) => s + Math.round(subtotal_cents * (t.rate / 100)), 0);
+  return { subtotal_cents, tax_cents, total_cents: subtotal_cents + tax_cents };
+}
 
 /* ── Garde-fous communs ────────────────────────────────────────── */
 
@@ -151,7 +166,7 @@ export const ETIQUETTES_DERIVED: Record<string, string> = {
 /**
  * Taxes actives de l'org, mappées au format tax_lines des jobs — la même
  * source que l'écran Réglages › Taxes (table tax_configs). Le calcul des
- * montants passe ensuite par calculateJobFinancials, LE calculateur de
+ * montants passe ensuite par calculerFinancesJob (copie du calculateur de
  * l'app (module pur importé tel quel) : mêmes arrondis au cent.
  */
 async function taxesParDefaut(ctx: ToolContext): Promise<TaxLine[]> {
@@ -625,7 +640,7 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
     //      un appel (numéro, statut, calendrier gérés par la base) ;
     //   2. file de géocodage — sans elle, le job n'apparaît pas sur la carte ;
     //   3. VRAIES lignes d'items dans job_line_items — pas un résumé en note ;
-    //   4. finances par calculateJobFinancials (le calculateur de l'app) avec
+    //   4. finances par calculerFinancesJob (copie du calculateur de l'app) avec
     //      les taxes actives de l'org — cents uniquement, projections par
     //      trigger.
     const items: any[] = (Array.isArray(args.line_items) ? args.line_items : [])
@@ -637,7 +652,7 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       }));
 
     const taxes: TaxLine[] = args.no_taxes ? [] : await taxesParDefaut(ctx);
-    const finances = calculateJobFinancials(
+    const finances = calculerFinancesJob(
       items.map((it) => ({ qty: it.qty, unit_price_cents: it.unit_price_cents })),
       taxes,
     );
@@ -1773,7 +1788,7 @@ const updateJobTool: AgentTool = {
         const taxes: TaxLine[] = args.no_taxes
           ? []
           : ((job.tax_lines as TaxLine[])?.length ? (job.tax_lines as TaxLine[]) : await taxesParDefaut(ctx));
-        finances = calculateJobFinancials(
+        finances = calculerFinancesJob(
           items.map((it: any) => ({ qty: it.qty, unit_price_cents: it.unit_price_cents })),
           taxes,
         );
