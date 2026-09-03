@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle, CreditCard, FileText, Loader2, Lock, PenLine } from 'lucide-react';
-import { loadStripe, type Stripe } from '@stripe/stripe-js';
+import { loadStripe } from '@stripe/stripe-js/pure';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import AgreementDocument, { type AgreementDocData } from '../components/agreements/AgreementDocument';
 import { resolveBrand, readableOn } from '../lib/brandColor';

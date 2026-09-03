@@ -3,7 +3,8 @@ import { resolveBrand, readableOn } from '../lib/brandColor';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import { formatQuoteMoney } from '../lib/quotesApi';
-import { loadStripe, Stripe } from '@stripe/stripe-js';
+import { loadStripe } from '@stripe/stripe-js/pure';
+import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 
 // ── Lume fallback logo (panda) ──
