@@ -11,6 +11,10 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FunctionDeclaration } from './gemini';
+import {
+  OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS,
+  handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
+} from './tools-etendus';
 
 export interface ToolContext {
   client: SupabaseClient;
@@ -23,8 +27,21 @@ export type ToolKind = 'read' | 'write';
 export interface AgentTool {
   declaration: FunctionDeclaration;
   kind: ToolKind;
-  /** Present only for read tools. Returns a JSON-serialisable result. */
+  /**
+   * Exécute l'outil. Présent sur les lectures ET, depuis l'ouverture des
+   * écritures MCP, sur les écritures. L'orchestrateur interne (Gemini)
+   * n'exécute JAMAIS un outil `write` — il propose et l'utilisateur
+   * confirme dans l'interface (voir orchestrator.ts, test sur `kind`).
+   * Seul le serveur MCP exécute les handlers d'écriture, sous scope
+   * `mcp:write` + identité obligatoire.
+   */
   handler?: (args: Record<string, any>, ctx: ToolContext) => Promise<any>;
+  /**
+   * Exige le client Supabase à l'identité de l'utilisateur (session OAuth).
+   * JAMAIS de repli sur le service client : pour la paie, les finances, le
+   * GPS ou toute écriture, un repli contournerait les permissions par rôle.
+   */
+  needsIdentity?: boolean;
 }
 
 const clamp = (n: any, def: number, max: number) => {
@@ -643,7 +660,7 @@ const createQuote: AgentTool = {
   declaration: {
     name: 'create_quote',
     description:
-      'Propose creating a quote. Requires a client_id OR lead_id (look it up first with search_clients/search_leads). Does NOT create anything — it asks the user to confirm. Only call once all line items and the recipient are known.',
+      'Create a quote (draft) for a client or lead. Requires client_id OR lead_id (look it up first with search_clients/search_leads). Numbering and totals are computed by the database. Only call once all line items and the recipient are known — and if several clients match the name, ask which one first.',
     parameters: {
       type: 'object',
       properties: {
@@ -664,7 +681,7 @@ const createInvoice: AgentTool = {
   declaration: {
     name: 'create_invoice',
     description:
-      'Propose creating an invoice for a client. Requires client_id (look it up with search_clients). Does NOT create anything until the user confirms.',
+      'Create an invoice DRAFT for a client (client_id from search_clients). The invoice stays a draft: nothing is sent to the client — sending happens in Lume. Amounts are in cents.',
     parameters: {
       type: 'object',
       properties: {
@@ -695,7 +712,7 @@ const createJob: AgentTool = {
   kind: 'write',
   declaration: {
     name: 'create_job',
-    description: 'Propose creating a job (work order). Does NOT create anything until the user confirms.',
+    description: 'Create a job (work order). With scheduled_at it is created as scheduled, otherwise as draft. If several clients match a name, ask which one before creating.',
     parameters: {
       type: 'object',
       properties: {
@@ -728,7 +745,7 @@ const sendSms: AgentTool = {
   declaration: {
     name: 'send_sms',
     description:
-      'Propose sending an SMS to a client. Requires the phone number (look up the client with search_clients first). Does NOT send anything until the user confirms.',
+      'Send an SMS to a client — IT ACTUALLY SENDS, and a sent SMS cannot be recalled. ALWAYS show the user the exact message and recipient and get their explicit OK in the conversation before calling this. Opt-outs (STOP) are enforced server-side.',
     parameters: {
       type: 'object',
       properties: {
@@ -743,6 +760,19 @@ const sendSms: AgentTool = {
 };
 
 // ─────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────
+// Handlers d'écriture et outils étendus — voir tools-etendus.ts.
+// Attachés ICI pour que les quatre déclarations historiques gardent
+// leur place unique dans le registre (pas de doublon de nom).
+createQuote.handler = handlerCreateQuote;
+createQuote.needsIdentity = true;
+createInvoice.handler = handlerCreateInvoice;
+createInvoice.needsIdentity = true;
+createJob.handler = handlerCreateJob;
+createJob.needsIdentity = true;
+sendSms.handler = handlerSendSms;
+sendSms.needsIdentity = true;
 
 export const AGENT_TOOLS: AgentTool[] = [
   searchClients,
@@ -761,6 +791,8 @@ export const AGENT_TOOLS: AgentTool[] = [
   createInvoice,
   createJob,
   sendSms,
+  ...OUTILS_LECTURE_ETENDUS,
+  ...OUTILS_ECRITURE_ETENDUS,
 ];
 
 export const TOOLS_BY_NAME: Record<string, AgentTool> = Object.fromEntries(

@@ -32,7 +32,7 @@ import { getServiceClient, requireAuthedClient } from '../lib/supabase';
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { AGENT_TOOLS, TOOLS_BY_NAME, type AgentTool } from '../lib/agent/tools';
-import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ, buildUserScopedClient } from '../lib/oauth';
+import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ, SCOPE_MCP_WRITE, buildUserScopedClient } from '../lib/oauth';
 
 const router = Router();
 
@@ -40,8 +40,25 @@ const PROTOCOL_VERSION = '2025-06-18';
 const SERVER_INFO = { name: 'lume-crm', version: '1.0.0' };
 const REQUIRED_SCOPE = 'mcp';
 
-/** Tools published over MCP: read-only AND actually executable. */
-const MCP_TOOLS: AgentTool[] = AGENT_TOOLS.filter((t) => t.kind === 'read' && typeof t.handler === 'function');
+/** Tout ce qui est exécutable, lecture et écriture confondues. */
+const MCP_TOOLS: AgentTool[] = AGENT_TOOLS.filter((t) => typeof t.handler === 'function');
+
+/**
+ * Les outils que CET appelant peut voir et appeler.
+ * Un outil invisible ici est aussi inappelable plus bas — même filtre.
+ *   • écriture  → jeton OAuth portant `mcp:write` (jamais en mode clé :
+ *     une clé d'org n'a pas d'identité, donc pas d'audit nominatif).
+ *   • needsIdentity → session OAuth uniquement (paie, finances, GPS…).
+ */
+function outilsPour(auth: McpAuth): AgentTool[] {
+  const peutEcrire = auth.mode === 'oauth' && auth.scopes.includes(SCOPE_MCP_WRITE);
+  const aIdentite = auth.mode === 'oauth';
+  return MCP_TOOLS.filter((t) => {
+    if (t.kind === 'write' && !peutEcrire) return false;
+    if (t.needsIdentity && !aIdentite) return false;
+    return true;
+  });
+}
 
 /** Gemini FunctionDeclaration → MCP tool descriptor. */
 function toMcpTool(tool: AgentTool) {
@@ -77,6 +94,8 @@ interface McpAuth {
   /** Identifiant de la clé (mode clé) ou du jeton (mode OAuth). */
   credentialId: string;
   mode: 'oauth' | 'api_key';
+  /** Scopes du jeton OAuth (vide en mode clé). */
+  scopes: string[];
 }
 
 /**
@@ -93,7 +112,7 @@ function challengeHeader(): string {
     // PUBLIC_BASE_URL absent : on ne peut pas annoncer d'URL correcte.
     return `Bearer scope="${SCOPE_MCP_READ}"`;
   }
-  return `Bearer resource_metadata="${metadata}", scope="${SCOPE_MCP_READ}"`;
+  return `Bearer resource_metadata="${metadata}", scope="${SCOPE_MCP_READ} ${SCOPE_MCP_WRITE}"`;
 }
 
 /**
@@ -131,6 +150,7 @@ async function authenticate(req: any, res: any): Promise<McpAuth | null> {
       userId: validated.userId,
       credentialId: validated.tokenId,
       mode: 'oauth',
+      scopes: validated.scopes,
     };
   }
 
@@ -171,7 +191,7 @@ async function authenticate(req: any, res: any): Promise<McpAuth | null> {
     return null;
   }
 
-  return { orgId: key.orgId, credentialId: key.keyId, mode: 'api_key' };
+  return { orgId: key.orgId, credentialId: key.keyId, mode: 'api_key', scopes: [] };
 }
 
 /**
@@ -251,7 +271,7 @@ router.post('/', async (req, res) => {
 
     // ── tools/list ──
     if (method === 'tools/list') {
-      return res.json(rpcResult(id, { tools: MCP_TOOLS.map(toMcpTool) }));
+      return res.json(rpcResult(id, { tools: outilsPour(auth).map(toMcpTool) }));
     }
 
     // ── tools/call ──
@@ -260,20 +280,41 @@ router.post('/', async (req, res) => {
       const args = (body.params?.arguments || {}) as Record<string, any>;
       const tool = TOOLS_BY_NAME[name];
 
-      // Unknown, write, or handler-less tools are all refused identically:
-      // an MCP client must never reach a mutation path.
-      if (!tool || tool.kind !== 'read' || typeof tool.handler !== 'function') {
+      // Inconnu, sans handler, ou hors des droits de CET appelant (scope
+      // d'écriture absent, identité absente) : refus identique — un outil
+      // que la liste ne montre pas ne doit pas non plus s'appeler.
+      const autorises = outilsPour(auth);
+      if (!tool || typeof tool.handler !== 'function' || !autorises.includes(tool)) {
         return res.json(rpcError(id, -32602, `Unknown or unavailable tool: ${name}`));
       }
 
       // En OAuth, on interroge la base À L'IDENTITÉ du porteur : RLS
       // redevient actif et les RPC `SECURITY DEFINER` qui vérifient
       // `has_org_membership(auth.uid(), org)` acceptent enfin l'appel.
-      // Repli sur le service client si la session n'est plus rejouable :
-      // les outils simples continuent alors de répondre.
-      const clientOutil = auth.mode === 'oauth'
-        ? (await buildUserScopedClient(auth.credentialId)) ?? buildToolClient()
-        : buildToolClient();
+      //
+      // Pour un outil `needsIdentity` (paie, finances, GPS, TOUTE écriture),
+      // AUCUN repli : sans session rejouable, on refuse avec une consigne
+      // claire plutôt que de contourner les permissions par rôle. Les
+      // lectures simples, elles, gardent le repli service (org_id explicite).
+      let clientOutil: SupabaseClient;
+      if (auth.mode === 'oauth') {
+        const clientUtilisateur = await buildUserScopedClient(auth.credentialId);
+        if (!clientUtilisateur && tool.needsIdentity) {
+          return res.json(rpcResult(id, {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: 'Cette action exige votre identité et votre session Lume n’est plus rejouable. '
+                  + 'Reconnectez le connecteur Lume dans Claude (Réglages › Connecteurs), puis réessayez.',
+              }),
+            }],
+            isError: true,
+          }));
+        }
+        clientOutil = clientUtilisateur ?? buildToolClient();
+      } else {
+        clientOutil = buildToolClient();
+      }
 
       const result = await tool.handler(args, {
         client: clientOutil,

@@ -61,9 +61,17 @@ export const ACCESS_TOKEN_TTL_S = 60 * 60;              // 1 h
 export const REFRESH_TOKEN_TTL_S = 60 * 60 * 24 * 30;   // 30 j
 export const AUTH_CODE_TTL_S = 60;                      // 60 s (spec : « courte durée »)
 
-/** Le seul scope pour l'instant : lecture du CRM. */
+/**
+ * Scopes du serveur MCP.
+ * `mcp:read`  — consulter le CRM.
+ * `mcp:write` — créer (jobs, clients, tâches, devis, factures-brouillons)
+ *               et envoyer des SMS. Toujours accordé PAR la personne sur
+ *               l'écran de consentement, jamais implicite ; chaque écriture
+ *               exige en plus l'identité (session) et est idempotente.
+ */
 export const SCOPE_MCP_READ = 'mcp:read';
-export const SCOPES_SUPPORTED = [SCOPE_MCP_READ];
+export const SCOPE_MCP_WRITE = 'mcp:write';
+export const SCOPES_SUPPORTED = [SCOPE_MCP_READ, SCOPE_MCP_WRITE];
 
 /** Base publique du serveur. Sans elle, aucune URL absolue n'est correcte. */
 export function baseUrl(): string {
