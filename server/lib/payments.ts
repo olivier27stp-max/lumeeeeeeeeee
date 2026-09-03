@@ -76,6 +76,15 @@ export function isSchemaNotReadyError(error: any) {
   return code === '42P01' || code === '42703' || code === '42883' || code === '42P13';
 }
 
+/**
+ * 42501 = insufficient_privilege. PostgreSQL refuse l'opération faute de
+ * GRANT — c'est un refus de PRIVILÈGE, distinct d'un refus de politique RLS
+ * (qui, lui, ne lève rien : il renvoie simplement zéro ligne).
+ */
+export function isPermissionDeniedError(error: any) {
+  return readPgCode(error) === '42501';
+}
+
 export function defaultPaymentSettings(orgId: string): PaymentSettingsRow & {
   stripe_publishable_key: string | null;
   paypal_client_id: string | null;
@@ -93,13 +102,46 @@ export function defaultPaymentSettings(orgId: string): PaymentSettingsRow & {
   };
 }
 
+/**
+ * Crée la ligne de réglages de paiement d'un org si elle n'existe pas.
+ *
+ * POURQUOI CETTE FONCTION ÉCRIT EN service_role
+ * La table `payment_provider_settings` n'est plus inscriptible par
+ * `authenticated` : le durcissement du 2026-07-30
+ * (`20260730140000_defaut_refus_et_contraintes_metier.sql`) a révoqué
+ * insert/update/delete sur un lot de tables, celle-ci comprise, au motif
+ * qu'« elles ne sont écrites que par l'API en service_role ».
+ *
+ * L'intention était juste, mais l'API écrivait ici avec le client de
+ * L'UTILISATEUR. Et la RPC `ensure_payment_settings_row()` — SECURITY
+ * DEFINER, prévue exactement pour ce cas — a elle aussi perdu son
+ * `grant execute to authenticated`. Les deux chemins se sont donc fermés
+ * en même temps : la RPC échoue, le repli en upsert échoue
+ * (42501 permission denied), et l'appelant renvoie 403.
+ *
+ * Effet mesuré le 2026-09-03 : 45 des 46 orgs de production n'avaient
+ * aucune ligne de réglages, donc TOUTE ouverture des pages Revenus /
+ * Paiements déclenchait la création → 403. Trois routes mortes :
+ * payouts/summary, payouts/list, providers/status.
+ *
+ * Le correctif garde la table fermée en écriture aux utilisateurs — c'est
+ * la décision de juillet, on ne la défait pas — et fait passer cette
+ * création par service_role, comme le font déjà payroll.ts, reminders.ts
+ * et commissions.ts. Le contrôle d'accès reste entier : les appelants
+ * vérifient l'appartenance à l'org et la permission RBAC avant d'arriver
+ * ici, et rien de ce qui est écrit ne dépend de l'identité de l'appelant.
+ */
 export async function ensurePaymentSettingsRow(client: SupabaseClient, orgId: string) {
   const { error } = await client.rpc('ensure_payment_settings_row', { p_org: orgId });
   if (!error) return;
   if (isSchemaNotReadyError(error)) return;
 
-  // Fallback for environments where ensure_payment_settings_row() is missing.
-  const { error: upsertError } = await client.from('payment_provider_settings').upsert(
+  // La RPC a échoué (droit d'exécution retiré, ou fonction absente).
+  // On repasse par service_role : cette table n'accepte plus d'écriture
+  // d'un client utilisateur.
+  const writer = isPermissionDeniedError(error) ? getServiceClient() : client;
+
+  const { error: upsertError } = await writer.from('payment_provider_settings').upsert(
     {
       org_id: orgId,
       default_provider: 'none',
@@ -112,6 +154,17 @@ export async function ensurePaymentSettingsRow(client: SupabaseClient, orgId: st
     { onConflict: 'org_id' }
   );
   if (isSchemaNotReadyError(upsertError)) return;
+  if (upsertError && isPermissionDeniedError(upsertError) && writer !== client) {
+    // Déjà en service_role et toujours refusé : le problème est ailleurs.
+    throw upsertError;
+  }
+  if (upsertError && isPermissionDeniedError(upsertError)) {
+    const { error: retryError } = await getServiceClient()
+      .from('payment_provider_settings')
+      .upsert({ org_id: orgId, default_provider: 'none', stripe_enabled: false, paypal_enabled: false, stripe_keys_present: false, paypal_keys_present: false, updated_at: new Date().toISOString() }, { onConflict: 'org_id' });
+    if (retryError && !isSchemaNotReadyError(retryError)) throw retryError;
+    return;
+  }
   if (upsertError) throw upsertError;
 }
 
