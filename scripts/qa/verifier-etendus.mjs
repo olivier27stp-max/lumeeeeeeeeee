@@ -129,6 +129,8 @@ const outil = async (jeton, name, args = {}) => {
   R(instr.length > 200, 'initialize livre des instructions', `${instr.length} caractères`);
   R(/JAMAIS d'identifiant technique/i.test(instr), 'Interdiction des UUID/ids dans les réponses');
   R(/OUI explicite/i.test(instr), 'Confirmation exigée avant SMS');
+  R(/MÊME QUAND ÇA ÉCHOUE/i.test(instr) && /messages d'erreur bruts/i.test(instr),
+    'Le registre d\u2019exploitant tient aussi en cas d\u2019échec');
 
   /* ════ 1. SCOPES ════ */
   console.log('  ── Scopes et visibilité ──');
@@ -300,7 +302,7 @@ const outil = async (jeton, name, args = {}) => {
 
   // send_sms : sans Twilio local → erreur PROPRE (pas le message générique)
   const sms = await outil(jEcriture, 'send_sms', { phone_number: '+15145550100', message_text: 'test' });
-  R(!!sms.error && !/That lookup/i.test(sms.error), 'send_sms échoue proprement sans Twilio', (sms.error || '').slice(0, 60));
+  R(!!sms.error && !/La consultation a échoué/i.test(sms.error), 'send_sms échoue proprement sans Twilio', (sms.error || '').slice(0, 60));
 
   /* ════ 4. OUTILS D'ASSISTANT ════ */
   console.log('');
@@ -362,7 +364,7 @@ const outil = async (jeton, name, args = {}) => {
 
   // create_invoice_from_job → le flux « facture le job #X » de l'app.
   const factJob = await outil(jEcriture, 'create_invoice_from_job', { job_id: jCal.job?.id });
-  R((factJob.created === true && factJob.status === 'draft') || (!!factJob.error && !/That lookup/i.test(factJob.error)),
+  R((factJob.created === true && factJob.status === 'draft') || (!!factJob.error && !/La consultation a échoué/i.test(factJob.error)),
     'create_invoice_from_job : RPC de clôture appelée',
     factJob.invoice_id ? 'brouillon ' + factJob.invoice_id.slice(0, 8) : (factJob.error || '').slice(0, 60));
   if (factJob.invoice_id) aNettoyer.invoices.push(factJob.invoice_id);
@@ -402,7 +404,7 @@ const outil = async (jeton, name, args = {}) => {
   // l'utilisateur. En local sans SMTP, on attend un échec PROPRE (message
   // de la route), jamais le générique — et jamais un envoi fantôme.
   const envoi = await outil(jEcriture, 'send_invoice', { invoice_id: f1.invoice_id });
-  R(envoi.sent === true || (!!envoi.error && !/That lookup/i.test(envoi.error)),
+  R(envoi.sent === true || (!!envoi.error && !/La consultation a échoué/i.test(envoi.error)),
     'send_invoice : route de l’app appelée (envoi réel ou refus propre)',
     envoi.sent ? 'envoyée' : (envoi.error || '').slice(0, 70));
   const memeEnvoi = await outil(jEcriture, 'send_invoice', { invoice_id: f1.invoice_id });

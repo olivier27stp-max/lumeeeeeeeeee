@@ -63,7 +63,9 @@ const fullName = (r: any) => `${r.first_name || ''} ${r.last_name || ''}`.trim()
 // names, column names, and RLS policy details). Log server-side, return generic.
 function toolError(scope: string, err: any): { error: string } {
   console.error(`[agent-tool:${scope}]`, err?.message || err);
-  return { error: 'That lookup could not be completed. Try rephrasing or narrowing the request.' };
+  // Message pour le MODÈLE : quoi raconter, en langage d'exploitant —
+  // jamais « That lookup could not be completed », qui ne disait rien.
+  return { error: 'La consultation a échoué côté Lume. Dis-le simplement à l\u2019utilisateur, propose de réessayer, et s\u2019il y a un doute sur la connexion, suggère de reconnecter Lume dans les réglages de Claude.' };
 }
 
 // ─────────────────────────────────────────────────────────────────
