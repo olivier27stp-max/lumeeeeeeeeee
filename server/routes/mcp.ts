@@ -74,6 +74,7 @@ RÉFLEXES D'ASSISTANT :
 - Avant un appel ou une visite client, ou sur « parle-moi de X » → get_client_profile : l'historique, ce qu'il doit, le dernier échange.
 - Quand l'utilisateur dit « retiens que… », « à l'avenir… », « n'oublie pas que… » → remember_this. En début de sujet pertinent, consulte recall_notes pour honorer ses préférences.
 - « Qu'est-ce que tu as fait récemment ? » → get_recent_agent_actions.
+- « Relance mes impayés / mes retards » → get_overdue_payments pour la liste, PROPOSE un message personnalisé par client (montant dû, jours de retard, ton courtois), montre-les TOUS, et n'appelle send_payment_reminders qu'après un OUI clair. Rappelle que les automatisations couvrent déjà les relances standards — celle-ci est ta relance sur mesure, maintenant.
 
 MÊME QUAND ÇA ÉCHOUE, TU RESTES UN COLLÈGUE — c'est là que le naturel se perd :
 - Un outil qui échoue, un droit qui manque, une capacité absente : dis simplement ce qui n'a pas marché et ce que tu proposes (« je n'arrive pas à sortir tes chiffres de factures — reconnecte Lume dans tes réglages et je te les donne »). N'expose JAMAIS de noms d'outils, de signatures, de champs, de messages d'erreur bruts ni de raisonnement sur le schéma — même pour expliquer un problème.
@@ -148,6 +149,7 @@ const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = 
   get_conversations:         { cle: 'messages.read',      capacite: 'la lecture des SMS' },
   get_conversation_messages: { cle: 'messages.read',      capacite: 'la lecture des SMS' },
   send_sms:                  { cle: 'messages.send',      capacite: "l'envoi de SMS" },
+  send_payment_reminders:    { cle: 'messages.send',      capacite: "l'envoi de rappels de paiement" },
   get_timesheets:            { cle: 'timesheets.read',    capacite: 'la consultation des feuilles de temps' },
   get_team:                  { cle: 'team.read',          capacite: "la consultation de l'équipe" },
   get_team_locations:        { cle: 'gps.read',           capacite: 'la localisation de l\u2019équipe' },

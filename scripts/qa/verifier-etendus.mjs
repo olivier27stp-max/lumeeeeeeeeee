@@ -136,10 +136,10 @@ const outil = async (jeton, name, args = {}) => {
   console.log('  ── Scopes et visibilité ──');
   const listeLecture = (await rpc(jLecture, 'tools/list')).result.tools.map((t) => t.name);
   const listeEcriture = (await rpc(jEcriture, 'tools/list')).result.tools.map((t) => t.name);
-  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job', 'convert_quote_to_job', 'convert_lead_to_client', 'add_visit', 'update_job'];
+  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job', 'convert_quote_to_job', 'convert_lead_to_client', 'add_visit', 'update_job', 'send_payment_reminders'];
   R(!ecritures.some((n) => listeLecture.includes(n)), 'Jeton lecture : AUCUNE écriture visible',
     `${listeLecture.length} outils`);
-  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 21 écritures visibles',
+  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 22 écritures visibles',
     `${listeEcriture.length} outils`);
   const refusEcriture = await outil(jLecture, 'create_task', { title: 'interdit' });
   R(!!refusEcriture.rpc_error, 'Appel d\'écriture refusé sans le scope');
@@ -388,6 +388,25 @@ const outil = async (jeton, name, args = {}) => {
   const sms = await outil(jEcriture, 'send_sms', { phone_number: '+15145550100', message_text: 'test' });
   R(!!sms.error && !/La consultation a échoué/i.test(sms.error), 'send_sms échoue proprement sans Twilio', (sms.error || '').slice(0, 60));
 
+
+  // ── Relances d'impayés en lot ──
+  // Twilio absent en local : on vérifie le TRI (client sans tel ignoré
+  // proprement, pas d'échec dur) et le compte-rendu. Un client avec tel
+  // mais sans Twilio compte comme « ignoré » avec raison — jamais un crash.
+  const relances = await outil(jEcriture, 'send_payment_reminders', {
+    reminders: [
+      { client_id: c1.client?.id, message: 'Rappel amical : petite facture en attente.' },
+      { client_id: '00000000-0000-0000-0000-000000000000', message: 'client fantome' },
+    ],
+  });
+  R(typeof relances.sent_count === 'number' && typeof relances.skipped_count === 'number',
+    'send_payment_reminders renvoie un compte-rendu', `envoyés ${relances.sent_count}, ignorés ${relances.skipped_count}`);
+  R((relances.skipped || []).some((x) => /introuvable/i.test(x.raison || '')),
+    'Client inexistant ignoré proprement (pas de crash du lot)');
+  R(relances.sent_count + relances.skipped_count === 2, 'Chaque destinataire est traité une fois');
+  // Le client c1 a un téléphone mais Twilio est absent → ignoré, jamais un
+  // envoi fantôme.
+  R((relances.skipped || []).every((x) => !!x.raison), 'Chaque ignoré porte sa raison');
   /* ════ 4. OUTILS D'ASSISTANT ════ */
   console.log('');
   console.log('');
