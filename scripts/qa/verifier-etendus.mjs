@@ -105,6 +105,17 @@ const outil = async (jeton, name, args = {}) => {
   const jEcriture = await jetonPour(sess, reg.client_id, 'mcp:read mcp:write');
   console.log(`  Organisation : ${ORG}\n`);
 
+  /* ════ 0. INSTRUCTIONS DE PRÉSENTATION ════ */
+  // Sans elles, l'assistant répondait avec des UUID et des noms de champs —
+  // le retour utilisateur exact du 2026-09-03. Le champ `instructions`
+  // d'initialize est le canal MCP officiel pour dicter le ton.
+  console.log('  ── Instructions serveur ──');
+  const init = await rpc(jLecture, 'initialize', {});
+  const instr = init.result?.instructions || '';
+  R(instr.length > 200, 'initialize livre des instructions', `${instr.length} caractères`);
+  R(/JAMAIS d'identifiant technique/i.test(instr), 'Interdiction des UUID/ids dans les réponses');
+  R(/OUI explicite/i.test(instr), 'Confirmation exigée avant SMS');
+
   /* ════ 1. SCOPES ════ */
   console.log('  ── Scopes et visibilité ──');
   const listeLecture = (await rpc(jLecture, 'tools/list')).result.tools.map((t) => t.name);

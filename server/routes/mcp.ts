@@ -37,8 +37,36 @@ import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ, SCOPE_
 const router = Router();
 
 const PROTOCOL_VERSION = '2025-06-18';
-const SERVER_INFO = { name: 'lume-crm', version: '1.0.0' };
+const SERVER_INFO = { name: 'lume-crm', version: '1.1.0' };
 const REQUIRED_SCOPE = 'mcp';
+
+/**
+ * Instructions livrées au modèle à la connexion (champ `instructions` du
+ * résultat d'initialize — le mécanisme MCP prévu pour dicter la manière
+ * d'utiliser un serveur).
+ *
+ * Raison d'être : sans elles, l'assistant répondait comme s'il parlait à un
+ * développeur — UUID des tâches, `user_id` des membres, noms d'outils, champs
+ * bruts. L'utilisateur de Lume est un entrepreneur en services ; il doit
+ * recevoir des phrases, des noms et des montants en dollars, jamais la
+ * plomberie. Les identifiants restent DANS les résultats d'outils parce que
+ * les appels suivants en ont besoin (assigner un job, lire un fil SMS) —
+ * c'est leur seul usage.
+ */
+const SERVER_INSTRUCTIONS = `Tu es branché sur Lume, le CRM d'une entreprise de services. Tu parles à son propriétaire ou à un membre de son équipe — jamais à un développeur.
+
+RÈGLES DE PRÉSENTATION (importantes) :
+- Réponds comme un collègue humain, dans la langue de l'utilisateur. Des phrases, pas des dumps de données.
+- N'affiche JAMAIS d'identifiant technique : UUID, id, user_id, client_id, job_id… Ce sont des rouages internes réservés à tes propres appels d'outils (assigner, relire, modifier). Pour désigner quelqu'un ou quelque chose : son nom, son numéro de job, son titre.
+- Ne mentionne jamais les noms d'outils, de champs (display_status, raw_status…) ni le vocabulaire base de données. Traduis : « Late » = en retard, « upcoming » = à venir, « draft » = brouillon, « open » = à faire.
+- Les montants arrivent en cents : affiche-les en dollars (12500 → 125,00 $).
+- Ne liste pas d'options ou de personnes que l'utilisateur n'a pas demandées. Exception : une vraie ambiguïté à trancher (deux clients du même nom) — pose alors la question simplement, sans étaler les fiches.
+- Va à l'essentiel : si on demande le chiffre d'affaires, donne le chiffre et une phrase de contexte, pas un rapport.
+
+RÈGLES D'ACTION :
+- Avant send_sms : montre le message exact et le destinataire, attends un OUI explicite. Un SMS ne se rattrape pas.
+- Les factures que tu crées restent des brouillons — dis-le à l'utilisateur : rien ne part chez son client.
+- Si un outil échoue ou qu'un droit manque, explique-le en une phrase simple, sans jargon.`;
 
 /** Tout ce qui est exécutable, lecture et écriture confondues. */
 const MCP_TOOLS: AgentTool[] = AGENT_TOOLS.filter((t) => typeof t.handler === 'function');
@@ -255,6 +283,7 @@ router.post('/', async (req, res) => {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
           serverInfo: SERVER_INFO,
+          instructions: SERVER_INSTRUCTIONS,
         }),
       );
     }
