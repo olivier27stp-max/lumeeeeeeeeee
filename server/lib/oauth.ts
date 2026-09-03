@@ -463,53 +463,94 @@ export interface UserSession {
   accessToken: string;
 }
 
+function clientPourJeton(accessToken: string): SupabaseClient {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/**
+ * Rafraîchissements EN COURS, par autorisation. Le brief du matin lance
+ * plusieurs outils en parallèle ; sans ce verrou, chacun rafraîchissait la
+ * session en même temps — or le jeton de rafraîchissement TOURNE à chaque
+ * usage, et Supabase traite un jeton déjà consommé comme un VOL : famille
+ * révoquée, « session plus rejouable », factures et revenus morts jusqu'à
+ * reconnexion. Vécu en production le 2026-09-03 au matin.
+ * Une seule volée de rafraîchissement à la fois ; les appels concurrents
+ * attendent la même promesse.
+ */
+const rafraichissementsEnCours = new Map<string, Promise<UserSession | null>>();
+
 export async function buildUserScopedClient(tokenId: string): Promise<UserSession | null> {
   const db = getServiceClient();
   const { data } = await db
     .from('oauth_tokens')
-    .select('supabase_refresh_token_chiffre')
+    .select('supabase_refresh_token_chiffre, supabase_access_token_chiffre, supabase_access_expire_a')
     .eq('id', tokenId)
     .maybeSingle();
   if (!data?.supabase_refresh_token_chiffre) return null;
 
-  let refresh: string;
-  try {
-    refresh = dechiffrerSession(data.supabase_refresh_token_chiffre);
-  } catch (e: any) {
-    console.error('[oauth] déchiffrement de la session impossible :', e?.message || e);
-    return null;
+  // ── Chemin rapide : le jeton d'ACCÈS en cache est encore valide ──
+  // Aucun rafraîchissement, donc aucune rotation : le parallélisme est
+  // inoffensif. Marge de 60 s pour ne jamais servir un jeton mourant.
+  if (data.supabase_access_token_chiffre && data.supabase_access_expire_a
+      && new Date(data.supabase_access_expire_a).getTime() > Date.now() + 60_000) {
+    try {
+      const accessToken = dechiffrerSession(data.supabase_access_token_chiffre);
+      return { client: clientPourJeton(accessToken), accessToken };
+    } catch { /* cache illisible : on retombe sur le rafraîchissement */ }
   }
 
-  try {
-    const anon = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data: sess, error } = await anon.auth.refreshSession({ refresh_token: refresh });
-    if (error || !sess?.session?.access_token) return null;
+  // ── Chemin lent : rafraîchir, UNE seule volée par autorisation ──
+  const enCours = rafraichissementsEnCours.get(tokenId);
+  if (enCours) return enCours;
 
-    // Rotation : le jeton précédent est mort, il faut garder le nouveau.
-    if (sess.session.refresh_token && sess.session.refresh_token !== refresh) {
+  const volee = (async (): Promise<UserSession | null> => {
+    let refresh: string;
+    try {
+      refresh = dechiffrerSession(data.supabase_refresh_token_chiffre);
+    } catch (e: any) {
+      console.error('[oauth] déchiffrement de la session impossible :', e?.message || e);
+      return null;
+    }
+
+    try {
+      const anon = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+      const { data: sess, error } = await anon.auth.refreshSession({ refresh_token: refresh });
+      if (error || !sess?.session?.access_token) return null;
+
+      const accessToken = sess.session.access_token;
+      // Rotation + cache : on garde le NOUVEAU couple, avec l'échéance
+      // réelle du jeton d'accès (expires_at Supabase, en secondes epoch).
+      const expireA = sess.session.expires_at
+        ? new Date(sess.session.expires_at * 1000).toISOString()
+        : new Date(Date.now() + 55 * 60_000).toISOString();
       try {
         await db.from('oauth_tokens').update({
-          supabase_refresh_token_chiffre: chiffrerSession(sess.session.refresh_token),
+          ...(sess.session.refresh_token && sess.session.refresh_token !== refresh
+            ? { supabase_refresh_token_chiffre: chiffrerSession(sess.session.refresh_token) }
+            : {}),
+          supabase_access_token_chiffre: chiffrerSession(accessToken),
+          supabase_access_expire_a: expireA,
           supabase_session_maj_le: new Date().toISOString(),
         }).eq('id', tokenId);
       } catch (e: any) {
-        console.error('[oauth] restockage du jeton tourné impossible :', e?.message || e);
+        console.error('[oauth] restockage de la session impossible :', e?.message || e);
       }
-    }
 
-    return {
-      client: createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${sess.session.access_token}` } },
-        auth: { persistSession: false, autoRefreshToken: false },
-      }),
-      // Le jeton brut sert aux outils qui rappellent les ROUTES de
-      // l'application au nom de l'utilisateur (envoi de devis/facture) :
-      // même moteur, mêmes modèles, mêmes relances — zéro duplication.
-      accessToken: sess.session.access_token,
-    };
-  } catch (e: any) {
-    console.error('[oauth] session utilisateur injouable :', e?.message || e);
-    return null;
+      return { client: clientPourJeton(accessToken), accessToken };
+    } catch (e: any) {
+      console.error('[oauth] session utilisateur injouable :', e?.message || e);
+      return null;
+    }
+  })();
+
+  rafraichissementsEnCours.set(tokenId, volee);
+  try {
+    return await volee;
+  } finally {
+    rafraichissementsEnCours.delete(tokenId);
   }
 }
 
