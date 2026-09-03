@@ -175,8 +175,8 @@ export default function ApiMcpSettings() {
         </h2>
         <p className="mt-1 text-[13px] text-text-secondary leading-relaxed">
           {fr
-            ? 'Connectez un assistant IA (Claude, Cursor…) à votre CRM pour le consulter en langage naturel : chiffre d’affaires, horaire, impayés, clients. L’accès est en lecture seule — aucun assistant ne peut modifier vos données.'
-            : 'Connect an AI assistant (Claude, Cursor…) to your CRM and query it in plain language: revenue, schedule, unpaid invoices, clients. Access is read-only — no assistant can change your data.'}
+            ? 'Connectez un assistant IA (Claude, Cursor…) à votre CRM : consultez-le en langage naturel (chiffre d’affaires, horaire, impayés) et, si vous l’autorisez à la connexion, laissez-le créer des jobs, clients, tâches, devis et factures-brouillons, ou envoyer des SMS. Chaque action est tracée à votre nom, avec vos permissions Lume — rien ne peut être supprimé ni encaissé.'
+            : 'Connect an AI assistant (Claude, Cursor…) to your CRM: query it in plain language (revenue, schedule, unpaid invoices) and, if you authorize it at connection time, let it create jobs, clients, tasks, quotes and draft invoices, or send SMS. Every action is logged under your name with your Lume permissions — nothing can be deleted or charged.'}
         </p>
       </div>
 

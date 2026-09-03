@@ -40,6 +40,10 @@ export default function OAuthConsent() {
   const redirectUri = params.get('redirect_uri') || '';
   const codeChallenge = params.get('code_challenge') || '';
   const scope = params.get('scope') || 'mcp:read';
+  // Ce que l'application demande RÉELLEMENT : l'écran doit le refléter.
+  // Un consentement qui dit « lecture seule » pendant que le jeton porte
+  // l'écriture serait un mensonge — c'est ici que la vérité se joue.
+  const demandeEcriture = scope.split(/\s+/).includes('mcp:write');
   const resource = params.get('resource') || '';
   const state = params.get('state') || '';
 
@@ -144,9 +148,9 @@ export default function OAuthConsent() {
           </h1>
           <p className="text-[13px] text-text-secondary leading-relaxed">
             {fr ? (
-              <><span className="font-medium text-text-primary">{client?.client_name}</span> demande à consulter les données de Lume avec votre compte.</>
+              <><span className="font-medium text-text-primary">{client?.client_name}</span> demande à {demandeEcriture ? 'consulter votre CRM et à y créer des éléments' : 'consulter les données de Lume'} avec votre compte.</>
             ) : (
-              <><span className="font-medium text-text-primary">{client?.client_name}</span> is requesting to read your Lume data using your account.</>
+              <><span className="font-medium text-text-primary">{client?.client_name}</span> is requesting to {demandeEcriture ? 'read your CRM and create items in it' : 'read your Lume data'} using your account.</>
             )}
           </p>
         </div>
@@ -170,12 +174,37 @@ export default function OAuthConsent() {
               {fr ? 'Consulter votre horaire et vos tournées' : 'Read your schedule and routes'}
             </li>
           </ul>
+          {demandeEcriture && (
+            <>
+              <div className="pt-1.5 border-t border-outline/40 text-[12px] font-semibold text-text-primary">
+                {fr ? 'Et elle pourra aussi :' : 'And it will also be able to:'}
+              </div>
+              <ul className="space-y-1.5 text-[12.5px] text-text-secondary">
+                <li className="flex gap-2">
+                  <Check size={14} className="text-warning shrink-0 mt-0.5" />
+                  {fr ? 'Créer des clients, travaux, tâches et devis' : 'Create clients, jobs, tasks and quotes'}
+                </li>
+                <li className="flex gap-2">
+                  <Check size={14} className="text-warning shrink-0 mt-0.5" />
+                  {fr ? 'Préparer des factures (brouillons — rien n’est envoyé)' : 'Prepare invoices (drafts — nothing is sent)'}
+                </li>
+                <li className="flex gap-2">
+                  <Check size={14} className="text-warning shrink-0 mt-0.5" />
+                  {fr ? 'Envoyer des SMS à vos clients en votre nom' : 'Send SMS to your clients on your behalf'}
+                </li>
+              </ul>
+            </>
+          )}
           <div className="pt-1.5 border-t border-outline/40 flex gap-2 text-[12.5px] text-text-secondary">
             <X size={14} className="text-danger shrink-0 mt-0.5" />
             <span>
-              {fr
-                ? 'Elle ne peut rien modifier, supprimer ni envoyer — l’accès est en lecture seule.'
-                : 'It cannot change, delete or send anything — access is read-only.'}
+              {demandeEcriture
+                ? (fr
+                  ? 'Elle ne peut rien supprimer ni encaisser, et chaque action est tracée à votre nom avec vos permissions Lume.'
+                  : 'It cannot delete anything or take payments, and every action is logged under your name with your Lume permissions.')
+                : (fr
+                  ? 'Elle ne peut rien modifier, supprimer ni envoyer — l’accès est en lecture seule.'
+                  : 'It cannot change, delete or send anything — access is read-only.')}
             </span>
           </div>
         </div>
