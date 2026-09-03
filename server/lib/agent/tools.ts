@@ -413,6 +413,10 @@ const listQuotes: AgentTool = {
 
 const listInvoices: AgentTool = {
   kind: 'read',
+  // RPC à identité (auth.uid()) : sans session rejouable, l'outil ne PEUT
+  // pas répondre. needsIdentity déclenche le message clair « reconnecte »
+  // au lieu du générique « ça a échoué » qui laisse croire à un bug.
+  needsIdentity: true,
   declaration: {
     name: 'list_invoices',
     description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance.',
@@ -474,6 +478,10 @@ const getCompanyInfo: AgentTool = {
 
 const getOverduePayments: AgentTool = {
   kind: 'read',
+  // RPC à identité (auth.uid()) : sans session rejouable, l'outil ne PEUT
+  // pas répondre. needsIdentity déclenche le message clair « reconnecte »
+  // au lieu du générique « ça a échoué » qui laisse croire à un bug.
+  needsIdentity: true,
   declaration: {
     name: 'get_overdue_payments',
     description:
@@ -528,6 +536,10 @@ const getOverduePayments: AgentTool = {
 
 const getRevenueSummary: AgentTool = {
   kind: 'read',
+  // RPC à identité (auth.uid()) : sans session rejouable, l'outil ne PEUT
+  // pas répondre. needsIdentity déclenche le message clair « reconnecte »
+  // au lieu du générique « ça a échoué » qui laisse croire à un bug.
+  needsIdentity: true,
   declaration: {
     name: 'get_revenue_summary',
     description:
