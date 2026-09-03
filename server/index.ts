@@ -654,10 +654,22 @@ app.use('/api/oauth', rateLimit({ windowMs: 60_000, max: 30 }), oauthRouter);
 //      la passer par la porte MFA le bloquerait sans recours.
 //
 // Limité par IP : sans session, userKey() n'a rien à lire.
-// 120/min par IP : une conversation d'assistant réelle enchaîne brief +
-// profil + salves d'outils PARALLÈLES — 60/min étranglait un usager actif
-// (constaté par la suite QA, qui est justement une conversation dense).
-app.use('/api/mcp', rateLimit({ windowMs: 60_000, max: 120 }), mcpRouter);
+// 120/min PAR JETON, pas par IP : toutes les requêtes des clients Claude
+// sortent des mêmes IP d'Anthropic — une limite par IP ferait partager une
+// seule enveloppe à toutes les organisations clientes à la fois. La clé de
+// comptage est l'empreinte de l'identifiant présenté (jeton OAuth ou clé
+// d'API) ; sans identifiant, on retombe sur l'IP (découverte, 401).
+app.use('/api/mcp', rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  keyFn: (req) => {
+    const identifiant = (req.headers['authorization'] as string) || (req.headers['x-api-key'] as string) || '';
+    if (identifiant) {
+      return 'mcp:tok:' + crypto.createHash('sha256').update(identifiant).digest('hex').slice(0, 24);
+    }
+    return 'mcp:ip:' + (req.ip || 'inconnue');
+  },
+}), mcpRouter);
 
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 // SMS 2FA enrollment/challenge routes must stay reachable (they authenticate

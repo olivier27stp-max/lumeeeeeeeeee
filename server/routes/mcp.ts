@@ -34,6 +34,7 @@ import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { AGENT_TOOLS, TOOLS_BY_NAME, type AgentTool } from '../lib/agent/tools';
 import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ, SCOPE_MCP_WRITE, buildUserScopedClient } from '../lib/oauth';
+import { getUserContext, hasPermission } from '../lib/rbac';
 
 const router = Router();
 
@@ -117,6 +118,52 @@ function outilsPour(auth: McpAuth): AgentTool[] {
      sont blanchis dans la réponse, avec une note qui l'explique.
    • Clé d'API : identifiant créé par un admin de l'org — visibilité
      complète, comme depuis toujours.                                   */
+
+/* ── Matrice de permissions de l'app, appliquée aux outils ─────────
+   Les montants (ci-dessous) ne sont qu'UNE ligne de l'écran des rôles.
+   Le reste — SMS, GPS, feuilles de temps, clients, jobs… — doit obéir
+   pareil : la décision vient de getUserContext/hasPermission (rbac.ts),
+   la MÊME mécanique que les routes de l'application (propriétaire
+   toujours oui, technicien jamais financier, réglages de l'org par-
+   dessus). Un outil sans entrée ici est ouvert à tout membre.          */
+const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = {
+  search_clients:            { cle: 'clients.read',       capacite: 'la consultation des clients' },
+  get_client_profile:        { cle: 'clients.read',       capacite: 'la consultation des clients' },
+  create_client:             { cle: 'clients.create',     capacite: 'la création de clients' },
+  update_client:             { cle: 'clients.update',     capacite: 'la modification des clients' },
+  search_leads:              { cle: 'leads.read',         capacite: 'la consultation des prospects' },
+  list_request_submissions:  { cle: 'leads.read',         capacite: 'la consultation des demandes entrantes' },
+  list_jobs:                 { cle: 'jobs.read',          capacite: 'la consultation des jobs' },
+  get_job:                   { cle: 'jobs.read',          capacite: 'la consultation des jobs' },
+  query_schedule:            { cle: 'jobs.read',          capacite: "la consultation de l'horaire" },
+  find_dates_in_location:    { cle: 'jobs.read',          capacite: "la consultation de l'horaire" },
+  get_day_route:             { cle: 'jobs.read',          capacite: "la consultation de l'horaire" },
+  get_morning_briefing:      { cle: 'jobs.read',          capacite: 'le survol de la journée' },
+  create_job:                { cle: 'jobs.create',        capacite: 'la création de jobs' },
+  update_job_status:         { cle: 'jobs.update',        capacite: 'la modification des jobs' },
+  archive_job:               { cle: 'jobs.update',        capacite: "l'archivage des jobs" },
+  assign_job:                { cle: 'jobs.assign',        capacite: "l'assignation des jobs" },
+  reschedule_job:            { cle: 'calendar.update',    capacite: 'la replanification du calendrier' },
+  get_conversations:         { cle: 'messages.read',      capacite: 'la lecture des SMS' },
+  get_conversation_messages: { cle: 'messages.read',      capacite: 'la lecture des SMS' },
+  send_sms:                  { cle: 'messages.send',      capacite: "l'envoi de SMS" },
+  get_timesheets:            { cle: 'timesheets.read',    capacite: 'la consultation des feuilles de temps' },
+  get_team:                  { cle: 'team.read',          capacite: "la consultation de l'équipe" },
+  get_team_locations:        { cle: 'gps.read',           capacite: 'la localisation de l\u2019équipe' },
+  get_d2d_stats:             { cle: 'door_to_door.access', capacite: 'les statistiques terrain' },
+  list_automations:          { cle: 'automations.read',   capacite: 'la consultation des automatisations' },
+  get_payroll_summary:       { cle: 'financial.view_reports', capacite: 'la paie' },
+  list_quotes:               { cle: 'quotes.read',        capacite: 'la consultation des devis' },
+  create_quote:              { cle: 'quotes.create',      capacite: 'la création de devis' },
+  send_quote:                { cle: 'quotes.send',        capacite: "l'envoi de devis" },
+  list_invoices:             { cle: 'invoices.read',      capacite: 'la consultation des factures' },
+  create_invoice:            { cle: 'invoices.create',    capacite: 'la création de factures' },
+  create_invoice_from_job:   { cle: 'invoices.create',    capacite: 'la création de factures' },
+  send_invoice:              { cle: 'invoices.send',      capacite: "l'envoi de factures" },
+  convert_quote_to_job:      { cle: 'quotes.approve',     capacite: 'la conversion des devis' },
+  convert_lead_to_client:    { cle: 'leads.update',       capacite: 'la conversion des prospects' },
+  add_visit:                 { cle: 'calendar.update',    capacite: 'la planification du calendrier' },
+};
 
 const OUTILS_FINANCIERS = new Set([
   'get_revenue_summary', 'get_financial_overview', 'get_overdue_payments',
@@ -383,6 +430,27 @@ router.post('/', async (req, res) => {
       const autorises = outilsPour(auth);
       if (!tool || typeof tool.handler !== 'function' || !autorises.includes(tool)) {
         return res.json(rpcError(id, -32602, `Unknown or unavailable tool: ${name}`));
+      }
+
+      // La MATRICE de permissions de l'app, d'abord : si le rôle de la
+      // personne n'inclut pas cette capacité, refus en mots simples —
+      // clé d'API exclue (identifiant d'admin, accès complet).
+      const regle = PERMISSION_PAR_OUTIL[name];
+      if (regle && auth.mode === 'oauth' && auth.userId) {
+        const ctxRole = await getUserContext(getServiceClient(), auth.userId, auth.orgId);
+        if (!ctxRole || !hasPermission(ctxRole, regle.cle)) {
+          return res.json(rpcResult(id, {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: `Les accès Lume de cette personne n'incluent pas ${regle.capacite} `
+                  + '(réglage de l\u2019écran des rôles de son entreprise). Dis-le-lui simplement, '
+                  + 'et suggère de voir l\u2019administrateur si ce droit devrait changer.',
+              }),
+            }],
+            isError: true,
+          }));
+        }
       }
 
       // Les montants suivent le RÔLE de la personne — la même règle que
