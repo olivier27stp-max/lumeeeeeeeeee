@@ -160,6 +160,58 @@ const outil = async (jeton, name, args = {}) => {
   R(!listeCle.includes('get_payroll_summary') && !listeCle.includes('get_team_locations') && !listeCle.includes('create_task'),
     'Clé d\'API : ni paie, ni GPS, ni écriture', `${listeCle.length} outils`);
 
+  /* ════ 1b. MONTANTS SELON LE RÔLE ════ */
+  // La règle de l'écran des rôles doit tenir AUSSI via l'agent : un
+  // technicien d'une org cliente ne doit pas voir via Claude les prix que
+  // l'application lui cache. On crée un VRAI membre au rôle restreint, il
+  // se connecte, et on vérifie — pendant que le propriétaire (le reste de
+  // la suite) continue de tout voir.
+  console.log('');
+  console.log('  ── Montants selon le rôle ──');
+  const courrielTech = 'qa.technicien.montants@test.lume.dev';
+  { // repartir propre si un run précédent a planté
+    const { data: ancien } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
+    const deja = (ancien?.users || []).find((u) => u.email === courrielTech);
+    if (deja) { await admin.from('memberships').delete().eq('user_id', deja.id); await admin.auth.admin.deleteUser(deja.id); }
+  }
+  const { data: cree, error: eCree } = await admin.auth.admin.createUser({ email: courrielTech, email_confirm: true });
+  if (eCree) throw new Error('création du technicien : ' + eCree.message);
+  const techId = cree.user.id;
+  await admin.from('memberships').insert({ org_id: ORG, user_id: techId, role: 'technicien', status: 'active' });
+
+  const { data: lienT } = await admin.auth.admin.generateLink({ type: 'magiclink', email: courrielTech });
+  const { data: sessT } = await anon.auth.verifyOtp({ token_hash: lienT.properties.hashed_token, type: 'magiclink' });
+  const jTech = await jetonPour(sessT.session, reg.client_id, 'mcp:read');
+
+  const jobsTech = await outil(jTech, 'list_jobs', { limit: 5 });
+  R(jobsTech.montants_masques === true, 'Technicien : la réponse annonce le masquage');
+  R((jobsTech.jobs || []).every((j) => j.total_cents === null || j.total_cents === undefined),
+    'Technicien : aucun montant de job visible', `${(jobsTech.jobs || []).length} job(s) blanchis`);
+  R(!!jobsTech.note_montants, 'La note explique le masquage à l\u2019assistant');
+
+  const caTech = await outil(jTech, 'get_revenue_summary', { period: 'this_month' });
+  R(!!caTech.error && /rôles|montants/i.test(caTech.error) && caTech.revenue_cents === undefined,
+    'Technicien : le chiffre d\u2019affaires est refusé, en langage d\u2019exploitant');
+
+  const factTech = await outil(jTech, 'list_invoices', { limit: 5 });
+  R(!!factTech.error && factTech.invoices === undefined, 'Technicien : les factures sont refusées');
+
+  const clientsTech = await outil(jTech, 'search_clients', { query: '', limit: 5 });
+  R((clientsTech.count ?? clientsTech.clients?.length ?? 0) >= 0 && !clientsTech.error,
+    'Technicien : le reste du CRM fonctionne normalement', `${clientsTech.count ?? 0} client(s)`);
+
+  // Et le PROPRIÉTAIRE, lui, voit toujours tout — même appel, même org.
+  const jobsProprio = await outil(jLecture, 'list_jobs', { limit: 5 });
+  R(jobsProprio.montants_masques === undefined
+      && (jobsProprio.jobs || []).some((j) => typeof j.total_cents === 'number'),
+    'Propriétaire : montants intacts, aucun masquage');
+
+  // Ménage du technicien (jetons, membership, compte).
+  await admin.from('oauth_tokens').update({ revoked: true, revoked_at: new Date().toISOString(), revoked_reason: 'qa_roles' })
+    .eq('user_id', techId);
+  await admin.from('memberships').delete().eq('user_id', techId);
+  await admin.auth.admin.deleteUser(techId);
+
   /* ════ 2. LECTURES vs sources de l'app ════ */
   console.log('\n  ── Lectures : mêmes chiffres que l\'app ──');
   const compte = async (table, filtres = (q) => q) => {
