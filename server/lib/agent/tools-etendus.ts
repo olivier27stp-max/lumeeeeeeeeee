@@ -177,12 +177,26 @@ async function taxesParDefaut(ctx: ToolContext): Promise<TaxLine[]> {
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .limit(4);
-  return (data || []).map((t: any) => ({
-    code: /tps|gst/i.test(t.name) ? 'tps' : /tvq|qst|pst/i.test(t.name) ? 'tvq' : String(t.id),
-    label: String(t.name),
-    rate: Number(t.rate) || 0,
-    enabled: true,
-  }));
+  // tax_configs peut contenir des DOUBLONS (deux TPS, deux TVQ actives) —
+  // l'app les évite en passant par les GROUPES de taxes ; nous, on lit la
+  // table brute, donc on déduplique par (nom, taux). Sans ça : chaque taxe
+  // comptée deux fois, total sur-taxé du double (bug remonté le 2026-09-03).
+  const vues = new Set<string>();
+  const taxes: TaxLine[] = [];
+  for (const t of (data || [])) {
+    const rate = Number(t.rate) || 0;
+    const nom = String(t.name).trim();
+    const cle = `${nom.toLowerCase()}|${rate}`;
+    if (vues.has(cle)) continue;
+    vues.add(cle);
+    taxes.push({
+      code: /tps|gst/i.test(nom) ? 'tps' : /tvq|qst|pst/i.test(nom) ? 'tvq' : String(t.id),
+      label: nom,
+      rate,
+      enabled: true,
+    });
+  }
+  return taxes;
 }
 
 /** Nom affichable d'un client (même logique que l'app). */
@@ -683,7 +697,16 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       finISO = fin_.toISOString();
     }
 
+    // Adresse : celle fournie, sinon celle du client. Si elle semble
+    // incomplète (ni virgule, ni chiffre de code postal) et qu'on a une
+    // adresse client plus riche, on ne l'écrase pas mais on le SIGNALE —
+    // un géocodage sur « 88 rue des Érables » sans ville tombe n'importe où.
     const adresse = String(args.property_address || clientAddress || '-');
+    const adresseIncomplete = adresse !== '-'
+      && args.property_address
+      && !/,/.test(adresse)
+      && !/\b[A-Z]\d[A-Z]\s?\d[A-Z]\d\b/i.test(adresse)
+      && !/\b(québec|montréal|laval|drummond|sherbrooke|gatineau|longueuil)\b/i.test(adresse);
 
     // 1. Création par LA RPC de l'app — job + visite éventuelle d'un coup.
     const { data: rpcData, error: rpcError } = await ctx.client.rpc('rpc_create_job_with_optional_schedule', {
@@ -765,9 +788,13 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       tax_cents: finances.tax_cents,
       total_cents: finances.total_cents,
       taxes_appliquees: taxes.map((t) => `${t.label} ${t.rate} %`),
-      note: debutISO
-        ? 'Job complet : items, taxes, calendrier — et il apparaîtra sur la carte une fois géocodé.'
-        : 'Job complet en brouillon (sans visite). Items et taxes posés ; planifie-le pour le mettre au calendrier.',
+      address_warning: adresseIncomplete
+        ? 'L\u2019adresse n\u2019a ni ville ni code postal — la carte risque de mal la situer. Demande à l\u2019utilisateur la ville pour un repérage fiable.'
+        : undefined,
+      note: (adresseIncomplete ? 'Adresse incomplète (voir address_warning). ' : '')
+        + (debutISO
+          ? 'Job complet : items, taxes, calendrier — et il apparaîtra sur la carte une fois géocodé.'
+          : 'Job complet en brouillon (sans visite). Items et taxes posés ; planifie-le pour le mettre au calendrier.'),
     };
   });
 
@@ -1246,7 +1273,7 @@ const getMorningBriefing: AgentTool = {
 
     const [impayesR, jobsR, tachesR, demandesR, nonLusR] = await Promise.all([
       ctx.client.from('invoices')
-        .select('client_id, total_cents, due_date, status', { count: 'exact' })
+        .select('client_id, balance_cents, total_cents, due_date, status', { count: 'exact' })
         .eq('org_id', ctx.orgId).is('deleted_at', null)
         .in('status', ['sent', 'partial', 'overdue']).lt('due_date', aujourdHui)
         .order('due_date', { ascending: true }).limit(5),
@@ -1290,10 +1317,15 @@ const getMorningBriefing: AgentTool = {
       date: aujourdHui,
       overdue_invoices: {
         total_matching: impayesR.count ?? 0,
-        total_cents: sommeCents(impayesR.data),
+        // Le SOLDE dû (balance_cents), pas le total facturé : c'est le montant
+        // qui reste à collecter, celui qui compte le matin. Repli sur total
+        // pour une facture jamais entamée (balance non renseignée).
+        total_cents: (impayesR.data || []).reduce((s2: number, f: any) =>
+          s2 + (f.balance_cents != null ? Number(f.balance_cents) : Number(f.total_cents) || 0), 0),
         worst: (impayesR.data || []).map((f: any) => ({
           client: noms.get(f.client_id) || 'client supprimé',
-          total_cents: f.total_cents, due_date: f.due_date,
+          balance_cents: f.balance_cents != null ? f.balance_cents : f.total_cents,
+          due_date: f.due_date,
         })),
       },
       todays_visits: {
