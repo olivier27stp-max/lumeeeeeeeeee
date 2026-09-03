@@ -28,6 +28,7 @@ import { useTranslation } from '../../i18n';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ROLE_LABELS, normalizeRole, hasPermission, type TeamRole } from '../../lib/permissions';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
+import SignInMethodsCard from '../../components/settings/SignInMethodsCard';
 import { uploadViaServer } from '../../lib/storage';
 import { getRepRealStats, getTechRealStats, type RepRealStats, type TechRealStats } from '../../lib/repStatsApi';
 import AddressAutocomplete from '../../components/AddressAutocomplete';
@@ -569,6 +570,9 @@ export default function ProfileSettings() {
           {saving ? (isFr ? 'Sauvegarde…' : 'Saving…') : saved ? (isFr ? 'Sauvegardé' : 'Saved') : (isFr ? 'Enregistrer' : 'Save')}
         </button>
       </div>
+
+      {/* ── Connexion : Google / courriel + mot de passe ── */}
+      <SignInMethodsCard />
 
       {/* ── Role-adapted stats ── */}
       {role === 'technician' ? (

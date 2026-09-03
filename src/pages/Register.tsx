@@ -110,6 +110,12 @@ export default function Register() {
       }
 
       setEmailSent(true);
+      // Le compte existe, mais le courriel n'est pas parti (mailer en panne ou
+      // non configuré). Le serveur le signale exprès : sans ce message, le
+      // client attend un courriel qui n'arrivera jamais.
+      if (data.verification_email_sent === false) {
+        setMessage({ type: 'error', text: t.register.emailNotSent });
+      }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -128,6 +134,9 @@ export default function Register() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || (language === 'fr' ? "Échec du renvoi." : 'Failed to resend.'));
+      // `sent: false` = le serveur a accepté la demande mais le courriel n'est
+      // pas parti. Dire « renvoyé ! » serait faux.
+      if (data.sent === false) throw new Error(t.register.emailNotSent);
       setMessage({ type: 'success', text: t.register.resendSuccess });
       setResendCooldown(60);
       const interval = setInterval(() => {

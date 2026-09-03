@@ -1,15 +1,16 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { supabaseUrl, supabaseServiceRoleKey } from '../lib/config';
+import { supabaseUrl, supabaseServiceRoleKey, supabaseAnonKey } from '../lib/config';
 import { getBaseUrl } from '../lib/config';
 import { sendSafeError } from '../lib/error-handler';
 import { passwordSchema } from '../lib/validation';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { findUserByEmail } from '../lib/supabase';
+import { findUserByEmail, buildSupabaseWithAuth } from '../lib/supabase';
 import { redisRateLimit } from '../lib/rate-limiter';
-import { extractIP, recordLoginAttempt } from '../lib/security';
+import { extractIP, recordLoginAttempt, logSecurityEvent } from '../lib/security';
+import { renderPasswordResetEmail, renderAccountExistsEmail } from '../lib/email-templates/password-reset';
 
 // Per-IP rate limit for auth endpoints (defeats brute-force + cron-driven abuse)
 const authRateLimit = redisRateLimit({
@@ -76,6 +77,54 @@ async function sendVerificationEmail(
   return { sent: result.sent, error: result.error };
 }
 
+// ─── Mot de passe : outils partagés ────────────────────────────────────────
+//
+// Un compte a un mot de passe dans deux cas : il a été créé par courriel (une
+// identité `email` existe), ou le serveur lui en a posé un après coup
+// (drapeau `has_password` dans app_metadata — écrit par le service role
+// uniquement, l'utilisateur ne peut pas le falsifier). Vérifié sur staging :
+// poser un mot de passe à un compte Google ne crée PAS d'identité `email`,
+// d'où le drapeau.
+export function userHasPassword(user: any): boolean {
+  const identities: any[] = Array.isArray(user?.identities) ? user.identities : [];
+  if (identities.some((i) => i?.provider === 'email')) return true;
+  return user?.app_metadata?.has_password === true;
+}
+
+const RESET_TOKEN_TTL_MINUTES = 60;
+
+function hashResetToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+async function sendAccountExistsEmail(user: any, name: string): Promise<void> {
+  if (!isMailerConfigured() || !user?.email) return;
+  const result = await sendEmail({
+    to: user.email,
+    subject: 'Tu as déjà un compte Lume',
+    html: renderAccountExistsEmail({
+      name: name || String(user.user_metadata?.full_name || ''),
+      appUrl: getBaseUrl(),
+      hasPassword: userHasPassword(user),
+    }),
+  });
+  if (!result.sent) console.error('[auth] courriel « compte existant » non envoyé à', user.email, '—', result.error);
+}
+
+/**
+ * Résout l'utilisateur d'une requête portant un jeton de session Supabase.
+ * Plus léger que `requireAuthedClient` : pas besoin d'organisation ici — un
+ * compte Google fraîchement créé doit pouvoir se choisir un mot de passe même
+ * avant que son espace soit provisionné.
+ */
+async function userFromBearer(req: any) {
+  const header = req.header('authorization');
+  if (!header) return null;
+  const { data, error } = await buildSupabaseWithAuth(header).auth.getUser();
+  if (error || !data?.user) return null;
+  return data.user;
+}
+
 // ─── POST /api/auth/register — create account + send verification email ───
 router.post('/auth/register', authRateLimit, async (req, res) => {
   try {
@@ -139,8 +188,13 @@ router.post('/auth/register', authRateLimit, async (req, res) => {
             // branche morte, et le `console.log` qui suivait affirmait un
             // envoi jamais vérifié.
             await sendVerificationEmail(email, verifyUrl, fullName.trim());
+          } else if (existingUser) {
+            // Déjà confirmé — la réponse reste « ok » (aucune énumération),
+            // mais on prévient le propriétaire de la boîte. Avant, il voyait
+            // « vérifie ton courriel » et attendait un message qui ne partait
+            // jamais : un compte créé avec Google était une impasse.
+            await sendAccountExistsEmail(existingUser, fullName.trim());
           }
-          // Already confirmed — return ok silently (prevent enumeration)
         } catch (lookupErr: any) {
           console.error('[auth] Error looking up existing user:', lookupErr.message);
         }
@@ -456,6 +510,195 @@ router.post('/auth/login-failed', authRateLimit, async (req, res) => {
     console.error('[auth/login-failed] erreur inattendue:', err?.message);
   }
   return res.status(204).end();
+});
+
+// ────────────────────────────────────────────────────────────────────
+// Mot de passe oublié / réinitialisation / définition en session
+// ────────────────────────────────────────────────────────────────────
+//
+// Ces trois routes existent pour qu'un compte créé avec Google puisse ensuite
+// se connecter avec courriel + mot de passe, et pour que « mot de passe
+// oublié » aboutisse enfin à un formulaire (voir password-reset.ts pour les
+// raisons de ne pas passer par le flux intégré de Supabase). Le mot de passe
+// est posé par le service role : la règle « reauthentification obligatoire »
+// activée en prod ne s'applique pas aux appels admin.
+
+// ─── POST /api/auth/forgot-password — envoie le lien de réinitialisation ──
+// Répond TOUJOURS { ok: true } : ne révèle jamais si l'adresse a un compte.
+router.post('/auth/forgot-password', authRateLimit, async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 320);
+    if (!email || !email.includes('@')) return res.status(400).json({ error: 'Email is required.' });
+
+    const admin = getAdminClient();
+    const user: any = await findUserByEmail(admin, email);
+    if (!user?.id) {
+      // Même temps de réponse approximatif qu'un envoi réel.
+      await new Promise((r) => setTimeout(r, 80 + Math.random() * 120));
+      return res.json({ ok: true });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000).toISOString();
+    const { error: updErr } = await (admin.auth.admin as any).updateUserById(user.id, {
+      user_metadata: {
+        ...(user.user_metadata || {}),
+        // Seul le haché est stocké : une fuite de métadonnées ne donne pas le jeton.
+        password_reset_token_hash: hashResetToken(token),
+        password_reset_expires: expires,
+      },
+    });
+    if (updErr) {
+      console.error('[auth/forgot-password] écriture du jeton refusée:', updErr.message);
+      return res.json({ ok: true });
+    }
+
+    if (!isMailerConfigured()) {
+      console.error('[auth/forgot-password] SMTP non configuré — lien NON envoyé à', email);
+      return res.json({ ok: true });
+    }
+    const resetUrl = `${getBaseUrl()}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    const meta = user.user_metadata || {};
+    const prenom = String(meta.first_name || meta.full_name || '').trim().split(' ')[0] || '';
+    const result = await sendEmail({
+      to: email,
+      subject: 'Choisis un nouveau mot de passe Lume',
+      html: renderPasswordResetEmail({ name: prenom, resetUrl, expiresInMinutes: RESET_TOKEN_TTL_MINUTES }),
+    });
+    if (!result.sent) console.error('[auth/forgot-password] courriel non envoyé à', email, '—', result.error);
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to send reset email.', '[auth]');
+  }
+});
+
+// ─── POST /api/auth/reset-password — pose le mot de passe depuis le lien ──
+router.post('/auth/reset-password', authRateLimit, async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 320);
+    const token = String(req.body?.token || '');
+    if (!email || !/^[a-f0-9]{64}$/.test(token)) {
+      return res.status(400).json({ error: 'Invalid reset link.', code: 'invalid_link' });
+    }
+    const pw = passwordSchema.safeParse(req.body?.password);
+    if (!pw.success) {
+      return res.status(400).json({ error: pw.error.issues[0].message, code: 'weak_password' });
+    }
+
+    const admin = getAdminClient();
+    const user: any = await findUserByEmail(admin, email);
+    const meta = user?.user_metadata || {};
+    const stored = String(meta.password_reset_token_hash || '');
+    const given = hashResetToken(token);
+    const ok = !!user?.id
+      && stored.length === given.length
+      && crypto.timingSafeEqual(Buffer.from(stored), Buffer.from(given));
+    if (!ok) {
+      await new Promise((r) => setTimeout(r, 50 + Math.random() * 100));
+      return res.status(400).json({ error: 'Invalid reset link.', code: 'invalid_link' });
+    }
+    if (meta.password_reset_expires && new Date(meta.password_reset_expires) < new Date()) {
+      return res.status(400).json({ error: 'This link has expired.', code: 'expired_link' });
+    }
+
+    // Cliquer le lien prouve la possession de la boîte : on confirme l'adresse
+    // au passage, avec le même niveau de preuve que /auth/verify-email.
+    const dejaVerifie = meta.billing_email_verified === true;
+    const { error: updErr } = await (admin.auth.admin as any).updateUserById(user.id, {
+      password: pw.data,
+      email_confirm: true,
+      user_metadata: {
+        ...meta,
+        password_reset_token_hash: null,
+        password_reset_expires: null,
+        ...(dejaVerifie ? {} : { billing_email_verified: true, billing_email_verified_at: new Date().toISOString() }),
+      },
+      app_metadata: { ...(user.app_metadata || {}), has_password: true },
+    });
+    if (updErr) {
+      console.error('[auth/reset-password] mise à jour refusée:', updErr.message);
+      return res.status(500).json({ error: 'Failed to update password.' });
+    }
+
+    logSecurityEvent({
+      user_id: user.id,
+      event_type: 'password_reset',
+      severity: 'info',
+      source: 'auth',
+      ip_address: extractIP(req),
+      user_agent: String(req.headers['user-agent'] || '').slice(0, 500),
+    });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to update password.', '[auth]');
+  }
+});
+
+// ─── POST /api/auth/set-password — définir ou changer, en session ─────────
+// Compte sans mot de passe (Google) : le jeton de session suffit — c'est
+// exactement la garantie qu'offre updateUser() de Supabase. Compte avec mot de
+// passe : l'actuel est exigé et vérifié par une vraie tentative de connexion,
+// dont la session est révoquée aussitôt.
+//
+// EFFET DE BORD À CONNAÎTRE (vérifié sur staging) : quand le mot de passe est
+// posé par l'API admin, Supabase révoque TOUTES les sessions du compte, y
+// compris celle qui porte cette requête. Le front doit donc renvoyer vers la
+// connexion après un succès — `sessionsRevoked: true` le rappelle.
+router.post('/auth/set-password', authRateLimit, async (req, res) => {
+  try {
+    const sessionUser = await userFromBearer(req);
+    if (!sessionUser) return res.status(401).json({ error: 'Invalid auth token.' });
+
+    const pw = passwordSchema.safeParse(req.body?.newPassword);
+    if (!pw.success) {
+      return res.status(400).json({ error: pw.error.issues[0].message, code: 'weak_password' });
+    }
+
+    const admin = getAdminClient();
+    // Copie fraîche : le jeton de session peut dater d'avant un changement
+    // d'app_metadata, et il n'embarque pas les identités.
+    const { data: fresh } = await admin.auth.admin.getUserById(sessionUser.id);
+    const user: any = fresh?.user || sessionUser;
+    if (!user.email) return res.status(400).json({ error: 'Account has no email.' });
+
+    if (userHasPassword(user)) {
+      const current = String(req.body?.currentPassword || '');
+      if (!current) return res.status(400).json({ error: 'Current password is required.', code: 'current_required' });
+      if (current === pw.data) return res.status(400).json({ error: 'New password must be different.', code: 'same_password' });
+
+      const sonde = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+      const { data: essai, error: essaiErr } = await sonde.auth.signInWithPassword({ email: user.email, password: current });
+      if (essaiErr || !essai?.session) {
+        return res.status(400).json({ error: 'Current password is incorrect.', code: 'wrong_current' });
+      }
+      // Ne laisse pas traîner la session de vérification.
+      await sonde.auth.signOut({ scope: 'local' }).catch(() => { /* sans effet */ });
+    }
+
+    const { error: updErr } = await (admin.auth.admin as any).updateUserById(user.id, {
+      password: pw.data,
+      app_metadata: { ...(user.app_metadata || {}), has_password: true },
+    });
+    if (updErr) {
+      console.error('[auth/set-password] mise à jour refusée:', updErr.message);
+      return res.status(500).json({ error: 'Failed to update password.' });
+    }
+
+    logSecurityEvent({
+      user_id: user.id,
+      event_type: 'password_changed',
+      severity: 'info',
+      source: 'auth',
+      ip_address: extractIP(req),
+      user_agent: String(req.headers['user-agent'] || '').slice(0, 500),
+    });
+    return res.json({ ok: true, hasPassword: true, sessionsRevoked: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Failed to update password.', '[auth]');
+  }
 });
 
 export default router;

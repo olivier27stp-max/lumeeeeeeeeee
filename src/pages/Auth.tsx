@@ -4,8 +4,9 @@ import { motion } from 'motion/react';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import MfaChallenge from '../components/auth/MfaChallenge';
+import { forgotPassword } from '../lib/authApi';
 
 interface AuthProps {
   onBack?: () => void;
@@ -14,11 +15,17 @@ interface AuthProps {
 export default function Auth({ onBack }: AuthProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
+  // Retour de /reset-password : le courriel est pré-rempli et un message
+  // confirme que le nouveau mot de passe est actif.
+  const etatRetour = (location.state as { passwordReset?: boolean; email?: string } | null) || null;
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(etatRetour?.email || '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string, hint?: string } | null>(
+    etatRetour?.passwordReset ? { type: 'success', text: t.auth.passwordUpdatedSignIn } : null,
+  );
 
   // MFA challenge state.
   // Hardening (audit P1-D8): when MFA is enrolled, the AAL1 session that
@@ -67,7 +74,17 @@ export default function Auth({ onBack }: AuthProps) {
         body: JSON.stringify({ email, reason: String(error?.message || 'unknown').slice(0, 120) }),
       }).catch(() => { /* jamais bloquant */ });
 
-      setMessage({ type: 'error', text: error.message });
+      // Un compte créé avec Google n'a pas de mot de passe : Supabase répond
+      // « Invalid login credentials », exactement comme pour un mauvais mot de
+      // passe. L'indice reste générique (aucune énumération de comptes) mais
+      // donne la sortie : bouton Google, ou « mot de passe oublié » pour s'en
+      // créer un.
+      const identifiantsRefuses = /invalid login credentials/i.test(String(error?.message || ''));
+      setMessage({
+        type: 'error',
+        text: identifiantsRefuses ? t.auth.invalidCredentials : error.message,
+        hint: identifiantsRefuses ? t.auth.invalidCredentialsHint : undefined,
+      });
     } finally {
       setLoading(false);
     }
@@ -211,6 +228,7 @@ export default function Auth({ onBack }: AuthProps) {
                 )}
               >
                 {message.text}
+                {message.hint && <p className="mt-1.5 text-gray-600">{message.hint}</p>}
               </motion.div>
             )}
 
@@ -277,10 +295,9 @@ export default function Auth({ onBack }: AuthProps) {
                   }
                   setLoading(true);
                   try {
-                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                      redirectTo: `${window.location.origin}/settings`,
-                    });
-                    if (error) throw error;
+                    // Notre propre lien (voir src/lib/authApi.ts) : celui de
+                    // Supabase n'aboutissait à aucun formulaire.
+                    await forgotPassword(email);
                     setMessage({ type: 'success', text: t.auth.passwordResetLinkSentToYourEmail });
                   } catch (err: any) {
                     setMessage({ type: 'error', text: err.message });
