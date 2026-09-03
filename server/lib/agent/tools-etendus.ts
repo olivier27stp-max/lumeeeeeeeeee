@@ -61,7 +61,9 @@ const clamp = (n: any, def: number, max: number) => {
 /** Même politique que tools.ts : jamais d'erreur brute vers le modèle. */
 function erreurOutil(scope: string, err: any): { error: string } {
   console.error(`[agent-tool:${scope}]`, err?.message || err);
-  return { error: 'That lookup could not be completed. Try rephrasing or narrowing the request.' };
+  // Message pour le MODÈLE, pas pour l'écran : il lui dit quoi raconter
+  // (en langage d'exploitant) au lieu de le laisser broder sur le schéma.
+  return { error: 'La consultation a échoué côté Lume. Dis-le simplement à l\u2019utilisateur, propose de réessayer, et s\u2019il y a un doute sur la connexion, suggère de reconnecter Lume dans les réglages de Claude.' };
 }
 
 /** JSON à clés triées : la même intention → la même empreinte, toujours. */
@@ -1583,6 +1585,16 @@ const createInvoiceFromJobTool: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'create_invoice_from_job', args, async () => {
       // La RPC de l'app fait tout : clôture, report des items, numérotation.
+      // Un job sans montants produit une facture à 0 $ : mieux vaut le
+      // savoir AVANT et le dire, que de surprendre l'utilisateur après.
+      const { data: jobAvant } = await ctx.client
+        .from('jobs')
+        .select('total_cents, title, job_number')
+        .eq('org_id', ctx.orgId).eq('id', String(args.job_id))
+        .is('deleted_at', null).maybeSingle();
+      if (!jobAvant) throw new Error('Job introuvable — vérifiez avec list_jobs.');
+      const sansMontant = !Number(jobAvant.total_cents);
+
       const { data, error } = await ctx.client.rpc('finish_job_and_prepare_invoice', {
         p_org_id: ctx.orgId,
         p_job_id: String(args.job_id),
@@ -1593,7 +1605,9 @@ const createInvoiceFromJobTool: AgentTool = {
       if (!invoiceId) throw new Error('La préparation a réussi mais la facture est introuvable.');
       return {
         created: true, invoice_id: invoiceId, status: 'draft',
-        note: 'Facture préparée depuis le job, en BROUILLON — rien n\u2019est parti chez le client. send_invoice pour l\u2019envoyer, avec confirmation.',
+        note: sansMontant
+          ? 'Facture préparée en BROUILLON, mais le job n\u2019avait AUCUN montant : elle est à 0 $. Demande à l\u2019utilisateur les items et montants à y mettre (ou qu\u2019il la complète dans Lume) AVANT tout envoi.'
+          : 'Facture préparée depuis le job, en BROUILLON — rien n\u2019est parti chez le client. send_invoice pour l\u2019envoyer, avec confirmation.',
       };
     }),
 };
