@@ -120,10 +120,10 @@ const outil = async (jeton, name, args = {}) => {
   console.log('  ── Scopes et visibilité ──');
   const listeLecture = (await rpc(jLecture, 'tools/list')).result.tools.map((t) => t.name);
   const listeEcriture = (await rpc(jEcriture, 'tools/list')).result.tools.map((t) => t.name);
-  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job'];
+  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice'];
   R(!ecritures.some((n) => listeLecture.includes(n)), 'Jeton lecture : AUCUNE écriture visible',
     `${listeLecture.length} outils`);
-  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 8 écritures visibles',
+  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 11 écritures visibles',
     `${listeEcriture.length} outils`);
   const refusEcriture = await outil(jLecture, 'create_task', { title: 'interdit' });
   R(!!refusEcriture.rpc_error, 'Appel d\'écriture refusé sans le scope');
@@ -271,6 +271,52 @@ const outil = async (jeton, name, args = {}) => {
   const sms = await outil(jEcriture, 'send_sms', { phone_number: '+15145550100', message_text: 'test' });
   R(!!sms.error && !/That lookup/i.test(sms.error), 'send_sms échoue proprement sans Twilio', (sms.error || '').slice(0, 60));
 
+  /* ════ 4. OUTILS D'ASSISTANT ════ */
+  console.log('');
+  console.log('  ── Assistant : profil, brief, mémoire, envois ──');
+
+  // Profil 360° du client de test — il a un job, un devis et une facture.
+  const profil = await outil(jLecture, 'get_client_profile', { client_id: c1.client?.id });
+  R(profil.client?.name === 'QAÉtendus Testeur', 'get_client_profile : identité', profil.client?.name);
+  R((profil.jobs?.total ?? 0) >= 1 && (profil.jobs?.lifetime_value_cents ?? 0) >= 25000,
+    'Profil : historique de jobs et valeur à vie', `${profil.jobs?.total} job(s), ${profil.jobs?.lifetime_value_cents} ¢`);
+  R((profil.billing?.invoices_total ?? 0) >= 1, 'Profil : facturation visible', `${profil.billing?.invoices_total} facture(s)`);
+  R((profil.quotes?.total ?? 0) >= 1, 'Profil : devis visibles');
+
+  // Briefing — les cinq sections répondent avec de vrais totaux.
+  const brief = await outil(jLecture, 'get_morning_briefing', {});
+  R(!!brief.date && ['overdue_invoices', 'todays_jobs', 'tasks_due', 'new_requests_48h', 'unread_sms']
+      .every((k) => typeof brief[k]?.total_matching === 'number'),
+    'get_morning_briefing : les 5 sections avec totaux réels',
+    `impayés=${brief.overdue_invoices?.total_matching} jobs=${brief.todays_jobs?.total_matching} tâches=${brief.tasks_due?.total_matching}`);
+
+  // Mémoire — écrire, relire, et visible dans la table de l'app.
+  const mem = await outil(jEcriture, 'remember_this', { key: 'qa-jour-facturation', note: 'QA — facturer le vendredi' });
+  R(mem.remembered === true, 'remember_this enregistre', mem.key);
+  const rappel = await outil(jLecture, 'recall_notes', {});
+  R((rappel.notes || []).some((n) => n.key === 'qa-jour-facturation'), 'recall_notes relit la préférence');
+  const { data: enTable } = await admin.from('org_knowledge')
+    .select('id').eq('org_id', ORG).eq('category', 'assistant').eq('key', 'qa-jour-facturation').maybeSingle();
+  R(!!enTable, 'La note vit dans org_knowledge (visible dans l’app)');
+
+  // Continuité — l'agent sait ce qu'il vient de faire.
+  const actions = await outil(jLecture, 'get_recent_agent_actions', {});
+  R((actions.actions || []).some((a) => a.outil === 'create_task'), 'get_recent_agent_actions : la tâche créée y figure');
+
+  // Envoi de facture — passe par LA route de l'app avec la session de
+  // l'utilisateur. En local sans SMTP, on attend un échec PROPRE (message
+  // de la route), jamais le générique — et jamais un envoi fantôme.
+  const envoi = await outil(jEcriture, 'send_invoice', { invoice_id: f1.invoice_id });
+  R(envoi.sent === true || (!!envoi.error && !/That lookup/i.test(envoi.error)),
+    'send_invoice : route de l’app appelée (envoi réel ou refus propre)',
+    envoi.sent ? 'envoyée' : (envoi.error || '').slice(0, 70));
+  const memeEnvoi = await outil(jEcriture, 'send_invoice', { invoice_id: f1.invoice_id });
+  if (envoi.sent === true) {
+    R(memeEnvoi.deja_fait === true, 'send_invoice rejoué → pas de double courriel');
+  } else {
+    console.log('  · idempotence d’envoi : non testable ici (l’échec libère l’empreinte, voulu)');
+  }
+
   /* ════ Nettoyage ════ */
   for (const id of aNettoyer.invoices) {
     await admin.from('invoice_items').delete().eq('invoice_id', id);
@@ -285,6 +331,7 @@ const outil = async (jeton, name, args = {}) => {
   for (const id of aNettoyer.tasks) await admin.from('tasks').delete().eq('id', id);
   for (const id of aNettoyer.clients) await admin.from('clients').delete().eq('id', id);
   await admin.from('agent_actions').delete().eq('org_id', ORG);
+  await admin.from('org_knowledge').delete().eq('org_id', ORG).eq('category', 'assistant').eq('key', 'qa-jour-facturation');
   await admin.from('api_keys').delete().like('name', 'QA Étendus%');
   await admin.from('oauth_tokens').update({ revoked: true, revoked_at: new Date().toISOString(), revoked_reason: 'qa' })
     .eq('client_id', reg.client_id);

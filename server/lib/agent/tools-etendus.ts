@@ -132,6 +132,19 @@ async function executerIdempotent(
   }
 }
 
+/**
+ * Étiquettes du statut CALCULÉ des jobs (jobs_active.derived_status) — le
+ * statut que l'écran affiche. Partagée entre list_jobs (tools.ts) et le
+ * profil client : une seule table, une seule vérité.
+ */
+export const ETIQUETTES_DERIVED: Record<string, string> = {
+  upcoming: 'Upcoming',
+  late: 'Late',
+  action_required: 'Action Required',
+  archived: 'Archived',
+  requires_invoicing: 'Requires Invoicing',
+};
+
 /** Nom affichable d'un client (même logique que l'app). */
 function nomClient(r: any): string {
   if (!r) return '';
@@ -963,6 +976,346 @@ const assignJobTool: AgentTool = {
   handler: handlerAssignJob,
 };
 
+
+/* ════════════════════════════════════════════════════════════════
+   ASSISTANT — ce qui sépare « répond aux questions » de « assiste »
+   ════════════════════════════════════════════════════════════════ */
+
+/**
+ * Rappelle une ROUTE de l'application au nom de l'utilisateur, avec sa
+ * propre session. C'est ainsi que les envois (devis, facture) empruntent
+ * le moteur existant — modèles de courriel, liens de partage, relances
+ * automatiques, journalisation — au lieu d'en maintenir une copie qui
+ * finirait par dériver.
+ */
+async function appelInterne(
+  ctx: ToolContext,
+  chemin: string,
+  corps: Record<string, any>,
+): Promise<{ ok: boolean; status: number; json: any }> {
+  if (!ctx.accessToken) {
+    throw new Error('Cette action exige votre session Lume — reconnectez le connecteur dans Claude.');
+  }
+  const port = Number(process.env.PORT || process.env.API_PORT || 3002);
+  const r = await fetch(`http://127.0.0.1:${port}/api${chemin}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${ctx.accessToken}`,
+      'x-org-id': ctx.orgId,
+    },
+    body: JSON.stringify(corps),
+  });
+  const json = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, json };
+}
+
+const sommeCents = (rows: any[] | null | undefined, champ = 'total_cents') =>
+  (rows || []).reduce((s, r) => s + (Number(r?.[champ]) || 0), 0);
+
+const getClientProfile: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_client_profile',
+    description:
+      'The 360° view of ONE client before a call or a visit: contact info, job history and totals, '
+      + 'what they owe (unpaid invoices), quotes, and the last SMS exchange. '
+      + 'Use client_id from search_clients. This is THE tool for "tell me about X".',
+    parameters: {
+      type: 'object',
+      properties: { client_id: { type: 'string', description: 'Client id (from search_clients).' } },
+      required: ['client_id'],
+    },
+  },
+  handler: async (args, ctx) => {
+    const clientId = String(args.client_id || '');
+    const { data: c, error } = await ctx.client
+      .from('clients')
+      .select('id, first_name, last_name, company, display_as_company, email, phone, address, city, status, lead_source, created_at')
+      .eq('org_id', ctx.orgId).eq('id', clientId)
+      .is('deleted_at', null).maybeSingle();
+    if (error) return erreurOutil('profil', error);
+    if (!c) return { error: 'Client introuvable — vérifiez avec search_clients.' };
+
+    const [jobsR, facturesR, devisR, convR] = await Promise.all([
+      ctx.client.from('jobs_active')
+        .select('job_number, title, scheduled_at, derived_status, status, total_cents', { count: 'exact' })
+        .eq('org_id', ctx.orgId).eq('client_id', clientId)
+        .order('scheduled_at', { ascending: false, nullsFirst: false }).limit(5),
+      ctx.client.from('invoices')
+        .select('status, total_cents, due_date', { count: 'exact' })
+        .eq('org_id', ctx.orgId).eq('client_id', clientId).is('deleted_at', null),
+      ctx.client.from('quotes')
+        .select('title, status, total_cents, created_at', { count: 'exact' })
+        .eq('org_id', ctx.orgId).eq('client_id', clientId).is('deleted_at', null)
+        .order('created_at', { ascending: false }).limit(3),
+      ctx.client.from('conversations')
+        .select('last_message_text, last_message_at, unread_count')
+        .eq('org_id', ctx.orgId).eq('client_id', clientId)
+        .order('last_message_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    for (const r of [jobsR, facturesR, devisR]) if (r.error) return erreurOutil('profil', r.error);
+
+    const factures = facturesR.data || [];
+    const impayees = factures.filter((f: any) => ['sent', 'partial', 'overdue'].includes(f.status));
+    const aujourdHui = new Date().toISOString().slice(0, 10);
+
+    return {
+      client: {
+        name: nomClient(c), company: c.company, email: c.email, phone: c.phone,
+        address: c.address, city: c.city, status: c.status, since: c.created_at,
+      },
+      jobs: {
+        total: jobsR.count ?? 0,
+        lifetime_value_cents: sommeCents(jobsR.data),
+        recent: (jobsR.data || []).map((j: any) => ({
+          job_number: j.job_number, title: j.title, date: j.scheduled_at,
+          display_status: ETIQUETTES_DERIVED[j.derived_status] || j.derived_status || j.status,
+          total_cents: j.total_cents,
+        })),
+      },
+      billing: {
+        invoices_total: facturesR.count ?? 0,
+        unpaid_count: impayees.length,
+        unpaid_cents: sommeCents(impayees),
+        overdue_cents: sommeCents(impayees.filter((f: any) => f.due_date && f.due_date < aujourdHui)),
+      },
+      quotes: {
+        total: devisR.count ?? 0,
+        recent: (devisR.data || []).map((q: any) => ({ title: q.title, status: q.status, total_cents: q.total_cents })),
+      },
+      last_sms: convR.data
+        ? { text: convR.data.last_message_text, at: convR.data.last_message_at, unread: convR.data.unread_count }
+        : null,
+    };
+  },
+};
+
+const getMorningBriefing: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_morning_briefing',
+    description:
+      "What deserves the user's attention RIGHT NOW, in one call: overdue invoices (who and how much), "
+      + "today's jobs, tasks due by tomorrow, request-form submissions from the last 48 h, and unread SMS. "
+      + 'Use it whenever the user asks for their brief, their day, or "quoi de neuf".',
+    parameters: { type: 'object', properties: {} },
+  },
+  handler: async (_args, ctx) => {
+    const maintenant = new Date();
+    const aujourdHui = maintenant.toISOString().slice(0, 10);
+    const debutJour = `${aujourdHui}T00:00:00Z`;
+    const finJour = `${aujourdHui}T23:59:59Z`;
+    const demain = new Date(maintenant.getTime() + 86400000).toISOString().slice(0, 10);
+    const il48h = new Date(maintenant.getTime() - 48 * 3600_000).toISOString();
+
+    const [impayesR, jobsR, tachesR, demandesR, nonLusR] = await Promise.all([
+      ctx.client.from('invoices')
+        .select('client_id, total_cents, due_date, status', { count: 'exact' })
+        .eq('org_id', ctx.orgId).is('deleted_at', null)
+        .in('status', ['sent', 'partial', 'overdue']).lt('due_date', aujourdHui)
+        .order('due_date', { ascending: true }).limit(5),
+      ctx.client.from('jobs_active')
+        .select('job_number, title, client_name, property_address, scheduled_at', { count: 'exact' })
+        .eq('org_id', ctx.orgId)
+        .gte('scheduled_at', debutJour).lte('scheduled_at', finJour)
+        .order('scheduled_at', { ascending: true }).limit(10),
+      ctx.client.from('tasks_active')
+        .select('title, priority, due_date', { count: 'exact' })
+        .eq('org_id', ctx.orgId).eq('status', 'open').lte('due_date', demain)
+        .order('due_date', { ascending: true }).limit(10),
+      ctx.client.from('form_submissions')
+        .select('first_name, last_name, phone, email, city, created_at', { count: 'exact' })
+        .eq('org_id', ctx.orgId).is('deleted_at', null).is('archived_at', null)
+        .gte('created_at', il48h).order('created_at', { ascending: false }).limit(5),
+      ctx.client.from('conversations')
+        .select('client_name, phone_number, last_message_text, unread_count', { count: 'exact' })
+        .eq('org_id', ctx.orgId).gt('unread_count', 0)
+        .order('last_message_at', { ascending: false }).limit(5),
+    ]);
+    for (const r of [impayesR, jobsR, tachesR, demandesR, nonLusR]) {
+      if (r.error) return erreurOutil('briefing', r.error);
+    }
+
+    // Noms des clients qui doivent de l'argent — un briefing dit QUI.
+    const idsImpayes = [...new Set((impayesR.data || []).map((f: any) => f.client_id).filter(Boolean))];
+    const noms = new Map<string, string>();
+    if (idsImpayes.length) {
+      const { data: cs } = await ctx.client
+        .from('clients')
+        .select('id, first_name, last_name, company, display_as_company')
+        .eq('org_id', ctx.orgId).in('id', idsImpayes);
+      for (const c of cs || []) noms.set(c.id, nomClient(c));
+    }
+
+    return {
+      date: aujourdHui,
+      overdue_invoices: {
+        total_matching: impayesR.count ?? 0,
+        total_cents: sommeCents(impayesR.data),
+        worst: (impayesR.data || []).map((f: any) => ({
+          client: noms.get(f.client_id) || 'client supprimé',
+          total_cents: f.total_cents, due_date: f.due_date,
+        })),
+      },
+      todays_jobs: {
+        total_matching: jobsR.count ?? 0,
+        jobs: (jobsR.data || []).map((j: any) => ({
+          time: j.scheduled_at, job_number: j.job_number, title: j.title,
+          client: j.client_name, address: j.property_address,
+        })),
+      },
+      tasks_due: { total_matching: tachesR.count ?? 0, tasks: tachesR.data || [] },
+      new_requests_48h: { total_matching: demandesR.count ?? 0, requests: demandesR.data || [] },
+      unread_sms: { total_matching: nonLusR.count ?? 0, conversations: nonLusR.data || [] },
+    };
+  },
+};
+
+const rememberThis: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'remember_this',
+    description:
+      'Persist a preference or standing instruction from the user ("retiens que je facture le vendredi") '
+      + 'so future conversations honor it. Give it a short stable key (kebab-case) and the note.',
+    parameters: {
+      type: 'object',
+      properties: {
+        key: { type: 'string', description: "Short stable identifier, e.g. 'jour-de-facturation'." },
+        note: { type: 'string', description: 'The preference or instruction, in plain words.' },
+      },
+      required: ['key', 'note'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'remember_this', args, async () => {
+      // Même table et même forme que Réglages › Connaissances de l'org
+      // (server/routes/org-knowledge.ts) : la fiche est visible et
+      // modifiable dans l'application, pas enfermée chez l'agent.
+      const admin = getServiceClient();
+      const cle = String(args.key).trim().toLowerCase().replace(/[^a-z0-9à-ÿ-]+/g, '-').slice(0, 80);
+      const { error } = await admin
+        .from('org_knowledge')
+        .upsert({
+          org_id: ctx.orgId,
+          category: 'assistant',
+          key: cle,
+          value: String(args.note).slice(0, 2000),
+          importance: 3,
+          is_active: true,
+        }, { onConflict: 'org_id,category,key' });
+      if (error) throw error;
+      return { remembered: true, key: cle };
+    }),
+};
+
+const recallNotes: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'recall_notes',
+    description:
+      "The user's standing preferences and instructions saved with remember_this. "
+      + 'Check them when starting a relevant task (invoicing, scheduling, messaging) to honor them.',
+    parameters: { type: 'object', properties: {} },
+  },
+  handler: async (_args, ctx) => {
+    const admin = getServiceClient();
+    const { data, error } = await admin
+      .from('org_knowledge')
+      .select('key, value, updated_at')
+      .eq('org_id', ctx.orgId).eq('category', 'assistant').eq('is_active', true)
+      .order('updated_at', { ascending: false }).limit(30);
+    if (error) return erreurOutil('notes', error);
+    return { count: data?.length || 0, notes: data || [] };
+  },
+};
+
+const getRecentAgentActions: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_recent_agent_actions',
+    description:
+      'What the assistant itself did recently (last 24 h): tasks created, jobs, quotes, messages sent. '
+      + 'Use it for continuity ("what did you do yesterday?") and to avoid redoing done work.',
+    parameters: { type: 'object', properties: {} },
+  },
+  handler: async (_args, ctx) => {
+    const { data, error } = await ctx.client
+      .from('agent_actions')
+      .select('outil, resultat, created_at')
+      .eq('org_id', ctx.orgId)
+      .order('created_at', { ascending: false }).limit(15);
+    if (error) return erreurOutil('actions', error);
+    return { count: data?.length || 0, actions: data || [] };
+  },
+};
+
+const sendQuoteTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'send_quote',
+    description:
+      "Email a quote to its client — IT ACTUALLY SENDS through the app's own engine (share link, "
+      + 'templates, tracking). ALWAYS show the user which quote goes to whom and get their explicit OK '
+      + 'first. Get quote ids from list_quotes or create_quote.',
+    parameters: {
+      type: 'object',
+      properties: {
+        quote_id: { type: 'string', description: 'Quote id.' },
+        subject: { type: 'string', description: 'Optional email subject override.' },
+        message: { type: 'string', description: 'Optional email body override.' },
+      },
+      required: ['quote_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'send_quote', args, async () => {
+      const { ok, status, json } = await appelInterne(ctx, '/quotes/send-email', {
+        quoteId: String(args.quote_id),
+        ...(args.subject ? { emailSubject: String(args.subject) } : {}),
+        ...(args.message ? { emailBody: String(args.message) } : {}),
+      });
+      if (!ok) throw new Error(json?.error || `Envoi refusé (${status}).`);
+      return { sent: true, channel: 'email', note: 'Le devis est parti par le moteur d\u2019envoi de Lume — suivi d\u2019ouverture et relances habituels.' };
+    }),
+};
+
+const sendInvoiceTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'send_invoice',
+    description:
+      "Email an invoice to its client — IT ACTUALLY SENDS through the app's own engine and moves the "
+      + 'invoice out of draft (payment reminders may follow automatically). ALWAYS show the user which '
+      + 'invoice goes to whom and get their explicit OK first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        invoice_id: { type: 'string', description: 'Invoice id (from create_invoice or list_invoices).' },
+        subject: { type: 'string', description: 'Optional email subject override.' },
+        message: { type: 'string', description: 'Optional email body override.' },
+      },
+      required: ['invoice_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'send_invoice', args, async () => {
+      const { ok, status, json } = await appelInterne(ctx, '/emails/send-invoice', {
+        invoiceId: String(args.invoice_id),
+        ...(args.subject ? { subject: String(args.subject) } : {}),
+        ...(args.message ? { body: String(args.message) } : {}),
+      });
+      if (!ok) throw new Error(json?.error || `Envoi refusé (${status}).`);
+      return { sent: true, channel: 'email', note: 'La facture est partie — elle n\u2019est plus un brouillon, et les rappels de paiement de Lume prennent le relais.' };
+    }),
+};
+
 /** Lecture ajoutée par ce module. */
 export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getConversations,
@@ -977,6 +1330,10 @@ export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getPayrollSummary,
   getFinancialOverview,
   getTeamLocations,
+  getClientProfile,
+  getMorningBriefing,
+  recallNotes,
+  getRecentAgentActions,
 ];
 
 /** Écriture ajoutée par ce module (les 4 historiques restent dans tools.ts). */
@@ -985,4 +1342,7 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   createTaskTool,
   updateJobStatusTool,
   assignJobTool,
+  rememberThis,
+  sendQuoteTool,
+  sendInvoiceTool,
 ];

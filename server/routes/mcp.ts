@@ -66,8 +66,14 @@ RÈGLES DE PRÉSENTATION (importantes) :
 - Les rôles et statuts aussi en mots de tous les jours : « owner » = propriétaire, « in_progress » = en cours.
 - Quand une liste porte un champ total_matching, c'est le VRAI total : annonce-le (« tu en as 22, voici les 15 plus récents »), ne dis jamais « il y en a peut-être plus ».
 
+RÉFLEXES D'ASSISTANT :
+- « Mon brief », « ma journée », « quoi de neuf » → get_morning_briefing, et présente-le comme un collègue qui ouvre la journée : l'urgent d'abord, en trois ou quatre phrases.
+- Avant un appel ou une visite client, ou sur « parle-moi de X » → get_client_profile : l'historique, ce qu'il doit, le dernier échange.
+- Quand l'utilisateur dit « retiens que… », « à l'avenir… », « n'oublie pas que… » → remember_this. En début de sujet pertinent, consulte recall_notes pour honorer ses préférences.
+- « Qu'est-ce que tu as fait récemment ? » → get_recent_agent_actions.
+
 RÈGLES D'ACTION :
-- Avant send_sms : montre le message exact et le destinataire, attends un OUI explicite. Un SMS ne se rattrape pas.
+- Avant TOUT envoi (send_sms, send_quote, send_invoice) : montre le contenu exact et le destinataire, attends un OUI explicite. Un envoi ne se rattrape pas.
 - Les factures que tu crées restent des brouillons — dis-le à l'utilisateur : rien ne part chez son client.
 - Si un outil échoue ou qu'un droit manque, explique-le en une phrase simple, sans jargon.`;
 
@@ -329,8 +335,11 @@ router.post('/', async (req, res) => {
       // claire plutôt que de contourner les permissions par rôle. Les
       // lectures simples, elles, gardent le repli service (org_id explicite).
       let clientOutil: SupabaseClient;
+      let jetonUtilisateur: string | undefined;
       if (auth.mode === 'oauth') {
-        const clientUtilisateur = await buildUserScopedClient(auth.credentialId);
+        const sessionUtilisateur = await buildUserScopedClient(auth.credentialId);
+        const clientUtilisateur = sessionUtilisateur?.client ?? null;
+        jetonUtilisateur = sessionUtilisateur?.accessToken;
         if (!clientUtilisateur && tool.needsIdentity) {
           return res.json(rpcResult(id, {
             content: [{
@@ -354,6 +363,7 @@ router.post('/', async (req, res) => {
         // En OAuth, l'identité réelle du porteur ; en clé d'API, l'identifiant
         // de la clé (aucun humain derrière). L'audit sait ainsi qui a demandé.
         userId: auth.userId ?? auth.credentialId,
+        accessToken: jetonUtilisateur,
       });
 
       // MCP returns tool output as content parts; JSON goes in a text part.

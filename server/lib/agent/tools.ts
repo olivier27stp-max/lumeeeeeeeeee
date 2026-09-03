@@ -12,7 +12,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FunctionDeclaration } from './gemini';
 import {
-  OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS,
+  OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
   handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
 } from './tools-etendus';
 
@@ -20,6 +20,13 @@ export interface ToolContext {
   client: SupabaseClient;
   orgId: string;
   userId: string;
+  /**
+   * Jeton d'accès Supabase de l'utilisateur (session OAuth rejouée).
+   * Présent uniquement sur le chemin MCP à identité ; permet aux outils
+   * d'appeler les ROUTES de l'application en son nom (envoi de devis,
+   * de facture) au lieu de dupliquer leur logique.
+   */
+  accessToken?: string;
 }
 
 export type ToolKind = 'read' | 'write';
@@ -165,13 +172,7 @@ const searchLeads: AgentTool = {
 // Sans cette correspondance, l'agent et l'interface parlaient deux langues :
 // on demandait « mes jobs en retard », l'agent ne connaissait que
 // `scheduled`/`completed` et devait deviner en comparant des dates.
-const ETIQUETTES_DERIVED: Record<string, string> = {
-  upcoming: 'Upcoming',
-  late: 'Late',
-  action_required: 'Action Required',
-  archived: 'Archived',
-  requires_invoicing: 'Requires Invoicing',
-};
+
 
 /** Accepte aussi bien le vocabulaire de l'interface que le statut brut. */
 function normaliserStatutJob(valeur: string): { champ: 'derived_status' | 'status'; valeur: string } {
