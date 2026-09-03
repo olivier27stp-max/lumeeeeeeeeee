@@ -482,6 +482,45 @@ function clientPourJeton(accessToken: string): SupabaseClient {
  */
 const rafraichissementsEnCours = new Map<string, Promise<UserSession | null>>();
 
+/**
+ * Crée une session Supabase DÉDIÉE à cette autorisation, indépendante du
+ * navigateur de l'utilisateur.
+ *
+ * Le problème résolu : Supabase fait tourner le jeton de rafraîchissement et
+ * invalide l'ancien après `reuse_interval` (5 s en prod). Si Claude et le
+ * navigateur PARTAGENT la même session (l'ancien comportement, où le
+ * consentement capturait le refresh token du navigateur), le premier qui
+ * rafraîchit tue l'autre — donc ouvrir Lume dans son navigateur cassait la
+ * connexion Claude, chaque jour. Prouvé : deux sessions distinctes du même
+ * user survivent l'une à l'autre.
+ *
+ * generateLink(magiclink) + verifyOtp crée une NOUVELLE ligne dans
+ * auth.sessions — un jeton de rafraîchissement bien à Claude, que l'usage
+ * normal de Lume ne touche jamais. Fait côté serveur avec l'identité DÉJÀ
+ * vérifiée par requireAuthedClient : aucune élévation.
+ */
+export async function creerSessionDediee(email: string): Promise<string | null> {
+  if (!email) return null;
+  try {
+    const admin = getServiceClient();
+    const { data: lien, error: e1 } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
+    if (e1 || !lien?.properties?.hashed_token) {
+      console.error('[oauth] generateLink pour session dédiée :', e1?.message || 'pas de hashed_token');
+      return null;
+    }
+    const anon = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { data: sess, error: e2 } = await anon.auth.verifyOtp({ token_hash: lien.properties.hashed_token, type: 'magiclink' });
+    if (e2 || !sess?.session?.refresh_token) {
+      console.error('[oauth] verifyOtp pour session dédiée :', e2?.message || 'pas de refresh_token');
+      return null;
+    }
+    return sess.session.refresh_token;
+  } catch (e) {
+    console.error('[oauth] création de session dédiée impossible :', (e as any)?.message || e);
+    return null;
+  }
+}
+
 export async function buildUserScopedClient(tokenId: string): Promise<UserSession | null> {
   const db = getServiceClient();
   const { data } = await db

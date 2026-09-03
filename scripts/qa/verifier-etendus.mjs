@@ -286,6 +286,29 @@ const outil = async (jeton, name, args = {}) => {
     'La session est encore vivante après la salve',
     apresSalve.error ? 'MORTE — rotation concurrente' : 'OK');
 
+  /* ════ 2c. SESSION DÉDIÉE : le navigateur ne tue plus Claude ════ */
+  // LE bug quotidien de Rafba : Claude et le navigateur partageaient une
+  // session ; ouvrir Lume rafraîchissait le jeton et tuait la connexion
+  // Claude. Correctif : session dédiée créée au consentement. Ici on
+  // rafraîchit une AUTRE session du même user (le navigateur) et on vérifie
+  // que Claude respire encore juste après.
+  console.log('');
+  console.log('  ── Session dédiée (le navigateur ne tue plus Claude) ──');
+  {
+    // 1. Session « navigateur » indépendante pour le même utilisateur.
+    const lienNav = await admin.auth.admin.generateLink({ type: 'magiclink', email: COMPTE });
+    const sessNav = (await anon.auth.verifyOtp({ token_hash: lienNav.data.properties.hashed_token, type: 'magiclink' })).data.session;
+    // 2. Le navigateur rafraîchit (comme quand tu ouvres Lume), au-delà du reuse_interval.
+    const cNav = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    await cNav.auth.refreshSession({ refresh_token: sessNav.refresh_token });
+    await new Promise((r) => setTimeout(r, 6000));
+    // 3. Claude appelle un outil à identité : il doit RÉPONDRE, pas mourir.
+    const apresNav = await outil(jLecture, 'get_revenue_summary', { period: 'this_month' });
+    R(typeof apresNav.revenue_cents === 'number',
+      'Claude survit au rafraîchissement du navigateur (session dédiée)',
+      apresNav.error ? 'MORTE — sessions encore partagées' : 'OK, indépendantes');
+  }
+
   /* ════ 3. ÉCRITURES ════ */
   console.log('\n  ── Écritures ──');
   const aNettoyer = { tasks: [], jobs: [], clients: [], quotes: [], invoices: [] };

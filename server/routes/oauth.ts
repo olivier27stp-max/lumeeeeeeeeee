@@ -24,6 +24,7 @@ import { Router } from 'express';
 import express from 'express';
 import crypto from 'crypto';
 import {
+  creerSessionDediee,
   baseUrl, canonicalResource, sha256, safeEqual,
   SCOPES_SUPPORTED, SCOPE_MCP_READ, AUTH_CODE_TTL_S,
   getClient, redirectUriAllowed, verifyPkce,
@@ -277,14 +278,14 @@ router.post('/consent', json, async (req, res) => {
       resource: res_,
     });
 
-    // La session Supabase du navigateur est transmise ici par l'écran de
-    // consentement. Elle est mise de côté le temps que le client échange son
-    // code (60 s), puis rattachée au jeton émis : c'est elle qui donnera au
-    // serveur MCP une identité, et donc l'accès aux RPC qui vérifient
-    // `has_org_membership(auth.uid(), org)`.
-    const sessionNavigateur = typeof req.body?.supabase_refresh_token === 'string'
-      ? req.body.supabase_refresh_token : null;
-    if (sessionNavigateur) memoriserSession(code, sessionNavigateur);
+    // Session DÉDIÉE à cette autorisation — surtout PAS celle du navigateur.
+    // Partager la session avec le navigateur cassait la connexion Claude dès
+    // que l'utilisateur ouvrait Lume (rotation du refresh token, reuse_interval).
+    // On en crée une indépendante, côté serveur, avec l'identité déjà vérifiée.
+    // (Le champ supabase_refresh_token du corps n'est plus utilisé : conservé
+    // le temps que les anciens clients cessent de l'envoyer, ignoré.)
+    const sessionDediee = user.email ? await creerSessionDediee(user.email) : null;
+    if (sessionDediee) memoriserSession(code, sessionDediee);
 
     logSecurityEvent({
       org_id: orgId,
