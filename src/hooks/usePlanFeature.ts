@@ -38,6 +38,48 @@ const cache: {
 const CACHE_TTL_MS = 30_000;
 
 /**
+ * Requête en cours, partagée par tous les montages simultanés.
+ *
+ * POURQUOI ELLE EXISTE
+ * Le cache ci-dessus n'est rempli qu'APRÈS la réponse. Or cinq composants
+ * appellent ce hook, et ils montent en même temps : au premier rendu le
+ * cache est encore vide pour tous, donc chacun lançait sa propre requête.
+ *
+ * Mesuré le 2026-09-03 sur /day, /clients et une fiche facture :
+ *   billing/plans   → 2 appels
+ *   billing/current → 2 appels
+ * soit le double, sur CHAQUE page, à chaque première visite.
+ *
+ * En mémorisant la promesse elle-même, le deuxième montage attend le
+ * résultat du premier au lieu de relancer un appel identique.
+ */
+let requeteEnVol: Promise<{
+  plansData: Plan[];
+  billing: { subscription: Subscription | null };
+  billingFailed: boolean;
+}> | null = null;
+
+/** Charge forfaits + abonnement, en réutilisant l'appel déjà en cours. */
+function chargerFacturation() {
+  if (requeteEnVol) return requeteEnVol;
+  requeteEnVol = (async () => {
+    let billingFailed = false;
+    const [plansData, billing] = await Promise.all([
+      fetchPlans().catch(() => [] as Plan[]),
+      fetchCurrentBilling().catch(() => {
+        billingFailed = true;
+        return { subscription: null, billing_profile: null };
+      }),
+    ]);
+    return { plansData, billing, billingFailed };
+  })();
+  // Libérée dans tous les cas : un échec ne doit pas figer les montages
+  // suivants sur une promesse morte.
+  requeteEnVol.finally(() => { requeteEnVol = null; });
+  return requeteEnVol;
+}
+
+/**
  * Returns whether the current org's plan grants a given feature (via plan flags).
  * Falls back to `true` (open access) while loading to avoid flashing locked screens.
  *
@@ -68,14 +110,7 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
         // On distingue « pas d'abonnement » (reponse valide, subscription null)
         // de « appel echoue » (reseau, 500, 410...). Confondre les deux privait
         // un client payant de ses fonctionnalites des le moindre hoquet API.
-        let billingFailed = false;
-        const [plansData, billing] = await Promise.all([
-          fetchPlans().catch(() => []),
-          fetchCurrentBilling().catch(() => {
-            billingFailed = true;
-            return { subscription: null, billing_profile: null };
-          }),
-        ]);
+        const { plansData, billing, billingFailed } = await chargerFacturation();
         if (cancelled) return;
 
         if (billingFailed) {
