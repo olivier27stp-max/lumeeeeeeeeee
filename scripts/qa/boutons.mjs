@@ -155,18 +155,42 @@ async function ouvrirSession() {
   return sess.session;
 }
 
-/** Ferme les fenêtres de consentement qui couvrent l'application. */
+/**
+ * Ferme les fenêtres de consentement qui couvrent l'application.
+ *
+ * POURQUOI CETTE FONCTION EST INSISTANTE
+ * Le bandeau Loi 25 se monte APRÈS le premier rendu. Une seule tentative
+ * immédiate le manquait, et il capturait alors tous les clics :
+ * `/settings/payments` a été rapportée « 0 élément cliquable » alors
+ * qu'elle en compte 51, et deux boutons du bandeau lui-même ont été
+ * déclarés « morts » à tort.
+ *
+ * On réessaie donc jusqu'à 6 fois (~3 s), et on mémorise le refus dans
+ * localStorage pour que les navigations suivantes ne le réaffichent pas.
+ */
 async function degagerLaVue(page) {
-  const n = await page.evaluate(() => {
-    const REFUS = ['Refuser', 'Decline', 'Tout refuser', 'Reject all'];
-    let k = 0;
-    for (const b of Array.from(document.querySelectorAll('button'))) {
-      if (REFUS.includes((b.textContent || '').trim())) { b.click(); k++; }
-    }
-    return k;
-  }).catch(() => 0);
-  if (n) await new Promise((r) => setTimeout(r, 1200));
-  return n;
+  let total = 0;
+  for (let essai = 0; essai < 6; essai++) {
+    const n = await page.evaluate(() => {
+      const REFUS = ['Refuser', 'Decline', 'Tout refuser', 'Reject all', 'Refuser tout'];
+      let k = 0;
+      for (const b of Array.from(document.querySelectorAll('button'))) {
+        if (REFUS.includes((b.textContent || '').trim())) { b.click(); k++; }
+      }
+      return k;
+    }).catch(() => 0);
+    total += n;
+    if (n) { await new Promise((r) => setTimeout(r, 800)); break; }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  // Mémoriser le refus : les pages suivantes ne réafficheront pas le bandeau.
+  await page.evaluate(() => {
+    try {
+      const choix = JSON.stringify({ essential: true, analytics: false, marketing: false, at: Date.now() });
+      for (const k of ['lume-cookie-consent', 'cookie-consent', 'lume-consent']) localStorage.setItem(k, choix);
+    } catch { /* stockage indisponible : sans effet */ }
+  }).catch(() => {});
+  return total;
 }
 
 /** Inventaire des éléments cliquables réellement visibles. */
