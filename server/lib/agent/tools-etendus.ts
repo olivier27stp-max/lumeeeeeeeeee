@@ -946,62 +946,68 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
     };
   });
 
+/**
+ * Envoie UN SMS via le moteur de l'app (opt-out STOP, numéro de l'org, plan,
+ * conversation, journalisation). Cœur partagé entre l'envoi solo et le lot
+ * de relances — une seule copie des garde-fous, jamais deux.
+ * Lève si l'envoi échoue ; renvoie l'id du message sinon.
+ */
+async function envoyerUnSms(
+  ctx: ToolContext,
+  telephoneBrut: string,
+  texte: string,
+  clientId?: string | null,
+  clientNom?: string | null,
+): Promise<{ message_id?: string; provider_sid: string }> {
+  if (!twilioClient) throw new Error('Twilio n\u2019est pas configuré sur ce serveur.');
+  const message = String(texte || '').trim();
+  if (!message) throw new Error('message vide.');
+  if (message.length > 1000) throw new Error('message trop long (max 1000).');
+  const telephone = normalizeE164(String(telephoneBrut || ''));
+  if (!telephone) throw new Error('numéro de téléphone invalide.');
+  const admin = getServiceClient();
+
+  const { data: optOut } = await admin
+    .from('sms_opt_outs').select('id')
+    .eq('org_id', ctx.orgId).eq('phone', telephone).maybeSingle();
+  if (optOut) throw new Error('destinataire STOP — ne pas contacter.');
+
+  let fromNumber: string;
+  try {
+    fromNumber = await getOrgSmsFromNumber(ctx.orgId);
+  } catch (e) {
+    if (e instanceof SmsNumberNotProvisionedError) throw new Error('Aucun numéro SMS pour cette organisation.');
+    if (e instanceof SmsNotInPlanError) throw new Error('Le forfait n\u2019inclut pas les SMS.');
+    throw e;
+  }
+
+  const conversation = await findOrCreateConversation(admin, ctx.orgId, telephone, clientId || undefined, clientNom || undefined);
+  const statusCallback = getTwilioStatusCallbackUrl();
+  const twilioMessage = await twilioClient.messages.create({
+    body: message, from: fromNumber, to: telephone,
+    ...(statusCallback ? { statusCallback } : {}),
+  });
+  const { data: msg } = await admin.from('messages').insert({
+    conversation_id: conversation.id, org_id: ctx.orgId,
+    client_id: conversation.client_id || clientId || null,
+    phone_number: telephone, direction: 'outbound', message_text: message,
+    status: 'sent', provider_message_id: twilioMessage.sid, sender_user_id: ctx.userId,
+  }).select('id').single();
+  return { message_id: msg?.id, provider_sid: twilioMessage.sid };
+}
+
 export const handlerSendSms = async (args: Record<string, any>, ctx: ToolContext) =>
   executerIdempotent(ctx, 'send_sms', args, async () => {
-    // Un SMS envoyé ne se rattrape pas : chaque garde de la route
-    // officielle est reproduite ici, dans le même ordre.
-    if (!twilioClient) throw new Error('Twilio n\'est pas configuré sur ce serveur.');
-    const texte = String(args.message_text || '').trim();
-    if (!texte) throw new Error('message_text est requis.');
-    if (texte.length > 1000) throw new Error('Message trop long (max 1000 caractères).');
-
-    const telephone = normalizeE164(String(args.phone_number || ''));
-    const admin = getServiceClient();
-
-    // Conformité LCAP : jamais vers un destinataire qui a texté STOP.
-    const { data: optOut } = await admin
-      .from('sms_opt_outs')
-      .select('id')
-      .eq('org_id', ctx.orgId).eq('phone', telephone)
-      .maybeSingle();
-    if (optOut) throw new Error('Ce destinataire a refusé les SMS de votre organisation (STOP).');
-
-    let fromNumber: string;
-    try {
-      fromNumber = await getOrgSmsFromNumber(ctx.orgId);
-    } catch (e) {
-      if (e instanceof SmsNumberNotProvisionedError) throw new Error('Votre organisation n\'a pas encore de numéro SMS — Réglages › Messagerie.');
-      if (e instanceof SmsNotInPlanError) throw new Error('Votre forfait n\'inclut pas les SMS.');
-      throw e;
-    }
-
-    const conversation = await findOrCreateConversation(
-      admin, ctx.orgId, telephone, args.client_id || undefined, args.client_name || undefined);
-
-    const statusCallback = getTwilioStatusCallbackUrl();
-    const twilioMessage = await twilioClient.messages.create({
-      body: texte, from: fromNumber, to: telephone,
-      ...(statusCallback ? { statusCallback } : {}),
-    });
-
-    const { data: message, error } = await admin
-      .from('messages')
-      .insert({
-        conversation_id: conversation.id,
-        org_id: ctx.orgId,
-        client_id: conversation.client_id || args.client_id || null,
-        phone_number: telephone,
-        direction: 'outbound',
-        message_text: texte,
-        status: 'sent',
-        provider_message_id: twilioMessage.sid,
-        sender_user_id: ctx.userId,
-      })
-      .select('id, created_at')
-      .single();
-    if (error) throw error;
-
-    return { sent: true, to: telephone, message_id: message?.id, provider_sid: twilioMessage.sid };
+    // Tout passe par le noyau partagé (mêmes garde-fous que le lot de
+    // relances) : opt-out STOP, numéro de l'org, plan, conversation, journal.
+    const { message_id, provider_sid } = await envoyerUnSms(
+      ctx,
+      String(args.phone_number || ''),
+      String(args.message_text || ''),
+      args.client_id || null,
+      args.client_name || null,
+    );
+    return { sent: true, to: normalizeE164(String(args.phone_number || '')), message_id, provider_sid };
   });
 
 /* ── Nouvelles déclarations d'écriture ───────────────────────────── */
@@ -1909,6 +1915,81 @@ const addVisitTool: AgentTool = {
     }),
 };
 
+
+/* ── Relancer les impayés, sur mesure et en lot ─────────────────── */
+
+const sendPaymentReminders: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'send_payment_reminders',
+    description:
+      'Send a personalized payment-reminder SMS to several overdue clients at once — the automations '
+      + 'handle the standard cadence; THIS is for a custom reminder you send now, in your own words. '
+      + 'Build the list from get_overdue_payments. For each recipient give client_id and the exact '
+      + 'message. ALWAYS show the user every message and recipient and get one clear OK before calling. '
+      + 'Opt-outs (STOP) and clients without a phone are skipped and reported, never a hard failure.',
+    parameters: {
+      type: 'object',
+      properties: {
+        reminders: {
+          type: 'array',
+          description: 'One entry per client to remind.',
+          items: {
+            type: 'object',
+            properties: {
+              client_id: { type: 'string', description: 'Client id (from get_overdue_payments).' },
+              message: { type: 'string', description: 'The exact SMS text for THIS client (personalize it).' },
+            },
+            required: ['client_id', 'message'],
+          },
+        },
+      },
+      required: ['reminders'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'send_payment_reminders', args, async () => {
+      const liste: any[] = Array.isArray(args.reminders) ? args.reminders : [];
+      if (!liste.length) throw new Error('Aucun rappel à envoyer.');
+      if (liste.length > 30) throw new Error('Trop de rappels d\u2019un coup (max 30) — fractionne.');
+
+      // Téléphones et noms, en une requête (jamais un client d'une autre org).
+      const ids = [...new Set(liste.map((r) => String(r.client_id)).filter(Boolean))];
+      const { data: clients } = await ctx.client
+        .from('clients')
+        .select('id, first_name, last_name, company, display_as_company, phone')
+        .eq('org_id', ctx.orgId).in('id', ids).is('deleted_at', null);
+      const parId = new Map((clients || []).map((c: any) => [c.id, c]));
+
+      const envoyes: any[] = [];
+      const ignores: any[] = [];
+      for (const r of liste) {
+        const c = parId.get(String(r.client_id));
+        const nom = c ? nomClient(c) : 'client inconnu';
+        if (!c) { ignores.push({ client: nom, raison: 'client introuvable dans votre CRM' }); continue; }
+        if (!c.phone) { ignores.push({ client: nom, raison: 'aucun numéro de téléphone' }); continue; }
+        try {
+          await envoyerUnSms(ctx, c.phone, String(r.message), c.id, nom);
+          envoyes.push({ client: nom });
+        } catch (e: any) {
+          // Un destinataire STOP ou en échec ne fait pas capoter le lot :
+          // les autres partent, celui-ci est reporté clairement.
+          ignores.push({ client: nom, raison: e?.message || 'envoi refusé' });
+        }
+      }
+
+      return {
+        sent_count: envoyes.length,
+        skipped_count: ignores.length,
+        sent: envoyes,
+        skipped: ignores,
+        note: `Rappels envoyés à ${envoyes.length} client(s)`
+          + (ignores.length ? `, ${ignores.length} ignoré(s) — explique-les à l\u2019utilisateur.` : '.'),
+      };
+    }),
+};
+
 /** Lecture ajoutée par ce module. */
 export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getConversations,
@@ -1938,6 +2019,7 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   rememberThis,
   sendQuoteTool,
   sendInvoiceTool,
+  sendPaymentReminders,
   rescheduleJobTool,
   updateClientTool,
   updateTaskStatusTool,
