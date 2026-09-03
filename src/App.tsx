@@ -162,6 +162,7 @@ import D2DReports from './pages/D2DReports';
 // l'invitation ; /d2d-settings/* redirige vers /settings/team.
 import D2DOnboarding from './pages/D2DOnboarding';
 import SettingsRoles from './pages/SettingsRoles';
+import DevPlanSwitch from './pages/DevPlanSwitch';
 import PermissionGate from './components/PermissionGate';
 import ModuleGate from './components/ModuleGate';
 import { useModuleAccess } from './hooks/useModuleAccess';
@@ -1482,6 +1483,12 @@ function AuthenticatedApp({
                     <Route path="/privacy" element={<Privacy />} />
                     <Route path="/terms" element={<Terms />} />
           <Route path="/subprocessors" element={<Subprocessors />} />
+                    {/* Bascule de forfait — outil de test, monté comme le bouton
+                        qui y mène : développement uniquement (import.meta.env.DEV).
+                        Sans cette route, « Switch Plan » menait à un 404. */}
+                    {import.meta.env.DEV && (
+                      <Route path="/dev/plan-switch" element={<PageWrapper><DevPlanSwitch /></PageWrapper>} />
+                    )}
                     <Route path="/automations" element={<Gated permission="automations.read"><PlanFeatureGate flag="includes_automations"><PageWrapper><Automations /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/tasks" element={<Gated permission="settings.read"><PageWrapper><TasksPage /></PageWrapper></Gated>} />
                     <Route path="/courses" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><div className="px-8 py-6"><Courses /></div></PlanFeatureGate></Gated>} />
