@@ -266,13 +266,20 @@ const getJob: AgentTool = {
   handler: async (args, ctx) => {
     const { data, error } = await ctx.client
       .from('jobs_active')
-      .select('id, job_number, title, description, client_name, client_id, property_address, scheduled_at, end_at, status, total_cents, currency, job_type, requires_invoicing, notes')
+      .select('id, job_number, title, description, client_name, client_id, property_address, scheduled_at, end_at, status, derived_status, total_cents, subtotal_cents, tax_cents, tax_lines, currency, job_type, requires_invoicing, notes')
       .eq('org_id', ctx.orgId)
       .eq('id', String(args.job_id))
       .maybeSingle();
     if (error) return toolError('db', error);
     if (!data) return { error: 'Job not found.' };
-    return data;
+    // Le job complet inclut ses lignes d'items — sans elles, « c'est quoi le
+    // détail du job » ne sait répondre que le total.
+    const { data: items } = await ctx.client
+      .from('job_line_items')
+      .select('name, qty, unit_price_cents, total_cents, included')
+      .eq('job_id', (data as any).id)
+      .is('deleted_at', null);
+    return { ...data, line_items: items || [] };
   },
 };
 
@@ -720,7 +727,10 @@ const createJob: AgentTool = {
   kind: 'write',
   declaration: {
     name: 'create_job',
-    description: 'Create a job (work order). With scheduled_at it is created as scheduled, otherwise as draft. If several clients match a name, ask which one before creating.',
+    description:
+      'Create a COMPLETE job (work order): real line items, the org\u2019s taxes computed like the app, '
+      + 'address geocoded for the map, and a calendar visit when scheduled_at is given (otherwise draft). '
+      + 'If several clients match a name, ask which one before creating.',
     parameters: {
       type: 'object',
       properties: {
@@ -730,6 +740,8 @@ const createJob: AgentTool = {
         scheduled_at: { type: 'string', description: 'Optional ISO datetime for the visit (creates a calendar visit; without it the job stays a draft).' },
         end_at: { type: 'string', description: 'Optional ISO end of the visit (default: start + 1 h).' },
         description: { type: 'string', description: 'Optional description.' },
+        job_type: { type: 'string', description: 'Optional job type (e.g. lavage de vitres).' },
+        no_taxes: { type: 'boolean', description: 'true = no taxes on this job (default: the org\u2019s active taxes apply).' },
         line_items: {
           type: 'array',
           description: 'Optional line items.',

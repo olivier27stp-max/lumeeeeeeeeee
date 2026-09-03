@@ -136,10 +136,10 @@ const outil = async (jeton, name, args = {}) => {
   console.log('  ── Scopes et visibilité ──');
   const listeLecture = (await rpc(jLecture, 'tools/list')).result.tools.map((t) => t.name);
   const listeEcriture = (await rpc(jEcriture, 'tools/list')).result.tools.map((t) => t.name);
-  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job', 'convert_quote_to_job', 'convert_lead_to_client', 'add_visit'];
+  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job', 'convert_quote_to_job', 'convert_lead_to_client', 'add_visit', 'update_job'];
   R(!ecritures.some((n) => listeLecture.includes(n)), 'Jeton lecture : AUCUNE écriture visible',
     `${listeLecture.length} outils`);
-  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 20 écritures visibles',
+  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 21 écritures visibles',
     `${listeEcriture.length} outils`);
   const refusEcriture = await outil(jLecture, 'create_task', { title: 'interdit' });
   R(!!refusEcriture.rpc_error, 'Appel d\'écriture refusé sans le scope');
@@ -313,12 +313,32 @@ const outil = async (jeton, name, args = {}) => {
     title: 'QA Étendus — job test', client_id: c1.client?.id,
     line_items: [{ name: 'Lavage', qty: 2, unit_price_cents: 12500 }],
   });
-  R(j1.created && j1.job?.status === 'draft' && j1.job?.id, 'create_job sans date → brouillon');
+  R(j1.created === true && !!j1.job?.id, 'create_job (complet) crée', j1.job?.job_number ? `#${j1.job.job_number}` : '');
   if (j1.job?.id) aNettoyer.jobs.push(j1.job.id);
-  const { data: jobBase } = await admin.from('jobs').select('total_cents, client_name').eq('id', j1.job?.id).maybeSingle();
-  R(jobBase?.total_cents === 25000, 'Montant écrit en *_cents (2 × 125,00 $)', `${jobBase?.total_cents}`);
-  R(!!jobBase?.client_name, 'client_name résolu comme le fait l\'app', jobBase?.client_name);
-
+  R(j1.subtotal_cents === 25000, 'Sous-total exact (2 x 125,00 $)', `${j1.subtotal_cents}`);
+  R(j1.total_cents >= j1.subtotal_cents && Array.isArray(j1.taxes_appliquees),
+    'Taxes de l\u2019org appliquees par le calculateur de l\u2019app',
+    `${j1.taxes_appliquees?.join(' + ') || 'aucune'} -> total ${j1.total_cents}`);
+  const { data: lignesJob } = await admin.from('job_line_items')
+    .select('name, qty, unit_price_cents, total_cents').eq('job_id', j1.job?.id).is('deleted_at', null);
+  R((lignesJob || []).length === 1 && lignesJob[0].qty === 2 && lignesJob[0].total_cents === 25000,
+    'De VRAIES lignes d\u2019items en base (pas un resume en note)', `${(lignesJob || []).length} ligne(s)`);
+  const { data: jobBase } = await admin.from('jobs')
+    .select('total_cents, subtotal_cents, tax_cents, tax_lines, client_name').eq('id', j1.job?.id).maybeSingle();
+  R(jobBase?.subtotal_cents === 25000 && jobBase?.total_cents === j1.total_cents && Array.isArray(jobBase?.tax_lines),
+    'Finances ecrites en cents + tax_lines stockees');
+  R(!!jobBase?.client_name, 'client_name resolu comme le fait l\u2019app', jobBase?.client_name);
+  const dJ1 = await outil(jLecture, 'get_job', { job_id: j1.job?.id });
+  R(Array.isArray(dJ1.line_items) && dJ1.line_items.length === 1, 'get_job livre le detail des items');
+  const majJob = await outil(jEcriture, 'update_job', {
+    job_id: j1.job?.id, title: 'QA Etendus - job test v2',
+    line_items: [{ name: 'Grand menage', qty: 3, unit_price_cents: 10000 }],
+  });
+  R(majJob.updated === true && majJob.subtotal_cents === 30000,
+    'update_job remplace les items et recalcule', `sous-total ${majJob.subtotal_cents}`);
+  const { count: nbLignesApres } = await admin.from('job_line_items')
+    .select('*', { count: 'exact', head: true }).eq('job_id', j1.job?.id).is('deleted_at', null);
+  R(nbLignesApres === 1, 'Anciennes lignes remplacees, pas empilees', `${nbLignesApres}`);
   const jCap = await outil(jEcriture, 'create_job', {
     title: 'QA Étendus — trop cher', line_items: [{ name: 'X', qty: 1, unit_price_cents: 200_000_000 }],
   });
@@ -516,6 +536,7 @@ const outil = async (jeton, name, args = {}) => {
     await admin.from('quotes').delete().eq('id', id);
   }
   for (const id of aNettoyer.jobs) {
+    await admin.from('job_line_items').delete().eq('job_id', id);
     await admin.from('schedule_events').delete().eq('job_id', id);
     await admin.from('jobs').delete().eq('id', id);
   }

@@ -31,6 +31,7 @@ import {
   computePayPeriod, periodToIsoRange, computeEntryHours, DEFAULT_PAYROLL_SETTINGS,
   type PayrollSettings,
 } from '../payroll';
+import { calculateJobFinancials, type TaxLine } from '../../../src/lib/jobCalc';
 import type { AgentTool, ToolContext } from './tools';
 
 /* ── Garde-fous communs ────────────────────────────────────────── */
@@ -146,6 +147,28 @@ export const ETIQUETTES_DERIVED: Record<string, string> = {
   archived: 'Archived',
   requires_invoicing: 'Requires Invoicing',
 };
+
+/**
+ * Taxes actives de l'org, mappées au format tax_lines des jobs — la même
+ * source que l'écran Réglages › Taxes (table tax_configs). Le calcul des
+ * montants passe ensuite par calculateJobFinancials, LE calculateur de
+ * l'app (module pur importé tel quel) : mêmes arrondis au cent.
+ */
+async function taxesParDefaut(ctx: ToolContext): Promise<TaxLine[]> {
+  const { data } = await ctx.client
+    .from('tax_configs')
+    .select('id, name, rate, is_active, sort_order')
+    .eq('org_id', ctx.orgId)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .limit(4);
+  return (data || []).map((t: any) => ({
+    code: /tps|gst/i.test(t.name) ? 'tps' : /tvq|qst|pst/i.test(t.name) ? 'tvq' : String(t.id),
+    label: String(t.name),
+    rate: Number(t.rate) || 0,
+    enabled: true,
+  }));
+}
 
 /** Nom affichable d'un client (même logique que l'app). */
 function nomClient(r: any): string {
@@ -597,13 +620,31 @@ const getTeamLocations: AgentTool = {
 
 export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolContext) =>
   executerIdempotent(ctx, 'create_job', args, async () => {
-    const items: any[] = Array.isArray(args.line_items) ? args.line_items : [];
-    const totalCents = items.reduce(
-      (s, it) => s + Math.round((Number(it.qty) || 1) * (Number(it.unit_price_cents) || 0)), 0);
-    const cap = depassePlafond(totalCents);
+    // LE pipeline complet de l'application (jobsApi.createJob), fidèlement :
+    //   1. rpc_create_job_with_optional_schedule — job + première visite en
+    //      un appel (numéro, statut, calendrier gérés par la base) ;
+    //   2. file de géocodage — sans elle, le job n'apparaît pas sur la carte ;
+    //   3. VRAIES lignes d'items dans job_line_items — pas un résumé en note ;
+    //   4. finances par calculateJobFinancials (le calculateur de l'app) avec
+    //      les taxes actives de l'org — cents uniquement, projections par
+    //      trigger.
+    const items: any[] = (Array.isArray(args.line_items) ? args.line_items : [])
+      .filter((it) => String(it?.name || '').trim())
+      .map((it) => ({
+        name: String(it.name).trim().slice(0, 200),
+        qty: Number.isFinite(Number(it.qty)) && Number(it.qty) > 0 ? Number(it.qty) : 1,
+        unit_price_cents: Math.max(0, Math.round(Number(it.unit_price_cents) || 0)),
+      }));
+
+    const taxes: TaxLine[] = args.no_taxes ? [] : await taxesParDefaut(ctx);
+    const finances = calculateJobFinancials(
+      items.map((it) => ({ qty: it.qty, unit_price_cents: it.unit_price_cents })),
+      taxes,
+    );
+    const cap = depassePlafond(finances.total_cents);
     if (cap) throw new Error(cap.error);
 
-    // Nom et adresse du client, comme le fait l'application à la création.
+    // Nom et adresse du client, comme le fait l'application.
     let clientName: string | null = null;
     let clientAddress: string | null = null;
     if (args.client_id) {
@@ -617,59 +658,101 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       clientAddress = c.address || null;
     }
 
-    const description = [
-      args.description ? String(args.description) : null,
-      items.length
-        ? 'Items : ' + items.map((it) => `${it.name} × ${it.qty || 1} @ ${((it.unit_price_cents || 0) / 100).toFixed(2)} $`).join(' ; ')
-        : null,
-    ].filter(Boolean).join('\n') || null;
-
-    // Le modèle du calendrier Lume (commentaire de NewJobModal) : « les jobs
-    // n'ont pas de date en propre — le calendrier montre les VISITES, un job
-    // sans visite est un brouillon ». On insère donc toujours un brouillon,
-    // puis la RPC du calendrier crée la visite — c'est elle qui recalcule
-    // jobs.scheduled_at et le statut. Écrire scheduled_at à la main créait
-    // des jobs invisibles à l'écran Calendrier.
-    const { data, error } = await ctx.client
-      .from('jobs')
-      .insert({
-        org_id: ctx.orgId,
-        title: String(args.title).slice(0, 200),
-        description,
-        client_id: args.client_id || null,
-        client_name: clientName,
-        property_address: args.property_address || clientAddress || null,
-        status: 'draft',
-        // NOT NULL en base : un job sans items vaut 0, jamais null. Le
-        // `|| null` d'origine cassait toute création sans line_items.
-        total_cents: totalCents,
-        currency: 'CAD',
-      })
-      .select('id, job_number, title, status')
-      .single();
-    if (error) throw error;
-
-    let visite: any = null;
+    let debutISO: string | null = null;
+    let finISO: string | null = null;
     if (args.scheduled_at) {
       const debut = new Date(String(args.scheduled_at));
       if (Number.isNaN(debut.getTime())) throw new Error('scheduled_at invalide (ISO attendu).');
-      const fin = args.end_at ? new Date(String(args.end_at)) : new Date(debut.getTime() + 60 * 60_000);
-      const { data: ev, error: evErr } = await ctx.client.rpc('rpc_schedule_job', {
-        p_job_id: data.id,
-        p_start_at: debut.toISOString(),
-        p_end_at: fin.toISOString(),
-        p_team_id: null,
-        p_timezone: 'America/Montreal',
-      });
-      if (evErr) throw evErr;
-      visite = (ev as any)?.event || ev || null;
+      const fin_ = args.end_at ? new Date(String(args.end_at)) : new Date(debut.getTime() + 60 * 60_000);
+      debutISO = debut.toISOString();
+      finISO = fin_.toISOString();
     }
+
+    const adresse = String(args.property_address || clientAddress || '-');
+
+    // 1. Création par LA RPC de l'app — job + visite éventuelle d'un coup.
+    const { data: rpcData, error: rpcError } = await ctx.client.rpc('rpc_create_job_with_optional_schedule', {
+      p_lead_id: args.lead_id || null,
+      p_client_id: args.client_id || null,
+      p_team_id: null,
+      p_title: String(args.title).slice(0, 200),
+      p_job_number: null,
+      p_job_type: args.job_type ? String(args.job_type).slice(0, 80) : null,
+      p_status: null,
+      p_address: adresse,
+      p_notes: args.description ? String(args.description) : null,
+      p_scheduled_at: debutISO,
+      p_end_at: finISO,
+      p_timezone: 'America/Montreal',
+    });
+    if (rpcError) throw rpcError;
+    const jobId = String((rpcData as any)?.job_id || '');
+    if (!jobId) throw new Error('Le job a été créé mais son id est introuvable.');
+
+    // 2. File de géocodage + nom du client. La RPC de création ne remplit
+    //    pas jobs.client_name (l'app le passe à part) : on l'estampille ici.
+    const patchApres: Record<string, any> = {};
+    if (clientName) patchApres.client_name = clientName;
+    if (adresse && adresse !== '-') {
+      patchApres.geocode_status = 'pending';
+      patchApres.geocoded_at = null;
+      patchApres.latitude = null;
+      patchApres.longitude = null;
+    }
+    if (Object.keys(patchApres).length) {
+      await ctx.client.from('jobs').update(patchApres).eq('id', jobId).eq('org_id', ctx.orgId);
+    }
+
+    // 3. Les vraies lignes d'items.
+    if (items.length) {
+      const lignes = items.map((it) => ({
+        job_id: jobId,
+        org_id: ctx.orgId,
+        name: it.name,
+        qty: it.qty,
+        unit_price_cents: it.unit_price_cents,
+        total_cents: Math.max(0, Math.round(it.qty * it.unit_price_cents)),
+        included: true,
+      }));
+      const { error: itemsErr } = await ctx.client.from('job_line_items').insert(lignes);
+      if (itemsErr) throw itemsErr;
+    }
+
+    // 4. Finances — cents uniquement, projections par trigger.
+    const { error: finErr } = await ctx.client.from('jobs')
+      .update({
+        subtotal_cents: finances.subtotal_cents,
+        tax_cents: finances.tax_cents,
+        total_cents: finances.total_cents,
+        tax_lines: taxes,
+      })
+      .eq('id', jobId).eq('org_id', ctx.orgId);
+    if (finErr) throw finErr;
+
+    const { data: final } = await ctx.client
+      .from('jobs_active')
+      .select('id, job_number, title, status, scheduled_at, property_address, derived_status')
+      .eq('id', jobId).maybeSingle();
 
     return {
       created: true,
-      job: data,
-      visit: visite ? { start_at: visite.start_at, end_at: visite.end_at } : null,
-      note: visite ? 'Job planifié — la visite est au calendrier Lume.' : 'Job créé en brouillon — sans visite, il n\u2019apparaît pas au calendrier.',
+      job: {
+        id: jobId,
+        job_number: final?.job_number,
+        title: final?.title,
+        display_status: ETIQUETTES_DERIVED[final?.derived_status] || final?.derived_status || final?.status,
+        client: clientName,
+        address: adresse !== '-' ? adresse : null,
+      },
+      visit: debutISO ? { start_at: debutISO, end_at: finISO } : null,
+      items_count: items.length,
+      subtotal_cents: finances.subtotal_cents,
+      tax_cents: finances.tax_cents,
+      total_cents: finances.total_cents,
+      taxes_appliquees: taxes.map((t) => `${t.label} ${t.rate} %`),
+      note: debutISO
+        ? 'Job complet : items, taxes, calendrier — et il apparaîtra sur la carte une fois géocodé.'
+        : 'Job complet en brouillon (sans visite). Items et taxes posés ; planifie-le pour le mettre au calendrier.',
     };
   });
 
@@ -1613,6 +1696,120 @@ const createInvoiceFromJobTool: AgentTool = {
 };
 
 
+const updateJobTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'update_job',
+    description:
+      "Edit a job completely: title, description, type, address (re-geocoded for the map), and/or "
+      + 'REPLACE its line items (amounts and taxes recomputed by the app\u2019s own calculator). '
+      + 'Only provided fields change. Use reschedule_job for dates.',
+    parameters: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job id.' },
+        title: { type: 'string' },
+        description: { type: 'string' },
+        job_type: { type: 'string' },
+        property_address: { type: 'string', description: 'New address (queues re-geocoding).' },
+        line_items: {
+          type: 'array',
+          description: 'REPLACES all items when provided.',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' }, qty: { type: 'number' },
+              unit_price_cents: { type: 'integer', description: 'Unit price in CENTS.' },
+            },
+            required: ['name', 'unit_price_cents'],
+          },
+        },
+        no_taxes: { type: 'boolean', description: 'true = recompute without taxes.' },
+      },
+      required: ['job_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'update_job', args, async () => {
+      const jobId = String(args.job_id);
+      const { data: job, error: eJob } = await ctx.client
+        .from('jobs')
+        .select('id, property_address, tax_lines')
+        .eq('org_id', ctx.orgId).eq('id', jobId)
+        .is('deleted_at', null).maybeSingle();
+      if (eJob) throw eJob;
+      if (!job) throw new Error('Job introuvable — vérifiez avec list_jobs.');
+
+      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (args.title !== undefined) patch.title = String(args.title).slice(0, 200);
+      if (args.description !== undefined) patch.notes = String(args.description) || null;
+      if (args.job_type !== undefined) patch.job_type = String(args.job_type).slice(0, 80) || null;
+      if (args.property_address !== undefined) {
+        // Même règle que l'app : nouvelle adresse = re-géocodage pour la carte.
+        patch.property_address = String(args.property_address);
+        patch.address = patch.property_address;
+        patch.geocode_status = 'pending';
+        patch.geocoded_at = null;
+        patch.latitude = null;
+        patch.longitude = null;
+      }
+
+      let finances: any = null;
+      if (Array.isArray(args.line_items)) {
+        const items = args.line_items
+          .filter((it: any) => String(it?.name || '').trim())
+          .map((it: any) => ({
+            name: String(it.name).trim().slice(0, 200),
+            qty: Number.isFinite(Number(it.qty)) && Number(it.qty) > 0 ? Number(it.qty) : 1,
+            unit_price_cents: Math.max(0, Math.round(Number(it.unit_price_cents) || 0)),
+          }));
+        const taxes: TaxLine[] = args.no_taxes
+          ? []
+          : ((job.tax_lines as TaxLine[])?.length ? (job.tax_lines as TaxLine[]) : await taxesParDefaut(ctx));
+        finances = calculateJobFinancials(
+          items.map((it: any) => ({ qty: it.qty, unit_price_cents: it.unit_price_cents })),
+          taxes,
+        );
+        const cap = depassePlafond(finances.total_cents);
+        if (cap) throw new Error(cap.error);
+
+        // Remplacement complet, comme l'édition de l'app : delete puis insert.
+        const { error: delErr } = await ctx.client.from('job_line_items').delete().eq('job_id', jobId);
+        if (delErr) throw delErr;
+        if (items.length) {
+          const { error: insErr } = await ctx.client.from('job_line_items').insert(items.map((it: any) => ({
+            job_id: jobId, org_id: ctx.orgId, name: it.name, qty: it.qty,
+            unit_price_cents: it.unit_price_cents,
+            total_cents: Math.max(0, Math.round(it.qty * it.unit_price_cents)),
+            included: true,
+          })));
+          if (insErr) throw insErr;
+        }
+        patch.subtotal_cents = finances.subtotal_cents;
+        patch.tax_cents = finances.tax_cents;
+        patch.total_cents = finances.total_cents;
+        patch.tax_lines = taxes;
+      }
+
+      if (Object.keys(patch).length === 1 && !finances) throw new Error('Aucun champ à modifier.');
+
+      const { data: maj, error } = await ctx.client
+        .from('jobs')
+        .update(patch)
+        .eq('org_id', ctx.orgId).eq('id', jobId)
+        .select('id, job_number, title, property_address')
+        .single();
+      if (error) throw error;
+      return {
+        updated: true,
+        job: { job_number: maj.job_number, title: maj.title, address: maj.property_address },
+        ...(finances ? { subtotal_cents: finances.subtotal_cents, tax_cents: finances.tax_cents, total_cents: finances.total_cents } : {}),
+        ...(args.property_address !== undefined ? { note: 'Adresse changée — le job sera re-géocodé pour la carte.' } : {}),
+      };
+    }),
+};
+
 /* ── Conversions et visites ────────────────────────────────────── */
 
 const convertQuoteToJobTool: AgentTool = {
@@ -1750,4 +1947,5 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   convertQuoteToJobTool,
   convertLeadToClientTool,
   addVisitTool,
+  updateJobTool,
 ];

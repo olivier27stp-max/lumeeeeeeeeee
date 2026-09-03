@@ -141,6 +141,7 @@ const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = 
   get_morning_briefing:      { cle: 'jobs.read',          capacite: 'le survol de la journée' },
   create_job:                { cle: 'jobs.create',        capacite: 'la création de jobs' },
   update_job_status:         { cle: 'jobs.update',        capacite: 'la modification des jobs' },
+  update_job:                { cle: 'jobs.update',        capacite: 'la modification des jobs' },
   archive_job:               { cle: 'jobs.update',        capacite: "l'archivage des jobs" },
   assign_job:                { cle: 'jobs.assign',        capacite: "l'assignation des jobs" },
   reschedule_job:            { cle: 'calendar.update',    capacite: 'la replanification du calendrier' },
