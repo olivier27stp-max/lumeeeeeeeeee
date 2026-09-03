@@ -189,6 +189,23 @@ const outil = async (jeton, name, args = {}) => {
   const gps = await outil(jLecture, 'get_team_locations');
   R(!gps.error && typeof gps.count === 'number', 'get_team_locations répond', `${gps.count} position(s) fraîche(s)`);
 
+  /* ════ 2b. PARALLÉLISME : la session doit survivre au brief ════ */
+  // Le bug vécu en prod le 2026-09-03 : le brief lance plusieurs outils en
+  // parallèle, chacun rafraîchissait la session, la rotation simultanée
+  // passait pour un vol et Supabase révoquait tout. Ce test tire DIX appels
+  // à identité en même temps, puis revérifie que la session respire encore.
+  console.log('');
+  console.log('  ── Parallélisme (le tueur de session) ──');
+  const salve = await Promise.all(
+    Array.from({ length: 10 }, () => outil(jLecture, 'get_revenue_summary', { period: 'this_month' })),
+  );
+  const reussies = salve.filter((r) => typeof r.revenue_cents === 'number').length;
+  R(reussies === 10, '10 appels à identité EN PARALLÈLE réussissent', `${reussies}/10`);
+  const apresSalve = await outil(jLecture, 'get_financial_overview', {});
+  R(typeof apresSalve.revenue_this_month_cents === 'number',
+    'La session est encore vivante après la salve',
+    apresSalve.error ? 'MORTE — rotation concurrente' : 'OK');
+
   /* ════ 3. ÉCRITURES ════ */
   console.log('\n  ── Écritures ──');
   const aNettoyer = { tasks: [], jobs: [], clients: [], quotes: [], invoices: [] };
