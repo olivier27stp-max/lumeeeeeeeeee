@@ -1,6 +1,6 @@
 # ── Stage 1: Build ──────────────────────────────────────────────
 # Cache bust: 2026-05-12-v2
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -33,7 +33,7 @@ ENV VITE_SENTRY_TRACES_SAMPLE_RATE=$VITE_SENTRY_TRACES_SAMPLE_RATE
 RUN npm run build
 
 # ── Stage 2: Production ────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 WORKDIR /app
 
 # Create non-root user for security (prevents container escape → root access)
