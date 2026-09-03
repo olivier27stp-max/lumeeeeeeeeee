@@ -208,6 +208,16 @@ const outil = async (jeton, name, args = {}) => {
   R(!smsTech.error && typeof (smsTech.total_matching ?? smsTech.count) === 'number',
     'Technicien : SMS accessibles (droit du préréglage)', `${smsTech.total_matching ?? smsTech.count}`);
 
+  const { data: unVrai } = await admin.from('clients')
+    .select('first_name, last_name').eq('org_id', ORG).is('deleted_at', null)
+    .not('first_name', 'is', null).not('last_name', 'is', null).limit(1).maybeSingle();
+  if (unVrai?.first_name && unVrai?.last_name) {
+    const nomComplet = `${unVrai.first_name} ${unVrai.last_name}`;
+    const rechComplet = await outil(jLecture, 'search_clients', { query: nomComplet, limit: 5 });
+    R((rechComplet.count ?? 0) >= 1, 'search_clients trouve Prenom Nom complet (multi-tokens)', `"${nomComplet}" -> ${rechComplet.count}`);
+  } else {
+    console.log('  . recherche multi-tokens : aucun client prenom+nom en staging, saute');
+  }
   const clientsTech = await outil(jTech, 'search_clients', { query: '', limit: 5 });
   R((clientsTech.count ?? clientsTech.clients?.length ?? 0) >= 0 && !clientsTech.error,
     'Technicien : le reste du CRM fonctionne normalement', `${clientsTech.count ?? 0} client(s)`);
@@ -342,6 +352,8 @@ const outil = async (jeton, name, args = {}) => {
   R(j1.total_cents >= j1.subtotal_cents && Array.isArray(j1.taxes_appliquees),
     'Taxes de l\u2019org appliquees par le calculateur de l\u2019app',
     `${j1.taxes_appliquees?.join(' + ') || 'aucune'} -> total ${j1.total_cents}`);
+  const nomsTax = j1.taxes_appliquees || [];
+  R(new Set(nomsTax).size === nomsTax.length, 'Aucune taxe en double (tax_configs dupliquees)', nomsTax.join(' + ') || 'aucune');
   const { data: lignesJob } = await admin.from('job_line_items')
     .select('name, qty, unit_price_cents, total_cents').eq('job_id', j1.job?.id).is('deleted_at', null);
   R((lignesJob || []).length === 1 && lignesJob[0].qty === 2 && lignesJob[0].total_cents === 25000,

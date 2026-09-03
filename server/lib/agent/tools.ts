@@ -96,10 +96,16 @@ const searchClients: AgentTool = {
       .limit(limit);
     const term = String(args.query || '').trim();
     if (term) {
-      const t = term.replace(/[%,()]/g, ' ');
-      q = q.or(
-        `first_name.ilike.%${t}%,last_name.ilike.%${t}%,company.ilike.%${t}%,email.ilike.%${t}%,phone.ilike.%${t}%,city.ilike.%${t}%`,
-      );
+      // Multi-tokens : « Marie Tremblay » cherchait cette chaîne ENTIÈRE dans
+      // first_name seul → 0 résultat. On découpe en mots et on exige que
+      // CHAQUE mot apparaisse quelque part (prénom, nom, compagnie…). Ainsi
+      // « Marie Tremblay » = (Marie dans un champ) ET (Tremblay dans un champ).
+      const mots = term.replace(/[%,()]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5);
+      for (const mot of mots) {
+        q = q.or(
+          `first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%,email.ilike.%${mot}%,phone.ilike.%${mot}%,city.ilike.%${mot}%`,
+        );
+      }
     }
     const { data, error } = await q;
     if (error) return toolError('db', error);
