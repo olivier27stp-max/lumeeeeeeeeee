@@ -622,6 +622,12 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
         : null,
     ].filter(Boolean).join('\n') || null;
 
+    // Le modèle du calendrier Lume (commentaire de NewJobModal) : « les jobs
+    // n'ont pas de date en propre — le calendrier montre les VISITES, un job
+    // sans visite est un brouillon ». On insère donc toujours un brouillon,
+    // puis la RPC du calendrier crée la visite — c'est elle qui recalcule
+    // jobs.scheduled_at et le statut. Écrire scheduled_at à la main créait
+    // des jobs invisibles à l'écran Calendrier.
     const { data, error } = await ctx.client
       .from('jobs')
       .insert({
@@ -631,15 +637,38 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
         client_id: args.client_id || null,
         client_name: clientName,
         property_address: args.property_address || clientAddress || null,
-        scheduled_at: args.scheduled_at || null,
-        status: args.scheduled_at ? 'scheduled' : 'draft',
-        total_cents: totalCents || null,
+        status: 'draft',
+        // NOT NULL en base : un job sans items vaut 0, jamais null. Le
+        // `|| null` d'origine cassait toute création sans line_items.
+        total_cents: totalCents,
         currency: 'CAD',
       })
-      .select('id, job_number, title, status, scheduled_at')
+      .select('id, job_number, title, status')
       .single();
     if (error) throw error;
-    return { created: true, job: data };
+
+    let visite: any = null;
+    if (args.scheduled_at) {
+      const debut = new Date(String(args.scheduled_at));
+      if (Number.isNaN(debut.getTime())) throw new Error('scheduled_at invalide (ISO attendu).');
+      const fin = args.end_at ? new Date(String(args.end_at)) : new Date(debut.getTime() + 60 * 60_000);
+      const { data: ev, error: evErr } = await ctx.client.rpc('rpc_schedule_job', {
+        p_job_id: data.id,
+        p_start_at: debut.toISOString(),
+        p_end_at: fin.toISOString(),
+        p_team_id: null,
+        p_timezone: 'America/Montreal',
+      });
+      if (evErr) throw evErr;
+      visite = (ev as any)?.event || ev || null;
+    }
+
+    return {
+      created: true,
+      job: data,
+      visit: visite ? { start_at: visite.start_at, end_at: visite.end_at } : null,
+      note: visite ? 'Job planifié — la visite est au calendrier Lume.' : 'Job créé en brouillon — sans visite, il n\u2019apparaît pas au calendrier.',
+    };
   });
 
 export const handlerCreateClient = async (args: Record<string, any>, ctx: ToolContext) =>
@@ -1115,11 +1144,14 @@ const getMorningBriefing: AgentTool = {
         .eq('org_id', ctx.orgId).is('deleted_at', null)
         .in('status', ['sent', 'partial', 'overdue']).lt('due_date', aujourdHui)
         .order('due_date', { ascending: true }).limit(5),
-      ctx.client.from('jobs_active')
-        .select('job_number, title, client_name, property_address, scheduled_at', { count: 'exact' })
-        .eq('org_id', ctx.orgId)
-        .gte('scheduled_at', debutJour).lte('scheduled_at', finJour)
-        .order('scheduled_at', { ascending: true }).limit(10),
+      // Le calendrier de l'app lit les VISITES (schedule_events), pas
+      // jobs.scheduled_at — même source ici, sinon le brief rate les
+      // visites multiples et les jobs planifiés autrement.
+      ctx.client.from('schedule_events')
+        .select('start_at, end_at, job:jobs!schedule_events_job_id_fkey(job_number, title, client_name, property_address)', { count: 'exact' })
+        .eq('org_id', ctx.orgId).is('deleted_at', null)
+        .gte('start_at', debutJour).lte('start_at', finJour)
+        .order('start_at', { ascending: true }).limit(10),
       ctx.client.from('tasks_active')
         .select('title, priority, due_date', { count: 'exact' })
         .eq('org_id', ctx.orgId).eq('status', 'open').lte('due_date', demain)
@@ -1158,11 +1190,12 @@ const getMorningBriefing: AgentTool = {
           total_cents: f.total_cents, due_date: f.due_date,
         })),
       },
-      todays_jobs: {
+      todays_visits: {
         total_matching: jobsR.count ?? 0,
-        jobs: (jobsR.data || []).map((j: any) => ({
-          time: j.scheduled_at, job_number: j.job_number, title: j.title,
-          client: j.client_name, address: j.property_address,
+        visits: (jobsR.data || []).map((v: any) => ({
+          start_at: v.start_at, end_at: v.end_at,
+          job_number: v.job?.job_number, title: v.job?.title,
+          client: v.job?.client_name, address: v.job?.property_address,
         })),
       },
       tasks_due: { total_matching: tachesR.count ?? 0, tasks: tachesR.data || [] },
@@ -1248,7 +1281,7 @@ const getRecentAgentActions: AgentTool = {
       .from('agent_actions')
       .select('outil, resultat, created_at')
       .eq('org_id', ctx.orgId)
-      .order('created_at', { ascending: false }).limit(15);
+      .order('created_at', { ascending: false }).limit(20);
     if (error) return erreurOutil('actions', error);
     return { count: data?.length || 0, actions: data || [] };
   },
@@ -1316,6 +1349,255 @@ const sendInvoiceTool: AgentTool = {
     }),
 };
 
+
+/* ── Gestion : modifier, déplacer, classer ─────────────────────── */
+
+const rescheduleJobTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'reschedule_job',
+    description:
+      "Move a job's calendar visit to a new date/time — the same engine as dragging it on the Lume "
+      + 'calendar. If the job has several visits, the NEXT upcoming one moves (or the most recent if all '
+      + 'are past). Get the job id from list_jobs.',
+    parameters: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job id.' },
+        start_at: { type: 'string', description: 'New ISO start datetime.' },
+        end_at: { type: 'string', description: 'New ISO end (default: start + previous duration, else 1 h).' },
+      },
+      required: ['job_id', 'start_at'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'reschedule_job', args, async () => {
+      const { data: visites, error } = await ctx.client
+        .from('schedule_events')
+        .select('id, start_at, end_at')
+        .eq('org_id', ctx.orgId).eq('job_id', String(args.job_id))
+        .is('deleted_at', null)
+        .order('start_at', { ascending: true });
+      if (error) throw error;
+      if (!visites?.length) throw new Error('Ce job n\u2019a aucune visite au calendrier — utilisez create_job ou planifiez-le dans Lume d\u2019abord.');
+      const maintenant = Date.now();
+      const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
+
+      const debut = new Date(String(args.start_at));
+      if (Number.isNaN(debut.getTime())) throw new Error('start_at invalide (ISO attendu).');
+      const dureePrec = new Date(cible.end_at).getTime() - new Date(cible.start_at).getTime();
+      const fin = args.end_at
+        ? new Date(String(args.end_at))
+        : new Date(debut.getTime() + (dureePrec > 0 ? dureePrec : 60 * 60_000));
+
+      // La RPC du calendrier : recalcule jobs.scheduled_at et signale les
+      // chevauchements, exactement comme un glisser-déposer dans l'app.
+      const { data: res, error: rpcErr } = await ctx.client.rpc('rpc_reschedule_event', {
+        p_event_id: cible.id,
+        p_start_at: debut.toISOString(),
+        p_end_at: fin.toISOString(),
+        p_team_id: null,
+        p_timezone: 'America/Montreal',
+      });
+      if (rpcErr) throw rpcErr;
+      const chevauchements = Number((res as any)?.overlaps ?? 0);
+      return {
+        rescheduled: true,
+        new_start: debut.toISOString(),
+        new_end: fin.toISOString(),
+        overlaps: chevauchements,
+        ...(chevauchements > 0 ? { warning: `${chevauchements} visite(s) se chevauchent sur ce créneau — à signaler à l'utilisateur.` } : {}),
+      };
+    }),
+};
+
+const updateClientTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'update_client',
+    description:
+      "Correct a client's contact info: phone, email, address, city, name or company. "
+      + 'Only the provided fields change. Get the client id from search_clients.',
+    parameters: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string', description: 'Client id.' },
+        phone: { type: 'string' }, email: { type: 'string' },
+        address: { type: 'string' }, city: { type: 'string' },
+        first_name: { type: 'string' }, last_name: { type: 'string' },
+        company: { type: 'string' },
+      },
+      required: ['client_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'update_client', args, async () => {
+      // Mêmes règles que updateClient de l'app : champs explicites, trim,
+      // et validation du courriel avant d'écrire quoi que ce soit.
+      const patch: Record<string, any> = {};
+      if (args.email !== undefined) {
+        const email = String(args.email).trim();
+        if (email && !/^[^@\s]+@[^@\s]+[.][^@\s]+$/.test(email)) throw new Error('Adresse courriel invalide.');
+        patch.email = email || null;
+      }
+      for (const champ of ['phone', 'address', 'city', 'first_name', 'last_name', 'company'] as const) {
+        if (args[champ] !== undefined) patch[champ] = String(args[champ]).trim() || null;
+      }
+      if (!Object.keys(patch).length) throw new Error('Aucun champ à modifier.');
+      const { data, error } = await ctx.client
+        .from('clients')
+        .update(patch)
+        .eq('org_id', ctx.orgId).eq('id', String(args.client_id))
+        .is('deleted_at', null)
+        .select('id, first_name, last_name, company, display_as_company, phone, email, address, city')
+        .single();
+      if (error) throw error;
+      return { updated: true, client: { name: nomClient(data), phone: data.phone, email: data.email, address: data.address, city: data.city } };
+    }),
+};
+
+const updateTaskStatusTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'update_task_status',
+    description: "Mark a task done, or reopen it. Get task ids from list_tasks. Valid: 'done', 'open'.",
+    parameters: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string', description: 'Task id.' },
+        status: { type: 'string', description: "'done' or 'open'." },
+      },
+      required: ['task_id', 'status'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'update_task_status', args, async () => {
+      const statut = String(args.status);
+      if (!['done', 'open'].includes(statut)) throw new Error("Statut invalide : 'done' ou 'open'.");
+      // Même logique que l'app : completed_at suit le statut.
+      const { data, error } = await ctx.client
+        .from('tasks')
+        .update({ status: statut, completed_at: statut === 'done' ? new Date().toISOString() : null })
+        .eq('org_id', ctx.orgId).eq('id', String(args.task_id))
+        .is('deleted_at', null)
+        .select('id, title, status')
+        .single();
+      if (error) throw error;
+      return { updated: true, task: data };
+    }),
+};
+
+const addNoteTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'add_note',
+    description:
+      "Add a note to a client's or a job's activity feed — visible in the Lume timeline. "
+      + "entity_type is 'client' or 'job'.",
+    parameters: {
+      type: 'object',
+      properties: {
+        entity_type: { type: 'string', description: "'client' or 'job'." },
+        entity_id: { type: 'string', description: 'Client or job id.' },
+        note: { type: 'string', description: 'The note text.' },
+      },
+      required: ['entity_type', 'entity_id', 'note'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'add_note', args, async () => {
+      const type = String(args.entity_type);
+      if (!['client', 'job'].includes(type)) throw new Error("entity_type : 'client' ou 'job'.");
+      // Même insertion que la route activity-notes : la note porte l'auteur
+      // réel (actor_id) — le fil d'activité de l'app dit QUI a écrit quoi.
+      const admin = getServiceClient();
+      const { data, error } = await admin
+        .from('activity_notes')
+        .insert({
+          org_id: ctx.orgId,
+          entity_type: type,
+          entity_id: String(args.entity_id),
+          body: String(args.note).slice(0, 4000),
+          actor_id: ctx.userId,
+        })
+        .select('id, created_at')
+        .single();
+      if (error) throw error;
+      return { added: true, at: data.created_at };
+    }),
+};
+
+const archiveJobTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'archive_job',
+    description:
+      'Archive a job (reversible — restore: true brings it back). Archived jobs leave the late/upcoming '
+      + 'counts. The right tool for cleaning up demo or stale jobs the user confirms are dead.',
+    parameters: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job id.' },
+        restore: { type: 'boolean', description: 'true to UN-archive instead.' },
+      },
+      required: ['job_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'archive_job', args, async () => {
+      const restaurer = Boolean(args.restore);
+      const { data, error } = await ctx.client
+        .from('jobs')
+        .update(restaurer
+          ? { archived_at: null, archived_by: null }
+          : { archived_at: new Date().toISOString(), archived_by: ctx.userId })
+        .eq('org_id', ctx.orgId).eq('id', String(args.job_id))
+        .is('deleted_at', null)
+        .select('id, job_number, title, archived_at')
+        .single();
+      if (error) throw error;
+      return { [restaurer ? 'restored' : 'archived']: true, job: { job_number: data.job_number, title: data.title } };
+    }),
+};
+
+const createInvoiceFromJobTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'create_invoice_from_job',
+    description:
+      "Close out a completed job into a DRAFT invoice — the app's own finish-and-prepare flow "
+      + '(line items carried over, job marked invoiced). Nothing is sent. THE tool for '
+      + '\u00ab facture le job #X \u00bb. Get the job id from list_jobs.',
+    parameters: {
+      type: 'object',
+      properties: { job_id: { type: 'string', description: 'Job id.' } },
+      required: ['job_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'create_invoice_from_job', args, async () => {
+      // La RPC de l'app fait tout : clôture, report des items, numérotation.
+      const { data, error } = await ctx.client.rpc('finish_job_and_prepare_invoice', {
+        p_org_id: ctx.orgId,
+        p_job_id: String(args.job_id),
+      });
+      if (error) throw error;
+      const row: any = Array.isArray(data) ? data[0] : data;
+      const invoiceId = String(row?.invoice_id || '');
+      if (!invoiceId) throw new Error('La préparation a réussi mais la facture est introuvable.');
+      return {
+        created: true, invoice_id: invoiceId, status: 'draft',
+        note: 'Facture préparée depuis le job, en BROUILLON — rien n\u2019est parti chez le client. send_invoice pour l\u2019envoyer, avec confirmation.',
+      };
+    }),
+};
+
 /** Lecture ajoutée par ce module. */
 export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getConversations,
@@ -1345,4 +1627,10 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   rememberThis,
   sendQuoteTool,
   sendInvoiceTool,
+  rescheduleJobTool,
+  updateClientTool,
+  updateTaskStatusTool,
+  addNoteTool,
+  archiveJobTool,
+  createInvoiceFromJobTool,
 ];

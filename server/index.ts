@@ -654,7 +654,10 @@ app.use('/api/oauth', rateLimit({ windowMs: 60_000, max: 30 }), oauthRouter);
 //      la passer par la porte MFA le bloquerait sans recours.
 //
 // Limité par IP : sans session, userKey() n'a rien à lire.
-app.use('/api/mcp', rateLimit({ windowMs: 60_000, max: 60 }), mcpRouter);
+// 120/min par IP : une conversation d'assistant réelle enchaîne brief +
+// profil + salves d'outils PARALLÈLES — 60/min étranglait un usager actif
+// (constaté par la suite QA, qui est justement une conversation dense).
+app.use('/api/mcp', rateLimit({ windowMs: 60_000, max: 120 }), mcpRouter);
 
 // ── MFA enforcement for admin/owner on sensitive endpoints ──
 // SMS 2FA enrollment/challenge routes must stay reachable (they authenticate
@@ -1178,6 +1181,17 @@ app.listen(port, '0.0.0.0', () => {
         setInterval(runDunning, 6 * 60 * 60 * 1000);
         setTimeout(runDunning, 30_000);
         console.log('[dunning] Cron started (every 6h, lock-guarded)');
+
+    // Ménage OAuth : codes périmés et jetons morts (fonction oauth_menage,
+    // migration 20260903090000). Sans ce cron, la fonction existait mais
+    // n'était appelée par RIEN — les tables grossissaient sans fin.
+    setInterval(() => {
+      withAdvisoryLock('oauth-menage', () => withCronCheckIn('oauth-menage', async () => {
+        const { error } = await getServiceClient().rpc('oauth_menage');
+        if (error) throw new Error(error.message);
+      })).catch((err: any) => captureCronFailure('oauth-menage', err));
+    }, 6 * 60 * 60_000);
+    console.log('[oauth] Ménage des jetons planifié (toutes les 6 h, verrouillé)');
       },
     ).catch((e: any) => captureCronFailure('dunning-engine-import', e));
 
