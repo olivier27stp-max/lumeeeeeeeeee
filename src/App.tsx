@@ -50,12 +50,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
-import Dashboard from './pages/Dashboard';
 import CrmWorkspace from './pages/CrmWorkspace';
 import Clients from './pages/Clients';
 import NewClient from './pages/NewClient';
 import ClientDetails from './pages/ClientDetails';
-import Schedule from './pages/Schedule';
 import SettingsLayout, { SettingsIndex } from './pages/settings/SettingsLayout';
 import ProfileSettings from './pages/settings/ProfileSettings';
 import BillingSettings from './pages/settings/BillingSettings';
@@ -79,14 +77,12 @@ import { countOverdueInvoices } from './lib/invoicesApi';
 import { User } from '@supabase/supabase-js';
 import Jobs from './pages/Jobs';
 import NotFound from './pages/NotFound';
-import JobDetails from './pages/JobDetails';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { JobModalControllerProvider } from './contexts/JobModalController';
 import { useTranslation } from './i18n';
 import InvoiceDetails from './pages/InvoiceDetails';
 import InvoiceEdit from './pages/InvoiceEdit';
-import Statistiques from './pages/Statistiques';
 import Finances from './pages/Finances';
 import PaymentSettings from './pages/PaymentSettings';
 import Automations from './pages/Automations';
@@ -96,7 +92,6 @@ import TeamMemberDetails from './pages/TeamMemberDetails';
 import GlobalSearch from './components/GlobalSearch';
 import { OfficeSwitcher } from './components/OfficeSwitcher';
 import SearchResultsPage from './pages/SearchResults';
-import Timesheets from './pages/Timesheets';
 import Quotes from './pages/Quotes';
 import QuoteDetails from './pages/QuoteDetails';
 import type { TileColor } from './components/ui';
@@ -108,6 +103,17 @@ import AppMarketplace from './pages/AppMarketplace';
 import SettingsMessaging from './pages/SettingsMessaging';
 import RequestFormSettings from './pages/RequestFormSettings';
 import QuotePresets from './pages/QuotePresets';
+// Pages porteuses de CARTES (leaflet + mapbox-gl, ~1,9 Mo). Importees
+// statiquement, elles entrainaient ce poids dans le bundle principal :
+// il partait sur CHAQUE page, /checkout compris. En differe, les cartes
+// ne se chargent que lorsqu'on ouvre une page qui en affiche une.
+const DispatchMap = React.lazy(() => import('./pages/DispatchMap'));
+const D2DMap = React.lazy(() => import('./pages/D2DMap'));
+const JobDetails = React.lazy(() => import('./pages/JobDetails'));
+const RepProfile = React.lazy(() => import('./pages/RepProfile'));
+const Schedule = React.lazy(() => import('./pages/Schedule'));
+const Timesheets = React.lazy(() => import('./pages/Timesheets'));
+const Statistiques = React.lazy(() => import('./pages/Statistiques'));
 const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
 const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
 // Console interne des migrations assistées — la page se gate elle-même via
@@ -119,7 +125,6 @@ const CreatorSpace = React.lazy(() => import('./pages/creator-space/CreatorSpace
 import TaxSettings from './pages/TaxSettings';
 import OAuthCallback from './pages/OAuthCallback';
 import EmailOAuthCallback from './pages/EmailOAuthCallback';
-import DispatchMap from './pages/DispatchMap';
 import OnboardingFlow from './pages/OnboardingFlow';
 import CheckoutSuccess from './pages/CheckoutSuccess';
 import AcceptInvitation from './pages/AcceptInvitation';
@@ -152,9 +157,6 @@ import Requests from './pages/Requests';
 import RequestDetails from './pages/RequestDetails';
 import Leaderboard from './pages/Leaderboard';
 import Commissions from './pages/Commissions';
-import RepProfile from './pages/RepProfile';
-import FieldSales from './pages/FieldSales';
-import D2DMap from './pages/D2DMap';
 import D2DPipeline from './pages/D2DPipeline';
 import D2DReports from './pages/D2DReports';
 // D2DSettingsGeneral (mock non branché) puis D2DSettingsTeams (config terrain)
@@ -1425,8 +1427,8 @@ function AuthenticatedApp({
                     <Route path="/requests" element={<Gated permission="clients.read"><div className="px-8 py-6"><Requests /></div></Gated>} />
                     <Route path="/requests/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><RequestDetails /></div></Gated>} />
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
-                    <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><JobDetails /></PageWrapper></Gated>} />
-                    <Route path="/calendar" element={<Gated permission="calendar.read"><Schedule /></Gated>} />
+                    <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><React.Suspense fallback={null}><JobDetails /></React.Suspense></PageWrapper></Gated>} />
+                    <Route path="/calendar" element={<Gated permission="calendar.read"><React.Suspense fallback={null}><Schedule /></React.Suspense></Gated>} />
                     <Route path="/availability" element={<Navigate to="/timesheets?view=horaire" replace />} />
                     <Route path="/search" element={<Gated permission="settings.read"><PageWrapper><SearchResultsPage /></PageWrapper></Gated>} />
                     <Route path="/quotes" element={<Gated permission="quotes.read"><div className="px-8 py-6"><Quotes /></div></Gated>} />
@@ -1441,10 +1443,10 @@ function AuthenticatedApp({
                     <Route path="/invoices/new" element={<Gated permission="invoices.create"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
                     <Route path="/invoices/:id" element={<Gated permission="invoices.read"><PageWrapper><InvoiceDetails /></PageWrapper></Gated>} />
                     <Route path="/invoices/:id/edit" element={<Gated permission="invoices.update"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
-                    <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><Statistiques /></PageWrapper></Gated>} />
+                    <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><React.Suspense fallback={null}><Statistiques /></React.Suspense></PageWrapper></Gated>} />
                     <Route path="/payments" element={<PaymentsRedirect />} />
                     <Route path="/payments/settings" element={<Navigate to="/settings/payments" replace />} />
-                    <Route path="/timesheets" element={<Gated permission="timesheets.read"><PlanFeatureGate flag="includes_timesheets"><PageWrapper><Timesheets /></PageWrapper></PlanFeatureGate></Gated>} />
+                    <Route path="/timesheets" element={<Gated permission="timesheets.read"><PlanFeatureGate flag="includes_timesheets"><PageWrapper><React.Suspense fallback={null}><Timesheets /></React.Suspense></PageWrapper></PlanFeatureGate></Gated>} />
                     {/* Settings — unified layout: persistent sidebar + nested sub-pages.
                         Old ?tab= deep links are redirected by SettingsIndex. Each child
                         keeps the same permission/plan gates as its old standalone route. */}
@@ -1502,9 +1504,9 @@ function AuthenticatedApp({
                     <Route path="/manage-team" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/settings/team/:memberId" element={<Gated permission="team.read"><PageWrapper><TeamMemberDetails /></PageWrapper></Gated>} />
                     {/* Dispatch: NO PageWrapper — full-bleed */}
-                    <Route path="/dispatch" element={<Gated permission="map.access"><DispatchMap /></Gated>} />
+                    <Route path="/dispatch" element={<Gated permission="map.access"><React.Suspense fallback={null}><DispatchMap /></React.Suspense></Gated>} />
                     {/* Vente (ex-D2D) — gated by plan flag + module activation */}
-                    <Route path="/field-sales" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DMap /></ModuleGate></PlanFeatureGate></Gated>} />
+                    <Route path="/field-sales" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><React.Suspense fallback={null}><D2DMap /></React.Suspense></ModuleGate></PlanFeatureGate></Gated>} />
                     {/* Dashboard page removed for all roles — redirect to Sales Map */}
                     <Route path="/d2d-dashboard" element={<Navigate to="/field-sales" replace />} />
                     <Route path="/pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
@@ -1517,8 +1519,8 @@ function AuthenticatedApp({
                     <Route path="/d2d-settings/general" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/d2d-settings/teams" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/d2d-onboarding" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DOnboarding /></ModuleGate></PlanFeatureGate></Gated>} />
-                    <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><RepProfile /></Gated>} />
-                    <Route path="/reps/:id" element={<Gated permission="team.read"><RepProfile /></Gated>} />
+                    <Route path="/settings/team/:memberId/profile" element={<Gated permission="team.read"><React.Suspense fallback={null}><RepProfile /></React.Suspense></Gated>} />
+                    <Route path="/reps/:id" element={<Gated permission="team.read"><React.Suspense fallback={null}><RepProfile /></React.Suspense></Gated>} />
                     {/* NOTE: /quotes/presets and /quotes/templates moved before /quotes/:id to prevent route conflict */}
                     <Route path="/settings/users" element={<Navigate to="/settings/team" replace />} />
                     <Route path="/apps/callback" element={<Gated permission="integrations.update"><OAuthCallback /></Gated>} />
