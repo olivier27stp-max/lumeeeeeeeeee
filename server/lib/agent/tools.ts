@@ -725,7 +725,8 @@ const createJob: AgentTool = {
         title: { type: 'string', description: 'Job title.' },
         client_id: { type: 'string', description: 'Existing client id (optional).' },
         property_address: { type: 'string', description: 'Job site address (optional).' },
-        scheduled_at: { type: 'string', description: 'Optional ISO datetime for the visit.' },
+        scheduled_at: { type: 'string', description: 'Optional ISO datetime for the visit (creates a calendar visit; without it the job stays a draft).' },
+        end_at: { type: 'string', description: 'Optional ISO end of the visit (default: start + 1 h).' },
         description: { type: 'string', description: 'Optional description.' },
         line_items: {
           type: 'array',

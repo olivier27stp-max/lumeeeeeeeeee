@@ -72,12 +72,26 @@ async function jetonPour(sess, clientId, scope) {
   return tok.access_token;
 }
 
-const rpc = async (jeton, method, params = {}, entetes = {}) =>
-  fetch(`${API}/api/mcp`, {
+// Espacement des DÉPARTS de requêtes : le garde anti-rafale du serveur
+// (30 req/3 s, puis blocage d'IP PERSISTÉ 15 min) est une protection de
+// prod légitime — c'est à la suite de marcher au pas, pas au serveur de
+// s'ouvrir. 130 ms entre départs = ~23 req/3 s, sous le seuil, et le test
+// de parallélisme reste concurrent (les requêtes se chevauchent en vol).
+let fileCadence = Promise.resolve();
+function cadence() {
+  const tour = fileCadence.then(() => new Promise((r) => setTimeout(r, 130)));
+  fileCadence = tour;
+  return tour;
+}
+
+const rpc = async (jeton, method, params = {}, entetes = {}) => {
+  await cadence();
+  return fetch(`${API}/api/mcp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}`, ...entetes },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   }).then((r) => r.json());
+};
 
 const outil = async (jeton, name, args = {}) => {
   const r = await rpc(jeton, 'tools/call', { name, arguments: args });
@@ -120,10 +134,10 @@ const outil = async (jeton, name, args = {}) => {
   console.log('  ── Scopes et visibilité ──');
   const listeLecture = (await rpc(jLecture, 'tools/list')).result.tools.map((t) => t.name);
   const listeEcriture = (await rpc(jEcriture, 'tools/list')).result.tools.map((t) => t.name);
-  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice'];
+  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job'];
   R(!ecritures.some((n) => listeLecture.includes(n)), 'Jeton lecture : AUCUNE écriture visible',
     `${listeLecture.length} outils`);
-  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 11 écritures visibles',
+  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 17 écritures visibles',
     `${listeEcriture.length} outils`);
   const refusEcriture = await outil(jLecture, 'create_task', { title: 'interdit' });
   R(!!refusEcriture.rpc_error, 'Appel d\'écriture refusé sans le scope');
@@ -290,6 +304,69 @@ const outil = async (jeton, name, args = {}) => {
 
   /* ════ 4. OUTILS D'ASSISTANT ════ */
   console.log('');
+  console.log('');
+  console.log('  ── Gestion : calendrier, modifications, classement ──');
+
+  // create_job AVEC date → une VISITE existe au calendrier (le modèle de
+  // l'app : un job sans visite est un brouillon invisible au calendrier).
+  const demainISO = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const jCal = await outil(jEcriture, 'create_job', {
+    title: 'QA Étendus — job calendrier', client_id: c1.client?.id,
+    scheduled_at: `${demainISO}T14:00:00Z`,
+  });
+  R(jCal.created && jCal.visit?.start_at, 'create_job avec date → visite créée', jCal.visit?.start_at);
+  if (jCal.job?.id) aNettoyer.jobs.push(jCal.job.id);
+  const { data: visiteBase } = await admin.from('schedule_events')
+    .select('id, start_at').eq('job_id', jCal.job?.id).is('deleted_at', null).maybeSingle();
+  R(!!visiteBase, 'La visite vit dans schedule_events (écran Calendrier)');
+  const { data: jobResync } = await admin.from('jobs')
+    .select('scheduled_at, status').eq('id', jCal.job?.id).maybeSingle();
+  R(!!jobResync?.scheduled_at && jobResync?.status !== 'draft',
+    'La RPC a recalculé scheduled_at et le statut', `${jobResync?.status}`);
+
+  // reschedule_job → la visite bouge, comme un glisser-déposer.
+  const nouvelHoraire = `${demainISO}T16:30:00Z`;
+  const dep = await outil(jEcriture, 'reschedule_job', { job_id: jCal.job?.id, start_at: nouvelHoraire });
+  R(dep.rescheduled === true, 'reschedule_job déplace la visite', `chevauchements=${dep.overlaps}`);
+  const { data: visiteApres } = await admin.from('schedule_events')
+    .select('start_at').eq('id', visiteBase?.id).maybeSingle();
+  R(new Date(visiteApres?.start_at).getTime() === new Date(nouvelHoraire).getTime(),
+    'Le nouveau créneau est en base', visiteApres?.start_at);
+
+  // update_client → corriger un téléphone.
+  const maj = await outil(jEcriture, 'update_client', { client_id: c1.client?.id, phone: '+1514555042' });
+  R(maj.updated === true && maj.client?.phone === '+1514555042',
+    'update_client corrige le téléphone', maj.client?.phone);
+  const majCourrielKO = await outil(jEcriture, 'update_client', { client_id: c1.client?.id, email: 'pas-un-courriel' });
+  R(!!majCourrielKO.error && /courriel/i.test(majCourrielKO.error), 'update_client refuse un courriel invalide');
+
+  // update_task_status → faite, puis rouverte.
+  const faite = await outil(jEcriture, 'update_task_status', { task_id: t1.task?.id, status: 'done' });
+  R(faite.updated === true && faite.task?.status === 'done', 'update_task_status → faite');
+  const { data: tacheBase } = await admin.from('tasks').select('completed_at').eq('id', t1.task?.id).maybeSingle();
+  R(!!tacheBase?.completed_at, 'completed_at posé comme le fait l\u2019app');
+
+  // add_note → visible dans le fil d'activité, signée par l'utilisateur.
+  const note = await outil(jEcriture, 'add_note', { entity_type: 'client', entity_id: c1.client?.id, note: 'QA Étendus — note test' });
+  R(note.added === true, 'add_note écrit au fil d\u2019activité');
+  const { data: noteBase } = await admin.from('activity_notes')
+    .select('id, actor_id').eq('org_id', ORG).eq('entity_id', c1.client?.id).eq('body', 'QA Étendus — note test').maybeSingle();
+  R(!!noteBase && noteBase.actor_id === sess.user.id, 'La note porte le vrai auteur (actor_id)');
+  if (noteBase?.id) aNettoyer.notes = [noteBase.id];
+
+  // archive_job → sort des comptes, puis restauration.
+  const arch = await outil(jEcriture, 'archive_job', { job_id: j1.job?.id });
+  R(arch.archived === true, 'archive_job archive');
+  const rest = await outil(jEcriture, 'archive_job', { job_id: j1.job?.id, restore: true });
+  R(rest.restored === true, 'archive_job restore ramène le job');
+
+  // create_invoice_from_job → le flux « facture le job #X » de l'app.
+  const factJob = await outil(jEcriture, 'create_invoice_from_job', { job_id: jCal.job?.id });
+  R((factJob.created === true && factJob.status === 'draft') || (!!factJob.error && !/That lookup/i.test(factJob.error)),
+    'create_invoice_from_job : RPC de clôture appelée',
+    factJob.invoice_id ? 'brouillon ' + factJob.invoice_id.slice(0, 8) : (factJob.error || '').slice(0, 60));
+  if (factJob.invoice_id) aNettoyer.invoices.push(factJob.invoice_id);
+
   console.log('  ── Assistant : profil, brief, mémoire, envois ──');
 
   // Profil 360° du client de test — il a un job, un devis et une facture.
@@ -302,10 +379,10 @@ const outil = async (jeton, name, args = {}) => {
 
   // Briefing — les cinq sections répondent avec de vrais totaux.
   const brief = await outil(jLecture, 'get_morning_briefing', {});
-  R(!!brief.date && ['overdue_invoices', 'todays_jobs', 'tasks_due', 'new_requests_48h', 'unread_sms']
+  R(!!brief.date && ['overdue_invoices', 'todays_visits', 'tasks_due', 'new_requests_48h', 'unread_sms']
       .every((k) => typeof brief[k]?.total_matching === 'number'),
     'get_morning_briefing : les 5 sections avec totaux réels',
-    `impayés=${brief.overdue_invoices?.total_matching} jobs=${brief.todays_jobs?.total_matching} tâches=${brief.tasks_due?.total_matching}`);
+    `impayés=${brief.overdue_invoices?.total_matching} visites=${brief.todays_visits?.total_matching} tâches=${brief.tasks_due?.total_matching}`);
 
   // Mémoire — écrire, relire, et visible dans la table de l'app.
   const mem = await outil(jEcriture, 'remember_this', { key: 'qa-jour-facturation', note: 'QA — facturer le vendredi' });
@@ -318,7 +395,8 @@ const outil = async (jeton, name, args = {}) => {
 
   // Continuité — l'agent sait ce qu'il vient de faire.
   const actions = await outil(jLecture, 'get_recent_agent_actions', {});
-  R((actions.actions || []).some((a) => a.outil === 'create_task'), 'get_recent_agent_actions : la tâche créée y figure');
+  R((actions.actions || []).some((a) => ['add_note', 'update_task_status', 'archive_job'].includes(a.outil)),
+    'get_recent_agent_actions : les actions récentes y figurent', `${(actions.actions || []).length} action(s)`);
 
   // Envoi de facture — passe par LA route de l'app avec la session de
   // l'utilisateur. En local sans SMTP, on attend un échec PROPRE (message
@@ -344,7 +422,11 @@ const outil = async (jeton, name, args = {}) => {
     await admin.from('quote_status_history').delete().eq('quote_id', id);
     await admin.from('quotes').delete().eq('id', id);
   }
-  for (const id of aNettoyer.jobs) await admin.from('jobs').delete().eq('id', id);
+  for (const id of aNettoyer.jobs) {
+    await admin.from('schedule_events').delete().eq('job_id', id);
+    await admin.from('jobs').delete().eq('id', id);
+  }
+  for (const id of (aNettoyer.notes || [])) await admin.from('activity_notes').delete().eq('id', id);
   for (const id of aNettoyer.tasks) await admin.from('tasks').delete().eq('id', id);
   for (const id of aNettoyer.clients) await admin.from('clients').delete().eq('id', id);
   await admin.from('agent_actions').delete().eq('org_id', ORG);
