@@ -104,6 +104,58 @@ function outilsPour(auth: McpAuth): AgentTool[] {
   });
 }
 
+/* ── Montants selon le rôle ──────────────────────────────────────
+   L'application masque les montants à certains rôles (écran des rôles,
+   fonction `membre_voit_les_montants`, vue jobs_pour_role). L'agent
+   doit obéir à LA MÊME règle — sinon un technicien d'une org cliente
+   verrait via Claude les prix que l'écran lui cache.
+
+   Application au CENTRE, pas outil par outil : une seule porte, et tout
+   outil futur est couvert d'office.
+   • Outils PUREMENT financiers → refus clair, en langage d'exploitant.
+   • Tous les autres → les champs de montants (…_cents, …_pct financiers)
+     sont blanchis dans la réponse, avec une note qui l'explique.
+   • Clé d'API : identifiant créé par un admin de l'org — visibilité
+     complète, comme depuis toujours.                                   */
+
+const OUTILS_FINANCIERS = new Set([
+  'get_revenue_summary', 'get_financial_overview', 'get_overdue_payments',
+  'list_invoices', 'create_invoice', 'create_invoice_from_job',
+  'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
+]);
+
+const CLES_MONTANTS = /(_cents|_amount|margin_pct|goal_progress_pct)$/;
+
+async function montantsVisibles(auth: McpAuth): Promise<boolean> {
+  if (auth.mode === 'api_key') return true;
+  if (!auth.userId) return false;
+  try {
+    // La fonction de l'app, telle quelle — SECURITY DEFINER, elle porte la
+    // règle complète (rôles à droit d'office + réglage explicite de l'org).
+    // p_user vient de la ligne du jeton, jamais de la requête.
+    const { data, error } = await getServiceClient()
+      .rpc('membre_voit_les_montants', { p_user: auth.userId, p_org: auth.orgId });
+    if (error) throw error;
+    return data === true;
+  } catch (e: any) {
+    console.error('[mcp] visibilité des montants indéterminable :', e?.message || e);
+    return false; // la philosophie de la fonction : jamais exposer par défaut
+  }
+}
+
+/** Blanchit récursivement les champs de montants d'un résultat d'outil. */
+function masquerMontants(v: any): any {
+  if (Array.isArray(v)) return v.map(masquerMontants);
+  if (v && typeof v === 'object') {
+    const sortie: Record<string, any> = {};
+    for (const [k, val] of Object.entries(v)) {
+      sortie[k] = CLES_MONTANTS.test(k) ? null : masquerMontants(val);
+    }
+    return sortie;
+  }
+  return v;
+}
+
 /** Gemini FunctionDeclaration → MCP tool descriptor. */
 function toMcpTool(tool: AgentTool) {
   return {
@@ -333,6 +385,23 @@ router.post('/', async (req, res) => {
         return res.json(rpcError(id, -32602, `Unknown or unavailable tool: ${name}`));
       }
 
+      // Les montants suivent le RÔLE de la personne — la même règle que
+      // l'écran des rôles de l'application, décidée par sa propre fonction.
+      const voitLesMontants = await montantsVisibles(auth);
+      if (!voitLesMontants && OUTILS_FINANCIERS.has(name)) {
+        return res.json(rpcResult(id, {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              error: 'Les accès Lume de cette personne ne couvrent pas les montants et la facturation '
+                + '(réglage de l\u2019écran des rôles de son entreprise). Dis-le-lui simplement — sans jargon — '
+                + 'et suggère de voir l\u2019administrateur si ce droit devrait changer.',
+            }),
+          }],
+          isError: true,
+        }));
+      }
+
       // En OAuth, on interroge la base À L'IDENTITÉ du porteur : RLS
       // redevient actif et les RPC `SECURITY DEFINER` qui vérifient
       // `has_org_membership(auth.uid(), org)` acceptent enfin l'appel.
@@ -373,11 +442,22 @@ router.post('/', async (req, res) => {
         accessToken: jetonUtilisateur,
       });
 
+      // Masquage central : si la personne ne voit pas les montants dans
+      // l'app, elle ne les voit pas non plus ici — champ par champ, avec
+      // une note pour que l'assistant l'explique au lieu d'inventer.
+      const resultatFinal = voitLesMontants
+        ? result
+        : {
+            ...masquerMontants(result),
+            montants_masques: true,
+            note_montants: 'Les montants sont masqués : le rôle de cette personne dans Lume ne les inclut pas. Ne pas les estimer ni les déduire.',
+          };
+
       // MCP returns tool output as content parts; JSON goes in a text part.
       return res.json(
         rpcResult(id, {
-          content: [{ type: 'text', text: JSON.stringify(result) }],
-          isError: Boolean((result as any)?.error),
+          content: [{ type: 'text', text: JSON.stringify(resultatFinal) }],
+          isError: Boolean((resultatFinal as any)?.error),
         }),
       );
     }
