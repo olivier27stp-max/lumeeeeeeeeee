@@ -91,6 +91,15 @@ export default function OAuthConsent() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
+          // Multi-bureaux : sans cet en-tête, l'autorisation se lie au
+          // PREMIER bureau de l'utilisateur — pas forcément celui où il
+          // travaille. Le serveur vérifie l'appartenance (anti-IDOR).
+          ...(() => {
+            try {
+              const bureau = localStorage.getItem('lume-active-org');
+              return bureau ? { 'x-org-id': bureau } : {};
+            } catch { return {}; }
+          })(),
         },
         body: JSON.stringify({
           client_id: clientId,

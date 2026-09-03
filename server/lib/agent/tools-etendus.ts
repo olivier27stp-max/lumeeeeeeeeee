@@ -1612,6 +1612,106 @@ const createInvoiceFromJobTool: AgentTool = {
     }),
 };
 
+
+/* ── Conversions et visites ────────────────────────────────────── */
+
+const convertQuoteToJobTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'convert_quote_to_job',
+    description:
+      "The client accepted a quote → turn it into a job, through the app's own conversion route "
+      + '(line items carried, quote marked converted). Get the quote id from list_quotes.',
+    parameters: {
+      type: 'object',
+      properties: { quote_id: { type: 'string', description: 'Quote id.' } },
+      required: ['quote_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'convert_quote_to_job', args, async () => {
+      // La route de l'app fait foi : items, statut du devis, création du job.
+      const { ok, status, json } = await appelInterne(ctx, '/quotes/convert-to-job', {
+        quoteId: String(args.quote_id),
+      });
+      if (!ok) throw new Error(json?.error || `Conversion refusée (${status}).`);
+      return {
+        converted: true,
+        job: json?.job ? { id: json.job.id, job_number: json.job.job_number, title: json.job.title } : null,
+        note: 'Devis converti en job par le flux de l\u2019application. Sans visite planifiée, le job est en brouillon — propose de le planifier.',
+      };
+    }),
+};
+
+const convertLeadToClientTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'convert_lead_to_client',
+    description:
+      'Promote a lead to an active client — same effect as the app\u2019s convert action '
+      + '(status active, pipeline closed-won). Get the lead id from search_leads.',
+    parameters: {
+      type: 'object',
+      properties: { lead_id: { type: 'string', description: 'Lead id (from search_leads).' } },
+      required: ['lead_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'convert_lead_to_client', args, async () => {
+      // Miroir exact de convertLeadToClient (leadsApi) : les leads vivent
+      // dans la table clients — la conversion est un changement de statut.
+      const { data, error } = await ctx.client
+        .from('clients')
+        .update({ status: 'active', lead_status: 'closed_won', updated_at: new Date().toISOString() })
+        .eq('org_id', ctx.orgId).eq('id', String(args.lead_id))
+        .is('deleted_at', null)
+        .select('id, first_name, last_name, company, display_as_company')
+        .single();
+      if (error) throw error;
+      return { converted: true, client: { id: data.id, name: nomClient(data) } };
+    }),
+};
+
+const addVisitTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'add_visit',
+    description:
+      'Add an ADDITIONAL calendar visit to a job (a job can hold several). Same engine as the '
+      + 'app\u2019s calendar. Use reschedule_job to MOVE an existing visit instead.',
+    parameters: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job id.' },
+        start_at: { type: 'string', description: 'ISO start datetime.' },
+        end_at: { type: 'string', description: 'ISO end (default: start + 1 h).' },
+      },
+      required: ['job_id', 'start_at'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'add_visit', args, async () => {
+      const debut = new Date(String(args.start_at));
+      if (Number.isNaN(debut.getTime())) throw new Error('start_at invalide (ISO attendu).');
+      const fin = args.end_at ? new Date(String(args.end_at)) : new Date(debut.getTime() + 60 * 60_000);
+      // La RPC du calendrier de l'app — mêmes défauts, même recalcul.
+      const { data, error } = await ctx.client.rpc('rpc_add_visit', {
+        p_job_id: String(args.job_id),
+        p_start_at: debut.toISOString(),
+        p_end_at: fin.toISOString(),
+        p_team_id: null,
+        p_timezone: 'America/Montreal',
+        p_notes: null,
+      });
+      if (error) throw error;
+      const ev: any = (data as any)?.event || data || {};
+      return { added: true, visit: { start_at: ev.start_at || debut.toISOString(), end_at: ev.end_at || fin.toISOString() } };
+    }),
+};
+
 /** Lecture ajoutée par ce module. */
 export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getConversations,
@@ -1647,4 +1747,7 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   addNoteTool,
   archiveJobTool,
   createInvoiceFromJobTool,
+  convertQuoteToJobTool,
+  convertLeadToClientTool,
+  addVisitTool,
 ];

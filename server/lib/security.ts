@@ -399,6 +399,13 @@ function sanitizeObject(obj: Record<string, any>, req?: Request, depth = 0): { b
       if (key === 'html' || key === 'body_html' || key === 'content') continue;
       // Don't sanitize password fields
       if (key.includes('password') || key.includes('secret') || key.includes('token')) continue;
+      // Matériel cryptographique OAuth : le code_challenge et le code_verifier
+      // PKCE sont du base64url GÉNÉRÉ PAR LE CLIENT (spec RFC 7636) — deux
+      // tirets consécutifs y apparaissent ~2 % du temps et ressemblent à un
+      // commentaire SQL. Résultat : ~1 connexion Claude sur 50 échouait AU
+      // HASARD au consentement ou à l'échange. Ces valeurs ne touchent jamais
+      // une requête SQL en clair (hachées/comparées), on ne les inspecte pas.
+      if (key === 'code_challenge' || key === 'code_verifier') continue;
 
       // Detect SQL injection — log and BLOCK the request
       if (containsSQLInjection(value)) {

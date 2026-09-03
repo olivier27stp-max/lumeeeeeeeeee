@@ -136,10 +136,10 @@ const outil = async (jeton, name, args = {}) => {
   console.log('  ── Scopes et visibilité ──');
   const listeLecture = (await rpc(jLecture, 'tools/list')).result.tools.map((t) => t.name);
   const listeEcriture = (await rpc(jEcriture, 'tools/list')).result.tools.map((t) => t.name);
-  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job'];
+  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job', 'convert_quote_to_job', 'convert_lead_to_client', 'add_visit'];
   R(!ecritures.some((n) => listeLecture.includes(n)), 'Jeton lecture : AUCUNE écriture visible',
     `${listeLecture.length} outils`);
-  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 17 écritures visibles',
+  R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 20 écritures visibles',
     `${listeEcriture.length} outils`);
   const refusEcriture = await outil(jLecture, 'create_task', { title: 'interdit' });
   R(!!refusEcriture.rpc_error, 'Appel d\'écriture refusé sans le scope');
@@ -177,7 +177,7 @@ const outil = async (jeton, name, args = {}) => {
   const { data: cree, error: eCree } = await admin.auth.admin.createUser({ email: courrielTech, email_confirm: true });
   if (eCree) throw new Error('création du technicien : ' + eCree.message);
   const techId = cree.user.id;
-  await admin.from('memberships').insert({ org_id: ORG, user_id: techId, role: 'technicien', status: 'active' });
+  await admin.from('memberships').insert({ org_id: ORG, user_id: techId, role: 'technician', status: 'active' });
 
   const { data: lienT } = await admin.auth.admin.generateLink({ type: 'magiclink', email: courrielTech });
   const { data: sessT } = await anon.auth.verifyOtp({ token_hash: lienT.properties.hashed_token, type: 'magiclink' });
@@ -195,6 +195,18 @@ const outil = async (jeton, name, args = {}) => {
 
   const factTech = await outil(jTech, 'list_invoices', { limit: 5 });
   R(!!factTech.error && factTech.invoices === undefined, 'Technicien : les factures sont refusées');
+
+  // La MATRICE au-delà des montants : le préréglage technicien de l'app
+  // n'inclut ni prospects, ni devis, ni équipe — mais inclut les SMS.
+  const leadsTech = await outil(jTech, 'search_leads', { query: '', limit: 3 });
+  R(!!leadsTech.error && /prospects/i.test(leadsTech.error), 'Technicien : prospects refusés (matrice)');
+  const equipeTech = await outil(jTech, 'get_team', {});
+  R(!!equipeTech.error && /équipe/i.test(equipeTech.error), 'Technicien : équipe refusée (matrice)');
+  const devisTech = await outil(jTech, 'list_quotes', { limit: 3 });
+  R(!!devisTech.error, 'Technicien : devis refusés');
+  const smsTech = await outil(jTech, 'get_conversations', { limit: 3 });
+  R(!smsTech.error && typeof (smsTech.total_matching ?? smsTech.count) === 'number',
+    'Technicien : SMS accessibles (droit du préréglage)', `${smsTech.total_matching ?? smsTech.count}`);
 
   const clientsTech = await outil(jTech, 'search_clients', { query: '', limit: 5 });
   R((clientsTech.count ?? clientsTech.clients?.length ?? 0) >= 0 && !clientsTech.error,
@@ -413,6 +425,33 @@ const outil = async (jeton, name, args = {}) => {
   R(arch.archived === true, 'archive_job archive');
   const rest = await outil(jEcriture, 'archive_job', { job_id: j1.job?.id, restore: true });
   R(rest.restored === true, 'archive_job restore ramène le job');
+
+  // add_visit → une DEUXIÈME visite sur le job du calendrier.
+  const demain2 = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
+  const v2 = await outil(jEcriture, 'add_visit', { job_id: jCal.job?.id, start_at: `${demain2}T09:00:00Z` });
+  R(v2.added === true, 'add_visit ajoute une seconde visite', v2.visit?.start_at);
+  const { count: nbVisites } = await admin.from('schedule_events')
+    .select('*', { count: 'exact', head: true }).eq('job_id', jCal.job?.id).is('deleted_at', null);
+  R(nbVisites === 2, 'Le job porte bien deux visites au calendrier', `${nbVisites}`);
+
+  // convert_lead_to_client → le prospect devient client actif.
+  const lead1 = await outil(jEcriture, 'create_client', {
+    first_name: 'QAÉtendus', last_name: 'Prospect', phone: '+15145550777',
+  });
+  await admin.from('clients').update({ status: 'lead' }).eq('id', lead1.client?.id);
+  const convL = await outil(jEcriture, 'convert_lead_to_client', { lead_id: lead1.client?.id });
+  R(convL.converted === true, 'convert_lead_to_client convertit', convL.client?.name);
+  const { data: apresConv } = await admin.from('clients').select('status, lead_status').eq('id', lead1.client?.id).maybeSingle();
+  R(apresConv?.status === 'active' && apresConv?.lead_status === 'closed_won',
+    'Statuts posés comme le fait l\u2019app', `${apresConv?.status}/${apresConv?.lead_status}`);
+  if (lead1.client?.id) aNettoyer.clients.push(lead1.client.id);
+
+  // convert_quote_to_job → la route de conversion de l'app.
+  const convQ = await outil(jEcriture, 'convert_quote_to_job', { quote_id: q1.quote_id });
+  R(convQ.converted === true || (!!convQ.error && !/La consultation a échoué/i.test(convQ.error)),
+    'convert_quote_to_job : route de conversion appelée',
+    convQ.job?.job_number ? `job #${convQ.job.job_number}` : (convQ.error || '').slice(0, 60));
+  if (convQ.job?.id) aNettoyer.jobs.push(convQ.job.id);
 
   // create_invoice_from_job → le flux « facture le job #X » de l'app.
   const factJob = await outil(jEcriture, 'create_invoice_from_job', { job_id: jCal.job?.id });
