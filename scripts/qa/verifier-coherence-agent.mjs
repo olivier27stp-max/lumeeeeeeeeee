@@ -116,9 +116,9 @@ function comparer(libelle, attendu, obtenu, note = '') {
     const { count } = await admin.from('jobs_active')
       .select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('derived_status', etat);
     const r = await outil('list_jobs', { status: etat, limit: 30 });
-    // L'outil est plafonné à 30 : on ne compare que si l'app est sous le plafond.
-    if ((count ?? 0) <= 30) comparer(`jobs « ${etat} »`, count ?? 0, r.count ?? '—');
-    else console.log(`  · jobs « ${etat} »${' '.repeat(24)} app=${count} (au-delà du plafond de 30, non comparable)`);
+    // total_matching = le compte exact, indépendant du plafond de lignes :
+    // la comparaison vaut désormais pour n'importe quel volume.
+    comparer(`jobs « ${etat} »`, count ?? 0, r.total_matching ?? '—');
   }
   const unJob = (await outil('list_jobs', { limit: 1 })).jobs?.[0];
   comparer('list_jobs expose display_status', true, !!unJob?.display_status);

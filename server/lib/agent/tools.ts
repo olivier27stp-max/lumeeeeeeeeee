@@ -213,9 +213,13 @@ const listJobs: AgentTool = {
   },
   handler: async (args, ctx) => {
     const limit = clamp(args.limit, 15, 30);
+    // `count: 'exact'` : le total RÉEL voyage avec les lignes plafonnées.
+    // Sans lui, l'assistant disait « 15 affichés, il y en a peut-être plus »
+    // alors que l'utilisateur en avait 22 — un chiffre qu'il ne pouvait pas
+    // donner. Un agent qui ne peut pas compter n'inspire pas confiance.
     let q = ctx.client
       .from('jobs_active')
-      .select('id, job_number, title, client_name, property_address, scheduled_at, end_at, status, derived_status, total_cents, currency')
+      .select('id, job_number, title, client_name, property_address, scheduled_at, end_at, status, derived_status, total_cents, currency', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .order('scheduled_at', { ascending: false, nullsFirst: false })
       .limit(limit);
@@ -228,10 +232,11 @@ const listJobs: AgentTool = {
       const t = term.replace(/[%,()]/g, ' ');
       q = q.or(`job_number.ilike.%${t}%,title.ilike.%${t}%,property_address.ilike.%${t}%,client_name.ilike.%${t}%`);
     }
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return toolError('db', error);
     return {
-      count: data?.length || 0,
+      total_matching: count ?? data?.length ?? 0,
+      returned: data?.length || 0,
       jobs: (data || []).map((j: any) => {
         const { derived_status, status, ...reste } = j;
         return {

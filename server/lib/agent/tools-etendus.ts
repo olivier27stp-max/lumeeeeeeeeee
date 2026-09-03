@@ -156,14 +156,14 @@ const getConversations: AgentTool = {
     },
   },
   handler: async (args, ctx) => {
-    const { data, error } = await ctx.client
+    const { data, error, count } = await ctx.client
       .from('conversations')
-      .select('id, client_id, client_name, phone_number, last_message_text, last_message_at, unread_count')
+      .select('id, client_id, client_name, phone_number, last_message_text, last_message_at, unread_count', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .order('last_message_at', { ascending: false })
       .limit(clamp(args.limit, 15, 30));
     if (error) return erreurOutil('conversations', error);
-    return { count: data?.length || 0, conversations: data || [] };
+    return { total_matching: count ?? data?.length ?? 0, returned: data?.length || 0, conversations: data || [] };
   },
 };
 
@@ -299,15 +299,15 @@ const listTasks: AgentTool = {
   handler: async (args, ctx) => {
     let q = ctx.client
       .from('tasks_active')
-      .select('id, title, description, status, priority, due_date, assignee_user_id, created_at')
+      .select('id, title, description, status, priority, due_date, assignee_user_id, created_at', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .order('due_date', { ascending: true, nullsFirst: false })
       .limit(clamp(args.limit, 20, 40));
     const statut = String(args.status || 'open');
     if (statut === 'open' || statut === 'done') q = q.eq('status', statut);
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return erreurOutil('tasks', error);
-    return { count: data?.length || 0, tasks: data || [] };
+    return { total_matching: count ?? data?.length ?? 0, returned: data?.length || 0, tasks: data || [] };
   },
 };
 

@@ -9,16 +9,17 @@
    no client-supplied org is ever trusted. The `mcp` scope is
    required — a key without it is rejected even if otherwise valid.
 
-   READ ONLY, BY CONSTRUCTION — this route serves only tools whose
-   `kind === 'read'`. Write tools in the registry have no handler at
-   all: they produce a *proposal* the user confirms in the Lume UI
-   (see the header of server/lib/agent/tools.ts). An MCP client has
-   no such confirmation step, so writes stay out. Both conditions
-   are checked below; neither alone is relied upon.
+   LECTURE + ÉCRITURE SOUS SCOPE — les lectures exigent `mcp:read` ;
+   les écritures exigent `mcp:write` (accordé par la personne sur
+   l'écran de consentement) ET l'identité (session OAuth rejouée).
+   Une clé d'API — partagée, sans humain derrière — ne voit ni les
+   écritures ni les lectures sensibles (needsIdentity). Le filtre de
+   visibilité (outilsPour) et le contrôle d'appel sont le MÊME code :
+   un outil invisible est inappelable.
 
-   ⚠️  Adding a `kind: 'read'` tool to AGENT_TOOLS publishes it here
-   automatically. Anything unfit for a third-party client must not
-   be registered as a read tool.
+   ⚠️  Ajouter un outil à AGENT_TOOLS avec un handler le publie ici
+   automatiquement, sous les règles ci-dessus. Rien d'impropre à un
+   client tiers ne doit y entrer.
 
    TRANSPORT — JSON-RPC 2.0 over HTTP POST (the MCP "streamable
    HTTP" transport, non-streaming subset). Implemented directly:
@@ -62,6 +63,8 @@ RÈGLES DE PRÉSENTATION (importantes) :
 - Les montants arrivent en cents : affiche-les en dollars (12500 → 125,00 $).
 - Ne liste pas d'options ou de personnes que l'utilisateur n'a pas demandées. Exception : une vraie ambiguïté à trancher (deux clients du même nom) — pose alors la question simplement, sans étaler les fiches.
 - Va à l'essentiel : si on demande le chiffre d'affaires, donne le chiffre et une phrase de contexte, pas un rapport.
+- Les rôles et statuts aussi en mots de tous les jours : « owner » = propriétaire, « in_progress » = en cours.
+- Quand une liste porte un champ total_matching, c'est le VRAI total : annonce-le (« tu en as 22, voici les 15 plus récents »), ne dis jamais « il y en a peut-être plus ».
 
 RÈGLES D'ACTION :
 - Avant send_sms : montre le message exact et le destinataire, attends un OUI explicite. Un SMS ne se rattrape pas.

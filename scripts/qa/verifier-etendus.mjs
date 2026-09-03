@@ -152,14 +152,14 @@ const outil = async (jeton, name, args = {}) => {
   };
 
   const conv = await outil(jLecture, 'get_conversations', { limit: 30 });
-  R(conv.count === Math.min(await compte('conversations'), 30), 'get_conversations', `${conv.count}`);
+  R(conv.total_matching === await compte('conversations'), 'get_conversations (total réel)', `${conv.total_matching}`);
 
   const equipe = await outil(jLecture, 'get_team');
   R(equipe.count === await compte('team_members'), 'get_team', `${equipe.count} membres`);
 
   const taches = await outil(jLecture, 'list_tasks', { status: 'all', limit: 40 });
   const tachesApp = await compte('tasks', (q) => q.is('deleted_at', null));
-  R(taches.count === Math.min(tachesApp, 40), 'list_tasks (all)', `${taches.count}`);
+  R(taches.total_matching === tachesApp, 'list_tasks (total réel)', `${taches.total_matching}`);
 
   const demandes = await outil(jLecture, 'list_request_submissions', { limit: 30 });
   const demandesApp = await compte('form_submissions', (q) => q.is('deleted_at', null).is('archived_at', null));
