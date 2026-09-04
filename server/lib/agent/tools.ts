@@ -506,7 +506,7 @@ const getOverduePayments: AgentTool = {
   declaration: {
     name: 'get_overdue_payments',
     description:
-      'List overdue (past due) invoices with the client name, phone number, balance owing and days overdue. Use this to prepare payment reminders — then propose send_sms for the chosen clients.',
+      'List overdue (past due) invoices with the client name, phone number, balance owing and days overdue. Use this to prepare payment reminders — then propose to text the chosen clients.',
     parameters: {
       type: 'object',
       properties: { limit: { type: 'integer', description: 'Max results (default 50, max 100).' } },
@@ -708,7 +708,7 @@ const createQuote: AgentTool = {
   declaration: {
     name: 'create_quote',
     description:
-      'Create a quote (draft) for a client or lead. Requires client_id OR lead_id (look it up first with search_clients/search_leads). Numbering and totals are computed by the database. Only call once all line items and the recipient are known — and if several clients match the name, ask which one first.',
+      'Create a quote (draft) for a client or lead. Requires client_id OR lead_id (look it up first with a client or lead search). Numbering and totals are computed by the database. Only call once all line items and the recipient are known — and if several clients match the name, ask which one first.',
     parameters: {
       type: 'object',
       properties: {
