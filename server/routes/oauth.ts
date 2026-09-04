@@ -38,32 +38,11 @@ import { sendSafeError } from '../lib/error-handler';
 const router = Router();
 const json = express.json({ limit: '16kb' });
 
-/**
- * Sessions Supabase en attente, le temps que le client échange son code.
- * En mémoire volontairement : elles vivent 60 s (la durée du code) et ne
- * doivent jamais toucher le disque. Un redémarrage pendant ces 60 s fait
- * perdre la session — l'autorisation reste valide, seuls les outils à RPC
- * seront dégradés, et une reconnexion répare.
- */
-const sessionsEnAttente = new Map<string, { valeur: string; expire: number }>();
-
-function memoriserSession(code: string, refreshToken: string) {
-  sessionsEnAttente.set(sha256(code), { valeur: refreshToken, expire: Date.now() + AUTH_CODE_TTL_S * 1000 });
-}
-
-function reprendreSession(code: string): string | null {
-  const cle = sha256(code);
-  const e = sessionsEnAttente.get(cle);
-  sessionsEnAttente.delete(cle);
-  if (!e || e.expire < Date.now()) return null;
-  return e.valeur;
-}
-
-// Purge des sessions jamais réclamées (client qui abandonne après « Autoriser »).
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of sessionsEnAttente) if (v.expire < now) sessionsEnAttente.delete(k);
-}, 60_000).unref();
+// La session Supabase dédiée n'est plus mémorisée ici : elle est stockée
+// chiffrée AVEC le code d'autorisation en base (issueAuthorizationCode), et
+// relue à l'échange (consumeAuthorizationCode). Elle survit ainsi à un
+// redémarrage serveur entre le consentement et l'échange — l'ancienne Map
+// mémoire, elle, était perdue à chaque déploi, laissant un jeton sans identité.
 const form = express.urlencoded({ extended: false, limit: '16kb' });
 
 /** Réponse d'erreur OAuth normalisée (RFC 6749 §5.2). */
@@ -268,6 +247,15 @@ router.post('/consent', json, async (req, res) => {
     const res_ = String(resource || canonicalResource());
     if (res_ !== canonicalResource()) return oauthError(res, 400, 'invalid_target');
 
+    // Session DÉDIÉE à cette autorisation — surtout PAS celle du navigateur.
+    // Partager la session avec le navigateur cassait la connexion Claude dès
+    // que l'utilisateur ouvrait Lume (rotation du refresh token, reuse_interval).
+    // On en crée une indépendante, côté serveur, avec l'identité déjà vérifiée.
+    // On la crée AVANT le code pour la stocker AVEC lui, en base (survit à un
+    // redémarrage serveur entre le consentement et l'échange — l'ancienne Map
+    // mémoire, elle, était perdue à chaque déploi → jeton sans identité).
+    const sessionDediee = user.email ? await creerSessionDediee(user.email) : null;
+
     const code = await issueAuthorizationCode({
       clientId: client.client_id,
       userId: user.id,
@@ -276,16 +264,8 @@ router.post('/consent', json, async (req, res) => {
       redirectUri: String(redirect_uri),
       codeChallenge: String(code_challenge),
       resource: res_,
+      supabaseRefreshToken: sessionDediee,
     });
-
-    // Session DÉDIÉE à cette autorisation — surtout PAS celle du navigateur.
-    // Partager la session avec le navigateur cassait la connexion Claude dès
-    // que l'utilisateur ouvrait Lume (rotation du refresh token, reuse_interval).
-    // On en crée une indépendante, côté serveur, avec l'identité déjà vérifiée.
-    // (Le champ supabase_refresh_token du corps n'est plus utilisé : conservé
-    // le temps que les anciens clients cessent de l'envoyer, ignoré.)
-    const sessionDediee = user.email ? await creerSessionDediee(user.email) : null;
-    if (sessionDediee) memoriserSession(code, sessionDediee);
 
     logSecurityEvent({
       org_id: orgId,
@@ -374,7 +354,9 @@ router.post('/token', form, json, async (req, res) => {
         orgId: consumed.org_id,
         scopes: consumed.scopes,
         resource: consumed.resource,
-        supabaseRefreshToken: reprendreSession(code),
+        // La session vient du CODE (stockée en base au consentement) : elle a
+        // survécu à un éventuel redémarrage serveur entre les deux requêtes.
+        supabaseRefreshToken: consumed.supabaseRefreshToken,
       });
 
       // Re-consentement : le nouveau jeton vit, on peut couper les anciens du

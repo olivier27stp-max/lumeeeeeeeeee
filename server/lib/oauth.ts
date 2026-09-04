@@ -185,12 +185,23 @@ export interface IssueCodeParams {
   redirectUri: string;
   codeChallenge: string;
   resource: string;
+  /** Refresh token de la session Supabase dédiée, à conserver avec le code
+   *  jusqu'à l'échange (chiffré en base — survit à un redémarrage). */
+  supabaseRefreshToken?: string | null;
 }
 
 /** Émet un code d'autorisation. Le code brut n'est jamais stocké. */
 export async function issueAuthorizationCode(p: IssueCodeParams): Promise<string> {
   const code = randomToken(32);
   const db = getServiceClient();
+  // La session dédiée est stockée chiffrée AVEC le code, en base : elle survit
+  // à un redémarrage serveur entre le consentement et l'échange (l'ancienne
+  // Map mémoire, elle, était perdue à chaque déploi → jeton sans identité).
+  let sessionChiffree: string | null = null;
+  if (p.supabaseRefreshToken) {
+    try { sessionChiffree = chiffrerSession(p.supabaseRefreshToken); }
+    catch (e: any) { console.error('[oauth] chiffrement session (code) impossible :', e?.message || e); }
+  }
   const { error } = await db.from('oauth_authorization_codes').insert({
     code_hash: sha256(code),
     client_id: p.clientId,
@@ -202,6 +213,7 @@ export async function issueAuthorizationCode(p: IssueCodeParams): Promise<string
     code_challenge_method: 'S256',
     resource: p.resource,
     expires_at: new Date(Date.now() + AUTH_CODE_TTL_S * 1000).toISOString(),
+    ...(sessionChiffree ? { supabase_session_chiffre: sessionChiffree } : {}),
   });
   if (error) throw new Error(`Émission du code impossible : ${error.message}`);
   return code;
@@ -215,6 +227,8 @@ export interface ConsumedCode {
   redirect_uri: string;
   code_challenge: string;
   resource: string;
+  /** Session Supabase dédiée déchiffrée (si elle avait été créée au consentement). */
+  supabaseRefreshToken: string | null;
 }
 
 /**
@@ -227,7 +241,7 @@ export async function consumeAuthorizationCode(code: string): Promise<ConsumedCo
   const hash = sha256(code);
   const { data } = await db
     .from('oauth_authorization_codes')
-    .select('id, client_id, user_id, org_id, scopes, redirect_uri, code_challenge, resource, expires_at, used_at')
+    .select('id, client_id, user_id, org_id, scopes, redirect_uri, code_challenge, resource, expires_at, used_at, supabase_session_chiffre')
     .eq('code_hash', hash)
     .maybeSingle();
 
@@ -246,6 +260,12 @@ export async function consumeAuthorizationCode(code: string): Promise<ConsumedCo
     .maybeSingle();
   if (!claimed) return 'reused';
 
+  let session: string | null = null;
+  if (data.supabase_session_chiffre) {
+    try { session = dechiffrerSession(data.supabase_session_chiffre); }
+    catch (e: any) { console.error('[oauth] déchiffrement session (code) impossible :', e?.message || e); }
+  }
+
   return {
     client_id: data.client_id,
     user_id: data.user_id,
@@ -254,6 +274,7 @@ export async function consumeAuthorizationCode(code: string): Promise<ConsumedCo
     redirect_uri: data.redirect_uri,
     code_challenge: data.code_challenge,
     resource: data.resource,
+    supabaseRefreshToken: session,
   };
 }
 
