@@ -430,7 +430,7 @@ const getConversations: AgentTool = {
     name: 'get_conversations',
     description:
       'List recent SMS conversations with clients: who, last message, when, unread count. '
-      + 'Use get_conversation_messages to read a full thread.',
+      + 'Read a full thread to see all its messages.',
     parameters: {
       type: 'object',
       properties: { limit: { type: 'integer', description: 'Max conversations (default 15, max 30).' } },
@@ -511,7 +511,7 @@ const getTeam: AgentTool = {
   declaration: {
     name: 'get_team',
     description:
-      'List the team members: name, email, role, status. Returns the user_id needed by assign_job.',
+      'List the team members: name, email, role, status. Returns the member needed to assign a job.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -1174,7 +1174,7 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
         .select('id, first_name, last_name, company, display_as_company, address')
         .eq('org_id', ctx.orgId).eq('id', String(args.client_id))
         .is('deleted_at', null).single();
-      if (error || !c) throw new Error('Client introuvable — vérifiez le client_id avec search_clients.');
+      if (error || !c) throw new Error('Client introuvable — vérifiez le nom ou les coordonnées du client.');
       clientName = nomClient(c) || null;
       clientAddress = c.address || null;
     }
@@ -1392,7 +1392,7 @@ export const handlerAssignJob = async (args: Record<string, any>, ctx: ToolConte
       .select('user_id, first_name, last_name')
       .eq('org_id', ctx.orgId).eq('user_id', String(args.assignee_user_id))
       .maybeSingle();
-    if (!membre) throw new Error('Ce user_id n\'est pas membre de l\'équipe — vérifiez avec get_team.');
+    if (!membre) throw new Error('Ce user_id n\'est pas membre de l\'équipe — vérifiez le nom du membre de l’équipe.');
 
     const { data, error } = await ctx.client
       .from('jobs')
@@ -1765,7 +1765,7 @@ const getClientProfile: AgentTool = {
       .eq('org_id', ctx.orgId).eq('id', clientId)
       .is('deleted_at', null).maybeSingle();
     if (error) return erreurOutil('profil', error);
-    if (!c) return { error: 'Client introuvable — vérifiez avec search_clients.' };
+    if (!c) return { error: 'Client introuvable — vérifiez le nom du client.' };
 
     const [jobsR, facturesR, devisR, convR] = await Promise.all([
       ctx.client.from('jobs_active')
@@ -1979,7 +1979,7 @@ const recallNotes: AgentTool = {
   declaration: {
     name: 'recall_notes',
     description:
-      "The user's standing preferences and instructions saved with remember_this. "
+      "The user's standing preferences and instructions you asked me to remember. "
       + 'Check them when starting a relevant task (invoicing, scheduling, messaging) to honor them.',
     parameters: { type: 'object', properties: {} },
   },
@@ -2024,7 +2024,7 @@ const getRecentAgentActions: AgentTool = {
       create_invoice: 'facture créée', create_invoice_from_job: 'facture préparée depuis un job',
       send_invoice: 'facture envoyée', mark_invoice_paid: 'facture marquée payée',
       send_sms: 'SMS envoyé', send_payment_reminders: 'rappels de paiement envoyés',
-      add_note: 'note ajoutée', remember_this: 'préférence mémorisée',
+      add_note: 'note ajoutée', preference_memorisee: 'préférence mémorisée',
     };
     const heureLocale = (iso: string) => {
       try {
@@ -2280,7 +2280,7 @@ const rescheduleJobTool: AgentTool = {
         .is('deleted_at', null)
         .order('start_at', { ascending: true });
       if (error) throw error;
-      if (!visites?.length) throw new Error('Ce job n\u2019a aucune visite au calendrier — utilisez create_job ou planifiez-le dans Lume d\u2019abord.');
+      if (!visites?.length) throw new Error('Ce job n\u2019a aucune visite au calendrier — crée le job ou planifiez-le dans Lume d\u2019abord.');
       const maintenant = Date.now();
       const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
 
@@ -2608,7 +2608,7 @@ const markInvoicePaidTool: AgentTool = {
         .eq('org_id', ctx.orgId).eq('id', invoiceId)
         .is('deleted_at', null).maybeSingle();
       if (eInv) throw eInv;
-      if (!inv) throw new Error('Facture introuvable — vérifie avec list_invoices.');
+      if (!inv) throw new Error('Facture introuvable — vérifie le numéro de facture.');
       if (inv.status === 'paid' || Number(inv.balance_cents) <= 0) {
         return { already_paid: true, invoice: { invoice_number: inv.invoice_number }, note: 'Cette facture est déjà payée — rien à faire.' };
       }
@@ -2617,7 +2617,7 @@ const markInvoicePaidTool: AgentTool = {
       // deviendrait payée-invisible (absente du filtre « payées », son montant
       // hors du revenu collecté). Il faut d'abord l'envoyer au client.
       if (inv.status === 'draft') {
-        throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client (send_invoice), ensuite je pourrai la marquer payée.');
+        throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client envoie-la d’abord au client, ensuite je pourrai la marquer payée.');
       }
       const reste = Number(inv.balance_cents) > 0 ? Number(inv.balance_cents) : Number(inv.total_cents);
       const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
@@ -2752,7 +2752,7 @@ const createInvoiceFromJobTool: AgentTool = {
         .select('total_cents, title, job_number')
         .eq('org_id', ctx.orgId).eq('id', String(args.job_id))
         .is('deleted_at', null).maybeSingle();
-      if (!jobAvant) throw new Error('Job introuvable — vérifiez avec list_jobs.');
+      if (!jobAvant) throw new Error('Job introuvable — vérifiez le numéro de job.');
       const sansMontant = !Number(jobAvant.total_cents);
 
       const { data, error } = await ctx.client.rpc('finish_job_and_prepare_invoice', {
@@ -2781,7 +2781,7 @@ const updateJobTool: AgentTool = {
     description:
       "Edit a job completely: title, description, type, address (re-geocoded for the map), and/or "
       + 'REPLACE its line items (amounts and taxes recomputed by the app\u2019s own calculator). '
-      + 'Only provided fields change. Use reschedule_job for dates.',
+      + 'Only provided fields change. To move dates, reschedule the visit.',
     parameters: {
       type: 'object',
       properties: {
@@ -2816,7 +2816,7 @@ const updateJobTool: AgentTool = {
         .eq('org_id', ctx.orgId).eq('id', jobId)
         .is('deleted_at', null).maybeSingle();
       if (eJob) throw eJob;
-      if (!job) throw new Error('Job introuvable — vérifiez avec list_jobs.');
+      if (!job) throw new Error('Job introuvable — vérifiez le numéro de job.');
 
       const patch: Record<string, any> = { updated_at: new Date().toISOString() };
       if (args.title !== undefined) patch.title = champRequis(args.title, 'Le titre').slice(0, 200);
@@ -3013,7 +3013,7 @@ const addVisitTool: AgentTool = {
     name: 'add_visit',
     description:
       'Add an ADDITIONAL calendar visit to a job (a job can hold several). Same engine as the '
-      + 'app\u2019s calendar. Use reschedule_job to MOVE an existing visit instead.',
+      + 'app\u2019s calendar. To MOVE an existing visit instead, reschedule it.',
     parameters: {
       type: 'object',
       properties: {
