@@ -58,6 +58,15 @@ const PLAFOND_CENTS = (() => {
 })();
 
 function depassePlafond(totalCents: number): { error: string } | null {
+  // Garde BILATÉRAL. Un total négatif trahit une quantité ou un prix négatif
+  // (ex. quantity: -5) : on refuse plutôt que d'émettre un devis/facture à
+  // montant négatif que le plafond haut ne voyait pas passer.
+  if (totalCents < 0) {
+    return {
+      error: 'Le total est négatif — une quantité ou un prix est probablement négatif. '
+        + 'Vérifie les articles (quantités et prix doivent être positifs) et recommence.',
+    };
+  }
   if (totalCents > PLAFOND_CENTS) {
     return {
       error: `Le montant (${(totalCents / 100).toFixed(2)} $) dépasse le plafond autorisé pour l'agent `
@@ -66,6 +75,40 @@ function depassePlafond(totalCents: number): { error: string } | null {
     };
   }
   return null;
+}
+
+/**
+ * Quantité normalisée d'une ligne : un nombre fini STRICTEMENT positif, sinon
+ * 1. Empêche une quantité négative (`-5`) ou zéro de produire un total
+ * négatif/nul. À utiliser À LA FOIS pour le calcul du total (plafond) ET pour
+ * l'insert, afin que les deux ne divergent jamais.
+ */
+function qtePositive(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+/**
+ * Plage de dates BORNÉE pour les lectures analytiques (feuilles de temps, paie,
+ * stats terrain, finances). Sans borne, un `from` très ancien ramènerait des
+ * années de lignes d'un coup. On rabote la fenêtre à `maxJours` (en reculant
+ * le `from` depuis le `to`) et on renvoie un drapeau si on a dû tronquer, pour
+ * que l'outil le signale honnêtement. Dates en `YYYY-MM-DD`.
+ */
+function plageBornee(
+  fromArg: any,
+  toArg: any,
+  maxJours = 366,
+): { from: string; to: string; tronquee: boolean } {
+  const jour = (d: Date) => d.toISOString().slice(0, 10);
+  const toD = fromArg || toArg ? new Date(String(toArg || new Date().toISOString().slice(0, 10))) : new Date();
+  const to = Number.isNaN(toD.getTime()) ? new Date() : toD;
+  const defautFrom = new Date(to.getTime() - 7 * 86400000);
+  const fromD = fromArg ? new Date(String(fromArg)) : defautFrom;
+  const from = Number.isNaN(fromD.getTime()) ? defautFrom : fromD;
+  const planche = new Date(to.getTime() - maxJours * 86400000);
+  const tronquee = from < planche;
+  return { from: jour(tronquee ? planche : from), to: jour(to), tronquee };
 }
 
 const clamp = (n: any, def: number, max: number) => {
@@ -101,6 +144,21 @@ function stableStringify(v: any): string {
  * Si l'action échoue, l'empreinte est retirée : une vraie retentative
  * (après correction) reste possible.
  */
+/**
+ * À lever DEPUIS une action idempotente quand l'échec survient APRÈS qu'une
+ * écriture en base a déjà eu lieu (point de non-retour franchi). Sans ça,
+ * `executerIdempotent` libérerait l'empreinte et une retentative de Claude
+ * recréerait les mêmes données → DOUBLON. Ici on GARDE l'empreinte : la
+ * retentative tombe sur `deja_fait` et Claude explique la situation au lieu
+ * de dupliquer. `message` décrit ce qui a été créé et ce qui reste à finir.
+ */
+class EffetPartiel extends Error {
+  constructor(public resume: Record<string, any>) {
+    super(String(resume.error || 'Action partiellement appliquée.'));
+    this.name = 'EffetPartiel';
+  }
+}
+
 async function executerIdempotent(
   ctx: ToolContext,
   outil: string,
@@ -126,7 +184,7 @@ async function executerIdempotent(
         .maybeSingle();
       return {
         deja_fait: true,
-        note: 'Cette action identique a déjà été exécutée il y a moins de 24 h — voici son résultat, rien n\'a été créé en double.',
+        note: 'Cette action identique a déjà été tentée récemment — voici son résultat, rien n\'a été refait en double.',
         ...(existante?.resultat || {}),
       };
     }
@@ -143,7 +201,20 @@ async function executerIdempotent(
     });
     return resultat;
   } catch (e: any) {
-    // Libérer l'empreinte : un échec ne doit pas bloquer une future tentative.
+    if (e instanceof EffetPartiel) {
+      // Point de non-retour franchi : on NE libère PAS l'empreinte (sinon
+      // doublon à la retentative). On mémorise ce qui a été fait pour que
+      // `deja_fait` le rejoue.
+      await admin.from('agent_actions').update({ resultat: e.resume }).eq('id', posee!.id);
+      logSecurityEvent({
+        org_id: ctx.orgId, user_id: ctx.userId,
+        event_type: 'agent_write_partial', severity: 'medium', source: 'api',
+        details: { outil, resume: JSON.stringify(e.resume).slice(0, 300) },
+      });
+      return e.resume;
+    }
+    // Échec "propre" (avant toute écriture) : libérer l'empreinte, une vraie
+    // retentative après correction reste possible.
     await admin.from('agent_actions').delete().eq('id', posee!.id);
     console.error(`[agent-tool:${outil}]`, e?.message || e);
     return { error: e?.message ? String(e.message).slice(0, 200) : 'L\'action a échoué.' };
@@ -294,7 +365,8 @@ const getTeam: AgentTool = {
       .from('team_members')
       .select('user_id, first_name, last_name, email, role, status')
       .eq('org_id', ctx.orgId)
-      .order('first_name', { ascending: true });
+      .order('first_name', { ascending: true })
+      .limit(200); // borne de sûreté — aucune équipe réaliste ne l'atteint
     if (error) return erreurOutil('team', error);
     return {
       count: data?.length || 0,
@@ -323,14 +395,14 @@ const getTimesheets: AgentTool = {
     },
   },
   handler: async (args, ctx) => {
-    const to = String(args.to || new Date().toISOString().slice(0, 10));
-    const from = String(args.from || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+    const { from, to, tronquee } = plageBornee(args.from, args.to, 366);
     const { data, error } = await ctx.client
       .from('time_entries')
       .select('employee_id, employee_name, date, punch_in, punch_out, breaks')
       .eq('org_id', ctx.orgId)
       .gte('date', from).lte('date', to)
-      .order('date', { ascending: true });
+      .order('date', { ascending: true })
+      .limit(20000); // borne dure — au-delà, la plage est de toute façon trop large
     if (error) return erreurOutil('timesheets', error);
 
     const parEmploye = new Map<string, { name: string; hours: number; entries: number }>();
@@ -343,6 +415,7 @@ const getTimesheets: AgentTool = {
     }
     return {
       from, to,
+      ...(tronquee ? { note: 'Plage limitée à 1 an ; précise from/to pour une période plus ancienne.' } : {}),
       employees: [...parEmploye.values()].map((v) => ({ ...v, hours: Math.round(v.hours * 100) / 100 })),
       total_hours: Math.round([...parEmploye.values()].reduce((s, v) => s + v.hours, 0) * 100) / 100,
     };
@@ -419,13 +492,13 @@ const getD2dStats: AgentTool = {
     },
   },
   handler: async (args, ctx) => {
-    const to = String(args.to || new Date().toISOString().slice(0, 10));
-    const from = String(args.from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
+    const { from, to } = plageBornee(args.from, args.to, 366);
     const { data, error } = await ctx.client
       .from('field_daily_stats')
       .select('user_id, date, knocks, leads, quotes_sent, sales, revenue_cents')
       .eq('org_id', ctx.orgId)
-      .gte('date', from).lte('date', to);
+      .gte('date', from).lte('date', to)
+      .limit(20000);
     if (error) return erreurOutil('d2d', error);
 
     const parRep = new Map<string, { knocks: number; leads: number; quotes_sent: number; sales: number; revenue_cents: number }>();
@@ -727,6 +800,15 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
     const jobId = String((rpcData as any)?.job_id || '');
     if (!jobId) throw new Error('Le job a été créé mais son id est introuvable.');
 
+    // ── POINT DE NON-RETOUR ──────────────────────────────────────────────
+    // Le job existe désormais en base. Les étapes 2-4 sont des ENRICHISSEMENTS
+    // (géocodage, items, finances) sur ce même job : elles ne doivent JAMAIS
+    // `throw`. Un throw ferait échouer l'action, libérerait l'empreinte
+    // d'idempotence, et une retentative de Claude créerait un SECOND job. On
+    // collecte plutôt les ratés dans `avertissements` et on renvoie le job
+    // comme créé. (Pas de transaction possible : RPC + 3 updates séparés.)
+    const avertissements: string[] = [];
+
     // 2. File de géocodage + nom du client. La RPC de création ne remplit
     //    pas jobs.client_name (l'app le passe à part) : on l'estampille ici.
     const patchApres: Record<string, any> = {};
@@ -738,10 +820,12 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       patchApres.longitude = null;
     }
     if (Object.keys(patchApres).length) {
-      await ctx.client.from('jobs').update(patchApres).eq('id', jobId).eq('org_id', ctx.orgId);
+      const { error: geoErr } = await ctx.client.from('jobs').update(patchApres).eq('id', jobId).eq('org_id', ctx.orgId);
+      if (geoErr) avertissements.push('le job n’apparaîtra peut-être pas tout de suite sur la carte (géocodage à relancer)');
     }
 
     // 3. Les vraies lignes d'items.
+    let itemsPoses = items.length;
     if (items.length) {
       const lignes = items.map((it) => ({
         job_id: jobId,
@@ -753,7 +837,7 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
         included: true,
       }));
       const { error: itemsErr } = await ctx.client.from('job_line_items').insert(lignes);
-      if (itemsErr) throw itemsErr;
+      if (itemsErr) { itemsPoses = 0; avertissements.push('les articles n’ont pas pu être ajoutés — à saisir dans le job'); }
     }
 
     // 4. Finances — cents uniquement, projections par trigger.
@@ -765,14 +849,14 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
         tax_lines: taxes,
       })
       .eq('id', jobId).eq('org_id', ctx.orgId);
-    if (finErr) throw finErr;
+    if (finErr) avertissements.push('le total et les taxes ne sont pas encore posés sur le job');
 
     const { data: final } = await ctx.client
       .from('jobs_active')
       .select('id, job_number, title, status, scheduled_at, property_address, derived_status')
       .eq('id', jobId).maybeSingle();
 
-    return {
+    const resume: Record<string, any> = {
       created: true,
       job: {
         id: jobId,
@@ -783,7 +867,7 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
         address: adresse !== '-' ? adresse : null,
       },
       visit: debutISO ? { start_at: debutISO, end_at: finISO } : null,
-      items_count: items.length,
+      items_count: itemsPoses,
       subtotal_cents: finances.subtotal_cents,
       tax_cents: finances.tax_cents,
       total_cents: finances.total_cents,
@@ -791,11 +875,24 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       address_warning: adresseIncomplete
         ? 'L\u2019adresse n\u2019a ni ville ni code postal — la carte risque de mal la situer. Demande à l\u2019utilisateur la ville pour un repérage fiable.'
         : undefined,
-      note: (adresseIncomplete ? 'Adresse incomplète (voir address_warning). ' : '')
+    };
+
+    if (avertissements.length) {
+      // Le job EST cree mais incomplet. On passe par EffetPartiel pour
+      // VERROUILLER l'idempotence (aucun doublon si Claude reessaie) tout en
+      // renvoyant un resultat exploitable et honnete.
+      resume.incomplet = true;
+      resume.note = `Job cree (n° ${final?.job_number || jobId.slice(0, 8)}), mais : ${avertissements.join(' ; ')}. `
+        + 'Le job existe — ne le recree pas ; complete-le ou demande a l’utilisateur de le faire.'
+        + (adresseIncomplete ? ' ' + resume.address_warning : '');
+      throw new EffetPartiel(resume);
+    }
+
+    resume.note = (adresseIncomplete ? 'Adresse incomplète (voir address_warning). ' : '')
         + (debutISO
           ? 'Job complet : items, taxes, calendrier — et il apparaîtra sur la carte une fois géocodé.'
-          : 'Job complet en brouillon (sans visite). Items et taxes posés ; planifie-le pour le mettre au calendrier.'),
-    };
+          : 'Job complet en brouillon (sans visite). Items et taxes posés ; planifie-le pour le mettre au calendrier.');
+    return resume;
   });
 
 export const handlerCreateClient = async (args: Record<string, any>, ctx: ToolContext) =>
@@ -898,7 +995,7 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const items: any[] = Array.isArray(args.line_items) ? args.line_items : [];
     if (!items.length) throw new Error('line_items est requis.');
     const totalCents = items.reduce(
-      (s, it) => s + Math.round((Number(it.quantity) || 1) * (Number(it.unit_price_cents) || 0)), 0);
+      (s, it) => s + Math.round(qtePositive(it.quantity) * Math.max(0, Number(it.unit_price_cents) || 0)), 0);
     const cap = depassePlafond(totalCents);
     if (cap) throw new Error(cap.error);
 
@@ -924,9 +1021,9 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
       quote_id: quoteId,
       name: String(it.name).trim(),
       description: it.description ? String(it.description) : null,
-      quantity: Number(it.quantity) || 1,
-      unit_price_cents: Math.round(Number(it.unit_price_cents) || 0),
-      total_cents: Math.round((Number(it.quantity) || 1) * (Number(it.unit_price_cents) || 0)),
+      quantity: qtePositive(it.quantity),
+      unit_price_cents: Math.max(0, Math.round(Number(it.unit_price_cents) || 0)),
+      total_cents: Math.round(qtePositive(it.quantity) * Math.max(0, Number(it.unit_price_cents) || 0)),
       sort_order: i,
       item_type: 'service',
       is_optional: false,
@@ -946,8 +1043,19 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
   executerIdempotent(ctx, 'create_invoice', args, async () => {
     const items: any[] = Array.isArray(args.items) ? args.items : [];
     if (!items.length) throw new Error('items est requis.');
-    const totalCents = items.reduce(
-      (s, it) => s + Math.round((Number(it.qty) || 1) * (Number(it.unit_price_cents) || 0)), 0)
+    // On calcule le total sur les MÊMES lignes que celles réellement insérées
+    // (description non vide, qty > 0, prix >= 0) pour que le plafond vérifié et
+    // le montant enregistré ne divergent jamais.
+    const lignesRetenues = items
+      .map((it) => ({
+        description: String(it.description || '').trim(),
+        qty: qtePositive(it.qty),
+        unit_price_cents: Math.max(0, Math.round(Number(it.unit_price_cents) || 0)),
+      }))
+      .filter((it) => it.description && it.qty > 0 && it.unit_price_cents >= 0);
+    if (!lignesRetenues.length) throw new Error('Aucune ligne valide (description, quantité > 0 et prix requis).');
+    const totalCents = lignesRetenues.reduce(
+      (s, it) => s + Math.round(it.qty * it.unit_price_cents), 0)
       + Math.max(0, Math.round(Number(args.tax_cents) || 0));
     const cap = depassePlafond(totalCents);
     if (cap) throw new Error(cap.error);
@@ -972,13 +1080,7 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
       p_discount_cents: 0,
       p_notes: null,
       p_internal_notes: 'Créée par l\'agent (MCP).',
-      p_items: items
-        .map((it) => ({
-          description: String(it.description || '').trim(),
-          qty: Number.isFinite(Number(it.qty)) ? Number(it.qty) : 1,
-          unit_price_cents: Math.round(Number(it.unit_price_cents) || 0),
-        }))
-        .filter((it) => it.description && it.qty > 0 && it.unit_price_cents >= 0),
+      p_items: lignesRetenues,
     });
     if (e2) throw e2;
 
@@ -1837,7 +1939,20 @@ const updateJobTool: AgentTool = {
             total_cents: Math.max(0, Math.round(it.qty * it.unit_price_cents)),
             included: true,
           })));
-          if (insErr) throw insErr;
+          // Le delete a réussi juste avant : le job a déjà PERDU ses anciens
+          // articles. Un throw ici libérerait l'empreinte et la retentative
+          // referait un delete inutile. EffetPartiel verrouille l'idempotence
+          // et dit clairement que les articles sont à ressaisir.
+          if (insErr) {
+            throw new EffetPartiel({
+              updated: true,
+              incomplet: true,
+              job: { id: jobId },
+              note: 'Les anciens articles du job ont été retirés mais les nouveaux n’ont pas pu être enregistrés. '
+                + 'Le job n’a temporairement plus d’articles — ne relance pas la modification à l’identique ; '
+                + 'ressaisis les articles dans le job ou dis à l’utilisateur de le faire.',
+            });
+          }
         }
         patch.subtotal_cents = finances.subtotal_cents;
         patch.tax_cents = finances.tax_cents;

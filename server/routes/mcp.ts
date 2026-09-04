@@ -166,6 +166,20 @@ const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = 
   convert_quote_to_job:      { cle: 'quotes.approve',     capacite: 'la conversion des devis' },
   convert_lead_to_client:    { cle: 'leads.update',       capacite: 'la conversion des prospects' },
   add_visit:                 { cle: 'calendar.update',    capacite: 'la planification du calendrier' },
+  // Suivi léger (tâches, notes) : rattaché au dossier job/client. On exige au
+  // moins la LECTURE des jobs — clé que tout rôle opérationnel possède (owner,
+  // admin, sales_rep, technician). But : donner un garde explicite plutôt que
+  // « ouvert à tout membre », SANS bloquer les rôles standards. Ne pas mapper
+  // sur jobs.update (les sales_rep ne l'ont pas) ni clients.update (pas les
+  // technicians) : ça casserait un usage courant.
+  list_tasks:                { cle: 'jobs.read',          capacite: 'la consultation des tâches' },
+  create_task:               { cle: 'jobs.read',          capacite: 'la création de tâches' },
+  update_task_status:        { cle: 'jobs.read',          capacite: 'la mise à jour des tâches' },
+  add_note:                  { cle: 'jobs.read',          capacite: "l'ajout de notes" },
+  // Agrégats financiers : permission dédiée, comme la paie.
+  get_financial_overview:    { cle: 'financial.view_reports', capacite: 'la vue financière' },
+  get_revenue_summary:       { cle: 'financial.view_reports', capacite: 'le résumé des revenus' },
+  get_overdue_payments:      { cle: 'financial.view_invoices', capacite: 'les paiements en retard' },
 };
 
 const OUTILS_FINANCIERS = new Set([
@@ -174,7 +188,14 @@ const OUTILS_FINANCIERS = new Set([
   'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
 ]);
 
-const CLES_MONTANTS = /(_cents|_amount|margin_pct|goal_progress_pct)$/;
+// Champs à blanchir pour un membre sans droit aux montants. On couvre les
+// suffixes techniques (_cents, _amount…) ET des noms financiers SANS AMBIGUÏTÉ
+// même sans suffixe — filet contre un futur champ mal nommé qui, autrement,
+// fuirait faute de finir par `_cents`. On EXCLUT volontairement les mots
+// polysémiques comme `total` ou `count` : ce sont souvent des compteurs
+// (nombre de jobs, de devis…), pas des montants — les blanchir casserait
+// l'affichage. Seuls des noms non ambigus figurent ici.
+const CLES_MONTANTS = /(_cents|_amount|_price|margin_pct|goal_progress_pct)$|^(revenue|solde|mrr|arr|ltv|lifetime_value|commission|payout)$/i;
 
 async function montantsVisibles(auth: McpAuth): Promise<boolean> {
   if (auth.mode === 'api_key') return true;
@@ -483,6 +504,10 @@ router.post('/', async (req, res) => {
       // lectures simples, elles, gardent le repli service (org_id explicite).
       let clientOutil: SupabaseClient;
       let jetonUtilisateur: string | undefined;
+      // Vrai quand une lecture retombe sur le service client faute de session
+      // rejouable : la donnée reste filtrée par org_id (sûre) mais RLS est
+      // contourné et l'utilisateur devrait se reconnecter. On le SIGNALE.
+      let sessionDegradee = false;
       if (auth.mode === 'oauth') {
         const sessionUtilisateur = await buildUserScopedClient(auth.credentialId);
         const clientUtilisateur = sessionUtilisateur?.client ?? null;
@@ -500,6 +525,7 @@ router.post('/', async (req, res) => {
           }));
         }
         clientOutil = clientUtilisateur ?? buildToolClient();
+        sessionDegradee = !clientUtilisateur; // lecture servie sans identité
       } else {
         clientOutil = buildToolClient();
       }
@@ -516,13 +542,24 @@ router.post('/', async (req, res) => {
       // Masquage central : si la personne ne voit pas les montants dans
       // l'app, elle ne les voit pas non plus ici — champ par champ, avec
       // une note pour que l'assistant l'explique au lieu d'inventer.
-      const resultatFinal = voitLesMontants
+      let resultatFinal: any = voitLesMontants
         ? result
         : {
             ...masquerMontants(result),
             montants_masques: true,
             note_montants: 'Les montants sont masqués : le rôle de cette personne dans Lume ne les inclut pas. Ne pas les estimer ni les déduire.',
           };
+
+      // Session dégradée : la lecture a réussi mais sans l'identité du porteur
+      // (session Lume expirée). On invite à reconnecter, une fois, discrètement,
+      // sans bloquer le résultat déjà obtenu.
+      if (sessionDegradee && resultatFinal && typeof resultatFinal === 'object' && !Array.isArray(resultatFinal)) {
+        resultatFinal = {
+          ...resultatFinal,
+          session_a_reconnecter: true,
+          note_session: 'Ces données sont à jour, mais votre session Lume a expiré. Pour les actions personnalisées (finances, écritures), reconnectez le connecteur Lume dans Claude quand vous aurez un moment.',
+        };
+      }
 
       // MCP returns tool output as content parts; JSON goes in a text part.
       return res.json(
