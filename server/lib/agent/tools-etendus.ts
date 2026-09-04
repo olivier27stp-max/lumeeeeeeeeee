@@ -219,6 +219,41 @@ class EffetPartiel extends Error {
   }
 }
 
+/**
+ * Traduit une erreur (souvent Postgres/Supabase, remontée par un `throw error`
+ * de handler) en phrase d'EXPLOITANT. Le message brut — nom de contrainte,
+ * « violates foreign key », code SQL — ne doit JAMAIS atteindre le modèle : les
+ * instructions le lui interdisent d'affichage, mais mieux vaut ne pas le lui
+ * donner du tout. Le détail reste dans les logs (appelant). On reconnaît les
+ * cas courants ; tout le reste devient un message générique poli.
+ */
+function messageHumainErreur(e: any, contexte?: string): string {
+  const brut = String(e?.message || e || '').toLowerCase();
+  const code = String(e?.code || '');
+  if (code === '23505' || brut.includes('duplicate key') || brut.includes('unique constraint')) {
+    return 'Ça existe déjà — pas besoin de le recréer.';
+  }
+  if (code === '23503' || brut.includes('foreign key')) {
+    return 'Un élément lié est introuvable (client, job ou pièce). Vérifie qu\'il existe encore et réessaie.';
+  }
+  if (code === '23502' || brut.includes('not-null') || brut.includes('violates not-null')) {
+    return 'Il manque une information obligatoire. Précise-la et réessaie.';
+  }
+  if (code === '23514' || brut.includes('check constraint')) {
+    return 'Une valeur n\'est pas dans les choix permis. Vérifie les entrées et réessaie.';
+  }
+  if (code === '42501' || brut.includes('permission denied') || brut.includes('not allowed') || brut.includes('row-level security') || brut.includes('rls')) {
+    return 'Ton rôle dans Lume ne permet pas cette action.';
+  }
+  if (brut.includes('timeout') || brut.includes('timed out')) {
+    return 'Ça a mis trop de temps à répondre. Réessaie dans un instant.';
+  }
+  // Rien de reconnu : message générique, JAMAIS le texte brut.
+  return contexte
+    ? `${contexte} n'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer.`
+    : 'L\'action n\'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer.';
+}
+
 async function executerIdempotent(
   ctx: ToolContext,
   outil: string,
@@ -276,8 +311,15 @@ async function executerIdempotent(
     // Échec "propre" (avant toute écriture) : libérer l'empreinte, une vraie
     // retentative après correction reste possible.
     await admin.from('agent_actions').delete().eq('id', posee!.id);
-    console.error(`[agent-tool:${outil}]`, e?.message || e);
-    return { error: e?.message ? String(e.message).slice(0, 200) : 'L\'action a échoué.' };
+    // Le message BRUT (Postgres, contrainte, code) reste dans les logs pour le
+    // diagnostic ; le modèle, lui, ne reçoit qu'une phrase d'exploitant.
+    console.error(`[agent-tool:${outil}] org=${ctx.orgId}`, e?.code || '', e?.message || e);
+    // Une erreur déjà rédigée en français par un handler (throw new Error(...))
+    // est humaine : on la garde. Une erreur Supabase/Postgres (avec .code ou du
+    // jargon SQL) passe par la traduction.
+    const dejaHumaine = e instanceof Error && !(e as any)?.code
+      && !/constraint|violates|postgres|sql|null value|rls|row-level|permission denied/i.test(String(e.message || ''));
+    return { error: dejaHumaine ? String(e.message).slice(0, 200) : messageHumainErreur(e) };
   }
 }
 
@@ -286,13 +328,50 @@ async function executerIdempotent(
  * statut que l'écran affiche. Partagée entre list_jobs (tools.ts) et le
  * profil client : une seule table, une seule vérité.
  */
+// Libellés en FRANÇAIS : l'agent parle à un francophone, autant lui donner le
+// mot juste plutôt que l'anglais brut qu'il devrait traduire. (Isolé au
+// connecteur MCP ; le frontend a ses propres libellés dans StatusBadge.)
 export const ETIQUETTES_DERIVED: Record<string, string> = {
-  upcoming: 'Upcoming',
-  late: 'Late',
-  action_required: 'Action Required',
-  archived: 'Archived',
-  requires_invoicing: 'Requires Invoicing',
+  upcoming: 'à venir',
+  late: 'en retard',
+  action_required: 'action requise',
+  archived: 'archivé',
+  requires_invoicing: 'à facturer',
+  scheduled: 'planifié',
+  completed: 'terminé',
+  in_progress: 'en cours',
+  cancelled: 'annulé',
+  draft: 'brouillon',
 };
+
+// Statuts traduits DANS le résultat, pour que l'agent n'ait rien à deviner.
+export const STATUT_DEVIS: Record<string, string> = {
+  draft: 'brouillon', awaiting_response: 'en attente de réponse',
+  changes_requested: 'modifications demandées', approved: 'accepté',
+  declined: 'refusé', expired: 'expiré', converted: 'converti en job',
+  archived: 'archivé', sent: 'envoyé',
+};
+export const STATUT_FACTURE: Record<string, string> = {
+  draft: 'brouillon', sent: 'envoyée', sent_not_due: 'envoyée (pas encore due)',
+  past_due: 'en retard', overdue: 'en retard', paid: 'payée',
+  partial: 'partiellement payée', partially_paid: 'partiellement payée',
+  void: 'annulée', cancelled: 'annulée', uncollectible: 'irrécouvrable',
+};
+export const STATUT_ROLE: Record<string, string> = {
+  owner: 'propriétaire', admin: 'administrateur',
+  sales_rep: 'représentant', technician: 'technicien', manager: 'gestionnaire',
+};
+export const STATUT_LEAD: Record<string, string> = {
+  new: 'nouveau', contacted: 'contacté', qualified: 'qualifié',
+  proposal: 'proposition envoyée', won: 'gagné', closed_won: 'gagné',
+  lost: 'perdu', closed_lost: 'perdu', unqualified: 'non qualifié',
+};
+/** Traduit une valeur via un dictionnaire, en repli lisible si inconnue. */
+export function traduireStatut(v: any, dico: Record<string, string>): string | null {
+  if (v == null) return null;
+  const s = String(v);
+  return dico[s.toLowerCase()] || s.replace(/_/g, ' ');
+}
 
 /**
  * Taxes actives de l'org, mappées au format tax_lines des jobs — la même
@@ -361,7 +440,18 @@ const getConversations: AgentTool = {
       .order('last_message_at', { ascending: false })
       .limit(clamp(args.limit, 15, 30));
     if (error) return erreurOutil('conversations', error);
-    return { total_matching: count ?? data?.length ?? 0, returned: data?.length || 0, conversations: data || [] };
+    return {
+      total_matching: count ?? data?.length ?? 0,
+      returned: data?.length || 0,
+      conversations: (data || []).map((c: any) => ({
+        client_id: c.client_id, // interne : pour get_client_profile / get_conversation_messages
+        client_name: c.client_name,
+        phone_number: c.phone_number,
+        last_message_text: c.last_message_text,
+        last_message_at: c.last_message_at,
+        unread_count: c.unread_count,
+      })),
+    };
   },
 };
 
@@ -431,9 +521,11 @@ const getTeam: AgentTool = {
     return {
       count: data?.length || 0,
       members: (data || []).map((m) => ({
-        user_id: m.user_id,
+        user_id: m.user_id, // interne : pour assign_job / create_task
         name: `${m.first_name || ''} ${m.last_name || ''}`.trim(),
-        email: m.email, role: m.role, status: m.status,
+        email: m.email,
+        role: traduireStatut(m.role, STATUT_ROLE),
+        status: m.status,
       })),
     };
   },
@@ -507,7 +599,32 @@ const listTasks: AgentTool = {
     if (statut === 'open' || statut === 'done') q = q.eq('status', statut);
     const { data, error, count } = await q;
     if (error) return erreurOutil('tasks', error);
-    return { total_matching: count ?? data?.length ?? 0, returned: data?.length || 0, tasks: data || [] };
+
+    // Résoudre les assignés en NOMS (l'UUID nu ne dit rien à l'utilisateur).
+    const idsAssignes = [...new Set((data || []).map((t: any) => t.assignee_user_id).filter(Boolean))];
+    const nomsAssignes = new Map<string, string>();
+    if (idsAssignes.length) {
+      const { data: membres } = await ctx.client
+        .from('team_members').select('user_id, first_name, last_name')
+        .eq('org_id', ctx.orgId).in('user_id', idsAssignes);
+      for (const m of membres || []) {
+        nomsAssignes.set(m.user_id, `${m.first_name || ''} ${m.last_name || ''}`.trim() || '—');
+      }
+    }
+    const PRIO = { low: 'basse', medium: 'moyenne', high: 'haute' } as Record<string, string>;
+    return {
+      total_matching: count ?? data?.length ?? 0,
+      returned: data?.length || 0,
+      tasks: (data || []).map((t: any) => ({
+        id: t.id, // interne : pour update_task_status
+        title: t.title,
+        description: t.description,
+        statut: t.status === 'done' ? 'terminée' : 'à faire',
+        priorite: PRIO[t.priority] || t.priority,
+        echeance: t.due_date,
+        assignee: t.assignee_user_id ? (nomsAssignes.get(t.assignee_user_id) || '—') : null,
+      })),
+    };
   },
 };
 
@@ -1454,7 +1571,7 @@ const getClientProfile: AgentTool = {
       },
       quotes: {
         total: devisR.count ?? 0,
-        recent: (devisR.data || []).map((q: any) => ({ title: q.title, status: q.status, total_cents: q.total_cents })),
+        recent: (devisR.data || []).map((q: any) => ({ title: q.title, statut: traduireStatut(q.status, STATUT_DEVIS), total_cents: q.total_cents })),
       },
       last_sms: convR.data
         ? { text: convR.data.last_message_text, at: convR.data.last_message_at, unread: convR.data.unread_count }
