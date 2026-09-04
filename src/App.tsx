@@ -437,6 +437,15 @@ export default function App() {
         import('sonner').then(({ toast }) => {
           toast.info(t.common.sessionExpiredPleaseSignInAgain);
         });
+        // Sans redirection, le routeur reste sur la route protégée que l'user
+        // vient de quitter (ex. /jobs) ; déconnecté, l'app rend PublicRoutes
+        // dont seul le catch-all l'attrape → « Page introuvable » (404). On
+        // renvoie sur l'accueil, comme le fait le bouton Déconnexion.
+        const p = window.location.pathname;
+        const routePublique = p === '/' || p.startsWith('/auth') || p.startsWith('/register')
+          || p.startsWith('/reset-password') || p.startsWith('/verify-email')
+          || p.startsWith('/privacy') || p.startsWith('/terms') || p.startsWith('/subprocessors');
+        if (!routePublique) window.location.replace(window.location.origin + '/');
       }
       if (event === 'TOKEN_REFRESHED') {
         // silently refreshed — no action needed
