@@ -6,6 +6,47 @@ import ConnectOnboarding from '../components/ConnectOnboarding';
 import SmsStepUp from '../components/auth/SmsStepUp';
 import { getSmsStatus, type SmsStatus } from '../lib/mfaSmsApi';
 
+// Illustration d'en-tête (fournie par le propriétaire). Elle porte déjà le
+// titre « LUME Payments » : on la met en bandeau et on n'ajoute qu'un
+// sous-titre lisible sur un voile. Repli texte propre si le fichier est absent.
+const HERO_URL = '/lume-payments-hero.webp';
+
+function PaymentsHero({ language }: { language: string }) {
+  const fr = language === 'fr';
+  const [hasImg, setHasImg] = React.useState(false);
+  React.useEffect(() => {
+    const img = new Image();
+    img.onload = () => setHasImg(true);
+    img.src = HERO_URL;
+  }, []);
+
+  const subtitle = fr
+    ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
+    : 'Accept online payments from your clients via Lume Payments.';
+
+  if (hasImg) {
+    return (
+      <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-card">
+        <img
+          src={HERO_URL}
+          alt={fr ? 'Lume Payments' : 'Lume Payments'}
+          className="w-full block dark:brightness-95"
+        />
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-surface-card via-surface-card/85 to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 bottom-0 px-6 pb-5 pt-8 text-center">
+          <p className="text-sm text-text-secondary max-w-md mx-auto leading-relaxed">{subtitle}</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <h1 className="text-xl font-bold text-text-primary tracking-tight">Lume Payments</h1>
+      <p className="text-[12px] text-text-tertiary mt-0.5">{subtitle}</p>
+    </div>
+  );
+}
+
 // ── SMS 2FA — payment-security section ──
 // Risk-based, payments-scoped: owners verify a mobile number; sensitive payment
 // actions on a new device then require an SMS code (device trusted 30 days).
@@ -94,16 +135,7 @@ export default function PaymentSettings() {
     // route itself let in. (Connect activation stays admin-gated server-side.)
     <PermissionGate permission="settings.read">
       <div className="max-w-2xl space-y-6">
-        <div>
-          <h1 className="text-xl font-bold text-text-primary tracking-tight">
-            {t.commandPalette.payments}
-          </h1>
-          <p className="text-[12px] text-text-tertiary mt-0.5">
-            {language === 'fr'
-              ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
-              : 'Accept online payments from your clients via Lume Payments.'}
-          </p>
-        </div>
+        <PaymentsHero language={language} />
 
         <ConnectOnboarding />
 
