@@ -569,6 +569,15 @@ router.post('/', async (req, res) => {
         };
       }
 
+      // Un échec d'outil : on trace AVEC le contexte (org, utilisateur, outil)
+      // — sans ça, le diagnostic prod savait « quel outil » mais jamais « quelle
+      // org ni qui », donc impossible de cibler par tenant.
+      if ((resultatFinal as any)?.error) {
+        console.error('[mcp:tool-error]',
+          `outil=${name} org=${auth.orgId} user=${auth.userId ?? auth.credentialId} :`,
+          String((resultatFinal as any).error).slice(0, 160));
+      }
+
       // MCP returns tool output as content parts; JSON goes in a text part.
       return res.json(
         rpcResult(id, {
@@ -581,7 +590,8 @@ router.post('/', async (req, res) => {
     return res.json(rpcError(id, -32601, `Method not found: ${method}`));
   } catch (err: any) {
     // Never surface raw errors to an MCP client (they can leak schema details).
-    console.error('[mcp]', err?.message || err);
+    // On loggue AVEC le contexte pour diagnostiquer sans reproduire.
+    console.error('[mcp]', `method=${method} :`, err?.message || err);
     return res.json(rpcError(id, -32603, 'Internal error.'));
   }
 });
