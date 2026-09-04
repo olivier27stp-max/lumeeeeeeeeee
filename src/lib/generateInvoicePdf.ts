@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { versDate } from './dateSeule';
 import type { InvoiceDetail } from './invoicesApi';
 import { formatMoneyFromCents, toClientDisplayName } from './invoicesApi';
 
@@ -20,7 +21,7 @@ const isFr = (): boolean => (typeof localStorage !== 'undefined' && localStorage
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '--';
-  const d = new Date(iso);
+  const d = versDate(iso); // date seule -> minuit local, pas la veille
   if (Number.isNaN(d.getTime())) return '--';
   const locale = isFr() ? 'fr-CA' : 'en-CA';
   return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });

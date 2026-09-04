@@ -36,6 +36,7 @@ import ServicePicker from '../components/ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
+import { versDate } from '../lib/dateSeule';
 
 const MONTHS_SHORT_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 const MONTHS_SHORT_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -388,7 +389,7 @@ export default function QuoteDetails() {
             </div>
             {quote.valid_until && (
               <div className="flex justify-between text-[13px]">
-                <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(new Date(quote.valid_until), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
+                <span className="text-text-tertiary">{language === 'fr' ? "Valide jusqu'au" : 'Valid until'}</span><span className="font-medium text-text-primary">{format(versDate(quote.valid_until), 'PP', { locale: language === 'fr' ? dfFr : dfEn })}</span>
               </div>
             )}
             <div className="flex justify-between text-[13px] border-t border-outline pt-2.5">

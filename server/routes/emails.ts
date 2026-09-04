@@ -35,7 +35,14 @@ function formatCurrency(cents: number, currency = 'CAD') {
 
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return 'N/A';
-  return new Date(dateStr).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+  // Une date seule (« 2026-09-04 ») est affichée telle quelle, dans le fuseau
+  // de l'entreprise — pas convertie via minuit UTC, qui la ferait reculer
+  // d'un jour si le serveur tournait un jour ailleurs qu'en UTC.
+  const seule = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const d = seule
+    ? new Date(Date.UTC(Number(seule[1]), Number(seule[2]) - 1, Number(seule[3]), 12))
+    : new Date(dateStr);
+  return d.toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric', ...(seule ? { timeZone: 'UTC' } : {}) });
 }
 
 export interface CompanyInfo {

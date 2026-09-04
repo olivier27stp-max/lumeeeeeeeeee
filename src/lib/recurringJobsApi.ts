@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { supabase } from './supabase';
+import { versDate } from './dateSeule';
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ export async function createRecurrenceRule(rule: {
   if (!membership?.org_id) throw new Error('No organization');
 
   // Calculate next_run_at
-  const startDate = new Date(rule.start_date);
+  const startDate = versDate(rule.start_date);
   const now = new Date();
   const nextRun = startDate > now ? startDate : calculateNextOccurrence(now, rule.frequency, rule.interval_days || 7);
 

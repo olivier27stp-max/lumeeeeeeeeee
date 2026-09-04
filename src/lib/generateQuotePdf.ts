@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { versDate } from './dateSeule';
 import type { QuoteDetail } from './quotesApi';
 import { formatQuoteMoney } from './quotesApi';
 import type { PdfCompanyInfo } from './generateInvoicePdf';
@@ -8,7 +9,7 @@ function L(en: string, fr: string): string { return isFr() ? fr : en; }
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '--';
-  const d = new Date(iso);
+  const d = versDate(iso); // date seule -> minuit local, pas la veille
   if (Number.isNaN(d.getTime())) return '--';
   const locale = isFr() ? 'fr-CA' : 'en-CA';
   return d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });

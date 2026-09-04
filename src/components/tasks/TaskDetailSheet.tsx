@@ -21,6 +21,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import type { TaskRow } from '../../types/task';
+import { versDate } from '../../lib/dateSeule';
 
 interface TaskDetailSheetProps {
   task: TaskRow;
@@ -109,7 +110,7 @@ export default function TaskDetailSheet({ task, onClose, onEdit, onToggleStatus,
               <DetailRow
                 icon={Calendar}
                 label={fr ? 'Échéance' : 'Due Date'}
-                value={new Date(task.due_date).toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                value={versDate(task.due_date).toLocaleDateString(dateLocale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
               />
             )}
             {task.linked_entity_type && (

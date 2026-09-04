@@ -49,6 +49,7 @@ import BulkActionBar, { type BulkAction } from '../components/BulkActionBar';
 import { useTranslation } from '../i18n';
 import TaskModal from '../components/tasks/TaskModal';
 import TaskDetailSheet from '../components/tasks/TaskDetailSheet';
+import { versDate } from '../lib/dateSeule';
 
 const PAGE_SIZE = 20;
 
@@ -643,7 +644,7 @@ export default function Tasks() {
                     {row.due_date && (
                       <span className="text-[12px] text-text-tertiary mt-0.5 flex items-center gap-1">
                         <Calendar size={11} />
-                        {new Date(row.due_date).toLocaleDateString(isFr ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric' })}
+                        {versDate(row.due_date).toLocaleDateString(isFr ? 'fr-CA' : 'en-US', { month: 'short', day: 'numeric' })}
                       </span>
                     )}
                   </div>

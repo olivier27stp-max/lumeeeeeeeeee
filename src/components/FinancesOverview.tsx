@@ -23,6 +23,7 @@ import { getPayrollPreview } from '../lib/commissionsApi';
 import { fetchTaxesCollected, type TaxesCollected } from '../lib/taxApi';
 import RevenueOverviewCard from './RevenueOverviewCard';
 import type { FsCommissionEntry } from '../types';
+import { versDate } from '../lib/dateSeule';
 
 /* ── Aging computation ─────────────────────────────────────────── */
 type AgingBucket = { key: string; label: string; hint: string; cents: number; count: number };
@@ -53,7 +54,7 @@ function computeAging(rows: InvoiceRow[], fr: boolean) {
   for (const r of rows) {
     const bal = r.balance_cents || 0;
     if (bal <= 0) continue;
-    const due = r.due_date ? new Date(r.due_date).getTime() : null;
+    const due = r.due_date ? versDate(r.due_date).getTime() : null;
     const days = due != null ? Math.floor((today - due) / 86_400_000) : 0;
 
     if (due == null || days <= 0) byBucket(0, bal);

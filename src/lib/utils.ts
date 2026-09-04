@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { versDate } from './dateSeule';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -21,7 +22,9 @@ export function formatCurrency(value: number, currency?: string) {
 }
 
 export function formatDate(date: string | Date) {
-  return new Date(date).toLocaleDateString(_currentLocale(), {
+  // Une date seule (« 2026-09-04 ») se lit à minuit local, pas UTC —
+  // sinon toute échéance s'affiche la veille au Canada. Voir dateSeule.ts.
+  return versDate(date).toLocaleDateString(_currentLocale(), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
