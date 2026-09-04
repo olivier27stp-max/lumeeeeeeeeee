@@ -503,26 +503,40 @@ const rafraichissementsEnCours = new Map<string, Promise<UserSession | null>>();
  * normal de Lume ne touche jamais. Fait côté serveur avec l'identité DÉJÀ
  * vérifiée par requireAuthedClient : aucune élévation.
  */
+async function tenterSessionDediee(email: string): Promise<string | null> {
+  const admin = getServiceClient();
+  const { data: lien, error: e1 } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
+  if (e1 || !lien?.properties?.hashed_token) {
+    throw new Error(`generateLink: ${e1?.message || 'pas de hashed_token'}`);
+  }
+  const anon = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: sess, error: e2 } = await anon.auth.verifyOtp({ token_hash: lien.properties.hashed_token, type: 'magiclink' });
+  if (e2 || !sess?.session?.refresh_token) {
+    throw new Error(`verifyOtp: ${e2?.message || 'pas de refresh_token'}`);
+  }
+  return sess.session.refresh_token;
+}
+
+/**
+ * Crée la session Supabase dédiée à Claude. generateLink/verifyOtp échoue par
+ * INTERMITTENCE (aléa réseau, latence GoTrue) — mesuré ~15 % des reconnexions,
+ * et chaque échec laissait un jeton SANS session, donc tous les outils à
+ * identité (finances, écritures) morts jusqu'à une reconnexion chanceuse.
+ * On RÉESSAIE : un hoquet ne doit pas ruiner la connexion de l'utilisateur.
+ */
 export async function creerSessionDediee(email: string): Promise<string | null> {
   if (!email) return null;
-  try {
-    const admin = getServiceClient();
-    const { data: lien, error: e1 } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
-    if (e1 || !lien?.properties?.hashed_token) {
-      console.error('[oauth] generateLink pour session dédiée :', e1?.message || 'pas de hashed_token');
-      return null;
+  const MAX = 3;
+  for (let essai = 1; essai <= MAX; essai++) {
+    try {
+      return await tenterSessionDediee(email);
+    } catch (e: any) {
+      console.error(`[oauth] session dédiée essai ${essai}/${MAX} :`, e?.message || e);
+      if (essai < MAX) await new Promise((r) => setTimeout(r, 400 * essai));
     }
-    const anon = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data: sess, error: e2 } = await anon.auth.verifyOtp({ token_hash: lien.properties.hashed_token, type: 'magiclink' });
-    if (e2 || !sess?.session?.refresh_token) {
-      console.error('[oauth] verifyOtp pour session dédiée :', e2?.message || 'pas de refresh_token');
-      return null;
-    }
-    return sess.session.refresh_token;
-  } catch (e) {
-    console.error('[oauth] création de session dédiée impossible :', (e as any)?.message || e);
-    return null;
   }
+  console.error('[oauth] session dédiée impossible après', MAX, 'tentatives — jeton sans identité (outils finances/écritures indisponibles jusqu\'à reconnexion).');
+  return null;
 }
 
 export async function buildUserScopedClient(tokenId: string): Promise<UserSession | null> {
