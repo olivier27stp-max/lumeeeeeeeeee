@@ -278,7 +278,10 @@ export default function SettingsRoles() {
                     <div className="border-t border-border px-4 py-2 space-y-1">
                       {group.permissions.map((perm) => {
                         const enabled = current[perm.key] === true;
-                        // Sensible, pas verrouillé : on prévient sans interdire.
+                        // Donnée financière chez un technicien : l'infobulle l'explique
+                        // au survol. Pas de cadenas — il laissait croire que le
+                        // réglage était bloqué alors que l'interrupteur a toujours
+                        // fonctionné (`disabled` ne dépend que de isOwner).
                         const financierSensible = selectedRole === 'technician' && FINANCIAL_PERMISSION_KEYS.includes(perm.key);
                         const disabled = isOwner;
                         return (
@@ -296,7 +299,7 @@ export default function SettingsRoles() {
                           >
                             <span className="text-[12px] text-text-secondary flex items-center gap-1.5">
                               {fr ? (perm.label_fr || perm.label_en) : (perm.label_en || perm.label_fr)}
-                              {financierSensible && <Lock size={10} className="text-amber-500" />}
+
                             </span>
                             <button
                               type="button"
