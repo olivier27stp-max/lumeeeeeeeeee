@@ -6,45 +6,43 @@ import ConnectOnboarding from '../components/ConnectOnboarding';
 import SmsStepUp from '../components/auth/SmsStepUp';
 import { getSmsStatus, type SmsStatus } from '../lib/mfaSmsApi';
 
-// Illustration de fond (fournie par le propriétaire). Elle couvre toute la
-// page de réglages ; un voile la calme pour que le texte reste lisible.
+// Illustration d'en-tête (fournie par le propriétaire). Elle porte déjà le
+// titre « LUME Payments » : on la met en bandeau et on n'ajoute qu'un
+// sous-titre lisible sur un voile. Repli texte propre si le fichier est absent.
 const HERO_URL = '/lume-payments-hero.webp';
 
-/**
- * Fond image de toute la page. Positionné `fixed` derrière la zone de contenu :
- * il reste en place au défilement et un voile dégradé garde le contraste. Ne
- * s'affiche que si le fichier existe (repli : aucun fond, la page reste normale).
- */
-function PageBackdrop() {
+function PaymentsHero({ language }: { language: string }) {
+  const fr = language === 'fr';
   const [hasImg, setHasImg] = React.useState(false);
   React.useEffect(() => {
     const img = new Image();
     img.onload = () => setHasImg(true);
     img.src = HERO_URL;
   }, []);
-  if (!hasImg) return null;
-  return (
-    <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.18] dark:opacity-[0.12]"
-        style={{ backgroundImage: `url(${HERO_URL})` }}
-      />
-      {/* Voile : plus dense en bas pour tenir le texte des cartes. */}
-      <div className="absolute inset-0 bg-gradient-to-b from-surface/60 via-surface/75 to-surface/90" />
-    </div>
-  );
-}
 
-function PaymentsHero({ language }: { language: string }) {
-  const fr = language === 'fr';
+  const subtitle = fr
+    ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
+    : 'Accept online payments from your clients via Lume Payments.';
+
+  if (hasImg) {
+    return (
+      <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-card">
+        <img
+          src={HERO_URL}
+          alt={fr ? 'Lume Payments' : 'Lume Payments'}
+          className="w-full block dark:brightness-95"
+        />
+        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-surface-card via-surface-card/85 to-transparent" aria-hidden />
+        <div className="absolute inset-x-0 bottom-0 px-6 pb-5 pt-8 text-center">
+          <p className="text-sm text-text-secondary max-w-md mx-auto leading-relaxed">{subtitle}</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div>
-      <h1 className="text-2xl font-extrabold text-text-primary tracking-tight">Lume Payments</h1>
-      <p className="text-[13px] text-text-secondary mt-1">
-        {fr
-          ? 'Acceptez les paiements en ligne de vos clients via Lume Payments.'
-          : 'Accept online payments from your clients via Lume Payments.'}
-      </p>
+      <h1 className="text-xl font-bold text-text-primary tracking-tight">Lume Payments</h1>
+      <p className="text-[12px] text-text-tertiary mt-0.5">{subtitle}</p>
     </div>
   );
 }
@@ -136,10 +134,7 @@ export default function PaymentSettings() {
     // to demand payments.create and showed "Access Restricted" to users the
     // route itself let in. (Connect activation stays admin-gated server-side.)
     <PermissionGate permission="settings.read">
-      {/* Fond complet : l'illustration couvre toute la page, un voile garde le
-          texte lisible et les cartes (section-card) restent opaques par-dessus. */}
-      <PageBackdrop />
-      <div className="relative z-10 max-w-2xl space-y-6">
+      <div className="max-w-2xl space-y-6">
         <PaymentsHero language={language} />
 
         <ConnectOnboarding />
