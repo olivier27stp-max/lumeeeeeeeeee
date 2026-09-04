@@ -81,9 +81,13 @@ export function useLiveLocationTracking(
  * still valid so the RLS-protected "mark offline" write succeeds, removing the
  * user's live pin from the maps immediately rather than waiting for it to go stale.
  *
- * Ends by sending the browser to the marketing home page: without it the URL stays
- * on the app route the user just left (e.g. /jobs), which the public router only
- * matches with its catch-all — showing "Page not found" instead of the homepage.
+ * Ends by sending the browser to the marketing home page. We navigate to the
+ * ORIGIN ROOT (`window.location.origin`), not `'/'`: assigning `'/'` keeps the
+ * current pathname in the History entry until the load commits, so for a split
+ * second the app re-renders the route the user just left (e.g. /jobs) against
+ * the now-signed-out router — whose public tree only matches it with the
+ * catch-all, flashing "Page not found" (404) before the reload lands. Replacing
+ * the whole URL avoids that flash and can't leave the old route in history.
  */
 export async function endTrackingAndSignOut(): Promise<void> {
   try {
@@ -99,5 +103,7 @@ export async function endTrackingAndSignOut(): Promise<void> {
     // Never block logout on a tracking-cleanup failure.
   }
   await supabase.auth.signOut();
-  window.location.href = '/';
+  // Replace (not assign) so the signed-in route never lands in history, and go
+  // to the origin root so the home page is what loads — never the old path.
+  window.location.replace(window.location.origin + '/');
 }

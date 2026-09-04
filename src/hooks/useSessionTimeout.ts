@@ -12,8 +12,9 @@
 import { useEffect, useRef } from 'react';
 import { endTrackingAndSignOut } from './useLiveLocationTracking';
 
-// 4 hours of inactivity before auto-signout
-export const SESSION_TIMEOUT_MS = 4 * 60 * 60 * 1000;
+// 24 hours of inactivity before auto-signout (choisi par le propriétaire :
+// il veut rester connecté toute une journée de travail sans coupure).
+export const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 // Warning 5 minutes before timeout
 export const WARNING_BEFORE_MS = 5 * 60 * 1000;
@@ -49,8 +50,11 @@ export function useSessionTimeout(userId: string | null) {
 
       timeoutRef.current = setTimeout(async () => {
         console.warn('[session] Inactivity timeout — signing out');
+        // endTrackingAndSignOut() redirige déjà proprement vers l'accueil
+        // (window.location.replace de l'origine). Le `window.location.href = '/'`
+        // qui suivait ici causait le 404 fugace : il repartait de l'ancienne
+        // route protégée pendant que la session tombait.
         await endTrackingAndSignOut();
-        window.location.href = '/';
       }, SESSION_TIMEOUT_MS);
     };
 
