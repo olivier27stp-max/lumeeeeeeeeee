@@ -1754,7 +1754,41 @@ const getRecentAgentActions: AgentTool = {
       .eq('org_id', ctx.orgId)
       .order('created_at', { ascending: false }).limit(20);
     if (error) return erreurOutil('actions', error);
-    return { count: data?.length || 0, actions: data || [] };
+    // Le journal brut est du jargon (noms d'outils, cents, UUID, dates UTC).
+    // On le rend LISIBLE : chaque ligne devient une phrase et une heure locale.
+    const LIBELLE: Record<string, string> = {
+      create_job: 'job créé', update_job: 'job modifié', update_job_status: 'statut de job changé',
+      assign_job: 'job assigné', archive_job: 'job archivé', reschedule_job: 'visite déplacée',
+      add_visit: 'visite ajoutée', cancel_visit: 'visite annulée',
+      create_client: 'client créé', update_client: 'client modifié', convert_lead_to_client: 'prospect converti en client',
+      create_task: 'tâche créée', update_task: 'tâche modifiée', update_task_status: 'tâche mise à jour', delete_task: 'tâche supprimée',
+      create_quote: 'devis créé', send_quote: 'devis envoyé', cancel_quote: 'devis annulé', convert_quote_to_job: 'devis converti en job',
+      create_invoice: 'facture créée', create_invoice_from_job: 'facture préparée depuis un job',
+      send_invoice: 'facture envoyée', mark_invoice_paid: 'facture marquée payée',
+      send_sms: 'SMS envoyé', send_payment_reminders: 'rappels de paiement envoyés',
+      add_note: 'note ajoutée', remember_this: 'préférence mémorisée',
+    };
+    const heureLocale = (iso: string) => {
+      try {
+        return new Intl.DateTimeFormat('fr-CA', {
+          timeZone: FUSEAU_ORG, day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+        }).format(new Date(iso));
+      } catch { return iso; }
+    };
+    const actions = (data || []).map((a: any) => {
+      const r = a.resultat || {};
+      // Un repère lisible SANS jargon : numéro de pièce, nom, titre — jamais d'id.
+      const quoi = r.job?.job_number ? `job n° ${r.job.job_number}`
+        : r.invoice?.invoice_number ? `facture n° ${r.invoice.invoice_number}`
+        : r.quote?.quote_number ? `devis n° ${r.quote.quote_number}`
+        : r.client?.name || r.job?.title || r.task?.title || null;
+      return {
+        action: LIBELLE[a.outil] || String(a.outil).replace(/_/g, ' '),
+        ...(quoi ? { cible: quoi } : {}),
+        quand: heureLocale(a.created_at),
+      };
+    });
+    return { count: actions.length, actions };
   },
 };
 
@@ -2196,6 +2230,13 @@ const markInvoicePaidTool: AgentTool = {
       if (!inv) throw new Error('Facture introuvable — vérifie avec list_invoices.');
       if (inv.status === 'paid' || Number(inv.balance_cents) <= 0) {
         return { already_paid: true, invoice: { invoice_number: inv.invoice_number }, note: 'Cette facture est déjà payée — rien à faire.' };
+      }
+      // On ne « paie » pas un BROUILLON. apply_invoice_payment mettrait la
+      // balance à 0 mais laisserait le statut à « brouillon » : la facture
+      // deviendrait payée-invisible (absente du filtre « payées », son montant
+      // hors du revenu collecté). Il faut d'abord l'envoyer au client.
+      if (inv.status === 'draft') {
+        throw new Error('Cette facture est encore un brouillon — envoie-la d’abord au client (send_invoice), ensuite je pourrai la marquer payée.');
       }
       const reste = Number(inv.balance_cents) > 0 ? Number(inv.balance_cents) : Number(inv.total_cents);
       const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
