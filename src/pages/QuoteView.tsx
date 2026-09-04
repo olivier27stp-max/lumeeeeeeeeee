@@ -6,6 +6,7 @@ import { formatQuoteMoney } from '../lib/quotesApi';
 import { loadStripe } from '@stripe/stripe-js/pure';
 import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { versDate, finDeJournee } from '../lib/dateSeule';
 
 // ── Lume fallback logo (panda) ──
 const LUME_LOGO_URL = '/lume-logo.png';
@@ -451,7 +452,7 @@ export default function QuoteView() {
     : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const cur = quote.currency;
   const contact = client || lead;
-  const isExpired = quote.valid_until && new Date(quote.valid_until) < new Date();
+  const isExpired = quote.valid_until && finDeJournee(quote.valid_until) < new Date();
   const canRespond = ['draft', 'awaiting_response', 'changes_requested'].includes(quote.status) && !isExpired;
   const requiredItems = items.filter(i => !i.is_optional);
   const optionalItems = items.filter(i => i.is_optional);

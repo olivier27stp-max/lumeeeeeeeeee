@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { emitQuoteDeclined, emitQuoteApproved } from './automationEventsApi';
 import { syncEntityPin } from './fieldSalesApi';
+import { versDate } from './dateSeule';
 
 // ── Types ──
 
@@ -645,7 +646,7 @@ export async function duplicateQuote(quoteId: string): Promise<QuoteDetail> {
   // Même durée de validité que l'original (valid_until − created_at), pas le 30 jours par défaut.
   const sourceValidDays = source.quote.valid_until
     ? Math.min(365, Math.max(1, Math.round(
-        (new Date(source.quote.valid_until).getTime() - new Date(source.quote.created_at).getTime()) / 86400000,
+        (versDate(source.quote.valid_until).getTime() - new Date(source.quote.created_at).getTime()) / 86400000,
       )))
     : 30;
 

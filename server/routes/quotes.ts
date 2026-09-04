@@ -12,6 +12,7 @@ import { decryptSecret } from '../../src/lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
 import { getCompanyBranding } from '../lib/companyBranding';
+import { estEchue } from '../lib/date-seule';
 
 const router = Router();
 
@@ -970,7 +971,10 @@ router.post('/quotes/public/accept', async (req, res) => {
     if (['approved', 'declined', 'converted', 'expired', 'archived'].includes(quote.status)) {
       return res.status(400).json({ error: `Quote is already ${quote.status}.` });
     }
-    if (quote.valid_until && new Date(quote.valid_until) < new Date()) {
+    // Date civile contre date civile : le dernier jour de validité compte
+    // encore. `new Date('AAAA-MM-JJ')` est minuit UTC, soit la veille au soir
+    // à Montréal — le devis était refusé toute sa dernière journée.
+    if (estEchue(quote.valid_until)) {
       return res.status(400).json({ error: 'Quote has expired.' });
     }
 

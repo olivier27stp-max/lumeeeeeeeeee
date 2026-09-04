@@ -78,6 +78,7 @@ import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import EntityHubHeader from '../components/EntityHubHeader';
 import EntityNumberEditor from '../components/EntityNumberEditor';
+import { versDate } from '../lib/dateSeule';
 import TeamDayRoster from '../components/TeamDayRoster';
 import ClientPinMiniMap, { type ClientMapPin } from '../components/map-d2d/ClientPinMiniMap';
 import { getPins } from '../lib/fieldSalesApi';
@@ -2205,8 +2206,8 @@ export default function JobDetails() {
                       : (language === 'fr' ? recFreqLabelFr(recurrence.frequency) : recFreqLabelEn(recurrence.frequency))}
                   </p>
                   <p className="text-[12px] text-text-tertiary">
-                    {language === 'fr' ? 'Depuis' : 'Since'} {new Date(recurrence.start_date).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')} — {recurrence.occurrences_created} {language === 'fr' ? 'créées' : 'created'}
-                    {recurrence.end_date ? ` — ${language === 'fr' ? 'se termine le' : 'ends'} ${new Date(recurrence.end_date).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')}` : ''}
+                    {language === 'fr' ? 'Depuis' : 'Since'} {versDate(recurrence.start_date).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')} — {recurrence.occurrences_created} {language === 'fr' ? 'créées' : 'created'}
+                    {recurrence.end_date ? ` — ${language === 'fr' ? 'se termine le' : 'ends'} ${versDate(recurrence.end_date).toLocaleDateString(language === 'fr' ? 'fr-CA' : 'en-US')}` : ''}
                   </p>
                 </div>
                 <button
