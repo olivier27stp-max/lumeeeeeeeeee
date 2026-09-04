@@ -620,6 +620,43 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
 
 // ─── POST /billing/create-payment-intent — For Stripe Elements ──
 
+/**
+ * Traduit une erreur Stripe en message exploitable, sans jamais divulguer
+ * de détail interne au client.
+ *
+ * POURQUOI
+ * Ces routes répondaient « Internal server error » quelle que soit la cause.
+ * Or Stripe dit précisément ce qui cloche — constaté le 2026-09-04 :
+ *   « No such price 'price_1TqyQY…' ; a similar object exists in live mode,
+ *     but a test mode key was used to make this request. »
+ * Ce diagnostic partait dans les journaux et l'appelant ne voyait rien.
+ * Le jour où une configuration Stripe dérive, personne ne sait quoi chercher.
+ */
+function messageStripe(err: any): { status: number; error: string } {
+  const code = err?.code || err?.raw?.code;
+  const msg = String(err?.message || '');
+
+  // Décalage entre les clés utilisées et les objets référencés en base.
+  if (code === 'resource_missing' && /live mode|test mode/i.test(msg)) {
+    return {
+      status: 503,
+      error:
+        'Configuration Stripe incohérente : les identifiants de tarifs enregistrés '
+        + 'n’existent pas pour la clé utilisée (mélange entre le mode test et le mode réel).',
+    };
+  }
+  if (code === 'resource_missing') {
+    return { status: 503, error: 'Tarif introuvable chez Stripe — vérifier la configuration des forfaits.' };
+  }
+  if (err?.type === 'StripeAuthenticationError') {
+    return { status: 503, error: 'Clé Stripe invalide ou absente sur le serveur.' };
+  }
+  if (err?.type === 'StripeCardError') {
+    return { status: 402, error: err.message || 'Paiement refusé.' };
+  }
+  return { status: 500, error: 'Internal server error' };
+}
+
 router.post('/billing/create-payment-intent', async (req, res) => {
   try {
     if (!stripe) {
@@ -672,7 +709,8 @@ router.post('/billing/create-payment-intent', async (req, res) => {
     return res.json({ client_secret: paymentIntent.client_secret });
   } catch (err: any) {
     console.error('[billing/create-payment-intent]', err.message);
-    return res.status(500).json({ error: 'Internal server error' });
+    const r = messageStripe(err);
+    return res.status(r.status).json({ error: r.error });
   }
 });
 
@@ -1930,7 +1968,8 @@ router.post('/billing/create-checkout-session', async (req, res) => {
     return res.json({ url: session.url });
   } catch (err: any) {
     console.error('[billing/create-checkout-session]', err.message);
-    return res.status(500).json({ error: 'Internal server error' });
+    const r = messageStripe(err);
+    return res.status(r.status).json({ error: r.error });
   }
 });
 
