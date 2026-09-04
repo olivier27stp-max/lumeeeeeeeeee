@@ -57,12 +57,12 @@ const STEPS: StepId[] = ['basic', 'company', 'profile', 'revenue', 'goals', 'att
 
 // ─── Right-side panel content per step ───
 const STEP_PANELS: Record<StepId, { image: string; quote: string; quoteFr: string; author?: string }> = {
-  basic:       { image: '/industries/landscaping.png', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
-  company:     { image: '/industries/landscaping.png', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
-  profile:     { image: '/industries/construction.png', quote: 'Business owners who use Lume save 7 hours a week.', quoteFr: 'Les propriétaires d\'entreprise qui utilisent Lume économisent 7 heures par semaine.', author: '' },
-  revenue:     { image: '/industries/hvac.png', quote: 'You can get paid 4x faster with Lume payments.', quoteFr: 'Faites-vous payer 4 fois plus vite avec les paiements Lume.', author: '' },
+  basic:       { image: '/industries/landscaping.webp', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
+  company:     { image: '/industries/landscaping.webp', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
+  profile:     { image: '/industries/construction.webp', quote: 'Business owners who use Lume save 7 hours a week.', quoteFr: 'Les propriétaires d\'entreprise qui utilisent Lume économisent 7 heures par semaine.', author: '' },
+  revenue:     { image: '/industries/hvac.webp', quote: 'You can get paid 4x faster with Lume payments.', quoteFr: 'Faites-vous payer 4 fois plus vite avec les paiements Lume.', author: '' },
   goals:       { image: '/industries/powerwash.jpg', quote: 'Lume has changed the game for us. Now we are actually starting to scale up our business.', quoteFr: 'Lume a changé la donne pour nous. On commence vraiment à faire croître notre entreprise.', author: 'Vision Lavage' },
-  attribution: { image: '/industries/roofing.png', quote: "We're here to help your business run smoothly.", quoteFr: 'On est là pour que votre entreprise roule sans accroc.', author: '' },
+  attribution: { image: '/industries/roofing.webp', quote: "We're here to help your business run smoothly.", quoteFr: 'On est là pour que votre entreprise roule sans accroc.', author: '' },
   optimize:    { image: '/industries/window.jpg', quote: 'Upgrade your plan and unlock more powerful features.', quoteFr: 'Passez à un plan supérieur et débloquez des fonctionnalités plus puissantes.', author: '' },
   checkout:    { image: '', quote: '', quoteFr: '', author: '' },
 };
@@ -788,7 +788,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
 
       {/* Hero banner */}
       <div className="relative rounded-2xl overflow-hidden mb-8">
-        <img src="/industries/landscaping.png" alt="" className="w-full h-48 object-cover" />
+        <img src="/industries/landscaping.webp" alt="" className="w-full h-48 object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/30" />
         <div className="absolute inset-0 flex items-center px-8 md:px-12">
           <div>
