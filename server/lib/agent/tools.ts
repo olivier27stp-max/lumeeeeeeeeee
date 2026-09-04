@@ -14,6 +14,7 @@ import type { FunctionDeclaration } from './gemini';
 import {
   OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
   handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
+  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, traduireStatut,
 } from './tools-etendus';
 
 export interface ToolContext {
@@ -164,7 +165,7 @@ const searchLeads: AgentTool = {
         company: l.company,
         email: l.email,
         phone: l.phone,
-        status: l.status,
+        statut: traduireStatut(l.status, STATUT_LEAD),
         value: l.value,
         address: l.address,
       })),
@@ -413,7 +414,17 @@ const listQuotes: AgentTool = {
     }
     const { data, error } = await q;
     if (error) return toolError('db', error);
-    return { count: data?.length || 0, quotes: data || [] };
+    return {
+      count: data?.length || 0,
+      quotes: (data || []).map((q: any) => ({
+        id: q.id, // interne : pour send_quote / convert_quote_to_job
+        quote_number: q.quote_number,
+        title: q.title,
+        statut: traduireStatut(q.status, STATUT_DEVIS),
+        total_cents: q.total_cents,
+        valid_until: q.valid_until,
+      })),
+    };
   },
 };
 
@@ -452,10 +463,10 @@ const listInvoices: AgentTool = {
     return {
       count: rows.length,
       invoices: rows.slice(0, limit).map((r: any) => ({
-        id: r.id,
+        id: r.id, // interne : pour send_invoice
         invoice_number: r.invoice_number,
         client_name: r.client_name,
-        status: r.status,
+        statut: traduireStatut(r.status, STATUT_FACTURE),
         total_cents: r.total_cents,
         balance_cents: r.balance_cents,
         due_date: r.due_date,
