@@ -125,6 +125,21 @@ async function userFromBearer(req: any) {
   return data.user;
 }
 
+/**
+ * Niveau d'assurance (aal1 / aal2) porté par le jeton de session. Lu dans la
+ * charge utile du JWT — sans vérifier la signature, ce qui est sans danger ici :
+ * `userFromBearer` a déjà fait valider le jeton par Supabase juste avant.
+ */
+function aalFromBearer(req: any): string {
+  try {
+    const token = String(req.header('authorization') || '').replace(/^Bearer\s+/i, '');
+    const payload = JSON.parse(Buffer.from(token.split('.')[1] || '', 'base64url').toString('utf8'));
+    return String(payload?.aal || 'aal1');
+  } catch {
+    return 'aal1';
+  }
+}
+
 // ─── POST /api/auth/register — create account + send verification email ───
 router.post('/auth/register', authRateLimit, async (req, res) => {
   try {
@@ -661,6 +676,16 @@ router.post('/auth/set-password', authRateLimit, async (req, res) => {
     const { data: fresh } = await admin.auth.admin.getUserById(sessionUser.id);
     const user: any = fresh?.user || sessionUser;
     if (!user.email) return res.status(400).json({ error: 'Account has no email.' });
+
+    // Double authentification active : un jeton AAL1 (mot de passe seul, sans
+    // le code) ne suffit pas à changer le mot de passe. L'application n'émet
+    // ce genre d'appel qu'en AAL2, mais un jeton volé pourrait être rejoué
+    // directement contre cette route — c'est ici que ça doit être refusé.
+    const { data: facteurs } = await admin.auth.admin.mfa.listFactors({ userId: user.id });
+    const mfaActive = (facteurs?.factors || []).some((f: any) => f.status === 'verified');
+    if (mfaActive && aalFromBearer(req) !== 'aal2') {
+      return res.status(403).json({ error: 'Two-factor verification required.', code: 'mfa_required' });
+    }
 
     if (userHasPassword(user)) {
       const current = String(req.body?.currentPassword || '');

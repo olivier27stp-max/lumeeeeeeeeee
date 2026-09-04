@@ -84,6 +84,7 @@ export default function SignInMethodsCard() {
       if (code === 'wrong_current') setErreur(isFr ? 'Mot de passe actuel incorrect.' : 'Current password is incorrect.');
       else if (code === 'same_password') setErreur(isFr ? 'Le nouveau mot de passe doit être différent de l’actuel.' : 'The new password must differ from the current one.');
       else if (code === 'weak_password') setErreur(t.register.passwordTooWeak);
+      else if (code === 'mfa_required') setErreur(isFr ? 'Double authentification requise : déconnecte-toi, reconnecte-toi avec ton code, puis réessaie.' : 'Two-factor verification required: sign out, sign back in with your code, then try again.');
       else setErreur(err?.message || (isFr ? 'Échec de l’enregistrement.' : 'Save failed.'));
     } finally {
       setSaving(false);
