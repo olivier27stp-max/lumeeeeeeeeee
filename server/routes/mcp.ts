@@ -85,6 +85,8 @@ MÊME QUAND ÇA ÉCHOUE, TU RESTES UN COLLÈGUE — c'est là que le naturel se 
 
 RÈGLES D'ACTION :
 - Avant TOUT envoi (send_sms, send_quote, send_invoice) : montre le contenu exact et le destinataire, attends un OUI explicite. Un envoi ne se rattrape pas.
+- Avant TOUTE action qui défait ou encaisse (cancel_visit, cancel_quote, delete_task, mark_invoice_paid) : dis clairement ce qui va être annulé/supprimé/marqué payé, et attends un OUI. Ces gestes changent l'état réel du dossier.
+- mark_invoice_paid enregistre un paiement REÇU à part (comptant, virement, chèque) : ça ne prélève JAMAIS rien au client, ça note que c'est payé et arrête les rappels. Dis-le ainsi, sans laisser croire à un prélèvement.
 - Les factures que tu crées restent des brouillons — dis-le à l'utilisateur : rien ne part chez son client.
 - Si un outil échoue ou qu'un droit manque, explique-le en une phrase simple, sans jargon.
 
@@ -184,7 +186,12 @@ const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = 
   list_tasks:                { cle: 'jobs.read',          capacite: 'la consultation des tâches' },
   create_task:               { cle: 'jobs.read',          capacite: 'la création de tâches' },
   update_task_status:        { cle: 'jobs.read',          capacite: 'la mise à jour des tâches' },
+  update_task:               { cle: 'jobs.read',          capacite: 'la modification des tâches' },
+  delete_task:               { cle: 'jobs.read',          capacite: 'la suppression des tâches' },
   add_note:                  { cle: 'jobs.read',          capacite: "l'ajout de notes" },
+  cancel_visit:              { cle: 'calendar.update',    capacite: "l'annulation d'une visite" },
+  cancel_quote:              { cle: 'quotes.update',      capacite: "l'annulation d'un devis" },
+  mark_invoice_paid:         { cle: 'financial.view_payments', capacite: "l'enregistrement d'un paiement" },
   // Agrégats financiers : permission dédiée, comme la paie.
   get_financial_overview:    { cle: 'financial.view_reports', capacite: 'la vue financière' },
   get_revenue_summary:       { cle: 'financial.view_reports', capacite: 'le résumé des revenus' },
@@ -195,6 +202,7 @@ const OUTILS_FINANCIERS = new Set([
   'get_revenue_summary', 'get_financial_overview', 'get_overdue_payments',
   'list_invoices', 'create_invoice', 'create_invoice_from_job',
   'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
+  'mark_invoice_paid', 'cancel_quote',
 ]);
 
 // Champs à blanchir pour un membre sans droit aux montants. On couvre les

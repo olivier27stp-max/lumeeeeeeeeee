@@ -136,7 +136,7 @@ const outil = async (jeton, name, args = {}) => {
   console.log('  ── Scopes et visibilité ──');
   const listeLecture = (await rpc(jLecture, 'tools/list')).result.tools.map((t) => t.name);
   const listeEcriture = (await rpc(jEcriture, 'tools/list')).result.tools.map((t) => t.name);
-  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job', 'convert_quote_to_job', 'convert_lead_to_client', 'add_visit', 'update_job', 'send_payment_reminders'];
+  const ecritures = ['create_job', 'create_client', 'create_task', 'create_quote', 'create_invoice', 'send_sms', 'update_job_status', 'assign_job', 'remember_this', 'send_quote', 'send_invoice', 'reschedule_job', 'update_client', 'update_task_status', 'add_note', 'archive_job', 'create_invoice_from_job', 'convert_quote_to_job', 'convert_lead_to_client', 'add_visit', 'update_job', 'send_payment_reminders', 'cancel_visit', 'update_task', 'delete_task', 'cancel_quote', 'mark_invoice_paid'];
   R(!ecritures.some((n) => listeLecture.includes(n)), 'Jeton lecture : AUCUNE écriture visible',
     `${listeLecture.length} outils`);
   R(ecritures.every((n) => listeEcriture.includes(n)), 'Jeton écriture : les 22 écritures visibles',
