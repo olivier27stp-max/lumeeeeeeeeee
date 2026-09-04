@@ -276,8 +276,15 @@ ${viewUrl ? `
     // Le courriel est déjà parti : on ne peut plus répondre en erreur sans
     // pousser l'utilisateur à renvoyer, donc on journalise fort.
     const now = new Date().toISOString();
+    // Le statut DOIT suivre l'envoi. Sans lui, une facture partie chez le
+    // client restait « brouillon » : absente des impayés, absente des
+    // relances, absente du chiffre d'affaires à recouvrer.
+    // Constat en production le 2026-09-03 : 4 factures dans ce cas — 919 $
+    // envoyés au client mais invisibles côté Lume.
+    // On ne touche QU'AUX brouillons : une facture déjà payée, partielle ou
+    // annulée garde son statut, un renvoi de courriel ne doit pas la rouvrir.
     const { error: stampError } = await client.from('invoices').update({
-      issued_at: invoice.status === 'draft' ? now : undefined,
+      ...(invoice.status === 'draft' ? { status: 'sent', issued_at: now } : {}),
       sent_at: now,
     }).eq('id', invoiceId);
     if (stampError) {
