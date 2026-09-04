@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { erreurLisible } from './erreursBase';
 
 /** One phone number with its label (New Client form). */
 export interface ClientPhone {
@@ -241,7 +242,7 @@ export async function createClientWithDuplicateHandling(
     },
     p_merge_duplicates: true,
   });
-  if (error) throw error;
+  if (error) throw erreurLisible(error);
   return data as unknown as ClientRecord;
 }
 
@@ -287,7 +288,7 @@ export async function updateClient(id: string, payload: Partial<ClientPayload>):
   if (error?.code === 'PGRST116' && expectedVersion != null) {
     throw new Error('This client was modified by another user. Please refresh and try again.');
   }
-  if (error) throw error;
+  if (error) throw erreurLisible(error);
   return data as ClientRecord;
 }
 
