@@ -33,6 +33,7 @@ import { getServiceClient, requireAuthedClient } from '../lib/supabase';
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { AGENT_TOOLS, TOOLS_BY_NAME, type AgentTool } from '../lib/agent/tools';
+import { masquerIds, demasquerIds } from '../lib/agent/refs';
 import { validateAccessToken, canonicalResource, baseUrl, SCOPE_MCP_READ, SCOPE_MCP_WRITE, buildUserScopedClient } from '../lib/oauth';
 import { getUserContext, hasPermission } from '../lib/rbac';
 
@@ -547,7 +548,13 @@ router.post('/', async (req, res) => {
         clientOutil = buildToolClient();
       }
 
-      const result = await tool.handler(args, {
+      // Réfs opaques : l'espace de correspondance est propre à (org, porteur).
+      const espaceRefs = `${auth.orgId}:${auth.userId ?? auth.credentialId}`;
+      // ENTRÉE : une réf courte que l'agent nous renvoie (c1, j3…) redevient
+      // l'UUID réel avant d'agir. Un vrai UUID passe tel quel (rien ne casse).
+      const argsReels = demasquerIds(espaceRefs, args);
+
+      const result = await tool.handler(argsReels, {
         client: clientOutil,
         orgId: auth.orgId,
         // En OAuth, l'identité réelle du porteur ; en clé d'API, l'identifiant
@@ -587,10 +594,15 @@ router.post('/', async (req, res) => {
           String((resultatFinal as any).error).slice(0, 160));
       }
 
+      // SORTIE : dernier filtre, tout UUID devient une réf courte (c1, j3…).
+      // Un seul point de passage → aucun outil ne peut faire fuir un id, ni
+      // aujourd'hui ni demain. L'agent ne verra jamais d'UUID.
+      const resultatSansIds = masquerIds(espaceRefs, resultatFinal);
+
       // MCP returns tool output as content parts; JSON goes in a text part.
       return res.json(
         rpcResult(id, {
-          content: [{ type: 'text', text: JSON.stringify(resultatFinal) }],
+          content: [{ type: 'text', text: JSON.stringify(resultatSansIds) }],
           isError: Boolean((resultatFinal as any)?.error),
         }),
       );

@@ -1668,9 +1668,30 @@ const getMorningBriefing: AgentTool = {
           client: v.job?.client_name, address: v.job?.property_address,
         })),
       },
-      tasks_due: { total_matching: tachesR.count ?? 0, tasks: tachesR.data || [] },
-      new_requests_48h: { total_matching: demandesR.count ?? 0, requests: demandesR.data || [] },
-      unread_sms: { total_matching: nonLusR.count ?? 0, conversations: nonLusR.data || [] },
+      tasks_due: {
+        total_matching: tachesR.count ?? 0,
+        tasks: (tachesR.data || []).map((t: any) => ({
+          title: t.title,
+          priorite: ({ low: 'basse', medium: 'moyenne', high: 'haute' } as Record<string, string>)[t.priority] || t.priority,
+          echeance: t.due_date,
+        })),
+      },
+      new_requests_48h: {
+        total_matching: demandesR.count ?? 0,
+        requests: (demandesR.data || []).map((r: any) => ({
+          nom: `${r.first_name || ''} ${r.last_name || ''}`.trim() || r.phone || r.email || 'demande',
+          ville: r.city || null,
+          quand: r.created_at,
+        })),
+      },
+      unread_sms: {
+        total_matching: nonLusR.count ?? 0,
+        conversations: (nonLusR.data || []).map((c: any) => ({
+          client: c.client_name || c.phone_number,
+          dernier_message: c.last_message_text,
+          non_lus: c.unread_count,
+        })),
+      },
     };
   },
 };
