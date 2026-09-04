@@ -729,7 +729,7 @@ const createInvoice: AgentTool = {
   declaration: {
     name: 'create_invoice',
     description:
-      'Create an invoice DRAFT for a client (client_id from search_clients). The invoice stays a draft: nothing is sent to the client — sending happens in Lume. Amounts are in cents.',
+      'Create an invoice DRAFT for a client (client_id from a client search). The invoice stays a draft: nothing is sent to the client — sending happens in Lume. Amounts are in cents.',
     parameters: {
       type: 'object',
       properties: {

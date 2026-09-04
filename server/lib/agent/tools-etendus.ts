@@ -469,7 +469,7 @@ const getConversationMessages: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
-        client_id: { type: 'string', description: 'Client id (from search_clients).' },
+        client_id: { type: 'string', description: 'Client id (from a client search).' },
         phone_number: { type: 'string', description: 'Phone number if no client_id.' },
         limit: { type: 'integer', description: 'Max messages (default 20, max 50).' },
       },
@@ -1605,7 +1605,7 @@ const createTaskTool: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'create_task',
-    description: 'Create a task (to-do), optionally assigned to a team member (user_id from get_team).',
+    description: 'Create a task (to-do), optionally assigned to a team member (user_id from the team list).',
     parameters: {
       type: 'object',
       properties: {
@@ -1628,7 +1628,7 @@ const updateJobStatusTool: AgentTool = {
     name: 'update_job_status',
     description:
       "Change a job's status. Valid: draft, scheduled, in_progress, completed, cancelled. "
-      + 'Get the job id from list_jobs first.',
+      + 'Get the job id from the jobs list first.',
     parameters: {
       type: 'object',
       properties: {
@@ -1646,7 +1646,7 @@ const assignJobTool: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'assign_job',
-    description: 'Assign a job to a team member. Use get_team for the user_id, list_jobs for the job id.',
+    description: 'Assign a job to a team member. Use the team list for the member, the jobs list for the job.',
     parameters: {
       type: 'object',
       properties: {
@@ -1750,10 +1750,10 @@ const getClientProfile: AgentTool = {
     description:
       'The 360° view of ONE client before a call or a visit: contact info, job history and totals, '
       + 'what they owe (unpaid invoices), quotes, and the last SMS exchange. '
-      + 'Use client_id from search_clients. This is THE tool for "tell me about X".',
+      + 'Use the client id from a client search. This is THE tool for "tell me about X".',
     parameters: {
       type: 'object',
-      properties: { client_id: { type: 'string', description: 'Client id (from search_clients).' } },
+      properties: { client_id: { type: 'string', description: 'Client id (from a client search).' } },
       required: ['client_id'],
     },
   },
@@ -2058,7 +2058,7 @@ const sendQuoteTool: AgentTool = {
     description:
       "Email a quote to its client — IT ACTUALLY SENDS through the app's own engine (share link, "
       + 'templates, tracking). ALWAYS show the user which quote goes to whom and get their explicit OK '
-      + 'first. Get quote ids from list_quotes or create_quote.',
+      + 'first. Get quote ids from the quotes list.',
     parameters: {
       type: 'object',
       properties: {
@@ -2100,7 +2100,7 @@ const sendInvoiceTool: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
-        invoice_id: { type: 'string', description: 'Invoice id (from create_invoice or list_invoices).' },
+        invoice_id: { type: 'string', description: 'Invoice id (from the invoices list).' },
         subject: { type: 'string', description: 'Optional email subject override.' },
         message: { type: 'string', description: 'Optional email body override.' },
       },
@@ -2133,7 +2133,7 @@ const sendEmailTool: AgentTool = {
     name: 'send_email',
     description:
       'Send a free-form email to a client (a thank-you, a follow-up, an answer) — IT ACTUALLY SENDS. '
-      + 'For a quote or invoice, use send_quote/send_invoice instead. ALWAYS show the user the recipient, '
+      + 'For a quote or invoice, use the quote or invoice sending action instead. ALWAYS show the user the recipient, '
       + 'subject and full text and get their explicit OK first. Only owners/admins can send.',
     parameters: {
       type: 'object',
@@ -2212,8 +2212,8 @@ const optimizeRouteTool: AgentTool = {
     name: 'optimize_route',
     description:
       'Propose the best ORDER to visit a set of jobs to drive less, with distance and drive time. It only '
-      + 'PROPOSES — it does not move anything on the calendar. Give the job ids (from get_day_route or '
-      + 'list_jobs). Use for « organize my stops », « best route for these jobs ».',
+      + 'PROPOSES — it does not move anything on the calendar. Give the job ids (from the route of the day '
+      + 'or the jobs list). Use for « organize my stops », « best route for these jobs ».',
     parameters: {
       type: 'object',
       properties: {
@@ -2224,7 +2224,7 @@ const optimizeRouteTool: AgentTool = {
   },
   handler: async (args, ctx) => {
     const ids = Array.isArray(args.job_ids) ? args.job_ids.map(String).filter(Boolean) : [];
-    if (!ids.length) return { error: 'Donne au moins un job à ordonner (via get_day_route).' };
+    if (!ids.length) return { error: 'Donne au moins un job à ordonner (ceux de ta journée).' };
     let res;
     try {
       res = await appelInterne(ctx, '/route-optimization/optimize', { job_ids: ids });
@@ -2260,7 +2260,7 @@ const rescheduleJobTool: AgentTool = {
     description:
       "Move a job's calendar visit to a new date/time — the same engine as dragging it on the Lume "
       + 'calendar. If the job has several visits, the NEXT upcoming one moves (or the most recent if all '
-      + 'are past). Get the job id from list_jobs.',
+      + 'are past). Get the job id from the jobs list.',
     parameters: {
       type: 'object',
       properties: {
@@ -2320,7 +2320,7 @@ const cancelVisitTool: AgentTool = {
     description:
       "Cancel a job's calendar visit — same as deleting it on the Lume calendar. Removes the NEXT "
       + 'upcoming visit (or the most recent if all are past). If it was the job\'s only visit, the job '
-      + 'goes back to unscheduled. Get the job id from list_jobs. Confirm with the user first.',
+      + 'goes back to unscheduled. Get the job id from the jobs list. Confirm with the user first.',
     parameters: {
       type: 'object',
       properties: {
@@ -2370,7 +2370,7 @@ const updateClientTool: AgentTool = {
     name: 'update_client',
     description:
       "Correct a client's contact info: phone, email, address, city, name or company. "
-      + 'Only the provided fields change. Get the client id from search_clients.',
+      + 'Only the provided fields change. Get the client id from a client search.',
     parameters: {
       type: 'object',
       properties: {
@@ -2414,7 +2414,7 @@ const updateTaskStatusTool: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'update_task_status',
-    description: "Mark a task done, or reopen it. Get task ids from list_tasks. Valid: 'done', 'open'.",
+    description: "Mark a task done, or reopen it. Get task ids from the tasks list. Valid: 'done', 'open'.",
     parameters: {
       type: 'object',
       properties: {
@@ -2448,16 +2448,16 @@ const updateTaskTool: AgentTool = {
     name: 'update_task',
     description:
       "Edit a task's content: title, description, due date, priority, or who it's assigned to. "
-      + 'Only the provided fields change. Get task ids from list_tasks and member ids from get_team.',
+      + 'Only the provided fields change. Get task ids from the tasks list and member ids from the team list.',
     parameters: {
       type: 'object',
       properties: {
-        task_id: { type: 'string', description: 'Task id (from list_tasks).' },
+        task_id: { type: 'string', description: 'Task id (from the tasks list).' },
         title: { type: 'string', description: 'New title.' },
         description: { type: 'string', description: 'New description.' },
         due_date: { type: 'string', description: 'New due date YYYY-MM-DD (or ISO).' },
         priority: { type: 'string', description: "'low', 'medium' or 'high'." },
-        assignee_user_id: { type: 'string', description: 'Team member user_id from get_team (or null to unassign).' },
+        assignee_user_id: { type: 'string', description: 'Team member user_id from the team list (or null to unassign).' },
       },
       required: ['task_id'],
     },
@@ -2513,12 +2513,12 @@ const deleteTaskTool: AgentTool = {
   declaration: {
     name: 'delete_task',
     description:
-      'Delete a task (it disappears from the list). Get the task id from list_tasks. This is a soft '
+      'Delete a task (it disappears from the list). Get the task id from the tasks list. This is a soft '
       + 'delete, like in Lume. Confirm with the user first.',
     parameters: {
       type: 'object',
       properties: {
-        task_id: { type: 'string', description: 'Task id (from list_tasks).' },
+        task_id: { type: 'string', description: 'Task id (from the tasks list).' },
       },
       required: ['task_id'],
     },
@@ -2546,11 +2546,11 @@ const cancelQuoteTool: AgentTool = {
     name: 'cancel_quote',
     description:
       'Cancel a quote — mark it declined (the client said no) or archived (set aside). Same as changing '
-      + 'its status in Lume. Get the quote id from list_quotes. Confirm with the user first.',
+      + 'its status in Lume. Get the quote id from the quotes list. Confirm with the user first.',
     parameters: {
       type: 'object',
       properties: {
-        quote_id: { type: 'string', description: 'Quote id (from list_quotes).' },
+        quote_id: { type: 'string', description: 'Quote id (from the quotes list).' },
         reason: { type: 'string', description: "'declined' (client refused) or 'archived' (set aside). Default: archived." },
       },
       required: ['quote_id'],
@@ -2587,12 +2587,12 @@ const markInvoicePaidTool: AgentTool = {
     description:
       'Mark an invoice as fully PAID — records a full manual payment (cash, e-transfer, cheque…) and '
       + 'stops payment reminders, exactly like "Mark as paid" in Lume. Use for money received OUTSIDE '
-      + 'Stripe/PayPal. This does NOT charge anyone. Get the invoice id from list_invoices or '
-      + 'get_overdue_payments. ALWAYS confirm the invoice and amount with the user first.',
+      + 'Stripe/PayPal. This does NOT charge anyone. Get the invoice id from the invoices list or '
+      + 'the overdue payments list. ALWAYS confirm the invoice and amount with the user first.',
     parameters: {
       type: 'object',
       properties: {
-        invoice_id: { type: 'string', description: 'Invoice id (from list_invoices / get_overdue_payments).' },
+        invoice_id: { type: 'string', description: 'Invoice id (from the invoices list).' },
         method: { type: 'string', description: "How it was paid: 'cash', 'e-transfer', 'check' or 'card'. Optional." },
       },
       required: ['invoice_id'],
@@ -2735,7 +2735,7 @@ const createInvoiceFromJobTool: AgentTool = {
     description:
       "Close out a completed job into a DRAFT invoice — the app's own finish-and-prepare flow "
       + '(line items carried over, job marked invoiced). Nothing is sent. THE tool for '
-      + '\u00ab facture le job #X \u00bb. Get the job id from list_jobs.',
+      + '\u00ab facture le job #X \u00bb. Get the job id from the jobs list.',
     parameters: {
       type: 'object',
       properties: { job_id: { type: 'string', description: 'Job id.' } },
@@ -2908,11 +2908,11 @@ const setJobExpensesTool: AgentTool = {
     description:
       'Record the total expenses/costs on a job (gas, materials, subcontractor…) so its profit is '
       + 'accurate. This SETS the total expense figure (it replaces it, it does not add to it) — if there '
-      + 'were already expenses, include them. Amount in dollars. Get the job id from list_jobs.',
+      + 'were already expenses, include them. Amount in dollars. Get the job id from the jobs list.',
     parameters: {
       type: 'object',
       properties: {
-        job_id: { type: 'string', description: 'Job id (from list_jobs).' },
+        job_id: { type: 'string', description: 'Job id (from the jobs list).' },
         amount_dollars: { type: 'number', description: 'TOTAL expenses in dollars (e.g. 125.50). Replaces the current figure.' },
       },
       required: ['job_id', 'amount_dollars'],
@@ -2954,7 +2954,7 @@ const convertQuoteToJobTool: AgentTool = {
     name: 'convert_quote_to_job',
     description:
       "The client accepted a quote → turn it into a job, through the app's own conversion route "
-      + '(line items carried, quote marked converted). Get the quote id from list_quotes.',
+      + '(line items carried, quote marked converted). Get the quote id from the quotes list.',
     parameters: {
       type: 'object',
       properties: { quote_id: { type: 'string', description: 'Quote id.' } },
@@ -2983,10 +2983,10 @@ const convertLeadToClientTool: AgentTool = {
     name: 'convert_lead_to_client',
     description:
       'Promote a lead to an active client — same effect as the app\u2019s convert action '
-      + '(status active, pipeline closed-won). Get the lead id from search_leads.',
+      + '(status active, pipeline closed-won). Get the lead id from a lead search.',
     parameters: {
       type: 'object',
-      properties: { lead_id: { type: 'string', description: 'Lead id (from search_leads).' } },
+      properties: { lead_id: { type: 'string', description: 'Lead id (from a lead search).' } },
       required: ['lead_id'],
     },
   },
@@ -3055,7 +3055,7 @@ const sendPaymentReminders: AgentTool = {
     description:
       'Send a personalized payment-reminder SMS to several overdue clients at once — the automations '
       + 'handle the standard cadence; THIS is for a custom reminder you send now, in your own words. '
-      + 'Build the list from get_overdue_payments. For each recipient give client_id and the exact '
+      + 'Build the list from the overdue payments list. For each recipient give client_id and the exact '
       + 'message. ALWAYS show the user every message and recipient and get one clear OK before calling. '
       + 'Opt-outs (STOP) and clients without a phone are skipped and reported, never a hard failure.',
     parameters: {
@@ -3067,7 +3067,7 @@ const sendPaymentReminders: AgentTool = {
           items: {
             type: 'object',
             properties: {
-              client_id: { type: 'string', description: 'Client id (from get_overdue_payments).' },
+              client_id: { type: 'string', description: 'Client id (from the overdue payments list).' },
               message: { type: 'string', description: 'The exact SMS text for THIS client (personalize it).' },
             },
             required: ['client_id', 'message'],
