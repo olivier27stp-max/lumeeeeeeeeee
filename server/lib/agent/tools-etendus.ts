@@ -89,6 +89,64 @@ function qtePositive(v: any): number {
 }
 
 /**
+ * Exige un champ texte non vide. Le schéma JSON-RPC déclare `required`, mais
+ * il n'est PAS validé avant le handler : un client qui omet le champ ferait
+ * `String(undefined)` = "undefined" inséré en base (donnée corrompue
+ * silencieuse). On refuse proprement à la place. Renvoie la valeur nettoyée.
+ */
+function champRequis(v: any, nomLisible: string): string {
+  const s = v == null ? '' : String(v).trim();
+  if (!s) throw new Error(`${nomLisible} est requis — précise-le et réessaie.`);
+  return s;
+}
+
+/**
+ * Fuseau de l'entreprise. Le serveur (Railway) tourne en UTC : un
+ * `new Date().toISOString().slice(0,10)` donne la date UTC, pas celle de
+ * Québec. En soirée locale (déjà le lendemain en UTC), ça marquait des
+ * factures « en retard » à tort et donnait le briefing du mauvais jour.
+ * Même fuseau que le moteur d'automatisations (Intl, DST-safe, sans lib).
+ */
+const FUSEAU_ORG = 'America/Montreal';
+
+/** Date du jour (YYYY-MM-DD) DANS le fuseau de l'entreprise, pas en UTC. */
+function dateOrgAujourdhui(d: Date = new Date()): string {
+  // en-CA + year/month/day → « 2026-09-03 » directement, en heure locale.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: FUSEAU_ORG, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d);
+}
+
+/**
+ * Décalage du fuseau de l'entreprise par rapport à UTC, en minutes, à un
+ * instant donné (gère l'heure d'été). Ex. Montréal l'été = -240.
+ */
+function offsetOrgMinutes(d: Date): number {
+  const s = new Intl.DateTimeFormat('en-US', {
+    timeZone: FUSEAU_ORG, timeZoneName: 'shortOffset',
+  }).formatToParts(d).find((p) => p.type === 'timeZoneName')?.value || 'GMT-5';
+  const m = s.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+  if (!m) return -300;
+  const signe = m[1] === '-' ? -1 : 1;
+  return signe * (Number(m[2]) * 60 + Number(m[3] || 0));
+}
+
+/**
+ * Début et fin d'une journée LOCALE (fuseau org), exprimés en instants UTC
+ * ISO — pour filtrer une colonne timestamptz sur « la journée d'aujourd'hui à
+ * Québec » et non « la journée UTC ». jourYmd optionnel = un autre jour local.
+ */
+function bornesJourOrg(jourYmd?: string): { debut: string; fin: string; jour: string } {
+  const jour = jourYmd || dateOrgAujourdhui();
+  // Minuit local = minuit UTC de ce jour, moins l'offset local.
+  const minuitUtcNaif = new Date(`${jour}T00:00:00Z`);
+  const off = offsetOrgMinutes(minuitUtcNaif); // minutes (ex. -240)
+  const debut = new Date(minuitUtcNaif.getTime() - off * 60_000);
+  const fin = new Date(debut.getTime() + 86400_000 - 1000);
+  return { debut: debut.toISOString(), fin: fin.toISOString(), jour };
+}
+
+/**
  * Plage de dates BORNÉE pour les lectures analytiques (feuilles de temps, paie,
  * stats terrain, finances). Sans borne, un `from` très ancien ramènerait des
  * années de lignes d'un coup. On rabote la fenêtre à `maxJours` (en reculant
@@ -101,10 +159,12 @@ function plageBornee(
   maxJours = 366,
 ): { from: string; to: string; tronquee: boolean } {
   const jour = (d: Date) => d.toISOString().slice(0, 10);
-  const toD = fromArg || toArg ? new Date(String(toArg || new Date().toISOString().slice(0, 10))) : new Date();
+  // Défaut du `to` = aujourd'hui à Québec (colonnes de type `date`), pas la
+  // date UTC — sinon « aujourd'hui » en soirée locale pointe le lendemain.
+  const toD = new Date(`${String(toArg || dateOrgAujourdhui())}T12:00:00Z`);
   const to = Number.isNaN(toD.getTime()) ? new Date() : toD;
   const defautFrom = new Date(to.getTime() - 7 * 86400000);
-  const fromD = fromArg ? new Date(String(fromArg)) : defautFrom;
+  const fromD = fromArg ? new Date(`${String(fromArg)}T12:00:00Z`) : defautFrom;
   const from = Number.isNaN(fromD.getTime()) ? defautFrom : fromD;
   const planche = new Date(to.getTime() - maxJours * 86400000);
   const tronquee = from < planche;
@@ -630,10 +690,11 @@ const getFinancialOverview: AgentTool = {
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
-    const debutMois = new Date();
-    debutMois.setDate(1);
-    const from = debutMois.toISOString().slice(0, 10);
-    const to = new Date().toISOString().slice(0, 10);
+    // Bornes du mois courant DANS le fuseau de l'entreprise : un « 1er du
+    // mois » calculé en UTC peut tomber le dernier jour du mois précédent à
+    // Québec, et fausser le mois affiché en début/fin de mois.
+    const to = dateOrgAujourdhui();
+    const from = `${to.slice(0, 7)}-01`;
 
     const [kpisR, serieR, jobsR] = await Promise.all([
       ctx.client.rpc('rpc_invoices_kpis_30d', { p_org: ctx.orgId }),
@@ -786,12 +847,12 @@ export const handlerCreateJob = async (args: Record<string, any>, ctx: ToolConte
       p_lead_id: args.lead_id || null,
       p_client_id: args.client_id || null,
       p_team_id: null,
-      p_title: String(args.title).slice(0, 200),
+      p_title: champRequis(args.title, 'Le titre').slice(0, 200),
       p_job_number: null,
       p_job_type: args.job_type ? String(args.job_type).slice(0, 80) : null,
       p_status: null,
       p_address: adresse,
-      p_notes: args.description ? String(args.description) : null,
+      p_notes: args.description ? String(args.description).slice(0, 5000) : null,
       p_scheduled_at: debutISO,
       p_end_at: finISO,
       p_timezone: 'America/Montreal',
@@ -932,8 +993,8 @@ export const handlerCreateTask = async (args: Record<string, any>, ctx: ToolCont
       .insert({
         org_id: ctx.orgId,
         created_by: ctx.userId,
-        title: String(args.title).slice(0, 200),
-        description: args.description ? String(args.description) : null,
+        title: champRequis(args.title, 'Le titre').slice(0, 200),
+        description: args.description ? String(args.description).slice(0, 5000) : null,
         status: 'open',
         priority: priorite,
         due_date: args.due_date || null,
@@ -1003,7 +1064,7 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const { data: rpcResult, error: rpcError } = await ctx.client.rpc('rpc_create_quote', {
       p_lead_id: args.lead_id || null,
       p_client_id: args.client_id || null,
-      p_title: String(args.title).slice(0, 200),
+      p_title: champRequis(args.title, 'Le titre').slice(0, 200),
       p_salesperson_id: null,
       p_context_type: args.client_id ? 'client' : 'lead',
       p_currency: 'CAD',
@@ -1020,7 +1081,7 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const lignes = items.map((it, i) => ({
       quote_id: quoteId,
       name: String(it.name).trim(),
-      description: it.description ? String(it.description) : null,
+      description: it.description ? String(it.description).slice(0, 2000) : null,
       quantity: qtePositive(it.quantity),
       unit_price_cents: Math.max(0, Math.round(Number(it.unit_price_cents) || 0)),
       total_cents: Math.round(qtePositive(it.quantity) * Math.max(0, Number(it.unit_price_cents) || 0)),
@@ -1252,6 +1313,38 @@ const assignJobTool: AgentTool = {
  * automatiques, journalisation — au lieu d'en maintenir une copie qui
  * finirait par dériver.
  */
+/**
+ * Signale un appel interne dont la requête est partie mais dont la RÉPONSE
+ * n'est jamais arrivée (timeout, connexion coupée). L'effet — un courriel
+ * déjà envoyé, par exemple — est INCERTAIN : ni « fait » ni « pas fait ». Les
+ * handlers d'envoi le convertissent en EffetPartiel pour NE PAS retenter (donc
+ * ne jamais dupliquer un envoi au client).
+ */
+class AppelInterneIncertain extends Error {
+  constructor(public cause: string) {
+    super(cause);
+    this.name = 'AppelInterneIncertain';
+  }
+}
+
+/**
+ * Construit l'EffetPartiel d'un envoi dont le résultat est incertain (la
+ * requête est partie, la réponse n'est pas revenue). On GARDE l'empreinte
+ * d'idempotence : Claude ne doit pas retenter — un second envoi au client est
+ * irrattrapable. Message honnête : « peut-être parti, vérifie dans Lume ».
+ */
+function envoiIncertain(quoi: string): EffetPartiel {
+  return new EffetPartiel({
+    incertain: true,
+    sent: null,
+    note: `Je n'ai pas eu la confirmation que ${quoi} est bien parti — il a PEUT-ÊTRE été envoyé. `
+      + `Ne le renvoie pas d'ici là : vérifie dans Lume si le client l'a reçu, et ne relance que si ce n'est pas le cas.`,
+  });
+}
+
+/** Délai au-delà duquel un appel interne est abandonné (ms). */
+const TIMEOUT_APPEL_INTERNE_MS = Number(process.env.MCP_INTERNAL_TIMEOUT_MS) || 20_000;
+
 async function appelInterne(
   ctx: ToolContext,
   chemin: string,
@@ -1261,15 +1354,30 @@ async function appelInterne(
     throw new Error('Cette action exige votre session Lume — reconnectez le connecteur dans Claude.');
   }
   const port = Number(process.env.PORT || process.env.API_PORT || 3002);
-  const r = await fetch(`http://127.0.0.1:${port}/api${chemin}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${ctx.accessToken}`,
-      'x-org-id': ctx.orgId,
-    },
-    body: JSON.stringify(corps),
-  });
+  const ctrl = new AbortController();
+  const minuteur = setTimeout(() => ctrl.abort(), TIMEOUT_APPEL_INTERNE_MS);
+  let r: Response;
+  try {
+    r = await fetch(`http://127.0.0.1:${port}/api${chemin}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${ctx.accessToken}`,
+        'x-org-id': ctx.orgId,
+      },
+      body: JSON.stringify(corps),
+      signal: ctrl.signal,
+    });
+  } catch (e: any) {
+    // Requête partie, pas de réponse : l'effet côté route interne est
+    // INCERTAIN. On loggue (l'audit prod notait l'absence de trace ici) et on
+    // remonte un échec typé — surtout PAS un throw ordinaire qui libérerait
+    // l'idempotence et autoriserait un second envoi.
+    console.error(`[appelInterne:${chemin}] pas de réponse (org ${ctx.orgId}) :`, e?.name === 'AbortError' ? 'timeout' : e?.message || e);
+    throw new AppelInterneIncertain(e?.name === 'AbortError' ? 'timeout' : 'connexion interrompue');
+  } finally {
+    clearTimeout(minuteur);
+  }
   const json = await r.json().catch(() => ({}));
   return { ok: r.ok, status: r.status, json };
 }
@@ -1322,7 +1430,7 @@ const getClientProfile: AgentTool = {
 
     const factures = facturesR.data || [];
     const impayees = factures.filter((f: any) => ['sent', 'partial', 'overdue'].includes(f.status));
-    const aujourdHui = new Date().toISOString().slice(0, 10);
+    const aujourdHui = dateOrgAujourdhui(); // date de Québec, pas UTC
 
     return {
       client: {
@@ -1367,10 +1475,11 @@ const getMorningBriefing: AgentTool = {
   },
   handler: async (_args, ctx) => {
     const maintenant = new Date();
-    const aujourdHui = maintenant.toISOString().slice(0, 10);
-    const debutJour = `${aujourdHui}T00:00:00Z`;
-    const finJour = `${aujourdHui}T23:59:59Z`;
-    const demain = new Date(maintenant.getTime() + 86400000).toISOString().slice(0, 10);
+    // Journée d'AUJOURD'HUI à Québec (pas la journée UTC) : sinon, en soirée
+    // locale — déjà demain en UTC — le brief affichait les visites du lendemain
+    // et ratait celles du soir même.
+    const { debut: debutJour, fin: finJour, jour: aujourdHui } = bornesJourOrg();
+    const demain = dateOrgAujourdhui(new Date(maintenant.getTime() + 86400000));
     const il48h = new Date(maintenant.getTime() - 48 * 3600_000).toISOString();
 
     const [impayesR, jobsR, tachesR, demandesR, nonLusR] = await Promise.all([
@@ -1468,14 +1577,15 @@ const rememberThis: AgentTool = {
       // (server/routes/org-knowledge.ts) : la fiche est visible et
       // modifiable dans l'application, pas enfermée chez l'agent.
       const admin = getServiceClient();
-      const cle = String(args.key).trim().toLowerCase().replace(/[^a-z0-9à-ÿ-]+/g, '-').slice(0, 80);
+      const cle = champRequis(args.key, 'La clé du souvenir')
+        .toLowerCase().replace(/[^a-z0-9à-ÿ-]+/g, '-').slice(0, 80);
       const { error } = await admin
         .from('org_knowledge')
         .upsert({
           org_id: ctx.orgId,
           category: 'assistant',
           key: cle,
-          value: String(args.note).slice(0, 2000),
+          value: champRequis(args.note, 'La note à retenir').slice(0, 2000),
           importance: 3,
           is_active: true,
         }, { onConflict: 'org_id,category,key' });
@@ -1548,11 +1658,18 @@ const sendQuoteTool: AgentTool = {
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'send_quote', args, async () => {
-      const { ok, status, json } = await appelInterne(ctx, '/quotes/send-email', {
-        quoteId: String(args.quote_id),
-        ...(args.subject ? { emailSubject: String(args.subject) } : {}),
-        ...(args.message ? { emailBody: String(args.message) } : {}),
-      });
+      let res;
+      try {
+        res = await appelInterne(ctx, '/quotes/send-email', {
+          quoteId: String(args.quote_id),
+          ...(args.subject ? { emailSubject: String(args.subject) } : {}),
+          ...(args.message ? { emailBody: String(args.message) } : {}),
+        });
+      } catch (e) {
+        if (e instanceof AppelInterneIncertain) throw envoiIncertain('le devis');
+        throw e;
+      }
+      const { ok, status, json } = res;
       if (!ok) throw new Error(json?.error || `Envoi refusé (${status}).`);
       return { sent: true, channel: 'email', note: 'Le devis est parti par le moteur d\u2019envoi de Lume — suivi d\u2019ouverture et relances habituels.' };
     }),
@@ -1579,11 +1696,18 @@ const sendInvoiceTool: AgentTool = {
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'send_invoice', args, async () => {
-      const { ok, status, json } = await appelInterne(ctx, '/emails/send-invoice', {
-        invoiceId: String(args.invoice_id),
-        ...(args.subject ? { subject: String(args.subject) } : {}),
-        ...(args.message ? { body: String(args.message) } : {}),
-      });
+      let res;
+      try {
+        res = await appelInterne(ctx, '/emails/send-invoice', {
+          invoiceId: String(args.invoice_id),
+          ...(args.subject ? { subject: String(args.subject) } : {}),
+          ...(args.message ? { body: String(args.message) } : {}),
+        });
+      } catch (e) {
+        if (e instanceof AppelInterneIncertain) throw envoiIncertain('la facture');
+        throw e;
+      }
+      const { ok, status, json } = res;
       if (!ok) throw new Error(json?.error || `Envoi refusé (${status}).`);
       return { sent: true, channel: 'email', note: 'La facture est partie — elle n\u2019est plus un brouillon, et les rappels de paiement de Lume prennent le relais.' };
     }),
@@ -1760,8 +1884,8 @@ const addNoteTool: AgentTool = {
         .insert({
           org_id: ctx.orgId,
           entity_type: type,
-          entity_id: String(args.entity_id),
-          body: String(args.note).slice(0, 4000),
+          entity_id: champRequis(args.entity_id, "L'élément à annoter"),
+          body: champRequis(args.note, 'La note').slice(0, 4000),
           actor_id: ctx.userId,
         })
         .select('id, created_at')
@@ -1897,8 +2021,8 @@ const updateJobTool: AgentTool = {
       if (!job) throw new Error('Job introuvable — vérifiez avec list_jobs.');
 
       const patch: Record<string, any> = { updated_at: new Date().toISOString() };
-      if (args.title !== undefined) patch.title = String(args.title).slice(0, 200);
-      if (args.description !== undefined) patch.notes = String(args.description) || null;
+      if (args.title !== undefined) patch.title = champRequis(args.title, 'Le titre').slice(0, 200);
+      if (args.description !== undefined) patch.notes = String(args.description).slice(0, 5000) || null;
       if (args.job_type !== undefined) patch.job_type = String(args.job_type).slice(0, 80) || null;
       if (args.property_address !== undefined) {
         // Même règle que l'app : nouvelle adresse = re-géocodage pour la carte.

@@ -32,7 +32,10 @@ export const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER || ''; // E.164
 // renvoie le client inchangé.
 export const twilioClient = envelopperTwilio(
   twilioAccountSid && twilioAuthToken && twilioAccountSid.startsWith('AC')
-    ? Twilio(twilioAccountSid, twilioAuthToken)
+    // timeout : sans borne, une lenteur réseau Twilio suspend l'appelant
+    // indéfiniment (l'agent MCP, une automatisation…). 20 s est très au-delà
+    // d'un envoi normal (~1-2 s) et libère la requête en cas de blocage.
+    ? Twilio(twilioAccountSid, twilioAuthToken, { timeout: 20_000 })
     : null,
 );
 
