@@ -9,7 +9,8 @@
 
 import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { normalizeAddressKey } from './normalize';
+import { localToUtcIso, normalizeAddressKey } from './normalize';
+import { sanitizeCellForDisplay } from './masks';
 import type {
   DryRunReport,
   EntityCounts,
@@ -301,6 +302,48 @@ function mapVisitStatus(source: string): string {
   return 'scheduled';
 }
 
+// Statuts sources « reconnus » : ceux qui matchent une règle de mapping OU un
+// mot bénin qui tombe légitimement sur le défaut. Tout le reste est signalé au
+// dry-run (audit S3 : une valeur inconnue tombait sur le défaut en silence).
+const BENIGN_DEFAULT_RE = /(sched|plan|book|open|activ|new|nouveau|upcoming|venir|pending|attente|confirm)/;
+const RECOGNIZED_STATUS_RES: Partial<Record<TargetEntity, RegExp[]>> = {
+  job: [/(complet|done|closed|term|ferm|finish)/, /(cancel|annul)/, /(progress|en cours)/, /draft|brouillon/, BENIGN_DEFAULT_RE],
+  invoice: [/(paid|pay[ée]e?)/, /partial/, /draft|brouillon/, /(sent|envoy|due|overdue|retard|unpaid|impay)/, BENIGN_DEFAULT_RE],
+  quote: [/(convert)/, /(approv|accept|won|sign)/, /(chang|revis)/, /(sent|await|open|pending|envoy)/, /(archiv|declin|lost|refus|expir|cancel|annul)/, /draft|brouillon/],
+  visit: [/(complet|done|term)/, /(cancel|annul)/, BENIGN_DEFAULT_RE],
+};
+
+export function statusRecognized(entity: TargetEntity, source: string): boolean {
+  const res = RECOGNIZED_STATUS_RES[entity];
+  if (!res) return true; // entité sans statut mappé : rien à signaler
+  const s = source.toLowerCase();
+  return res.some((re) => re.test(s));
+}
+
+/**
+ * Bloc « champs non importés » ajouté aux notes du dossier (clients/jobs) :
+ * les colonnes non mappées ne disparaissent jamais silencieusement (audit S3).
+ * Valeurs passées par l'anti-injection de formules.
+ */
+export function unmappedNotesBlock(n: Record<string, unknown>): string {
+  const unmapped = n._unmapped;
+  if (!unmapped || typeof unmapped !== 'object') return '';
+  const lines: string[] = [];
+  for (const [header, value] of Object.entries(unmapped as Record<string, unknown>)) {
+    if (typeof value !== 'string' || !value) continue;
+    lines.push(`${sanitizeCellForDisplay(header)} : ${sanitizeCellForDisplay(value)}`);
+    if (lines.length >= 12) break;
+  }
+  if (lines.length === 0) return '';
+  const block = `Champs non importés (ancien CRM) :\n${lines.join('\n')}`;
+  return block.length > 1500 ? `${block.slice(0, 1500)}…` : block;
+}
+
+function joinNotes(notes: string, block: string): string | null {
+  const joined = [notes, block].filter(Boolean).join('\n\n');
+  return joined || null;
+}
+
 export interface BuildContext {
   migration: MigrationRow;
   createdBy: string;
@@ -356,7 +399,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         city: str(n.city) || null,
         province: str(n.province) || null,
         postal_code: str(n.postal_code) || null,
-        notes: str(n.notes) || null,
+        notes: joinNotes(str(n.notes), unmappedNotesBlock(n)),
         lead_source: str(n.lead_source) || null,
         status: 'active',
         created_by: ctx.createdBy,
@@ -408,7 +451,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         property_id: propertyId,
         title,
         description: str(n.description) || null,
-        notes: str(n.notes) || null,
+        notes: joinNotes(str(n.notes), unmappedNotesBlock(n)),
         job_number: str(n.job_number) || null,
         status: mapJobStatus(str(n.status)),
         total_cents: totalCents,
@@ -465,19 +508,24 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         ? `${startAt.slice(0, 10)}T23:59:00`
         : new Date(new Date(`${startAt}Z`).getTime() + 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, '');
     }
+    // Heure locale du bureau → UTC : l'app écrit toISOString() et relit en
+    // local (scheduleApi). Un naïf inséré tel quel serait pris pour de l'UTC
+    // → « rendez-vous à 9 h » affiché à 5 h (audit S2, fuseaux horaires).
+    const startUtc = localToUtcIso(startAt) ?? startAt;
+    const endUtc = localToUtcIso(endAt) ?? endAt;
     return {
       ok: true,
       row: {
         org_id: orgId,
         job_id: jobId,
         title: str(n.title) || 'Visite importée',
-        start_at: startAt,
-        end_at: endAt,
-        start_time: startAt,
-        end_time: endAt,
+        start_at: startUtc,
+        end_at: endUtc,
+        start_time: startUtc,
+        end_time: endUtc,
         status: mapVisitStatus(str(n.status)),
         notes: str(n.notes) || null,
-        timezone: 'America/Montreal',
+        timezone: 'America/Toronto', // aligné sur DEFAULT_TIMEZONE de scheduleApi
         assigned_user: ctx.staffIdBySource?.get(refKey(str(n.assigned_to))) ?? null,
         created_by: ctx.createdBy,
       },
@@ -582,6 +630,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
 
   let intraMerged = 0;
   const allAmbiguousKeys: string[] = [];
+  const unknownStatuses = new Map<string, number>(); // `${entity}:${valeur}` → occurrences
   for (const entity of entities) {
     const counts = emptyCounts();
     byEntity[entity] = counts;
@@ -603,6 +652,11 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
 
     for (const rec of rows) {
       const decision = decisions.get(rec.id);
+      const sourceStatus = str((rec.normalized ?? {}).status);
+      if (sourceStatus && !statusRecognized(entity, sourceStatus)) {
+        const key = `${entity}:${sourceStatus.toLowerCase().slice(0, 40)}`;
+        unknownStatuses.set(key, (unknownStatuses.get(key) ?? 0) + 1);
+      }
       const registerRefs = (targetId: string) => {
         targetByStagingId.set(rec.id, targetId);
         if (!mapByEntity) return;
@@ -691,6 +745,37 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
 
   if (orphans > 0) notes.push(`${orphans} ligne(s) sans relation résoluble (ex. job sans client, homonymes) seront exclues.`);
 
+  // Statuts sources non reconnus : la valeur par défaut s'appliquera — on le
+  // dit AVANT l'import au lieu de coercer en silence (audit S3).
+  if (unknownStatuses.size > 0) {
+    const detail = Array.from(unknownStatuses.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([k, count]) => ({ value: k, count }));
+    const total = Array.from(unknownStatuses.values()).reduce((a, b) => a + b, 0);
+    notes.push(`${unknownStatuses.size} statut(s) source non reconnu(s) (${total} ligne(s)) — statut par défaut appliqué, voir les problèmes.`);
+    const title = 'Statuts sources non reconnus — valeur par défaut appliquée';
+    const { data: existingStatusIssue } = await admin
+      .from('migration_issues')
+      .select('id')
+      .eq('migration_id', migration.id)
+      .eq('type', 'unknown_status')
+      .is('resolved_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (!existingStatusIssue) {
+      const { error: statusIssueErr } = await admin.from('migration_issues').insert({
+        migration_id: migration.id,
+        type: 'unknown_status',
+        severity: 'warning',
+        title,
+        details_masked: { statuses: detail }, // valeurs de statut = non-PII
+        options: ['acknowledge'],
+      });
+      if (statusIssueErr) console.error('[migration-importer] unknown status issue insert failed:', statusIssueErr.message);
+    }
+  }
+
   const dupCounts = { pending: 0, merge: 0, createNew: 0, skip: 0, review: 0 };
   for (const d of decisions.values()) {
     if (d.decision === 'merge') dupCounts.merge += 1;
@@ -716,6 +801,17 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
     revenueCents,
   };
 
+  // Taux d'échec anormal : dit en toutes lettres dans le rapport (audit S4) —
+  // le blocage dur (> MAX_IMPORT_ERROR_RATIO) vit sur la route d'import final.
+  if (totals.sourceRows > 0) {
+    const failRatio = (totals.blockingErrors + orphans) / totals.sourceRows;
+    if (failRatio > 0.1) {
+      notes.unshift(
+        `Attention : ${Math.round(failRatio * 100)} % des lignes seraient rejetées ou exclues — corrigez les fichiers avant d'approuver.`,
+      );
+    }
+  }
+
   return {
     version: 1,
     generatedAt: new Date().toISOString(),
@@ -731,6 +827,10 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
 // ---------------------------------------------------------------------------
 // Import final — idempotent, repris sans doublon
 
+/** Au-delà de ce taux d'échec (erreurs + orphelins / lignes), l'import final
+ *  est refusé : un fichier aussi cassé se corrige, il ne s'importe pas (audit S4). */
+export const MAX_IMPORT_ERROR_RATIO = 0.25;
+
 interface ImportRecordRow {
   batch_id: string;
   migration_id: string;
@@ -738,15 +838,96 @@ interface ImportRecordRow {
   entity_table: string;
   entity_id: string;
   action: 'created' | 'merged' | 'skipped';
+  /** Fusion enrichissante : valeurs d'origine des champs comblés (rollback fidèle). */
+  previous_values?: Record<string, unknown> | null;
 }
 
 async function upsertImportRecords(admin: SupabaseClient, records: ImportRecordRow[]): Promise<void> {
   for (let i = 0; i < records.length; i += CHUNK) {
+    const chunk = records.slice(i, i + CHUNK);
     const { error } = await admin
       .from('migration_import_records')
-      .upsert(records.slice(i, i + CHUNK), { onConflict: 'migration_id,staging_record_id,entity_table', ignoreDuplicates: true });
-    if (error) console.error('[migration-importer] import_records upsert failed:', error.message);
+      .upsert(chunk, { onConflict: 'migration_id,staging_record_id,entity_table', ignoreDuplicates: true });
+    if (error) {
+      // colonne previous_values absente (SQL 20260903000000 pas appliqué) :
+      // on n'échoue jamais le registre d'idempotence pour autant.
+      if (/previous_values/i.test(error.message)) {
+        const stripped = chunk.map(({ previous_values: _pv, ...rest }) => rest);
+        const { error: retryErr } = await admin
+          .from('migration_import_records')
+          .upsert(stripped, { onConflict: 'migration_id,staging_record_id,entity_table', ignoreDuplicates: true });
+        if (retryErr) console.error('[migration-importer] import_records upsert failed:', retryErr.message);
+        else console.error('[migration-importer] previous_values ignoré — appliquez le SQL 20260903000000');
+        continue;
+      }
+      console.error('[migration-importer] import_records upsert failed:', error.message);
+    }
   }
+}
+
+/** Champs d'un client existant que la fusion peut COMBLER (jamais écraser). */
+const ENRICHABLE_CLIENT_FIELDS = [
+  'first_name', 'last_name', 'company', 'email', 'phone',
+  'address', 'city', 'province', 'postal_code', 'lead_source',
+] as const;
+
+/**
+ * Fusion enrichissante (clients) : les champs VIDES du dossier existant sont
+ * comblés par la source ; les non-vides ne sont jamais touchés. Retourne, par
+ * ligne de staging, les valeurs d'origine des champs modifiés (audit S5 :
+ * « merge » jetait la ligne source entière). Idempotent : au 2e passage les
+ * champs sont remplis, le patch est vide, rien ne bouge.
+ */
+async function enrichMergedClients(
+  admin: SupabaseClient,
+  ctx: BuildContext,
+  targets: { rec: StagingRow; existingId: string }[],
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  if (targets.length === 0) return out;
+
+  const ids = Array.from(new Set(targets.map((t) => t.existingId)));
+  const existingById = new Map<string, Record<string, unknown>>();
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data, error } = await admin
+      .from('clients')
+      .select('id, first_name, last_name, company, email, phone, address, city, province, postal_code, lead_source')
+      .in('id', ids.slice(i, i + CHUNK))
+      .eq('org_id', ctx.migration.org_id);
+    if (error) {
+      console.error('[migration-importer] enrich fetch failed:', error.message);
+      return out;
+    }
+    for (const c of (data ?? []) as Record<string, unknown>[]) existingById.set(String(c.id), c);
+  }
+
+  for (const t of targets) {
+    const existing = existingById.get(t.existingId);
+    if (!existing) continue;
+    const built = buildEntityRow('client', t.rec, ctx);
+    if (!built.ok) continue;
+    const patch: Record<string, unknown> = {};
+    const prev: Record<string, unknown> = {};
+    for (const f of ENRICHABLE_CLIENT_FIELDS) {
+      const cur = existing[f];
+      const incoming = (built.row as Record<string, unknown>)[f];
+      const curEmpty = cur === null || cur === undefined || String(cur).trim() === '';
+      if (curEmpty && typeof incoming === 'string' && incoming) {
+        patch[f] = incoming;
+        prev[f] = cur ?? null;
+      }
+    }
+    if (Object.keys(patch).length === 0) continue;
+    const { error } = await admin.from('clients').update(patch).eq('id', t.existingId).eq('org_id', ctx.migration.org_id);
+    if (error) {
+      console.error('[migration-importer] enrich update failed:', error.message);
+      continue;
+    }
+    out.set(t.rec.id, prev);
+    // deux lignes fusionnées vers le même dossier : la 2e voit les champs comblés
+    existingById.set(t.existingId, { ...existing, ...patch });
+  }
+  return out;
 }
 
 async function setStagingStatus(admin: SupabaseClient, migrationId: string, ids: string[], status: string): Promise<void> {
@@ -813,6 +994,7 @@ export async function runFinalImport(
 
     const toInsert: { rec: StagingRow; row: Record<string, unknown>; id: string }[] = [];
     const importRecords: ImportRecordRow[] = [];
+    const enrichTargets: { rec: StagingRow; existingId: string }[] = [];
     const mergedIds: string[] = [];
     const ignoredIds: string[] = [];
     const orphanIds: string[] = [];
@@ -866,6 +1048,7 @@ export async function runFinalImport(
         mergedIds.push(rec.id);
         importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: rec.id, entity_table: table, entity_id: decision.existingId, action: 'merged' });
         registerRefs(rec, decision.existingId);
+        if (entity === 'client') enrichTargets.push({ rec, existingId: decision.existingId });
         continue;
       }
       if (decision && decision.decision !== 'create_new' && decision.score >= 90) {
@@ -949,6 +1132,16 @@ export async function runFinalImport(
       mergedIds.push(rec.id);
       importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: rec.id, entity_table: table, entity_id: target, action: 'merged' });
       registerRefs(rec, target);
+    }
+
+    // Fusion enrichissante (clients) : appliquer AVANT d'écrire le registre,
+    // pour que previous_values parte dans la même écriture idempotente.
+    if (enrichTargets.length > 0) {
+      const prevByStagingId = await enrichMergedClients(admin, ctx, enrichTargets);
+      for (const ir of importRecords) {
+        const prev = prevByStagingId.get(ir.staging_record_id);
+        if (prev) ir.previous_values = prev;
+      }
     }
 
     await upsertImportRecords(admin, importRecords);
@@ -1040,9 +1233,10 @@ export async function rollbackFinalBatch(
   admin: SupabaseClient,
   batchId: string,
   actorId: string,
-): Promise<{ softDeleted: number; deactivated: number }> {
+): Promise<{ softDeleted: number; deactivated: number; restored: number }> {
   let softDeleted = 0;
   let deactivated = 0;
+  let restored = 0;
 
   const byTable = new Map<string, string[]>();
   for (let offset = 0; ; offset += STAGING_PAGE) {
@@ -1082,13 +1276,41 @@ export async function rollbackFinalBatch(
     }
   }
 
+  // Fusions enrichissantes : restaurer les valeurs d'origine des champs
+  // comblés (previous_values). Les dossiers fusionnés eux-mêmes ne sont
+  // jamais supprimés — ils préexistaient à l'import.
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('migration_import_records')
+      .select('entity_table, entity_id, previous_values')
+      .eq('batch_id', batchId)
+      .eq('action', 'merged')
+      .not('previous_values', 'is', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) {
+      // colonne absente (SQL 20260903000000 pas appliqué) : rien à restaurer
+      if (!/previous_values/i.test(error.message)) {
+        console.error('[migration-importer] rollback merged fetch failed:', error.message);
+      }
+      break;
+    }
+    if (!data || data.length === 0) break;
+    for (const rec of data as { entity_table: string; entity_id: string; previous_values: Record<string, unknown> | null }[]) {
+      if (!rec.previous_values || Object.keys(rec.previous_values).length === 0) continue;
+      const { error: restoreErr } = await admin.from(rec.entity_table).update(rec.previous_values).eq('id', rec.entity_id);
+      if (restoreErr) console.error('[migration-importer] rollback restore failed:', restoreErr.message);
+      else restored += 1;
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+
   const { error: batchErr } = await admin
     .from('migration_import_batches')
     .update({ status: 'rolled_back', rolled_back_at: new Date().toISOString(), rolled_back_by: actorId })
     .eq('id', batchId);
   if (batchErr) console.error('[migration-importer] batch rollback mark failed:', batchErr.message);
 
-  return { softDeleted, deactivated };
+  return { softDeleted, deactivated, restored };
 }
 
 // ---------------------------------------------------------------------------

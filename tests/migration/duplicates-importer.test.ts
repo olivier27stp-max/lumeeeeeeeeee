@@ -156,6 +156,70 @@ describe('mapJobStatus — respecte jobs_status_check de prod (leçon E2E round 
   });
 });
 
+describe('audit S2 — visites en UTC (jamais « 9 h devient 5 h »)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' },
+    createdBy: 'user-1',
+    clientIdByRef: new Map(),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map([['job-42', 'job-uuid-1']]),
+  } as any;
+  const visitFor = (normalized: Record<string, unknown>) => (buildEntityRow('visit', {
+    id: 'v1', row_number: 1, entity_type: 'visit', external_id: null, status: 'ready',
+    normalized, relations: { job_ref: 'JOB-42' },
+  } as any, ctx) as any).row;
+
+  it('9 h locales (été) → 13:00Z, cohérent avec toISOString() de l\'app', () => {
+    const row = visitFor({ start_at: '2024-07-15T09:00:00', end_at: '2024-07-15T10:00:00' });
+    expect(row.start_at).toBe('2024-07-15T13:00:00Z');
+    expect(row.end_at).toBe('2024-07-15T14:00:00Z');
+    expect(row.timezone).toBe('America/Toronto'); // aligné sur DEFAULT_TIMEZONE
+  });
+
+  it('convention « pas d\'heure précise » (00:00→23:59) survit à la conversion', () => {
+    const row = visitFor({ start_at: '2024-07-15T00:00:00' });
+    // relu par l'app : new Date('...T04:00:00Z').getHours() === 0 à Toronto
+    expect(row.start_at).toBe('2024-07-15T04:00:00Z');
+    expect(row.end_at).toBe('2024-07-16T03:59:00Z');
+    expect(new Date(row.start_at).getUTCHours()).toBe(4);
+  });
+});
+
+describe('audit S3 — colonnes non mappées rattachées aux notes, statuts inconnus signalés', async () => {
+  const { buildEntityRow, statusRecognized, unmappedNotesBlock } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' },
+    createdBy: 'user-1',
+    clientIdByRef: new Map([['marc tremblay', 'client-1']]),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map(),
+  } as any;
+
+  it('client : _unmapped devient un bloc de notes, formules neutralisées', () => {
+    const res = buildEntityRow('client', {
+      id: 's1', row_number: 1, entity_type: 'client', external_id: null, status: 'ready',
+      normalized: { first_name: 'Marc', notes: 'client fidèle', _unmapped: { 'Ancien champ': 'valeur', Piege: '=cmd|calc' } },
+      relations: {},
+    } as any, ctx);
+    const notes = (res as any).row.notes as string;
+    expect(notes).toContain('client fidèle');
+    expect(notes).toContain('Champs non importés (ancien CRM)');
+    expect(notes).toContain('Ancien champ : valeur');
+    expect(notes).toContain("'=cmd|calc"); // anti-injection : apostrophe préfixée
+    expect(unmappedNotesBlock({})).toBe('');
+  });
+
+  it('statusRecognized : valeurs mappées et bénignes reconnues, l\'inconnu signalé', () => {
+    expect(statusRecognized('job', 'Complete')).toBe(true);
+    expect(statusRecognized('job', 'Scheduled')).toBe(true);
+    expect(statusRecognized('invoice', 'Payée')).toBe(true);
+    expect(statusRecognized('job', 'Zombie-Status-42')).toBe(false);
+    expect(statusRecognized('quote', 'bizarre-42')).toBe(false);
+    expect(statusRecognized('client', 'peu importe')).toBe(true); // entité sans statut mappé
+  });
+});
+
 describe('planIntraDedupe — doublons internes et homonymes (précision)', async () => {
   const { planIntraDedupe } = await import('../../server/lib/migration/importer');
   const rec = (id: string, normalized: Record<string, unknown>) => ({

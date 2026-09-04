@@ -91,6 +91,41 @@ export function maskValueByType(value: string, type: DetectedType): string {
   }
 }
 
+// ── Masquage d'une ligne NORMALISÉE (aperçu des 20 premières lignes) ────────
+// Par NOM de champ Lume : la PII est masquée, les valeurs de travail (montants,
+// dates, statuts) restent lisibles — le client doit pouvoir valider la
+// transformation sans exposer les dossiers complets (audit S4).
+
+const FIELD_MASKERS: Record<string, (v: string) => string> = {
+  email: maskEmail,
+  phone: maskPhone,
+  phone_secondary: maskPhone,
+  first_name: maskName,
+  last_name: maskName,
+  full_name: maskName,
+  company: maskName,
+  name: maskName,
+  salesperson: maskName,
+  assigned_to: maskName,
+  address: maskAddress,
+  postal_code: maskPostalCode,
+  notes: maskGeneric,
+  description: maskGeneric,
+};
+
+export function maskNormalizedRecord(normalized: Record<string, unknown> | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!normalized) return out;
+  for (const [field, raw] of Object.entries(normalized)) {
+    if (field.startsWith('_') || field.endsWith('_digits')) continue; // interne
+    const v = sanitizeCellForDisplay(String(raw ?? '')).trim();
+    if (!v) continue;
+    const masker = FIELD_MASKERS[field];
+    out[field] = masker ? masker(v) : v.length > 40 ? `${v.slice(0, 40)}…` : v;
+  }
+  return out;
+}
+
 const CONTROL_CHARS_RE = new RegExp('[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]', 'g');
 const FORMULA_PREFIX_RE = new RegExp('^[\\s]*[=+\\-@\\t\\r]');
 const NUMERIC_PREFIX_RE = new RegExp('^[\\s]*-?\\d');

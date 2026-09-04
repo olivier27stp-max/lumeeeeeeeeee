@@ -36,6 +36,9 @@ import {
   type TargetEntity,
 } from '../lib/migration/types';
 import { looksBinary, sniffIsPdf } from '../lib/migration/analyzer';
+import { buildRejectsCsv } from '../lib/migration/rejects';
+import { maskNormalizedRecord } from '../lib/migration/masks';
+import { IMPORT_ORDER } from '../lib/migration/importer';
 
 const router = Router();
 
@@ -565,6 +568,63 @@ router.get('/migration-portal/preview', async (req, res) => {
     });
   } catch (err: any) {
     return sendSafeError(res, err, 'Aperçu indisponible.', '[migration-portal]');
+  }
+});
+
+// ── Aperçu masqué des premières lignes transformées (audit S4) ──────────
+// Le client valide la TRANSFORMATION (dates, montants, statuts lisibles),
+// la PII reste masquée comme partout ailleurs sur le portail.
+router.get('/migration-portal/preview-rows', async (req, res) => {
+  try {
+    const ctx = await requirePortalAccess(req, res);
+    if (!ctx) return;
+    const { admin, migration } = ctx;
+    const byEntity: Record<string, { row_number: number; status: string; fields: Record<string, string> }[]> = {};
+    for (const entity of IMPORT_ORDER) {
+      const { data: rows, error } = await admin
+        .from('migration_staging_records')
+        .select('row_number, status, normalized')
+        .eq('migration_id', migration.id)
+        .eq('entity_type', entity)
+        .in('status', ['ready', 'duplicate', 'imported', 'merged'])
+        .order('row_number', { ascending: true })
+        .limit(20);
+      if (error) throw error;
+      if (!rows || rows.length === 0) continue;
+      byEntity[entity] = rows.map((r: { row_number: number; status: string; normalized: Record<string, unknown> | null }) => ({
+        row_number: r.row_number,
+        status: r.status,
+        fields: maskNormalizedRecord(r.normalized),
+      }));
+    }
+    return res.json({ by_entity: byEntity });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Aperçu des lignes indisponible.', '[migration-portal]');
+  }
+});
+
+// ── Rapport d'erreurs ligne par ligne (audit S4) ────────────────────────
+// Les lignes rejetées contiennent les données DU bureau : il y a droit, c'est
+// ce qui lui permet de corriger son fichier. Téléchargement authentifié
+// (jeton + session + rôle), jamais envoyé par courriel, et journalisé.
+router.get('/migration-portal/rejects.csv', async (req, res) => {
+  try {
+    const ctx = await requirePortalAccess(req, res);
+    if (!ctx) return;
+    const { admin, migration } = ctx;
+    const { csv, rows } = await buildRejectsCsv(admin, migration.id);
+    await logMigrationAudit(admin, {
+      migrationId: migration.id,
+      action: 'rejects.export',
+      actorId: ctx.user.id,
+      actorRole: 'client',
+      meta: { rows },
+    });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="lignes-en-erreur-${migration.id.slice(0, 8)}.csv"`);
+    return res.send(csv);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Export des lignes en erreur impossible.', '[migration-portal]');
   }
 });
 

@@ -21,7 +21,9 @@ import {
   deletePortalFile,
   getPortalInstructions,
   getPortalMappings,
+  downloadPortalRejectsCsv,
   getPortalPreview,
+  getPortalPreviewRows,
   getPortalReport,
   getPortalSession,
   listPortalFiles,
@@ -754,6 +756,19 @@ function PreviewSection({ fr, token, session, onDecided }: { fr: boolean; token:
         {(report.notes ?? []).map((n: string, i: number) => <p key={i}>· {n}</p>)}
       </div>
 
+      <MaskedRowsPreview fr={fr} token={token} />
+
+      {((report.totals?.blockingErrors ?? 0) > 0 || (report.orphans ?? 0) > 0) && (
+        <div className="mb-4">
+          <RejectsDownloadButton fr={fr} token={token} />
+          <p className="text-[11px] text-[#8a8578] mt-1">
+            {fr
+              ? 'Le fichier indique la ligne Excel exacte, la colonne fautive et la valeur reçue — corrigez puis re-téléversez.'
+              : 'The file shows the exact Excel row, the failing column and the received value — fix and re-upload.'}
+          </p>
+        </div>
+      )}
+
       {session.status === 'waiting_for_approval' && (
         <div className="rounded-lg border border-[#e6e2d8] bg-[#fbfaf7] p-4 space-y-3">
           <div className="text-[13px] font-semibold">{fr ? 'Votre décision' : 'Your decision'}</div>
@@ -822,6 +837,98 @@ function PreviewSection({ fr, token, session, onDecided }: { fr: boolean; token:
   );
 }
 
+function RejectsDownloadButton({ fr, token }: { fr: boolean; token: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const csv = await downloadPortalRejectsCsv(token);
+          const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fr ? 'lignes-en-erreur.csv' : 'rows-with-errors.csv';
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (err: any) {
+          toast.error(err?.message ?? 'Erreur');
+        } finally {
+          setBusy(false);
+        }
+      }}
+      className="h-9 px-4 bg-white border border-[#e6e2d8] text-[#444] hover:bg-[#f4f1ea] rounded-md text-[13px] font-medium disabled:opacity-50"
+    >
+      {busy ? '…' : fr ? 'Télécharger les lignes en erreur (CSV)' : 'Download rows with errors (CSV)'}
+    </button>
+  );
+}
+
+// Premières lignes transformées, PII masquée côté serveur : le client vérifie
+// que dates, montants et statuts ont été compris avant d'approuver.
+function MaskedRowsPreview({ fr, token }: { fr: boolean; token: string }) {
+  const [open, setOpen] = useState(false);
+  const q = useQuery({
+    queryKey: ['migration-portal-preview-rows', token],
+    queryFn: () => getPortalPreviewRows(token),
+    enabled: open,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const byEntity = q.data?.by_entity ?? {};
+  const entities = Object.keys(byEntity);
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-[13px] text-[#6b675e] underline underline-offset-2 hover:text-black"
+      >
+        {open
+          ? fr ? 'Masquer l\'aperçu des lignes transformées' : 'Hide transformed rows preview'
+          : fr ? 'Voir un aperçu des lignes transformées (données masquées)' : 'Preview transformed rows (masked data)'}
+      </button>
+      {open && q.isLoading && <p className="text-[12px] text-[#8a8578] mt-2">…</p>}
+      {open && !q.isLoading && entities.length === 0 && (
+        <p className="text-[12px] text-[#8a8578] mt-2">{fr ? 'Aucune ligne prête pour le moment.' : 'No rows ready yet.'}</p>
+      )}
+      {open && entities.map((entity) => {
+        const rows = byEntity[entity] ?? [];
+        const fields = Array.from(new Set(rows.flatMap((r) => Object.keys(r.fields)))).slice(0, 6);
+        return (
+          <div key={entity} className="mt-3">
+            <div className="text-[12px] font-semibold text-[#6b675e] mb-1">{ENTITY_LABELS_FR[entity] ?? entity}</div>
+            <div className="border border-[#e6e2d8] rounded-lg overflow-x-auto">
+              <table className="text-[11px] w-full min-w-[560px]">
+                <thead>
+                  <tr className="bg-[#fbfaf7]">
+                    <th className="px-2 py-1.5 text-left font-semibold text-[#6b675e] border-b border-[#e6e2d8]">{fr ? 'Ligne Excel' : 'Excel row'}</th>
+                    {fields.map((f) => (
+                      <th key={f} className="px-2 py-1.5 text-left font-semibold text-[#6b675e] border-b border-[#e6e2d8]">{f}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.slice(0, 10).map((r) => (
+                    <tr key={r.row_number}>
+                      <td className="px-2 py-1.5 border-b border-[#f0ece2] text-[#8a8578]">{r.row_number + 1}</td>
+                      {fields.map((f) => (
+                        <td key={f} className="px-2 py-1.5 border-b border-[#f0ece2] text-[#444] whitespace-nowrap max-w-[160px] overflow-hidden text-ellipsis">{r.fields[f] ?? ''}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PreviewRow({ label, counts }: { label: string; counts: { wouldCreate?: number; wouldMerge?: number; ignored?: number; errors?: number } }) {
   const cell = 'px-3 py-2 border-b border-[#f0ece2] text-[#444]';
   return (
@@ -868,6 +975,8 @@ function ReportSection({ fr, token }: { fr: boolean; token: string }) {
       >
         {fr ? 'Télécharger le rapport' : 'Download report'}
       </button>
+      <span className="inline-block w-2" />
+      <RejectsDownloadButton fr={fr} token={token} />
     </SectionCard>
   );
 }

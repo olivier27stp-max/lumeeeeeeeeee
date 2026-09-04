@@ -31,7 +31,8 @@ import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
 import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
-import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise } from '../lib/migration/importer';
+import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
+import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { entityForCategory, normalizeHeader } from '../lib/migration/mapping';
 import { DEFAULT_INVITE_TTL_HOURS, IMPORTABLE_CATEGORIES } from '../lib/migration/types';
@@ -844,6 +845,56 @@ router.post('/migration-admin/migrations/:id/final-import', validate(migrationFi
       return res.status(409).json({ error: `${blockingCount} problème(s) bloquant(s) non résolu(s).` });
     }
 
+    // Seuil d'échec (audit S4) : un fichier dont le quart des lignes tombe en
+    // erreur/orphelin se corrige, il ne s'importe pas — même approuvé.
+    const [{ count: failedRows }, { count: totalRows }] = await Promise.all([
+      admin
+        .from('migration_staging_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('migration_id', migration.id)
+        .in('status', ['error', 'orphan']),
+      admin
+        .from('migration_staging_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('migration_id', migration.id),
+    ]);
+    if ((totalRows ?? 0) > 0 && (failedRows ?? 0) / (totalRows ?? 1) > MAX_IMPORT_ERROR_RATIO) {
+      const pct = Math.round(((failedRows ?? 0) / (totalRows ?? 1)) * 100);
+      return res.status(409).json({
+        error: `${pct} % des lignes sont en erreur ou orphelines (max ${Math.round(MAX_IMPORT_ERROR_RATIO * 100)} %) — corrigez les fichiers et refaites un import test avant l'import final.`,
+      });
+    }
+
+    // Fichier ajouté APRÈS le dernier import test complété : ses lignes n'ont
+    // jamais passé la détection de doublons ni le rapport approuvé (audit S5 —
+    // un fichier corrigé re-téléversé créerait des doublons en silence).
+    const { data: lastTest } = await admin
+      .from('migration_import_batches')
+      .select('finished_at')
+      .eq('migration_id', migration.id)
+      .eq('kind', 'test')
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!lastTest?.finished_at) {
+      return res.status(409).json({ error: 'Aucun import test complété — refaites un import test avant l\'import final.' });
+    }
+    const { data: staleFiles } = await admin
+      .from('migration_files')
+      .select('original_name')
+      .eq('migration_id', migration.id)
+      .eq('kind', 'data')
+      .is('deleted_at', null)
+      .neq('security_status', 'rejected')
+      .gt('created_at', lastTest.finished_at)
+      .limit(5);
+    if ((staleFiles ?? []).length > 0) {
+      return res.status(409).json({
+        error: `Fichier(s) téléversé(s) après le dernier import test : ${(staleFiles ?? []).map((f) => f.original_name).join(', ')} — refaites un import test (et une approbation) avant l'import final.`,
+      });
+    }
+
     const { error: statusErr } = await admin
       .from('data_migrations')
       .update({ status: 'importing' })
@@ -1020,52 +1071,17 @@ router.get('/migration-admin/migrations/:id/rejects.csv', async (req, res) => {
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
 
-    const { data: files } = await admin
-      .from('migration_files')
-      .select('id, original_name')
-      .eq('migration_id', migration.id);
-    const fileName = new Map((files ?? []).map((f: { id: string; original_name: string }) => [f.id, f.original_name]));
-
-    const esc = (v: unknown) => {
-      const str = String(v ?? '');
-      // anti-injection de formule + guillemets CSV
-      const safe = /^[=+\-@\t\r]/.test(str) && !/^-?\d/.test(str) ? `'${str}` : str;
-      return `"${safe.replace(/"/g, '""')}"`;
-    };
-    const lines: string[] = ['fichier,ligne,entite,statut,erreur,donnees_source_json'];
-    for (let offset = 0; ; offset += 1000) {
-      const { data: rows, error } = await admin
-        .from('migration_staging_records')
-        .select('file_id, row_number, entity_type, status, error, payload')
-        .eq('migration_id', migration.id)
-        .in('status', ['error', 'orphan'])
-        .order('file_id')
-        .order('row_number')
-        .range(offset, offset + 999);
-      if (error) throw error;
-      if (!rows || rows.length === 0) break;
-      for (const r of rows) {
-        lines.push([
-          esc(fileName.get(r.file_id) ?? r.file_id),
-          esc(r.row_number),
-          esc(r.entity_type),
-          esc(r.status),
-          esc(r.error ?? ''),
-          esc(JSON.stringify(r.payload ?? {})),
-        ].join(','));
-      }
-      if (rows.length < 1000) break;
-    }
+    const { csv, rows } = await buildRejectsCsv(admin, migration.id);
     await logMigrationAudit(admin, {
       migrationId: migration.id,
       action: 'rejects.export',
       actorId: auth.user.id,
       actorRole: 'platform_admin',
-      meta: { rows: lines.length - 1 },
+      meta: { rows },
     });
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="rejets-migration-${migration.id.slice(0, 8)}.csv"`);
-    return res.send(`\uFEFF${lines.join('\n')}`);
+    return res.send(csv);
   } catch (err: any) {
     return sendSafeError(res, err, 'Export des rejets impossible.', '[migration-admin]');
   }

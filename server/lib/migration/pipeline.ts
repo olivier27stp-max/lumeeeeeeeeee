@@ -119,6 +119,44 @@ export async function analyzeMigrationFile(admin: SupabaseClient, migration: Mig
       return;
     }
 
+    // ── Avertissements structurels du fichier (audit S1) ───────────────
+    const structuralIssues: { type: string; title: string }[] = [];
+    if (analyzed.warnings.includes('duplicate_headers')) {
+      structuralIssues.push({
+        type: 'duplicate_headers',
+        title: `En-têtes en double dans ${file.original_name} — colonnes renommées « (2) », à vérifier au mapping`,
+      });
+    }
+    if (analyzed.warnings.includes('missing_header_row')) {
+      structuralIssues.push({
+        type: 'missing_header_row',
+        title: `${file.original_name} semble sans ligne d'en-tête (la 1re ligne ressemble à des données) — ajoutez des en-têtes puis re-téléversez`,
+      });
+    }
+    for (const si of structuralIssues) {
+      const { data: existing } = await admin
+        .from('migration_issues')
+        .select('id')
+        .eq('migration_id', migration.id)
+        .eq('type', si.type)
+        .eq('title', si.title)
+        .is('resolved_at', null)
+        .limit(1)
+        .maybeSingle();
+      if (!existing) {
+        const { error: siErr } = await admin.from('migration_issues').insert({
+          migration_id: migration.id,
+          type: si.type,
+          severity: 'warning',
+          title: si.title,
+          details_masked: { file: file.original_name },
+          client_visible: true,
+          options: ['acknowledge'],
+        });
+        if (siErr) console.error('[migration-pipeline] structural issue insert failed:', siErr.message);
+      }
+    }
+
     // ── Colonnes ────────────────────────────────────────────────────────
     const columnRows = analyzed.columns.map((c) => ({
       file_id: file.id,
@@ -310,7 +348,33 @@ export async function prepareStaging(admin: SupabaseClient, migration: Migration
     if (rows.length < STAGING_BATCH) break;
   }
   const conventionByFileField = new Map<string, DateConvention>();
+
+  // Réponses HUMAINES aux issues date_format : la décision du client
+  // (client_answer) ou de l'admin (resolution) fait toujours foi sur
+  // l'inférence. Angle mort corrigé (audit S2) : ces options étaient écrites
+  // mais jamais lues — le client répondait « JJ/MM » et MM/JJ s'appliquait.
+  const answeredKeys = new Set<string>();
+  const { data: dateAnswers, error: ansErr } = await admin
+    .from('migration_issues')
+    .select('details_masked, client_answer, resolution')
+    .eq('migration_id', migration.id)
+    .eq('type', 'date_format');
+  if (ansErr) console.error('[migration-pipeline] date answers fetch failed:', ansErr.message);
+  for (const issue of (dateAnswers ?? []) as { details_masked: Record<string, unknown> | null; client_answer: string | null; resolution: string | null }[]) {
+    const d = issue.details_masked ?? {};
+    const fileId = typeof d.file_id === 'string' ? d.file_id : '';
+    const field = typeof d.field === 'string' ? d.field : '';
+    if (!fileId || !field) continue;
+    const answer = `${issue.resolution ?? ''} ${issue.client_answer ?? ''}`.toLowerCase();
+    const chosen: DateConvention | null = /dmy|jj\/mm|jj-mm/.test(answer) ? 'dmy' : /mdy|mm\/jj|mm-jj/.test(answer) ? 'mdy' : null;
+    if (!chosen) continue;
+    const key = `${fileId}|${field}`;
+    conventionByFileField.set(key, chosen);
+    answeredKeys.add(key);
+  }
+
   for (const [key, values] of samplesByFileField) {
+    if (answeredKeys.has(key)) continue; // décision humaine déjà rendue
     const inferred = inferDateConvention(values);
     if (inferred === 'dmy') conventionByFileField.set(key, 'dmy');
     if (inferred === 'ambiguous' || inferred === 'mixed') {

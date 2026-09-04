@@ -207,7 +207,7 @@ describe('P1 déclenchés — nouveaux endpoints gardés et sûrs', () => {
     expect(body).toContain('requirePlatformAdmin');
     expect(body).toContain('text/csv');
     expect(body).toContain('rejects.export');
-    expect(body).toMatch(/\^\[=\+/); // neutralisation des préfixes de formule
+    expect(body).toContain('buildRejectsCsv'); // neutralisation des préfixes de formule
   });
   it('retry-errors ne relance QUE les échecs d\'insertion (import_failed:%)', () => {
     const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/retry-errors'");
@@ -250,5 +250,65 @@ describe('portail — le bouton de connexion pointe vers la vraie page', () => {
     const portalPage = read('src/pages/MigrationPortal.tsx');
     expect(portalPage).toContain('href="/auth"');
     expect(portalPage).not.toContain('/login?next=');
+  });
+});
+
+describe('audit sections 1-5 — garde-fous ajoutés', () => {
+  const importerSrc = read('server/lib/migration/importer.ts');
+  const pipelineSrc = read('server/lib/migration/pipeline.ts');
+  const rejectsSrc = read('server/lib/migration/rejects.ts');
+
+  it("S4 — l'import final refuse un taux d'échec > 25 % et un fichier jamais retesté", () => {
+    const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/final-import'");
+    expect(body).toContain('MAX_IMPORT_ERROR_RATIO');
+    expect(body).toContain("in('status', ['error', 'orphan'])");
+    expect(body).toContain("gt('created_at', lastTest.finished_at)");
+    expect(body).toContain('refaites un import test');
+  });
+
+  it('S4 — le portail expose le rapport d\'erreurs et l\'aperçu masqué, tous deux gardés et journalisés', () => {
+    const rejects = routeBody(portalSrc, "'/migration-portal/rejects.csv'");
+    expect(rejects).toContain('requirePortalAccess');
+    expect(rejects).toContain("action: 'rejects.export'");
+    expect(rejects).toContain('buildRejectsCsv');
+    const preview = routeBody(portalSrc, "'/migration-portal/preview-rows'");
+    expect(preview).toContain('requirePortalAccess');
+    expect(preview).toContain('maskNormalizedRecord'); // PII jamais en clair
+  });
+
+  it('S13 — le CSV des rejets donne la ligne Excel (décalage d\'en-tête corrigé) et reste anti-injection', () => {
+    expect(rejectsSrc).toContain('ligne_excel');
+    expect(rejectsSrc).toContain('r.row_number + 1');
+    expect(rejectsSrc).toMatch(/\^\[=\+\\-@/); // préfixes de formule neutralisés
+  });
+
+  it('S2 — la réponse humaine aux issues date_format est réellement consommée', () => {
+    expect(pipelineSrc).toContain("eq('type', 'date_format')");
+    expect(pipelineSrc).toContain('client_answer, resolution');
+    expect(pipelineSrc).toContain('answeredKeys');
+  });
+
+  it('S2 — les visites sont converties en UTC avant insertion', () => {
+    expect(importerSrc).toContain('localToUtcIso(startAt)');
+    expect(importerSrc).toContain('localToUtcIso(endAt)');
+    expect(importerSrc).toContain("timezone: 'America/Toronto'");
+    expect(importerSrc).not.toContain("timezone: 'America/Montreal'");
+  });
+
+  it('S5 — fusion enrichissante : jamais d\'écrasement, valeurs d\'origine consignées, rollback restaure', () => {
+    expect(importerSrc).toContain('ENRICHABLE_CLIENT_FIELDS');
+    expect(importerSrc).toContain('curEmpty'); // seuls les champs vides sont comblés
+    expect(importerSrc).toContain('previous_values');
+    expect(importerSrc).toMatch(/action', 'merged'\)[\s\S]{0,200}previous_values/); // le rollback relit les fusions
+  });
+
+  it('S3 — statuts sources inconnus signalés au dry-run au lieu d\'une coercition silencieuse', () => {
+    expect(importerSrc).toContain('statusRecognized');
+    expect(importerSrc).toContain("type: 'unknown_status'");
+  });
+
+  it('S1 — en-têtes dupliqués et fichier sans en-tête produisent des issues visibles', () => {
+    expect(pipelineSrc).toContain("type: 'duplicate_headers'");
+    expect(pipelineSrc).toContain("'missing_header_row'");
   });
 });

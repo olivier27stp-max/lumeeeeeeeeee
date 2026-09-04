@@ -24,6 +24,46 @@ export function normalizeDigits(v: string): string {
 }
 
 /**
+ * Marqueurs « pas de valeur » des exports CRM/Excel (N/A, -, #REF!, s/o…).
+ * Traités comme des cellules vides : jamais stockés littéralement en base
+ * (audit sections 1-5 : « 800 clients nommés N/A »). Comparaison sur la
+ * valeur ENTIÈRE repliée — « Nathalie » ou « Na » (nom coréen) ne matchent pas.
+ */
+const NULL_TOKENS = new Set([
+  'n/a', 'n.a.', 'n/d', 'n.d.', 's/o', 's.o.', 'null', 'none', 'nil',
+  '-', '--', '—', '–', '.', '?', 'aucun', 'aucune', 'unknown', 'inconnu',
+  '#ref!', '#n/a', '#value!', '#div/0!', '#name?', '#null!', '#num!',
+  '(vide)', '(empty)', '(none)', '(null)', '(blank)',
+]);
+
+export function isNullLikeValue(v: string): boolean {
+  return NULL_TOKENS.has((v ?? '').trim().toLowerCase());
+}
+
+/** Caractères invisibles (largeur nulle, BOM résiduel) qui survivent au trim. */
+const INVISIBLE_RE = /[\u200B-\u200D\u2060\uFEFF]/g;
+
+export function stripInvisible(v: string): string {
+  return (v ?? '').replace(INVISIBLE_RE, '');
+}
+
+/**
+ * Détecte une valeur passée en notation scientifique par Excel
+ * (téléphone « 5.14555E+11 », ID long « 1.23457E+18 ») : la donnée d'origine
+ * est irrécupérable — on la signale au lieu de stocker un faux numéro.
+ */
+export function isScientificNotation(v: string): boolean {
+  return /^-?\d+(?:[.,]\d+)?e[+-]?\d+$/i.test((v ?? '').trim());
+}
+
+/** 'h2x1y4' → 'H2X 1Y4' (format canadien canonique) ; sinon valeur inchangée. */
+export function normalizePostalCode(v: string): string {
+  const m = (v ?? '').trim().match(/^([A-Za-z]\d[A-Za-z])\s*(\d[A-Za-z]\d)$/);
+  if (m) return `${m[1].toUpperCase()} ${m[2].toUpperCase()}`;
+  return (v ?? '').trim();
+}
+
+/**
  * '$1,234.56' | '1 234,56 $' | '1234.5' | '(45.00)' → cents (int) ; null si invalide.
  */
 export function parseMoneyToCents(v: string): number | null {
@@ -54,6 +94,13 @@ function pad2(n: number): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
+/** Jours depuis l'époque Excel (1899-12-30) → 'YYYY-MM-DD' ; null hors plage. */
+function excelSerialToYmd(serial: number): string | null {
+  if (!Number.isFinite(serial) || serial < 20000 || serial > 60000) return null; // ~1954-2064
+  const dt = new Date(Math.round((serial - 25569) * 86400000)); // 25569 = 1970-01-01
+  return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+}
+
 function ymd(y: number, m: number, d: number): string | null {
   if (y < 1900 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
   const dt = new Date(Date.UTC(y, m - 1, d));
@@ -75,6 +122,11 @@ export function parseDateFlexible(v: string, convention: DateConvention = 'mdy')
 
   let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s].*)?$/);
   if (m) return ymd(Number(m[1]), Number(m[2]), Number(m[3]));
+
+  // Numéro de série Excel (« 45234 » = 2023-11-04) : 5 chiffres seuls,
+  // borné ~1954-2064 pour ne jamais avaler un vrai nombre. Un « 2024 » nu
+  // reste invalide (année seule = ambigu, jamais deviné).
+  if (/^\d{5}$/.test(s)) return excelSerialToYmd(Number(s));
 
   m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
   if (m) {
@@ -141,9 +193,57 @@ export function parseDateTimeFlexible(v: string, convention: DateConvention = 'm
     }
   }
 
+  // Série Excel avec fraction de jour (« 45234.375 » = 09:00)
+  const serial = s.match(/^(\d{5})\.(\d+)$/);
+  if (serial) {
+    const date = excelSerialToYmd(Number(serial[1]));
+    if (date) {
+      const dayMs = Math.round(Number(`0.${serial[2]}`) * 86400000);
+      const t = new Date(dayMs);
+      return `${date}T${pad2(t.getUTCHours())}:${pad2(t.getUTCMinutes())}:${pad2(t.getUTCSeconds())}`;
+    }
+  }
+
   const dateOnly = parseDateFlexible(s, convention);
   if (dateOnly) return `${dateOnly}T00:00:00`;
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Fuseau horaire — l'app écrit les visites en UTC (toISOString) et les relit
+// en heure locale ; l'import doit donc convertir ses datetimes naïfs (heure
+// locale du bureau) vers l'UTC, sinon « rendez-vous à 9 h » s'affiche à 5 h
+// (bug attrapé par l'audit sections 1-5). Défaut aligné sur scheduleApi.ts.
+
+export const IMPORT_TIMEZONE = 'America/Toronto';
+
+/** Décalage (ms) entre l'heure murale de `timeZone` et l'UTC à cet instant. */
+function tzOffsetMs(utcDate: Date, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat('en-CA', {
+    timeZone, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const parts: Record<string, string> = {};
+  for (const p of dtf.formatToParts(utcDate)) parts[p.type] = p.value;
+  const asUtc = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(parts.hour) % 24, Number(parts.minute), Number(parts.second),
+  );
+  return asUtc - utcDate.getTime();
+}
+
+/**
+ * 'YYYY-MM-DDTHH:MM:SS' (heure locale naïve) → ISO UTC avec Z, DST correct.
+ * null si le format n'est pas un datetime naïf complet.
+ */
+export function localToUtcIso(naive: string, timeZone: string = IMPORT_TIMEZONE): string | null {
+  const m = (naive ?? '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const guess = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]));
+  let offset = tzOffsetMs(new Date(guess), timeZone);
+  offset = tzOffsetMs(new Date(guess - offset), timeZone); // réajuste autour d'une bascule d'heure
+  return new Date(guess - offset).toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 const STREET_ABBREVIATIONS: Record<string, string> = {
@@ -218,18 +318,36 @@ export function normalizeRow(
   const normalized: Record<string, unknown> = {};
   const relations: Record<string, string> = {};
   const problems: string[] = [];
+  const unmapped: Record<string, string> = {};
 
   for (const [header, rawValue] of Object.entries(row)) {
     const field = fieldByHeader[header];
-    if (!field) continue;
-    const value = typeof rawValue === 'string' ? rawValue.trim() : '';
-    if (!value) continue;
+    const value = typeof rawValue === 'string' ? stripInvisible(rawValue).trim() : '';
+    if (!field) {
+      // Colonne non mappée : conservée dans `_unmapped` pour ne jamais perdre
+      // silencieusement la donnée (rattachée aux notes à l'import — audit S3).
+      if (value && !isNullLikeValue(value) && Object.keys(unmapped).length < 12) {
+        unmapped[header.slice(0, 60)] = value.length > 160 ? `${value.slice(0, 160)}…` : value;
+      }
+      continue;
+    }
+    if (!value || isNullLikeValue(value)) continue; // N/A, -, #REF!… = cellule vide
 
     if (RELATION_FIELDS.has(field)) {
+      // Clé mangée par Excel (« 1.23457E+18 ») : relation irrécupérable —
+      // mieux vaut un orphelin visible qu'un rattachement au hasard.
+      if (isScientificNotation(value)) {
+        problems.push(`invalid_id:${field}`);
+        continue;
+      }
       relations[field] = value.slice(0, 200);
       continue;
     }
     if (field === 'external_id') {
+      if (isScientificNotation(value)) {
+        problems.push('invalid_id:external_id');
+        continue;
+      }
       relations.external_id = value.slice(0, 120);
       normalized.external_id = value.slice(0, 120);
       continue;
@@ -271,9 +389,19 @@ export function normalizeRow(
       continue;
     }
     if (field === 'phone' || field === 'phone_secondary') {
+      // Téléphone détruit par Excel (« 5.14555E+11 ») : ne JAMAIS stocker un
+      // faux numéro ni une fausse clé de dédup — signalé, à corriger à la source.
+      if (isScientificNotation(value)) {
+        problems.push(`invalid_phone:${field}`);
+        continue;
+      }
       normalized[field] = value.slice(0, 40);
       const digits = normalizeDigits(value);
       if (digits.length >= 7) normalized[`${field}_digits`] = digits.slice(-10);
+      continue;
+    }
+    if (field === 'postal_code') {
+      normalized.postal_code = normalizePostalCode(value);
       continue;
     }
     normalized[field] = value.length > 2000 ? `${value.slice(0, 2000)}…` : value;
@@ -298,6 +426,8 @@ export function normalizeRow(
     const start = typeof row['start_time'] === 'string' ? row['start_time'] : '';
     normalized.start_at = start ? parseDateTimeFlexible(`${base} ${start}`) ?? `${base}T00:00:00` : `${base}T00:00:00`;
   }
+
+  if (Object.keys(unmapped).length > 0) normalized._unmapped = unmapped;
 
   return { normalized, relations, problems };
 }

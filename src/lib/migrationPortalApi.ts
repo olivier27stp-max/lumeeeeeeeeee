@@ -184,6 +184,30 @@ export function getPortalPreview(token: string): Promise<PortalPreview> {
   return portalFetch(token, '/preview');
 }
 
+export interface PortalPreviewRow {
+  row_number: number;
+  status: string;
+  fields: Record<string, string>;
+}
+
+/** Premières lignes transformées, PII masquée côté serveur. */
+export function getPortalPreviewRows(token: string): Promise<{ by_entity: Record<string, PortalPreviewRow[]> }> {
+  return portalFetch(token, '/preview-rows');
+}
+
+/** CSV des lignes en erreur/exclues (les données du bureau, pour correction). */
+export async function downloadPortalRejectsCsv(token: string): Promise<string> {
+  const headers = await portalHeaders(token);
+  if (!headers.Authorization) throw new PortalError('Connexion requise.', 'auth_required', 401);
+  const res = await fetch(`${BASE}/migration-portal/rejects.csv`, { headers });
+  if (!res.ok) {
+    let body: any = null;
+    try { body = await res.json(); } catch { body = null; }
+    throw new PortalError(body?.error ?? `HTTP ${res.status}`, body?.code ?? 'error', res.status);
+  }
+  return res.text();
+}
+
 export function submitPortalApproval(
   token: string,
   payload: { decision: 'approved' | 'refused' | 'changes_requested'; confirmed_text?: string; comment?: string },

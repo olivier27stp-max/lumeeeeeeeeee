@@ -7,13 +7,15 @@ import Papa from 'papaparse';
 import type { AnalyzedColumn, AnalyzedFile, DetectedType, MigrationCategory } from './types';
 import { MASKED_SAMPLE_COUNT, MAX_STAGED_ROWS } from './types';
 import { maskValueByType } from './masks';
+import { isNullLikeValue } from './normalize';
 
 // ---------------------------------------------------------------------------
 // Encodage / binaire / PDF
 
-export function detectEncoding(buf: Buffer): 'utf-8' | 'utf-16le' | 'latin1' {
+export function detectEncoding(buf: Buffer): 'utf-8' | 'utf-16le' | 'utf-16be' | 'latin1' {
   if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return 'utf-8';
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return 'utf-16le';
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) return 'utf-16be';
   // Sans BOM : UTF-8 si le décodage ne produit pas de caractère de
   // remplacement, sinon latin1 (exports Windows/Excel francophones).
   const limit = Math.min(buf.length, 64 * 1024);
@@ -61,7 +63,7 @@ function countOutsideQuotes(line: string, ch: string): number {
 
 export function detectDelimiter(firstLines: string): ',' | ';' | '\t' | '|' {
   const lines = firstLines
-    .split(/\r?\n/)
+    .split(/\r\n|\r|\n/) // \r seul = vieux exports Mac
     .filter((l) => l.trim().length > 0)
     .slice(0, 10);
   if (lines.length === 0) return ',';
@@ -188,8 +190,23 @@ function isStatusColumn(nonEmpty: string[]): boolean {
   return true;
 }
 
+/**
+ * Fichier probablement SANS ligne d'en-tête : si les « en-têtes » ressemblent à
+ * des données (courriels, téléphones, dates, montants, codes postaux), la 1re
+ * ligne de données a été avalée comme en-tête — signalé, jamais deviné.
+ */
+export function headersLookLikeData(headers: string[]): boolean {
+  if (headers.length < 2) return false;
+  const dataish = headers.filter(
+    (h) => isEmailValue(h) || isPhoneValue(h) || isDateValue(h) || isDateTimeValue(h) || isMoneyValue(h) || isPostalCodeValue(h),
+  ).length;
+  return dataish >= 2 && dataish / headers.length >= 0.4;
+}
+
 export function detectColumnType(values: string[]): DetectedType {
-  const nonEmpty = values.map((v) => (v ?? '').trim()).filter((v) => v.length > 0);
+  const nonEmpty = values
+    .map((v) => (v ?? '').trim())
+    .filter((v) => v.length > 0 && !isNullLikeValue(v)); // N/A, -, #REF! = vide
   if (nonEmpty.length === 0) return 'text';
   const ratioOf = (pred: (v: string) => boolean): number =>
     nonEmpty.filter(pred).length / nonEmpty.length;
@@ -227,9 +244,20 @@ interface PapaResult {
   meta: { fields?: string[]; delimiter?: string };
 }
 
-function decodeBuffer(buf: Buffer, encoding: 'utf-8' | 'utf-16le' | 'latin1'): string {
+function decodeBuffer(buf: Buffer, encoding: 'utf-8' | 'utf-16le' | 'utf-16be' | 'latin1'): string {
   if (encoding === 'utf-16le') return buf.toString('utf16le').replace(/^\uFEFF/, '');
-  if (encoding === 'latin1') return buf.toString('latin1');
+  if (encoding === 'utf-16be') {
+    // Node ne d\u00E9code que LE : on permute les paires d'octets avant.
+    const even = buf.length % 2 === 0 ? buf : buf.subarray(0, buf.length - 1);
+    const swapped = Buffer.from(even);
+    swapped.swap16();
+    return swapped.toString('utf16le').replace(/^\uFEFF/, '');
+  }
+  if (encoding === 'latin1') {
+    // Windows-1252 (surensemble pratique de latin1) : les exports Excel FR
+    // utilisent \u2019 \u201C \u201D \u2026 (0x80-0x9F) qui sont des contr\u00F4les en vrai latin1.
+    return new TextDecoder('windows-1252').decode(buf);
+  }
   return buf.toString('utf8').replace(/^\uFEFF/, '');
 }
 
@@ -254,21 +282,40 @@ export function analyzeCsvBuffer(buf: Buffer): AnalyzedFile {
   // sniff sur les premières lignes complètes seulement
   let sniffChunk = text.slice(0, 16384);
   if (text.length > sniffChunk.length) {
-    const lastNl = sniffChunk.lastIndexOf('\n');
+    const lastNl = Math.max(sniffChunk.lastIndexOf('\n'), sniffChunk.lastIndexOf('\r'));
     if (lastNl > 0) sniffChunk = sniffChunk.slice(0, lastNl);
   }
   const delimiter = detectDelimiter(sniffChunk);
 
+  // En-têtes dupliqués : Papa écrase la valeur précédente sous la même clé
+  // (perte silencieuse) — on suffixe « (2) », « (3) »… dès la 2e occurrence.
+  // Idempotent PAR INDEX : Papa peut rappeler transformHeader sur la même
+  // ligne d'en-tête (constaté aux tests) — sans cache, tout devenait « (2) ».
+  const headerSeen = new Map<string, number>();
+  const headerByIndex = new Map<number, string>();
+  let hadDuplicateHeaders = false;
   const parsed = Papa.parse(text, {
     header: true,
     delimiter,
     skipEmptyLines: 'greedy',
-    transformHeader: (h: string) => h.trim(),
+    transformHeader: (h: string, index: number) => {
+      const cached = headerByIndex.get(index);
+      if (cached !== undefined) return cached;
+      const t = h.trim();
+      const n = (headerSeen.get(t.toLowerCase()) ?? 0) + 1;
+      headerSeen.set(t.toLowerCase(), n);
+      const name = n === 1 ? t : `${t} (${n})`;
+      if (n > 1) hadDuplicateHeaders = true;
+      headerByIndex.set(index, name);
+      return name;
+    },
     preview: MAX_STAGED_ROWS + 1, // borne le travail sur les très gros fichiers
   }) as PapaResult;
 
   const headers = (parsed.meta.fields ?? []).map((h) => h.trim());
   const warnings: string[] = [];
+  if (hadDuplicateHeaders) warnings.push('duplicate_headers');
+  if (headersLookLikeData(headers)) warnings.push('missing_header_row');
 
   const truncated = parsed.data.length > MAX_STAGED_ROWS;
   const rawRows = truncated ? parsed.data.slice(0, MAX_STAGED_ROWS) : parsed.data;
@@ -290,12 +337,12 @@ export function analyzeCsvBuffer(buf: Buffer): AnalyzedFile {
   const columns: AnalyzedColumn[] = headers.map((header, position) => {
     const all = rows.map((r) => r[header] ?? '');
     const detectedType = detectColumnType(all.slice(0, 500));
-    const emptyCount = all.reduce((n, v) => (v.trim().length === 0 ? n + 1 : n), 0);
+    const emptyCount = all.reduce((n, v) => (v.trim().length === 0 || isNullLikeValue(v) ? n + 1 : n), 0);
     const emptyRatio = all.length === 0 ? 0 : Math.round((emptyCount / all.length) * 10000) / 10000;
     const samplesMasked: string[] = [];
     for (const v of all) {
       if (samplesMasked.length >= MASKED_SAMPLE_COUNT) break;
-      if (v.trim().length === 0) continue;
+      if (v.trim().length === 0 || isNullLikeValue(v)) continue;
       samplesMasked.push(maskValueByType(v, detectedType));
     }
     return { position, header, detectedType, emptyRatio, samplesMasked };
