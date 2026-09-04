@@ -120,6 +120,53 @@ async function inRole<T>(role: string, claims: string | null, fn: () => Promise<
   } finally { await c.query('rollback').catch(() => {}); }
 }
 
+// Marqueur des lignes créées par CE run pour se rendre auto-suffisant. Distinct
+// du seed permanent (`seed:rls`) : suffixe .ci pour que le nettoyage final ne
+// touche QUE l'éphémère, jamais la fixture stable d'un staging partagé.
+const EMAIL_CI = (i: number) => `rlsfix.user${i}.ci@fixture.lume.test`;
+let fixtureCICreee = false;
+
+async function creerFixtureEphemere(): Promise<void> {
+  fixtureCICreee = true;
+  for (let i = 0; i < 2; i++) {
+    const email = EMAIL_CI(i);
+    // Org minimale (seule `name` est obligatoire).
+    const org = (await c.query(
+      `insert into public.orgs (id, name) values (gen_random_uuid(), $1) returning id`,
+      [`[RLS-CI] org ${i}`],
+    )).rows[0];
+    // User minimal (même forme que seed:rls ; l'email a un index unique
+    // partiel → pas d'ON CONFLICT, on nettoie d'abord un résidu éventuel).
+    await c.query(`delete from auth.users where email = $1`, [email]).catch(() => {});
+    const u = (await c.query(
+      `insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
+         email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+       values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated',
+         'authenticated', $1, '', now(), now(), now(),
+         '{"provider":"email","providers":["email"],"rlsfix_ci":true}'::jsonb, '{}'::jsonb)
+       returning id`,
+      [email],
+    )).rows[0];
+    await c.query(
+      `insert into public.memberships (org_id, user_id, role, status)
+       values ($1, $2, 'owner', 'active')`,
+      [org.id, u.id],
+    );
+  }
+}
+
+async function nettoyerFixtureEphemere(): Promise<void> {
+  if (!fixtureCICreee) return;
+  // Les memberships et lignes liées tombent en cascade avec les users/orgs.
+  await c.query(
+    `delete from auth.users where email in ($1, $2)`,
+    [EMAIL_CI(0), EMAIL_CI(1)],
+  ).catch(() => {});
+  await c.query(
+    `delete from public.orgs where name like '[RLS-CI] org %'`,
+  ).catch(() => {});
+}
+
 async function main() {
   await c.connect();
   await c.query("set statement_timeout='120s'");
@@ -129,14 +176,19 @@ async function main() {
   // (rlsfix.user%@fixture.lume.test, créés par `npm run seed:rls`) : stables,
   // jamais touchés par les tests QA qui manipulent les memberships. Repli sur
   // n'importe quels users mono-org si la fixture n'a pas été semée.
-  let users = (await c.query(`
+  const parFixture = `
     select distinct on (m.org_id) m.user_id, m.org_id from memberships m
     join auth.users u on u.id = m.user_id
     where u.email like 'rlsfix.user%@fixture.lume.test'
       and (select count(*) from memberships mm where mm.user_id=m.user_id)=1
     order by m.org_id
-    limit 2`)).rows;
-  if (users.length < 2) {
+    limit 2`;
+  // RLS_FORCE_EPHEMERE=1 saute les fixtures existantes et force le chemin de
+  // création éphémère — pour tester ce chemin, et comme échappatoire si la
+  // fixture stable d'un staging est un jour corrompue.
+  const forceEphemere = process.env.RLS_FORCE_EPHEMERE === '1';
+  let users = forceEphemere ? [] : (await c.query(parFixture)).rows;
+  if (!forceEphemere && users.length < 2) {
     users = (await c.query(`
       select distinct on (m.org_id) m.user_id, m.org_id from memberships m
       where exists(select 1 from auth.users u where u.id=m.user_id)
@@ -144,7 +196,17 @@ async function main() {
       limit 2`)).rows;
   }
   if (users.length < 2) {
-    console.error('Need >=2 single-org users seeded. Run `npm run seed:rls` against staging.');
+    // Auto-suffisance CI : aucune paire trouvée (base fraîche, fixture non
+    // semée). On CRÉE une fixture ÉPHÉMÈRE — 2 orgs + 2 users mono-org — dans
+    // la base testée, puis on la supprimera en fin de run (finally). Le test
+    // ne dépend ainsi d'AUCUN seed préalable : c'était la cause du flake CI
+    // « Need >=2 single-org users » (la CI ne lance jamais `seed:rls`).
+    console.log('Aucune paire mono-org trouvée → création d\'une fixture éphémère pour ce run.');
+    await creerFixtureEphemere();
+    users = (await c.query(parFixture)).rows;
+  }
+  if (users.length < 2) {
+    console.error('Impossible d\'obtenir 2 users mono-org, même après création de la fixture éphémère.');
     process.exit(2);
   }
   const [A, B] = users;
@@ -347,13 +409,17 @@ async function main() {
   for (const v of badViews) leaks.push(`VIEW ${v.n} runs as owner (no security_invoker)`);
 
   console.log(`Checked: anon(${anonRels.length}) auth-org(${orgRels.length}) child(${childTbls.length}) write rpc(${anonFns.length}) control-plane(${CONTROL_PLANE.length}) secrets policies views\n`);
-  if (leaks.length) { console.log(`🔴 ${leaks.length} LEAK(S):`); leaks.forEach(l => console.log('   - ' + l)); await c.end(); process.exit(1); }
+  if (leaks.length) { console.log(`🔴 ${leaks.length} LEAK(S):`); leaks.forEach(l => console.log('   - ' + l)); await nettoyerFixtureEphemere(); await c.end(); process.exit(1); }
   console.log('✅ PASS — no cross-tenant leak (reads, anon, child tables, and writes all isolated).');
+  await nettoyerFixtureEphemere();
   await c.end();
 }
-main().catch(e => {
+main().catch(async e => {
   const msg = e?.message || String(e);
   console.error('✗', msg);
+  // Toujours retirer la fixture éphémère, même sur erreur, pour ne pas laisser
+  // de résidus dans la base testée.
+  await nettoyerFixtureEphemere().catch(() => {});
 
   // A connection failure is NOT a security finding, and reporting it as one
   // wastes the reader's time. Say which of the four things is actually wrong
