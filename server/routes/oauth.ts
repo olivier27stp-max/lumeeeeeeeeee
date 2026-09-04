@@ -29,7 +29,7 @@ import {
   SCOPES_SUPPORTED, SCOPE_MCP_READ, AUTH_CODE_TTL_S,
   getClient, redirectUriAllowed, verifyPkce,
   issueAuthorizationCode, consumeAuthorizationCode,
-  issueTokens, rotateRefreshToken, revokeToken,
+  issueTokens, rotateRefreshToken, revokeToken, revoquerAnciennesAutorisations,
 } from '../lib/oauth';
 import { getServiceClient, requireAuthedClient } from '../lib/supabase';
 import { logSecurityEvent, extractIP } from '../lib/security';
@@ -377,11 +377,19 @@ router.post('/token', form, json, async (req, res) => {
         supabaseRefreshToken: reprendreSession(code),
       });
 
+      // Re-consentement : le nouveau jeton vit, on peut couper les anciens du
+      // même (utilisateur, client) — sinon ils s'empilent (refresh 30 j +
+      // sessions Supabase dédiées orphelines). Best-effort, ne bloque rien.
+      revoquerAnciennesAutorisations(consumed.user_id, consumed.client_id, tokens.tokenId)
+        .catch(() => {});
+
       getServiceClient().from('oauth_clients')
         .update({ last_used_at: new Date().toISOString() })
         .eq('client_id', clientId).then(() => {}, () => {});
 
-      return res.json({ token_type: 'Bearer', ...tokens });
+      // tokenId est interne : on ne l'expose jamais au client HTTP.
+      const { tokenId: _omis, ...reponse } = tokens;
+      return res.json({ token_type: 'Bearer', ...reponse });
     }
 
     // ── Rafraîchissement ──
@@ -402,7 +410,9 @@ router.post('/token', form, json, async (req, res) => {
       }
       if (!result) return oauthError(res, 400, 'invalid_grant', 'Jeton invalide ou expiré.');
 
-      return res.json({ token_type: 'Bearer', ...result.tokens });
+      // tokenId reste interne, jamais dans la réponse au client.
+      const { tokenId: _rid, ...reponseRefresh } = result.tokens;
+      return res.json({ token_type: 'Bearer', ...reponseRefresh });
     }
 
     return oauthError(res, 400, 'unsupported_grant_type');

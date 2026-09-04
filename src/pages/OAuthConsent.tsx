@@ -13,11 +13,12 @@
    pour revenir ici après la connexion sans perdre les paramètres.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Check, Loader2, ShieldCheck, X } from 'lucide-react';
+import { Building2, Check, Loader2, ShieldCheck, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
+import { CompanyContext } from '../contexts/CompanyContext';
 
 interface ClientInfo {
   client_id: string;
@@ -30,6 +31,15 @@ export default function OAuthConsent() {
   const [params] = useSearchParams();
   const { language } = useTranslation();
   const fr = language === 'fr';
+  // Le bureau actif : c'est LUI que l'autorisation va lier au connecteur.
+  // Multi-bureaux → l'utilisateur doit voir lequel avant de cliquer, sinon
+  // Claude pourrait agir dans le mauvais sans qu'il s'en rende compte.
+  // On lit le contexte SANS useCompany() : cette page est aussi montée hors
+  // de <CompanyProvider> (parcours public), où useCompany() lèverait. Absent
+  // → on masque simplement le bandeau bureau, pas de plantage.
+  const companyCtx = useContext(CompanyContext);
+  const current = companyCtx?.current ?? null;
+  const companies = companyCtx?.companies ?? [];
 
   const [client, setClient] = useState<ClientInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,6 +173,31 @@ export default function OAuthConsent() {
             )}
           </p>
         </div>
+
+        {/* Le bureau lié : essentiel en multi-bureaux — l'accès sera collé à
+            celui-ci, et Claude n'en verra pas d'autre tant que l'utilisateur
+            ne reconnecte pas depuis le bon bureau. */}
+        {current?.companyName && (
+          <div className="rounded-lg bg-surface-secondary/50 border border-outline/40 p-3 flex items-start gap-2.5">
+            <Building2 size={15} className="text-text-tertiary shrink-0 mt-0.5" />
+            <div className="text-[12.5px] leading-relaxed">
+              <span className="text-text-secondary">
+                {fr ? 'Accès lié au bureau ' : 'Access tied to '}
+              </span>
+              <span className="font-semibold text-text-primary">{current.companyName}</span>
+              <span className="text-text-secondary">
+                {fr ? '. Claude n’agira que dans ce bureau.' : '. Claude will act only in this office.'}
+              </span>
+              {companies && companies.length > 1 && (
+                <div className="mt-1 text-[11.5px] text-text-tertiary">
+                  {fr
+                    ? 'Vous avez plusieurs bureaux. Pour un autre, changez de bureau dans Lume, puis reconnectez le connecteur.'
+                    : 'You have several offices. For a different one, switch office in Lume, then reconnect the connector.'}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Ce qui est accordé — et ce qui ne l'est pas */}
         <div className="rounded-lg bg-surface-secondary/50 border border-outline/40 p-4 space-y-2.5">
