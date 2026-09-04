@@ -123,43 +123,55 @@ export default function ApiMcpSettings() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      {/* ── Hero : pont Lume × Claude ── */}
-      <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-card">
-        {/* Fond de marque (+ image optionnelle par-dessus, fondue). */}
-        <div className="absolute inset-0 bg-gradient-to-br from-accent-light via-surface-card to-surface-card" aria-hidden />
-        {heroBg && (
-          <div
-            className="absolute inset-0 opacity-40 dark:opacity-25 bg-cover bg-center"
-            style={{ backgroundImage: `url(${HERO_BG_URL})` }}
-            aria-hidden
+      {/* ── Hero « Lume × Claude » ──
+         L'illustration porte déjà le titre « LUME × Claude » et l'histoire du
+         pont : on la laisse parler. Si le fichier public/mcp-hero-bg.webp est
+         absent, on retombe sur un bandeau de marque + titre texte. */}
+      {heroBg ? (
+        <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-card">
+          <img
+            src={HERO_BG_URL}
+            alt={fr ? 'Lume connecté à Claude' : 'Lume connected to Claude'}
+            className="w-full block dark:brightness-95"
           />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-surface-card via-surface-card/70 to-transparent" aria-hidden />
-
-        <div className="relative px-6 pt-8 pb-7 text-center">
-          <div className="flex items-center justify-center mb-5">
-            <div className="w-16 h-16 rounded-2xl bg-surface-card border border-outline shadow-sm grid place-items-center z-10">
-              <img src="/lume-logo-v2.png" alt="Lume" className="w-9 h-9 object-contain dark:invert" />
-            </div>
-            <div className="w-14 h-0.5 bg-gradient-to-r from-accent to-[#d97757] relative">
-              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-surface-card border border-outline grid place-items-center text-[11px] font-bold text-text-secondary z-20">
-                ×
-              </span>
-            </div>
-            <div className="w-16 h-16 rounded-2xl bg-surface-card border border-outline shadow-sm grid place-items-center z-10">
-              <ClaudeMark />
-            </div>
+          {/* Voile bas → le sous-titre reste lisible par-dessus l'illustration claire. */}
+          <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-surface-card via-surface-card/85 to-transparent" aria-hidden />
+          <div className="absolute inset-x-0 bottom-0 px-6 pb-5 pt-8 text-center">
+            <p className="text-sm text-text-secondary max-w-md mx-auto leading-relaxed">
+              {fr
+                ? 'Parle à ton entreprise en langage naturel. Colle une adresse dans Claude, connecte-toi avec ton compte Lume — aucune clé à gérer.'
+                : 'Talk to your business in plain language. Paste one address into Claude, sign in with your Lume account — no keys to manage.'}
+            </p>
           </div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-text-primary">
-            {fr ? 'Branche ton CRM à Claude' : 'Connect your CRM to Claude'}
-          </h2>
-          <p className="mt-2 text-sm text-text-secondary max-w-md mx-auto leading-relaxed">
-            {fr
-              ? 'Parle à ton entreprise en langage naturel. Colle une adresse dans Claude, connecte-toi avec ton compte Lume — aucune clé à gérer.'
-              : 'Talk to your business in plain language. Paste one address into Claude, sign in with your Lume account — no keys to manage.'}
-          </p>
         </div>
-      </div>
+      ) : (
+        <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-card">
+          <div className="absolute inset-0 bg-gradient-to-br from-accent-light via-surface-card to-surface-card" aria-hidden />
+          <div className="relative px-6 pt-8 pb-7 text-center">
+            <div className="flex items-center justify-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-surface-card border border-outline shadow-sm grid place-items-center z-10">
+                <img src="/lume-logo-v2.png" alt="Lume" className="w-9 h-9 object-contain dark:invert" />
+              </div>
+              <div className="w-14 h-0.5 bg-gradient-to-r from-accent to-[#d97757] relative">
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-surface-card border border-outline grid place-items-center text-[11px] font-bold text-text-secondary z-20">
+                  ×
+                </span>
+              </div>
+              <div className="w-16 h-16 rounded-2xl bg-surface-card border border-outline shadow-sm grid place-items-center z-10">
+                <ClaudeMark />
+              </div>
+            </div>
+            <h2 className="text-2xl font-extrabold tracking-tight text-text-primary">
+              {fr ? 'Branche ton CRM à Claude' : 'Connect your CRM to Claude'}
+            </h2>
+            <p className="mt-2 text-sm text-text-secondary max-w-md mx-auto leading-relaxed">
+              {fr
+                ? 'Parle à ton entreprise en langage naturel. Colle une adresse dans Claude, connecte-toi avec ton compte Lume — aucune clé à gérer.'
+                : 'Talk to your business in plain language. Paste one address into Claude, sign in with your Lume account — no keys to manage.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="h-24 rounded-2xl bg-surface-tertiary animate-pulse" />
