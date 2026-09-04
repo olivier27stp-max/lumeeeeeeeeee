@@ -197,6 +197,19 @@ const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = 
   get_financial_overview:    { cle: 'financial.view_reports', capacite: 'la vue financière' },
   get_revenue_summary:       { cle: 'financial.view_reports', capacite: 'le résumé des revenus' },
   get_overdue_payments:      { cle: 'financial.view_invoices', capacite: 'les paiements en retard' },
+  // Conseil / analyse : mêmes chiffres que les rapports financiers.
+  compare_revenue:           { cle: 'financial.view_reports', capacite: 'la comparaison des revenus' },
+  get_top_clients:           { cle: 'financial.view_reports', capacite: 'la valeur des clients' },
+  get_churn_risk:            { cle: 'financial.view_reports', capacite: 'les clients à risque' },
+  get_job_profitability:     { cle: 'financial.view_reports', capacite: 'la rentabilité des jobs' },
+  get_top_services:          { cle: 'financial.view_reports', capacite: 'les services les plus rentables' },
+  set_job_expenses:          { cle: 'financial.view_reports', capacite: "la saisie des dépenses d'un job" },
+  // Catalogue / planification.
+  list_services:             { cle: 'jobs.read',          capacite: 'le catalogue de services' },
+  find_free_slot:            { cle: 'calendar.read',      capacite: 'la recherche de créneaux' },
+  optimize_route:            { cle: 'jobs.read',          capacite: "l'optimisation de tournée" },
+  // Courriel libre : envoi au nom de l'entreprise (la route exige owner/admin).
+  send_email:                { cle: 'messages.send',      capacite: "l'envoi de courriels" },
 };
 
 const OUTILS_FINANCIERS = new Set([
@@ -204,6 +217,8 @@ const OUTILS_FINANCIERS = new Set([
   'list_invoices', 'create_invoice', 'create_invoice_from_job',
   'send_invoice', 'create_quote', 'send_quote', 'list_quotes',
   'mark_invoice_paid', 'cancel_quote',
+  'compare_revenue', 'get_top_clients', 'get_churn_risk',
+  'get_job_profitability', 'get_top_services',
 ]);
 
 // Champs à blanchir pour un membre sans droit aux montants. On couvre les

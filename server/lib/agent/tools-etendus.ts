@@ -710,6 +710,39 @@ const getD2dStats: AgentTool = {
   },
 };
 
+const listServices: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'list_services',
+    description:
+      'The org’s catalog of predefined services/products with their usual price. Use it BEFORE creating a '
+      + 'job/quote/invoice so prices and labels match what the business normally charges — « add 2 window '
+      + 'cleanings at the usual rate ».',
+    parameters: { type: 'object', properties: {} },
+  },
+  handler: async (_args, ctx) => {
+    const { data, error } = await ctx.client
+      .from('predefined_services')
+      .select('id, name, description, default_price_cents, category, default_duration_minutes')
+      .eq('org_id', ctx.orgId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
+      .limit(200);
+    if (error) return erreurOutil('services', error);
+    return {
+      count: data?.length || 0,
+      services: (data || []).map((s: any) => ({
+        nom: s.name,
+        description: s.description || null,
+        prix_cents: Math.round(Number(s.default_price_cents) || 0),
+        categorie: s.category || null,
+        duree_minutes: s.default_duration_minutes || null,
+      })),
+    };
+  },
+};
+
 const listCourses: AgentTool = {
   kind: 'read',
   declaration: {
@@ -857,6 +890,202 @@ const getFinancialOverview: AgentTool = {
         margin_pct: ca > 0 ? Math.round(((ca - depenses) / ca) * 1000) / 10 : null,
       },
     };
+  },
+};
+
+/* ── Conseil : analyse et tendances (au-delà du simple total) ───────── */
+
+const compareRevenue: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'compare_revenue',
+    description:
+      'Compare business metrics for a period against the PREVIOUS equivalent period (revenue, jobs, '
+      + 'invoices…) with the % change. Answers « how is this month vs last month », « am I up or down ». '
+      + 'Give from/to (YYYY-MM-DD); defaults to this month.',
+    parameters: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Start date YYYY-MM-DD (default: 1st of this month).' },
+        to: { type: 'string', description: 'End date YYYY-MM-DD (default: today).' },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const to = args.to ? String(args.to) : dateOrgAujourdhui();
+    const from = args.from ? String(args.from) : `${to.slice(0, 7)}-01`;
+    const { data, error } = await ctx.client.rpc('rpc_insights_period_comparison', {
+      p_org: ctx.orgId, p_from: from, p_to: to,
+    });
+    if (error) return erreurOutil('comparaison', error);
+    const LIB: Record<string, string> = {
+      revenue: 'revenus', jobs: 'jobs', invoices: 'factures', quotes: 'devis',
+      new_clients: 'nouveaux clients', collected: 'encaissé',
+    };
+    return {
+      periode: { du: from, au: to },
+      comparaison: (data || []).map((r: any) => ({
+        mesure: LIB[r.metric] || String(r.metric).replace(/_/g, ' '),
+        // Un montant garde son nom _cents (masquage + affichage $) ; un compte reste brut.
+        ...(/revenue|collected|amount|cents/i.test(r.metric)
+          ? { valeur_cents: Math.round(Number(r.current_value) || 0), precedent_cents: Math.round(Number(r.previous_value) || 0) }
+          : { valeur: Number(r.current_value) || 0, precedent: Number(r.previous_value) || 0 }),
+        variation_pct: r.change_pct == null ? null : Math.round(Number(r.change_pct) * 10) / 10,
+      })),
+    };
+  },
+};
+
+const getTopClients: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_top_clients',
+    description:
+      'Your most valuable clients by lifetime value: total spent, number of jobs, how long they’ve been '
+      + 'a client, when they were last active. Use for « who are my best clients ».',
+    parameters: {
+      type: 'object',
+      properties: { limit: { type: 'integer', description: 'How many (default 10, max 25).' } },
+    },
+  },
+  handler: async (args, ctx) => {
+    const { data, error } = await ctx.client.rpc('rpc_insights_client_lifetime_value', {
+      p_org: ctx.orgId, p_limit: clamp(args.limit, 10, 25),
+    });
+    if (error) return erreurOutil('top_clients', error);
+    return {
+      count: data?.length || 0,
+      clients: (data || []).map((c: any) => ({
+        client_id: c.client_id, // interne
+        nom: c.client_name,
+        total_cents: Math.round(Number(c.total_revenue_cents) || 0),
+        nombre_de_jobs: Number(c.total_jobs) || 0,
+        valeur_moyenne_cents: Math.round(Number(c.avg_job_value_cents) || 0),
+        client_depuis_jours: Number(c.tenure_days) || 0,
+        derniere_activite_il_y_a_jours: c.days_since_last_activity == null ? null : Number(c.days_since_last_activity),
+      })),
+    };
+  },
+};
+
+const getChurnRisk: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_churn_risk',
+    description:
+      'Clients at risk of leaving (inactive a while, unpaid invoices…), most at-risk first — exactly who '
+      + 'to reach out to. Use for « which clients should I follow up with », « who might I be losing ».',
+    parameters: {
+      type: 'object',
+      properties: { limit: { type: 'integer', description: 'How many (default 10, max 25).' } },
+    },
+  },
+  handler: async (args, ctx) => {
+    const { data, error } = await ctx.client.rpc('rpc_insights_churn_risk', {
+      p_org: ctx.orgId, p_limit: clamp(args.limit, 10, 25),
+    });
+    if (error) return erreurOutil('churn', error);
+    const NIV: Record<string, string> = { high: 'élevé', medium: 'moyen', low: 'faible' };
+    return {
+      count: data?.length || 0,
+      clients: (data || []).map((c: any) => ({
+        client_id: c.client_id, // interne
+        nom: c.client_name,
+        risque: NIV[c.risk_level] || c.risk_level,
+        inactif_depuis_jours: Number(c.days_inactive) || 0,
+        factures_en_retard: Number(c.overdue_invoices) || 0,
+        montant_en_retard_cents: Math.round(Number(c.overdue_amount_cents) || 0),
+        total_historique_cents: Math.round(Number(c.total_revenue_cents) || 0),
+      })),
+    };
+  },
+};
+
+const getJobProfitability: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_job_profitability',
+    description:
+      'Profitability of your jobs over a period: total revenue vs cost, gross margin and %, how many jobs '
+      + 'made money vs lost money. Use for « am I profitable », « where am I losing money ». '
+      + 'from/to YYYY-MM-DD; defaults to this month.',
+    parameters: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Start YYYY-MM-DD (default: 1st of month).' },
+        to: { type: 'string', description: 'End YYYY-MM-DD (default: today).' },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const to = args.to ? String(args.to) : dateOrgAujourdhui();
+    const from = args.from ? String(args.from) : `${to.slice(0, 7)}-01`;
+    const { data, error } = await ctx.client.rpc('rpc_insights_job_profitability', {
+      p_org: ctx.orgId, p_from: from, p_to: to,
+    });
+    if (error) return erreurOutil('rentabilite', error);
+    const r: any = Array.isArray(data) ? data[0] : data;
+    if (!r) return { periode: { du: from, au: to }, note: 'Aucune donnée de rentabilité sur cette période.' };
+    return {
+      periode: { du: from, au: to },
+      nombre_de_jobs: Number(r.total_jobs) || 0,
+      revenus_cents: Math.round(Number(r.total_revenue_cents) || 0),
+      couts_cents: Math.round(Number(r.total_cost_cents) || 0),
+      marge_cents: Math.round(Number(r.gross_margin_cents) || 0),
+      marge_pct: r.margin_pct == null ? null : Math.round(Number(r.margin_pct) * 10) / 10,
+      jobs_rentables: Number(r.profitable_jobs) || 0,
+      jobs_a_perte: Number(r.unprofitable_jobs) || 0,
+    };
+  },
+};
+
+const getTopServices: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_top_services',
+    description:
+      'Which kinds of work bring in the most revenue over a period, ranked. Use for « what services make '
+      + 'me the most money ». from/to YYYY-MM-DD; defaults to this month.',
+    parameters: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Start YYYY-MM-DD (default: 1st of month).' },
+        to: { type: 'string', description: 'End YYYY-MM-DD (default: today).' },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const to = args.to ? String(args.to) : dateOrgAujourdhui();
+    const from = args.from ? String(args.from) : `${to.slice(0, 7)}-01`;
+    // Pas de RPC : on agrège les jobs par titre, comme l'écran Insights.
+    const { data, error } = await ctx.client
+      .from('jobs')
+      .select('title, total_cents')
+      .eq('org_id', ctx.orgId)
+      .is('deleted_at', null)
+      .not('status', 'in', '(draft,cancelled)')
+      .gte('created_at', `${from}T00:00:00`)
+      .lte('created_at', `${to}T23:59:59`)
+      .limit(5000);
+    if (error) return erreurOutil('top_services', error);
+    const parType = new Map<string, { total: number; count: number }>();
+    for (const j of data || []) {
+      const cle = String(j.title || 'Autre').trim() || 'Autre';
+      const cur = parType.get(cle) || { total: 0, count: 0 };
+      cur.total += Number(j.total_cents) || 0;
+      cur.count += 1;
+      parType.set(cle, cur);
+    }
+    const services = [...parType.entries()]
+      .map(([nom, s]) => ({ service: nom, total_cents: s.total, nombre_de_jobs: s.count }))
+      .sort((a, b) => b.total_cents - a.total_cents)
+      .slice(0, 10);
+    return { periode: { du: from, au: to }, services };
   },
 };
 
@@ -1897,6 +2126,129 @@ const sendInvoiceTool: AgentTool = {
     }),
 };
 
+const sendEmailTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'send_email',
+    description:
+      'Send a free-form email to a client (a thank-you, a follow-up, an answer) — IT ACTUALLY SENDS. '
+      + 'For a quote or invoice, use send_quote/send_invoice instead. ALWAYS show the user the recipient, '
+      + 'subject and full text and get their explicit OK first. Only owners/admins can send.',
+    parameters: {
+      type: 'object',
+      properties: {
+        to: { type: 'string', description: 'Recipient email address.' },
+        subject: { type: 'string', description: 'Email subject.' },
+        message: { type: 'string', description: 'The email body, in plain text (line breaks kept).' },
+      },
+      required: ['to', 'subject', 'message'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'send_email', args, async () => {
+      const to = champRequis(args.to, 'Le destinataire');
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw new Error('L’adresse courriel du destinataire n’est pas valide.');
+      const subject = champRequis(args.subject, 'L’objet').slice(0, 300);
+      const texte = champRequis(args.message, 'Le message').slice(0, 20000);
+      const html = texte.split(/\n{2,}/).map((par) =>
+        `<p>${par.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}</p>`,
+      ).join('');
+      let res;
+      try {
+        res = await appelInterne(ctx, '/emails/send-custom', { to, subject, html });
+      } catch (e) {
+        if (e instanceof AppelInterneIncertain) throw envoiIncertain('le courriel');
+        throw e;
+      }
+      const { ok, status, json } = res;
+      if (!ok) {
+        if (status === 403) throw new Error('Seuls le propriétaire ou un administrateur peuvent envoyer un courriel libre.');
+        throw new Error(json?.error || `Envoi refusé (${status}).`);
+      }
+      return { sent: true, channel: 'email', destinataire: to, note: 'Courriel envoyé.' };
+    }),
+};
+
+const findFreeSlotTool: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'find_free_slot',
+    description:
+      'Find open time slots in the schedule to book a new visit — « find me a spot next week », « when '
+      + 'am I free Tuesday ». Returns available start times over the next days.',
+    parameters: {
+      type: 'object',
+      properties: {
+        start_date: { type: 'string', description: 'Look from this date YYYY-MM-DD (default: today).' },
+        days: { type: 'integer', description: 'How many days to scan (default 14, max 31).' },
+        slot_minutes: { type: 'integer', description: 'Length of the slot needed in minutes (default 60).' },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const { data, error } = await ctx.client.rpc('get_available_slots', {
+      p_org_id: ctx.orgId,
+      p_team_id: null,
+      p_start_date: args.start_date ? String(args.start_date) : dateOrgAujourdhui(),
+      p_days: clamp(args.days, 14, 31),
+      p_slot_minutes: clamp(args.slot_minutes, 60, 180),
+      p_timezone: FUSEAU_ORG,
+    });
+    if (error) return erreurOutil('creneaux', error);
+    return {
+      count: data?.length || 0,
+      creneaux: (data || []).slice(0, 40).map((sl) => ({ debut: sl.slot_start, fin: sl.slot_end })),
+      ...((data?.length || 0) === 0 ? { note: 'Aucun créneau libre trouvé sur la période — élargis les dates ou vérifie les disponibilités de l’équipe dans Lume.' } : {}),
+    };
+  },
+};
+
+const optimizeRouteTool: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'optimize_route',
+    description:
+      'Propose the best ORDER to visit a set of jobs to drive less, with distance and drive time. It only '
+      + 'PROPOSES — it does not move anything on the calendar. Give the job ids (from get_day_route or '
+      + 'list_jobs). Use for « organize my stops », « best route for these jobs ».',
+    parameters: {
+      type: 'object',
+      properties: {
+        job_ids: { type: 'array', items: { type: 'string' }, description: 'The jobs to order (their ids).' },
+      },
+      required: ['job_ids'],
+    },
+  },
+  handler: async (args, ctx) => {
+    const ids = Array.isArray(args.job_ids) ? args.job_ids.map(String).filter(Boolean) : [];
+    if (!ids.length) return { error: 'Donne au moins un job à ordonner (via get_day_route).' };
+    let res;
+    try {
+      res = await appelInterne(ctx, '/route-optimization/optimize', { job_ids: ids });
+    } catch (e) {
+      if (e instanceof AppelInterneIncertain) return { error: 'Le calcul de tournée n’a pas répondu — réessaie dans un instant.' };
+      throw e;
+    }
+    if (!res.ok) return { error: res.json?.error || `Optimisation impossible (${res.status}).` };
+    const j = res.json || {};
+    return {
+      ordre_propose: (j.ordered_jobs || []).map((st) => ({
+        position: st.order,
+        job: st.title,
+        adresse: st.address,
+        km_depuis_precedent: st.distance_km_from_prev,
+        minutes_de_route: st.eta_minutes_from_prev,
+      })),
+      distance_totale_km: j.total_distance_km,
+      temps_de_route_minutes: j.total_drive_minutes,
+      note: 'C’est une proposition d’ordre — rien n’a bougé au calendrier. Dis-moi si tu veux que je replanifie les visites dans cet ordre.',
+    };
+  },
+};
+
 
 /* ── Gestion : modifier, déplacer, classer ─────────────────────── */
 
@@ -2548,6 +2900,51 @@ const updateJobTool: AgentTool = {
     }),
 };
 
+const setJobExpensesTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'set_job_expenses',
+    description:
+      'Record the total expenses/costs on a job (gas, materials, subcontractor…) so its profit is '
+      + 'accurate. This SETS the total expense figure (it replaces it, it does not add to it) — if there '
+      + 'were already expenses, include them. Amount in dollars. Get the job id from list_jobs.',
+    parameters: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job id (from list_jobs).' },
+        amount_dollars: { type: 'number', description: 'TOTAL expenses in dollars (e.g. 125.50). Replaces the current figure.' },
+      },
+      required: ['job_id', 'amount_dollars'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'set_job_expenses', args, async () => {
+      const jobId = champRequis(args.job_id, 'Le job');
+      const montant = Number(args.amount_dollars);
+      if (!Number.isFinite(montant) || montant < 0) throw new Error('Le montant des dépenses doit être un nombre positif (en dollars).');
+      const cents = Math.max(0, Math.round(montant * 100));
+      const cap = depassePlafond(cents);
+      if (cap) throw new Error(cap.error);
+      const { data, error } = await ctx.client
+        .from('jobs')
+        .update({ expenses_cents: cents, updated_at: new Date().toISOString() })
+        .eq('org_id', ctx.orgId).eq('id', jobId)
+        .is('deleted_at', null)
+        .select('id, job_number, total_cents, expenses_cents')
+        .single();
+      if (error) throw error;
+      const marge = (Number(data.total_cents) || 0) - cents;
+      return {
+        updated: true,
+        job: { job_number: data.job_number },
+        depenses_cents: cents,
+        marge_cents: marge,
+        note: 'Dépenses enregistrées ; la marge du job est recalculée.',
+      };
+    }),
+};
+
 /* ── Conversions et visites ────────────────────────────────────── */
 
 const convertQuoteToJobTool: AgentTool = {
@@ -2740,6 +3137,14 @@ export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getMorningBriefing,
   recallNotes,
   getRecentAgentActions,
+  compareRevenue,
+  getTopClients,
+  getChurnRisk,
+  getJobProfitability,
+  getTopServices,
+  listServices,
+  findFreeSlotTool,
+  optimizeRouteTool,
 ];
 
 /** Écriture ajoutée par ce module (les 4 historiques restent dans tools.ts). */
@@ -2767,4 +3172,6 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   deleteTaskTool,
   cancelQuoteTool,
   markInvoicePaidTool,
+  setJobExpensesTool,
+  sendEmailTool,
 ];
