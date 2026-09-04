@@ -1893,6 +1893,57 @@ const rescheduleJobTool: AgentTool = {
     }),
 };
 
+const cancelVisitTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'cancel_visit',
+    description:
+      "Cancel a job's calendar visit — same as deleting it on the Lume calendar. Removes the NEXT "
+      + 'upcoming visit (or the most recent if all are past). If it was the job\'s only visit, the job '
+      + 'goes back to unscheduled. Get the job id from list_jobs. Confirm with the user first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        job_id: { type: 'string', description: 'Job id.' },
+      },
+      required: ['job_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'cancel_visit', args, async () => {
+      const jobId = champRequis(args.job_id, 'Le job');
+      const { data: visites, error } = await ctx.client
+        .from('schedule_events')
+        .select('id, start_at')
+        .eq('org_id', ctx.orgId).eq('job_id', jobId)
+        .is('deleted_at', null)
+        .order('start_at', { ascending: true });
+      if (error) throw error;
+      if (!visites?.length) throw new Error('Ce job n’a aucune visite au calendrier à annuler.');
+      const maintenant = Date.now();
+      const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
+
+      // Même RPC que « supprimer la visite » dans l'app : soft-delete de
+      // l'event + recompute_job_schedule (repasse le job en brouillon si
+      // c'était sa dernière visite) + hook d'annulation d'automatisation.
+      const { error: rpcErr } = await ctx.client.rpc('rpc_unschedule_job', {
+        p_job_id: jobId,
+        p_event_id: cible.id,
+      });
+      if (rpcErr) throw rpcErr;
+      const restantes = visites.length - 1;
+      return {
+        cancelled: true,
+        visite_annulee: { start_at: cible.start_at },
+        visites_restantes: restantes,
+        note: restantes > 0
+          ? `Visite annulée ; il reste ${restantes} visite(s) planifiée(s) sur ce job.`
+          : 'Visite annulée ; le job n’a plus de visite et repasse en brouillon — planifie-le à nouveau si besoin.',
+      };
+    }),
+};
+
 const updateClientTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -1968,6 +2019,210 @@ const updateTaskStatusTool: AgentTool = {
         .single();
       if (error) throw error;
       return { updated: true, task: data };
+    }),
+};
+
+const updateTaskTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'update_task',
+    description:
+      "Edit a task's content: title, description, due date, priority, or who it's assigned to. "
+      + 'Only the provided fields change. Get task ids from list_tasks and member ids from get_team.',
+    parameters: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string', description: 'Task id (from list_tasks).' },
+        title: { type: 'string', description: 'New title.' },
+        description: { type: 'string', description: 'New description.' },
+        due_date: { type: 'string', description: 'New due date YYYY-MM-DD (or ISO).' },
+        priority: { type: 'string', description: "'low', 'medium' or 'high'." },
+        assignee_user_id: { type: 'string', description: 'Team member user_id from get_team (or null to unassign).' },
+      },
+      required: ['task_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'update_task', args, async () => {
+      const taskId = champRequis(args.task_id, 'La tâche');
+      const patch: Record<string, any> = {};
+      if (args.title !== undefined) patch.title = champRequis(args.title, 'Le titre').slice(0, 200);
+      if (args.description !== undefined) patch.description = args.description ? String(args.description).slice(0, 5000) : null;
+      if (args.due_date !== undefined) {
+        if (args.due_date === null || args.due_date === '') patch.due_date = null;
+        else {
+          const d = new Date(String(args.due_date));
+          if (Number.isNaN(d.getTime())) throw new Error('La date d’échéance est invalide.');
+          patch.due_date = String(args.due_date);
+        }
+      }
+      if (args.priority !== undefined) {
+        const p = String(args.priority).toLowerCase();
+        if (!['low', 'medium', 'high'].includes(p)) throw new Error('La priorité doit être basse, moyenne ou haute.');
+        patch.priority = p;
+      }
+      if (args.assignee_user_id !== undefined) {
+        patch.assignee_user_id = args.assignee_user_id ? String(args.assignee_user_id) : null;
+      }
+      if (!Object.keys(patch).length) throw new Error('Rien à modifier — précise ce que tu veux changer.');
+
+      const PRIO = { low: 'basse', medium: 'moyenne', high: 'haute' } as Record<string, string>;
+      const { data, error } = await ctx.client
+        .from('tasks')
+        .update(patch)
+        .eq('org_id', ctx.orgId).eq('id', taskId)
+        .is('deleted_at', null)
+        .select('id, title, priority, due_date, status')
+        .single();
+      if (error) throw error;
+      return {
+        updated: true,
+        task: {
+          title: data.title,
+          priorite: PRIO[data.priority] || data.priority,
+          echeance: data.due_date,
+          statut: data.status === 'done' ? 'terminée' : 'à faire',
+        },
+      };
+    }),
+};
+
+const deleteTaskTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'delete_task',
+    description:
+      'Delete a task (it disappears from the list). Get the task id from list_tasks. This is a soft '
+      + 'delete, like in Lume. Confirm with the user first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'string', description: 'Task id (from list_tasks).' },
+      },
+      required: ['task_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'delete_task', args, async () => {
+      const taskId = champRequis(args.task_id, 'La tâche');
+      // Soft-delete, comme deleteTask dans l'app (jamais de hard delete).
+      const { data, error } = await ctx.client
+        .from('tasks')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('org_id', ctx.orgId).eq('id', taskId)
+        .is('deleted_at', null)
+        .select('id, title')
+        .single();
+      if (error) throw error;
+      return { deleted: true, task: { title: data.title }, note: 'Tâche supprimée.' };
+    }),
+};
+
+const cancelQuoteTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'cancel_quote',
+    description:
+      'Cancel a quote — mark it declined (the client said no) or archived (set aside). Same as changing '
+      + 'its status in Lume. Get the quote id from list_quotes. Confirm with the user first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        quote_id: { type: 'string', description: 'Quote id (from list_quotes).' },
+        reason: { type: 'string', description: "'declined' (client refused) or 'archived' (set aside). Default: archived." },
+      },
+      required: ['quote_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'cancel_quote', args, async () => {
+      const quoteId = champRequis(args.quote_id, 'Le devis');
+      const nouveau = String(args.reason || 'archived') === 'declined' ? 'declined' : 'archived';
+      // Miroir de updateQuoteStatus dans l'app : statut + son horodatage.
+      const patch: Record<string, any> = { status: nouveau, updated_at: new Date().toISOString() };
+      patch[`${nouveau}_at`] = new Date().toISOString();
+      const { data, error } = await ctx.client
+        .from('quotes')
+        .update(patch)
+        .eq('org_id', ctx.orgId).eq('id', quoteId)
+        .is('deleted_at', null)
+        .select('id, quote_number, title, status')
+        .single();
+      if (error) throw error;
+      return {
+        cancelled: true,
+        quote: { quote_number: data.quote_number, title: data.title, statut: traduireStatut(data.status, STATUT_DEVIS) },
+        note: nouveau === 'declined' ? 'Devis marqué refusé.' : 'Devis archivé.',
+      };
+    }),
+};
+
+const markInvoicePaidTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'mark_invoice_paid',
+    description:
+      'Mark an invoice as fully PAID — records a full manual payment (cash, e-transfer, cheque…) and '
+      + 'stops payment reminders, exactly like "Mark as paid" in Lume. Use for money received OUTSIDE '
+      + 'Stripe/PayPal. This does NOT charge anyone. Get the invoice id from list_invoices or '
+      + 'get_overdue_payments. ALWAYS confirm the invoice and amount with the user first.',
+    parameters: {
+      type: 'object',
+      properties: {
+        invoice_id: { type: 'string', description: 'Invoice id (from list_invoices / get_overdue_payments).' },
+        method: { type: 'string', description: "How it was paid: 'cash', 'e-transfer', 'check' or 'card'. Optional." },
+      },
+      required: ['invoice_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'mark_invoice_paid', args, async () => {
+      const invoiceId = champRequis(args.invoice_id, 'La facture');
+      // On lit la facture À L'IDENTITÉ (RLS garantit l'appartenance à l'org).
+      const { data: inv, error: eInv } = await ctx.client
+        .from('invoices')
+        .select('id, invoice_number, total_cents, balance_cents, status, client_id')
+        .eq('org_id', ctx.orgId).eq('id', invoiceId)
+        .is('deleted_at', null).maybeSingle();
+      if (eInv) throw eInv;
+      if (!inv) throw new Error('Facture introuvable — vérifie avec list_invoices.');
+      if (inv.status === 'paid' || Number(inv.balance_cents) <= 0) {
+        return { already_paid: true, invoice: { invoice_number: inv.invoice_number }, note: 'Cette facture est déjà payée — rien à faire.' };
+      }
+      const reste = Number(inv.balance_cents) > 0 ? Number(inv.balance_cents) : Number(inv.total_cents);
+      const methode = ['cash', 'e-transfer', 'check', 'card'].includes(String(args.method)) ? String(args.method) : null;
+
+      // On passe par la RPC dédiée apply_invoice_payment (service_role) : elle
+      // met paid_cents/balance/status/paid_at à jour atomiquement, filtrée par
+      // org_id. C'est la SEULE voie propre — un insert direct dans `payments`
+      // est bloqué (pas de GRANT à authenticated ; et le service client
+      // déclenche une cascade webhook qui exige un contexte auth). Testé en
+      // staging : balance → 0, statut → payée.
+      const admin = getServiceClient();
+      const { error: eApply } = await admin.rpc('apply_invoice_payment', {
+        p_invoice_id: invoiceId,
+        p_org_id: ctx.orgId,
+        p_amount_cents: reste,
+      });
+      if (eApply) throw eApply;
+
+      const { data: apres } = await admin
+        .from('invoices').select('invoice_number, balance_cents, status')
+        .eq('id', invoiceId).maybeSingle();
+      return {
+        paid: true,
+        invoice: {
+          invoice_number: apres?.invoice_number || inv.invoice_number,
+          statut: traduireStatut(apres?.status, STATUT_FACTURE),
+        },
+        amount_cents: reste,
+        methode_paiement: methode,
+        note: 'Paiement enregistré : la facture est payée et les rappels s’arrêtent. Rien n’a été prélevé — c’est un paiement reçu à part (comptant, virement ou chèque).',
+      };
     }),
 };
 
@@ -2433,4 +2688,9 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   convertLeadToClientTool,
   addVisitTool,
   updateJobTool,
+  cancelVisitTool,
+  updateTaskTool,
+  deleteTaskTool,
+  cancelQuoteTool,
+  markInvoicePaidTool,
 ];
