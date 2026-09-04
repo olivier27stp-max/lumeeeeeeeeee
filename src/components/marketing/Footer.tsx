@@ -96,7 +96,14 @@ export default function Footer() {
 
             {/* Image + text overlay on the right */}
             <div className="flex-1 relative rounded-xl overflow-hidden min-h-[400px]">
-              <img src="/desk.png" alt="Demo" className="absolute inset-0 w-full h-full object-cover" />
+              {/* desk.png pesait 2185 Ko — 85 % du poids de la page d'accueil,
+                  pour une image recouverte d'un voile noir à 50 %. La version
+                  WebP fait 30 Ko (écart visuel mesuré : 0,7 % par pixel).
+                  Le <picture> garde le PNG pour les navigateurs sans WebP. */}
+              <picture className="absolute inset-0 w-full h-full">
+                <source srcSet="/desk.webp" type="image/webp" />
+                <img src="/desk.png" alt="Demo" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+              </picture>
               <div className="absolute inset-0 bg-black/50" />
               <div className="relative z-10 flex flex-col justify-end h-full p-8">
                 <p className="text-xl md:text-2xl font-bold text-white leading-snug">

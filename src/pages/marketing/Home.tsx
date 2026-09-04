@@ -285,10 +285,10 @@ function Testimonial() {
 
 /* ─── INDUSTRIES GRID ─── */
 const SERVICE_IMAGES = [
-  { key: 'hvac' as const, img: '/industries/hvac.png' },
+  { key: 'hvac' as const, img: '/industries/hvac.webp' },
   { key: 'windowCleaning' as const, img: '/industries/window.jpg' },
-  { key: 'excavation' as const, img: '/industries/excavation.png' },
-  { key: 'landscaping' as const, img: '/industries/landscaping.png' },
+  { key: 'excavation' as const, img: '/industries/excavation.webp' },
+  { key: 'landscaping' as const, img: '/industries/landscaping.webp' },
   { key: 'powerWashing' as const, img: '/industries/powerwash.jpg' },
 ];
 
