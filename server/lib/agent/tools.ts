@@ -14,7 +14,7 @@ import type { FunctionDeclaration } from './gemini';
 import {
   OUTILS_LECTURE_ETENDUS, OUTILS_ECRITURE_ETENDUS, ETIQUETTES_DERIVED,
   handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
-  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, traduireStatut,
+  STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut,
 } from './tools-etendus';
 
 export interface ToolContext {
@@ -113,14 +113,14 @@ const searchClients: AgentTool = {
     return {
       count: data?.length || 0,
       clients: (data || []).map((c) => ({
-        id: c.id,
+        id: c.id, // interne : pour create_job / create_quote / get_client_profile…
         name: fullName(c),
         company: c.company,
         email: c.email,
         phone: c.phone,
         city: c.city,
         address: c.address,
-        status: c.status,
+        statut: traduireStatut(c.status, STATUT_CLIENT),
       })),
     };
   },
@@ -203,10 +203,9 @@ const listJobs: AgentTool = {
     name: 'list_jobs',
     description:
       'List jobs (work orders) in the CRM, optionally filtered by status or a search term. '
-      + 'Returns job number, title, client, address, schedule, total, and TWO statuses: '
-      + '`display_status` — what the user actually sees in Lume (Upcoming, Late, Action Required, '
-      + 'Requires Invoicing, Archived) — and `raw_status` (scheduled, completed, draft, in_progress). '
-      + 'Prefer display_status when answering the user: it is what their screen shows.',
+      + 'Returns job number, title, client, address, schedule, total, and a "statut" already in '
+      + 'plain French (à venir, en retard, action requise, à facturer, terminé…). Use it as-is when '
+      + 'answering — it is what the user sees on their screen.',
     parameters: {
       type: 'object',
       properties: {
@@ -247,14 +246,19 @@ const listJobs: AgentTool = {
     return {
       total_matching: count ?? data?.length ?? 0,
       returned: data?.length || 0,
-      jobs: (data || []).map((j: any) => {
-        const { derived_status, status, ...reste } = j;
-        return {
-          ...reste,
-          display_status: ETIQUETTES_DERIVED[derived_status] || derived_status || status,
-          raw_status: status,
-        };
-      }),
+      jobs: (data || []).map((j: any) => ({
+        id: j.id, // interne : pour get_job / update_job / reschedule_job…
+        job_number: j.job_number,
+        title: j.title,
+        client: j.client_name,
+        address: j.property_address,
+        date: j.scheduled_at,
+        // Statut EN FRANÇAIS, lisible. On ne renvoie plus le statut brut
+        // (raw_status) : c'était du vocabulaire db que l'agent finissait par
+        // répéter (« ce job est scheduled »).
+        statut: ETIQUETTES_DERIVED[j.derived_status] || ETIQUETTES_DERIVED[j.status] || j.derived_status || j.status,
+        total_cents: j.total_cents,
+      })),
     };
   },
 };
@@ -333,7 +337,7 @@ async function fetchScheduleEvents(
       return {
         start_at: e.start_at,
         end_at: e.end_at,
-        event_status: e.status,
+        statut: ETIQUETTES_DERIVED[e.status] || e.status,
         job_title: j.title,
         client_name: j.client_name,
         address: j.property_address,
@@ -673,7 +677,7 @@ const getDayRoute: AgentTool = {
           job_title: j.title,
           client_name: j.client_name,
           address: j.property_address,
-          status: e.status || j.status,
+          statut: ETIQUETTES_DERIVED[e.status] || ETIQUETTES_DERIVED[j.status] || e.status || j.status,
         };
       });
     return { date: dayStart.toISOString().slice(0, 10), count: stops.length, stops };

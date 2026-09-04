@@ -366,6 +366,10 @@ export const STATUT_LEAD: Record<string, string> = {
   proposal: 'proposition envoyée', won: 'gagné', closed_won: 'gagné',
   lost: 'perdu', closed_lost: 'perdu', unqualified: 'non qualifié',
 };
+export const STATUT_CLIENT: Record<string, string> = {
+  active: 'client actif', inactive: 'inactif', lead: 'prospect',
+  prospect: 'prospect', archived: 'archivé',
+};
 /** Traduit une valeur via un dictionnaire, en repli lisible si inconnue. */
 export function traduireStatut(v: any, dico: Record<string, string>): string | null {
   if (v == null) return null;
@@ -525,7 +529,7 @@ const getTeam: AgentTool = {
         name: `${m.first_name || ''} ${m.last_name || ''}`.trim(),
         email: m.email,
         role: traduireStatut(m.role, STATUT_ROLE),
-        status: m.status,
+        statut: m.status === 'active' ? 'actif' : (m.status === 'invited' ? 'invité' : m.status),
       })),
     };
   },
@@ -1214,7 +1218,7 @@ export const handlerCreateQuote = async (args: Record<string, any>, ctx: ToolCon
     const { error: recalcErr } = await ctx.client.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
     if (recalcErr) throw recalcErr;
 
-    return { created: true, quote_id: quoteId, total_cents: totalCents, status: 'draft' };
+    return { created: true, quote_id: quoteId, total_cents: totalCents, statut: 'brouillon' };
   });
 
 export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolContext) =>
@@ -1263,7 +1267,7 @@ export const handlerCreateInvoice = async (args: Record<string, any>, ctx: ToolC
     if (e2) throw e2;
 
     return {
-      created: true, invoice_id: invoiceId, status: 'draft', total_cents: totalCents,
+      created: true, invoice_id: invoiceId, statut: 'brouillon', total_cents: totalCents,
       note: 'Facture en BROUILLON — elle ne part pas chez le client. L\'envoi se fait depuis Lume.',
     };
   });
@@ -1552,7 +1556,7 @@ const getClientProfile: AgentTool = {
     return {
       client: {
         name: nomClient(c), company: c.company, email: c.email, phone: c.phone,
-        address: c.address, city: c.city, status: c.status, since: c.created_at,
+        address: c.address, city: c.city, statut: traduireStatut(c.status, STATUT_CLIENT), since: c.created_at,
       },
       jobs: {
         total: jobsR.count ?? 0,
@@ -2338,7 +2342,7 @@ const createInvoiceFromJobTool: AgentTool = {
       const invoiceId = String(row?.invoice_id || '');
       if (!invoiceId) throw new Error('La préparation a réussi mais la facture est introuvable.');
       return {
-        created: true, invoice_id: invoiceId, status: 'draft',
+        created: true, invoice_id: invoiceId, statut: 'brouillon',
         note: sansMontant
           ? 'Facture préparée en BROUILLON, mais le job n\u2019avait AUCUN montant : elle est à 0 $. Demande à l\u2019utilisateur les items et montants à y mettre (ou qu\u2019il la complète dans Lume) AVANT tout envoi.'
           : 'Facture préparée depuis le job, en BROUILLON — rien n\u2019est parti chez le client. send_invoice pour l\u2019envoyer, avec confirmation.',
