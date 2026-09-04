@@ -3627,7 +3627,8 @@ const fr: TranslationKeys = {
       submitFailed: 'Échec de l\'envoi. Réessaie.',
     },
     success: {
-      title: 'Merci ! Nous te contactons sous 24h.',
+      title: 'Demande reçue — choisis ton créneau',
+      pickSlot: 'Choisis le moment qui te convient. La démo dure 30 minutes, sans engagement.',
       body: 'Un courriel de confirmation a été envoyé. Notre équipe te recontactera bientôt pour planifier la démo.',
       videoTour: 'Tour vidéo 2 min',
       close: 'Fermer',

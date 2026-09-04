@@ -167,10 +167,10 @@ app.use((req, res, next) => {
         // wasm-unsafe-eval: le moteur de la carte 3D photoréaliste Google est en
         // WebAssembly — sans cette source, gmp-map-3d charge à l'infini. Ça
         // n'autorise QUE la compilation WASM, pas l'eval JavaScript.
-        ? "script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com"
+        ? "script-src 'self' 'wasm-unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com https://assets.calendly.com"
         // unsafe-eval required for Vite HMR in dev only; unsafe-inline scoped to dev
-        : "script-src 'self' 'unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com http://localhost:*",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com",
+        : "script-src 'self' 'unsafe-eval' https://maps.googleapis.com https://js.stripe.com https://www.paypal.com https://assets.calendly.com http://localhost:*",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.mapbox.com https://assets.calendly.com",
       "img-src 'self' data: https: blob:",
       "font-src 'self' data: https://fonts.gstatic.com",
       // *.googleapis.com covers maps + solar (building heights) + tile (photorealistic
@@ -179,10 +179,10 @@ app.use((req, res, next) => {
       // nominatim.openstreetmap.org: frontières municipales de la carte « Revenu
       // par ville » (Statistiques) — sans cette source, les fetchs sont bloqués
       // silencieusement et la carte retombe sur les cercles.
-      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.gstatic.com https://api.stripe.com https://api.paypal.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://fal.run https://queue.fal.run https://api.open-meteo.com https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org",
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.googleapis.com https://*.gstatic.com https://api.stripe.com https://api.paypal.com https://api.mapbox.com https://events.mapbox.com https://*.tiles.mapbox.com https://fal.run https://queue.fal.run https://api.open-meteo.com https://geocoding-api.open-meteo.com https://nominatim.openstreetmap.org https://calendly.com https://*.calendly.com",
       "worker-src 'self' blob:",
       "child-src 'self' blob:",
-      "frame-src https://js.stripe.com https://www.paypal.com",
+      "frame-src https://js.stripe.com https://www.paypal.com https://calendly.com https://*.calendly.com",
       "media-src 'self' https: blob:",
       "object-src 'none'",
       "base-uri 'self'",

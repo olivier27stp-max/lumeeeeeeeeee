@@ -3635,7 +3635,8 @@ const en = {
       submitFailed: 'Submission failed. Please try again.',
     },
     success: {
-      title: 'Thanks! We will contact you within 24h.',
+      title: 'Request received — now pick a time',
+      pickSlot: 'Choose the slot that works for you. The demo lasts 30 minutes, no commitment.',
       body: 'Check your inbox for a confirmation. Our team will reach out shortly to schedule your demo.',
       videoTour: '2-min video tour',
       close: 'Close',

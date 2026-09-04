@@ -5,6 +5,11 @@ import { X, Check, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import { submitDemoRequest, DEMO_INDUSTRY_VALUES, type DemoIndustry } from '../../lib/demoRequestsApi';
+import CalendlyInline from './CalendlyInline';
+
+// Lien de prise de rendez-vous. Affiché après l'envoi du formulaire pour que
+// le prospect réserve lui-même son créneau de démo.
+const CALENDLY_URL = 'https://calendly.com/willhebert30/30min';
 
 interface BookDemoFormProps {
   open: boolean;
@@ -141,7 +146,7 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
             exit={{ opacity: 0, y: 20, scale: 0.97 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto relative"
+            className={`bg-white rounded-2xl shadow-2xl w-full max-h-[92vh] overflow-y-auto relative transition-[max-width] ${status === 'success' ? 'max-w-3xl' : 'max-w-2xl'}`}
           >
             <button
               onClick={handleClose}
@@ -152,7 +157,11 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
             </button>
 
             {status === 'success' ? (
-              <SuccessPanel onClose={handleClose} />
+              <SuccessPanel
+                onClose={handleClose}
+                name={form.full_name.trim()}
+                email={form.email.trim()}
+              />
             ) : (
               <div className="p-6 sm:p-8">
                 <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#111]">
@@ -310,30 +319,37 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
   );
 }
 
-function SuccessPanel({ onClose }: { onClose: () => void }) {
+function SuccessPanel({ onClose, name, email }: { onClose: () => void; name: string; email: string }) {
   const { t } = useTranslation();
   const bd = (t as any).bookDemo;
   return (
-    <div className="p-10 text-center">
-      <div className="w-14 h-14 rounded-full bg-[#3FAF97]/15 flex items-center justify-center mx-auto mb-5">
-        <Check size={28} className="text-[#3FAF97]" />
+    <div className="px-6 sm:px-8 pt-8 pb-6">
+      {/* En-tête court : la demande est reçue, il ne reste qu'à choisir l'heure. */}
+      <div className="text-center">
+        <div className="w-14 h-14 rounded-full bg-[#3FAF97]/15 flex items-center justify-center mx-auto mb-4">
+          <Check size={28} className="text-[#3FAF97]" />
+        </div>
+        <h3 className="text-2xl font-bold text-[#111]">
+          {bd?.success?.title || 'Request received — now pick a time'}
+        </h3>
+        <p className="mt-2 text-sm text-text-secondary max-w-md mx-auto">
+          {bd?.success?.pickSlot || 'Choose the slot that works for you. The demo lasts 30 minutes, no commitment.'}
+        </p>
       </div>
-      <h3 className="text-2xl font-bold text-[#111]">
-        {bd?.success?.title || 'Thanks! We will contact you within 24h.'}
-      </h3>
-      <p className="mt-3 text-sm text-text-secondary max-w-md mx-auto">
-        {bd?.success?.body || "Check your inbox for a confirmation. Our team will reach out to schedule your demo."}
-      </p>
-      <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-        <a
-          href="#"
-          className="inline-flex items-center justify-center gap-2 border border-[#111] text-[#111] px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-[#111] hover:text-white transition-colors"
-        >
-          {bd?.success?.videoTour || '2-min video tour'}
-        </a>
+
+      {/* Calendrier Calendly, pré-rempli avec le nom et le courriel déjà saisis. */}
+      <div className="mt-5 -mx-2 sm:mx-0 rounded-xl overflow-hidden border border-[#e5e5e5]">
+        <CalendlyInline
+          url={CALENDLY_URL}
+          prefill={{ name, email }}
+          fallbackHref={CALENDLY_URL}
+        />
+      </div>
+
+      <div className="mt-4 text-center">
         <button
           onClick={onClose}
-          className="inline-flex items-center justify-center gap-2 bg-[#111] text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-[#1F5F4F] transition-colors"
+          className="text-sm font-semibold text-text-secondary hover:text-[#111] transition-colors"
         >
           {bd?.success?.close || 'Close'}
         </button>
