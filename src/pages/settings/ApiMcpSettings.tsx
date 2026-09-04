@@ -1,47 +1,35 @@
 /* ═══════════════════════════════════════════════════════════════
    Settings → API & MCP
    ─────────────────────────────────────────────────────────────
-   Owner/admin only (enforced server-side by requireAdmin and by RLS
-   on `api_keys`). Two jobs:
-     1. Manage machine credentials (create / list / revoke).
-     2. Show how to connect an MCP client to this org's CRM.
+   Réduit à une seule mission : brancher un assistant IA (Claude…)
+   sur le CRM de cette organisation via le serveur MCP.
 
-   The raw key appears exactly once, right after creation. It is
-   never stored client-side and cannot be retrieved afterwards.
+   La gestion des clés d'accès machine et des applications OAuth
+   connectées a été RETIRÉE de cette page (décision produit
+   2026-09-04) : elle noyait la seule action utile. Le serveur MCP
+   s'authentifie par le compte Lume de l'utilisateur (OAuth), aucune
+   clé à copier. Les routes /api/api-keys et /api/oauth existent
+   toujours côté serveur ; elles ne sont simplement plus exposées ici.
+
+   Design « Lume × Claude » : un pont entre les deux logos, l'adresse
+   à copier, trois étapes, et ce que l'assistant peut faire. Couleurs
+   issues des tokens du CRM.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Check, Copy, KeyRound, Loader2, Plug, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, Copy, Loader2, BarChart3, CalendarDays, Plus, FileText, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
-import {
-  listApiKeys,
-  createApiKey,
-  revokeApiKey,
-  getMcpInfo,
-  listConnectedApps,
-  revokeConnectedApp,
-  buildClaudeCliCommand,
-  buildMcpJsonConfig,
-  type ApiKey,
-  type CreatedApiKey,
-  type McpInfo,
-  type ConnectedApp,
-} from '../../lib/mcpApi';
+import { getMcpInfo, type McpInfo } from '../../lib/mcpApi';
 
-function fmtDate(iso: string | null, fr: boolean): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', {
-    day: 'numeric', month: 'short', year: 'numeric',
-  });
-}
+// Logo Claude : image officielle déposée dans /public par le propriétaire.
+// Tant qu'elle n'est pas là, on retombe sur une marque neutre (voir ClaudeMark).
+const CLAUDE_LOGO_URL = '/claude-logo.svg';
+// Image de fond optionnelle du hero (générée par le propriétaire). Absente =
+// dégradé de marque uniquement.
+const HERO_BG_URL = '/mcp-hero-bg.webp';
 
-/** A key is unusable if revoked or past its expiry. */
-function isInactive(k: ApiKey): boolean {
-  return k.revoked || (k.expires_at != null && new Date(k.expires_at) < new Date());
-}
-
-function CopyButton({ value, label }: { value: string; label: string }) {
+function CopyAddress({ value, fr }: { value: string; fr: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -50,16 +38,38 @@ function CopyButton({ value, label }: { value: string; label: string }) {
         try {
           await navigator.clipboard.writeText(value);
           setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
+          setTimeout(() => setCopied(false), 1600);
         } catch {
-          toast.error(label);
+          toast.error(fr ? 'Copie impossible' : 'Copy failed');
         }
       }}
-      className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition shrink-0"
-      title={label}
+      className="shrink-0 inline-flex items-center gap-2 rounded-r-xl bg-text-primary text-surface-card px-5 text-[13px] font-bold hover:bg-primary-hover transition-colors"
     >
-      {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
+      {copied
+        ? <><Check size={15} /> {fr ? 'Copié' : 'Copied'}</>
+        : <><Copy size={15} /> {fr ? 'Copier' : 'Copy'}</>}
     </button>
+  );
+}
+
+/** Marque Claude de repli si le logo officiel n'est pas encore déposé. */
+function ClaudeMark() {
+  const [broken, setBroken] = useState(false);
+  if (!broken) {
+    return (
+      <img
+        src={CLAUDE_LOGO_URL}
+        alt="Claude"
+        onError={() => setBroken(true)}
+        className="w-9 h-9 object-contain"
+      />
+    );
+  }
+  return (
+    <svg viewBox="0 0 36 36" className="w-8 h-8 text-[#d97757]" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">
+      <path d="M18 5v7M18 24v7M5 18h7M24 18h7M9 9l4.5 4.5M22.5 22.5L27 27M27 9l-4.5 4.5M13.5 22.5L9 27" />
+      <circle cx="18" cy="18" r="3.2" fill="currentColor" stroke="none" />
+    </svg>
   );
 }
 
@@ -67,406 +77,169 @@ export default function ApiMcpSettings() {
   const { language } = useTranslation();
   const fr = language === 'fr';
 
-  const [keys, setKeys] = useState<ApiKey[]>([]);
   const [mcp, setMcp] = useState<McpInfo | null>(null);
-  const [apps, setApps] = useState<ConnectedApp[]>([]);
-  const [revokingApp, setRevokingApp] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [heroBg, setHeroBg] = useState(false);
 
-  const [showForm, setShowForm] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [justCreated, setJustCreated] = useState<CreatedApiKey | null>(null);
-  const [revokingId, setRevokingId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      // Infos MCP et applications connectées sont accessoires : leur échec
-      // ne doit pas masquer la liste des clés.
-      const [k, m, a] = await Promise.all([
-        listApiKeys(),
-        getMcpInfo().catch(() => null),
-        listConnectedApps().catch(() => []),
-      ]);
-      setKeys(k);
-      setMcp(m);
-      setApps(a);
-    } catch (err: any) {
-      setError(err?.message || (fr ? 'Échec du chargement' : 'Failed to load'));
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    getMcpInfo().then(setMcp).catch(() => setMcp(null)).finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Précharge l'image de fond : on ne l'affiche que si elle existe vraiment.
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setHeroBg(true);
+    img.src = HERO_BG_URL;
+  }, []);
 
-  async function handleCreate() {
-    const name = newName.trim();
-    if (name.length < 2) {
-      toast.error(fr ? 'Donnez un nom d’au moins 2 caractères.' : 'Name must be at least 2 characters.');
-      return;
-    }
-    setCreating(true);
-    try {
-      const created = await createApiKey({ name, scopes: ['mcp'] });
-      setJustCreated(created);
-      setNewName('');
-      setShowForm(false);
-      await load();
-    } catch (err: any) {
-      toast.error(err?.message || (fr ? 'Création impossible' : 'Could not create key'));
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function handleRevoke(k: ApiKey) {
-    const ok = window.confirm(
-      fr
-        ? `Révoquer « ${k.name} » ? Tout client qui l’utilise perdra l’accès immédiatement. Cette action est irréversible.`
-        : `Revoke "${k.name}"? Any client using it loses access immediately. This cannot be undone.`,
-    );
-    if (!ok) return;
-    setRevokingId(k.id);
-    try {
-      await revokeApiKey(k.id);
-      toast.success(fr ? 'Clé révoquée' : 'Key revoked');
-      await load();
-    } catch (err: any) {
-      toast.error(err?.message || (fr ? 'Révocation impossible' : 'Could not revoke key'));
-    } finally {
-      setRevokingId(null);
-    }
-  }
-
-  async function handleRevokeApp(app: ConnectedApp) {
-    const ok = window.confirm(
-      fr
-        ? `Retirer l’accès de « ${app.client_name} » ? L’application devra être réautorisée pour consulter vos données.`
-        : `Remove access for "${app.client_name}"? The application will need to be authorized again.`,
-    );
-    if (!ok) return;
-    setRevokingApp(app.id);
-    try {
-      await revokeConnectedApp(app.id);
-      toast.success(fr ? 'Accès retiré' : 'Access removed');
-      await load();
-    } catch (err: any) {
-      toast.error(err?.message || (fr ? 'Retrait impossible' : 'Could not remove access'));
-    } finally {
-      setRevokingApp(null);
-    }
-  }
-
-  const activeKeys = keys.filter((k) => !isInactive(k));
   const mcpUrl = mcp?.url || '';
+  const ready = !!mcp?.enabled && !!mcpUrl;
+
+  const steps = fr
+    ? [
+        { t: 'Ouvre Claude', d: 'Dans l’app ou sur claude.ai : Réglages › Connecteurs.' },
+        { t: 'Ajoute un connecteur personnalisé', d: 'Colle l’adresse ci-dessus, puis valide.' },
+        { t: 'Connecte-toi avec Lume', d: 'Autorise l’accès dans la fenêtre. C’est fait — pose ta première question.' },
+      ]
+    : [
+        { t: 'Open Claude', d: 'In the app or on claude.ai: Settings › Connectors.' },
+        { t: 'Add a custom connector', d: 'Paste the address above, then confirm.' },
+        { t: 'Sign in with Lume', d: 'Authorize access in the popup. Done — ask your first question.' },
+      ];
+
+  const cans = fr
+    ? [
+        { icon: BarChart3, t: 'Consulter tes chiffres', d: '« Mon chiffre d’affaires ce mois-ci ? »' },
+        { icon: CalendarDays, t: 'Lire ton horaire', d: '« Qu’est-ce que j’ai demain ? »' },
+        { icon: Plus, t: 'Créer jobs & clients', d: 'Si tu l’autorises à la connexion' },
+        { icon: FileText, t: 'Préparer devis & relances', d: 'Brouillons et SMS, à ta demande' },
+      ]
+    : [
+        { icon: BarChart3, t: 'Check your numbers', d: '“What’s my revenue this month?”' },
+        { icon: CalendarDays, t: 'Read your schedule', d: '“What do I have tomorrow?”' },
+        { icon: Plus, t: 'Create jobs & clients', d: 'If you allow it at connection' },
+        { icon: FileText, t: 'Draft quotes & reminders', d: 'Drafts and SMS, on request' },
+      ];
 
   return (
-    <div className="max-w-3xl space-y-6">
-      {/* ── Intro ── */}
-      <div>
-        <h2 className="text-[15px] font-semibold text-text-primary flex items-center gap-2">
-          <Plug size={16} className="text-text-tertiary" />
-          {fr ? 'API & MCP' : 'API & MCP'}
-        </h2>
-        <p className="mt-1 text-[13px] text-text-secondary leading-relaxed">
+    <div className="max-w-2xl space-y-6">
+      {/* ── Hero : pont Lume × Claude ── */}
+      <div className="relative overflow-hidden rounded-2xl border border-outline bg-surface-card">
+        {/* Fond de marque (+ image optionnelle par-dessus, fondue). */}
+        <div className="absolute inset-0 bg-gradient-to-br from-accent-light via-surface-card to-surface-card" aria-hidden />
+        {heroBg && (
+          <div
+            className="absolute inset-0 opacity-40 dark:opacity-25 bg-cover bg-center"
+            style={{ backgroundImage: `url(${HERO_BG_URL})` }}
+            aria-hidden
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-surface-card via-surface-card/70 to-transparent" aria-hidden />
+
+        <div className="relative px-6 pt-8 pb-7 text-center">
+          <div className="flex items-center justify-center mb-5">
+            <div className="w-16 h-16 rounded-2xl bg-surface-card border border-outline shadow-sm grid place-items-center z-10">
+              <img src="/lume-logo-v2.png" alt="Lume" className="w-9 h-9 object-contain dark:invert" />
+            </div>
+            <div className="w-14 h-0.5 bg-gradient-to-r from-accent to-[#d97757] relative">
+              <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-surface-card border border-outline grid place-items-center text-[11px] font-bold text-text-secondary z-20">
+                ×
+              </span>
+            </div>
+            <div className="w-16 h-16 rounded-2xl bg-surface-card border border-outline shadow-sm grid place-items-center z-10">
+              <ClaudeMark />
+            </div>
+          </div>
+          <h2 className="text-2xl font-extrabold tracking-tight text-text-primary">
+            {fr ? 'Branche ton CRM à Claude' : 'Connect your CRM to Claude'}
+          </h2>
+          <p className="mt-2 text-sm text-text-secondary max-w-md mx-auto leading-relaxed">
+            {fr
+              ? 'Parle à ton entreprise en langage naturel. Colle une adresse dans Claude, connecte-toi avec ton compte Lume — aucune clé à gérer.'
+              : 'Talk to your business in plain language. Paste one address into Claude, sign in with your Lume account — no keys to manage.'}
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="h-24 rounded-2xl bg-surface-tertiary animate-pulse" />
+      ) : !ready ? (
+        <div className="section-card p-5 text-[13px] text-text-secondary">
           {fr
-            ? 'Connectez un assistant IA (Claude, Cursor…) à votre CRM : consultez-le en langage naturel (chiffre d’affaires, horaire, impayés) et, si vous l’autorisez à la connexion, laissez-le créer des jobs, clients, tâches, devis et factures-brouillons, ou envoyer des SMS. Chaque action est tracée à votre nom, avec vos permissions Lume — rien ne peut être supprimé ni encaissé.'
-            : 'Connect an AI assistant (Claude, Cursor…) to your CRM: query it in plain language (revenue, schedule, unpaid invoices) and, if you authorize it at connection time, let it create jobs, clients, tasks, quotes and draft invoices, or send SMS. Every action is logged under your name with your Lume permissions — nothing can be deleted or charged.'}
-        </p>
-      </div>
-
-      {error && <div className="section-card p-4 text-[13px] text-danger">{error}</div>}
-
-      {/* ── Connexion recommandée : OAuth ── */}
-      {mcp?.enabled && mcpUrl && (
-        <div className="section-card p-4 space-y-3">
-          <div>
-            <h3 className="text-[13px] font-semibold text-text-primary">
-              {fr ? 'Connecter un assistant' : 'Connect an assistant'}
-            </h3>
-            <p className="mt-1 text-[12.5px] text-text-secondary leading-relaxed">
-              {fr
-                ? 'Dans Claude : Réglages › Connecteurs › Ajouter un connecteur personnalisé, puis collez cette adresse. Vous vous connecterez avec votre compte Lume — aucune clé à copier.'
-                : 'In Claude: Settings › Connectors › Add custom connector, then paste this address. You sign in with your Lume account — no key to copy.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg bg-surface-secondary border border-outline/50 px-3 py-2">
-            <code className="text-[12px] font-mono text-text-primary break-all flex-1">{mcpUrl}</code>
-            <CopyButton value={mcpUrl} label={fr ? 'Copier l’adresse' : 'Copy address'} />
-          </div>
+            ? 'Le serveur MCP n’est pas encore activé pour ton organisation. Contacte le support pour l’ouvrir.'
+            : 'The MCP server is not enabled for your organization yet. Contact support to turn it on.'}
         </div>
-      )}
-
-      {/* ── Applications connectées (OAuth) ── */}
-      {apps.length > 0 && (
-        <div className="section-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-outline/30">
-            <span className="text-[13px] font-semibold text-text-primary">
-              {fr ? 'Applications connectées' : 'Connected applications'}
-            </span>
-            <p className="mt-0.5 text-[11.5px] text-text-tertiary">
-              {fr ? 'Autorisées avec votre compte.' : 'Authorized with your account.'}
-            </p>
-          </div>
-          <div className="divide-y divide-outline/30">
-            {apps.map((app) => (
-              <div key={app.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-surface-secondary flex items-center justify-center shrink-0">
-                    {app.logo_uri
-                      ? <img src={app.logo_uri} alt="" className="w-5 h-5 rounded" />
-                      : <Plug size={14} className="text-text-tertiary" />}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[13px] font-medium text-text-primary truncate">{app.client_name}</div>
-                    <div className="text-[11.5px] text-text-tertiary">
-                      {fr ? 'Autorisée le ' : 'Authorized '}{fmtDate(app.created_at, fr)}
-                      {' · '}
-                      {fr ? 'utilisée : ' : 'last used: '}
-                      {app.last_used_at ? fmtDate(app.last_used_at, fr) : (fr ? 'jamais' : 'never')}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRevokeApp(app)}
-                  disabled={revokingApp === app.id}
-                  className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-surface-secondary transition disabled:opacity-50 shrink-0"
-                  title={fr ? 'Retirer l’accès' : 'Remove access'}
-                >
-                  {revokingApp === app.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Raw key, shown once ── */}
-      {justCreated && (
-        <div className="section-card p-4 space-y-3 border-warning/40">
-          <div className="flex items-start gap-2">
-            <AlertTriangle size={16} className="text-warning shrink-0 mt-0.5" />
-            <div className="text-[13px] text-text-primary">
-              <p className="font-semibold">{fr ? 'Copiez cette clé maintenant' : 'Copy this key now'}</p>
-              <p className="text-text-secondary mt-0.5">
-                {fr
-                  ? 'Elle ne sera plus jamais affichée. Si vous la perdez, créez-en une nouvelle.'
-                  : 'It will never be shown again. If you lose it, create a new one.'}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg bg-surface-secondary border border-outline/50 px-3 py-2">
-            <code className="text-[12px] font-mono text-text-primary break-all flex-1">{justCreated.key}</code>
-            <CopyButton value={justCreated.key} label={fr ? 'Copier la clé' : 'Copy key'} />
-          </div>
-          <button
-            type="button"
-            onClick={() => setJustCreated(null)}
-            className="text-[12px] text-text-tertiary hover:text-text-primary transition"
-          >
-            {fr ? 'J’ai copié la clé — masquer' : 'I saved it — hide'}
-          </button>
-        </div>
-      )}
-
-      {/* ── Keys ── */}
-      <div className="section-card overflow-hidden">
-        <div className="px-4 py-3 flex items-center justify-between gap-2 border-b border-outline/30">
-          <div className="flex items-center gap-2">
-            <KeyRound size={15} className="text-text-tertiary" />
-            <div>
-              <span className="text-[13px] font-semibold text-text-primary">{fr ? 'Clés d’accès' : 'Access keys'}</span>
-              <p className="text-[11.5px] text-text-tertiary">
-                {fr
-                  ? 'Pour les scripts et outils en ligne de commande. Partagées par l’organisation.'
-                  : 'For scripts and command-line tools. Shared across the organization.'}
-              </p>
-            </div>
-          </div>
-          {!showForm && (
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-surface-secondary hover:bg-surface-secondary/70 px-3 py-1.5 text-[12px] font-medium text-text-primary transition"
-            >
-              <Plus size={13} />
-              {fr ? 'Nouvelle clé' : 'New key'}
-            </button>
-          )}
-        </div>
-
-        {showForm && (
-          <div className="px-4 py-3 bg-surface-secondary/20 border-b border-outline/30 space-y-2">
-            <label className="block text-[12px] font-medium text-text-secondary">
-              {fr ? 'Nom de la clé' : 'Key name'}
-            </label>
+      ) : (
+        <>
+          {/* ── Adresse MCP ── */}
+          <div className="section-card p-5 space-y-3">
             <div className="flex items-center gap-2">
-              <input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreate(); }}
-                placeholder={fr ? 'Ex. Claude — portable' : 'e.g. Claude — laptop'}
-                className="flex-1 rounded-lg bg-surface-card border border-outline/50 px-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-outline"
-              />
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={creating}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[12px] font-medium text-white disabled:opacity-60 transition"
-              >
-                {creating ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                {fr ? 'Créer' : 'Create'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShowForm(false); setNewName(''); }}
-                className="text-[12px] text-text-tertiary hover:text-text-primary px-2 transition"
-              >
-                {fr ? 'Annuler' : 'Cancel'}
-              </button>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
+                {fr ? 'Adresse du serveur MCP' : 'MCP server address'}
+              </span>
+              <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-success-light px-2.5 py-0.5 text-[11px] font-bold text-success">
+                <Check size={11} strokeWidth={3} /> {fr ? 'Actif' : 'Active'}
+              </span>
             </div>
-            <p className="text-[11.5px] text-text-tertiary">
-              {fr
-                ? 'La clé expire automatiquement après 90 jours, ou après 60 jours sans utilisation.'
-                : 'The key expires automatically after 90 days, or after 60 days of no use.'}
-            </p>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="p-4 space-y-2">
-            <div className="h-12 rounded-xl bg-surface-secondary/40 animate-pulse" />
-            <div className="h-12 rounded-xl bg-surface-secondary/40 animate-pulse" />
-          </div>
-        ) : keys.length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-[13px] text-text-secondary">
-              {fr ? 'Aucune clé pour l’instant.' : 'No keys yet.'}
-            </p>
-            <p className="text-[12px] text-text-tertiary mt-1">
-              {fr ? 'Créez-en une pour connecter un assistant.' : 'Create one to connect an assistant.'}
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-outline/30">
-            {keys.map((k) => {
-              const inactive = isInactive(k);
-              return (
-                <div key={k.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[13px] font-medium truncate ${inactive ? 'text-text-tertiary line-through' : 'text-text-primary'}`}>
-                        {k.name}
-                      </span>
-                      {k.revoked ? (
-                        <span className="inline-flex items-center rounded-full bg-surface-secondary text-text-tertiary px-2 py-0.5 text-[10.5px] font-medium">
-                          {fr ? 'Révoquée' : 'Revoked'}
-                        </span>
-                      ) : inactive ? (
-                        <span className="inline-flex items-center rounded-full bg-surface-secondary text-text-tertiary px-2 py-0.5 text-[10.5px] font-medium">
-                          {fr ? 'Expirée' : 'Expired'}
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-3 text-[11.5px] text-text-tertiary">
-                      <code className="font-mono">{k.key_prefix}</code>
-                      <span>
-                        {fr ? 'Utilisée : ' : 'Last used: '}
-                        {k.last_used_at ? fmtDate(k.last_used_at, fr) : (fr ? 'jamais' : 'never')}
-                      </span>
-                      <span className="hidden sm:inline">
-                        {fr ? 'Expire : ' : 'Expires: '}{fmtDate(k.expires_at, fr)}
-                      </span>
-                    </div>
-                  </div>
-                  {!k.revoked && (
-                    <button
-                      type="button"
-                      onClick={() => handleRevoke(k)}
-                      disabled={revokingId === k.id}
-                      className="p-1.5 rounded-lg text-text-tertiary hover:text-danger hover:bg-surface-secondary transition disabled:opacity-50 shrink-0"
-                      title={fr ? 'Révoquer' : 'Revoke'}
-                    >
-                      {revokingId === k.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ── Connect ── */}
-      {mcp?.enabled && (
-        <div className="section-card p-4 space-y-4">
-          <div>
-            <h3 className="text-[13px] font-semibold text-text-primary">
-              {fr ? 'Connecter Claude à Lume' : 'Connect Claude to Lume'}
-            </h3>
-            <p className="mt-1 text-[12.5px] text-text-secondary leading-relaxed">
-              {fr
-                ? 'Créez une clé ci-dessus, puis lancez cette commande dans votre terminal en remplaçant la clé.'
-                : 'Create a key above, then run this command in your terminal, replacing the key.'}
-            </p>
-          </div>
-
-          <div>
-            <div className="text-[11.5px] font-medium text-text-secondary mb-1.5">
-              {fr ? 'Claude Code (terminal)' : 'Claude Code (terminal)'}
-            </div>
-            <div className="flex items-start gap-2 rounded-lg bg-surface-secondary border border-outline/50 px-3 py-2">
-              <code className="text-[11.5px] font-mono text-text-primary break-all flex-1 leading-relaxed">
-                {buildClaudeCliCommand(mcpUrl)}
+            <div className="flex items-stretch">
+              <code className="flex-1 min-w-0 overflow-x-auto whitespace-nowrap rounded-l-xl border border-r-0 border-outline bg-surface-secondary px-3.5 py-3 font-mono text-[12.5px] text-text-primary flex items-center">
+                {mcpUrl}
               </code>
-              <CopyButton value={buildClaudeCliCommand(mcpUrl)} label={fr ? 'Copier' : 'Copy'} />
+              <CopyAddress value={mcpUrl} fr={fr} />
             </div>
-          </div>
-
-          <div>
-            <div className="text-[11.5px] font-medium text-text-secondary mb-1.5">
-              {fr ? 'Autres clients (fichier de configuration)' : 'Other clients (config file)'}
-            </div>
-            <div className="flex items-start gap-2 rounded-lg bg-surface-secondary border border-outline/50 px-3 py-2">
-              <pre className="text-[11.5px] font-mono text-text-primary flex-1 overflow-x-auto leading-relaxed">
-                {buildMcpJsonConfig(mcpUrl)}
-              </pre>
-              <CopyButton value={buildMcpJsonConfig(mcpUrl)} label={fr ? 'Copier' : 'Copy'} />
-            </div>
-          </div>
-
-          {activeKeys.length === 0 && (
-            <p className="text-[12px] text-text-tertiary">
+            <p className="text-[12.5px] text-text-secondary leading-relaxed">
               {fr
-                ? 'Aucune clé active — créez-en une pour que la connexion fonctionne.'
-                : 'No active key — create one for the connection to work.'}
+                ? 'Cette adresse est propre à ton entreprise. La connexion passe par ton compte Lume et respecte tes permissions.'
+                : 'This address is unique to your business. The connection goes through your Lume account and respects your permissions.'}
             </p>
-          )}
+          </div>
 
-          {mcp.tools.length > 0 && (
-            <details className="group">
-              <summary className="text-[12px] text-text-secondary hover:text-text-primary cursor-pointer transition list-none">
-                {fr
-                  ? `Ce que l’assistant peut consulter (${mcp.tools.length})`
-                  : `What the assistant can read (${mcp.tools.length})`}
-              </summary>
-              <ul className="mt-2 space-y-1.5">
-                {mcp.tools.map((t) => (
-                  <li key={t.name} className="text-[11.5px] text-text-tertiary leading-relaxed">
-                    <code className="font-mono text-text-secondary">{t.name}</code> — {t.description}
-                  </li>
-                ))}
-              </ul>
-            </details>
-          )}
-        </div>
+          {/* ── Étapes ── */}
+          <div className="section-card p-5">
+            <p className="text-[13px] font-bold text-text-primary mb-3">
+              {fr ? 'Trois étapes, une minute' : 'Three steps, one minute'}
+            </p>
+            <div className="divide-y divide-outline/70">
+              {steps.map((s, i) => (
+                <div key={i} className="flex gap-3.5 py-3 first:pt-0 last:pb-0">
+                  <div className="shrink-0 w-6 h-6 rounded-full bg-text-primary text-surface-card grid place-items-center text-[12px] font-extrabold">
+                    {i + 1}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-text-primary">{s.t}</p>
+                    <p className="text-[13px] text-text-secondary">{s.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Ce que l'assistant peut faire ── */}
+          <div className="space-y-3">
+            <p className="text-[13px] font-bold text-text-primary px-1">
+              {fr ? 'Ce que l’assistant pourra faire' : 'What the assistant can do'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {cans.map(({ icon: Icon, t, d }) => (
+                <div key={t} className="flex gap-3 items-start section-card p-3.5">
+                  <div className="shrink-0 w-8 h-8 rounded-lg bg-accent-light text-accent grid place-items-center">
+                    <Icon size={16} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] font-semibold text-text-primary leading-tight">{t}</p>
+                    <p className="text-[11.5px] text-text-tertiary mt-0.5">{d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center justify-center gap-2 text-[12px] text-text-secondary text-center pt-1">
+              <ShieldCheck size={14} className="text-success shrink-0" />
+              {fr
+                ? 'Chaque action est tracée à ton nom. Rien ne peut être supprimé ni encaissé.'
+                : 'Every action is logged under your name. Nothing can be deleted or charged.'}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
