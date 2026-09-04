@@ -264,6 +264,9 @@ export interface IssuedTokens {
   refresh_token: string;
   expires_in: number;
   scope: string;
+  /** Id interne de la ligne oauth_tokens émise — usage serveur (révocation
+   *  des anciennes autorisations), JAMAIS renvoyé au client HTTP. */
+  tokenId: string;
 }
 
 export interface IssueTokensParams {
@@ -319,7 +322,7 @@ export async function issueTokens(p: IssueTokensParams): Promise<IssuedTokens> {
     }
   }
 
-  const { error } = await db.from('oauth_tokens').insert(row);
+  const { data: insere, error } = await db.from('oauth_tokens').insert(row).select('id').single();
   if (error) throw new Error(`Émission des jetons impossible : ${error.message}`);
 
   return {
@@ -327,6 +330,7 @@ export async function issueTokens(p: IssueTokensParams): Promise<IssuedTokens> {
     refresh_token: refreshToken,
     expires_in: ACCESS_TOKEN_TTL_S,
     scope: p.scopes.join(' '),
+    tokenId: String(insere!.id),
   };
 }
 
@@ -601,4 +605,65 @@ export async function revokeToken(token: string): Promise<void> {
     .from('oauth_tokens')
     .update({ revoked: true, revoked_at: new Date().toISOString(), revoked_reason: 'client_revoked' })
     .or(`access_token_hash.eq.${hash},refresh_token_hash.eq.${hash}`);
+}
+
+/**
+ * Au RE-CONSENTEMENT (l'utilisateur reconnecte Lume dans Claude), révoque les
+ * autorisations PRÉCÉDENTES du même (utilisateur, client) — sauf celle qu'on
+ * vient d'émettre (`saufTokenId`). Sans ça, chaque reconnexion empilait un
+ * refresh token OAuth valide (30 j) ET une session Supabase dédiée jamais
+ * nettoyée : une traînée d'accès actifs. On invalide aussi, en best-effort,
+ * la session Supabase de chaque ancien jeton (signOut global du refresh
+ * dédié) pour ne pas laisser de lignes orphelines dans auth.sessions.
+ *
+ * Appelé APRÈS l'émission du nouveau jeton : si l'utilisateur ferme l'onglet
+ * avant l'échange, sa connexion existante n'est pas coupée pour rien.
+ */
+export async function revoquerAnciennesAutorisations(
+  userId: string,
+  clientId: string,
+  saufTokenId: string,
+): Promise<void> {
+  try {
+    const db = getServiceClient();
+    const { data: anciens } = await db
+      .from('oauth_tokens')
+      .select('id, supabase_refresh_token_chiffre')
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .eq('revoked', false)
+      .neq('id', saufTokenId);
+    if (!anciens?.length) return;
+
+    // Best-effort : couper chaque session Supabase dédiée. On échange le
+    // refresh dédié contre une session le temps d'un signOut global. Un échec
+    // (session déjà morte, refresh illisible) n'empêche jamais la révocation
+    // du jeton OAuth, qui, elle, est ce qui ferme réellement l'accès.
+    for (const t of anciens) {
+      if (!t.supabase_refresh_token_chiffre) continue;
+      try {
+        const refresh = dechiffrerSession(t.supabase_refresh_token_chiffre);
+        const anon = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+        const { data: sess } = await anon.auth.refreshSession({ refresh_token: refresh });
+        if (sess?.session) {
+          // Le client anon porte maintenant CETTE session dédiée précise :
+          // scope 'local' n'invalide qu'elle, jamais le navigateur de
+          // l'utilisateur ni ses autres sessions légitimes.
+          await anon.auth.signOut({ scope: 'local' }).catch(() => {});
+        }
+      } catch { /* session perdue — le jeton OAuth reste révoqué ci-dessous */ }
+    }
+
+    const { error } = await db
+      .from('oauth_tokens')
+      .update({ revoked: true, revoked_at: new Date().toISOString(), revoked_reason: 're_consent' })
+      .eq('user_id', userId)
+      .eq('client_id', clientId)
+      .eq('revoked', false)
+      .neq('id', saufTokenId);
+    if (error) console.error('[oauth] révocation des anciennes autorisations :', error.message);
+  } catch (e: any) {
+    // Ne jamais faire échouer l'émission du nouveau jeton pour un ménage raté.
+    console.error('[oauth] revoquerAnciennesAutorisations :', e?.message || e);
+  }
 }
