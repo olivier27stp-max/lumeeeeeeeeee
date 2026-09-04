@@ -726,7 +726,15 @@ const listCourses: AgentTool = {
       .order('created_at', { ascending: false })
       .limit(30);
     if (error) return erreurOutil('courses', error);
-    return { count: data?.length || 0, courses: data || [] };
+    const ETAT: Record<string, string> = { draft: 'brouillon', published: 'publié', archived: 'archivé' };
+    return {
+      count: data?.length || 0,
+      courses: (data || []).map((c: any) => ({
+        title: c.title,
+        categorie: c.category,
+        statut: ETAT[c.status] || c.status,
+      })),
+    };
   },
 };
 
