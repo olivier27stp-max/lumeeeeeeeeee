@@ -404,6 +404,15 @@ const outil = async (jeton, name, args = {}) => {
   });
   R(q1.created && q1.quote_id, 'create_quote crée (RPC de l\'app)', q1.quote_id?.slice(0, 8));
   if (q1.quote_id) aNettoyer.quotes.push(q1.quote_id);
+
+  // Devis à quantité NÉGATIVE : doit être refusé (total négatif), pas créé.
+  const qNeg = await outil(jEcriture, 'create_quote', {
+    title: 'QA Étendus — devis négatif', client_id: c1.client?.id,
+    line_items: [{ name: 'Bidon', quantity: -5, unit_price_cents: 10000 }],
+  });
+  R(!qNeg.created && !!qNeg.error && /négatif|positif/i.test(qNeg.error || ''),
+    'create_quote à quantité négative refusé', qNeg.error ? 'refusé' : 'CRÉÉ À TORT');
+  if (qNeg.quote_id) aNettoyer.quotes.push(qNeg.quote_id);
   const { data: devisBase } = await admin.from('quotes').select('subtotal_cents, total_cents, status').eq('id', q1.quote_id).maybeSingle();
   R(devisBase?.subtotal_cents === 30000 && (devisBase?.total_cents ?? 0) >= 30000,
     'Totaux du devis recalculés PAR la base (taxes incluses)',
