@@ -4,7 +4,7 @@ import { GripVertical, X, Filter, ChevronDown, User, UserCheck, Phone, Mail, Ref
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCorners,
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCorners, useDroppable,
   type DragStartEvent, type DragEndEvent,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -52,7 +52,10 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error('Not authenticated');
-  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  // Office actif — le serveur scope dessus si l'utilisateur en est membre.
+  let activeOrg = '';
+  try { activeOrg = localStorage.getItem('lume-active-org') || ''; } catch {}
+  return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'x-org-id': activeOrg };
 }
 
 async function fetchPipeline(repFilter?: string, fr = false): Promise<PipelineDeal[]> {
@@ -198,6 +201,8 @@ function StageColumn({ stage, deals, onStatusChange, onSelect }: {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const totalValue = deals.reduce((sum, d) => sum + d.value, 0);
+  // Column body is droppable so cards can land in an empty column (id = stage slug, never a deal uuid)
+  const { setNodeRef: setDropRef } = useDroppable({ id: stage });
 
   return (
     <div className="flex flex-col w-[280px] shrink-0">
@@ -216,6 +221,7 @@ function StageColumn({ stage, deals, onStatusChange, onSelect }: {
       </div>
       <SortableContext items={deals.map(d => d.id)} strategy={verticalListSortingStrategy}>
         <div
+          ref={setDropRef}
           className="pipeline-scroll flex-1 space-y-2.5 p-3 rounded-b-xl border border-t-0 min-h-[120px] overflow-y-auto max-h-[calc(100vh-14rem)]"
           style={{ borderColor: visuals.soft + '40', background: visuals.soft + '08' }}
         >
@@ -357,6 +363,8 @@ export default function D2DPipeline() {
   const [reps, setReps] = useState<Rep[]>([]);
   const [repFilter, setRepFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
   const [activeDeal, setActiveDeal] = useState<PipelineDeal | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<PipelineDeal | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -368,17 +376,19 @@ export default function D2DPipeline() {
   useEffect(() => {
     async function load() {
       try {
+        setLoadError(false);
         const [dealsData, repsData] = await Promise.all([fetchPipeline(repFilter, fr), fetchReps()]);
         setDeals(dealsData);
         setReps(repsData);
       } catch (err: any) {
         console.error('[D2DPipeline] Load failed:', err.message);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }
     }
     load();
-  }, [repFilter]);
+  }, [repFilter, reloadTick]);
 
   // Keep selected deal in sync with deals state
   useEffect(() => {
@@ -413,8 +423,11 @@ export default function D2DPipeline() {
     if (dragLocksRef.current.has(dealId)) return;
     const deal = deals.find(d => d.id === dealId);
     if (!deal) return;
-    const overDeal = deals.find(d => d.id === over.id);
-    const targetStage = overDeal?.d2dStage || deal.d2dStage;
+    const overId = String(over.id);
+    const overDeal = deals.find(d => d.id === overId);
+    // Drop target: a card, or the column body itself (empty columns have no cards)
+    const targetStage: D2DStage = overDeal?.d2dStage
+      || (D2D_STAGES.includes(overId as D2DStage) ? (overId as D2DStage) : deal.d2dStage);
     if (targetStage === deal.d2dStage) return;
     const targetConfig = D2D_STAGE_CONFIG[targetStage];
     if (!targetConfig.manualEntry) {
@@ -439,11 +452,20 @@ export default function D2DPipeline() {
   }
 
   async function handleStatusChange(dealId: string, status: D2DStatus) {
+    const prevStatus = deals.find(d => d.id === dealId)?.d2dStatus ?? null;
+    if (prevStatus === status) return;
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, d2dStatus: status } : d));
-    try { await updateDeal(dealId, { d2d_status: status }); } catch { /* silent */ }
+    try {
+      await updateDeal(dealId, { d2d_status: status });
+    } catch (err: any) {
+      toast.error(err.message);
+      setDeals(prev => prev.map(d => d.id === dealId ? { ...d, d2dStatus: prevStatus } : d));
+    }
   }
 
   async function handleReassign(dealId: string, newRepId: string) {
+    const prevDeal = deals.find(d => d.id === dealId);
+    if (!prevDeal || prevDeal.repId === newRepId) return;
     const rep = reps.find(r => r.user_id === newRepId);
     setDeals(prev => prev.map(d => d.id === dealId ? { ...d, repId: newRepId, repName: rep?.full_name || null } : d));
     try {
@@ -451,6 +473,7 @@ export default function D2DPipeline() {
       toast.success(fr ? 'Lead réassigné' : 'Lead reassigned');
     } catch (err: any) {
       toast.error(err.message);
+      setDeals(prev => prev.map(d => d.id === dealId ? { ...d, repId: prevDeal.repId, repName: prevDeal.repName } : d));
     }
   }
 
@@ -460,6 +483,23 @@ export default function D2DPipeline() {
     return (
       <div className="h-[calc(100vh-3rem)] flex items-center justify-center bg-surface">
         <div className="text-text-muted text-sm">{fr ? 'Chargement du pipeline...' : 'Loading pipeline...'}</div>
+      </div>
+    );
+  }
+
+  // Load failure must never masquerade as an empty pipeline
+  if (loadError) {
+    return (
+      <div className="h-[calc(100vh-3rem)] flex flex-col items-center justify-center gap-3 bg-surface">
+        <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Impossible de charger le pipeline' : 'Failed to load the pipeline'}</p>
+        <p className="text-[12px] text-text-muted">{fr ? 'Vérifie ta connexion, puis réessaie.' : 'Check your connection, then try again.'}</p>
+        <button
+          onClick={() => { setLoading(true); setReloadTick(t => t + 1); }}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-outline bg-surface-tertiary text-[12px] font-medium text-text-secondary hover:text-text-primary hover:border-outline-strong transition-all"
+        >
+          <RefreshCw size={13} />
+          {fr ? 'Réessayer' : 'Retry'}
+        </button>
       </div>
     );
   }

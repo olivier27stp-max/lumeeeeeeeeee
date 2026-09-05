@@ -217,7 +217,7 @@ export default function ProfileSettings() {
           nextPayout: entries.filter((c: any) => c.status === 'pending' || c.status === 'approved').reduce((s: number, c: any) => s + (c.amount || 0), 0),
           allTime: entries.filter((c: any) => c.status === 'paid').reduce((s: number, c: any) => s + (c.amount || 0), 0),
         });
-        setClosesCount(dealsRes.filter((d: any) => d.stage === 'won').length);
+        setClosesCount(dealsRes.filter((d: any) => d.stage === 'closed_won').length);
       } catch {
         // Stats are non-critical — the profile stays usable without them.
       }
