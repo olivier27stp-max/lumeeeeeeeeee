@@ -1866,6 +1866,9 @@ router.get('/pipeline', async (req: Request, res: Response) => {
 
   try {
     const repFilter = req.query.rep_id as string | undefined;
+    // Un rôle non owner/admin ne voit que SES deals. Le service client bypasse
+    // la RLS rep_own_scope, donc le scoping doit aussi vivre ici.
+    const isAdmin = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
 
     let query = admin
       .from('pipeline_deals')
@@ -1880,6 +1883,9 @@ router.get('/pipeline', async (req: Request, res: Response) => {
       .is('deleted_at', null)
       .order('updated_at', { ascending: false });
 
+    if (!isAdmin) {
+      query = query.or(`rep_id.eq.${auth.user.id},created_by.eq.${auth.user.id}`);
+    }
     if (repFilter && repFilter !== 'all') {
       query = query.eq('rep_id', repFilter);
     }
@@ -1932,6 +1938,19 @@ router.put('/pipeline/:id', async (req: Request, res: Response) => {
   const admin = getServiceClient();
 
   try {
+    // Même scoping que le GET : un non owner/admin ne modifie que SES deals.
+    const isAdmin = await isOrgAdminOrOwner(auth.client, auth.user.id, auth.orgId);
+    if (!isAdmin) {
+      const { data: owned } = await admin
+        .from('pipeline_deals')
+        .select('id')
+        .eq('id', req.params.id)
+        .eq('org_id', auth.orgId)
+        .or(`rep_id.eq.${auth.user.id},created_by.eq.${auth.user.id}`)
+        .maybeSingle();
+      if (!owned) return res.status(403).json({ error: 'You can only modify your own deals.' });
+    }
+
     const { stage, d2d_status, lost_reason, rep_id } = req.body;
     const now = new Date().toISOString();
     const updates: Record<string, any> = { updated_at: now };
