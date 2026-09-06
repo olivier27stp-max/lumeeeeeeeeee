@@ -41,6 +41,9 @@ interface CompanyDetails {
   province: string;
   postal_code: string;
   country: string;
+  /** Coordonnées exactes de la ville, capturées à la sélection (météo). */
+  weather_lat: number | null;
+  weather_lng: number | null;
   logo_url: string;
   /** Accent des documents client. Vide = encre noire, le défaut. */
   brand_color: string;
@@ -67,6 +70,8 @@ const EMPTY_COMPANY: CompanyDetails = {
   province: '',
   postal_code: '',
   country: '',
+  weather_lat: null,
+  weather_lng: null,
   logo_url: '',
   brand_color: '',
   revenue_goal_cents: 0,
@@ -131,6 +136,8 @@ export default function CompanySettings() {
             province: data.province || '',
             postal_code: data.postal_code || '',
             country: data.country || '',
+            weather_lat: data.weather_lat ?? null,
+            weather_lng: data.weather_lng ?? null,
             logo_url: data.logo_url || '',
             brand_color: data.brand_color || '',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
@@ -200,6 +207,8 @@ export default function CompanySettings() {
         province: form.province.trim(),
         postal_code: form.postal_code.trim(),
         country: form.country.trim(),
+        weather_lat: form.weather_lat,
+        weather_lng: form.weather_lng,
         logo_url: form.logo_url.trim(),
         // Vide → null : la colonne a un CHECK sur le format hex.
         brand_color: form.brand_color.trim() || null,
@@ -550,13 +559,16 @@ export default function CompanySettings() {
               </label>
               <AddressAutocomplete
                 value={form.city}
-                onChange={(v) => update('city', v)}
+                onChange={(v) => setForm((prev) => ({ ...prev, city: v, weather_lat: null, weather_lng: null }))}
                 onSelect={(addr: StructuredAddress) => {
                   setForm((prev) => ({
                     ...prev,
                     city: addr.city || prev.city,
                     province: addr.province || prev.province,
                     country: addr.country || prev.country,
+                    // Coordonnées exactes pour la météo (évite un homonyme).
+                    weather_lat: addr.latitude ?? prev.weather_lat,
+                    weather_lng: addr.longitude ?? prev.weather_lng,
                   }));
                   setDirty(true);
                 }}
