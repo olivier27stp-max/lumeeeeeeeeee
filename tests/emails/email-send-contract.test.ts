@@ -372,10 +372,14 @@ describe('état de départ — les manques que les phases 1 à 4 vont combler', 
     expect(read('server/routes/request-forms.ts')).toMatch(/\?\.language === 'en' \? 'en' : 'fr'/);
   });
 
-  it('aucune table de log email générique, aucun désabonnement', () => {
+  it('aucune table de log email générique ; le désabonnement, lui, existe désormais', () => {
+    // Écrit en août comme « manque à combler ». Le désabonnement a été
+    // livré depuis (table email_unsubscribes + POST /unsubscribe/:token) ;
+    // ce test ne le voyait pas parce que le snapshot n'avait pas été
+    // régénéré depuis le 2 août. Mis à jour avec le snapshot du 2026-09-06.
     const snapshot = read('supabase/SCHEMA_SNAPSHOT.md');
     expect(snapshot).not.toMatch(/^### `email_log`/m);
-    expect(snapshot).not.toMatch(/^### `email_unsubscribes`/m);
+    expect(snapshot).toMatch(/^### `email_unsubscribes`/m);
   });
 
   it('les 2 seules idempotences email existantes sont billing_receipt_log et reminder_log', () => {
