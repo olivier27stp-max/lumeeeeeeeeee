@@ -47,6 +47,7 @@
     "qa:envoi-reel": "node --env-file=.env.local scripts/qa/envoi-reel.mjs",
     "qa:automatisations": "node --env-file=.env.local scripts/qa/automatisations.mjs",
     "qa:parcours": "node --env-file=.env.local scripts/qa/parcours.mjs",
+    "qa:liens": "node --env-file=.env.local scripts/qa/liens-publics.mjs",
     "qa:rapport": "node scripts/qa/rapport.mjs",
     "qa:campagne": "node scripts/qa/campagne.mjs",
     "qa:boutons": "node --env-file=.env.local scripts/qa/boutons.mjs",

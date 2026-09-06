@@ -172,13 +172,20 @@ router.post('/quotes/:id/track-view', async (req, res) => {
     const serviceClient = getServiceClient();
 
     // SECURITY 2026-05-12: only accept lookup by view_token. The previous
-    // implementation also accepted a raw UUID for "backward compat with
-    // authed callers" — but the route is public and unauthenticated, so any
-    // anon could enumerate invoices and spam notifications by POSTing
+    // implementation also accepted a raw UUID as the document ID for
+    // "backward compat with authed callers" — but the route is public, so
+    // any anon could enumerate invoices and spam notifications by POSTing
     // /api/quotes/{any-uuid}/track-view. Token-only closes that.
-    // If an authed caller needs to mark a view internally, do it via a
-    // separate authenticated endpoint, not this public one.
-    if (!id || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    //
+    // 2026-09-06 : le garde qui rejetait tout identifiant « en forme d'UUID »
+    // a été retiré. `quotes.view_token` et `invoices.view_token` SONT des
+    // UUID (gen_random_uuid()) : il rejetait donc 100 % des jetons
+    // légitimes. Vérifié en prod : 10 documents envoyés, 0 ouverture
+    // enregistrée, 0 notification « le client a ouvert votre devis ».
+    // La sécurité tient déjà par la recherche ci-dessous, qui ne compare
+    // QUE view_token — un identifiant de document, même deviné, ne
+    // correspond à rien.
+    if (!id) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
     const { data: invoice, error } = await serviceClient
