@@ -21,11 +21,19 @@ echo "Dossier : $DEST"
 # (grep s'arrête à la première correspondance) et `pipefail` transforme alors
 # une correspondance en échec — la tâche s'affichait « absente » alors qu'elle
 # était bien installée.
-liste="$(launchctl list 2>/dev/null || true)"
-if [[ "$liste" == *"$LABEL"* ]]; then
-  echo "Tâche   : installée (launchd, 03 h 00, rattrapée au réveil)"
+if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
+  if powershell.exe -NoProfile -Command "Get-ScheduledTask -TaskName 'Lume Backup Prod' -ErrorAction Stop | Out-Null" 2>/dev/null; then
+    echo "Tâche   : installée (Planificateur Windows, 03 h 00, rattrapée si le PC dormait)"
+  else
+    echo "Tâche   : ⚠️ ABSENTE — lancer 'npm run backup:install'"
+  fi
 else
-  echo "Tâche   : ⚠️ ABSENTE — lancer 'npm run backup:install'"
+  liste="$(launchctl list 2>/dev/null || true)"
+  if [[ "$liste" == *"$LABEL"* ]]; then
+    echo "Tâche   : installée (launchd, 03 h 00, rattrapée au réveil)"
+  else
+    echo "Tâche   : ⚠️ ABSENTE — lancer 'npm run backup:install'"
+  fi
 fi
 
 dernier="$(ls -1t "$DEST"/prod-*.dump 2>/dev/null | head -1 || true)"
@@ -34,7 +42,7 @@ if [ -z "$dernier" ]; then
   exit 1
 fi
 
-age_s=$(( $(date +%s) - $(stat -f %m "$dernier") ))
+age_s=$(( $(date +%s) - $(stat -f %m "$dernier" 2>/dev/null || stat -c %Y "$dernier") ))
 age_h=$(( age_s / 3600 ))
 taille=$(du -h "$dernier" | cut -f1)
 nb=$(ls -1 "$DEST"/prod-*.dump 2>/dev/null | wc -l | tr -d ' ')
