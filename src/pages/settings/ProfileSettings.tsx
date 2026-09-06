@@ -79,6 +79,10 @@ export default function ProfileSettings() {
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [city, setCity] = useState('');
+  // Coordonnées exactes de la ville choisie dans l'autocomplétion. Stockées
+  // pour que la météo lise un point précis au lieu de re-géocoder un nom
+  // ambigu (cf. weatherApi). null tant que l'utilisateur n'a pas re-sélectionné.
+  const [cityCoords, setCityCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [birthDate, setBirthDate] = useState('');
   const [savedInfo, setSavedInfo] = useState({ firstName: '', lastName: '', phone: '', city: '', birthDate: '' });
   const queryClient = useQueryClient();
@@ -166,6 +170,11 @@ export default function ProfileSettings() {
         setLastName(info.lastName);
         setPhone(info.phone);
         setCity(info.city);
+        // Coordonnées déjà enregistrées : on les garde pour ne pas les écraser
+        // par null si l'utilisateur sauve sans re-toucher à la ville.
+        if (m?.weather_lat != null && m?.weather_lng != null) {
+          setCityCoords({ lat: Number(m.weather_lat), lng: Number(m.weather_lng) });
+        }
         setBirthDate(info.birthDate);
         setSavedInfo(info);
         if (m) {
@@ -249,6 +258,10 @@ export default function ProfileSettings() {
         // team_members.phone et city sont NOT NULL — chaîne vide, jamais null
         phone: phone.trim(),
         city: city.trim(),
+        // Coordonnées exactes si l'utilisateur a choisi la ville dans la liste.
+        // On n'écrase les anciennes que sur une vraie sélection (cityCoords non
+        // null) ; une simple saisie libre les laisse telles quelles côté DB.
+        ...(cityCoords ? { weather_lat: cityCoords.lat, weather_lng: cityCoords.lng } : {}),
         updated_at: new Date().toISOString(),
       };
       if (hasBirthCol) memberPayload.birth_date = birthDate || null;
@@ -453,8 +466,13 @@ export default function ProfileSettings() {
             <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Ville' : 'City'}</label>
             <AddressAutocomplete
               value={city}
-              onChange={(v) => setCity(v)}
-              onSelect={(addr) => setCity(addr.city || addr.formatted_address)}
+              onChange={(v) => { setCity(v); setCityCoords(null); /* saisie libre : coords à re-confirmer */ }}
+              onSelect={(addr) => {
+                setCity(addr.city || addr.formatted_address);
+                setCityCoords(addr.latitude != null && addr.longitude != null
+                  ? { lat: addr.latitude, lng: addr.longitude }
+                  : null);
+              }}
               primaryTypes={['locality']}
               className="mt-1.5"
               placeholder={companyCity || (isFr ? 'Drummondville' : 'Montreal')}

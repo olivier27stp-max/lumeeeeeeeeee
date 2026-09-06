@@ -146,6 +146,74 @@ async function main() {
     console.log('');
   }
 
+  /* ── L'administrateur : tout sauf supprimer un utilisateur ────── */
+  if (parRole.admin) {
+    console.log(`── Administrateur (${parRole.admin.nom || parRole.admin.courriel}) ──`);
+    const adm = await sessionPour(parRole.admin.courriel);
+
+    // Le préréglage `admin` accorde tout SAUF users.delete : il doit donc voir
+    // l'argent comme un propriétaire.
+    for (const t of ['invoices', 'quotes', 'jobs', 'clients']) {
+      const { data, error } = await adm.from(t).select('id').eq('org_id', ORG).limit(3);
+      ok(`il accède à ${t}`, !error, error ? error.message.slice(0, 50) : `${(data || []).length} ligne(s)`);
+    }
+
+    const { data: f } = await adm.from('invoices').select('total_cents').eq('org_id', ORG).limit(1);
+    ok('il voit les montants des factures', f?.[0]?.total_cents != null,
+      f?.[0]?.total_cents != null ? `${f[0].total_cents} cents` : 'masqués — anormal pour un admin');
+
+    const { data: autres } = await admin.from('orgs').select('id').neq('id', ORG).is('deleted_at', null).limit(1);
+    if (autres?.length) {
+      const { data: fuite } = await adm.from('clients').select('id').eq('org_id', autres[0].id).limit(1);
+      ok('il ne voit rien d’une autre organisation', (fuite || []).length === 0);
+    }
+    console.log('');
+  } else {
+    console.log('── Administrateur : aucun compte — contrôle impossible ──');
+  }
+
+  /* ── Le vendeur, en profondeur ────────────────────────────────── */
+  if (parRole.sales_rep) {
+    console.log('── Vendeur : ce qu’il ne doit PAS pouvoir faire ──');
+    const v = await sessionPour(parRole.sales_rep.courriel);
+
+    // `financial.view_pricing` : oui. Mais pas la gestion d'équipe ni les
+    // réglages de l'organisation.
+    const { data: prix } = await v.from('jobs').select('total_cents').eq('org_id', ORG).limit(1);
+    ok('il voit les prix (financial.view_pricing)', prix?.[0]?.total_cents != null,
+      prix?.[0]?.total_cents != null ? 'oui' : 'masqués');
+
+    // Écriture dans les réglages de l'organisation : réservée aux admins.
+    //
+    // PIÈGE (rencontré le 2026-09-02) : un `update()` sur une table VIDE
+    // réussit sans rien toucher — aucune erreur, zéro ligne modifiée. Lu
+    // naïvement, ce silence ressemble à une écriture acceptée et fait crier
+    // à la faille alors que tout est verrouillé.
+    //
+    // On teste donc l'INSERT, qui se heurte toujours au `with check` même
+    // quand la table est vide, et on n'accepte l'UPDATE comme preuve que
+    // s'il a réellement modifié une ligne (`.select()` les renvoie).
+    const { error: eIns } = await v.from('company_settings')
+      .insert({ org_id: ORG, company_name: '[QA] tentative vendeur' }).select('org_id');
+
+    const { data: modifiees, error: eUpd } = await v.from('company_settings')
+      .update({ updated_at: new Date().toISOString() }).eq('org_id', ORG).select('org_id');
+
+    const creationRefusee = !!eIns;
+    const modifRefusee = !!eUpd || (modifiees || []).length === 0;
+    ok('il ne peut pas modifier les réglages de l’entreprise', creationRefusee && modifRefusee,
+      creationRefusee
+        ? `création refusée : ${eIns.message.slice(0, 40)}`
+        : 'CRÉATION ACCEPTÉE — vraie faille');
+
+    // Filet : si une tentative est passée, on la retire immédiatement.
+    if (!creationRefusee) {
+      await admin.from('company_settings').delete()
+        .eq('org_id', ORG).eq('company_name', '[QA] tentative vendeur');
+    }
+    console.log('');
+  }
+
   /* ── Le propriétaire : tout, dans SON organisation ────────────── */
   if (parRole.owner) {
     console.log(`── Propriétaire (${parRole.owner.nom || parRole.owner.courriel}) ──`);

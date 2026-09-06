@@ -45,16 +45,60 @@ const CA_PROVINCES: Record<string, string> = {
 // province/country instead of blindly taking the first result.
 async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number; countryCode: string } | null> {
   const orgId = await getCurrentOrgIdOrThrow();
+
+  // La ville du PROFIL de l'usager prime : un employé qui travaille dans un
+  // autre secteur voit la météo de son coin, pas celle du bureau. On lit aussi
+  // les coordonnées exactes (weather_lat/lng) capturées à la sélection de la
+  // ville dans l'autocomplétion : quand elles existent, on saute le géocodage
+  // — plus aucun risque d'homonyme (Wickham QC vs Wickham Australie).
+  let profileCity = '';
+  let profileCoords: { lat: number; lng: number } | null = null;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: tm } = await supabase
+        .from('team_members')
+        .select('city, weather_lat, weather_lng')
+        .eq('user_id', user.id)
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle();
+      profileCity = String(tm?.city || '').trim();
+      if (tm?.weather_lat != null && tm?.weather_lng != null) {
+        profileCoords = { lat: Number(tm.weather_lat), lng: Number(tm.weather_lng) };
+      }
+    }
+  } catch { /* profil sans fiche team_members — on retombe sur l'entreprise */ }
+
   // The company's address lives in company_settings (not orgs).
   const { data, error } = await supabase
     .from('company_settings')
-    .select('city, street1, postal_code, province, country')
+    .select('city, street1, postal_code, province, country, weather_lat, weather_lng')
     .eq('org_id', orgId)
     .limit(1)
     .maybeSingle();
-  if (error || !data) return null;
+  if (!profileCity && (error || !data)) return null;
 
-  const query = String(data.city || data.street1 || '').trim();
+  // Le pays de l'entreprise choisit le modèle météo (Environnement Canada au
+  // Canada). Avec des coordonnées stockées, c'est la seule source possible.
+  const wantCountry = normalizePlace(String(data?.country || ''));
+  const storedCountryCode = wantCountry === 'canada' || wantCountry === 'ca' ? 'CA' : '';
+
+  // Coordonnées du profil connues → on les utilise directement.
+  if (profileCity && profileCoords) {
+    return { city: profileCity, lat: profileCoords.lat, lng: profileCoords.lng, countryCode: storedCountryCode };
+  }
+  // Pas de ville de profil, mais l'entreprise a des coordonnées stockées.
+  if (!profileCity && data?.weather_lat != null && data?.weather_lng != null) {
+    return {
+      city: String(data.city || '').trim() || 'Ville',
+      lat: Number(data.weather_lat),
+      lng: Number(data.weather_lng),
+      countryCode: storedCountryCode,
+    };
+  }
+
+  const query = profileCity || String(data?.city || data?.street1 || '').trim();
   if (!query) return null;
 
   const geoUrl =
@@ -65,9 +109,8 @@ async function getOrgLocation(): Promise<{ city: string; lat: number; lng: numbe
   const results: any[] = geo?.results || [];
   if (!results.length) return null;
 
-  const rawProvince = normalizePlace(String(data.province || ''));
+  const rawProvince = normalizePlace(String(data?.province || ''));
   const wantProvince = CA_PROVINCES[rawProvince] || rawProvince;
-  const wantCountry = normalizePlace(String(data.country || ''));
 
   let hit = results[0];
   let bestScore = -1;
