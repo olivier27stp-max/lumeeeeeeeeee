@@ -56,7 +56,7 @@ const ok = (nom, vrai, detail = '') => {
    Sans la table, on ne saurait pas si l'écran ment. */
 const PAGES = [
   { chemin: '/settings/company', nom: 'Entreprise', table: 'company_settings' },
-  { chemin: '/settings/profile', nom: 'Mon profil', table: 'profiles' },
+  { chemin: '/settings/profile', nom: 'Mon profil', table: 'profiles', cle: 'id' },
   { chemin: '/settings/taxes', nom: 'Taxes', table: null },
   { chemin: '/settings/products', nom: 'Produits & Services', table: null },
   { chemin: '/settings/messaging', nom: 'Messagerie', table: null },
@@ -210,7 +210,12 @@ async function main() {
 
     // L'écran peut mentir : la valeur peut n'être qu'en mémoire du navigateur.
     if (p.table) {
-      const { data } = await admin.from(p.table).select('*').eq('org_id', membre.org_id).maybeSingle();
+      // `profiles` est indexée par l'utilisateur (cle: 'id'), pas par l'org :
+      // interroger org_id y renvoyait null et déclarait la valeur « absente »
+      // alors qu'elle était bien en base (faux positif du 2026-09-02).
+      const cle = p.cle || 'org_id';
+      const valeur = cle === 'id' ? session.user.id : membre.org_id;
+      const { data } = await admin.from(p.table).select('*').eq(cle, valeur).maybeSingle();
       const enBase = data ? JSON.stringify(data).includes(marqueur) : false;
       ok('elle est bien arrivée en base', enBase,
         enBase ? p.table : `absente de ${p.table} — l'écran affiche une valeur qui n'existe pas`);

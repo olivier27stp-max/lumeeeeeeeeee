@@ -867,16 +867,47 @@ export function applySecurityMiddleware(app: any) {
   // 3. Input sanitization (after body parsing)
   app.use(sanitizeRequestBody());
 
-  // 4. Global rate limit (generous — specific endpoints have tighter limits)
+  // 4. Limite globale, en deux couches.
+  //
+  //    MESURÉ LE 2026-09-06 : un chargement de page déclenche 7 à 8 appels
+  //    /api, tous dans les 3 premières secondes. L'ancienne limite unique —
+  //    30 requêtes par 3 s PAR ADRESSE IP — signifiait que quatre employés
+  //    ouvrant Lume en même temps depuis le Wi-Fi du bureau (une seule IP
+  //    publique, comme toute entreprise), ou un seul appuyant quatre fois
+  //    sur F5, bloquaient TOUT le bureau pendant deux minutes : courriels,
+  //    factures, géocodage, tout échouait. Dix fois en trente minutes, et
+  //    l'IP entrait en liste noire pour un quart d'heure.
+  //
+  //    a) Par UTILISATEUR (jeton) : serrée. Un compte qui martèle est freiné
+  //       seul, sans entraîner ses collègues. Pas de liste noire d'IP ici :
+  //       la clé n'est pas une IP.
+  //    b) Par IP : le filet contre les inondations anonymes ou multi-comptes,
+  //       relevé à un niveau qu'un bureau n'atteint pas par simple usage
+  //       (150 requêtes par 3 s ≈ 20 chargements simultanés).
   app.use(slidingRateLimit({
     windowMs: 60_000,
-    max: 300,
-    burstMax: 30,
+    max: 400,
+    burstMax: 40,
+    burstWindowMs: 3_000,
+    blockDurationMs: 60_000,
+    keyFn: (req) => userKey(req),
+    onBlock: (key, req) => {
+      // Seule une clé anonyme est une IP ; on ne met jamais un identifiant
+      // d'utilisateur dans la liste noire d'adresses.
+      if (key.startsWith('ip:')) {
+        autoBlockIP(key.slice(3), `global_rate_limit:${req.path}`, 15).catch(() => {});
+      }
+    },
+  }));
+  app.use(slidingRateLimit({
+    windowMs: 60_000,
+    max: 1_500,
+    burstMax: 150,
     burstWindowMs: 3_000,
     blockDurationMs: 120_000,
-    keyFn: (req) => extractIP(req),
+    keyFn: (req) => `ipg:${extractIP(req)}`,
     onBlock: (key, req) => {
-      autoBlockIP(key, `global_rate_limit:${req.path}`, 15).catch(() => {});
+      autoBlockIP(key.slice(4), `global_ip_flood:${req.path}`, 15).catch(() => {});
     },
   }));
 
