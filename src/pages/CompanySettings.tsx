@@ -41,6 +41,8 @@ interface CompanyDetails {
   province: string;
   postal_code: string;
   country: string;
+  weather_lat: number | null;
+  weather_lng: number | null;
   logo_url: string;
   /** Accent des documents client. Vide = encre noire, le défaut. */
   brand_color: string;
@@ -67,6 +69,8 @@ const EMPTY_COMPANY: CompanyDetails = {
   province: '',
   postal_code: '',
   country: '',
+  weather_lat: null,
+  weather_lng: null,
   logo_url: '',
   brand_color: '',
   revenue_goal_cents: 0,
@@ -128,6 +132,8 @@ export default function CompanySettings() {
             street1: data.street1 || '',
             street2: data.street2 || '',
             city: data.city || '',
+            weather_lat: data.weather_lat ?? null,
+            weather_lng: data.weather_lng ?? null,
             province: data.province || '',
             postal_code: data.postal_code || '',
             country: data.country || '',
@@ -197,6 +203,8 @@ export default function CompanySettings() {
         street1: form.street1.trim(),
         street2: form.street2.trim(),
         city: form.city.trim(),
+        weather_lat: form.weather_lat,
+        weather_lng: form.weather_lng,
         province: form.province.trim(),
         postal_code: form.postal_code.trim(),
         country: form.country.trim(),
@@ -550,13 +558,16 @@ export default function CompanySettings() {
               </label>
               <AddressAutocomplete
                 value={form.city}
-                onChange={(v) => update('city', v)}
+                onChange={(v) => setForm((prev) => ({ ...prev, city: v, weather_lat: null, weather_lng: null }))}
                 onSelect={(addr: StructuredAddress) => {
                   setForm((prev) => ({
                     ...prev,
                     city: addr.city || prev.city,
                     province: addr.province || prev.province,
                     country: addr.country || prev.country,
+                    // Coordonnées exactes pour la météo (évite un homonyme).
+                    weather_lat: addr.latitude ?? prev.weather_lat,
+                    weather_lng: addr.longitude ?? prev.weather_lng,
                   }));
                   setDirty(true);
                 }}

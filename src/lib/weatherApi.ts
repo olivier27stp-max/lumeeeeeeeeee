@@ -43,20 +43,64 @@ const CA_PROVINCES: Record<string, string> = {
 // Homonyms are common (e.g. Wickham exists in Australia, England AND Québec),
 // so we fetch several candidates and pick the one matching the org's
 // province/country instead of blindly taking the first result.
-async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number; countryCode: string } | null> {
+type ResolvedLocation = { city: string; lat: number; lng: number; countryCode: string };
+
+async function getOrgLocation(): Promise<ResolvedLocation | null> {
   const orgId = await getCurrentOrgIdOrThrow();
+
+  // La ville du PROFIL prime : un employé qui travaille dans un autre secteur
+  // voit la météo de son coin, pas celle du bureau. Quand des coordonnées
+  // exactes ont été capturées à la sélection de la ville (weather_lat/lng), on
+  // les utilise directement — aucun géocodage, donc zéro risque d'homonyme.
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: tm } = await supabase
+        .from('team_members')
+        .select('city, province, country, weather_lat, weather_lng')
+        .eq('user_id', user.id)
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle();
+      const profileCity = String(tm?.city || '').trim();
+      if (profileCity && tm?.weather_lat != null && tm?.weather_lng != null) {
+        return { city: profileCity, lat: Number(tm.weather_lat), lng: Number(tm.weather_lng), countryCode: 'CA' };
+      }
+      if (profileCity) {
+        return geocodeCity(profileCity, String(tm?.province || ''), String(tm?.country || ''));
+      }
+    }
+  } catch { /* profil sans fiche team_members — on retombe sur l'entreprise */ }
+
   // The company's address lives in company_settings (not orgs).
   const { data, error } = await supabase
     .from('company_settings')
-    .select('city, street1, postal_code, province, country')
+    .select('city, street1, postal_code, province, country, weather_lat, weather_lng')
     .eq('org_id', orgId)
     .limit(1)
     .maybeSingle();
   if (error || !data) return null;
 
+  if (data.weather_lat != null && data.weather_lng != null) {
+    return {
+      city: String(data.city || '').trim() || 'Ville',
+      lat: Number(data.weather_lat),
+      lng: Number(data.weather_lng),
+      countryCode: 'CA',
+    };
+  }
+
   const query = String(data.city || data.street1 || '').trim();
   if (!query) return null;
+  return geocodeCity(query, String(data.province || ''), String(data.country || ''));
+}
 
+/**
+ * Géocode un nom de ville et choisit le meilleur candidat selon la province et
+ * le pays visés (score) — sinon « Wickham » renverrait le premier homonyme
+ * mondial. Partagé par la ville du profil ET celle de l'entreprise.
+ */
+async function geocodeCity(query: string, province: string, country: string): Promise<ResolvedLocation | null> {
   const geoUrl =
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=fr&format=json`;
   const geoRes = await fetch(geoUrl);
@@ -65,19 +109,22 @@ async function getOrgLocation(): Promise<{ city: string; lat: number; lng: numbe
   const results: any[] = geo?.results || [];
   if (!results.length) return null;
 
-  const rawProvince = normalizePlace(String(data.province || ''));
+  const rawProvince = normalizePlace(province);
   const wantProvince = CA_PROVINCES[rawProvince] || rawProvince;
-  const wantCountry = normalizePlace(String(data.country || ''));
+  const wantCountry = normalizePlace(country);
 
   let hit = results[0];
   let bestScore = -1;
   for (const r of results) {
     const admin1 = normalizePlace(String(r.admin1 || ''));
-    const country = normalizePlace(String(r.country || ''));
+    const rCountry = normalizePlace(String(r.country || ''));
     const cc = normalizePlace(String(r.country_code || ''));
     let score = 0;
     if (wantProvince && (admin1 === wantProvince || admin1.includes(wantProvince) || wantProvince.includes(admin1))) score += 3;
-    if (wantCountry && (country === wantCountry || cc === wantCountry)) score += 2;
+    if (wantCountry && (rCountry === wantCountry || cc === wantCountry)) score += 2;
+    // À défaut de province/pays connus, un candidat canadien l'emporte : Lume
+    // est un CRM québécois, l'homonyme australien n'a pas de sens ici.
+    if (!wantProvince && !wantCountry && cc === 'ca') score += 1;
     if (score > bestScore) { bestScore = score; hit = r; }
   }
 

@@ -4,23 +4,37 @@
  * across the full width. Org city's forecast (Open-Meteo, free, no key).
  * Renders nothing if the org has no resolvable city.
  */
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, Wind, Droplets, ArrowUp, ArrowDown } from 'lucide-react';
 import { useTranslation } from '../i18n';
+import { supabase } from '../lib/supabase';
 import { getOrgHourlyWeather, weatherIcon, weatherLabel, outdoorWorkVerdict } from '../lib/weatherApi';
 
 export default function HomeWeatherStrip() {
   const { language } = useTranslation();
   const fr = language === 'fr';
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['home-weather'],
+  // La météo suit la ville du PROFIL (chaque employé son coin, cf.
+  // weatherApi.getOrgLocation). La clé de cache DOIT donc porter l'id de
+  // l'utilisateur : sans lui, la clé « home-weather » était partagée, et le
+  // premier user à charger figeait sa météo pour tous les suivants sur le même
+  // navigateur pendant 30 min.
+  const [userId, setUserId] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id ?? null));
+  }, []);
+
+  const { data, isFetching } = useQuery({
+    queryKey: ['home-weather', userId],
     queryFn: () => getOrgHourlyWeather(12),
+    enabled: userId !== null,
     staleTime: 30 * 60_000, // 30 min — weather doesn't change fast
     refetchOnWindowFocus: false,
   });
 
-  if (isLoading) {
+  // Squelette pendant la résolution de l'user ou le chargement de la météo.
+  if (userId === null || (isFetching && !data)) {
     return <div className="mb-6 h-[140px] w-full rounded-2xl bg-surface-secondary/60 animate-pulse" />;
   }
 
