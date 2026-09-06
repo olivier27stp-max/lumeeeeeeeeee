@@ -114,7 +114,11 @@ describe('le rattrapage ne touche que les lignes fautives', () => {
   });
 
   it('factures : seulement celles encaissées jamais émises, en rejouant le trigger', () => {
-    expect(r).toMatch(/set updated_at = now\(\)\s+where issued_at is null\s+and paid_cents > 0/);
+    // La première version touchait updated_at — colonne que le trigger
+    // (UPDATE OF issued_at, paid_cents, …) ne surveille pas : rien ne
+    // bougeait. La migration de suivi réécrit paid_cents à sa valeur.
+    const suite = lire('supabase/migrations/20260906150000_rattrapage_facture_encaissee.sql');
+    expect(suite).toMatch(/set paid_cents = paid_cents\s+where issued_at is null\s+and paid_cents > 0/);
   });
 });
 

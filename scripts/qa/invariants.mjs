@@ -31,7 +31,9 @@ const C = [
   ['facture : total ≠ sous-total + taxes − remise', "select count(*) n from invoices where deleted_at is null and total_cents <> subtotal_cents + tax_cents - coalesce(discount_cents,0)"],
   ['facture : sous-total ≠ somme des lignes (quand il y a des lignes)', "select count(*) n from invoices i where i.deleted_at is null and exists (select 1 from invoice_items x where x.invoice_id=i.id and x.deleted_at is null) and i.subtotal_cents <> (select coalesce(sum(line_total_cents),0) from invoice_items x where x.invoice_id=i.id and x.deleted_at is null)"],
   ['facture : solde ≠ total − payé', "select count(*) n from invoices where deleted_at is null and balance_cents <> total_cents - paid_cents"],
-  ['facture : payé ≠ somme des paiements réussis', "select count(*) n from invoices i where i.deleted_at is null and i.paid_cents <> (select coalesce(sum(amount_cents),0) from payments p where p.invoice_id=i.id and p.deleted_at is null and p.status in ('succeeded','completed','paid'))"],
+  // « Marquer payée » à la main ne crée pas de ligne de paiement : on ne
+  // compare que lorsque des paiements existent.
+  ['facture : payé ≠ somme des paiements réussis (quand il y en a)', "select count(*) n from invoices i where i.deleted_at is null and exists (select 1 from payments p where p.invoice_id=i.id and p.deleted_at is null) and i.paid_cents <> (select coalesce(sum(amount_cents),0) from payments p where p.invoice_id=i.id and p.deleted_at is null and p.status in ('succeeded','completed','paid'))"],
   ['facture : statut « payée » mais solde > 0', "select count(*) n from invoices where deleted_at is null and status='paid' and balance_cents > 0"],
   ['facture : solde 0, total > 0, statut ≠ payée', "select count(*) n from invoices where deleted_at is null and total_cents > 0 and balance_cents <= 0 and status not in ('paid','void','cancelled','refunded')"],
   ['facture : montant négatif', "select count(*) n from invoices where deleted_at is null and (total_cents < 0 or subtotal_cents < 0 or tax_cents < 0 or paid_cents < 0)"],
