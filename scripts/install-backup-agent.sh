@@ -22,6 +22,35 @@ REPO="$PWD"
 
 LABEL="com.lume.backup-prod"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+
+# ── Windows (Git Bash) : tâche planifiée, pas launchd ─────────────────────
+# Constaté le 2026-09-06 : sur le poste Windows du propriétaire, ce script
+# n'installait RIEN (launchctl absent, échec silencieux) — aucune sauvegarde
+# de la prod n'a jamais existé sur ce disque. Même exigence que launchd :
+# 03 h 00 tous les jours, et RATTRAPAGE si le PC dormait (StartWhenAvailable).
+# Docker Desktop doit tourner : backup-prod.sh l'utilise pour pg_dump.
+if [[ "$(uname -s)" == MINGW* || "$(uname -s)" == MSYS* || "$(uname -s)" == CYGWIN* ]]; then
+  TACHE="Lume Backup Prod"
+  BASH_WIN="$(cygpath -w "$(command -v bash)")"
+  REPO_WIN="$(cygpath -m "$REPO")"
+  if [ "${1:-install}" = "uninstall" ]; then
+    powershell.exe -NoProfile -Command "Unregister-ScheduledTask -TaskName '$TACHE' -Confirm:\$false -ErrorAction SilentlyContinue" >/dev/null
+    echo "Tâche quotidienne retirée (Planificateur de tâches Windows)."
+    exit 0
+  fi
+  powershell.exe -NoProfile -Command "
+    \$action = New-ScheduledTaskAction -Execute '$BASH_WIN' -Argument '-lc \"cd \\\"$REPO_WIN\\\" && npm run backup:prod\"' -WorkingDirectory '$REPO_WIN'
+    \$trigger = New-ScheduledTaskTrigger -Daily -At 03:00
+    \$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
+    Register-ScheduledTask -TaskName '$TACHE' -Action \$action -Trigger \$trigger -Settings \$settings -Force | Out-Null
+  " || { echo "ERREUR: Register-ScheduledTask a échoué" >&2; exit 1; }
+  if powershell.exe -NoProfile -Command "Get-ScheduledTask -TaskName '$TACHE' -ErrorAction Stop | Out-Null" 2>/dev/null; then
+    echo "Tâche quotidienne installée : « $TACHE », 03 h 00, rattrapée si le PC dormait."
+    echo "Prérequis : Docker Desktop lancé au démarrage, SUPABASE_DB_PASSWORD dans .env.local."
+    exit 0
+  fi
+  echo "ERREUR: tâche introuvable après installation" >&2; exit 1
+fi
 LOG="$(dirname "$REPO")/lume-backups/backup.log"
 CIBLE="gui/$(id -u)"
 MARQUEUR_CRON="# lume-backup-quotidien"
