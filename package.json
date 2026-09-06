@@ -92,7 +92,7 @@
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
-    "lucide-react": "^0.546.0",
+    "lucide-react": "^1.14.0",
     "mapbox-gl": "^3.21.0",
     "motion": "^12.23.24",
     "nodemailer": "^9.0.3",
