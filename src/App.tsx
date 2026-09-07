@@ -187,6 +187,7 @@ import SessionTimeoutModal from './components/SessionTimeoutModal';
 
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
+import { rendueSansSession } from './lib/routesSansSession';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkCreatorAccess } from './lib/creatorSpaceApi';
@@ -414,7 +415,6 @@ export default function App() {
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      const prev = user;
       setUser(session?.user ?? null);
       // Reconnect (sign back in): drop all cached query data so the whole app
       // reloads fresh instead of showing the previous session's cache.
@@ -432,20 +432,19 @@ export default function App() {
           }
         } catch { /* stockage indisponible : sans effet */ }
       }
-      // Session expired or user signed out in another tab
-      if (event === 'SIGNED_OUT' && prev) {
-        import('sonner').then(({ toast }) => {
-          toast.info(t.common.sessionExpiredPleaseSignInAgain);
-        });
-        // Sans redirection, le routeur reste sur la route protégée que l'user
-        // vient de quitter (ex. /jobs) ; déconnecté, l'app rend PublicRoutes
-        // dont seul le catch-all l'attrape → « Page introuvable » (404). On
-        // renvoie sur l'accueil, comme le fait le bouton Déconnexion.
-        const p = window.location.pathname;
-        const routePublique = p === '/' || p.startsWith('/auth') || p.startsWith('/register')
-          || p.startsWith('/reset-password') || p.startsWith('/verify-email')
-          || p.startsWith('/privacy') || p.startsWith('/terms') || p.startsWith('/subprocessors');
-        if (!routePublique) window.location.replace(window.location.origin + '/');
+      // Déconnexion venue du SDK — jeton de rafraîchissement expiré ou
+      // révoqué, déconnexion dans un autre onglet — ou fin du délai
+      // d'inactivité. Sans redirection, le routeur reste sur la route protégée
+      // que l'utilisateur occupait (ex. /jobs) ; déconnectée, l'app rend
+      // PublicRoutes dont seul le catch-all l'attrape → « Page introuvable ».
+      // On ramène à l'accueil, comme le bouton Déconnexion.
+      //
+      // Aucune condition sur l'utilisateur précédent : ce callback est créé au
+      // montage, donc `user` y vaut toujours sa valeur initiale (null) — la
+      // garde `&& prev` qui existait ici ne passait jamais et laissait le 404.
+      // Pas de toast non plus : la page recharge, il ne serait jamais vu.
+      if (event === 'SIGNED_OUT' && !rendueSansSession(window.location.pathname)) {
+        window.location.replace(window.location.origin + '/');
       }
       if (event === 'TOKEN_REFRESHED') {
         // silently refreshed — no action needed
