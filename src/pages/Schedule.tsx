@@ -34,7 +34,7 @@ import { findFreeSlots, type FreeSlot } from '../lib/availabilityApi';
 import { checkVisitAgainstRoster } from '../lib/teamScheduleApi';
 import TeamDayRoster from '../components/TeamDayRoster';
 import TaskModal from '../components/tasks/TaskModal';
-import { createTask, updateTask, listScheduledTasksRange } from '../lib/tasksApi';
+import { createTask, updateTask, listScheduledTasksRange, listAssignableMembers } from '../lib/tasksApi';
 import { tasksToBlocks, type ScheduledTaskBlock } from '../lib/scheduledTask';
 import { optimizeRoute, applyOptimizedSchedule } from '../lib/routeOptimizationApi';
 import { listTeams, TeamRecord } from '../lib/teamsApi';
@@ -306,6 +306,7 @@ function ScheduleContent() {
   const { data: orgId } = useQuery({ queryKey: ['currentOrgId'], queryFn: getCurrentOrgId });
   const teamsQ = useQuery({ queryKey: ['teams', orgId || '-'], queryFn: listTeams, enabled: !!orgId, staleTime: 5 * 60_000 });
   const teams = teamsQ.data || [];
+  const membersQ = useQuery({ queryKey: ['assignableMembers'], queryFn: listAssignableMembers, enabled: !!orgId, staleTime: 5 * 60_000 });
 
   useEffect(() => {
     if (!teams.length || hydratedRef.current) return;
@@ -927,6 +928,8 @@ function ScheduleContent() {
         onClose={() => { setTaskModalOpen(false); setEditingTask(null); }}
         task={editingTask}
         defaults={editingTask ? undefined : taskDefaults}
+        members={membersQ.data || []}
+        teams={teams}
         onSubmit={async (input) => {
           if (editingTask) {
             await updateTask(editingTask.id, input as any);

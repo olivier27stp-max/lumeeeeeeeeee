@@ -32,6 +32,8 @@ export interface TaskRow {
   linked_person_type: TaskLinkedPersonType | null;
   linked_person_id: string | null;
   assignee_user_id: string | null;
+  /** Équipe assignée (optionnel), alternative à assignee_user_id. */
+  team_id: string | null;
   /** Heure précise optionnelle. NULL = échéance sans heure (due_date). */
   scheduled_at: string | null;
   /** Durée du bloc calendrier en minutes. NULL = marqueur ponctuel. */
@@ -68,6 +70,7 @@ export interface TaskCreateInput {
   linked_person_type?: TaskLinkedPersonType | null;
   linked_person_id?: string | null;
   assignee_user_id?: string | null;
+  team_id?: string | null;
 }
 
 export interface TaskUpdateInput {
@@ -84,4 +87,5 @@ export interface TaskUpdateInput {
   linked_person_type?: TaskLinkedPersonType | null;
   linked_person_id?: string | null;
   assignee_user_id?: string | null;
+  team_id?: string | null;
 }

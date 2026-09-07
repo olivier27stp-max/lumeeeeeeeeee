@@ -70,6 +70,35 @@ function parseSortKey(key: TaskSortKey): [string, 'asc' | 'desc'] {
 }
 
 // ── Create task ──
+export interface AssignableMember {
+  user_id: string;
+  name: string;
+}
+
+// Membres actifs de l'org, pour le sélecteur « Assigné à » d'une tâche.
+export async function listAssignableMembers(): Promise<AssignableMember[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('user_id, first_name, last_name, full_name')
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+    .not('user_id', 'is', null);
+  if (error) throw error;
+  const seen = new Set<string>();
+  const out: AssignableMember[] = [];
+  for (const m of (data || []) as any[]) {
+    if (!m.user_id || seen.has(m.user_id)) continue;
+    seen.add(m.user_id);
+    const name = [m.first_name, m.last_name].filter(Boolean).join(' ').trim()
+      || String(m.full_name || '').trim()
+      || 'Sans nom';
+    out.push({ user_id: m.user_id, name });
+  }
+  out.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
+}
+
 // ── Tâches planifiées d'une plage (calendrier) ──
 // Ne renvoie que les tâches avec une heure (scheduled_at) dans la fenêtre
 // affichée. `endAt` est exclusif (cohérent avec le range du calendrier).
@@ -116,11 +145,12 @@ export async function createTask(input: TaskCreateInput): Promise<TaskRow> {
     due_date: input.due_date || null,
     scheduled_at: input.scheduled_at || null,
     duration_minutes: input.duration_minutes ?? null,
+    assignee_user_id: input.assignee_user_id || null,
+    team_id: input.team_id || null,
     linked_entity_type: input.linked_entity_type || null,
     linked_entity_id: input.linked_entity_id || null,
     linked_person_type: input.linked_person_type || null,
     linked_person_id: input.linked_person_id || null,
-    assignee_user_id: input.assignee_user_id || null,
   };
 
   const { data, error } = await supabase
