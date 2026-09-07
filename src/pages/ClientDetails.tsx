@@ -145,6 +145,7 @@ function copyToClipboard(text: string, isFr = false) {
 
 // ─── Tabs ────────────────────────────────────────────────────────────
 type OverviewTab = 'active' | 'completed' | 'quotes' | 'jobs' | 'invoices' | 'leads' | 'specific_notes';
+const OVERVIEW_TABS: OverviewTab[] = ['active', 'completed', 'quotes', 'jobs', 'invoices', 'leads', 'specific_notes'];
 
 // ─── Skeleton ────────────────────────────────────────────────────────
 function DetailPageSkeleton() {
@@ -228,7 +229,11 @@ export default function ClientDetails() {
   });
 
   // Tabs & dropdown
-  const [activeTab, setActiveTab] = useState<OverviewTab>('active');
+  // Deep-link ?tab=jobs (ex. « Voir les jobs » depuis le hub de pin de la Vente Map)
+  const [activeTab, setActiveTab] = useState<OverviewTab>(() => {
+    const t = searchParams.get('tab');
+    return t && OVERVIEW_TABS.includes(t as OverviewTab) ? (t as OverviewTab) : 'active';
+  });
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [showNewItemMenu, setShowNewItemMenu] = useState(false);
   // Menu "+" des travaux actifs — position fixed pour échapper à l'overflow:hidden du section-card

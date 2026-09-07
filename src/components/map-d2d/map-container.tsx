@@ -12,6 +12,7 @@ import {
 } from './lead-pin';
 import { type ZoneData, getZoneColor } from './zone-types';
 import { PinClusterManager, type ClusterSourcePoint } from './pin-cluster';
+import { ClosedPinHub } from './ClosedPinHub';
 import { getRepAvatar } from '../../lib/constants/avatars';
 import { useTranslation } from '../../i18n';
 import { listTerritories, createTerritory, updateTerritory, deleteTerritory, listReps } from '../../lib/fieldSalesApi';
@@ -292,6 +293,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
   //  - isNew=false: clicked an existing pin → choosing an outcome updates it.
   const [actionPin, setActionPin] = useState<LeadPinData | null>(null);
   const [actionIsNew, setActionIsNew] = useState(false);
+  const closeActionPin = useCallback(() => setActionPin(null), []);
   // Locally-created pins (visit log / add-pin) — exempt from the reconcile
   // sweep, since they aren't in initialPins until the next full reload.
   const localPinIdsRef = useRef(new Set<string>());
@@ -2572,7 +2574,37 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       {/* ================================================================== */}
       {/* "Log prospecting pin" action modal — opens when a pin is clicked    */}
       {/* ================================================================== */}
-      {actionPin && (
+      {/* Pin « Vendu » existant → dossier client complet (ClosedPinHub).       */}
+      {actionPin && !actionIsNew && actionPin.status === 'closed_won' && (
+        <ClosedPinHub
+          pin={markersRef.current.get(actionPin.id)?.pin || actionPin}
+          fr={fr}
+          canOpenClient={!!(actionPin.client_id || actionPin.lead_id || actionPin.job_id || actionPin.lume_job_id)}
+          onClose={closeActionPin}
+          onChangeStatus={(status) => applyPinStatus(actionPin, status)}
+          onEdit={() => {
+            const current = markersRef.current.get(actionPin.id)?.pin || actionPin;
+            setActionPin(null);
+            setEditingPin(current);
+            setEditName(current.name);
+            setEditPhone(current.phone || '');
+            setEditEmail(current.email || '');
+            setEditStatus(current.status);
+            setEditNote(current.note);
+          }}
+          onOpenClient={() => {
+            const current = markersRef.current.get(actionPin.id)?.pin || actionPin;
+            setActionPin(null);
+            onOpenClientRef.current?.(current);
+          }}
+          onDelete={() => {
+            const current = markersRef.current.get(actionPin.id)?.pin || actionPin;
+            setActionPin(null);
+            requestPinDelete(current);
+          }}
+        />
+      )}
+      {actionPin && !(!actionIsNew && actionPin.status === 'closed_won') && (
         <div
           className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
           onClick={() => setActionPin(null)}
