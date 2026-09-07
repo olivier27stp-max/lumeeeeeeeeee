@@ -15,6 +15,7 @@ import {
   Palette,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
@@ -49,8 +50,6 @@ interface CompanyDetails {
   brand_color: string;
   revenue_goal_cents: number;
   currency: string;
-  google_review_url: string;
-  review_enabled: boolean;
   review_widget_settings: {
     theme: 'light' | 'dark';
     filter: string;
@@ -76,8 +75,6 @@ const EMPTY_COMPANY: CompanyDetails = {
   brand_color: '',
   revenue_goal_cents: 0,
   currency: 'CAD',
-  google_review_url: '',
-  review_enabled: false,
   review_widget_settings: { theme: 'light', filter: 'all', layout: 'cards', max_display: 6 },
 };
 
@@ -142,8 +139,6 @@ export default function CompanySettings() {
             brand_color: data.brand_color || '',
             revenue_goal_cents: Number(data.revenue_goal_cents) || 0,
             currency: data.currency || 'CAD',
-            google_review_url: data.google_review_url || '',
-            review_enabled: data.review_enabled ?? false,
             review_widget_settings: data.review_widget_settings || EMPTY_COMPANY.review_widget_settings,
           });
         }
@@ -184,11 +179,6 @@ export default function CompanySettings() {
       toast.error(language === 'fr' ? 'Adresse du site web invalide.' : 'Invalid website URL.');
       return;
     }
-    const reviewUrl = form.google_review_url.trim();
-    if (reviewUrl && !/^https?:\/\/[^\s.]+\.\S{2,}/i.test(reviewUrl)) {
-      toast.error(language === 'fr' ? 'Lien Google Review invalide (doit commencer par https://).' : 'Invalid Google Review URL (must start with https://).');
-      return;
-    }
 
     setSaving(true);
     setSaved(false);
@@ -214,8 +204,6 @@ export default function CompanySettings() {
         brand_color: form.brand_color.trim() || null,
         revenue_goal_cents: Math.max(0, Math.round(form.revenue_goal_cents || 0)),
         currency: form.currency || 'CAD',
-        google_review_url: form.google_review_url.trim(),
-        review_enabled: form.review_enabled,
         review_widget_settings: form.review_widget_settings,
         updated_at: new Date().toISOString(),
       };
@@ -652,73 +640,22 @@ export default function CompanySettings() {
           </div>
         </div>
 
-        {/* Google Reviews */}
-        <div className="section-card p-6 space-y-4">
-          <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-            <Star size={12} /> {t.companySettings.googleReviews}
-          </h3>
-
+        {/* Avis clients : déménagés sur leur propre page (/settings/reviews) —
+            liens Google + Facebook, message d'invitation, interrupteur. */}
+        <div className="section-card p-6 flex items-center justify-between gap-4">
           <div>
-            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
-              <ExternalLink size={10} /> {t.companySettings.googleReviewUrl}
-            </label>
-            <input
-              type="url"
-              value={form.google_review_url}
-              onChange={(e) => update('google_review_url', e.target.value)}
-              className="glass-input w-full mt-1"
-              placeholder="https://g.page/r/your-business/review"
-            />
+            <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+              <Star size={12} /> {language === 'fr' ? 'Avis clients' : 'Customer reviews'}
+            </h3>
             <p className="text-[12px] text-text-tertiary mt-1">
               {language === 'fr'
-                ? 'Les clients satisfaits seront redirigés vers ce lien pour laisser un avis.'
-                : 'Satisfied customers will be redirected to this link to leave a review.'}
+                ? 'Sondage d\'étoiles après la job, liens Google / Facebook et message d\'invitation.'
+                : 'Post-job star survey, Google / Facebook links and invite message.'}
             </p>
           </div>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-text-primary">
-                {language === 'fr' ? 'Activer les demandes d\'avis' : 'Enable review requests'}
-              </p>
-              <p className="text-[12px] text-text-tertiary">
-                {language === 'fr'
-                  ? 'Envoyer automatiquement des demandes d\'avis après complétion d\'un travail'
-                  : 'Automatically send review requests after job completion'}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                if (!form.google_review_url.trim() && !form.review_enabled) {
-                  toast.error(language === 'fr'
-                    ? 'Ajoutez d\'abord votre lien Google Review'
-                    : 'Add your Google Review URL first');
-                  return;
-                }
-                update('review_enabled', !form.review_enabled);
-              }}
-              className={cn(
-                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                form.review_enabled ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
-              )}
-            >
-              <span className={cn(
-                'inline-block h-4 w-4 transform rounded-full bg-surface-card transition-transform',
-                form.review_enabled ? 'translate-x-6' : 'translate-x-1',
-              )} />
-            </button>
-          </div>
-
-          {!form.google_review_url.trim() && (
-            <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2">
-              <p className="text-[12px] text-amber-700 dark:text-amber-300">
-                {language === 'fr'
-                  ? '⚠️ Aucun lien Google Review configuré. Les emails de demande d\'avis ne seront pas envoyés.'
-                  : '⚠️ No Google Review URL configured. Review request emails will not be sent.'}
-              </p>
-            </div>
-          )}
+          <Link to="/settings/reviews" className="glass-button inline-flex items-center gap-1.5 text-[12px] shrink-0">
+            {language === 'fr' ? 'Configurer' : 'Configure'} <ExternalLink size={12} />
+          </Link>
         </div>
 
         {/* ── Regional ── */}

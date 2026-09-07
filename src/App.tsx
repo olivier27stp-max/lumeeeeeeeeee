@@ -101,6 +101,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
 import AppMarketplace from './pages/AppMarketplace';
 import SettingsMessaging from './pages/SettingsMessaging';
+import SettingsReviews from './pages/SettingsReviews';
 import RequestFormSettings from './pages/RequestFormSettings';
 import QuotePresets from './pages/QuotePresets';
 // Pages porteuses de CARTES (leaflet + mapbox-gl, ~1,9 Mo). Importees
@@ -1479,6 +1480,7 @@ function AuthenticatedApp({
                       {/* Standalone reminders settings page removed — old links land on Lume Payments */}
                       <Route path="reminders" element={<Navigate to="/settings/payments" replace />} />
                       <Route path="messaging" element={<Gated permission="settings.read"><SettingsMessaging /></Gated>} />
+                      <Route path="reviews" element={<Gated permission="settings.update"><SettingsReviews /></Gated>} />
                       <Route path="request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><RequestFormSettings /></PlanFeatureGate></Gated>} />
                       <Route path="team" element={<Gated permission="team.read"><ManageTeam /></Gated>} />
                       <Route path="roles" element={<Gated permission="users.update_role"><SettingsRoles /></Gated>} />

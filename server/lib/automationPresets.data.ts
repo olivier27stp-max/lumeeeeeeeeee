@@ -257,11 +257,11 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
   },
   {
     "preset_key": "google_review",
-    "name": "Review Request — After Job",
-    "description": "Send satisfaction survey after job completion",
+    "name": "Sondage d'avis — dès la fin de la job",
+    "description": "Envoie le sondage d'étoiles (courriel + SMS) dès que la job est marquée terminée",
     "trigger_event": "job.completed",
     "conditions": {},
-    "delay_seconds": 7200,
+    "delay_seconds": 0,
     "actions": [
       {
         "type": "request_review",
@@ -998,7 +998,7 @@ export const AUTOMATION_PRESETS: AutomationPresetDef[] = [
       {
         "type": "send_sms",
         "config": {
-          "body": "Bonjour [client_first_name], un avis Google nous aiderait énormément : [google_review_url] Merci encore! — [company_name]"
+          "body": "Bonjour [client_first_name], un avis nous aiderait énormément : [review_page_url] Merci encore! — [company_name]"
         }
       },
       {

@@ -5,6 +5,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
+import { reviewDestinations } from '../reviews';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -158,7 +159,7 @@ export async function resolveEntityVariables(
   // Fetch company settings
   const { data: company } = await supabase
     .from('company_settings')
-    .select('company_name, phone, google_review_url')
+    .select('company_name, phone, google_review_url, facebook_review_url')
     .eq('org_id', orgId)
     .maybeSingle();
 
@@ -166,6 +167,10 @@ export async function resolveEntityVariables(
     vars.company_name = company.company_name || '';
     vars.company_phone = company.phone || '';
     vars.google_review_url = company.google_review_url || '';
+    vars.facebook_review_url = company.facebook_review_url || '';
+    // Première plateforme configurée (Google d'abord) : utilisable dans les SMS
+    // de rappel quel que soit le réseau choisi par l'entreprise.
+    vars.review_page_url = reviewDestinations(company)[0]?.url || '';
   }
 
   /**
@@ -660,27 +665,29 @@ export async function executeUpdateStatus(
 }
 
 // ── Action: Request Review ──────────────────────────────────
+//
+// Workflow « Avis clients » : envoyé DÈS que la job est terminée (règle
+// google_review, délai 0). Le client reçoit le lien du sondage d'étoiles par
+// courriel ET par SMS (selon ce qu'on a de lui). La suite (4-5 étoiles →
+// Google/Facebook, 1-3 → commentaires internes) se joue sur /survey/:token.
 
 export async function executeRequestReview(
   _config: Record<string, any>,
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  // 1. Validate google_review_url exists
-  if (!vars.google_review_url) {
-    return { success: false, error: 'No Google Review URL configured for this company. Set it in Company Settings.' };
-  }
-
-  // 1b. Honor the Company Settings "review requests" toggle (it used to be
-  // saved but never checked — the setting was write-only).
+  // 1. Réglages « Avis clients » : au moins une plateforme + interrupteur actif
   const { data: cs } = await ctx.supabase
     .from('company_settings')
-    .select('review_enabled')
+    .select('review_enabled, google_review_url, facebook_review_url')
     .eq('org_id', ctx.orgId)
     .limit(1)
     .maybeSingle();
   if (cs && cs.review_enabled === false) {
-    return { success: false, error: 'Review requests are disabled in Company Settings.' };
+    return { success: false, error: 'Review requests are disabled in Settings → Customer reviews.' };
+  }
+  if (reviewDestinations(cs).length === 0) {
+    return { success: false, error: 'No Google or Facebook review link configured. Set one in Settings → Customer reviews.' };
   }
 
   // 2. Determine client_id and job_id from entity
@@ -705,9 +712,9 @@ export async function executeRequestReview(
     jobId = inv?.job_id || null;
   }
 
-  // 3. Validate client has email
-  if (!vars.client_email) {
-    return { success: false, error: 'Client has no email address.' };
+  // 3. Il faut au moins un canal
+  if (!vars.client_email && !vars.client_phone) {
+    return { success: false, error: 'Client has no email address or phone number.' };
   }
 
   // 4. Resolve client name: first_name > full name > "Bonjour"
@@ -754,23 +761,23 @@ export async function executeRequestReview(
   vars.survey_url = surveyUrl;
   vars.review_link = surveyUrl;
 
-  // 8. Try to load custom email template for review_request
-  let subject = `${vars.company_name || 'Our team'} — How was your experience?`;
+  // 8. Courriel : gabarit personnalisé « review_request » sinon texte par défaut
+  const companyLabel = vars.company_name || 'notre équipe';
+  let subject = `${companyLabel} — Comment s'est passé notre service ?`;
   let body = `
     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-      <h2>Hi ${clientGreeting},</h2>
-      <p>We recently completed <strong>${vars.job_name || 'your project'}</strong> and would love to hear your feedback!</p>
-      <p>Please take a moment to rate your experience:</p>
+      <h2>Bonjour ${clientGreeting},</h2>
+      <p>Nous venons de terminer <strong>${vars.job_name || 'votre projet'}</strong> et votre opinion compte pour nous.</p>
+      <p>Notez votre expérience en 10 secondes :</p>
       <p style="text-align:center;margin:30px 0;">
-        <a href="${surveyUrl}" style="background:#2563eb;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">
-          Rate Your Experience
+        <a href="${surveyUrl}" style="background:#171717;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">
+          Noter mon expérience
         </a>
       </p>
-      <p>Thank you for choosing ${vars.company_name || 'us'}!</p>
+      <p>Merci d'avoir choisi ${companyLabel} !</p>
     </div>
   `;
 
-  // Check for custom review email template
   const { data: emailTemplate } = await ctx.supabase
     .from('email_templates')
     .select('subject, body')
@@ -781,48 +788,45 @@ export async function executeRequestReview(
     .maybeSingle();
 
   if (emailTemplate) {
-    // Résolution via `resolveTemplate`, comme partout ailleurs.
-    //
-    // Ce bloc utilisait un second résolveur maison qui ne comprenait que la
-    // syntaxe {var} — alors que TOUS les presets du produit utilisent [var].
-    // Un utilisateur composant son modèle en copiant cette syntaxe voyait donc
-    // « [client_name] » littéralement dans le courriel reçu par son client :
-    // le seul endroit du système où un placeholder brut pouvait atteindre le
-    // destinataire.
-    //
-    // Les variables complètes de l'entité sont désormais disponibles
-    // (invoice_number, quote_number, appointment_date…), pas seulement les
-    // quatre clés locales ; celles-ci restent prioritaires car elles portent la
-    // formule de politesse et le lien du sondage.
+    // Résolution via `resolveTemplate`, comme partout ailleurs : tous les
+    // presets du produit utilisent [var], et un second résolveur maison ne
+    // comprenait que {var}. Les variables complètes de l'entité sont
+    // disponibles ; les quatre clés locales restent prioritaires (formule de
+    // politesse + lien du sondage).
     const templateVars: Record<string, string> = {
       ...vars,
       client_name: clientGreeting,
       company_name: vars.company_name || '',
-      job_name: vars.job_name || 'your project',
+      job_name: vars.job_name || 'votre projet',
       review_link: surveyUrl,
     };
     subject = resolveTemplate(emailTemplate.subject, templateVars);
     body = resolveTemplate(emailTemplate.body, templateVars);
   }
 
-  // 9. Send email
-  const emailResult = await executeSendEmail(
-    { subject, body },
-    vars,
-    ctx,
-  );
+  // 9. Envoi : courriel si on a l'adresse, SMS si on a le numéro.
+  const emailResult = vars.client_email
+    ? await executeSendEmail({ subject, body }, vars, ctx)
+    : { success: false, error: 'Client has no email address.' };
 
-  // 10. Log review request for tracking
-  // C'est aussi ce que lit l'anti-doublon de l'étape 5 : si la ligne n'est pas
-  // écrite, la même demande peut repartir chaque jour.
+  const smsBody = `Bonjour ${clientGreeting}, merci d'avoir choisi ${companyLabel} ! `
+    + `Comment s'est passé notre service ? Notez-nous en 10 secondes : ${surveyUrl}`;
+  const smsResult = vars.client_phone
+    ? await executeSendSms({ body: smsBody }, vars, ctx)
+    : { success: false, error: 'Client has no phone number.' };
+
+  const sent = emailResult.success || smsResult.success;
+
+  // 10. Log review request for tracking — c'est aussi ce que lit l'anti-doublon
+  // de l'étape 5 : si la ligne n'est pas écrite, la même demande peut repartir.
   const { error: trackError } = await ctx.supabase.from('review_requests').insert({
     org_id: ctx.orgId,
     client_id: clientId,
     job_id: jobId,
     survey_id: survey?.id || null,
     subject_sent: subject,
-    status: emailResult.success ? 'sent' : 'failed',
-    sent_at: emailResult.success ? new Date().toISOString() : null,
+    status: sent ? 'sent' : 'failed',
+    sent_at: sent ? new Date().toISOString() : null,
   });
   if (trackError) {
     console.error(`[actions/request_review] review_requests insert failed (org ${ctx.orgId}, client ${clientId || 'n/a'}):`, trackError.message);
@@ -840,25 +844,25 @@ export async function executeRequestReview(
       client_name: clientGreeting,
       survey_token: token,
       email_sent: emailResult.success,
+      sms_sent: smsResult.success,
     },
   });
   if (activityError) {
     console.error(`[actions/request_review] activity_log insert failed (org ${ctx.orgId}, ${ctx.entityType} ${ctx.entityId}):`, activityError.message);
   }
 
-  // L'action ne vaut que par le courriel : si l'envoi a échoué, la journaliser
-  // comme réussie afficherait « exécutée » pour une demande jamais partie.
-  if (!emailResult.success) {
+  // L'action ne vaut que par l'envoi : aucun canal parti = échec.
+  if (!sent) {
     return {
       success: false,
-      error: emailResult.error || 'Review request email could not be sent',
-      data: { token, surveyUrl, emailSent: false },
+      error: [emailResult.error, smsResult.error].filter(Boolean).join(' / ') || 'Review request could not be sent',
+      data: { token, surveyUrl, emailSent: false, smsSent: false },
     };
   }
 
   return {
     success: true,
-    data: { token, surveyUrl, emailSent: true },
+    data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
   };
 }
 

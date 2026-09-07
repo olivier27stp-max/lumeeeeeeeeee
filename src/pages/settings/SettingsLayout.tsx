@@ -13,6 +13,7 @@ import {
   Archive,
   FileText,
   MessageSquare,
+  Star,
   Calendar as CalendarIcon,
   LifeBuoy,
   Store,
@@ -72,6 +73,7 @@ export function useSettingsNav(): NavGroup[] {
       heading: 'Communication',
       items: [
         { path: '/settings/messaging', label: isFr ? 'Messagerie SMS' : 'SMS Messaging', icon: MessageSquare },
+        { path: '/settings/reviews', label: isFr ? 'Avis clients' : 'Customer reviews', icon: Star },
         { path: '/settings/request-form', label: (t.settings as any).requestForm || t.requestForm.requestForm, icon: FileText },
         { path: '/automations', label: t.settings.automations, icon: Zap, external: true },
       ],

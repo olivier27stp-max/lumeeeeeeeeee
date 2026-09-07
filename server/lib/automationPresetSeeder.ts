@@ -43,6 +43,22 @@ export async function ensureAutomationPresets(
     .select('id');
   if (repErr) throw repErr;
 
+  // 1b. Workflow « Avis clients » (2026-09-07) : le sondage part DÈS la fin
+  // de la job. Seules les règles encore sur la valeur du vieux seed (7200 s)
+  // sont ramenées à 0 — un délai personnalisé par l'entreprise est conservé.
+  const { data: reviewRows, error: revErr } = await admin
+    .from('automation_rules')
+    .update({
+      delay_seconds: 0,
+      name: "Sondage d'avis — dès la fin de la job",
+      description: "Envoie le sondage d'étoiles (courriel + SMS) dès que la job est marquée terminée",
+    })
+    .eq('org_id', orgId)
+    .eq('preset_key', 'google_review')
+    .eq('delay_seconds', 7200)
+    .select('id');
+  if (revErr) throw revErr;
+
   // 2. Insérer les presets manquants
   const { data: existing, error: exErr } = await admin
     .from('automation_rules')
@@ -83,5 +99,5 @@ export async function ensureAutomationPresets(
     if (actErr) throw actErr;
   }
 
-  return { inserted: missing.length, repaired: repairedRows?.length || 0 };
+  return { inserted: missing.length, repaired: (repairedRows?.length || 0) + (reviewRows?.length || 0) };
 }

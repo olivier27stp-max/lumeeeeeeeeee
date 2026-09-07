@@ -73,14 +73,17 @@ const REVIEW_REQUEST_SCENARIO: WorkflowScenario = {
   trigger: 'job.completed',
   steps: [
     'Job completed → event emitted',
-    'Delay 2h',
-    'Send review request email with survey link',
+    'Immediate (delay 0)',
+    'Send survey link by email and SMS',
     'Log review_request record for tracking',
+    '4-5 stars → Google/Facebook review page + invite message',
+    '1-3 stars → internal feedback form + follow-up task',
   ],
   stopConditions: [
     'Review already sent to this client in last 7 days',
-    'Client has no email',
-    'No Google Review URL configured',
+    'Client has no email or phone',
+    'No Google or Facebook review link configured',
+    'Review requests disabled in Settings → Customer reviews',
   ],
   expectedOutcome: 'One review request per job completion, anti-duplicate per client',
 };
@@ -226,12 +229,21 @@ describe('Scenario — Review Request Workflow', () => {
     expect(s.stopConditions).toContain('Review already sent to this client in last 7 days');
   });
 
-  it('requires email', () => {
-    expect(s.stopConditions).toContain('Client has no email');
+  it('sends immediately after job completion', () => {
+    expect(s.steps).toContain('Immediate (delay 0)');
   });
 
-  it('requires Google Review URL', () => {
-    expect(s.stopConditions).toContain('No Google Review URL configured');
+  it('requires at least one contact channel', () => {
+    expect(s.stopConditions).toContain('Client has no email or phone');
+  });
+
+  it('requires a Google or Facebook review link', () => {
+    expect(s.stopConditions).toContain('No Google or Facebook review link configured');
+  });
+
+  it('branches on the rating', () => {
+    expect(s.steps).toContain('4-5 stars → Google/Facebook review page + invite message');
+    expect(s.steps).toContain('1-3 stars → internal feedback form + follow-up task');
   });
 });
 

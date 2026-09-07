@@ -392,7 +392,7 @@ const RULE_LABELS_FR: Record<string, string> = {
   estimate_followup: 'Relance après estimation',
   quote_followup_21d: 'Relance de devis — 21 jours (dernière)',
   invoice_sent_reminder_1d: 'Rappel de facture — 1 jour',
-  google_review: "Demande d'avis Google",
+  google_review: "Sondage d'avis — dès la fin de la job",
   cross_sell_30d: 'Offre complémentaire — 30 jours après la job',
 };
 
