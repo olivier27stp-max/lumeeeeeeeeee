@@ -24,7 +24,7 @@ import { useTranslation } from '../i18n';
 import PresetSelectModal from '../components/quotes/PresetSelectModal';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import type { QuotePreset } from '../types';
-import { CirclePlus, ArrowUpDown, Ruler } from 'lucide-react';
+import { CirclePlus, ArrowUpDown, Ruler, Eye } from 'lucide-react';
 
 const PAGE_SIZE = 20;
 type StatusTab = 'all' | QuoteStatus;
@@ -335,7 +335,7 @@ export default function Quotes() {
 
       {/* ── TABLE ── */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 48px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 110px 48px' }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
@@ -344,6 +344,7 @@ export default function Quotes() {
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Créé le' : 'Created'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
+          <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Ouverture' : 'Opened'}</span></div>
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
@@ -356,13 +357,14 @@ export default function Quotes() {
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
+              <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-8 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!isLoading && sorted.length === 0 && (
-            <div className="col-span-8 py-20 text-center text-[14px] text-text-tertiary">{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
+            <div className="col-span-9 py-20 text-center text-[14px] text-text-tertiary">{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
           )}
 
           {/* ROWS */}
@@ -392,6 +394,20 @@ export default function Quotes() {
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{formatDate(q.created_at)}</span></div>
                 <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><Badge status={q.status} /></div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span></div>
+                {/* Ouverture : œil dès que le client a ouvert le devis (is_viewed, 1re vue), tiret sinon. */}
+                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                  {q.is_viewed ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 text-entity-quote"
+                      title={q.viewed_at ? (fr ? `Ouvert le ${formatDate(q.viewed_at)}` : `Opened ${formatDate(q.viewed_at)}`) : (fr ? 'Ouvert par le client' : 'Opened by the client')}
+                    >
+                      <Eye size={16} strokeWidth={2} />
+                      {(q.view_count || 0) > 1 && <span className="text-[12px] tabular-nums">{q.view_count}</span>}
+                    </span>
+                  ) : (
+                    <span className="text-[14px] text-text-tertiary" title={fr ? 'Pas encore ouvert' : 'Not opened yet'}>—</span>
+                  )}
+                </div>
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
