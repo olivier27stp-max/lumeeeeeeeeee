@@ -6,7 +6,7 @@ import {
 import { frCA, enCA } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
 import {
-  AlertTriangle, Briefcase, CalendarDays, ChevronDown, ChevronLeft,
+  AlertTriangle, Briefcase, CalendarDays, CheckSquare, ChevronDown, ChevronLeft,
   ChevronRight, CircleAlert, Clock, GripVertical, List,
   MapPin, Plus, SlidersHorizontal, UserCheck, UserPlus,
   Users, X as XIcon, PanelRightOpen, PanelRightClose,
@@ -33,6 +33,9 @@ import {
 import { findFreeSlots, type FreeSlot } from '../lib/availabilityApi';
 import { checkVisitAgainstRoster } from '../lib/teamScheduleApi';
 import TeamDayRoster from '../components/TeamDayRoster';
+import TaskModal from '../components/tasks/TaskModal';
+import { createTask, updateTask, listScheduledTasksRange } from '../lib/tasksApi';
+import { tasksToBlocks, type ScheduledTaskBlock } from '../lib/scheduledTask';
 import { optimizeRoute, applyOptimizedSchedule } from '../lib/routeOptimizationApi';
 import { listTeams, TeamRecord } from '../lib/teamsApi';
 import { supabase } from '../lib/supabase';
@@ -277,6 +280,13 @@ function ScheduleContent() {
   const navigate = useNavigate();
 
   const [unassignedMode, setUnassignedMode] = useState(false);
+  // Bouton « + Créer » : menu Job (heure précise) ou Tâche (heure optionnelle).
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  // Jour/heure pré-remplis quand on crée une tâche depuis un créneau du calendrier.
+  const [taskDefaults, setTaskDefaults] = useState<{ due_date?: string; scheduled_at?: string; duration_minutes?: number }>({});
+  // Tâche en cours d'édition (clic sur un bloc tâche du calendrier).
+  const [editingTask, setEditingTask] = useState<ScheduledTaskBlock['raw'] | null>(null);
   const [assignModalJob, setAssignModalJob] = useState<UnscheduledJobRecord | ScheduleEventRecord | null>(null);
   const [activeFilter, setActiveFilter] = useState<QF>('all');
   const [teamPickerDrop, setTeamPickerDrop] = useState<{ jobId: string; startAt: string; endAt: string; revert: () => void; removeEvent: () => void } | null>(null);
@@ -336,12 +346,20 @@ function ScheduleContent() {
     staleTime: 30_000,
     queryFn: () => unassignedMode ? listUnassignedUnscheduledJobs() : listUnscheduledJobs(effTeams),
   });
+  // Tâches planifiées (avec heure) de la plage affichée → blocs calendrier.
+  const tasksQ = useQuery({
+    queryKey: ['calendarTasks', orgId || '-', view, dateKey],
+    enabled: !!orgId,
+    staleTime: 30_000,
+    queryFn: () => listScheduledTasksRange({ startAt: range.start.toISOString(), endAt: range.end.toISOString() }),
+  });
 
   const events = evQ.data || [];
   const unscheduledJobs = unschedQ.data || [];
+  const taskBlocks = useMemo(() => tasksToBlocks(tasksQ.data || []), [tasksQ.data]);
 
   /* ── Mutations ── */
-  const refresh = useCallback(() => { invalidateScheduleCache(); qc.invalidateQueries({ queryKey: ['calendarEvents'] }); qc.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }); }, [qc]);
+  const refresh = useCallback(() => { invalidateScheduleCache(); qc.invalidateQueries({ queryKey: ['calendarEvents'] }); qc.invalidateQueries({ queryKey: ['calendarUnscheduledJobs'] }); qc.invalidateQueries({ queryKey: ['calendarTasks'] }); }, [qc]);
 
   const rescheduleMut = useMutation({ mutationFn: rescheduleEvent, onSuccess: refresh });
   const scheduleMut = useMutation({
@@ -458,6 +476,21 @@ function ScheduleContent() {
   /* ── Handlers ── */
   const openCreate = (start: Date, end?: Date) => {
     openJobModal({ initialValues: { scheduled_at: start.toISOString(), end_at: (end || addHours(start, 2)).toISOString(), team_id: selectedTeamIds.length === 1 ? selectedTeamIds[0] : null, status: 'scheduled' }, sourceContext: { type: 'jobs' }, onCreated: refresh });
+  };
+  // Créer une tâche depuis le calendrier. `start` fourni (clic sur un créneau)
+  // → tâche pré-planifiée à cette heure ; sinon échéance sur le jour affiché,
+  // sans heure (l'utilisateur peut cocher « à une heure précise » dans le modal).
+  const openTaskCreate = (start?: Date, end?: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const day = start || selectedDate;
+    const dueDate = `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+    if (start) {
+      const mins = end ? Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000)) : 60;
+      setTaskDefaults({ due_date: dueDate, scheduled_at: start.toISOString(), duration_minutes: mins });
+    } else {
+      setTaskDefaults({ due_date: dueDate });
+    }
+    setTaskModalOpen(true);
   };
   // Clicking an empty slot adds a visit to an EXISTING job (a job can have many
   // visits). The modal still offers "create a new job instead".
@@ -719,7 +752,38 @@ function ScheduleContent() {
             <MapPin size={13} />{language === 'fr' ? 'Optimiser la tournée' : 'Optimize route'}
           </button>
         )}
-        <button onClick={() => openCreate(selectedDate)} className="flex items-center gap-1.5 rounded-lg bg-text-primary px-3.5 py-[6px] text-[13px] font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"><Plus size={14} strokeWidth={2.5} />{t.schedule.scheduleJob}</button>
+        <div className="relative">
+          <button
+            onClick={() => setCreateMenuOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded-lg bg-text-primary px-3.5 py-[6px] text-[13px] font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            {language === 'fr' ? 'Créer' : 'Create'}
+          </button>
+          {createMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setCreateMenuOpen(false)} />
+              <div className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-border bg-surface py-1 shadow-xl">
+                <button
+                  onClick={() => { setCreateMenuOpen(false); openCreate(selectedDate); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-[13px] text-text-primary transition-colors hover:bg-surface-secondary"
+                >
+                  <Briefcase size={14} className="text-text-tertiary" />
+                  <span>{language === 'fr' ? 'Une job' : 'A job'}</span>
+                  <span className="ml-auto text-[10px] text-text-tertiary">{language === 'fr' ? 'heure précise' : 'set time'}</span>
+                </button>
+                <button
+                  onClick={() => { setCreateMenuOpen(false); openTaskCreate(selectedDate); }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-[13px] text-text-primary transition-colors hover:bg-surface-secondary"
+                >
+                  <CheckSquare size={14} className="text-text-tertiary" />
+                  <span>{language === 'fr' ? 'Une tâche' : 'A task'}</span>
+                  <span className="ml-auto text-[10px] text-text-tertiary">{language === 'fr' ? 'heure optionnelle' : 'time optional'}</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </header>
 
       {/* BODY */}
@@ -765,6 +829,8 @@ function ScheduleContent() {
               onReschedule={handleDailyReschedule}
               onResize={handleDailyResize}
               externalDnd={dnd}
+              scheduledTasks={taskBlocks}
+              onTaskClick={(taskId) => { const b = taskBlocks.find((x) => x.id === taskId); if (b) { setEditingTask(b.raw); setTaskModalOpen(true); } }}
             />
           ) : view === 'agenda' ? (
             <div className="h-full overflow-y-auto"><AgendaView events={filtered} overlaps={overlaps} tcMap={tcMap} teams={teams} selectedTeamIds={selectedTeamIds} onEventClick={openExisting} onSlotClick={(s, e) => openAddVisit(s, e)} /></div>
@@ -853,6 +919,26 @@ function ScheduleContent() {
         defaultEnd={addVisitSlot?.end}
         onAdded={refresh}
         onCreateNewJob={() => { if (addVisitSlot) openCreate(addVisitSlot.start, addVisitSlot.end); }}
+      />
+
+      {/* TÂCHE — créer (bouton « + Créer › Une tâche » / créneau) ou éditer (clic sur un bloc) */}
+      <TaskModal
+        open={taskModalOpen}
+        onClose={() => { setTaskModalOpen(false); setEditingTask(null); }}
+        task={editingTask}
+        defaults={editingTask ? undefined : taskDefaults}
+        onSubmit={async (input) => {
+          if (editingTask) {
+            await updateTask(editingTask.id, input as any);
+            toast.success(language === 'fr' ? 'Tâche mise à jour' : 'Task updated');
+          } else {
+            await createTask(input as any);
+            toast.success(language === 'fr' ? 'Tâche créée' : 'Task created');
+          }
+          setTaskModalOpen(false);
+          setEditingTask(null);
+          refresh();
+        }}
       />
     </div>
   );
