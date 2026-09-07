@@ -32,6 +32,10 @@ export interface TaskRow {
   linked_person_type: TaskLinkedPersonType | null;
   linked_person_id: string | null;
   assignee_user_id: string | null;
+  /** Heure précise optionnelle. NULL = échéance sans heure (due_date). */
+  scheduled_at: string | null;
+  /** Durée du bloc calendrier en minutes. NULL = marqueur ponctuel. */
+  duration_minutes: number | null;
   completed_at: string | null;
   created_by: string;
   created_at: string;
@@ -57,6 +61,8 @@ export interface TaskCreateInput {
   priority?: TaskPriority;
   type: string;
   due_date?: string | null;
+  scheduled_at?: string | null;
+  duration_minutes?: number | null;
   linked_entity_type?: TaskLinkedEntityType | null;
   linked_entity_id?: string | null;
   linked_person_type?: TaskLinkedPersonType | null;
@@ -71,6 +77,8 @@ export interface TaskUpdateInput {
   priority?: TaskPriority;
   type?: string;
   due_date?: string | null;
+  scheduled_at?: string | null;
+  duration_minutes?: number | null;
   linked_entity_type?: TaskLinkedEntityType | null;
   linked_entity_id?: string | null;
   linked_person_type?: TaskLinkedPersonType | null;

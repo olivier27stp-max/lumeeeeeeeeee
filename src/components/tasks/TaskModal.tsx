@@ -42,9 +42,23 @@ interface TaskModalProps {
   onClose: () => void;
   task?: TaskRow | null;
   onSubmit: (input: TaskCreateInput | TaskUpdateInput) => Promise<void>;
+  /** Valeurs pré-remplies à l'ouverture (ex. depuis le calendrier : jour+heure cliqués). */
+  defaults?: { due_date?: string; scheduled_at?: string; duration_minutes?: number };
 }
 
-export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalProps) {
+// Découpe un ISO en date (yyyy-mm-dd) et heure locale (HH:mm) pour les inputs.
+function splitLocal(iso: string | null | undefined): { date: string; time: string } {
+  if (!iso) return { date: '', time: '' };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: '', time: '' };
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
+export default function TaskModal({ open, onClose, task, onSubmit, defaults }: TaskModalProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const isEdit = !!task;
@@ -57,6 +71,11 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
   const [dueDate, setDueDate] = useState('');
   const [linkedEntityType, setLinkedEntityType] = useState<TaskLinkedEntityType | ''>('');
   const [linkedPersonType, setLinkedPersonType] = useState<TaskLinkedPersonType | ''>('');
+  // Planification optionnelle à une heure précise (bloc calendrier).
+  const [timed, setTimed] = useState(false);
+  const [schedDate, setSchedDate] = useState('');
+  const [schedTime, setSchedTime] = useState('');
+  const [durationMin, setDurationMin] = useState('60');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -68,21 +87,38 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
       setStatus(task?.status || 'open');
       setPriority(task?.priority || 'medium');
       setType(task?.type || 'Admin');
-      setDueDate(task?.due_date || '');
+      setDueDate(task?.due_date || defaults?.due_date || '');
       setLinkedEntityType(task?.linked_entity_type || '');
       setLinkedPersonType(task?.linked_person_type || '');
+      // Heure : celle de la tâche éditée, sinon celle passée par le calendrier.
+      const sched = task?.scheduled_at || defaults?.scheduled_at || '';
+      const { date: sd, time: st } = splitLocal(sched);
+      setTimed(!!sched);
+      setSchedDate(sd);
+      setSchedTime(st);
+      setDurationMin(String(task?.duration_minutes ?? defaults?.duration_minutes ?? 60));
       setSaving(false);
       setError('');
     }
-  }, [open, task]);
+  }, [open, task, defaults]);
 
   const handleSubmit = async () => {
     if (!title.trim()) {
       setError(fr ? 'Le titre est requis' : 'Title is required');
       return;
     }
+    // Une heure précise demandée mais incomplète → on bloque avec un message clair.
+    if (timed && (!schedDate || !schedTime)) {
+      setError(fr ? 'Choisis une date ET une heure, ou décoche « à une heure précise ».' : 'Pick a date AND a time, or uncheck “at a specific time”.');
+      return;
+    }
     setError('');
     setSaving(true);
+    // Construit l'ISO local seulement si l'heure est activée.
+    const scheduledAt = timed && schedDate && schedTime
+      ? new Date(`${schedDate}T${schedTime}`).toISOString()
+      : null;
+    const dur = timed ? Math.max(1, Math.min(1440, parseInt(durationMin, 10) || 60)) : null;
     try {
       await onSubmit({
         title: title.trim(),
@@ -91,6 +127,8 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
         priority,
         type,
         due_date: dueDate || null,
+        scheduled_at: scheduledAt,
+        duration_minutes: dur,
         linked_entity_type: linkedEntityType || null,
         linked_person_type: linkedPersonType || null,
       });
@@ -209,6 +247,40 @@ export default function TaskModal({ open, onClose, task, onSubmit }: TaskModalPr
               className="input-field w-full"
             />
           </div>
+        </div>
+
+        {/* Planification à une heure précise (bloc calendrier) — optionnel */}
+        <div className="rounded-lg border border-outline bg-surface-secondary/40 p-3">
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={timed}
+              onChange={e => setTimed(e.target.checked)}
+              className="h-4 w-4 rounded border-outline text-primary focus:ring-1 focus:ring-primary/40 cursor-pointer"
+            />
+            <span className="text-[13px] font-medium text-text-primary">
+              {fr ? 'Planifier à une heure précise' : 'Schedule at a specific time'}
+            </span>
+            <span className="text-[11px] text-text-tertiary">
+              {fr ? '(apparaît dans le calendrier)' : '(shows in the calendar)'}
+            </span>
+          </label>
+          {timed && (
+            <div className="grid grid-cols-3 gap-3 mt-3">
+              <div>
+                <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Date' : 'Date'}</label>
+                <input type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)} className="input-field w-full" />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Heure' : 'Time'}</label>
+                <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)} className="input-field w-full" />
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Durée (min)' : 'Duration (min)'}</label>
+                <input type="number" min={1} max={1440} step={15} value={durationMin} onChange={e => setDurationMin(e.target.value)} className="input-field w-full" />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Row: Linked Entity + Linked Person */}

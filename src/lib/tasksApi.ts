@@ -70,6 +70,35 @@ function parseSortKey(key: TaskSortKey): [string, 'asc' | 'desc'] {
 }
 
 // ── Create task ──
+// ── Tâches planifiées d'une plage (calendrier) ──
+// Ne renvoie que les tâches avec une heure (scheduled_at) dans la fenêtre
+// affichée. `endAt` est exclusif (cohérent avec le range du calendrier).
+export async function listScheduledTasksRange(params: {
+  startAt: string;
+  endAt: string;
+}): Promise<TaskRow[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('tasks_active')
+    .select('*')
+    .eq('org_id', orgId)
+    .not('scheduled_at', 'is', null)
+    .gte('scheduled_at', params.startAt)
+    .lt('scheduled_at', params.endAt)
+    .order('scheduled_at', { ascending: true });
+  if (error) throw error;
+  return (data || []) as TaskRow[];
+}
+
+// Déplacer/redimensionner une tâche depuis le calendrier (drag & resize).
+export async function rescheduleTask(id: string, scheduledAt: string, durationMinutes: number | null): Promise<void> {
+  const { error } = await supabase
+    .from('tasks')
+    .update({ scheduled_at: scheduledAt, duration_minutes: durationMinutes, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
 export async function createTask(input: TaskCreateInput): Promise<TaskRow> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');
@@ -85,6 +114,8 @@ export async function createTask(input: TaskCreateInput): Promise<TaskRow> {
     priority: input.priority || 'medium',
     type: input.type || 'Admin',
     due_date: input.due_date || null,
+    scheduled_at: input.scheduled_at || null,
+    duration_minutes: input.duration_minutes ?? null,
     linked_entity_type: input.linked_entity_type || null,
     linked_entity_id: input.linked_entity_id || null,
     linked_person_type: input.linked_person_type || null,

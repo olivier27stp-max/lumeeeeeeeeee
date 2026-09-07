@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { frCA, enCA } from 'date-fns/locale';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, CheckSquare } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import { isAnytimeVisit, anytimeLabel, isClosedVisit, type ScheduleEventRecord } from '../../lib/scheduleApi';
+import { type ScheduledTaskBlock, taskPriorityColor } from '../../lib/scheduledTask';
 import type { TeamRecord } from '../../lib/teamsApi';
 import { getRosterForDate, fetchMemberNames, firstNameOf } from '../../lib/teamScheduleApi';
 import type { useCalendarDnd } from '../../hooks/useCalendarDnd';
 import { useJobTagColors } from '../../hooks/useJobTagColors';
-import { FALLBACK_TEAM_COLOR, isHexColor } from '../../lib/colorUtils';
+import { FALLBACK_TEAM_COLOR, isHexColor, toRgba } from '../../lib/colorUtils';
 import {
   DispatchDailyPrefs, loadDispatchDailyPrefs, saveDispatchDailyPrefs, vehicleNumberForTeam,
 } from '../../lib/dispatchDailyPrefs';
@@ -61,6 +62,10 @@ interface DailyDispatchViewProps {
   onResize: (eventId: string, startAt: string, endAt: string) => Promise<void>;
   /** Instance DnD partagée — utilisée seulement pour les drops du tiroir « Jobs non planifiés ». */
   externalDnd: CalendarDnd;
+  /** Tâches planifiées de la journée — affichées dans une ligne « Tâches » dédiée, sous les équipes. */
+  scheduledTasks?: ScheduledTaskBlock[];
+  /** Clic sur un bloc tâche → ouvrir/éditer la tâche. */
+  onTaskClick?: (taskId: string) => void;
 }
 
 type DailyDrag =
@@ -77,6 +82,7 @@ type DailyDrag =
 export default function DailyDispatchView({
   date, events, teams, visibleTeamIds, orgId, unassignedMode, isError,
   onEventClick, onSlotClick, onReschedule, onResize, externalDnd,
+  scheduledTasks, onTaskClick,
 }: DailyDispatchViewProps) {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
@@ -183,8 +189,23 @@ export default function DailyDispatchView({
   }, [effEvents, rowTeams, unassignedMode, dragLive, extActive]);
 
   /* ── Plage horaire (défaut 07–19 h, étendue aux visites du jour) ── */
-  const range = useMemo(() => computeDayRange(effEvents), [effEvents]);
+  /* ── Blocs tâches du jour → forme compatible géométrie (start_at/end_at) ── */
+  const taskBlocks = useMemo(() => scheduledTasks ?? [], [scheduledTasks]);
+  const taskEventShapes = useMemo(
+    () => taskBlocks.map((tb) => ({
+      id: tb.id, job_id: tb.id, team_id: null,
+      start_at: tb.startAt, end_at: tb.endAt, timezone: '',
+      status: tb.status, notes: null, deleted_at: null, job: null,
+    } as ScheduleEventRecord)),
+    [taskBlocks],
+  );
+  const taskById = useMemo(() => new Map(taskBlocks.map((tb) => [tb.id, tb])), [taskBlocks]);
+  const taskLanes = useMemo(() => assignLanes(taskEventShapes), [taskEventShapes]);
+  const showTaskRow = taskBlocks.length > 0;
+
+  const range = useMemo(() => computeDayRange([...effEvents, ...taskEventShapes]), [effEvents, taskEventShapes]);
   const timelineWidth = (range.endMin - range.startMin) * PX_PER_MINUTE;
+  const taskRowHeight = useMemo(() => rowHeightForLanes(taskLanes.laneCount), [taskLanes]);
 
   /* ── Géométrie accessible depuis les listeners window ── */
   const rowsAreaRef = useRef<HTMLDivElement>(null);
@@ -620,6 +641,95 @@ export default function DailyDispatchView({
                 </div>
               );
             })}
+
+            {/* ── Ligne dédiée « Tâches » — sous les lignes d'équipe, sans drag/resize ── */}
+            {showTaskRow && (
+              <div className="flex border-b border-border/70" style={{ height: taskRowHeight }}>
+                {/* Colonne fixe de gauche */}
+                <div
+                  className="sticky left-0 z-20 flex shrink-0 flex-col justify-center gap-0.5 border-r border-border bg-surface px-3"
+                  style={{ width: RESOURCE_COL_PX }}
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <CheckSquare size={13} className="shrink-0 text-text-tertiary" />
+                    <span className="truncate text-[13px] font-semibold text-text-primary">
+                      {isFr ? 'Tâches' : 'Tasks'}
+                    </span>
+                  </span>
+                </div>
+
+                {/* Timeline de la ligne tâches */}
+                <div className="relative shrink-0" style={{ width: timelineWidth }}>
+                  {range.hours.map((h) => (
+                    <React.Fragment key={h}>
+                      <span
+                        className="pointer-events-none absolute inset-y-0 border-l border-border/40 first:border-l-0"
+                        style={{ left: minutesToX(h * 60, range.startMin) }}
+                      />
+                      <span
+                        className="pointer-events-none absolute inset-y-0 border-l border-border/20"
+                        style={{ left: minutesToX(h * 60 + 30, range.startMin) }}
+                      />
+                    </React.Fragment>
+                  ))}
+                  {nowX != null && (
+                    <span className="pointer-events-none absolute inset-y-0 w-px bg-primary/25" style={{ left: nowX }} />
+                  )}
+
+                  {/* Cartes tâches */}
+                  {taskLanes.positioned.map((p) => {
+                    const tb = taskById.get(p.ev.id);
+                    if (!tb) return null;
+                    const color = taskPriorityColor(tb.priority);
+                    const width = Math.max((p.endMin - p.startMin) * PX_PER_MINUTE - CARD_GAP_X_PX * 2, 26);
+                    const done = tb.status === 'done';
+                    const label = timeLabelFor(p.startMin, p.endMin);
+                    return (
+                      <div
+                        key={tb.id}
+                        role="button"
+                        tabIndex={0}
+                        title={[tb.title, label].filter(Boolean).join(' · ')}
+                        onClick={(e) => { e.stopPropagation(); onTaskClick?.(tb.id); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') onTaskClick?.(tb.id); }}
+                        className={cn(
+                          'group/task-card absolute cursor-pointer select-none overflow-hidden rounded-lg border border-border text-left',
+                          'shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-shadow hover:z-10 hover:shadow-md',
+                          done && 'opacity-60',
+                        )}
+                        style={{
+                          left: minutesToX(p.startMin, range.startMin) + CARD_GAP_X_PX,
+                          top: laneTop(p.lane),
+                          width,
+                          height: CARD_HEIGHT_PX,
+                          backgroundColor: toRgba(color, 0.1),
+                          borderLeft: `3px dashed ${color}`,
+                        }}
+                      >
+                        <div className="flex h-full min-w-0 flex-col justify-center py-1 pl-3 pr-2">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <CheckSquare size={12} className="shrink-0" style={{ color }} />
+                            <span
+                              className={cn(
+                                'truncate text-[12.5px] font-semibold leading-[1.35] text-text-primary',
+                                done && 'line-through',
+                              )}
+                            >
+                              {tb.title}
+                            </span>
+                          </div>
+                          {width >= 96 && (
+                            <span className="truncate text-[10px] font-medium tabular-nums leading-[1.4] text-text-tertiary">
+                              {label}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
