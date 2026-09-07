@@ -23,9 +23,18 @@ interface Props {
 }
 
 function defaultRange() {
+  // Bornes du mois courant construites SANS toISOString() : passer par UTC
+  // décalait le 1er/dernier jour d'une journée pour les fuseaux à l'ouest de
+  // Greenwich (comme le Québec), faisant tomber les commissions de début/fin
+  // de mois du mauvais côté. On formate les composantes locales directement.
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const fmt = (yy: number, mm: number, dd: number) =>
+    `${yy}-${String(mm + 1).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  const from = fmt(y, m, 1);
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  const to = fmt(y, m, lastDay);
   return { from, to };
 }
 
@@ -125,10 +134,19 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
   // Dashboard derivations — total + cumulative time series + leaderboard + split.
   const dash = useMemo(() => {
     const list = entries ?? [];
-    const total = list.reduce((s, e) => s + Number(e.amount || 0), 0);
     const paid = payroll?.paid ?? 0;
     const pending = payroll?.pending ?? 0;
     const reversed = payroll?.reversed ?? 0;
+    // « approved » = approuvé, en attente de versement. Sans lui, une commission
+    // approuvée comptait dans le total mais n'apparaissait dans AUCUN segment :
+    // « 1 total, 0 partout ». C'est le prochain versement à faire.
+    const approved = payroll?.approved ?? 0;
+    // Le total et les segments viennent de la MÊME source (payroll, période
+    // entière) : ils se réconcilient toujours. On NE recalcule PAS le total
+    // depuis `entries` — celles-ci suivent le filtre de statut et incluaient
+    // le reversed en positif, ce qui contredisait le donut. Le total est ce
+    // qui est réellement dû : en attente + approuvé + versé (reversed exclu).
+    const total = payroll?.total ?? (pending + approved + paid);
 
     // Cumulative amount over the selected range (bucketed by day of the period).
     const from = new Date(filters.from + 'T00:00:00');
@@ -161,7 +179,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       .slice(0, 5);
 
     const avgPerDeal = list.length ? total / list.length : 0;
-    return { total, paid, pending, reversed, series, xLabels, leaderboard, deals: list.length, avgPerDeal, repCount: byRep.size };
+    return { total, paid, pending, approved, reversed, series, xLabels, leaderboard, deals: list.length, avgPerDeal, repCount: byRep.size };
   }, [entries, payroll, profileMap, filters.from, filters.to]);
 
   // Rep list for the filter dropdown — loaded once from the org's members, so
@@ -240,9 +258,9 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
           {/* KPI cards */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <KpiCard label={isFr ? 'En attente' : 'Pending'} value={fmtMoney(dash.pending)} money note={isFr ? "en attente d'approbation" : 'awaiting approval'} />
+            <KpiCard label={isFr ? 'Approuvé' : 'Approved'} value={fmtMoney(dash.approved)} money note={isFr ? 'à verser' : 'to pay out'} />
             <KpiCard label={isFr ? 'Versé' : 'Paid'} value={fmtMoney(dash.paid)} money note={isFr ? 'réglé' : 'settled'} />
             <KpiCard label={isFr ? 'Reversé' : 'Reversed'} value={fmtMoney(dash.reversed)} note={isFr ? 'annulé' : 'clawed back'} />
-            <KpiCard label={isFr ? 'Meilleur rep' : 'Top rep'} value={dash.leaderboard[0]?.name ?? '—'} note={dash.leaderboard[0] ? fmtMoney(dash.leaderboard[0].amount) : ''} />
           </div>
 
           {/* Leaderboard + status donut */}
@@ -258,6 +276,7 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
                   centerLabel="Total"
                   segments={[
                     { label: isFr ? 'Versé' : 'Paid', value: dash.paid, color: 'var(--color-success)' },
+                    { label: isFr ? 'Approuvé' : 'Approved', value: dash.approved, color: 'var(--color-info)' },
                     { label: isFr ? 'En attente' : 'Pending', value: dash.pending, color: 'var(--color-warning)' },
                     { label: isFr ? 'Reversé' : 'Reversed', value: dash.reversed, color: 'var(--color-danger)' },
                   ]}
