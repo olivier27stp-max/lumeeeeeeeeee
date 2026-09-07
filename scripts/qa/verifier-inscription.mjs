@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   VÃ‰RIFICATION â€” inscription classique courriel + mot de passe (API, staging)
+/* ═══════════════════════════════════════════════════════════════
+   VÉRIFICATION — inscription classique courriel + mot de passe (API, staging)
 
-   /register : mot de passe faible refusÃ©, compte crÃ©Ã© non confirmÃ©, connexion
-   refusÃ©e avant confirmation, rÃ©-inscription = nouveau jeton, lien de
-   vÃ©rification (faux, bon, rejouÃ©), connexion aprÃ¨s confirmation, identitÃ©
-   = [email] seule, courriel dÃ©jÃ  confirmÃ© â†’ rÃ©ponse identique et mot de passe
-   inchangÃ©. /register-checkout : compte confirmÃ© d'office, connexion immÃ©diate,
-   courriel existant â†’ existing:true.
+   /register : mot de passe faible refusé, compte créé non confirmé, connexion
+   refusée avant confirmation, ré-inscription = nouveau jeton, lien de
+   vérification (faux, bon, rejoué), connexion après confirmation, identité
+   = [email] seule, courriel déjà confirmé → réponse identique et mot de passe
+   inchangé. /register-checkout : compte confirmé d'office, connexion immédiate,
+   courriel existant → existing:true.
 
-   PrÃ©requis : serveur API local (3002) branchÃ© sur STAGING. Sans SMTP local,
-   verification_email_sent vaut false : le jeton est lu dans les mÃ©tadonnÃ©es.
+   Prérequis : serveur API local (3002) branché sur STAGING. Sans SMTP local,
+   verification_email_sent vaut false : le jeton est lu dans les métadonnées.
    Usage : node --env-file=.env.local scripts/qa/verifier-inscription.mjs
-   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+   ═══════════════════════════════════════════════════════════════ */
 import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.VITE_SUPABASE_URL;
@@ -40,7 +40,7 @@ try {
   check('register mdp faible -> 400 avec message', weak.status === 400 && !!weak.error, JSON.stringify(weak));
   const reg = await post('/auth/register', { email, password: MDP, fullName: 'QA Signup' });
   check('register -> 200 ok', reg.status === 200 && reg.ok === true, JSON.stringify(reg));
-  console.log('   verification_email_sent =', reg.verification_email_sent, '(SMTP local non configure attendu â†’ false)');
+  console.log('   verification_email_sent =', reg.verification_email_sent, '(SMTP local non configure attendu → false)');
   id = await findId(email);
   check('compte cree (non confirme)', !!id);
   let u = (await admin.auth.admin.getUserById(id)).data.user;
@@ -61,7 +61,7 @@ try {
   check('identites = [email] (compte classique, sans Google)', (u.identities || []).map((i) => i.provider).join(',') === 'email');
   const again = await post('/auth/verify-email', { email, token: u2.user_metadata.verification_token });
   check('rejouer le lien -> 400', again.status === 400);
-  // 4. inscription avec un courriel deja confirme -> reponse identique (courriel Â« compte existant Â» cote serveur)
+  // 4. inscription avec un courriel deja confirme -> reponse identique (courriel « compte existant » cote serveur)
   const dup = await post('/auth/register', { email, password: 'Xx-Autre-Mdp-5678!', fullName: 'QA Doublon' });
   check('register courriel deja confirme -> 200 ok, mot de passe INCHANGE', dup.status === 200 && dup.ok === true && (await login(email, MDP)) === 'OK' && (await login(email, 'Xx-Autre-Mdp-5678!')).startsWith('REFUS'));
 
