@@ -66,8 +66,19 @@ async function tablesAvecOrgId() {
   const { data: mem } = await admin.from('memberships').select('user_id, org_id, role');
   const parOrg = {};
   for (const m of mem || []) (parOrg[m.org_id] ||= []).push(m);
-  const { data: comptes } = await admin.auth.admin.listUsers({ perPage: 200 });
-  const courriel = (id) => (comptes.users.find((u) => u.id === id) || {}).email;
+  // `auth.admin.listUsers` renvoie parfois 0 compte (constaté à répétition
+  // sur ce projet). Repli : lire auth.users par l'API de gestion.
+  let utilisateurs = [];
+  try { const { data: comptes } = await admin.auth.admin.listUsers({ perPage: 200 }); utilisateurs = comptes?.users || []; } catch { /* repli */ }
+  if (!utilisateurs.length && process.env.SUPABASE_ACCESS_TOKEN && process.env.SUPABASE_PROJECT_REF) {
+    const r = await fetch(`https://api.supabase.com/v1/projects/${process.env.SUPABASE_PROJECT_REF}/database/query`, {
+      method: 'POST', headers: { Authorization: `Bearer ${process.env.SUPABASE_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'select id, email from auth.users where email is not null' }),
+    });
+    const j = await r.json();
+    if (Array.isArray(j)) utilisateurs = j;
+  }
+  const courriel = (id) => (utilisateurs.find((u) => u.id === id) || {}).email;
 
   const orgs = Object.entries(parOrg)
     .map(([org, m]) => ({ org, membres: m, mail: m.map((x) => courriel(x.user_id)).find(Boolean) }))
