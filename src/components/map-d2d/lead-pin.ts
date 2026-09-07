@@ -96,13 +96,14 @@ export const PIN_STATUS_CONFIG: Record<PinStatus, PinStatusConfig> = {
     iconPaths: '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
   },
   no_answer: {
-    // Design échangé avec « Autre » (2026-09-07) : orange + point plein.
+    // Orange + porte fermée : on a cogné, personne n'a ouvert (2026-09-07).
     color: '#F97316',
     gradientFrom: '#FB923C',
     gradientTo: '#EA580C',
     label: 'Aucune réponse',
     label_en: 'No answer',
-    iconPaths: '<circle cx="12" cy="12" r="4.5" fill="white" stroke="none"/>',
+    // Porte (7→17 × 3→21) centrée sur (12,12), seuil au sol, poignée à droite.
+    iconPaths: '<path d="M7 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><line x1="4" y1="21" x2="20" y2="21"/><circle cx="14.2" cy="12.5" r="1.2" fill="white" stroke="none"/>',
   },
   rejected: {
     color: '#EF4444',
