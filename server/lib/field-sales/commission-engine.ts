@@ -12,6 +12,17 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 
+/**
+ * Borne haute d'une plage sur une colonne timestamptz. Une date seule
+ * ('2026-09-30') est interprétée par Postgres comme minuit → un `.lte` exclut
+ * toutes les entrées de CE jour-là. On étend à la fin de journée pour inclure
+ * le dernier jour de la période (sinon zone morte en fin de mois). Une valeur
+ * qui porte déjà une heure (contient 'T') est laissée telle quelle.
+ */
+function finDeJour(borne: string): string {
+  return /T/.test(borne) ? borne : `${borne}T23:59:59.999`;
+}
+
 // ---------------------------------------------------------------------------
 // Core calculator — pure function, no DB
 // ---------------------------------------------------------------------------
@@ -185,7 +196,13 @@ export async function projectCommissionForJob(
     if (setErr) console.error(`[commissions] settings load failed (org ${orgId}):`, setErr.message);
     if (settings?.default_rule_id) rule = (rules ?? []).find((r: any) => r.id === settings.default_rule_id);
   }
-  if (!rule) return { created: 0, skipped: 'no_rule' };
+  if (!rule) {
+    // Silence coûteux : sans plan configuré (ni règle assignée, ni règle par
+    // défaut), le rep ne touche AUCUNE commission et personne n'était prévenu.
+    // On le rend visible pour que l'admin configure le plan et régularise.
+    console.warn(`[commissions] AUCUN PLAN — commission non générée (org ${orgId}, rep ${repUserId}). Configure une règle ou un plan par défaut dans Réglages › Commissions.`);
+    return { created: 0, skipped: 'no_rule' };
+  }
 
   // 5. Estimate base from the job total
   const baseCents = Number(job.total_cents || 0) || Math.round(Number(job.total || 0) * 100);
@@ -340,7 +357,13 @@ export async function generateCommissionsForInvoice(
     if (setErr) console.error(`[commissions] settings load failed (org ${orgId}):`, setErr.message);
     if (settings?.default_rule_id) rule = (rules ?? []).find((r: any) => r.id === settings.default_rule_id);
   }
-  if (!rule) return { created: 0, skipped: 'no_rule' };
+  if (!rule) {
+    // Silence coûteux : sans plan configuré (ni règle assignée, ni règle par
+    // défaut), le rep ne touche AUCUNE commission et personne n'était prévenu.
+    // On le rend visible pour que l'admin configure le plan et régularise.
+    console.warn(`[commissions] AUCUN PLAN — commission non générée (org ${orgId}, rep ${repUserId}). Configure une règle ou un plan par défaut dans Réglages › Commissions.`);
+    return { created: 0, skipped: 'no_rule' };
+  }
 
   // 5. Compute rep's period stats (calendar month) BEFORE this invoice
   const paidDate = new Date(invoice.paid_at);
@@ -525,7 +548,7 @@ export async function getCommissionEntries(
   if (options.dateRange) {
     query = query
       .gte('created_at', options.dateRange.from)
-      .lte('created_at', options.dateRange.to);
+      .lte('created_at', finDeJour(options.dateRange.to));
   }
 
   const { data, error } = await query;
@@ -582,7 +605,7 @@ export async function getPayrollPreview(
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .gte('created_at', periodStart)
-    .lte('created_at', periodEnd);
+    .lte('created_at', finDeJour(periodEnd));
 
   if (userId) query = query.eq('user_id', userId);
 
@@ -593,12 +616,21 @@ export async function getPayrollPreview(
   const byStatus = (s: string) =>
     entries.filter((e) => e.status === s).reduce((sum, e) => sum + Number(e.amount), 0);
 
+  const pending = byStatus('pending');
+  const approved = byStatus('approved');
+  const paid = byStatus('paid');
+  const reversed = byStatus('reversed');
+
   return {
-    total: entries.reduce((sum, e) => sum + Number(e.amount), 0),
-    pending: byStatus('pending'),
-    approved: byStatus('approved'),
-    paid: byStatus('paid'),
-    reversed: byStatus('reversed'),
+    // `total` = ce qui est réellement dû/gagné : en attente + approuvé + versé.
+    // Une commission REVERSÉE (clawback) est de l'argent REPRIS — la compter
+    // dans le total gonflait les chiffres et faisait surpayer. On l'expose à
+    // part (reversed), jamais dans le total.
+    total: pending + approved + paid,
+    pending,
+    approved,
+    paid,
+    reversed,
     count: entries.length,
     entries,
   };
@@ -638,31 +670,35 @@ export async function reverseCommission(
   entryId: string,
   reason: string
 ) {
-  const { data: existing, error: fetchErr } = await supabase
-    .from('fs_commission_entries')
-    .select('status')
-    .eq('id', entryId)
-    .eq('org_id', orgId)
-    .single();
-
-  if (fetchErr) throw new Error(fetchErr.message);
-  if (existing.status === 'paid') {
-    throw new Error('Cannot reverse a commission that has already been paid.');
-  }
-
+  // Garde ATOMIQUE, comme approve/markPaid : on ne reverse QUE depuis pending
+  // ou approved, dans l'UPDATE lui-même. L'ancienne version lisait le statut
+  // puis updatait sans filtre — une course avec un markPaid concurrent pouvait
+  // reverser une commission qui venait de passer « versée » (argent déjà
+  // parti), et reverser deux fois écrasait la raison d'origine.
   const { data, error } = await supabase
     .from('fs_commission_entries')
     .update({
       status: 'reversed',
-      description: reason ? `Reversed: ${reason}` : undefined,
+      ...(reason ? { description: `Reversed: ${reason}` } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', entryId)
     .eq('org_id', orgId)
+    .in('status', ['pending', 'approved'])
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error || !data) {
+    // Aucune ligne éligible : soit déjà versée/reversée, soit introuvable.
+    const { data: actuelle } = await supabase
+      .from('fs_commission_entries')
+      .select('status')
+      .eq('id', entryId).eq('org_id', orgId)
+      .maybeSingle();
+    if (actuelle?.status === 'paid') throw new Error('Cannot reverse a commission that has already been paid.');
+    if (actuelle?.status === 'reversed') throw new Error('This commission is already reversed.');
+    throw new Error('Commission not found or not reversible.');
+  }
   return data;
 }
 
