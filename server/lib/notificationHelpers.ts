@@ -38,6 +38,89 @@ export async function createNotification(
   });
 }
 
+type NotifLang = 'fr' | 'en';
+
+/**
+ * Destinataires internes d'un devis : owners + admins actifs de l'org, plus
+ * le vendeur assigné (salesperson_id, sinon le créateur du devis) s'il est
+ * encore membre actif. Retourne user_id → langue (memberships.language,
+ * défaut fr) pour localiser chaque ligne.
+ */
+export async function resolveQuoteRecipients(
+  supabase: SupabaseClient,
+  orgId: string,
+  quote: { salesperson_id?: string | null; created_by?: string | null },
+): Promise<Map<string, NotifLang>> {
+  const out = new Map<string, NotifLang>();
+  const { data: members, error } = await supabase
+    .from('memberships')
+    .select('user_id, role, status, language')
+    .eq('org_id', orgId);
+  if (error) {
+    console.error('[notifications] memberships lookup failed:', error.message);
+    return out;
+  }
+  const assigned = quote.salesperson_id || quote.created_by || null;
+  for (const m of (members || []) as Array<{ user_id: string; role: string | null; status: string | null; language: string | null }>) {
+    if (!m.user_id) continue;
+    if (m.status && m.status !== 'active') continue;
+    const isManager = m.role === 'owner' || m.role === 'admin';
+    if (!isManager && m.user_id !== assigned) continue;
+    out.set(m.user_id, m.language === 'en' ? 'en' : 'fr');
+  }
+  return out;
+}
+
+/**
+ * Insère UNE notification par destinataire (user_id renseigné) : chacun a
+ * son propre non-lu, la RLS ne montre la ligne qu'à lui, et le trigger DB
+ * fn_push_on_notification pousse sur SES appareils mobiles seulement (pas
+ * d'appel à sendExpoPushToOrg ici : il enverrait à tout l'org et doublerait
+ * le trigger). Sans destinataire résolu, retombe sur une ligne org-wide
+ * (user_id NULL) pour ne jamais perdre l'événement. Ne lance jamais.
+ */
+export async function insertTargetedNotifications(
+  supabase: SupabaseClient,
+  orgId: string,
+  recipients: Map<string, NotifLang>,
+  build: (lang: NotifLang) => { title: string; body: string },
+  extra: {
+    type: string;
+    entityType?: string | null;
+    entityId?: string | null;
+    link?: string | null;
+    icon?: string | null;
+    actorName?: string | null;
+  },
+): Promise<void> {
+  const base = {
+    org_id: orgId,
+    type: extra.type,
+    entity_type: extra.entityType ?? null,
+    entity_id: extra.entityId ?? null,
+    reference_id: extra.entityId ?? null,
+    link: extra.link ?? null,
+    icon: extra.icon ?? null,
+    actor_name: extra.actorName ?? null,
+  };
+  const targets: Array<[string | null, NotifLang]> = recipients.size > 0
+    ? Array.from(recipients.entries())
+    : [[null, 'fr']];
+  const rows = targets.map(([userId, lang]) => {
+    const { title, body } = build(lang);
+    return { ...base, user_id: userId, title, body, message: body };
+  });
+
+  let { error } = await supabase.from('notifications').insert(rows);
+  // Colonne inconnue (schéma sans entity_*/actor_name/message) : réessayer
+  // avec la forme minimale pour que la cloche sonne quand même.
+  if (error && (error.code === 'PGRST204' || error.code === '42703')) {
+    const legacy = rows.map(({ entity_type: _et, entity_id: _ei, actor_name: _an, message: _m, ...r }) => r);
+    ({ error } = await supabase.from('notifications').insert(legacy));
+  }
+  if (error) console.error(`[notifications] targeted insert (${extra.type}) failed:`, error.message);
+}
+
 /**
  * Le destinataire a-t-il répondu STOP à cette organisation ?
  *

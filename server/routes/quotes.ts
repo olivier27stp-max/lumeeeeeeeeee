@@ -11,6 +11,7 @@ import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe 
 import { decryptSecret } from '../../src/lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
+import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
 import { estEchue } from '../lib/date-seule';
 
@@ -201,7 +202,7 @@ router.post('/quotes/:id/track-view', async (req, res) => {
       // jamais enregistrée ni notifiée.
       const { data: quote } = await serviceClient
         .from('quotes')
-        .select('id, quote_number, client_id, lead_id, org_id, is_viewed, view_count')
+        .select('id, quote_number, client_id, lead_id, org_id, is_viewed, view_count, salesperson_id, created_by')
         .is('deleted_at', null)
         .eq('view_token', id)
         .maybeSingle();
@@ -224,7 +225,8 @@ router.post('/quotes/:id/track-view', async (req, res) => {
         .eq('id', quote.id);
 
       const contactId = quote.client_id || quote.lead_id;
-      await serviceClient
+      // Journal détaillé : un échec ici ne doit jamais empêcher la notification.
+      const { error: viewLogError } = await serviceClient
         .from('quote_views')
         .insert({
           quote_id: quote.id,
@@ -232,6 +234,7 @@ router.post('/quotes/:id/track-view', async (req, res) => {
           ip_address: req.ip || req.headers['x-forwarded-for'] || null,
           user_agent: req.headers['user-agent'] || null,
         });
+      if (viewLogError) console.error('[quotes/track-view] quote_views insert failed:', viewLogError.message);
 
       if (contactId) void recordClientActivity(serviceClient, contactId);
 
@@ -249,17 +252,28 @@ router.post('/quotes/:id/track-view', async (req, res) => {
           }
         }
 
-        await serviceClient
-          .from('notifications')
-          .insert({
-            org_id: quote.org_id,
+        // Première ouverture seulement (is_viewed passe à true ci-dessus).
+        // Destinataires : owners + admins + vendeur assigné — une ligne
+        // chacun, localisée, visible par eux seuls (RLS) et poussée sur
+        // leurs appareils mobiles via le trigger fn_push_on_notification.
+        const recipients = await resolveQuoteRecipients(serviceClient, quote.org_id, quote);
+        const num = quote.quote_number != null ? `#${quote.quote_number}` : '';
+        await insertTargetedNotifications(
+          serviceClient,
+          quote.org_id,
+          recipients,
+          (lang) => lang === 'fr'
+            ? { title: `${contactName} a ouvert le devis ${num}`.trim(), body: `Première ouverture du devis ${num}`.trim() }
+            : { title: `${contactName} opened quote ${num}`.trim(), body: `First time quote ${num} was opened`.trim() },
+          {
             type: 'quote_opened',
-            title: `${contactName} opened quote ${quote.quote_number}`,
-            body: `${contactName} has viewed their quote for the first time.`,
-            icon: 'eye',
+            entityType: 'quote',
+            entityId: quote.id,
             link: `/quotes/${quote.id}`,
-            reference_id: quote.id,
-          });
+            icon: 'eye',
+            actorName: contactName,
+          },
+        );
       }
 
       return res.json({ tracked: true, first_view: firstQuoteView });

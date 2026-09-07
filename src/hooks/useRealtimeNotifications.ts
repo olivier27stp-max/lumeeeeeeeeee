@@ -13,8 +13,17 @@ interface Notification {
   title?: string;
   body?: string | null;
   entity_type?: string | null;
+  // Destinataire : null = tout l'org, sinon ce user seulement.
+  user_id?: string | null;
   [key: string]: unknown;
 }
+
+// Lignes adressées à tout l'org (user_id NULL) ou à ce user. La RLS applique
+// déjà cette règle côté DB ; on la répète ici pour les environnements où la
+// migration 20260907100000 n'est pas encore passée.
+const visibleFor = (userId: string) => `user_id.is.null,user_id.eq.${userId}`;
+const isForMe = (n: { user_id?: string | null }, userId: string | null) =>
+  !n.user_id || n.user_id === userId;
 
 // Maps a notification's entity_type to the sidebar nav item(s) it belongs to,
 // so the unread count can surface as a badge on the relevant page(s). A
@@ -49,6 +58,15 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
   const { currentOrgId } = useCompany();
   const orgRef = useRef<string | null>(null);
   orgRef.current = currentOrgId ?? null;
+  const [userId, setUserId] = useState<string | null>(null);
+  const userRef = useRef<string | null>(null);
+  userRef.current = userId;
+  useEffect(() => {
+    if (!enabled) { setUserId(null); return; }
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => { if (!cancelled) setUserId(data.user?.id ?? null); });
+    return () => { cancelled = true; };
+  }, [enabled]);
   // Options in a ref so the realtime effect doesn't resubscribe every render.
   const optionsRef = useRef<RealtimeNotificationOptions | undefined>(options);
   optionsRef.current = options;
@@ -57,11 +75,13 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
   // (alerts are deduped), so a full refetch on each change is cheap.
   const fetchCounts = useCallback(async () => {
     const org = orgRef.current;
-    if (!org) return;
+    const me = userRef.current;
+    if (!org || !me) return;
     const { data } = await supabase
       .from('notifications')
       .select('entity_type')
       .eq('org_id', org)
+      .or(visibleFor(me))
       .eq('is_read', false)
       .limit(500);
     const counts: Record<string, number> = {};
@@ -74,11 +94,13 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
 
   const fetchUnreadTotal = useCallback(async () => {
     const org = orgRef.current;
-    if (!org) return;
+    const me = userRef.current;
+    if (!org || !me) return;
     const { count } = await supabase
       .from('notifications')
       .select('id', { count: 'exact', head: true })
       .eq('org_id', org)
+      .or(visibleFor(me))
       .eq('is_read', false);
     setUnreadCount(count || 0);
   }, []);
@@ -92,7 +114,8 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
   // called when the user visits the page, so its sidebar badge clears.
   const markNavAsRead = useCallback(async (navId: string) => {
     const org = orgRef.current;
-    if (!org) return;
+    const me = userRef.current;
+    if (!org || !me) return;
     const entityTypes = Object.keys(ENTITY_TO_NAV).filter((t) => ENTITY_TO_NAV[t].includes(navId));
     if (entityTypes.length === 0) return;
     // Optimistic: a 'request' notification badges two navs, so clear every
@@ -106,6 +129,7 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
       .eq('org_id', org)
+      .or(visibleFor(me))
       .eq('is_read', false)
       .in('entity_type', entityTypes);
     if (error) console.error('[notifications] failed to mark nav notifications read', error.message);
@@ -116,7 +140,7 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
   }, [fetchCounts, fetchUnreadTotal]);
 
   useEffect(() => {
-    if (!enabled || !currentOrgId) {
+    if (!enabled || !currentOrgId || !userId) {
       setUnreadCount(0);
       setCountsByNav({});
       return;
@@ -134,6 +158,7 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: orgFilter },
         (payload: RealtimePostgresInsertPayload<Notification>) => {
+          if (!isForMe(payload.new, userRef.current)) return;
           if (!payload.new.is_read) {
             setUnreadCount((prev) => prev + 1);
             // Surface a native OS notification when Lume isn't the active tab.
@@ -161,6 +186,7 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'notifications', filter: orgFilter },
         (payload: RealtimePostgresUpdatePayload<Notification>) => {
+          if (!isForMe(payload.new, userRef.current)) return;
           if (payload.old && !payload.old.is_read && payload.new.is_read) {
             setUnreadCount((prev) => Math.max(0, prev - 1));
           }
@@ -180,7 +206,7 @@ export function useRealtimeNotifications(enabled: boolean, options?: RealtimeNot
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [enabled, currentOrgId, fetchCounts, fetchUnreadTotal]);
+  }, [enabled, currentOrgId, userId, fetchCounts, fetchUnreadTotal]);
 
   return { unreadCount, resetCount, countsByNav, markNavAsRead };
 }

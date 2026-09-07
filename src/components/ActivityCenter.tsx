@@ -61,7 +61,12 @@ interface NotifRow {
   link?: string | null;
   created_at: string;
   actor_name?: string | null;
+  // Destinataire : null = tout l'org, sinon ce user seulement.
+  user_id?: string | null;
 }
+
+// Même règle que la RLS (migration 20260907100000) : lignes org-wide ou à moi.
+const visibleFor = (userId: string) => `user_id.is.null,user_id.eq.${userId}`;
 
 function timeAgo(dateStr: string, lang: string): string {
   const now = new Date();
@@ -210,6 +215,7 @@ const ACTOR_VERBS: Record<string, { fr: string; en: string }> = {
   note_deleted: { fr: 'a supprimé une note', en: 'deleted a note' },
   review_received: { fr: 'a laissé un avis', en: 'left a review' },
   card_saved: { fr: 'a enregistré une carte', en: 'saved a card' },
+  quote_opened: { fr: 'a ouvert un devis', en: 'opened a quote' },
 };
 
 // ── Customize center : les 11 catégories, toutes visibles par défaut ──
@@ -334,24 +340,29 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
   useEffect(() => {
     if (!open) return;
     loadActivities();
-    // Mark all notifications as read when opening (scoped to current org)
-    getCurrentOrgIdOrThrow().then(oid =>
-      supabase.from('notifications').update({ is_read: true }).eq('org_id', oid).eq('is_read', false).then(({ error }) => {
+    // Ouvrir le panneau marque lues MES notifications (org-wide + adressées à
+    // moi) — jamais celles adressées à un collègue.
+    Promise.all([getCurrentOrgIdOrThrow(), supabase.auth.getUser()]).then(([oid, { data }]) => {
+      const me = data.user?.id;
+      if (!me) return;
+      supabase.from('notifications').update({ is_read: true }).eq('org_id', oid).or(visibleFor(me)).eq('is_read', false).then(({ error }) => {
         if (error) console.error('[activity] failed to mark notifications read', error.message);
-      })
-    ).catch(() => {});
+      });
+    }).catch(() => {});
 
     // Subscribe to realtime notifications so new ones appear while panel is open
     let channel: ReturnType<typeof supabase.channel> | null = null;
     (async () => {
       const orgId = await getCurrentOrgIdOrThrow().catch(() => null);
       if (!orgId) return;
+      const me = (await supabase.auth.getUser()).data.user?.id ?? null;
       channel = supabase
       .channel(`activity-center-realtime-${orgId}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `org_id=eq.${orgId}` },
         (payload: { new: NotifRow & { is_read: boolean } }) => {
+          if (payload.new.user_id && payload.new.user_id !== me) return;
           const newItem = buildNotifItem(payload.new, language);
           setActivities((prev) => [newItem, ...prev].slice(0, 100));
           // Mark as read immediately since panel is open
@@ -453,10 +464,13 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
       // cartes — via triggers DB) + types historiques. select('*') pour
       // tolérer l'absence de actor_name tant que la migration n'est pas
       // appliquée (supabase-js avale les erreurs de colonne inconnue).
-      const { data: notifications } = await supabase
+      const me = (await supabase.auth.getUser()).data.user?.id ?? null;
+      let notifQuery = supabase
         .from('notifications')
         .select('*')
-        .eq('org_id', orgId)
+        .eq('org_id', orgId);
+      if (me) notifQuery = notifQuery.or(visibleFor(me));
+      const { data: notifications } = await notifQuery
         .order('created_at', { ascending: false })
         .limit(60);
 
