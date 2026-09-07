@@ -12,7 +12,7 @@ import {
 } from './lead-pin';
 import { type ZoneData, getZoneColor } from './zone-types';
 import { PinClusterManager, type ClusterSourcePoint } from './pin-cluster';
-import { ClosedPinHub } from './ClosedPinHub';
+import { PinHub } from './PinHub';
 import { getRepAvatar } from '../../lib/constants/avatars';
 import { useTranslation } from '../../i18n';
 import { listTerritories, createTerritory, updateTerritory, deleteTerritory, listReps } from '../../lib/fieldSalesApi';
@@ -2574,9 +2574,11 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       {/* ================================================================== */}
       {/* "Log prospecting pin" action modal — opens when a pin is clicked    */}
       {/* ================================================================== */}
-      {/* Pin « Vendu » existant → dossier client complet (ClosedPinHub).       */}
-      {actionPin && !actionIsNew && actionPin.status === 'closed_won' && (
-        <ClosedPinHub
+      {/* Pin existant → PinHub (Vendu = dossier client, Lead = prospect + devis, */}
+      {/* autres = pin sans client). La modale ci-dessous ne sert plus qu'aux     */}
+      {/* nouvelles visites (choix du statut initial).                            */}
+      {actionPin && !actionIsNew && (
+        <PinHub
           pin={markersRef.current.get(actionPin.id)?.pin || actionPin}
           fr={fr}
           canOpenClient={!!(actionPin.client_id || actionPin.lead_id || actionPin.job_id || actionPin.lume_job_id)}
@@ -2604,7 +2606,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
           }}
         />
       )}
-      {actionPin && !(!actionIsNew && actionPin.status === 'closed_won') && (
+      {actionPin && actionIsNew && (
         <div
           className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
           onClick={() => setActionPin(null)}
