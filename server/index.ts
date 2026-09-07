@@ -1274,5 +1274,17 @@ app.listen(port, '0.0.0.0', () => {
       setTimeout(run, 60_000);
       console.log('[migration-cleanup] Cron started (daily, lock-guarded)');
     }).catch((e: any) => captureCronFailure('migration-cleanup-import', e));
+
+    // Migration assistée — récupération des imports zombies (audit S7) : un
+    // redéploiement pendant un import laissait la migration en « importing »
+    // pour l'éternité. Boot + toutes les 10 min ; l'import étant idempotent,
+    // marquer failed permet la relance sans doublon.
+    Promise.all([import('./lib/migration/recovery'), import('./lib/supabase')]).then(([{ recoverZombieMigrations }, { getServiceClient }]) => {
+      const run = () => withAdvisoryLock('migration-recovery', () => withCronCheckIn('migration-recovery', () => recoverZombieMigrations(getServiceClient())))
+        .catch((e: any) => captureCronFailure('migration-recovery', e));
+      setInterval(run, 10 * 60 * 1000);
+      setTimeout(run, 90_000);
+      console.log('[migration-recovery] Zombie watchdog started (10 min, lock-guarded)');
+    }).catch((e: any) => captureCronFailure('migration-recovery-import', e));
   });
 });

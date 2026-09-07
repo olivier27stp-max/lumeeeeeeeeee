@@ -16,6 +16,7 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
+import { purgeMigrationTracesForEntity } from '../lib/migration/erasure';
 
 const router = Router();
 
@@ -135,7 +136,12 @@ router.post('/dsr/erase/client/:id', async (req, res) => {
   const { error } = await svc.rpc('anonymize_client', { p_client_id: clientId });
   if (error) return sendSafeError(res, error, 'Anonymization failed.', '[dsr/erase/client]');
 
-  return res.status(200).json({ ok: true, anonymized: clientId });
+  // Loi 25 (audit S10) : si ce client vient d'une migration assistée, sa ligne
+  // de staging (payload source complet) et les previous_values de fusion sont
+  // purgés aussi — l'anonymisation CRM ne doit pas laisser de copie ailleurs.
+  const traces = await purgeMigrationTracesForEntity(svc, 'clients', clientId);
+
+  return res.status(200).json({ ok: true, anonymized: clientId, migration_traces: traces });
 });
 
 // ────────────────────────────────────────────────────────────────────
@@ -173,7 +179,10 @@ router.post('/dsr/erase/lead/:id', async (req, res) => {
   const { error } = await svc.rpc('anonymize_client', { p_client_id: leadId });
   if (error) return sendSafeError(res, error, 'Anonymization failed.', '[dsr/erase/lead]');
 
-  return res.status(200).json({ ok: true, anonymized: leadId });
+  // Même purge des traces de migration que sur /dsr/erase/client (audit S10).
+  const traces = await purgeMigrationTracesForEntity(svc, 'clients', leadId);
+
+  return res.status(200).json({ ok: true, anonymized: leadId, migration_traces: traces });
 });
 
 // ────────────────────────────────────────────────────────────────────

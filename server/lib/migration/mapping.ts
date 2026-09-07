@@ -585,12 +585,18 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'assigned to', 'assigned', 'technician', 'technicien', 'employee', 'employe', 'assigne a',
       ],
     },
+    // NB : le champ « tags » a été retiré du catalogue (audit S6) — il était
+    // mappable mais buildEntityRow ne l'importait jamais (promesse non tenue).
+    // Les colonnes d'étiquettes suivent maintenant le chemin _unmapped → notes.
     {
-      field: 'tags',
-      labelFr: 'Étiquettes',
-      labelEn: 'Tags',
-      types: ['text', 'status'],
-      synonyms: ['tags', 'tag', 'labels', 'etiquettes', 'etiquette', 'mots cles'],
+      field: 'created_date',
+      labelFr: 'Date de création',
+      labelEn: 'Created date',
+      types: ['date', 'datetime', 'text'],
+      synonyms: [
+        'created date', 'date created', 'creation date', 'created at', 'created',
+        'date de creation', 'cree le', 'creee le', 'date d ajout',
+      ],
     },
     {
       field: 'external_id',

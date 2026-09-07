@@ -20,7 +20,7 @@ const API = 'https://lumecrm.net';
 const OWNER_EMAIL = 'olivier27stp@gmail.com';
 const OWNER_ID = 'cbccdd2e-f065-42eb-bbe3-96becfbc27fc';
 const ORG_NAME = 'ZZ-TEST-MIGRATION (à supprimer)';
-const SENTENCE = "J'ai vérifié l'aperçu de la migration et j'autorise Lume à effectuer l'importation finale dans mon workspace.";
+const SENTENCE = "J'ai vérifié l'aperçu de la migration, je confirme que mon entreprise a le droit de transférer ces renseignements et j'autorise Lume à effectuer l'importation finale dans mon workspace.";
 
 const env = readFileSync(`${process.env.HOME}/Downloads/lume-crm/.env.local`, 'utf8');
 const get = (k) => (env.match(new RegExp(`^${k}\\s*=\\s*(.+)$`, 'm')) ?? [])[1]?.trim().replace(/^['"]|['"]$/g, '');
@@ -239,6 +239,9 @@ try {
   const retry = await api(`/api/migration-admin/migrations/${MIG}/retry-errors`, { method: 'POST', body: JSON.stringify({}) });
   assert(retry.ok && retry.body.reset === 0, 'relance des erreurs d\'insertion: 0 (aucun échec)');
 
+  const pinsBefore = await count('field_house_profiles', ORG, '&deleted_at=is.null');
+  assert(pinsBefore > 0, `pins D2D auto-créés pour les clients importés (${pinsBefore})`);
+
   log('ÉTAPE 12 — rollback…');
   const fakeRb = await api(`/api/migration-admin/migrations/${MIG}/status`, { method: 'POST', body: JSON.stringify({ to: 'rolled_back' }) });
   assert(fakeRb.status === 409, '« rolled_back » direct refusé (rollback réel obligatoire)');
@@ -246,6 +249,8 @@ try {
   assert(rb.ok, `rollback: ${rb.body?.softDeleted ?? '?'} dossiers retirés`);
   const active = (await count('clients', ORG, '&deleted_at=is.null')) + (await count('jobs', ORG, '&deleted_at=is.null')) + (await count('invoices', ORG, '&deleted_at=is.null')) + (await count('quotes', ORG, '&deleted_at=is.null'));
   assert(active === 0, 'zéro dossier actif restant après rollback');
+  const pinsAfter = await count('field_house_profiles', ORG, '&deleted_at=is.null');
+  assert(pinsAfter === 0, `pins D2D purgés au rollback (${pinsBefore} → ${pinsAfter}) — audit S11`);
 
   log(`\n${failures === 0 ? 'RÉSULTAT GLOBAL: PARCOURS COMPLET RÉUSSI' : `RÉSULTAT GLOBAL: ${failures} ÉCHEC(S)`} en ${((Date.now() - t0) / 1000).toFixed(0)} s`);
   process.exitCode = failures === 0 ? 0 : 1;

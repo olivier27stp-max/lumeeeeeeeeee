@@ -220,6 +220,68 @@ describe('audit S3 — colonnes non mappées rattachées aux notes, statuts inco
   });
 });
 
+describe('audit S6 — created_at historique préservé pour jobs/soumissions/factures', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' },
+    createdBy: 'user-1',
+    clientIdByRef: new Map([['marc tremblay', 'client-1']]),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map(),
+  } as any;
+  const rowOf = (entity: string, normalized: Record<string, unknown>) => (buildEntityRow(entity as any, {
+    id: 'x1', row_number: 1, entity_type: entity, external_id: null, status: 'ready',
+    normalized, relations: { client_ref: 'Marc Tremblay' },
+  } as any, ctx) as any).row;
+
+  it('job de 2019 : created_at = created_date (sinon date de vente), midi, jamais now()', () => {
+    expect(rowOf('job', { title: 'T', created_date: '2019-05-10' }).created_at).toBe('2019-05-10T12:00:00');
+    expect(rowOf('job', { title: 'T', sale_date: '2020-08-01' }).created_at).toBe('2020-08-01T12:00:00');
+    expect('created_at' in rowOf('job', { title: 'T' })).toBe(false); // clé absente → DEFAULT now()
+  });
+  it('soumission : created_at = created_date, facture : created_at = date d\'émission', () => {
+    expect(rowOf('quote', { quote_number: 'Q-1', created_date: '2021-02-03' }).created_at).toBe('2021-02-03T12:00:00');
+    expect(rowOf('invoice', { invoice_number: '9', total_cents: 100, issued_date: '2022-11-30' }).created_at).toBe('2022-11-30T12:00:00');
+    expect('created_at' in rowOf('invoice', { invoice_number: '9', total_cents: 100 })).toBe(false);
+  });
+});
+
+describe('audit S9 — injection de formule neutralisée dans les tables actives', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' },
+    createdBy: 'user-1',
+    clientIdByRef: new Map([['marc tremblay', 'client-1']]),
+    propertyIdByRef: new Map(),
+    jobIdByRef: new Map(),
+  } as any;
+
+  it('un « =cmd… » importé en note/nom ressort préfixé, jamais exécutable au réexport', () => {
+    const res = buildEntityRow('client', {
+      id: 's1', row_number: 1, entity_type: 'client', external_id: null, status: 'ready',
+      normalized: { first_name: '=1+2', company: '@SUM(A1)', notes: '=HYPERLINK("http://x")', city: 'Laval' },
+      relations: {},
+    } as any, ctx);
+    const row = (res as any).row;
+    expect(row.first_name).toBe("'=1+2");
+    expect(row.company).toBe("'@SUM(A1)");
+    expect(row.notes.startsWith("'=HYPERLINK")).toBe(true);
+    expect(row.city).toBe('Laval'); // texte normal intact
+  });
+
+  it('les nombres négatifs et numéros ne sont jamais dénaturés', () => {
+    const res = buildEntityRow('job', {
+      id: 's2', row_number: 2, entity_type: 'job', external_id: null, status: 'ready',
+      normalized: { title: '-45 degrés', notes: '-12.50', job_number: '1001' },
+      relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx);
+    const row = (res as any).row;
+    expect(row.title).toBe('-45 degrés');
+    expect(row.notes).toBe('-12.50');
+    expect(row.job_number).toBe('1001');
+  });
+});
+
 describe('planIntraDedupe — doublons internes et homonymes (précision)', async () => {
   const { planIntraDedupe } = await import('../../server/lib/migration/importer');
   const rec = (id: string, normalized: Record<string, unknown>) => ({

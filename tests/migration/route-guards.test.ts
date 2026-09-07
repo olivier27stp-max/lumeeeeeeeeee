@@ -312,3 +312,57 @@ describe('audit sections 1-5 — garde-fous ajoutés', () => {
     expect(pipelineSrc).toContain("'missing_header_row'");
   });
 });
+
+describe('audit sections 6-14 — garde-fous ajoutés', () => {
+  const importerSrc2 = read('server/lib/migration/importer.ts');
+  const mappingSrc = read('server/lib/migration/mapping.ts');
+  const dsrSrc = read('server/routes/dsr.ts');
+  const benchSrc = read('scripts/migration-bench/e2e-trap.mjs');
+  const analyzerSrc = read('server/lib/migration/analyzer.ts');
+
+  it('S7 — watchdog zombie branché au boot (10 min, advisory lock) et heartbeat par lot', () => {
+    expect(indexSrc).toContain("withAdvisoryLock('migration-recovery'");
+    expect(indexSrc).toContain('recoverZombieMigrations');
+    expect(importerSrc2).toContain('progress: { entity, processed: i, total: toInsert.length }');
+  });
+
+  it('S10 — l\'effacement DSR purge aussi les traces de migration (staging + previous_values)', () => {
+    expect(dsrSrc.split('purgeMigrationTracesForEntity').length - 1).toBeGreaterThanOrEqual(3); // import + 2 routes
+    const erasureSrc = read('server/lib/migration/erasure.ts');
+    expect(erasureSrc).toContain("from('migration_staging_records')");
+    expect(erasureSrc).toContain('previous_values: null');
+  });
+
+  it('S10 — la phrase d\'approbation fait déclarer le droit de transférer, et le banc est synchronisé', () => {
+    const m = portalSrc.match(/APPROVAL_SENTENCE_FR =\s*"([^"]+)"/);
+    expect(m, 'phrase FR introuvable').toBeTruthy();
+    expect(m![1]).toContain('le droit de transférer ces renseignements');
+    expect(benchSrc).toContain(m![1]); // le banc E2E utilise EXACTEMENT la même phrase
+  });
+
+  it('S11 — le rollback purge les pins D2D auto-créés (maisons du client importé seulement)', () => {
+    expect(importerSrc2).toContain('purgeAutoPinsForClients');
+    expect(importerSrc2).toContain("meta.source === 'crm_client'");
+    expect(importerSrc2).toContain('pinsPurged');
+    expect(benchSrc).toContain('pins D2D purgés au rollback');
+  });
+
+  it('S6 — created_at historique (createdAtPatch) sur client, job, quote et invoice', () => {
+    expect(importerSrc2.split('...createdAtPatch(').length - 1).toBe(4);
+  });
+
+  it('S6 — le champ fantôme « tags » est retiré du catalogue (aucune promesse non tenue)', () => {
+    expect(mappingSrc).not.toContain("field: 'tags'");
+  });
+
+  it('S9 — les champs texte des rangées actives passent par safeStr (anti-formule)', () => {
+    expect(importerSrc2).toContain('function safeStr');
+    expect(importerSrc2).toContain('notes: joinNotes(safeStr(n.notes)');
+  });
+
+  it('S12 — le parse CSV est en flux (Readable), plus de Papa.parse(string) bloquant', () => {
+    expect(analyzerSrc).toContain('Readable.from(slices)');
+    expect(analyzerSrc).toContain('setImmediate');
+    expect(analyzerSrc).not.toMatch(/Papa\.parse\(text,/);
+  });
+});

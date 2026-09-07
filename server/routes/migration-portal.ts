@@ -43,10 +43,14 @@ import { IMPORT_ORDER } from '../lib/migration/importer';
 const router = Router();
 
 // Phrases de confirmation EXACTES exigées pour approuver l'import final.
+// Depuis l'audit S10 (Loi 25), la phrase fait aussi déclarer au bureau qu'il a
+// le droit de transférer les renseignements de ses clients finaux — la
+// responsabilité du transfert est documentée dans l'approbation journalisée
+// (IP + user-agent + version du rapport).
 export const APPROVAL_SENTENCE_FR =
-  "J'ai vérifié l'aperçu de la migration et j'autorise Lume à effectuer l'importation finale dans mon workspace.";
+  "J'ai vérifié l'aperçu de la migration, je confirme que mon entreprise a le droit de transférer ces renseignements et j'autorise Lume à effectuer l'importation finale dans mon workspace.";
 export const APPROVAL_SENTENCE_EN =
-  'I have reviewed the migration preview and authorize Lume to perform the final import into my workspace.';
+  'I have reviewed the migration preview, I confirm my business has the right to transfer this information, and I authorize Lume to perform the final import into my workspace.';
 
 interface PortalContext {
   admin: SupabaseClient;

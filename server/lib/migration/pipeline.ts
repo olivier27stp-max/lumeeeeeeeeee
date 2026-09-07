@@ -87,7 +87,7 @@ export async function analyzeMigrationFile(admin: SupabaseClient, migration: Mig
     await setMigrationStatus(admin, migration, 'parsing');
 
     // ── Analyse CSV ─────────────────────────────────────────────────────
-    const analyzed = analyzeCsvBuffer(buf);
+    const analyzed = await analyzeCsvBuffer(buf);
     const category: MigrationCategory | null = detectCategory(file.original_name, analyzed.headers);
 
     // Ré-analyse : purger les artefacts précédents de CE fichier seulement.

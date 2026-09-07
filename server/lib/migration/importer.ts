@@ -81,6 +81,20 @@ function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
 }
 
+/** str() + neutralisation d'injection de formule (audit S9) : pour les champs
+ *  TEXTE écrits dans les tables actives — un « =cmd… » importé tel quel
+ *  ressortirait exécutable dans n'importe quel export CSV futur du CRM.
+ *  Jamais utilisé pour une clé de référence (l'apostrophe changerait la clé). */
+function safeStr(v: unknown): string {
+  return sanitizeCellForDisplay(str(v));
+}
+
+/** created_at préservé (audit S6) : midi local pour éviter tout décalage de
+ *  jour ; clé ABSENTE si aucune date source (le DEFAULT now() agit). */
+function createdAtPatch(dateStr: string): Record<string, unknown> {
+  return dateStr ? { created_at: `${dateStr}T12:00:00` } : {};
+}
+
 function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
@@ -369,14 +383,14 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   const orgId = ctx.migration.org_id;
 
   if (entity === 'service') {
-    const name = str(n.name);
+    const name = safeStr(n.name);
     if (!name) return { ok: false, reason: 'invalid' };
     return {
       ok: true,
       row: {
         org_id: orgId,
         name,
-        description: str(n.description) || null,
+        description: safeStr(n.description) || null,
         default_price_cents: num(n.price_cents),
         is_active: true,
       },
@@ -390,22 +404,22 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       ok: true,
       row: {
         org_id: orgId,
-        first_name: str(n.first_name) || null,
-        last_name: str(n.last_name) || null,
-        company: str(n.company) || null,
+        first_name: safeStr(n.first_name) || null,
+        last_name: safeStr(n.last_name) || null,
+        company: safeStr(n.company) || null,
         email: str(n.email) || null,
         phone: str(n.phone) || null,
-        address: str(n.address) || null,
-        city: str(n.city) || null,
-        province: str(n.province) || null,
+        address: safeStr(n.address) || null,
+        city: safeStr(n.city) || null,
+        province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
-        notes: joinNotes(str(n.notes), unmappedNotesBlock(n)),
-        lead_source: str(n.lead_source) || null,
+        notes: joinNotes(safeStr(n.notes), unmappedNotesBlock(n)),
+        lead_source: safeStr(n.lead_source) || null,
         status: 'active',
         created_by: ctx.createdBy,
         // date d'origine préservée (fidélité historique) — clé ABSENTE sinon,
         // pour laisser agir le DEFAULT now() (jamais de null explicite)
-        ...(str(n.created_date) ? { created_at: `${str(n.created_date)}T12:00:00` } : {}),
+        ...createdAtPatch(str(n.created_date)),
       },
     };
   }
@@ -420,11 +434,11 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        address,
-        city: str(n.city) || null,
-        province: str(n.province) || null,
+        address: safeStr(n.address),
+        city: safeStr(n.city) || null,
+        province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
-        name: str(n.name) || null,
+        name: safeStr(n.name) || null,
         is_primary: false,
         created_by: ctx.createdBy,
       },
@@ -437,7 +451,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     const propertyId = r.property_ref
       ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
       : null;
-    const title = str(n.title) || str(n.description).slice(0, 120) || `Job importé ${str(n.job_number) || rec.external_id || `#${rec.row_number}`}`;
+    const title = safeStr(n.title) || safeStr(n.description).slice(0, 120) || `Job importé ${str(n.job_number) || rec.external_id || `#${rec.row_number}`}`;
     // jobs.total_cents/subtotal_cents sont NOT NULL en prod : jamais de null
     // explicite (il court-circuite les DEFAULT). Leçon du test E2E 2026-08-24.
     const totalCents = num(n.total_cents) ?? 0;
@@ -447,11 +461,11 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        client_name: str(r.client_ref) || null, // colonne héritée affichée par le calendrier
+        client_name: safeStr(r.client_ref) || null, // colonne héritée affichée par le calendrier
         property_id: propertyId,
         title,
-        description: str(n.description) || null,
-        notes: joinNotes(str(n.notes), unmappedNotesBlock(n)),
+        description: safeStr(n.description) || null,
+        notes: joinNotes(safeStr(n.notes), unmappedNotesBlock(n)),
         job_number: str(n.job_number) || null,
         status: mapJobStatus(str(n.status)),
         total_cents: totalCents,
@@ -464,6 +478,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         show_on_leaderboard: false,
         salesperson_id: ctx.staffIdBySource?.get(refKey(str(n.salesperson))) ?? null,
         created_by: ctx.createdBy,
+        // fidélité historique (audit S6) : un job de 2019 ne « naît » pas
+        // aujourd'hui — created_date sinon date de vente, clé absente sinon
+        ...createdAtPatch(str(n.created_date) || str(n.sale_date)),
       },
     };
   }
@@ -484,14 +501,15 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         job_id: jobId,
         quote_number: str(n.quote_number) || null,
         // quotes.title est NOT NULL en prod (leçon E2E round 8)
-        title: str(n.title) || (str(n.quote_number) ? `Soumission ${str(n.quote_number)}` : 'Soumission importée'),
+        title: safeStr(n.title) || (str(n.quote_number) ? `Soumission ${str(n.quote_number)}` : 'Soumission importée'),
         status: mapQuoteStatus(str(n.status)),
         subtotal_cents: subtotal ?? total ?? 0,
         tax_cents: tax ?? 0,
         total_cents: total ?? 0,
         valid_until: str(n.valid_until) || null,
-        notes: str(n.notes) || null,
+        notes: safeStr(n.notes) || null,
         created_by: ctx.createdBy,
+        ...createdAtPatch(str(n.created_date)),
       },
     };
   }
@@ -518,13 +536,13 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         job_id: jobId,
-        title: str(n.title) || 'Visite importée',
+        title: safeStr(n.title) || 'Visite importée',
         start_at: startUtc,
         end_at: endUtc,
         start_time: startUtc,
         end_time: endUtc,
         status: mapVisitStatus(str(n.status)),
-        notes: str(n.notes) || null,
+        notes: safeStr(n.notes) || null,
         timezone: 'America/Toronto', // aligné sur DEFAULT_TIMEZONE de scheduleApi
         assigned_user: ctx.staffIdBySource?.get(refKey(str(n.assigned_to))) ?? null,
         created_by: ctx.createdBy,
@@ -568,8 +586,11 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         total_cents: total,
         paid_cents: paidCents,
         balance_cents: Math.max(0, total - paidCents),
-        notes: str(n.notes) || null,
+        notes: safeStr(n.notes) || null,
         created_by: ctx.createdBy,
+        // created_at aligné sur la date d'émission : les rapports « par date
+        // de création » restent vrais pour l'historique migré (audit S6)
+        ...createdAtPatch(str(n.issued_date)),
       },
     };
   }
@@ -1080,6 +1101,16 @@ export async function runFinalImport(
     // pour isoler la rangée fautive (ex. collision de numéro unique).
     const importedIds: string[] = [];
     for (let i = 0; i < toInsert.length; i += CHUNK) {
+      // Battement de cœur + progression réelle (audit S7/S12) : updated_at du
+      // lot sert de heartbeat à la détection de zombie (recovery.ts), et
+      // totals.progress donne « lot 47/300 » au lieu d'un running muet.
+      // Écrasé par le rapport final à la complétion.
+      const { error: hbErr } = await admin
+        .from('migration_import_batches')
+        .update({ totals: { progress: { entity, processed: i, total: toInsert.length } } })
+        .eq('id', batchId)
+        .eq('status', 'running');
+      if (hbErr) console.error('[migration-importer] heartbeat failed:', hbErr.message);
       const chunk = toInsert.slice(i, i + CHUNK);
       const { error } = await admin.from(table).upsert(chunk.map((c) => c.row), { onConflict: 'id', ignoreDuplicates: true });
       if (!error) {
@@ -1229,14 +1260,92 @@ export async function purgeImportActivityNoise(
 // ---------------------------------------------------------------------------
 // Rollback — uniquement les entités créées par le lot
 
+/**
+ * Purge des pins créés par le trigger auto-pin (20260743000000) pour les
+ * clients annulés (audit S11) : le rollback soft-delete les clients mais les
+ * maisons/pins de la carte D2D restaient — 5 000 clients annulés laissaient
+ * 5 000 pins fantômes. On ne retire que les maisons dont CE client importé est
+ * le propriétaire d'origine (metadata.source='crm_client' + metadata.client_id
+ * = lui) ; une maison préexistante à la même adresse garde son pin, seul le
+ * lien du client annulé est retiré et son client_id est libéré.
+ */
+async function purgeAutoPinsForClients(admin: SupabaseClient, orgId: string, clientIds: string[]): Promise<number> {
+  let purged = 0;
+  for (let i = 0; i < clientIds.length; i += CHUNK) {
+    const ids = clientIds.slice(i, i + CHUNK);
+    const { data: houses, error } = await admin
+      .from('field_house_profiles')
+      .select('id, client_id, metadata')
+      .eq('org_id', orgId)
+      .in('client_id', ids)
+      .is('deleted_at', null);
+    if (error) {
+      console.error('[migration-importer] pin purge fetch failed:', error.message);
+      break;
+    }
+    const owned: string[] = [];
+    const kept: string[] = [];
+    for (const h of (houses ?? []) as { id: string; metadata: Record<string, unknown> | null }[]) {
+      const meta = h.metadata ?? {};
+      if (meta.source === 'crm_client' && ids.includes(String(meta.client_id ?? ''))) owned.push(h.id);
+      else kept.push(h.id);
+    }
+
+    // liens des clients annulés, sur toutes les maisons
+    const { error: linkErr } = await admin
+      .from('field_pin_entity_links')
+      .delete()
+      .eq('org_id', orgId)
+      .eq('entity_type', 'client')
+      .in('entity_id', ids);
+    if (linkErr) console.error('[migration-importer] pin links delete failed:', linkErr.message);
+
+    // maison préexistante rattachée par la fusion d'adresse : on libère
+    // seulement son client_id (le dossier pointé n'existe plus)
+    if (kept.length > 0) {
+      const { error: freeErr } = await admin
+        .from('field_house_profiles')
+        .update({ client_id: null })
+        .eq('org_id', orgId)
+        .in('id', kept)
+        .in('client_id', ids);
+      if (freeErr) console.error('[migration-importer] house unlink failed:', freeErr.message);
+    }
+
+    if (owned.length > 0) {
+      const { error: allLinksErr } = await admin.from('field_pin_entity_links').delete().eq('org_id', orgId).in('house_id', owned);
+      if (allLinksErr) console.error('[migration-importer] house links delete failed:', allLinksErr.message);
+      const { error: pinErr } = await admin.from('field_pins').delete().eq('org_id', orgId).in('house_id', owned);
+      if (pinErr) console.error('[migration-importer] pins delete failed:', pinErr.message);
+      const { data: del, error: houseErr } = await admin
+        .from('field_house_profiles')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('org_id', orgId)
+        .in('id', owned)
+        .select('id');
+      if (houseErr) console.error('[migration-importer] house soft-delete failed:', houseErr.message);
+      else purged += (del ?? []).length;
+    }
+  }
+  return purged;
+}
+
 export async function rollbackFinalBatch(
   admin: SupabaseClient,
   batchId: string,
   actorId: string,
-): Promise<{ softDeleted: number; deactivated: number; restored: number }> {
+): Promise<{ softDeleted: number; deactivated: number; restored: number; pinsPurged: number }> {
   let softDeleted = 0;
   let deactivated = 0;
   let restored = 0;
+  let pinsPurged = 0;
+
+  // org du lot (pour la purge des pins, scopée tenant)
+  const { data: batchRow } = await admin.from('migration_import_batches').select('migration_id').eq('id', batchId).maybeSingle();
+  const { data: migRow } = batchRow
+    ? await admin.from('data_migrations').select('org_id').eq('id', batchRow.migration_id).maybeSingle()
+    : { data: null };
+  const orgId: string | null = migRow?.org_id ?? null;
 
   const byTable = new Map<string, string[]>();
   for (let offset = 0; ; offset += STAGING_PAGE) {
@@ -1276,6 +1385,12 @@ export async function rollbackFinalBatch(
     }
   }
 
+  // Pins D2D des clients annulés (voir purgeAutoPinsForClients)
+  const clientIds = byTable.get('clients') ?? [];
+  if (orgId && clientIds.length > 0) {
+    pinsPurged = await purgeAutoPinsForClients(admin, orgId, clientIds);
+  }
+
   // Fusions enrichissantes : restaurer les valeurs d'origine des champs
   // comblés (previous_values). Les dossiers fusionnés eux-mêmes ne sont
   // jamais supprimés — ils préexistaient à l'import.
@@ -1310,7 +1425,7 @@ export async function rollbackFinalBatch(
     .eq('id', batchId);
   if (batchErr) console.error('[migration-importer] batch rollback mark failed:', batchErr.message);
 
-  return { softDeleted, deactivated, restored };
+  return { softDeleted, deactivated, restored, pinsPurged };
 }
 
 // ---------------------------------------------------------------------------

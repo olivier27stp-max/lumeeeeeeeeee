@@ -4,6 +4,7 @@
 // passent TOUJOURS par maskValueByType (aucune valeur source complète).
 
 import Papa from 'papaparse';
+import { Readable } from 'node:stream';
 import type { AnalyzedColumn, AnalyzedFile, DetectedType, MigrationCategory } from './types';
 import { MASKED_SAMPLE_COUNT, MAX_STAGED_ROWS } from './types';
 import { maskValueByType } from './masks';
@@ -261,7 +262,7 @@ function decodeBuffer(buf: Buffer, encoding: 'utf-8' | 'utf-16le' | 'utf-16be' |
   return buf.toString('utf8').replace(/^\uFEFF/, '');
 }
 
-export function analyzeCsvBuffer(buf: Buffer): AnalyzedFile {
+export async function analyzeCsvBuffer(buf: Buffer): Promise<AnalyzedFile> {
   const encoding = detectEncoding(buf);
   const text = decodeBuffer(buf, encoding);
 
@@ -294,23 +295,35 @@ export function analyzeCsvBuffer(buf: Buffer): AnalyzedFile {
   const headerSeen = new Map<string, number>();
   const headerByIndex = new Map<number, string>();
   let hadDuplicateHeaders = false;
-  const parsed = Papa.parse(text, {
-    header: true,
-    delimiter,
-    skipEmptyLines: 'greedy',
-    transformHeader: (h: string, index: number) => {
-      const cached = headerByIndex.get(index);
-      if (cached !== undefined) return cached;
-      const t = h.trim();
-      const n = (headerSeen.get(t.toLowerCase()) ?? 0) + 1;
-      headerSeen.set(t.toLowerCase(), n);
-      const name = n === 1 ? t : `${t} (${n})`;
-      if (n > 1) hadDuplicateHeaders = true;
-      headerByIndex.set(index, name);
-      return name;
-    },
-    preview: MAX_STAGED_ROWS + 1, // borne le travail sur les très gros fichiers
-  }) as PapaResult;
+  // Parse en FLUX (audit S12) : un Papa.parse(string) de 25 Mo bloquait
+  // l'event loop plusieurs secondes pour TOUS les tenants (un seul process
+  // Node). Le texte est découpé en tranches poussées via un Readable — Papa
+  // recolle les champs cités à cheval sur deux tranches, et l'event loop
+  // respire entre chaque tranche.
+  const parsed = await new Promise<PapaResult>((resolve, reject) => {
+    const SLICE = 512 * 1024;
+    const slices: string[] = [];
+    for (let i = 0; i < text.length; i += SLICE) slices.push(text.slice(i, i + SLICE));
+    Papa.parse(Readable.from(slices) as never, {
+      header: true,
+      delimiter,
+      skipEmptyLines: 'greedy',
+      transformHeader: (h: string, index: number) => {
+        const cached = headerByIndex.get(index);
+        if (cached !== undefined) return cached;
+        const t = h.trim();
+        const n = (headerSeen.get(t.toLowerCase()) ?? 0) + 1;
+        headerSeen.set(t.toLowerCase(), n);
+        const name = n === 1 ? t : `${t} (${n})`;
+        if (n > 1) hadDuplicateHeaders = true;
+        headerByIndex.set(index, name);
+        return name;
+      },
+      preview: MAX_STAGED_ROWS + 1, // borne le travail sur les très gros fichiers
+      complete: (results: PapaResult) => resolve(results),
+      error: (err: Error) => reject(err),
+    } as never);
+  });
 
   const headers = (parsed.meta.fields ?? []).map((h) => h.trim());
   const warnings: string[] = [];
@@ -320,21 +333,28 @@ export function analyzeCsvBuffer(buf: Buffer): AnalyzedFile {
   const truncated = parsed.data.length > MAX_STAGED_ROWS;
   const rawRows = truncated ? parsed.data.slice(0, MAX_STAGED_ROWS) : parsed.data;
 
-  // normalise chaque ligne : toute valeur devient une string, extras ignorés
-  const rows: Record<string, string>[] = rawRows.map((raw) => {
-    const row: Record<string, string> = {};
-    for (const header of headers) {
-      const v = raw[header];
-      row[header] = typeof v === 'string' ? v : v == null ? '' : String(v);
+  // normalise chaque ligne : toute valeur devient une string, extras ignorés —
+  // par tranches de 5 000 avec respiration de l'event loop (50 k lignes)
+  const rows: Record<string, string>[] = [];
+  for (let i = 0; i < rawRows.length; i += 5000) {
+    for (const raw of rawRows.slice(i, i + 5000)) {
+      const row: Record<string, string> = {};
+      for (const header of headers) {
+        const v = raw[header];
+        row[header] = typeof v === 'string' ? v : v == null ? '' : String(v);
+      }
+      rows.push(row);
     }
-    return row;
-  });
+    if (i + 5000 < rawRows.length) await new Promise<void>((r) => setImmediate(r));
+  }
 
   if (rows.length === 0) warnings.push('empty_file');
   if (truncated) warnings.push('truncated');
   if (parsed.errors.some((e) => e.type === 'FieldMismatch')) warnings.push('ragged_rows');
 
-  const columns: AnalyzedColumn[] = headers.map((header, position) => {
+  const columns: AnalyzedColumn[] = [];
+  for (let position = 0; position < headers.length; position++) {
+    const header = headers[position];
     const all = rows.map((r) => r[header] ?? '');
     const detectedType = detectColumnType(all.slice(0, 500));
     const emptyCount = all.reduce((n, v) => (v.trim().length === 0 || isNullLikeValue(v) ? n + 1 : n), 0);
@@ -345,8 +365,9 @@ export function analyzeCsvBuffer(buf: Buffer): AnalyzedFile {
       if (v.trim().length === 0 || isNullLikeValue(v)) continue;
       samplesMasked.push(maskValueByType(v, detectedType));
     }
-    return { position, header, detectedType, emptyRatio, samplesMasked };
-  });
+    columns.push({ position, header, detectedType, emptyRatio, samplesMasked });
+    await new Promise<void>((r) => setImmediate(r));
+  }
 
   return {
     encoding,

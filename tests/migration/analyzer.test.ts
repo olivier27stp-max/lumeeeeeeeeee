@@ -15,21 +15,21 @@ describe('détection bas niveau', () => {
     expect(detectEncoding(Buffer.from('Nom,Prénom\nHélène,Côté', 'latin1'))).toBe('latin1');
   });
 
-  it('UTF-16BE (BOM FE FF) décodé par permutation d\'octets (audit S1)', () => {
+  it('UTF-16BE (BOM FE FF) décodé par permutation d\'octets (audit S1)', async () => {
     const be = Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from('a,b\n1,2', 'utf16le').swap16()]);
     expect(detectEncoding(be)).toBe('utf-16be');
-    const res = analyzeCsvBuffer(be);
+    const res = await analyzeCsvBuffer(be);
     expect(res.headers).toEqual(['a', 'b']);
     expect(res.rows[0]?.a).toBe('1');
   });
 
-  it('ponctuation Windows-1252 (’ 0x92) décodée correctement, pas en contrôle (audit S1)', () => {
+  it('ponctuation Windows-1252 (’ 0x92) décodée correctement, pas en contrôle (audit S1)', async () => {
     const cp1252 = Buffer.concat([
       Buffer.from('Nom\n', 'latin1'),
       Buffer.from([0x4c, 0x92]), // « L’ » avec l'apostrophe courbe CP1252
       Buffer.from('Anse H\xe9l\xe8ne\n', 'latin1'),
     ]);
-    const res = analyzeCsvBuffer(cp1252);
+    const res = await analyzeCsvBuffer(cp1252);
     expect(res.rows[0]?.Nom).toBe('L’Anse Hélène');
   });
 
@@ -40,9 +40,9 @@ describe('détection bas niveau', () => {
     expect(detectDelimiter('a|b|c\n1|2|3')).toBe('|');
   });
 
-  it('fins de ligne \\r seules (vieux Mac) : délimiteur détecté quand même (audit S1)', () => {
+  it('fins de ligne \\r seules (vieux Mac) : délimiteur détecté quand même (audit S1)', async () => {
     expect(detectDelimiter('a;b;c\r1;2;3\r4;5;6')).toBe(';');
-    const res = analyzeCsvBuffer(Buffer.from('a,b\r1,2\r3,4'));
+    const res = await analyzeCsvBuffer(Buffer.from('a,b\r1,2\r3,4'));
     expect(res.rowCount).toBe(2);
   });
 
@@ -65,8 +65,8 @@ describe('détection bas niveau', () => {
 describe('analyzeCsvBuffer', () => {
   const csv = 'Customer Name,Email,Phone,Job Total\n"Marc Tremblay",marc@exemple.com,514-555-1234,$150.00\n"Julie Roy",julie@exemple.ca,438-555-9876,$275.50\n';
 
-  it('analyse un CSV valide', () => {
-    const res = analyzeCsvBuffer(Buffer.from(csv));
+  it('analyse un CSV valide', async () => {
+    const res = await analyzeCsvBuffer(Buffer.from(csv));
     expect(res.headers).toEqual(['Customer Name', 'Email', 'Phone', 'Job Total']);
     expect(res.rowCount).toBe(2);
     expect(res.columnCount).toBe(4);
@@ -74,43 +74,43 @@ describe('analyzeCsvBuffer', () => {
     expect(res.rows[0]['Customer Name']).toBe('Marc Tremblay');
   });
 
-  it('les échantillons de colonnes sont TOUJOURS masqués', () => {
-    const res = analyzeCsvBuffer(Buffer.from(csv));
+  it('les échantillons de colonnes sont TOUJOURS masqués', async () => {
+    const res = await analyzeCsvBuffer(Buffer.from(csv));
     const flat = JSON.stringify(res.columns.map((c) => c.samplesMasked));
     expect(flat).not.toContain('marc@exemple.com');
     expect(flat).not.toContain('514-555-1234');
     expect(flat).not.toContain('Tremblay');
   });
 
-  it('fichier vide → 0 ligne + warning', () => {
-    const res = analyzeCsvBuffer(Buffer.from(''));
+  it('fichier vide → 0 ligne + warning', async () => {
+    const res = await analyzeCsvBuffer(Buffer.from(''));
     expect(res.rowCount).toBe(0);
     expect(res.warnings.length).toBeGreaterThan(0);
   });
 
-  it('en-têtes seuls → 0 ligne de données', () => {
-    const res = analyzeCsvBuffer(Buffer.from('a,b,c\n'));
+  it('en-têtes seuls → 0 ligne de données', async () => {
+    const res = await analyzeCsvBuffer(Buffer.from('a,b,c\n'));
     expect(res.rowCount).toBe(0);
   });
 
-  it('en-têtes dupliqués : renommés « (2) » au lieu d\'écraser la valeur (audit S1)', () => {
-    const res = analyzeCsvBuffer(Buffer.from('Email,Phone,Email\na@b.com,514-555-1234,perso@b.com\n'));
+  it('en-têtes dupliqués : renommés « (2) » au lieu d\'écraser la valeur (audit S1)', async () => {
+    const res = await analyzeCsvBuffer(Buffer.from('Email,Phone,Email\na@b.com,514-555-1234,perso@b.com\n'));
     expect(res.headers).toEqual(['Email', 'Phone', 'Email (2)']);
     expect(res.rows[0]['Email']).toBe('a@b.com');
     expect(res.rows[0]['Email (2)']).toBe('perso@b.com'); // la 2e valeur survit
     expect(res.warnings).toContain('duplicate_headers');
   });
 
-  it('fichier sans ligne d\'en-tête : signalé, jamais deviné (audit S1)', () => {
+  it('fichier sans ligne d\'en-tête : signalé, jamais deviné (audit S1)', async () => {
     expect(headersLookLikeData(['marc@exemple.com', '514-555-1234', 'Marc Tremblay'])).toBe(true);
     expect(headersLookLikeData(['Customer Name', 'Email', 'Phone'])).toBe(false);
-    const res = analyzeCsvBuffer(Buffer.from('julie@exemple.ca,438-555-9876\nmarc@exemple.com,514-555-1234\n'));
+    const res = await analyzeCsvBuffer(Buffer.from('julie@exemple.ca,438-555-9876\nmarc@exemple.com,514-555-1234\n'));
     expect(res.warnings).toContain('missing_header_row');
   });
 
-  it('tokens nuls exclus de l\'inférence de type et des échantillons (audit S2)', () => {
+  it('tokens nuls exclus de l\'inférence de type et des échantillons (audit S2)', async () => {
     expect(detectColumnType(['N/A', 'a@b.com', 'c@d.ca', '-', 'e@f.org'])).toBe('email');
-    const res = analyzeCsvBuffer(Buffer.from('Email\nN/A\n#REF!\na@b.com\n'));
+    const res = await analyzeCsvBuffer(Buffer.from('Email\nN/A\n#REF!\na@b.com\n'));
     const emailCol = res.columns[0];
     expect(emailCol.samplesMasked.join('')).not.toContain('N/A');
     expect(emailCol.emptyRatio).toBeCloseTo(2 / 3, 2); // N/A et #REF! comptés vides
