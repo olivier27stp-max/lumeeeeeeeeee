@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { HEADER_AVATAR_QUERY_KEY } from '../../components/HeaderUserAvatar';
 import {
   Camera,
   Check,
@@ -283,6 +284,7 @@ export default function ProfileSettings() {
         if (created) setMemberRowId(created.id);
       }
       setSavedInfo({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phone.trim(), city: city.trim(), birthDate });
+      void queryClient.invalidateQueries({ queryKey: [HEADER_AVATAR_QUERY_KEY] });
       setSaved(true);
       // La météo de l'accueil suit la ville du profil — la rafraîchir tout de suite.
       queryClient.invalidateQueries({ queryKey: ['home-weather'] });
@@ -344,6 +346,7 @@ export default function ProfileSettings() {
         if (memberErr) throw memberErr;
       }
       setAvatarUrl(url);
+      void queryClient.invalidateQueries({ queryKey: [HEADER_AVATAR_QUERY_KEY] });
       toast.success(isFr ? 'Photo mise à jour' : 'Photo updated');
     } catch (err: any) {
       toast.error(err.message || (isFr ? "Échec de l'envoi de la photo" : 'Photo upload failed'));

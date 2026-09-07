@@ -23,7 +23,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  UserCircle2,
   Contact,
   Timer,
   Bell,
@@ -96,6 +95,7 @@ import Quotes from './pages/Quotes';
 import QuoteDetails from './pages/QuoteDetails';
 import type { TileColor } from './components/ui';
 import ActivityCenter from './components/ActivityCenter';
+import HeaderUserAvatar from './components/HeaderUserAvatar';
 import SupportFAB from './components/SupportFAB';
 import ErrorBoundary from './components/ErrorBoundary';
 import ProductsServices from './pages/ProductsServices';
@@ -1412,9 +1412,12 @@ function AuthenticatedApp({
                   </span>
                 )}
               </button>
-              <div className="ml-1.5 avatar-sm">
-                <UserCircle2 size={15} strokeWidth={1.75} />
-              </div>
+              <HeaderUserAvatar
+                userId={user.id}
+                orgId={currentOrgId ?? null}
+                fallbackName={user.email ?? null}
+                language={language}
+              />
             </div>
           </header>
 
