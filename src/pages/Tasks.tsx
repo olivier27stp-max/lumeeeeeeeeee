@@ -34,7 +34,9 @@ import {
   bulkUpdateTaskStatus,
   bulkUpdateTaskPriority,
   bulkDeleteTasks,
+  listAssignableMembers,
 } from '../lib/tasksApi';
+import { listTeams } from '../lib/teamsApi';
 import type {
   TaskRow,
   TaskStatus,
@@ -298,6 +300,8 @@ export default function Tasks() {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
   const queryClient = useQueryClient();
+  const membersQuery = useQuery({ queryKey: ['assignableMembers'], queryFn: listAssignableMembers, staleTime: 5 * 60_000 });
+  const teamsQuery = useQuery({ queryKey: ['teams'], queryFn: listTeams, staleTime: 5 * 60_000 });
 
   // ── State ──
   const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>('all');
@@ -737,6 +741,8 @@ export default function Tasks() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         onSubmit={handleCreate}
+        members={membersQuery.data || []}
+        teams={teamsQuery.data || []}
       />
 
       {/* ── EDIT TASK MODAL ── */}
@@ -745,6 +751,8 @@ export default function Tasks() {
           open={true}
           onClose={() => setEditingTask(null)}
           task={editingTask}
+          members={membersQuery.data || []}
+          teams={teamsQuery.data || []}
           onSubmit={async (input) => {
             await handleUpdate(editingTask.id, input);
           }}
