@@ -380,17 +380,49 @@ export async function generateCommissionsForInvoice(
   const repPeriodRevenueCents = (priorEntries ?? []).reduce((s: number, e: any) => s + Number(e.base_amount || 0), 0);
   const repPeriodSaleCount = (priorEntries ?? []).length;
 
-  // 6. Calculate
-  // Les surcharges par catégorie (rule.product_overrides) sont neutralisées :
-  // `invoice_items` ne porte aucune colonne `category`, donc aucune ligne ne
-  // peut être rattachée à une catégorie. On passe une liste vide, ce qui fait
-  // retomber le calcul sur le taux de base appliqué au total de la facture
-  // (cohérent avec `base_amount` ci-dessous). À rétablir le jour où les lignes
-  // de facture porteront une catégorie.
+  // 6. Surcharges par produit (rule.product_overrides). La catégorie d'une
+  //    ligne vit sur le service prédéfini qu'elle référence
+  //    (invoice_items.source_id → predefined_services.category).
+  //
+  //    PRUDENCE : le calcul « ligne par ligne » remplace le total de la facture
+  //    par la SOMME des lignes. Or Σ(line_total_cents) ≠ total_cents (taxes,
+  //    remises) — l'appliquer sans raison changerait le montant des commissions
+  //    même SANS override. On ne bascule donc en mode ligne-par-ligne QUE si la
+  //    règle a des overrides ET qu'au moins une ligne tombe dans une catégorie
+  //    couverte. Sinon, liste vide = taux de base sur le total (inchangé).
+  const overridesRegle: Array<{ category: string }> = Array.isArray(rule.product_overrides) ? rule.product_overrides : [];
+  let lineItems: Array<{ category: string | null; total_cents: number }> = [];
+  if (overridesRegle.length) {
+    const { data: items } = await supabase
+      .from('invoice_items')
+      .select('line_total_cents, source_id')
+      .eq('invoice_id', invoiceId).eq('org_id', orgId).is('deleted_at', null);
+    const serviceIds = [...new Set((items ?? []).map((i: any) => i.source_id).filter(Boolean))];
+    const catParService = new Map<string, string | null>();
+    if (serviceIds.length) {
+      const { data: services } = await supabase
+        .from('predefined_services')
+        .select('id, category').eq('org_id', orgId).in('id', serviceIds);
+      for (const s of services ?? []) catParService.set(s.id, s.category ?? null);
+    }
+    const catsCouvertes = new Set(overridesRegle.map((o) => o.category));
+    const construites = (items ?? []).map((i: any) => ({
+      category: i.source_id ? (catParService.get(i.source_id) ?? null) : null,
+      total_cents: Number(i.line_total_cents || 0),
+    }));
+    // Uniquement si un override s'applique réellement à une ligne. Sinon on
+    // laisse la liste vide pour NE PAS changer le montant de base.
+    if (construites.some((l) => l.category && catsCouvertes.has(l.category))) {
+      lineItems = construites;
+    }
+  }
+
+  // 7. Calculate — surcharges par catégorie appliquées le cas échéant ; sinon
+  //    taux de base sur le total de la facture, exactement comme avant.
   const calc = calculateCommissionAmount(rule, {
     invoiceTotalCents: Number(invoice.total_cents || 0),
     invoicePaidAt: invoice.paid_at,
-    lineItems: [],
+    lineItems,
     repPeriodRevenueCents,
     repPeriodSaleCount,
   });
