@@ -38,69 +38,37 @@ const CA_PROVINCES: Record<string, string> = {
   yt: 'yukon', nt: 'northwest territories', nu: 'nunavut',
 };
 
-// Read the org's city (fallback to address). Coordinates aren't stored on the
-// org, so we geocode the city name with Open-Meteo's free geocoding API.
-// Homonyms are common (e.g. Wickham exists in Australia, England AND Québec),
-// so we fetch several candidates and pick the one matching the org's
-// province/country instead of blindly taking the first result.
-async function getOrgLocation(): Promise<{ city: string; lat: number; lng: number; countryCode: string } | null> {
-  const orgId = await getCurrentOrgIdOrThrow();
+type ResolvedLocation = { city: string; lat: number; lng: number; countryCode: string };
 
-  // La ville du PROFIL de l'usager prime : un employé qui travaille dans un
-  // autre secteur voit la météo de son coin, pas celle du bureau. On lit aussi
-  // les coordonnées exactes (weather_lat/lng) capturées à la sélection de la
-  // ville dans l'autocomplétion : quand elles existent, on saute le géocodage
-  // — plus aucun risque d'homonyme (Wickham QC vs Wickham Australie).
-  let profileCity = '';
-  let profileCoords: { lat: number; lng: number } | null = null;
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data: tm } = await supabase
-        .from('team_members')
-        .select('city, weather_lat, weather_lng')
-        .eq('user_id', user.id)
-        .eq('org_id', orgId)
-        .limit(1)
-        .maybeSingle();
-      profileCity = String(tm?.city || '').trim();
-      if (tm?.weather_lat != null && tm?.weather_lng != null) {
-        profileCoords = { lat: Number(tm.weather_lat), lng: Number(tm.weather_lng) };
-      }
-    }
-  } catch { /* profil sans fiche team_members — on retombe sur l'entreprise */ }
+type SettingsRow = {
+  org_id?: string;
+  city?: string | null;
+  street1?: string | null;
+  postal_code?: string | null;
+  province?: string | null;
+  country?: string | null;
+  weather_lat?: number | null;
+  weather_lng?: number | null;
+};
 
-  // The company's address lives in company_settings (not orgs).
-  const { data, error } = await supabase
-    .from('company_settings')
-    .select('city, street1, postal_code, province, country, weather_lat, weather_lng')
-    .eq('org_id', orgId)
-    .limit(1)
-    .maybeSingle();
-  if (!profileCity && (error || !data)) return null;
+type ProfileRow = {
+  org_id?: string;
+  city?: string | null;
+  weather_lat?: number | null;
+  weather_lng?: number | null;
+};
 
-  // Le pays de l'entreprise choisit le modèle météo (Environnement Canada au
-  // Canada). Avec des coordonnées stockées, c'est la seule source possible.
-  const wantCountry = normalizePlace(String(data?.country || ''));
-  const storedCountryCode = wantCountry === 'canada' || wantCountry === 'ca' ? 'CA' : '';
+const SETTINGS_COLS = 'org_id, city, street1, postal_code, province, country, weather_lat, weather_lng';
+const PROFILE_COLS = 'org_id, city, weather_lat, weather_lng';
 
-  // Coordonnées du profil connues → on les utilise directement.
-  if (profileCity && profileCoords) {
-    return { city: profileCity, lat: profileCoords.lat, lng: profileCoords.lng, countryCode: storedCountryCode };
-  }
-  // Pas de ville de profil, mais l'entreprise a des coordonnées stockées.
-  if (!profileCity && data?.weather_lat != null && data?.weather_lng != null) {
-    return {
-      city: String(data.city || '').trim() || 'Ville',
-      lat: Number(data.weather_lat),
-      lng: Number(data.weather_lng),
-      countryCode: storedCountryCode,
-    };
-  }
+function hasCoords(r: { weather_lat?: number | null; weather_lng?: number | null } | null | undefined): boolean {
+  return r?.weather_lat != null && r?.weather_lng != null;
+}
 
-  const query = profileCity || String(data?.city || data?.street1 || '').trim();
-  if (!query) return null;
-
+// Geocode a city name with Open-Meteo's free geocoding API, picking the
+// candidate that matches the given province/country (homonyms are common:
+// Wickham exists in Australia, England AND Québec).
+async function geocodeCity(query: string, province: string, country: string): Promise<ResolvedLocation | null> {
   const geoUrl =
     `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=fr&format=json`;
   const geoRes = await fetch(geoUrl);
@@ -109,18 +77,19 @@ async function getOrgLocation(): Promise<{ city: string; lat: number; lng: numbe
   const results: any[] = geo?.results || [];
   if (!results.length) return null;
 
-  const rawProvince = normalizePlace(String(data?.province || ''));
+  const rawProvince = normalizePlace(province);
   const wantProvince = CA_PROVINCES[rawProvince] || rawProvince;
+  const wantCountry = normalizePlace(country);
 
   let hit = results[0];
   let bestScore = -1;
   for (const r of results) {
     const admin1 = normalizePlace(String(r.admin1 || ''));
-    const country = normalizePlace(String(r.country || ''));
     const cc = normalizePlace(String(r.country_code || ''));
+    const cname = normalizePlace(String(r.country || ''));
     let score = 0;
     if (wantProvince && (admin1 === wantProvince || admin1.includes(wantProvince) || wantProvince.includes(admin1))) score += 3;
-    if (wantCountry && (country === wantCountry || cc === wantCountry)) score += 2;
+    if (wantCountry && (cname === wantCountry || cc === wantCountry)) score += 2;
     if (score > bestScore) { bestScore = score; hit = r; }
   }
 
@@ -130,6 +99,134 @@ async function getOrgLocation(): Promise<{ city: string; lat: number; lng: numbe
     lng: hit.longitude,
     countryCode: String(hit.country_code || '').toUpperCase(),
   };
+}
+
+// Resolve a location from a profile row (user's city) and/or a company
+// settings row (office address). Profile city wins over the office address.
+async function resolveLocation(profile: ProfileRow | null, settings: SettingsRow | null): Promise<ResolvedLocation | null> {
+  const profileCity = String(profile?.city || '').trim();
+  if (!profileCity && !settings) return null;
+
+  // Le pays de l'entreprise choisit le modèle météo (Environnement Canada au
+  // Canada). Avec des coordonnées stockées, c'est la seule source possible.
+  const wantCountry = normalizePlace(String(settings?.country || ''));
+  const storedCountryCode = wantCountry === 'canada' || wantCountry === 'ca' ? 'CA' : '';
+
+  // Coordonnées du profil connues → on les utilise directement (plus aucun
+  // risque d'homonyme : capturées à la sélection dans l'autocomplétion).
+  if (profileCity && hasCoords(profile)) {
+    return { city: profileCity, lat: Number(profile!.weather_lat), lng: Number(profile!.weather_lng), countryCode: storedCountryCode };
+  }
+  // Pas de ville de profil, mais l'entreprise a des coordonnées stockées.
+  if (!profileCity && hasCoords(settings)) {
+    return {
+      city: String(settings!.city || '').trim() || 'Ville',
+      lat: Number(settings!.weather_lat),
+      lng: Number(settings!.weather_lng),
+      countryCode: storedCountryCode,
+    };
+  }
+
+  const query = profileCity || String(settings?.city || settings?.street1 || '').trim();
+  if (!query) return null;
+  return geocodeCity(query, String(settings?.province || ''), String(settings?.country || ''));
+}
+
+// Read the org's city (fallback to address). Coordinates aren't stored on the
+// org, so we geocode the city name with Open-Meteo's free geocoding API.
+//
+// Ordre de résolution :
+//   1. la ville du PROFIL de l'usager dans le bureau actif (un employé qui
+//      travaille dans un autre secteur voit la météo de son coin) ;
+//   2. l'adresse du bureau actif (company_settings) ;
+//   3. REPLI multi-bureaux : un bureau fraîchement créé n'a ni adresse ni
+//      fiche de profil (create-office ne seed que le nom), ce qui faisait
+//      disparaître la météo de l'accueil. On réutilise alors la ville de
+//      profil de l'usager dans un autre bureau, puis l'adresse d'un bureau
+//      frère de la compagnie (la RLS ne renvoie que les bureaux dont
+//      l'usager est membre).
+async function getOrgLocation(): Promise<ResolvedLocation | null> {
+  const orgId = await getCurrentOrgIdOrThrow();
+
+  let userId: string | null = null;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    userId = user?.id || null;
+  } catch { /* pas de session — on retombe sur l'entreprise */ }
+
+  // ── 1 + 2 : bureau actif ──
+  let profile: ProfileRow | null = null;
+  if (userId) {
+    try {
+      const { data: tm } = await supabase
+        .from('team_members')
+        .select(PROFILE_COLS)
+        .eq('user_id', userId)
+        .eq('org_id', orgId)
+        .limit(1)
+        .maybeSingle();
+      profile = (tm as ProfileRow | null) || null;
+    } catch { /* profil sans fiche team_members — on retombe sur l'entreprise */ }
+  }
+
+  // The company's address lives in company_settings (not orgs).
+  const { data: settings } = await supabase
+    .from('company_settings')
+    .select(SETTINGS_COLS)
+    .eq('org_id', orgId)
+    .limit(1)
+    .maybeSingle();
+
+  const own = await resolveLocation(profile, (settings as SettingsRow | null) || null);
+  if (own) return own;
+
+  // ── 3 : repli sur les autres bureaux de la compagnie ──
+  return resolveFromSiblingOffices(orgId, userId);
+}
+
+async function resolveFromSiblingOffices(orgId: string, userId: string | null): Promise<ResolvedLocation | null> {
+  let siblingSettings: SettingsRow[] = [];
+  try {
+    const { data } = await supabase
+      .from('company_settings')
+      .select(SETTINGS_COLS)
+      .neq('org_id', orgId)
+      .limit(50);
+    siblingSettings = (data as SettingsRow[] | null) || [];
+  } catch { /* aucun bureau frère lisible */ }
+  const settingsByOrg = new Map<string, SettingsRow>(
+    siblingSettings.filter((s) => s.org_id).map((s) => [s.org_id as string, s]),
+  );
+
+  // 3a. Ville de profil de l'usager dans un autre bureau (coords d'abord).
+  if (userId) {
+    try {
+      const { data } = await supabase
+        .from('team_members')
+        .select(PROFILE_COLS)
+        .eq('user_id', userId)
+        .neq('org_id', orgId)
+        .not('city', 'is', null)
+        .limit(50);
+      const profiles = ((data as ProfileRow[] | null) || []).filter((p) => String(p.city || '').trim());
+      profiles.sort((a, b) => Number(hasCoords(b)) - Number(hasCoords(a)));
+      for (const p of profiles) {
+        const loc = await resolveLocation(p, (p.org_id && settingsByOrg.get(p.org_id)) || null);
+        if (loc) return loc;
+      }
+    } catch { /* pas de fiche ailleurs */ }
+  }
+
+  // 3b. Adresse d'un bureau frère (coords d'abord, puis ville, puis rue).
+  const candidates = siblingSettings.filter(
+    (s) => hasCoords(s) || String(s.city || '').trim() || String(s.street1 || '').trim(),
+  );
+  candidates.sort((a, b) => Number(hasCoords(b)) - Number(hasCoords(a)));
+  for (const s of candidates) {
+    const loc = await resolveLocation(null, s);
+    if (loc) return loc;
+  }
+  return null;
 }
 
 /**
