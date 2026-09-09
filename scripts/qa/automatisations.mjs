@@ -29,6 +29,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 
+// Refus qui prouvent que le moteur A tourné mais ne pouvait pas livrer pour une
+// raison de CONFIGURATION (pas une panne) : Twilio/SMTP absents en dev, client
+// sans contact, désabonnement, forfait, fonctionnalité désactivée dans les
+// réglages (avis Google sans URL…), et le plafond anti-spam. Tout le reste = vraie panne.
+const REFUS_LEGITIME = /not configured|no recipient|opted out|plan does not include|are disabled|no google review url|no .*review link|has no email|frequency cap|has unsubscribed/i;
+
 const RACINE = process.cwd();
 const URL_SB = process.env.VITE_SUPABASE_URL;
 const CLE_SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -239,12 +245,11 @@ async function main() {
       // Un refus légitime n'est pas une panne : sans Twilio configuré en
       // local, l'envoi ÉCHOUE volontairement — ce qui prouve quand même que
       // le moteur s'est déclenché et a résolu ses variables.
-      const legitime = /not configured|no recipient|opted out|plan does not include|are disabled/i.test(e);
+      const legitime = REFUS_LEGITIME.test(e);
       console.log(`    ${legitime ? '·' : '✗'} ${j.action_type} — ${e}${legitime ? '  (refus attendu)' : ''}`);
     }
 
-    const vraisEchecs = echouees.filter((j) =>
-      !/not configured|no recipient|opted out|plan does not include|are disabled/i.test(String(j.result_error || '')));
+    const vraisEchecs = echouees.filter((j) => !REFUS_LEGITIME.test(String(j.result_error || '')));
     ok('aucune panne inattendue', vraisEchecs.length === 0,
       vraisEchecs.length ? `${vraisEchecs.length} échec(s) non expliqué(s)` : 'les refus sont tous légitimes');
   } finally {
