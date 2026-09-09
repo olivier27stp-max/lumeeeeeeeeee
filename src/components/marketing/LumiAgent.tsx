@@ -101,9 +101,9 @@ export default function LumiAgent() {
         </button>
       )}
 
-      {/* Panneau de chat */}
+      {/* Panneau de chat — latéral DROIT, pleine hauteur (façon Piper) */}
       {open && (
-        <div className="fixed bottom-5 right-5 z-[60] w-[min(380px,calc(100vw-2.5rem))] max-h-[min(620px,calc(100vh-2.5rem))] flex flex-col rounded-2xl bg-white border border-gray-200 shadow-2xl overflow-hidden">
+        <div className="fixed top-0 right-0 bottom-0 z-[60] w-full sm:w-[400px] flex flex-col bg-white border-l border-gray-200 shadow-2xl overflow-hidden">
           {/* En-tête */}
           <div className="flex items-center gap-2.5 px-4 py-3 border-b border-gray-100">
             <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.18)]" />
