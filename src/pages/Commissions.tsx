@@ -326,6 +326,7 @@ function RepsTab({ onSelectRep, onProfileMap }: RepsTabProps) {
             entries={entries ?? []}
             profileMap={profileMap}
             onSelectRep={onSelectRep}
+            allReps={allReps}
           />
 
           <Card>

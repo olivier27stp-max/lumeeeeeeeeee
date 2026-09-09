@@ -27,11 +27,14 @@ import PaymentMixCard from '../components/insights/PaymentMixCard';
 import MiniTrendCard from '../components/insights/MiniTrendCard';
 import ZonesHeatmapCard from '../components/insights/ZonesHeatmapCard';
 import ProfitabilityCard from '../components/insights/ProfitabilityCard';
+import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 
 const EMPTY_SERIES = { labels: [] as string[], vals: [] as number[] };
 function mean(a: number[]) { return a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0; }
-/** 0–1 fraction OR already-scaled percent → rounded percent. */
-function ratePct(v: number | null | undefined): number { const n = v ?? 0; return Math.round(Math.abs(n) <= 1 && n !== 0 ? n * 100 : n); }
+/** Les RPC (completion_rate, win_rate, conversion_rate) renvoient DÉJÀ un
+ *  pourcentage (0–100). On arrondit, sans re-multiplier : l'ancienne
+ *  heuristique « ≤ 1 → ×100 » transformait un vrai taux de 1 % en 100 %. */
+function ratePct(v: number | null | undefined): number { return Math.round(Math.abs(v ?? 0)); }
 
 /* ── shared shell (boxless, underlined header) ── */
 function SectionHead({ title }: { title: string }) {
@@ -51,7 +54,16 @@ function LinkCard({ to, children }: { to: string; children: ReactNode }) {
 }
 
 /* ── leaderboard (teams / clients) ── */
-function Leaderboard({ rows, loading, emptyLabel }: { rows: Array<{ name: string; primary: string; secondary?: string; weight: number }>; loading?: boolean; emptyLabel: string }) {
+interface LeaderboardRow {
+  name: string;
+  primary: string;
+  secondary?: string;
+  weight: number;
+  /** Quand présent, on montre le vrai avatar (bonhomme) au lieu des initiales. */
+  avatar?: { id: string | null; name: string };
+}
+
+function Leaderboard({ rows, loading, emptyLabel }: { rows: LeaderboardRow[]; loading?: boolean; emptyLabel: string }) {
   if (loading) return <div className="px-6 py-5 space-y-3">{[0, 1, 2].map((i) => <div key={i} className="h-8 rounded bg-surface-secondary/50 animate-pulse" />)}</div>;
   if (rows.length === 0) return <div className="h-[120px] flex items-center justify-center text-[12.5px] text-text-tertiary">{emptyLabel}</div>;
   const max = Math.max(1, ...rows.map((r) => r.weight));
@@ -61,7 +73,9 @@ function Leaderboard({ rows, loading, emptyLabel }: { rows: Array<{ name: string
       {rows.map((r, i) => (
         <div key={i} className="grid grid-cols-[16px_34px_1fr_auto] items-center gap-3.5 py-3 border-b border-border-light last:border-0">
           <span className={cn('text-[12px] font-bold text-center tabular-nums', i === 0 ? 'text-text-primary' : 'text-text-tertiary')}>{i + 1}</span>
-          <span className={cn('w-[34px] h-[34px] rounded-full grid place-items-center text-[12px] font-bold', i === 0 ? '' : 'bg-surface-secondary border border-border text-text-secondary')} style={i === 0 ? { background: 'var(--color-text-primary)', color: 'var(--color-surface)' } : undefined}>{ini(r.name)}</span>
+          {r.avatar
+            ? <UnifiedAvatar id={r.avatar.id} name={r.avatar.name} size={34} />
+            : <span className={cn('w-[34px] h-[34px] rounded-full grid place-items-center text-[12px] font-bold', i === 0 ? '' : 'bg-surface-secondary border border-border text-text-secondary')} style={i === 0 ? { background: 'var(--color-text-primary)', color: 'var(--color-surface)' } : undefined}>{ini(r.name)}</span>}
           <div className="min-w-0">
             <div className="text-[13.5px] font-semibold tracking-tight truncate text-text-primary">{r.name}</div>
             <div className="h-1.5 rounded-full bg-surface-tertiary overflow-hidden mt-2"><span className="block h-full rounded-full" style={{ width: `${Math.round((r.weight / max) * 100)}%`, background: 'var(--color-text-primary)' }} /></div>
@@ -128,7 +142,7 @@ export default function Statistiques() {
     .map((t) => ({ name: t.team_name, primary: kc(t.revenue_cents), secondary: `${t.jobs_count} jobs · ${kc(t.avg_job_value_cents)} ${fr ? 'moy.' : 'avg'}`, weight: t.revenue_cents }));
   const teamsByCompletion = teams.slice().sort((a, b) => ratePct(b.completion_rate) - ratePct(a.completion_rate)).slice(0, 5)
     .map((t) => ({ name: t.team_name, primary: `${ratePct(t.completion_rate)} %`, secondary: `${t.jobs_completed}/${t.jobs_count} jobs`, weight: ratePct(t.completion_rate) }));
-  const clientRows = (clientQ.data || []).slice().sort((a, b) => b.total_revenue_cents - a.total_revenue_cents).slice(0, 5).map((c) => ({ name: c.client_name, primary: kc(c.total_revenue_cents), secondary: `${c.total_jobs} jobs`, weight: c.total_revenue_cents }));
+  const clientRows = (clientQ.data || []).slice().sort((a, b) => b.total_revenue_cents - a.total_revenue_cents).slice(0, 5).map((c) => ({ name: c.client_name, primary: kc(c.total_revenue_cents), secondary: `${c.total_jobs} jobs`, weight: c.total_revenue_cents, avatar: { id: c.client_id, name: c.client_name } }));
 
   const loy = loyQ.data || { recurringPct: 0, ltvAvgCents: 0, retentionPct: 0 };
   const conv = convQ.data;

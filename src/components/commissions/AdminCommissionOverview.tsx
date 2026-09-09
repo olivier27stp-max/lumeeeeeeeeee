@@ -56,6 +56,25 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  // Rep list for the filter dropdown AND for zero-filling the leaderboard —
+  // loaded once from the org's members, so it stays STABLE. Declared here (not
+  // just before the JSX) because the `dash` useMemo below reads it. Deriving it
+  // from the filtered entries would collapse it to the selected rep.
+  const [allReps, setAllReps] = useState<{ id: string; label: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchTeamList()
+      .then(({ members }) => {
+        if (cancelled) return;
+        setAllReps(
+          members
+            .filter((m) => m.status === 'active' && m.user_id)
+            .map((m) => ({ id: m.user_id, label: m.full_name || m.email || m.user_id })),
+        );
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -173,33 +192,28 @@ export default function AdminCommissionOverview({ onSelectRep }: Props) {
       r.deals += 1;
       byRep.set(e.user_id, r);
     }
-    const leaderboard: LeaderRep[] = [...byRep.entries()]
-      .map(([userId, v]) => ({ userId, name: profileMap[userId] ?? userId, amount: v.amount, deals: v.deals }))
+    // Zéro-fill : TOUS les représentants actifs de l'équipe figurent au
+    // classement, même ceux sans plan ni commission (0 $, 0 vente). Personne
+    // n'est invisible. Quand la liste d'équipe n'a pas (encore) chargé, on
+    // retombe sur les seuls reps ayant des entrées, comme avant.
+    const rankIds = allReps.length
+      ? [...new Set([...allReps.map((r) => r.id), ...byRep.keys()])]
+      : [...byRep.keys()];
+    const repLabel = (id: string) =>
+      allReps.find((r) => r.id === id)?.label ?? profileMap[id] ?? id;
+    const leaderboard: LeaderRep[] = rankIds
+      .map((userId) => {
+        const v = byRep.get(userId) ?? { amount: 0, deals: 0 };
+        return { userId, name: repLabel(userId), amount: v.amount, deals: v.deals };
+      })
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 5);
 
     const avgPerDeal = list.length ? total / list.length : 0;
-    return { total, paid, pending, approved, reversed, series, xLabels, leaderboard, deals: list.length, avgPerDeal, repCount: byRep.size };
-  }, [entries, payroll, profileMap, filters.from, filters.to]);
+    const repCount = allReps.length || byRep.size;
+    return { total, paid, pending, approved, reversed, series, xLabels, leaderboard, deals: list.length, avgPerDeal, repCount };
+  }, [entries, payroll, profileMap, allReps, filters.from, filters.to]);
 
-  // Rep list for the filter dropdown — loaded once from the org's members, so
-  // it stays STABLE. (Deriving it from the filtered entries collapsed the list
-  // to just the selected rep, trapping the filter.)
-  const [allReps, setAllReps] = useState<{ id: string; label: string }[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    fetchTeamList()
-      .then(({ members }) => {
-        if (cancelled) return;
-        setAllReps(
-          members
-            .filter((m) => m.status === 'active' && m.user_id)
-            .map((m) => ({ id: m.user_id, label: m.full_name || m.email || m.user_id })),
-        );
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
   // Fallback: if the team list is empty, derive from entries (union, not just the
   // filtered rep) so the dropdown is never empty.
   const repOptions = useMemo(() => {

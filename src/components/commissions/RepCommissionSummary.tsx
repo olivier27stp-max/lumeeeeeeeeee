@@ -10,6 +10,12 @@ interface Props {
   profileMap: Record<string, string>;
   /** Called when a rep row is clicked; admin can open a drilldown */
   onSelectRep?: (userId: string) => void;
+  /**
+   * Tous les représentants actifs de l'org (id + libellé). Fournis-les pour
+   * que le tableau liste AUSSI ceux sans aucune commission (0 $, 0 vente) :
+   * personne n'est invisible. Absent → on ne montre que les reps avec entrées.
+   */
+  allReps?: { id: string; label: string }[];
 }
 
 interface RepRow {
@@ -29,20 +35,18 @@ function fmtMoney(n: number, locale: string) {
  * Per-rep summary table — used in the admin/owner overview tab to surface the
  * top performers and let the viewer drill into a specific rep.
  */
-export default function RepCommissionSummary({ entries, profileMap, onSelectRep }: Props) {
+export default function RepCommissionSummary({ entries, profileMap, onSelectRep, allReps }: Props) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const locale = fr ? 'fr-CA' : 'en-US';
   const byRep = new Map<string, RepRow>();
+  const blankRow = (userId: string, name: string): RepRow => ({
+    userId, name, deals: 0, totalEarned: 0, pending: 0, paid: 0,
+  });
+  // Zéro-fill d'abord : chaque rep actif de l'équipe a une ligne, même à 0 $.
+  for (const r of allReps ?? []) byRep.set(r.id, blankRow(r.id, r.label));
   for (const e of entries) {
-    const row = byRep.get(e.user_id) ?? {
-      userId: e.user_id,
-      name: profileMap[e.user_id] ?? e.rep_name ?? e.user_id,
-      deals: 0,
-      totalEarned: 0,
-      pending: 0,
-      paid: 0,
-    };
+    const row = byRep.get(e.user_id) ?? blankRow(e.user_id, profileMap[e.user_id] ?? e.rep_name ?? e.user_id);
     row.deals += 1;
     row.totalEarned += Number(e.amount || 0);
     if (e.status === 'pending') row.pending += Number(e.amount || 0);
