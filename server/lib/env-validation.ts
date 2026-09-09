@@ -54,9 +54,10 @@ const optionalEnvSchema = z.object({
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().optional(),
 
-  // Gemini AI
+  // Gemini AI — accepte l'ancien format de clé (AIza…) ET le nouveau format
+  // de clé API AI Studio (AQ.…). Les deux sont des clés valides côté Google.
   GEMINI_API_KEY: z.string().optional()
-    .refine(v => !v || v.startsWith('AIza'), 'GEMINI_API_KEY must start with AIza'),
+    .refine(v => !v || v.startsWith('AIza') || v.startsWith('AQ.'), 'GEMINI_API_KEY must be a valid Gemini API key (AIza… or AQ.…)'),
 
   // Payments encryption
   PAYMENTS_ENCRYPTION_KEY: z.string().optional(),
