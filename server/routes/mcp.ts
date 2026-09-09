@@ -167,6 +167,7 @@ const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = 
   get_team_locations:        { cle: 'gps.read',           capacite: 'la localisation de l\u2019équipe' },
   get_d2d_stats:             { cle: 'door_to_door.access', capacite: 'les statistiques terrain' },
   list_automations:          { cle: 'automations.read',   capacite: 'la consultation des automatisations' },
+  get_automation_health:     { cle: 'automations.read',   capacite: 'le diagnostic des automatisations' },
   get_payroll_summary:       { cle: 'financial.view_reports', capacite: 'la paie' },
   list_quotes:               { cle: 'quotes.read',        capacite: 'la consultation des devis' },
   create_quote:              { cle: 'quotes.create',      capacite: 'la création de devis' },
