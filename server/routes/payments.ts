@@ -6,6 +6,7 @@ import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient, 
 import { parseOrgId, clampInt, resolvePublicBaseUrl } from '../lib/helpers';
 import { dispatchWebhook } from '../lib/webhookDispatcher';
 import { generateCommissionsForInvoice, handleInvoiceReversal } from '../lib/field-sales/commission-engine';
+import { seedOrgComplete } from '../lib/seedOrgDefaults';
 
 // Refund input validation
 const refundSchema = z.object({
@@ -1961,6 +1962,28 @@ async function handleCheckoutSessionCompleted(
       }
     } catch (err) { console.error('[webhook/checkout] propagate billing address to company_settings failed:', err); }
   }
+
+  // ── 7b. Seed the org's baseline (taxes + automations + service catalog) ──
+  // Le lien de paiement court-circuite l'assistant post-login (on pose
+  // onboarding_done ci-dessous), donc SANS ceci l'org resterait sans taxes
+  // (factures à 0 % de TPS/TVQ, silencieusement) et sans automatisations.
+  // Idempotent et best-effort — ne bloque jamais l'activation. L'industrie
+  // n'est pas collectée par le lien de paiement : on lit company_settings
+  // (souvent vide ici → catalogue de services simplement sauté, pas de faux
+  // services), mais taxes (défaut QC) et automatisations sont universelles.
+  try {
+    const { data: cs } = await admin
+      .from('company_settings')
+      .select('industry, province')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    // `province` peut être un code preset ('QC') ou un nom libre ('Quebec').
+    // On ne l'utilise que si c'est un code preset connu (2-3 lettres) ; sinon
+    // défaut QC — jamais « aucune taxe » par mauvais appariement silencieux.
+    const prov = (cs?.province && String(cs.province).trim().toUpperCase()) || '';
+    const taxRegion = /^[A-Z]{2,3}$/.test(prov) ? prov : 'QC';
+    await seedOrgComplete(admin, orgId, { industry: cs?.industry, taxRegion });
+  } catch (err) { console.error('[webhook/checkout] seedOrgComplete failed:', err); }
 
   // ── 8. Mark onboarding done ──
   try {

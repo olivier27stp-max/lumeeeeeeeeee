@@ -339,6 +339,18 @@ export default function OnboardingFlow() {
     // 1. Provision org
     try { await provisionOrg(); } catch {}
 
+    // 1b. Seed the org baseline (taxes QC + automations + service catalog).
+    // Ce chemin /checkout crée une org NUE et pose onboarding_done, ce qui
+    // court-circuite l'assistant : sans ceci l'org facturerait à 0 % de taxe
+    // et n'aurait aucune automatisation. Serveur (service_role requis),
+    // idempotent, best-effort — n'interrompt jamais le paiement.
+    try {
+      await fetch('/api/onboarding/seed-defaults', {
+        method: 'POST', headers,
+        body: JSON.stringify({ industry: industry || null, tax_region: 'QC' }),
+      });
+    } catch {}
+
     // 2. Save onboarding
     try { await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) }); } catch {}
 
