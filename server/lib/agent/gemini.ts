@@ -64,6 +64,7 @@ export async function generateContent(opts: {
   functionDeclarations?: FunctionDeclaration[];
   temperature?: number;
   maxOutputTokens?: number;
+  disableThinking?: boolean;
 }): Promise<GenerateResult> {
   if (!geminiApiKey) {
     throw new Error('GEMINI_API_KEY is not configured. Set it in .env.local to enable the Lume Agent.');
@@ -74,6 +75,14 @@ export async function generateContent(opts: {
   // chat vendeur public où n'importe qui peut envoyer des messages).
   if (typeof opts.maxOutputTokens === 'number') {
     generationConfig.maxOutputTokens = opts.maxOutputTokens;
+  }
+  // Gemini 2.5 est un modèle « thinking » : il dépense des tokens à réfléchir
+  // AVANT de répondre. Sur une réponse courte plafonnée, ce budget « pensée »
+  // mangeait tout le maxOutputTokens et la vraie réponse était coupée
+  // (finishReason MAX_TOKENS, texte tronqué). Pour un chat vendeur simple, on
+  // coupe la réflexion : réponses complètes, plus rapides et moins chères.
+  if (opts.disableThinking) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
   }
 
   const body: Record<string, any> = {

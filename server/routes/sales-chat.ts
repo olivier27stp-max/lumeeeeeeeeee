@@ -102,7 +102,9 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
       systemInstruction: SYSTEM_PROMPT,
       contents,
       temperature: 0.6,
-      maxOutputTokens: 320, // borne le coût par réponse (réponses courtes de vendeur)
+      maxOutputTokens: 400, // réponses courtes de vendeur, avec marge
+      disableThinking: true, // pas de « réflexion » : sinon elle mange le budget
+                             // et la réponse est coupée (bug MAX_TOKENS constaté).
     });
 
     const reply = (result.text || '').trim();
