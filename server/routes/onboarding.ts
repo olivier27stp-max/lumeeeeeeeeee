@@ -198,7 +198,7 @@ router.get('/me/setup-status', async (req, res) => {
     const admin = getServiceClient();
     const orgId = auth.orgId;
 
-    const [clientsRes, quotesRes, paymentsSettings, twilioRow, membersRes, csRes] =
+    const [clientsRes, quotesRes, paymentsSettings, twilioRow, membersRes, csRes, taxGroupRes] =
       await Promise.all([
         admin
           .from('clients')
@@ -232,6 +232,12 @@ router.get('/me/setup-status', async (req, res) => {
           .select('setup_completed')
           .eq('org_id', orgId)
           .maybeSingle(),
+        // Taxes configurées = au moins un groupe de taxe existe pour l'org.
+        // Sans ça, les factures partent à 0 % de TPS/TVQ silencieusement.
+        admin
+          .from('tax_groups')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId),
       ]);
 
     return res.json({
@@ -240,6 +246,7 @@ router.get('/me/setup-status', async (req, res) => {
       stripe_connected: !!(paymentsSettings.data?.stripe_enabled && paymentsSettings.data?.stripe_keys_present),
       twilio_provisioned: !!twilioRow.data?.twilio_number,
       members_count: membersRes.count || 0,
+      taxes_configured: (taxGroupRes.count || 0) > 0,
       setup_completed: !!csRes.data?.setup_completed,
     });
   } catch (err: any) {
