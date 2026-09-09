@@ -132,50 +132,63 @@ export default function Auth({ onBack }: AuthProps) {
       {/* Left visual panel — hidden on small screens */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         <img
-          src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80"
+          src="/auth-hero.webp"
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
         />
-        <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-black/50 to-black/30" />
+        {/* Illustration N&B (planche de BD) : texte foncé en gras en haut,
+            sur la zone de ciel vide, plutôt que du blanc sur voile noir. */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="relative z-10 flex flex-col justify-end p-14 text-white"
+          className="relative z-10 flex flex-col justify-start p-14 text-gray-900"
         >
-          <h2 className="text-4xl font-light leading-tight">
+          <h2 className="text-4xl font-extrabold leading-none tracking-tight">
             {t.auth.welcomeBack}
           </h2>
-          <p className="mt-4 text-lg font-light text-white/80 max-w-md">
+          <p className="mt-4 text-lg font-medium text-gray-700 max-w-sm">
             {t.auth.welcomeTagline}
           </p>
-          <div className="mt-8 flex items-center gap-3 text-sm text-white/60">
-            <span className="h-px w-12 bg-white/40" />
+          <div className="mt-7 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">
+            <span className="h-0.5 w-9 bg-gray-900" />
             {t.auth.companyOS}
           </div>
         </motion.div>
       </div>
 
-      {/* Right form panel */}
-      <div className="flex-1 flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
+      {/* Right form panel — planche de BD : trame de points en fond, encre noire */}
+      <div
+        className="flex-1 flex items-center justify-center p-6 relative"
+        style={{
+          backgroundColor: '#f7f5ef',
+          backgroundImage: 'radial-gradient(#141414 0.9px, transparent 0.9px)',
+          backgroundSize: '14px 14px',
+        }}
+      >
+        {/* Voile radial pour aérer la trame au centre (lisibilité du formulaire) */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse at center, rgba(247,245,239,0.93) 42%, rgba(247,245,239,0.68) 100%)' }}
+        />
+      <div className="w-full max-w-md relative z-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.15 }}
-          className="glass-card space-y-8"
+          className="space-y-8"
         >
           <div className="text-center space-y-2">
             <div className="flex justify-center mb-4">
-              <button 
+              <button
                 onClick={onBack}
                 className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
               >
                 {t.auth.backToHome}
               </button>
             </div>
-            <h1 className="text-3xl font-extralight tracking-widest">LUME</h1>
-            <p className="text-gray-500 font-light text-sm">
+            <h1 className="text-3xl font-black tracking-[0.3em]" style={{ textShadow: '2px 2px 0 rgba(20,20,20,0.10)' }}>LUME</h1>
+            <p className="text-gray-500 font-medium text-sm">
               {t.auth.welcomeBack}
             </p>
           </div>
@@ -190,7 +203,7 @@ export default function Auth({ onBack }: AuthProps) {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="glass-input w-full pl-10"
+                  className="w-full pl-10 h-12 rounded border-2 border-gray-900 bg-white text-sm shadow-[2px_2px_0_rgba(20,20,20,0.12)] focus:outline-none focus:shadow-[3px_3px_0_rgba(20,20,20,0.20)] transition-shadow"
                   placeholder={t.auth.emailPlaceholder}
                 />
               </div>
@@ -205,7 +218,7 @@ export default function Auth({ onBack }: AuthProps) {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="glass-input w-full pl-10 pr-10"
+                  className="w-full pl-10 pr-10 h-12 rounded border-2 border-gray-900 bg-white text-sm shadow-[2px_2px_0_rgba(20,20,20,0.12)] focus:outline-none focus:shadow-[3px_3px_0_rgba(20,20,20,0.20)] transition-shadow"
                   placeholder={t.auth.passwordPlaceholder}
                 />
                 <button
@@ -235,7 +248,7 @@ export default function Auth({ onBack }: AuthProps) {
             <button
               type="submit"
               disabled={loading}
-              className="glass-button-primary w-full flex items-center justify-center gap-2 group"
+              className="w-full h-12 rounded bg-gray-900 text-white text-sm font-bold uppercase tracking-wide flex items-center justify-center gap-2 group shadow-[3px_3px_0_rgba(20,20,20,0.18)] hover:shadow-[4px_4px_0_rgba(20,20,20,0.24)] active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_rgba(20,20,20,0.18)] disabled:opacity-50 transition-all"
             >
               {loading ? t.auth.processing : t.auth.signIn}
               {!loading && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
@@ -244,10 +257,10 @@ export default function Auth({ onBack }: AuthProps) {
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
+              <div className="w-full border-t-2 border-dotted border-gray-900/40"></div>
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-transparent px-2 text-gray-400 font-light">{t.auth.orContinueWith}</span>
+              <span className="px-3 text-gray-500 font-semibold tracking-wide" style={{ backgroundColor: '#f7f5ef' }}>{t.auth.orContinueWith}</span>
             </div>
           </div>
 
@@ -255,7 +268,7 @@ export default function Auth({ onBack }: AuthProps) {
             <button
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="glass-button flex items-center justify-center gap-2 disabled:opacity-50"
+              className="h-12 rounded border-2 border-gray-900 bg-white text-sm font-semibold text-gray-900 flex items-center justify-center gap-2 shadow-[2px_2px_0_rgba(20,20,20,0.12)] hover:shadow-[3px_3px_0_rgba(20,20,20,0.18)] active:translate-x-[1px] active:translate-y-[1px] disabled:opacity-50 transition-all"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
