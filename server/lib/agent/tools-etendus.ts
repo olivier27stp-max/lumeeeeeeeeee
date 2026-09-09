@@ -790,6 +790,62 @@ const listAutomations: AgentTool = {
   },
 };
 
+const getAutomationHealth: AgentTool = {
+  kind: 'read',
+  needsIdentity: true,
+  declaration: {
+    name: 'get_automation_health',
+    description:
+      'Why automations did or did not send lately. Reads the recent execution log and reports how many '
+      + 'messages went out vs failed, WITH the reason for each failure (client has no phone/email, no '
+      + 'sender number set up, texting not configured…). Use for « why aren’t my automations sending », '
+      + '« are my reminders going out ».',
+    parameters: { type: 'object', properties: {} },
+  },
+  handler: async (_args, ctx) => {
+    const { data, error } = await ctx.client
+      .from('automation_execution_logs')
+      .select('action_type, trigger_event, result_success, result_error, created_at')
+      .eq('org_id', ctx.orgId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) return erreurOutil('automation_health', error);
+    const logs = data || [];
+    if (!logs.length) {
+      return { note: 'Aucune automatisation ne s’est exécutée récemment. Soit rien ne les a déclenchées, soit elles attendent leur échéance (un rappel « 3 jours avant » ne part que le moment venu).' };
+    }
+    // Traduit les erreurs techniques du moteur en cause claire.
+    const causeLisible = (err: string | null): string => {
+      const e = String(err || '').toLowerCase();
+      if (e.includes('no recipient phone')) return 'le client n’a pas de numéro de téléphone';
+      if (e.includes('no recipient email')) return 'le client n’a pas d’adresse courriel';
+      if (e.includes('twilio not configured') || e.includes('sender') || e.includes('from number')) return 'aucun numéro d’envoi configuré pour l’entreprise';
+      if (e.includes('smtp not configured') || e.includes('mailer')) return 'l’envoi de courriels n’est pas configuré';
+      if (e.includes('unsubscribed') || e.includes('opt') || e.includes('stop')) return 'le destinataire s’est désabonné';
+      return err ? String(err).slice(0, 120) : 'raison inconnue';
+    };
+    const reussites = logs.filter((l: any) => l.result_success).length;
+    const echecs = logs.filter((l: any) => !l.result_success);
+    // Regroupe les échecs par cause.
+    const parCause = new Map<string, number>();
+    for (const l of echecs) {
+      const c = causeLisible(l.result_error);
+      parCause.set(c, (parCause.get(c) || 0) + 1);
+    }
+    return {
+      sur_les_dernieres: logs.length,
+      partis: reussites,
+      echoues: echecs.length,
+      raisons_des_echecs: [...parCause.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([cause, nombre]) => ({ cause, nombre })),
+      note: echecs.length
+        ? 'Corrige les causes ci-dessus (coordonnées des clients, numéro d’envoi de l’entreprise) pour que les prochains messages partent.'
+        : 'Tout est parti sans échec récent.',
+    };
+  },
+};
+
 /* ── Lecture SENSIBLE : identité obligatoire ─────────────────────
    Ces trois-là ne se replient JAMAIS sur le service client : les
    permissions par rôle de l'utilisateur (RLS) doivent s'appliquer.  */
@@ -3130,6 +3186,7 @@ export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getD2dStats,
   listCourses,
   listAutomations,
+  getAutomationHealth,
   getPayrollSummary,
   getFinancialOverview,
   getTeamLocations,
