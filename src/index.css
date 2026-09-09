@@ -1428,29 +1428,29 @@ tr[data-status="cancelled"] {
   --color-primary-lighter: #171f30;
 }
 
-/* ─── Compaction quand l'agent Lumi est ouvert ───
-   Tant que <html> porte .lumi-open, la page marketing se resserre
-   verticalement pour qu'on voie plus de contenu d'un coup à l'arrivée.
-   À la fermeture de Lumi (× → classe retirée), tout revient à la normale.
-   On réduit les paddings verticaux des sections marketing plutôt que de
-   cibler des classes Tailwind précises (robuste aux refontes). */
-.lumi-open .marketing-landing main > section {
-  padding-top: 2.25rem !important;
-  padding-bottom: 2.25rem !important;
-  transition: padding 0.25s ease;
+/* ─── Panneau Lumi ouvert : la page se décale à gauche ───
+   Lumi est un panneau latéral droit pleine hauteur (400px sur desktop).
+   Tant que <html> porte .lumi-open, on réserve cette largeur à droite en
+   décalant toute la page marketing vers la gauche, pour que le contenu ne
+   passe jamais sous le panneau. À la fermeture (classe retirée), la page
+   reprend toute la largeur. Sur mobile le panneau est plein écran, donc pas
+   de décalage (il couvre la page — géré côté composant). */
+.marketing-landing {
+  transition: margin-right 0.28s ease;
 }
-/* Le hero est la 1re section : un peu plus d'air en haut sous le header. */
-.lumi-open .marketing-landing main > section:first-child {
-  padding-top: 4.5rem !important;
-  padding-bottom: 2rem !important;
+/* Le header marketing est en position:fixed w-full — la marge du parent ne
+   le décale donc pas. On rétrécit sa largeur pour qu'il s'arrête au bord du
+   panneau Lumi au lieu de passer dessous. */
+.marketing-landing header {
+  transition: width 0.28s ease;
 }
-/* Resserre aussi les grands espacements internes entre blocs feature. */
-.lumi-open .marketing-landing main > section [class*="space-y-2"],
-.lumi-open .marketing-landing main > section [class*="space-y-3"] {
-  --tw-space-y-reverse: 0;
-}
-.marketing-landing main > section {
-  transition: padding 0.25s ease;
+@media (min-width: 640px) {
+  .lumi-open .marketing-landing {
+    margin-right: 400px;
+  }
+  .lumi-open .marketing-landing header {
+    width: calc(100% - 400px) !important;
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════
