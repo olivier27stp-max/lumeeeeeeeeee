@@ -136,22 +136,23 @@ export default function Auth({ onBack }: AuthProps) {
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
         />
-        {/* Illustration N&B (planche de BD) : texte foncé en gras en haut,
-            sur la zone de ciel vide, plutôt que du blanc sur voile noir. */}
+        {/* Voile dégradé depuis le bas : assombrit la moitié basse (nuages,
+            ponton) pour que le texte blanc ressorte, sans salir le ciel clair. */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="relative z-10 flex flex-col justify-start p-14 text-gray-900"
+          className="relative z-10 flex flex-col justify-end p-14 text-white"
         >
           <h2 className="text-4xl font-extrabold leading-none tracking-tight">
             {t.auth.welcomeBack}
           </h2>
-          <p className="mt-4 text-lg font-medium text-gray-700 max-w-sm">
+          <p className="mt-4 text-lg font-medium text-white/85 max-w-sm">
             {t.auth.welcomeTagline}
           </p>
-          <div className="mt-7 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-gray-500">
-            <span className="h-0.5 w-9 bg-gray-900" />
+          <div className="mt-7 flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.15em] text-white/60">
+            <span className="h-0.5 w-9 bg-white/70" />
             {t.auth.companyOS}
           </div>
         </motion.div>
@@ -181,7 +182,14 @@ export default function Auth({ onBack }: AuthProps) {
           <div className="text-center space-y-2">
             <div className="flex justify-center mb-4">
               <button
-                onClick={onBack}
+                onClick={() => {
+                  // onBack ne changeait qu'un state interne sans changer l'URL
+                  // (/auth restait affiché) → bouton sans effet. On navigue
+                  // explicitement vers l'accueil ; onBack reste appelé au cas où
+                  // un parent en dépend.
+                  onBack?.();
+                  navigate('/');
+                }}
                 className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
               >
                 {t.auth.backToHome}
