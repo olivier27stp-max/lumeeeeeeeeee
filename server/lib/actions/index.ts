@@ -14,6 +14,83 @@ export interface ActionContext {
   entityId: string;
   twilio: { client: any; phoneNumber: string } | null;
   baseUrl: string;
+  /**
+   * true = message COMMERCIAL (relance, suivi, cross-sell — toute action
+   * différée). Soumis au plafond de fréquence par destinataire. false/absent
+   * = transactionnel (confirmation, reçu, rappel de RDV attendu) : toujours
+   * livré, jamais plafonné. Posé par le worker des tâches différées.
+   */
+  commercial?: boolean;
+  /**
+   * Langue des messages envoyés au client ('fr' | 'en'), = default_language de
+   * l'org. Le moteur choisit body_en/subject_en si 'en' et qu'ils existent,
+   * sinon la version FR (repli). Absent → 'fr'.
+   */
+  langue?: 'fr' | 'en';
+}
+
+/**
+ * Version localisée d'un champ de message. En anglais, on prend `<champ>_en`
+ * s'il est renseigné ; sinon on retombe sur la version française (jamais de
+ * trou : une action pas encore traduite reste en français plutôt que vide).
+ */
+function champLocalise(config: Record<string, any>, champ: string, langue?: 'fr' | 'en'): string {
+  if (langue === 'en') {
+    const en = config[`${champ}_en`];
+    if (typeof en === 'string' && en.trim()) return en;
+  }
+  return config[champ] || '';
+}
+
+/**
+ * Plafond anti-spam : nombre max de messages COMMERCIAUX d'automatisation
+ * qu'un même destinataire peut recevoir par 24 h, tous canaux/règles
+ * confondus. Réglable via env, défaut prudent.
+ */
+const PLAFOND_MSG_COMMERCIAUX_24H = (() => {
+  const v = Number(process.env.AUTOMATION_MAX_COMMERCIAL_PER_DAY);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 3;
+})();
+
+/**
+ * A-t-on atteint le plafond de messages commerciaux pour ce destinataire dans
+ * les dernières 24 h ? On compte les envois d'AUTOMATISATION uniquement (SMS :
+ * messages sortants sans sender_user_id ; courriel : activity_log
+ * event_type='email_sent'), jamais les envois manuels du propriétaire.
+ */
+async function depassePlafondFrequence(
+  ctx: ActionContext,
+  canal: 'sms' | 'email',
+  destinataire: string,
+): Promise<boolean> {
+  if (!ctx.commercial) return false; // transactionnel : jamais plafonné
+  const depuis = new Date(Date.now() - 24 * 3600_000).toISOString();
+  try {
+    if (canal === 'sms') {
+      const { count } = await ctx.supabase
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', ctx.orgId)
+        .eq('phone_number', normalizeE164(destinataire))
+        .eq('direction', 'outbound')
+        .is('sender_user_id', null)
+        .gte('created_at', depuis);
+      return (count ?? 0) >= PLAFOND_MSG_COMMERCIAUX_24H;
+    }
+    const { count } = await ctx.supabase
+      .from('activity_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', ctx.orgId)
+      .eq('event_type', 'email_sent')
+      .ilike('description', `%${destinataire}%`)
+      .gte('created_at', depuis);
+    return (count ?? 0) >= PLAFOND_MSG_COMMERCIAUX_24H;
+  } catch (e: any) {
+    // En cas de doute, on NE bloque PAS : mieux vaut un message de trop qu'une
+    // relance légitime avalée par une erreur transitoire.
+    console.error(`[actions] plafond fréquence indéterminable (${canal}, org ${ctx.orgId}):`, e?.message || e);
+    return false;
+  }
 }
 
 export interface ActionResult {
@@ -361,8 +438,8 @@ export async function executeSendEmail(
   const to = config.to ? resolveTemplate(config.to, vars) : vars.client_email;
   if (!to) return { success: false, error: 'No recipient email' };
 
-  const subject = resolveTemplate(config.subject, vars);
-  const body = resolveTemplate(config.body, vars);
+  const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
+  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
 
   try {
     const { sendEmail, isMailerConfigured } = await import('../mailer');
@@ -388,6 +465,11 @@ export async function executeSendEmail(
     const { isEmailUnsubscribed, getUnsubscribeUrl } = await import('../notificationHelpers');
     if (await isEmailUnsubscribed(ctx.supabase, ctx.orgId, to)) {
       return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
+    }
+
+    // Plafond anti-spam, tous canaux confondus par destinataire.
+    if (await depassePlafondFrequence(ctx, 'email', to)) {
+      return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
     }
 
     const { getCompanySettings, buildEmailLayout, senderFor } = await import('../../routes/emails');
@@ -466,7 +548,12 @@ export async function executeSendSms(
     return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
   }
 
-  const body = resolveTemplate(config.body, vars);
+  // Plafond anti-spam : pas plus de N messages commerciaux / client / 24h.
+  if (await depassePlafondFrequence(ctx, 'sms', to)) {
+    return { success: false, error: `Frequency cap reached for ${optOutPhone} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
+  }
+
+  const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
 
   // Toujours partir du numero DE L'ORG, jamais du numero partage de la
   // plateforme : sinon les automatisations d'un locataire arrivent chez ses

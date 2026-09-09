@@ -212,3 +212,29 @@ export async function getCompanyBranding(): Promise<ApercuEntreprise> {
     company_phone: data.phone ?? null,
   };
 }
+
+/**
+ * Langue des communications automatiques de l'org (company_settings.
+ * default_language). Détermine si les SMS/courriels d'automatisation partent
+ * en français ou en anglais chez les clients. Défaut 'fr'.
+ */
+export async function getAutomationLanguage(): Promise<'fr' | 'en'> {
+  const orgId = await getCurrentOrgId();
+  if (!orgId) return 'fr';
+  const { data } = await supabase
+    .from('company_settings')
+    .select('default_language')
+    .eq('org_id', orgId)
+    .maybeSingle();
+  return data?.default_language === 'en' ? 'en' : 'fr';
+}
+
+export async function setAutomationLanguage(lang: 'fr' | 'en'): Promise<void> {
+  const orgId = await getCurrentOrgId();
+  if (!orgId) throw new Error('No organization');
+  const { error } = await supabase
+    .from('company_settings')
+    .update({ default_language: lang })
+    .eq('org_id', orgId);
+  if (error) throw new Error(error.message);
+}

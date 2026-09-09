@@ -163,6 +163,23 @@ export function nextSendTime(from: Date = new Date()): Date {
 
 // ── Execute actions for a rule ──────────────────────────────
 
+/**
+ * Langue des communications automatiques de l'org (company_settings.
+ * default_language). Défaut 'fr' si absent/erreur — jamais bloquant.
+ */
+async function langueOrg(supabase: SupabaseClient, orgId: string): Promise<'fr' | 'en'> {
+  try {
+    const { data } = await supabase
+      .from('company_settings')
+      .select('default_language')
+      .eq('org_id', orgId)
+      .maybeSingle();
+    return data?.default_language === 'en' ? 'en' : 'fr';
+  } catch {
+    return 'fr';
+  }
+}
+
 async function executeRuleActions(
   rule: AutomationRule,
   event: CRMEvent,
@@ -181,8 +198,8 @@ async function executeRuleActions(
     entityType: event.entityType,
     entityId: event.entityId,
     twilio: config.twilio,
-
     baseUrl: config.baseUrl,
+    langue: await langueOrg(config.supabase, event.orgId),
   };
 
   for (let i = 0; i < rule.actions.length; i++) {
@@ -462,6 +479,7 @@ function isTransientFailure(error?: string | null): boolean {
     'opted out',              // désabonnement : ne jamais réessayer
     'plan does not include',  // forfait insuffisant
     'are disabled',           // fonctionnalité désactivée dans les réglages
+    'frequency cap',          // plafond atteint : le retenter donnerait le même refus
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));
@@ -660,8 +678,12 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         entityType: task.entity_type,
         entityId: task.entity_id,
         twilio: engineConfig.twilio,
-
         baseUrl: engineConfig.baseUrl,
+        // Toute tâche de cette file est DIFFÉRÉE, donc commerciale : soumise au
+        // plafond de fréquence. Les actions immédiates (confirmations) ne
+        // passent pas ici et restent exemptes.
+        commercial: true,
+        langue: await langueOrg(supabase, task.org_id),
       };
 
       const startTime = Date.now();

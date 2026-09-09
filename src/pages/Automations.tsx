@@ -28,6 +28,8 @@ import {
   getAutomationRules,
   toggleAutomationRule,
   getFailureCountsByRule,
+  getAutomationLanguage,
+  setAutomationLanguage,
 } from '../lib/automationRulesApi';
 
 // ── Automation name translations (for DB-seeded English names) ──
@@ -336,6 +338,25 @@ export default function Automations() {
   /** Échecs par règle sur 7 jours — alimente le badge d'alerte. */
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  // Langue dans laquelle les messages d'automatisation partent aux clients.
+  const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
+  const [savingLang, setSavingLang] = useState(false);
+  useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
+  const changerLangue = async (lang: 'fr' | 'en') => {
+    if (lang === orgLang || savingLang) return;
+    setSavingLang(true);
+    const avant = orgLang;
+    setOrgLang(lang); // optimiste
+    try {
+      await setAutomationLanguage(lang);
+      toast.success(fr ? (lang === 'en' ? 'Messages en anglais' : 'Messages en français') : (lang === 'en' ? 'Messages set to English' : 'Messages set to French'));
+    } catch {
+      setOrgLang(avant); // rollback si échec
+      toast.error(fr ? 'Impossible de changer la langue' : 'Could not change language');
+    } finally {
+      setSavingLang(false);
+    }
+  };
 
   // ── Load (read only — no auto-seed) ──
   const load = useCallback(async () => {
@@ -449,13 +470,31 @@ export default function Automations() {
               : 'Event-driven automations for your business'}
           </p>
         </div>
-        <button
-          onClick={() => navigate('/settings')}
-          className="glass-button-ghost inline-flex shrink-0 items-center gap-1.5 text-[12px]"
-        >
-          <ArrowLeft size={14} />
-          {fr ? 'Retour' : 'Back'}
-        </button>
+        <div className="flex shrink-0 items-center gap-3">
+          {/* Langue dans laquelle les messages partent aux clients */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
+            <div className="inline-flex rounded-lg border border-outline/50 overflow-hidden text-[12px]">
+              {(['fr', 'en'] as const).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => changerLangue(l)}
+                  disabled={savingLang}
+                  className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-surface-primary' : 'text-text-secondary hover:bg-surface-tertiary'}`}
+                >
+                  {l === 'fr' ? 'FR' : 'EN'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/settings')}
+            className="glass-button-ghost inline-flex items-center gap-1.5 text-[12px]"
+          >
+            <ArrowLeft size={14} />
+            {fr ? 'Retour' : 'Back'}
+          </button>
+        </div>
       </div>
 
       {/* ── Stats row ── */}
