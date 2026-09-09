@@ -2593,6 +2593,7 @@ const fr: TranslationKeys = {
     addFirstClient: 'Ajouter ton premier client',
     createFirstQuote: 'Créer ton premier devis',
     connectStripe: 'Connecter Stripe',
+    configureTaxes: 'Configurer tes taxes (TPS/TVQ)',
     configureSms: 'Configurer ton numéro SMS',
     customizeTemplates: 'Personnaliser tes templates',
     inviteTeam: 'Inviter ton équipe',

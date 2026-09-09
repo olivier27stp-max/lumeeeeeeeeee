@@ -17,6 +17,7 @@ type Status = {
   stripe_connected: boolean;
   twilio_provisioned: boolean;
   members_count: number;
+  taxes_configured: boolean;
   setup_completed: boolean;
 };
 
@@ -83,6 +84,12 @@ export default function SetupChecklist() {
         label: (t.setup as any).connectStripe,
         done: status.stripe_connected,
         path: '/settings/payments',
+      },
+      {
+        key: 'taxes',
+        label: (t.setup as any).configureTaxes,
+        done: status.taxes_configured,
+        path: '/settings/taxes',
       },
       {
         key: 'sms',

@@ -2601,6 +2601,7 @@ const en = {
     addFirstClient: 'Add your first client',
     createFirstQuote: 'Create your first quote',
     connectStripe: 'Connect Stripe',
+    configureTaxes: 'Set up your taxes',
     configureSms: 'Set up your SMS number',
     customizeTemplates: 'Customize your templates',
     inviteTeam: 'Invite your team',

@@ -7,8 +7,8 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { listIndustries, seedOrgFromIndustry } from '../lib/industryPresets';
-import { ensureAutomationPresets } from '../lib/automationPresetSeeder';
+import { listIndustries } from '../lib/industryPresets';
+import { seedOrgComplete } from '../lib/seedOrgDefaults';
 import { getBaseUrl } from '../lib/config';
 
 const router = Router();
@@ -83,24 +83,12 @@ router.post('/onboarding/complete', validate(onboardingSchema), async (req, res)
       if (error) console.warn('[onboarding/complete] company_settings upsert:', error.message);
     }
 
-    // 4. Seed industry presets (best-effort)
-    try {
-      await seedOrgFromIndustry(admin, orgId, body.industry);
-    } catch (err: any) {
-      console.warn('[onboarding/complete] seedOrgFromIndustry:', err?.message);
-    }
-
-    // 4b. Filet de sécurité : garantit les 34 presets d'automatisation
-    // canoniques même si la fonction DB de seed a divergé (déjà arrivé
-    // en prod). Idempotent — safe au retry de l'onboarding.
-    try {
-      const r = await ensureAutomationPresets(admin, orgId, { activateAll: true });
-      if (r.inserted || r.repaired) {
-        console.log(`[onboarding/complete] automation presets: +${r.inserted} inserted, ${r.repaired} repaired`);
-      }
-    } catch (err: any) {
-      console.warn('[onboarding/complete] ensureAutomationPresets:', err?.message);
-    }
+    // 4. Socle complet de l'org : catalogue de services (industrie),
+    //    34 automatisations canoniques ET taxes (défaut QC — l'assistant ne
+    //    les posait pas, d'où des factures à 0 % selon la porte d'entrée).
+    //    seedOrgComplete est idempotent, best-effort et partagé avec le
+    //    webhook Stripe et le /checkout — un seul point de vérité.
+    await seedOrgComplete(admin, orgId, { industry: body.industry, taxRegion: 'QC' });
 
     // 5. Process team invites — insert pending invitation rows + send Supabase magic-link.
     //    The full invitations flow lives in /api/invitations/send; we duplicate the
@@ -172,6 +160,36 @@ router.post('/onboarding/complete', validate(onboardingSchema), async (req, res)
   }
 });
 
+// ── POST /api/onboarding/seed-defaults ──
+// Pose le socle d'une org (taxes + automatisations + catalogue de services)
+// pour les portes d'entrée qui n'ont pas d'étape « assistant » : le
+// OnboardingFlow /checkout (CTA du pricing) crée une org NUE côté client puis
+// pose onboarding_done, ce qui court-circuite l'assistant. Sans cet appel,
+// l'org resterait sans taxes (factures à 0 %) et sans automatisations.
+// Le service_role est requis pour semer taxes/presets, donc c'est côté serveur.
+// Idempotent et best-effort — ne peut jamais casser le parcours de paiement.
+const seedDefaultsSchema = z.object({
+  industry: z.string().trim().max(120).nullable().optional(),
+  tax_region: z.string().trim().max(20).nullable().optional(),
+});
+router.post('/onboarding/seed-defaults', validate(seedDefaultsSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const body = req.body as z.infer<typeof seedDefaultsSchema>;
+    const result = await seedOrgComplete(admin, auth.orgId, {
+      industry: body.industry ?? null,
+      taxRegion: (body.tax_region && body.tax_region.trim()) || 'QC',
+    });
+    return res.json({ ok: true, seeded: result });
+  } catch (err: any) {
+    // Best-effort par contrat : ne jamais faire échouer l'onboarding client.
+    console.error('[onboarding/seed-defaults]', err?.message || err);
+    return res.json({ ok: false });
+  }
+});
+
 // ── GET /api/me/setup-status ── powers the Setup Checklist widget ──
 router.get('/me/setup-status', async (req, res) => {
   try {
@@ -180,7 +198,7 @@ router.get('/me/setup-status', async (req, res) => {
     const admin = getServiceClient();
     const orgId = auth.orgId;
 
-    const [clientsRes, quotesRes, paymentsSettings, twilioRow, membersRes, csRes] =
+    const [clientsRes, quotesRes, paymentsSettings, twilioRow, membersRes, csRes, taxGroupRes] =
       await Promise.all([
         admin
           .from('clients')
@@ -214,6 +232,12 @@ router.get('/me/setup-status', async (req, res) => {
           .select('setup_completed')
           .eq('org_id', orgId)
           .maybeSingle(),
+        // Taxes configurées = au moins un groupe de taxe existe pour l'org.
+        // Sans ça, les factures partent à 0 % de TPS/TVQ silencieusement.
+        admin
+          .from('tax_groups')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId),
       ]);
 
     return res.json({
@@ -222,6 +246,7 @@ router.get('/me/setup-status', async (req, res) => {
       stripe_connected: !!(paymentsSettings.data?.stripe_enabled && paymentsSettings.data?.stripe_keys_present),
       twilio_provisioned: !!twilioRow.data?.twilio_number,
       members_count: membersRes.count || 0,
+      taxes_configured: (taxGroupRes.count || 0) > 0,
       setup_completed: !!csRes.data?.setup_completed,
     });
   } catch (err: any) {
