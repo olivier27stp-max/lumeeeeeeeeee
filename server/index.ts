@@ -54,6 +54,7 @@ import storageUploadRouter from './routes/storage-upload';
 import timesheetsRouter from './routes/timesheets';
 import requestFormsRouter from './routes/request-forms';
 import marketingRouter from './routes/marketing';
+import salesChatRouter from './routes/sales-chat';
 import routeOptimizationRouter from './routes/route-optimization';
 // Removed: campaigns / booking / recurring-invoices / webhooks-config /
 // quickbooks-export — corresponding UI features deleted.
@@ -610,6 +611,9 @@ app.use('/api/agreements/public', redisRateLimit({ preset: 'public' }));
 app.use('/api/portal', redisRateLimit({ preset: 'auth' }));
 // Public form submissions — tight rate limit to prevent abuse
 app.use('/api/public/form', redisRateLimit({ preset: 'auth' }));
+// Agent vendeur public (Lumi) — chat sans compte, borné par IP (chaque
+// message = tokens facturés). Preset public = 15/min/IP.
+app.use('/api/public/sales-chat', redisRateLimit({ preset: 'public' }));
 // Survey submissions — prevent ballot stuffing
 app.use('/api/survey', redisRateLimit({ preset: 'auth' }));
 // DSR endpoints — tight rate limit (compliance-sensitive + expensive export)
@@ -760,6 +764,7 @@ app.use('/api/public/form', formSubmitLimiter);
 app.use('/api/public/book-demo', formSubmitLimiter);
 app.use('/api', requestFormsRouter);
 app.use('/api', marketingRouter);
+app.use('/api', salesChatRouter);
 app.use('/api', quoteTemplatesRouter);
 app.use('/api', checklistsRouter);
 app.use('/api', taxesRouter);

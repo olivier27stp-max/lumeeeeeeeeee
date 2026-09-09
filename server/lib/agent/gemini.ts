@@ -63,15 +63,23 @@ export async function generateContent(opts: {
   contents: GeminiContent[];
   functionDeclarations?: FunctionDeclaration[];
   temperature?: number;
+  maxOutputTokens?: number;
 }): Promise<GenerateResult> {
   if (!geminiApiKey) {
     throw new Error('GEMINI_API_KEY is not configured. Set it in .env.local to enable the Lume Agent.');
   }
 
+  const generationConfig: Record<string, any> = { temperature: opts.temperature ?? 0.4 };
+  // Plafond de tokens de sortie (borne le coût par réponse — utilisé par le
+  // chat vendeur public où n'importe qui peut envoyer des messages).
+  if (typeof opts.maxOutputTokens === 'number') {
+    generationConfig.maxOutputTokens = opts.maxOutputTokens;
+  }
+
   const body: Record<string, any> = {
     systemInstruction: { parts: [{ text: opts.systemInstruction }] },
     contents: opts.contents,
-    generationConfig: { temperature: opts.temperature ?? 0.4 },
+    generationConfig,
   };
 
   if (opts.functionDeclarations && opts.functionDeclarations.length > 0) {
