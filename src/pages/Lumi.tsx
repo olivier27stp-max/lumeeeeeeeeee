@@ -142,6 +142,8 @@ export default function Lumi() {
           break;
         case 'proposal':
           dernier.proposal = { tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: 'en_attente' };
+          // Le modèle propose parfois l'action sans un mot : on l'annonce.
+          if (!dernier.text.trim()) dernier.text = fr ? "J'ai préparé l'action ci-dessous. Confirmez pour l'exécuter." : 'I prepared the action below. Confirm to run it.';
           break;
         case 'done':
           dernier.enCours = false;
@@ -414,7 +416,9 @@ function PropositionCarte({ proposition, fr, busy, onDecision }: { proposition: 
   const titre = proposition.capacite
     ? (fr ? `Action proposée : ${proposition.capacite}` : `Proposed action: ${proposition.capacite}`)
     : (fr ? `Action proposée : ${proposition.tool.replace(/_/g, ' ')}` : `Proposed action: ${proposition.tool.replace(/_/g, ' ')}`);
-  const entrees = Object.entries(proposition.args).filter(([, v]) => v !== null && v !== undefined && v !== '');
+  // Les identifiants techniques (UUID, réfs opaques) ne disent rien à l'utilisateur.
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const entrees = Object.entries(proposition.args).filter(([k, v]) => v !== null && v !== undefined && v !== '' && !/(^|_)id$/.test(k) && !(typeof v === 'string' && UUID.test(v)));
   return (
     <div className="mt-3 rounded-xl border border-outline bg-surface p-3 text-[13px]">
       <p className="font-semibold text-text-primary">{titre}</p>
