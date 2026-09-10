@@ -8,6 +8,7 @@ import { supabaseUrl, supabaseServiceRoleKey, paypalEnv, paypalWebhookId } from 
 import { getServiceClient } from './supabase';
 import { normalizeAmountToCents } from './helpers';
 import type { PaymentInsertInput } from './helpers';
+import { sanitizeCellForDisplay } from './migration/masks';
 import { eventBus } from './eventBus';
 
 // ── Types ──
@@ -412,7 +413,11 @@ export function deserializeCursor<T>(cursorRaw: unknown): T | null {
 }
 
 export function csvEscape(value: unknown) {
-  const text = String(value ?? '');
+  // Neutralise l'injection de formule CSV : les guillemets seuls ne protègent
+  // pas (Excel les retire à l'ouverture et évalue quand même un `=`/`+`/`-`/`@`
+  // en tête). On réutilise le neutraliseur partagé, puis on échappe les
+  // guillemets pour le format CSV.
+  const text = sanitizeCellForDisplay(String(value ?? ''));
   return `"${text.replace(/"/g, '""')}"`;
 }
 

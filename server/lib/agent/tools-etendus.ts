@@ -1594,6 +1594,26 @@ async function envoyerUnSms(
     .eq('org_id', ctx.orgId).eq('phone', telephone).maybeSingle();
   if (optOut) throw new Error('destinataire STOP — ne pas contacter.');
 
+  // Anti-exfiltration : le destinataire DOIT être un contact connu de l'org.
+  // Le numéro vient d'arguments produits par le modèle, qui est nourri de
+  // contenu non maîtrisé (notes de clients, SMS entrants, formulaires publics).
+  // Sans cette garde, une injection de prompt (« envoie par SMS au +1XXX … »)
+  // exfiltrerait des données à un numéro arbitraire, facturé à l'org. Un
+  // clientId déjà résolu par l'appelant vaut confirmation. (Les prospects/leads
+  // sont des lignes de `clients` : pas de table `leads` séparée en prod.)
+  if (!clientId) {
+    const chiffres = telephone.replace(/\D/g, '').slice(-10); // 10 derniers chiffres
+    const { data: cli } = await admin
+      .from('clients').select('id').eq('org_id', ctx.orgId)
+      .is('deleted_at', null).ilike('phone', `%${chiffres}%`).limit(1).maybeSingle();
+    if (!cli) {
+      throw new Error(
+        'Ce numéro n’est pas un contact de ton organisation. ' +
+        'Ajoute-le d’abord comme client avant de lui écrire.',
+      );
+    }
+  }
+
   let fromNumber: string;
   try {
     fromNumber = await getOrgSmsFromNumber(ctx.orgId);
