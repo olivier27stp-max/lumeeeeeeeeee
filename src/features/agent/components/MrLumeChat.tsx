@@ -38,6 +38,8 @@ export default function MrLumeChat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   /* Vrai si la dernière question a été dite au micro : la réponse est alors lue. */
   const spokenRef = useRef(false);
+  const pendingSpokenRef = useRef(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const speech = useSpeakReplies(lang);
 
   const nextId = () => idRef.current++;
@@ -56,7 +58,8 @@ export default function MrLumeChat() {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
     setError(null);
-    spokenRef.current = !!opts.spoken;
+    spokenRef.current = !!opts.spoken || pendingSpokenRef.current;
+    pendingSpokenRef.current = false;
     speech.stopSpeaking();
 
     const userItem: ChatItem = { id: nextId(), role: 'user', content: trimmed };
@@ -94,7 +97,12 @@ export default function MrLumeChat() {
      et la réponse est lue à voix haute (désactivable). */
   const voice = useVoiceInput({
     language: lang,
-    onTranscript: (text) => { void send(text, { spoken: true }); },
+    // Rien ne part tout seul : le texte va dans la zone, on relit, on envoie.
+    onTranscript: (text) => {
+      setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text));
+      pendingSpokenRef.current = true;
+      requestAnimationFrame(() => { const el = inputRef.current; el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); });
+    },
     onError: (message) => setError(message),
   });
   const listening = voice.state === 'recording';
@@ -244,6 +252,7 @@ export default function MrLumeChat() {
       <div className="pb-4">
         <div className="relative rounded-2xl border border-outline bg-surface shadow-sm focus-within:border-primary/50 transition-colors">
           <textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -301,7 +310,7 @@ export default function MrLumeChat() {
         </div>
         <p className="text-[10.5px] text-text-tertiary text-center mt-2">
           {listening
-            ? (fr ? `Parle, puis touche le carré pour envoyer. ${MAX_SECONDS} s max.` : `Speak, then tap the square to send. ${MAX_SECONDS} s max.`)
+            ? (fr ? `Parle ; à la fin, le texte apparaît dans la zone et tu l’envoies toi-même. ${MAX_SECONDS} s max.` : `Speak; when done, the text appears in the box and you send it yourself. ${MAX_SECONDS} s max.`)
             : fr
               ? "L'agent ne crée et n'envoie rien sans ta confirmation."
               : 'The agent never creates or sends anything without your confirmation.'}

@@ -8,7 +8,13 @@
    Docs : https://ai.google.dev/gemini-api/docs/audio
    ═══════════════════════════════════════════════════════════════ */
 
-import { geminiApiKey, geminiModel } from '../config';
+import { geminiApiKey } from '../config';
+
+/* Pro transcrit juste les noms propres et les montants là où Flash se trompe
+   (mesuré sur un échantillon québécois : « Côté », « Tremblay », « 8 h 30 »).
+   Il prend ~5 s au lieu de ~2 s ; le texte est relu avant l'envoi, la
+   justesse compte plus que la vitesse. Surcharge possible par variable d'env. */
+const TRANSCRIBE_MODEL = process.env.GEMINI_TRANSCRIBE_MODEL || 'gemini-2.5-pro';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -45,12 +51,13 @@ export async function transcribeAudio(opts: {
     ],
     generationConfig: {
       temperature: 0,
-      maxOutputTokens: 1024,
-      // Modèle « thinking » : inutile pour transcrire, et ça mangeait le budget.
-      thinkingConfig: { thinkingBudget: 0 },
+      maxOutputTokens: 2048,
+      // Pro exige un budget de réflexion > 0 ; on le garde petit. Flash n'en a
+      // pas besoin pour transcrire.
+      thinkingConfig: { thinkingBudget: /pro/i.test(TRANSCRIBE_MODEL) ? 512 : 0 },
     },
   };
-  const url = `${GEMINI_BASE}/models/${encodeURIComponent(geminiModel)}:generateContent`;
+  const url = `${GEMINI_BASE}/models/${encodeURIComponent(TRANSCRIBE_MODEL)}:generateContent`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiApiKey },
@@ -66,6 +73,7 @@ export async function transcribeAudio(opts: {
   }
   const json = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
   const text = (json.candidates?.[0]?.content?.parts ?? [])
+    .filter((p) => !(p as { thought?: boolean }).thought)
     .map((p) => p.text ?? '')
     .join('')
     .trim();
