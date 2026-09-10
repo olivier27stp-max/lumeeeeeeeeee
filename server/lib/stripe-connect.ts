@@ -382,7 +382,11 @@ export async function logWebhookEvent(params: {
 }) {
   const admin = getServiceClient();
 
-  // Idempotency check — skip if already processed
+  // Idempotency check — ne court-circuiter que ce qui est RÉELLEMENT terminé
+  // (processed/skipped). Une ligne restée 'pending' ou 'failed' signifie que le
+  // traitement a planté (ou que le process est mort en plein milieu) : il FAUT
+  // rejouer. L'idempotence métier est assurée par insertOrUpdatePaymentIdempotent
+  // (contrainte sur provider_payment_id), donc rejouer ne double aucun paiement.
   if (params.stripeEventId) {
     const { data: existing } = await admin
       .from('webhook_events')
@@ -391,7 +395,8 @@ export async function logWebhookEvent(params: {
       .maybeSingle();
 
     if (existing) {
-      return { id: existing.id, alreadyProcessed: true };
+      const termine = existing.status === 'processed' || existing.status === 'skipped';
+      return { id: existing.id, alreadyProcessed: termine };
     }
   }
 
@@ -411,9 +416,16 @@ export async function logWebhookEvent(params: {
     .single();
 
   if (error) {
-    // Unique constraint violation — already exists
+    // Course entre deux livraisons du même événement : la ligne existe déjà.
+    // On relit son statut pour décider s'il faut rejouer (pending/failed) ou non.
     if (error.code === '23505' && params.stripeEventId) {
-      return { id: null, alreadyProcessed: true };
+      const { data: existing } = await admin
+        .from('webhook_events')
+        .select('id, status')
+        .eq('stripe_event_id', params.stripeEventId)
+        .maybeSingle();
+      const termine = existing?.status === 'processed' || existing?.status === 'skipped';
+      return { id: existing?.id ?? null, alreadyProcessed: termine };
     }
     throw error;
   }
