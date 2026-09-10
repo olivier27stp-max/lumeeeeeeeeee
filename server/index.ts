@@ -158,7 +158,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '0'); // Disabled: modern CSP is preferred over broken XSS filter
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self), payment=(self), usb=(), bluetooth=()');
+  // microphone=(self) : le micro de Lumi (enregistrement puis transcription
+  // serveur) doit être permis sur notre origine ; « () » l'interdisait partout,
+  // quels que soient les réglages du navigateur.
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=(self), payment=(self), usb=(), bluetooth=()');
   res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
