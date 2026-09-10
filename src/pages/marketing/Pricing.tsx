@@ -336,16 +336,17 @@ const COPY = {
     less: 'Less',
     more: 'More',
     nFeatures: (n: number) => `${n} features`,
+    because: 'Because of:',
+    becauseSeats: (u: number, o: number, cheaper: string) => `your team (${u} ${u > 1 ? 'people' : 'person'}, ${o} ${o > 1 ? 'offices' : 'office'}) is more than ${cheaper} includes`,
+    tooManyUsers: (u: number, inc: number) => `${u} people, ${inc} included`,
+    tooManyOffices: (o: number, inc: number) => `${o} offices, ${inc} included`,
+    withExtras: 'With extras:',
     verdictKicker: 'The plan you need',
-    verdictEmpty: 'Your turn to check',
-    verdictEmptyHint: 'Select what Lume should do for you.',
-    verdictLine: (n: number, u: number, o: number) => `Covers your ${n} need${n > 1 ? 's' : ''}, ${u} ${u > 1 ? 'people' : 'person'} and ${o} ${o > 1 ? 'offices' : 'office'}.`,
+    verdictLine: (n: number, u: number, o: number) => n > 0 ? `Covers your ${n} need${n > 1 ? 's' : ''}, ${u} ${u > 1 ? 'people' : 'person'} and ${o} ${o > 1 ? 'offices' : 'office'}.` : `For ${u} ${u > 1 ? 'people' : 'person'} and ${o} ${o > 1 ? 'offices' : 'office'}. Check features to refine.`,
     coverage: (c: number, n: number) => `${c} / ${n} of your needs`,
-    extraUsers: (n: number) => `${n} extra user${n > 1 ? 's' : ''}`,
-    extraOffices: (n: number) => `${n} extra office${n > 1 ? 's' : ''}`,
     missing: 'Missing:',
     gotoCompare: 'See your needs in the full comparison ↓',
-    finderNote: 'Monthly prices. Users and offices beyond those included are added to the price. The recommended plan is the cheapest one that covers everything you checked.',
+    finderNote: 'Monthly prices. The recommended plan is the cheapest one that includes every feature you checked and your whole team. Beyond what Autopilot includes, users and offices are added to the price.',
     detailKicker: 'In detail',
     detailTitle: 'Everything each plan includes.',
     compareSummary: 'See the full comparison of all features',
@@ -389,16 +390,17 @@ const COPY = {
     less: 'Moins',
     more: 'Plus',
     nFeatures: (n: number) => `${n} fonctions`,
+    because: 'Parce que :',
+    becauseSeats: (u: number, o: number, cheaper: string) => `votre équipe (${u} personne${u > 1 ? 's' : ''}, ${o} bureau${o > 1 ? 'x' : ''}) dépasse ce que ${cheaper} inclut`,
+    tooManyUsers: (u: number, inc: number) => `${u} personnes, ${inc} incluses`,
+    tooManyOffices: (o: number, inc: number) => `${o} bureaux, ${inc} inclus`,
+    withExtras: 'Avec suppléments :',
     verdictKicker: 'Le forfait qu\'il vous faut',
-    verdictEmpty: 'À vous de cocher',
-    verdictEmptyHint: 'Sélectionnez ce que Lume doit faire pour vous.',
-    verdictLine: (n: number, u: number, o: number) => `Couvre vos ${n} besoin${n > 1 ? 's' : ''}, ${u} personne${u > 1 ? 's' : ''} et ${o} bureau${o > 1 ? 'x' : ''}.`,
+    verdictLine: (n: number, u: number, o: number) => n > 0 ? `Couvre vos ${n} besoin${n > 1 ? 's' : ''}, ${u} personne${u > 1 ? 's' : ''} et ${o} bureau${o > 1 ? 'x' : ''}.` : `Pour ${u} personne${u > 1 ? 's' : ''} et ${o} bureau${o > 1 ? 'x' : ''}. Cochez des fonctions pour préciser.`,
     coverage: (c: number, n: number) => `${c} / ${n} de vos besoins`,
-    extraUsers: (n: number) => `${n} utilisateur${n > 1 ? 's' : ''} en plus`,
-    extraOffices: (n: number) => `${n} bureau${n > 1 ? 'x' : ''} en plus`,
     missing: 'Manque :',
     gotoCompare: 'Voir vos besoins dans la comparaison complète ↓',
-    finderNote: 'Prix mensuels. Utilisateurs et bureaux en plus des inclus sont ajoutés au prix. Le forfait recommandé est le moins cher qui couvre tout ce que vous avez coché.',
+    finderNote: 'Prix mensuels. Le forfait recommandé est le moins cher qui inclut chaque fonction cochée et toute votre équipe. Au-delà de ce qu\'Autopilot inclut, utilisateurs et bureaux s\'ajoutent au prix.',
     detailKicker: 'Dans le détail',
     detailTitle: 'Tout ce que chaque forfait comprend.',
     compareSummary: 'Voir la comparaison complète de toutes les fonctions',
@@ -436,12 +438,22 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
   // ── Trouveur ──
   const priceFor = (plan: Plan) =>
     pr(plan).monthly + Math.max(0, users - plan.seats.users) * pr(plan).extraUser + Math.max(0, offices - plan.seats.offices) * pr(plan).extraOffice;
-  const { rec, wantedRows, coverage } = useMemo(() => {
+  const { rec, wantedRows, coverage, why } = useMemo(() => {
     const list = [...needs].map(k => NEED_BY_KEY[k]).filter(Boolean);
     const coverage = PLANS.map((_, i) => list.filter(n => n.plan <= i));
-    const rec = list.length === 0 ? -1 : PLANS.findIndex((_, i) => coverage[i].length === list.length);
-    return { rec, wantedRows: new Set(list.flatMap(n => n.rows)), coverage };
-  }, [needs]);
+    const coversAll = (i: number) => coverage[i].length === list.length;
+    const fits = (i: number) => users <= PLANS[i].seats.users && offices <= PLANS[i].seats.offices;
+    // Le moins cher qui couvre toutes les fonctions cochées ET inclut l'équipe ;
+    // au-delà des inclus d'Autopilot, Autopilot avec suppléments.
+    let rec = PLANS.findIndex((_, i) => coversAll(i) && fits(i));
+    if (rec < 0) rec = PLANS.length - 1;
+    // Pourquoi ce forfait : les fonctions qui l'exigent, et l'équipe si un forfait
+    // moins cher couvrait déjà les fonctions.
+    const byFeature = list.filter(n => n.plan === rec);
+    const cheaperCovers = PLANS.findIndex((_, i) => coversAll(i));
+    const bySeats = cheaperCovers >= 0 && cheaperCovers < rec;
+    return { rec, wantedRows: new Set(list.flatMap(n => n.rows)), coverage, why: { byFeature, bySeats } };
+  }, [needs, users, offices]);
   const toggleNeed = (k: string) => setNeeds(prev => { const s = new Set(prev); if (s.has(k)) s.delete(k); else s.add(k); return s; });
   const gotoCompare = () => {
     setCompareOpen(true);
@@ -541,7 +553,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                 <div className="pr-gt">{g.title[language]}<span>{c.nFeatures(g.items.length)}</span></div>
                 <div className="pr-chips">
                   {g.items.map(n => (
-                    <button key={n.key} type="button" className="pr-chip" aria-pressed={needs.has(n.key)} onClick={() => toggleNeed(n.key)}>{n.label[language]}</button>
+                    <button key={n.key} type="button" className="pr-chip" aria-pressed={needs.has(n.key)} onClick={() => toggleNeed(n.key)}>{n.label[language]}<i>{PLANS[n.plan].name}</i></button>
                   ))}
                 </div>
               </div>
@@ -550,24 +562,33 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
           <aside className="pr-side">
             <div className="pr-verdict">
               <div className="k">{c.verdictKicker}</div>
-              {rec < 0 ? (
-                <><h3>{c.verdictEmpty}</h3><p>{c.verdictEmptyHint}</p></>
-              ) : (
-                <><h3>{PLANS[rec].name}<small>{money(priceFor(PLANS[rec]))} {c.perMonth}</small></h3><p>{c.verdictLine(needs.size, users, offices)} {PLANS[rec].stage[language]}.</p></>
+              <h3>{PLANS[rec].name}<small>{money(priceFor(PLANS[rec]))} {c.perMonth}</small></h3>
+              <p>{c.verdictLine(needs.size, users, offices)} {PLANS[rec].stage[language]}.</p>
+              {(why.byFeature.length > 0 || why.bySeats) && (
+                <p className="why">
+                  {c.because}{' '}
+                  {why.byFeature.map((n, j) => <span key={n.key}>{j > 0 && ', '}<b>{n.label[language]}</b></span>)}
+                  {why.byFeature.length > 0 && why.bySeats && ' · '}
+                  {why.bySeats && <b>{c.becauseSeats(users, offices, PLANS[rec - 1].name)}</b>}
+                </p>
               )}
             </div>
             {PLANS.map((plan, i) => {
               const miss = [...needs].map(k => NEED_BY_KEY[k]).filter(n => n && n.plan > i);
               const pct = needs.size ? Math.round((coverage[i].length / needs.size) * 100) : 0;
-              const extra: string[] = [];
-              if (users > plan.seats.users) extra.push(c.extraUsers(users - plan.seats.users));
-              if (offices > plan.seats.offices) extra.push(c.extraOffices(offices - plan.seats.offices));
+              const seatMiss: string[] = [];
+              if (users > plan.seats.users) seatMiss.push(c.tooManyUsers(users, plan.seats.users));
+              if (offices > plan.seats.offices) seatMiss.push(c.tooManyOffices(offices, plan.seats.offices));
+              const isLast = i === PLANS.length - 1;
               return (
                 <div key={plan.slug} className={`pr-pl${i === rec ? ' rec' : ''}`}>
                   <div className="n">{plan.name}{i === rec && <em>{c.recommended}</em>}</div>
                   <div className="pr">{money(priceFor(plan))}<small> {c.perMonth}</small></div>
-                  <div className="cov"><b>{c.coverage(coverage[i].length, needs.size)}</b> · {c.seats(plan.seats.users, plan.seats.offices)}{extra.length > 0 && ` · ${extra.join(', ')}`}</div>
-                  {miss.length > 0 && <div className="miss">{c.missing} {miss.map((n, j) => <span key={n.key}>{j > 0 && ', '}<s>{n.label[language]}</s></span>)}</div>}
+                  <div className="cov"><b>{c.coverage(coverage[i].length, needs.size)}</b> · {c.seats(plan.seats.users, plan.seats.offices)}</div>
+                  {(miss.length > 0 || (seatMiss.length > 0 && !isLast)) && (
+                    <div className="miss">{c.missing} {miss.map((n, j) => <span key={n.key}>{j > 0 && ', '}<s>{n.label[language]}</s></span>)}{miss.length > 0 && seatMiss.length > 0 && !isLast && ', '}{!isLast && seatMiss.map((m, j) => <span key={m}>{j > 0 && ', '}<s>{m}</s></span>)}</div>
+                  )}
+                  {seatMiss.length > 0 && isLast && <div className="miss">{c.withExtras} {seatMiss.join(', ')}</div>}
                   <div className="bar"><i style={{ width: `${pct}%` }} /></div>
                 </div>
               );
@@ -723,7 +744,11 @@ const PRICING_CSS = `
 .pr-chip::before { content:""; width:14px; height:14px; border-radius:4px; border:1.5px solid rgba(11,40,80,.28); background:#fff; flex:none; }
 .pr-chip[aria-pressed="true"] { background:#111; color:#fff; border-color:#111; }
 .pr-chip[aria-pressed="true"]::before { background:var(--mint) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M3.5 8.5l3 3L12.5 5' stroke='%23111' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 12px no-repeat; border-color:var(--mint); }
+.pr-chip i { font-style:normal; font-size:10px; letter-spacing:.08em; text-transform:uppercase; font-weight:700; color:var(--ink4); margin-left:2px; }
+.pr-chip[aria-pressed="true"] i { color:#9fb3ab; }
 .pr-chip:hover { border-color:#111; }
+.pr-verdict .why { margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,.14); font-size:12.5px; color:#c8cfd8; line-height:1.5; }
+.pr-verdict .why b { color:#fff; font-weight:600; }
 .pr-chip:focus-visible, .pr-stepper button:focus-visible, .pr-toggle button:focus-visible { outline:2px solid var(--mint); outline-offset:2px; }
 .pr-side { position:sticky; top:84px; }
 .pr-verdict { background:#111; color:#fff; border-radius:18px; padding:20px 22px; margin-bottom:12px; }
@@ -731,6 +756,7 @@ const PRICING_CSS = `
 .pr-verdict h3 { color:#fff; font-size:30px; font-weight:800; letter-spacing:-.03em; margin-top:4px; display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
 .pr-verdict h3 small { font-size:15px; font-weight:600; color:#c8cfd8; letter-spacing:0; }
 .pr-verdict p { margin:8px 0 0; color:#c8cfd8; font-size:13.5px; }
+.pr-verdict p.why { font-size:12.5px; }
 .pr-pl { background:#fff; border:1px solid var(--hair); border-radius:14px; padding:14px 16px; margin-top:8px; display:grid; grid-template-columns:1fr auto; gap:2px 14px; align-items:center; }
 .pr-pl.rec { border-color:#111; box-shadow:0 0 0 1px #111 inset; }
 .pr-pl .n { font-weight:800; font-size:15px; color:var(--ink); }

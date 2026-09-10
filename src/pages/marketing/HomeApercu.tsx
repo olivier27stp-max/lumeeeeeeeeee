@@ -17,7 +17,7 @@
  * Le panneau Lumi (assistant vendeur) et le décalage de la page à sa
  * gauche sont gérés par `MarketingLayout` / `LumiAgent`, pas ici.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
@@ -42,6 +42,14 @@ function Underline({ color }: { color: string }) {
   );
 }
 
+/* Deux membres d'une équipe type, avec les mêmes avatars DiceBear « notionists »
+   que dans l'app (UnifiedAvatar). Personas, pas des clients réels. */
+const PEOPLE = [
+  { seed: 'Julie Tremblay', side: 'l', name: 'Julie', role: { fr: 'Répartition', en: 'Dispatch' }, quote: { fr: '« 4 min pour planifier ma journée. »', en: '“4 minutes to plan my day.”' } },
+  { seed: 'Antoine Roy', side: 'r', name: 'Antoine', role: { fr: 'Terrain', en: 'Field' }, quote: { fr: '« Je vois mes jobs, je pars. »', en: '“I see my jobs, I go.”' } },
+] as const;
+const dicebear = (seed: string) => `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(seed)}&size=104&backgroundColor=f5f5f5&radius=50`;
+
 export default function HomeApercu() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
@@ -49,6 +57,15 @@ export default function HomeApercu() {
   const [demoOpen, setDemoOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('accueil');
   const frameRef = useRef<HTMLDivElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const onHeroMove = (e: MouseEvent<HTMLElement>) => {
+    const el = heroRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--px', String((e.clientX - r.left) / r.width - 0.5));
+    el.style.setProperty('--py', String((e.clientY - r.top) / r.height - 0.5));
+  };
+  const onHeroLeave = () => { heroRef.current?.style.removeProperty('--px'); heroRef.current?.style.removeProperty('--py'); };
   const [reduceMotion, setReduceMotion] = useState(false);
 
   useEffect(() => {
@@ -100,9 +117,15 @@ export default function HomeApercu() {
       <style>{HOME_APERCU_CSS + SECTIONS_CSS}</style>
 
       {/* ── 1. Hero compact ── */}
-      <section className="ha-hero">
+      <section className="ha-hero" ref={heroRef} onMouseMove={onHeroMove} onMouseLeave={onHeroLeave}>
         <div className="ha-cloud ha-c1" aria-hidden="true" />
         <div className="ha-cloud ha-c2" aria-hidden="true" />
+        {PEOPLE.map((p) => (
+          <div key={p.seed} className={`ha-person ha-p-${p.side}`} aria-hidden="true">
+            <img src={dicebear(p.seed)} alt="" width={52} height={52} loading="lazy" decoding="async" />
+            <div><em>{p.role[language]}</em><b>{p.name}</b><span>{p.quote[language]}</span></div>
+          </div>
+        ))}
         <div className="ha-head">
           <p className="ha-kicker">{fr ? 'Lume · CRM + assistant IA pour entreprises de services' : 'Lume · CRM + AI assistant for service businesses'}</p>
           <h1 className="ha-h1">
@@ -235,6 +258,20 @@ const HOME_APERCU_CSS = `
 .ha-f1 { left:6px; top:-22px; } .ha-f2 { right:6px; top:120px; animation-delay:-2.5s; }
 @keyframes ha-float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
 
+/* Personas : une carte de chaque côté du titre, dans la même famille que les
+   cartes flottantes de l'aperçu. Entrée en douceur, avatar qui flotte, et la
+   carte se déplace un peu vers la souris (--px/--py posés par le hero). */
+.ha-person { position:absolute; z-index:3; top:246px; display:flex; gap:12px; align-items:center; background:#fff; border:1px solid rgba(11,40,80,.12); border-radius:16px; padding:12px 16px 12px 12px; box-shadow:0 24px 50px -28px rgba(0,0,0,.35); font-size:14px; color:#171717; white-space:nowrap; animation:ha-pop .7s cubic-bezier(.2,.8,.2,1) both; transform:translate(calc(var(--px, 0) * 16px), calc(var(--py, 0) * 10px)); transition:transform .35s ease-out; }
+.ha-p-l { left:max(24px, calc(50% - 640px)); animation-delay:.25s; }
+.ha-p-r { right:max(24px, calc(50% - 640px)); top:300px; animation-delay:.4s; }
+.ha-person img { width:52px; height:52px; border-radius:50%; background:#f5f5f5; flex:none; animation:ha-float 6s ease-in-out infinite; }
+.ha-p-r img { animation-delay:-3s; }
+.ha-person em { display:block; font-style:normal; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; font-weight:700; color:var(--forest); }
+.ha-person b { display:block; font-size:14px; color:#0a0a0a; }
+.ha-person span { display:block; font-size:12.5px; color:#4a4f57; margin-top:2px; }
+@keyframes ha-pop { from { opacity:0; translate:0 14px; scale:.96; } to { opacity:1; translate:0 0; scale:1; } }
+@media (max-width: 1180px) { .ha-person { display:none; } }
+
 .ha-case-note { margin:28px 0 0; padding-top:12px; border-top:1px solid #d9d9d4; font-size:12.5px; color:#555; }
 
 .ha-case { max-width:1000px; margin:56px auto 0; padding:0 24px 64px; color:#111; }
@@ -259,5 +296,5 @@ const HOME_APERCU_CSS = `
   .ha-bar { height:auto; flex-wrap:wrap; padding:8px 12px; } .ha-seg { margin-left:0; width:100%; justify-content:space-between; }
   .ha-case-head { flex-direction:column; align-items:flex-start; }
 }
-@media (prefers-reduced-motion: reduce) { .ha-float { animation:none !important; } }
+@media (prefers-reduced-motion: reduce) { .ha-float, .ha-person, .ha-person img { animation:none !important; transition:none !important; } }
 `;
