@@ -177,13 +177,20 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     // Fetch invoice
     const { data: invoice, error: invoiceError } = await client
       .from('invoices')
-      .select('id, invoice_number, total_cents, balance_cents, currency, due_date, status, client_id, view_token, created_at')
+      .select('id, invoice_number, total_cents, balance_cents, currency, due_date, status, client_id, view_token, created_at, sent_at')
       .eq('id', invoiceId)
       .eq('org_id', orgId)
       .is('deleted_at', null)
       .maybeSingle();
 
     if (invoiceError || !invoice) return res.status(404).json({ error: 'Invoice not found.' });
+
+    // Anti double-clic : si la facture vient d'être envoyée (< 10 s), on refuse
+    // le renvoi immédiat — c'est un double-clic ou un retry réseau, pas un vrai
+    // renvoi. Un renvoi volontaire plus tard passe normalement.
+    if (invoice.sent_at && Date.now() - new Date(invoice.sent_at).getTime() < 10_000) {
+      return res.status(409).json({ error: 'Cette facture vient d’être envoyée. Réessaie dans un instant si besoin.' });
+    }
 
     // Fetch client (exclude archived)
     const { data: clientData } = await client
@@ -366,13 +373,18 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     // Fetch quote (invoices table, quotes are stored as invoices)
     const { data: quote, error: quoteError } = await client
       .from('invoices')
-      .select('id, invoice_number, total_cents, balance_cents, currency, due_date, status, client_id, view_token, created_at')
+      .select('id, invoice_number, total_cents, balance_cents, currency, due_date, status, client_id, view_token, created_at, sent_at')
       .eq('id', invoiceId)
       .eq('org_id', orgId)
       .is('deleted_at', null)
       .maybeSingle();
 
     if (quoteError || !quote) return res.status(404).json({ error: 'Quote not found.' });
+
+    // Anti double-clic (voir send-invoice) : refuse un renvoi < 10 s.
+    if (quote.sent_at && Date.now() - new Date(quote.sent_at).getTime() < 10_000) {
+      return res.status(409).json({ error: 'Ce devis vient d’être envoyé. Réessaie dans un instant si besoin.' });
+    }
 
     // Fetch client (exclude archived)
     const { data: clientData } = await client
