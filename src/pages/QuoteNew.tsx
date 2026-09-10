@@ -147,6 +147,7 @@ export default function QuoteNew() {
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
   const [clientListOpen, setClientListOpen] = useState(false);
+  const [clientHighlight, setClientHighlight] = useState(-1);
   const [clientDetail, setClientDetail] = useState<ClientDetail | null>(null);
   const [leadFirstName, setLeadFirstName] = useState('');
   const [leadLastName, setLeadLastName] = useState('');
@@ -694,6 +695,12 @@ export default function QuoteNew() {
     ? clients
     : clients.filter(c => c.label.toLowerCase().includes(clientQuery));
 
+  useEffect(() => {
+    if (!clientListOpen || clientHighlight < 0) return;
+    const opt = document.getElementById(`${id}-client-opt-${filteredClients[clientHighlight]?.id}`);
+    opt?.scrollIntoView({ block: 'nearest' });
+  }, [clientHighlight, clientListOpen, id, filteredClients]);
+
   const sectionToggles = [
     { key: 'intro', label: tq.introduction, enabled: introEnabled, toggle: setIntroEnabled },
     { key: 'disclaimer', label: tq.contractDisclaimer, enabled: disclaimerEnabled, toggle: setDisclaimerEnabled },
@@ -794,22 +801,50 @@ export default function QuoteNew() {
                 <label htmlFor={`${id}-client-search`} className={FIELD}>{tq.clientLabel}</label>
                 <div className="relative">
                   <input id={`${id}-client-search`}
+                    role="combobox"
+                    aria-expanded={clientListOpen}
+                    aria-controls={`${id}-client-listbox`}
+                    aria-autocomplete="list"
+                    aria-activedescendant={clientListOpen && clientHighlight >= 0 && filteredClients[clientHighlight] ? `${id}-client-opt-${filteredClients[clientHighlight].id}` : undefined}
                     value={clientSearch || (clientId ? (clients.find(c => c.id === clientId)?.label || '') : '')}
-                    onChange={e => { setClientSearch(e.target.value); setClientListOpen(true); if (!e.target.value) setClientId(''); }}
+                    onChange={e => { setClientSearch(e.target.value); setClientListOpen(true); setClientHighlight(-1); if (!e.target.value) setClientId(''); }}
                     onFocus={() => setClientListOpen(true)}
+                    onKeyDown={e => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!clientListOpen) { setClientListOpen(true); return; }
+                        setClientHighlight(h => Math.min(h + 1, filteredClients.length - 1));
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setClientHighlight(h => Math.max(h - 1, 0));
+                      } else if (e.key === 'Enter') {
+                        if (clientListOpen && clientHighlight >= 0 && filteredClients[clientHighlight]) {
+                          e.preventDefault();
+                          const c = filteredClients[clientHighlight];
+                          setClientId(c.id); setClientSearch(c.label); setClientListOpen(false); setClientHighlight(-1);
+                        }
+                      } else if (e.key === 'Escape') {
+                        if (clientListOpen) { e.preventDefault(); setClientListOpen(false); setClientHighlight(-1); }
+                      }
+                    }}
                     className={INPUT}
                     placeholder={tq.selectClientOpt}
                     autoComplete="off"
                   />
                   {clientListOpen && (
-                    <div className={cn('absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-[10px] border bg-white dark:bg-[#0e0e11] shadow-lg', OUTLINE)}>
-                      {filteredClients.map(c => (
+                    <div id={`${id}-client-listbox`} role="listbox" className={cn('absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-[10px] border bg-white dark:bg-[#0e0e11] shadow-lg', OUTLINE)}>
+                      {filteredClients.map((c, idx) => (
                         <button
                           key={c.id}
+                          id={`${id}-client-opt-${c.id}`}
+                          role="option"
+                          aria-selected={c.id === clientId}
                           type="button"
-                          onClick={() => { setClientId(c.id); setClientSearch(c.label); setClientListOpen(false); }}
+                          onMouseEnter={() => setClientHighlight(idx)}
+                          onClick={() => { setClientId(c.id); setClientSearch(c.label); setClientListOpen(false); setClientHighlight(-1); }}
                           className={cn(
                             'w-full text-left px-3 py-2 text-[13px] text-black dark:text-white hover:bg-[#f5f5f5] dark:hover:bg-[#1c1c1f] transition-colors flex items-center justify-between gap-2',
+                            idx === clientHighlight && 'bg-[#f5f5f5] dark:bg-[#1c1c1f]',
                             c.id === clientId && 'font-bold bg-[#f5f5f5] dark:bg-[#1c1c1f]',
                           )}
                         >

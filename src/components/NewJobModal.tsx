@@ -350,6 +350,7 @@ export default function NewJobModal({
   const [clientId, setClientId] = useState('');
   const [clientSearch, setClientSearch] = useState('');
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
+  const [clientHighlight, setClientHighlight] = useState(-1);
   // Properties (a job must be assigned to one of the client's properties).
   // An empty propertyId means "new property" — it is created on submit from
   // the address fields below.
@@ -369,6 +370,15 @@ export default function NewJobModal({
   const [teamSelection, setTeamSelection] = useState('');
   const [teamSuggestions, setTeamSuggestions] = useState<TeamSuggestion[]>([]);
   const [clients, setClients] = useState<Array<{ id: string; label: string; address: string | null; phone: string | null; street_number: string | null; street_name: string | null; city: string | null; province: string | null; postal_code: string | null; country: string | null; latitude: number | null; longitude: number | null }>>([]);
+  const clientMatches = useMemo(
+    () => clients.filter(c => !clientSearch || c.label.toLowerCase().includes(clientSearch.toLowerCase())),
+    [clients, clientSearch],
+  );
+  useEffect(() => {
+    if (!clientDropdownOpen || clientHighlight < 0) return;
+    const opt = document.getElementById(`${id}-client-opt-${clientMatches[clientHighlight]?.id}`);
+    opt?.scrollIntoView({ block: 'nearest' });
+  }, [clientHighlight, clientDropdownOpen, id, clientMatches]);
   const [jobNumber, setJobNumber] = useState('');
   // # pré-rempli avec le prochain numéro de l'org. `touched` distingue une
   // modification manuelle (envoyée + validée) du défaut auto (laissé au
@@ -2439,32 +2449,59 @@ export default function NewJobModal({
                     <div className="relative">
                     <input
                       type="text"
+                      role="combobox"
+                      aria-expanded={clientDropdownOpen}
+                      aria-controls={`${id}-client-listbox`}
+                      aria-autocomplete="list"
+                      aria-activedescendant={clientDropdownOpen && clientHighlight >= 0 && clientMatches[clientHighlight] ? `${id}-client-opt-${clientMatches[clientHighlight].id}` : undefined}
                       value={clientSearch || (clientId ? clients.find(c => c.id === clientId)?.label || '' : '')}
-                      onChange={(e) => { setClientSearch(e.target.value); setClientDropdownOpen(true); if (!e.target.value) setClientId(''); }}
+                      onChange={(e) => { setClientSearch(e.target.value); setClientDropdownOpen(true); setClientHighlight(-1); if (!e.target.value) setClientId(''); }}
                       onFocus={() => setClientDropdownOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          if (!clientDropdownOpen) { setClientDropdownOpen(true); return; }
+                          setClientHighlight(h => Math.min(h + 1, clientMatches.length - 1));
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setClientHighlight(h => Math.max(h - 1, 0));
+                        } else if (e.key === 'Enter') {
+                          if (clientDropdownOpen && clientHighlight >= 0 && clientMatches[clientHighlight]) {
+                            e.preventDefault();
+                            const c = clientMatches[clientHighlight];
+                            setClientId(c.id); setClientSearch(c.label); setClientDropdownOpen(false); setClientHighlight(-1);
+                          }
+                        } else if (e.key === 'Escape') {
+                          if (clientDropdownOpen) { e.preventDefault(); setClientDropdownOpen(false); setClientHighlight(-1); }
+                        }
+                      }}
                       className="glass-input w-full"
                       placeholder={t.modals.selectClient}
                       aria-label={t.modals.selectClient}
                       autoComplete="off"
                     />
                     {clientDropdownOpen && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-outline bg-surface shadow-lg">
+                      <div id={`${id}-client-listbox`} role="listbox" className="absolute z-50 top-full left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-outline bg-surface shadow-lg">
                         <button
                           type="button"
-                          onClick={() => { setClientDropdownOpen(false); setIsCreatingNewClient(true); setClientId(''); setClientSearch(''); }}
+                          onClick={() => { setClientDropdownOpen(false); setIsCreatingNewClient(true); setClientId(''); setClientSearch(''); setClientHighlight(-1); }}
                           className="w-full text-left px-3 py-2.5 text-sm font-semibold text-primary hover:bg-primary/10 transition-colors border-b border-outline"
                         >
                           {t.modals.createNewClient}
                         </button>
-                        {clients
-                          .filter(c => !clientSearch || c.label.toLowerCase().includes(clientSearch.toLowerCase()))
-                          .map((client) => (
+                        {clientMatches
+                          .map((client, idx) => (
                             <button
                               key={client.id}
+                              id={`${id}-client-opt-${client.id}`}
+                              role="option"
+                              aria-selected={client.id === clientId}
                               type="button"
-                              onClick={() => { setClientId(client.id); setClientSearch(client.label); setClientDropdownOpen(false); }}
+                              onMouseEnter={() => setClientHighlight(idx)}
+                              onClick={() => { setClientId(client.id); setClientSearch(client.label); setClientDropdownOpen(false); setClientHighlight(-1); }}
                               className={cn(
                                 'w-full text-left px-3 py-2 hover:bg-surface-secondary transition-colors',
+                                idx === clientHighlight && 'bg-surface-secondary',
                                 client.id === clientId && 'bg-surface-tertiary'
                               )}
                             >
@@ -2478,7 +2515,7 @@ export default function NewJobModal({
                             </button>
                           ))
                         }
-                        {clients.filter(c => !clientSearch || c.label.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+                        {clientMatches.length === 0 && (
                           <p className="px-3 py-2 text-sm text-text-tertiary">{t.clients.noClientsFound}</p>
                         )}
                       </div>
