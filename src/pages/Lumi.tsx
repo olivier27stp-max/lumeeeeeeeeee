@@ -9,7 +9,8 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowUp, AudioLines, AlertTriangle, CheckCircle2, Download, FileText, History, Loader2, MessageSquarePlus, Mic, Sparkles, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
+import { ArrowUp, AudioLines, AlertTriangle, ChevronDown, Copy, Download, FileText, History, Loader2, MessageSquarePlus, Mic, RotateCcw, Sparkles, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useVoiceInput, MAX_SECONDS } from '../features/agent/hooks/useVoiceInput';
 import { useSpeakReplies } from '../features/agent/hooks/useSpeakReplies';
 import { toast } from 'sonner';
@@ -26,7 +27,48 @@ interface Item extends MessageLumi {
   id: number;
   enCours?: boolean;
   outilsActifs?: string[];
+  /** Début et durée (ms) de la réponse, pour « Réflexion · 3 s ». */
+  debut?: number;
+  duree?: number;
 }
+
+/** Page du CRM où vérifier ce qu'un outil a consulté (ligne « Sources »). */
+const SOURCES_OUTILS: Record<string, [string, string, string]> = {
+  search_clients: ['/clients', 'Clients', 'Clients'],
+  search_leads: ['/pipeline', 'Pipeline', 'Pipeline'],
+  list_jobs: ['/jobs', 'Jobs', 'Jobs'],
+  get_job: ['/jobs', 'Jobs', 'Jobs'],
+  query_schedule: ['/calendar', 'Calendrier', 'Calendar'],
+  find_dates_in_location: ['/calendar', 'Calendrier', 'Calendar'],
+  get_day_route: ['/dispatch', 'Carte de répartition', 'Dispatch map'],
+  list_quotes: ['/quotes', 'Devis', 'Quotes'],
+  list_invoices: ['/finances', 'Finances', 'Finances'],
+  get_overdue_payments: ['/finances', 'Finances', 'Finances'],
+  get_revenue_summary: ['/finances', 'Finances', 'Finances'],
+  get_financial_overview: ['/finances', 'Finances', 'Finances'],
+  get_team: ['/settings/team', 'Équipe', 'Team'],
+  get_morning_briefing: ['/day', 'Accueil', 'Home'],
+};
+
+/* Réflexion et outils de message : le petit disque qui tourne, le libellé qui
+   scintille, et les boutons copier / réessayer visibles au survol. */
+const LUMI_CSS = `
+.lumi-disc { width:14px; height:14px; border-radius:50%; border:2px solid rgba(63,175,151,.25); border-top-color:#3FAF97; flex:none; }
+.lumi-disc.live { animation: lumi-spin .9s linear infinite; }
+.lumi-disc.done { border-color:#3FAF97; background: radial-gradient(circle, #3FAF97 35%, transparent 40%); }
+.lumi-shimmer { background: linear-gradient(90deg, currentColor 0%, #3FAF97 50%, currentColor 100%); background-size:200% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation: lumi-shimmer 1.6s linear infinite; }
+.lumi-halo { box-shadow: 0 0 0 0 rgba(63,175,151,.55); animation: lumi-halo 1.4s ease-out infinite; }
+.lumi-msg .lumi-tools { opacity:0; transition: opacity .15s; }
+.lumi-msg:hover .lumi-tools, .lumi-msg .lumi-tools:focus-within { opacity:1; }
+.lumi-think > summary { list-style:none; }
+.lumi-think > summary::-webkit-details-marker { display:none; }
+.lumi-think .lumi-chev { transition: transform .2s; }
+.lumi-think[open] .lumi-chev { transform: rotate(180deg); }
+@keyframes lumi-spin { to { transform: rotate(360deg); } }
+@keyframes lumi-shimmer { to { background-position: -200% 0; } }
+@keyframes lumi-halo { to { box-shadow: 0 0 0 9px rgba(63,175,151,0); } }
+@media (prefers-reduced-motion: reduce) { .lumi-disc.live, .lumi-shimmer, .lumi-halo { animation: none !important; } .lumi-shimmer { color: inherit; } }
+`;
 
 const LIBELLES_OUTILS: Record<string, [string, string]> = {
   search_clients: ['Recherche des clients', 'Searching clients'],
@@ -80,11 +122,11 @@ function TableauLumi({ lignes }: { lignes: string[] }) {
   const corps = lignes.slice(2).map(cellulesTableau);
   return (
     <div className="my-1 overflow-x-auto">
-      <table className="w-full border-collapse text-[12px]">
+      <table className="w-full border-collapse text-[13px] tabular-nums">
         <thead>
           <tr>
             {entete.map((c, i) => (
-              <th key={i} className="border border-outline/60 px-2 py-1 text-left font-semibold whitespace-nowrap"><Gras texte={c} /></th>
+              <th key={i} className="border-b border-outline px-2 py-1.5 pl-0 text-left text-[12px] font-medium text-text-tertiary whitespace-nowrap"><Gras texte={c} /></th>
             ))}
           </tr>
         </thead>
@@ -92,7 +134,7 @@ function TableauLumi({ lignes }: { lignes: string[] }) {
           {corps.map((rangee, r) => (
             <tr key={r}>
               {rangee.map((c, i) => (
-                <td key={i} className="border border-outline/60 px-2 py-1 align-top"><Gras texte={c} /></td>
+                <td key={i} className="border-b border-outline/50 px-2 py-1.5 pl-0 align-top"><Gras texte={c} /></td>
               ))}
             </tr>
           ))}
@@ -214,7 +256,7 @@ export default function Lumi() {
       const next = [...prev];
       let dernier = next[next.length - 1];
       if (!dernier || dernier.role !== 'assistant' || !dernier.enCours) {
-        dernier = { id: nextId(), role: 'assistant', text: '', tools: [], enCours: true, outilsActifs: [] };
+        dernier = { id: nextId(), role: 'assistant', text: '', tools: [], enCours: true, outilsActifs: [], debut: Date.now() };
         next.push(dernier);
       } else {
         dernier = { ...dernier };
@@ -242,9 +284,11 @@ export default function Lumi() {
         case 'done':
           dernier.enCours = false;
           dernier.outilsActifs = [];
+          dernier.duree = Date.now() - (dernier.debut ?? Date.now());
           break;
         case 'error':
           dernier.enCours = false;
+          dernier.duree = Date.now() - (dernier.debut ?? Date.now());
           if (!dernier.text) dernier.text = e.message === 'refusal'
             ? (fr ? 'Je ne peux pas répondre à cette demande.' : "I can't help with that request.")
             : (fr ? 'Désolé, je n’ai pas réussi à répondre. Réessayez.' : 'Sorry, I could not answer. Please try again.');
@@ -326,6 +370,16 @@ export default function Lumi() {
   }
   const chrono = `${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`;
 
+  function copier(texte: string) {
+    try { void navigator.clipboard?.writeText(texte); } catch { /* presse-papiers indisponible */ }
+  }
+  /** Relance la question qui a produit ce message. */
+  function reessayer(itemId: number) {
+    const idx = items.findIndex((m) => m.id === itemId);
+    const question = [...items.slice(0, idx)].reverse().find((m) => m.role === 'user');
+    if (question?.text) void envoyer(question.text);
+  }
+
   const suggestions = fr
     ? ['Quel est mon chiffre du mois ?', 'Quelles factures sont en retard ?', 'Prépare ma journée de demain', 'Qui sont mes meilleurs clients ?']
     : ['What is my revenue this month?', 'Which invoices are overdue?', 'Prepare my day tomorrow', 'Who are my best clients?'];
@@ -335,6 +389,7 @@ export default function Lumi() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
+      <style>{LUMI_CSS}</style>
       {/* ── En-tête, comme toute page du CRM ── */}
       <PageHeader
         title="Lumi"
@@ -437,39 +492,74 @@ export default function Lumi() {
             </motion.div>
           )}
 
-          {items.map((m) => (
-            <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-              <div className={m.role === 'user' ? 'max-w-[80%]' : 'max-w-[88%]'}>
-                {m.role === 'assistant' && ((m.outilsActifs?.length ?? 0) > 0 || (m.tools.length > 0 && !m.enCours)) && (
-                  <div className="mb-1.5 flex flex-wrap gap-1.5">
-                    {m.outilsActifs?.map((n) => (
-                      <span key={`a-${n}`} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5 text-[11px] text-text-tertiary">
-                        <Loader2 size={10} className="animate-spin" /> {libelleOutil(n, fr)}…
-                      </span>
-                    ))}
-                    {!m.enCours && m.tools.map((n) => (
-                      <span key={`f-${n}`} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5 text-[11px] text-text-tertiary">
-                        <CheckCircle2 size={10} className="text-emerald-600" /> {libelleOutil(n, fr)}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {(m.text || m.enCours) && (
-                  <div className={m.role === 'user'
-                    ? 'rounded-2xl rounded-br-md bg-primary text-white px-4 py-2.5 text-[13.5px] whitespace-pre-wrap'
-                    : 'rounded-2xl rounded-bl-md bg-surface-secondary text-text-primary px-4 py-2.5 text-[13.5px] leading-relaxed'}>
-                    {m.text
-                      ? (m.role === 'assistant' ? <TexteLumi texte={m.text} /> : m.text)
-                      : <Loader2 size={16} className="animate-spin text-text-tertiary" />}
-                  </div>
-                )}
-                {m.report && <RapportCarte rapport={m.report} fr={fr} />}
-                {m.proposal && (
-                  <PropositionCarte proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} />
-                )}
+          {items.map((m) => {
+            if (m.role === 'user') {
+              return (
+                <div key={m.id} className="flex justify-end">
+                  <div className="max-w-[80%] rounded-2xl rounded-br-md bg-surface-secondary border border-outline/50 px-4 py-2.5 text-[14px] text-text-primary whitespace-pre-wrap">{m.text}</div>
+                </div>
+              );
+            }
+            const actifs = m.outilsActifs ?? [];
+            const reflechit = !!m.enCours && (!m.text || actifs.length > 0);
+            const etapes = [...m.tools, ...actifs.filter((n) => !m.tools.includes(n))];
+            const secondes = m.duree ? Math.max(1, Math.round(m.duree / 1000)) : null;
+            const sources = Array.from(new Map(m.tools.filter((n) => SOURCES_OUTILS[n]).map((n) => [SOURCES_OUTILS[n][0], SOURCES_OUTILS[n]])).values());
+            return (
+              <div key={m.id} className="lumi-msg grid grid-cols-[28px_1fr] gap-3">
+                <img src="/agent/lumi-poster.png" alt="" width={28} height={28} className={cn('mt-0.5 h-7 w-7 rounded-full bg-surface-secondary', reflechit && 'lumi-halo')} />
+                <div className="min-w-0">
+                  {(reflechit || etapes.length > 0) && (
+                    <details className="lumi-think mb-2" open={reflechit}>
+                      <summary className="inline-flex cursor-pointer items-center gap-2 text-[12.5px] font-medium text-text-secondary">
+                        <span className={cn('lumi-disc', reflechit ? 'live' : 'done')} aria-hidden="true" />
+                        <span className={reflechit ? 'lumi-shimmer' : undefined}>
+                          {reflechit
+                            ? (fr ? 'Lumi réfléchit…' : 'Lumi is thinking…')
+                            : `${fr ? 'Réflexion' : 'Thinking'}${secondes ? ` · ${secondes} s` : ''}`}
+                        </span>
+                        {etapes.length > 0 && <ChevronDown size={12} className="lumi-chev text-text-tertiary" />}
+                      </summary>
+                      {etapes.length > 0 && (
+                        <ul className="ml-[22px] mt-1.5 border-l-2 border-outline pl-3 text-[12.5px] leading-relaxed text-text-tertiary">
+                          {etapes.map((n) => (
+                            <li key={n} className="flex items-center gap-2">
+                              {actifs.includes(n) && <Loader2 size={10} className="animate-spin" />}
+                              {libelleOutil(n, fr)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </details>
+                  )}
+                  {m.text && (
+                    <div className="text-[14.5px] leading-relaxed text-text-primary"><TexteLumi texte={m.text} /></div>
+                  )}
+                  {m.report && <RapportCarte rapport={m.report} fr={fr} />}
+                  {m.proposal && (
+                    <PropositionCarte proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} />
+                  )}
+                  {!m.enCours && sources.length > 0 && (
+                    <p className="mt-2 text-[12.5px] text-text-tertiary">
+                      <span className="mr-2">{fr ? 'Sources' : 'Sources'}</span>
+                      {sources.map(([href, lfr, len], i) => (
+                        <React.Fragment key={href}>
+                          {i > 0 && <span className="mx-2 text-text-tertiary">·</span>}
+                          <Link to={href} className="border-b border-outline text-text-secondary hover:text-text-primary">{fr ? lfr : len}</Link>
+                        </React.Fragment>
+                      ))}
+                    </p>
+                  )}
+                  {!m.enCours && m.text && (
+                    <div className="lumi-tools mt-1 -ml-1.5 flex gap-0.5">
+                      <button type="button" onClick={() => copier(m.text)} title={fr ? 'Copier' : 'Copy'} aria-label={fr ? 'Copier la réponse' : 'Copy reply'} className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-secondary hover:text-text-primary"><Copy size={14} /></button>
+                      <button type="button" onClick={() => reessayer(m.id)} disabled={enCours} title={fr ? 'Réessayer' : 'Retry'} aria-label={fr ? 'Reposer la question' : 'Ask again'} className="rounded-md p-1.5 text-text-tertiary hover:bg-surface-secondary hover:text-text-primary disabled:opacity-50"><RotateCcw size={14} /></button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {erreur && (
@@ -609,15 +699,13 @@ function RapportCarte({ rapport, fr }: { rapport: RapportLumi; fr: boolean }) {
 }
 
 function PropositionCarte({ proposition, fr, busy, onDecision }: { proposition: PropositionLumi; fr: boolean; busy: boolean; onDecision: (d: 'confirm' | 'cancel') => void }) {
-  const titre = proposition.capacite
-    ? (fr ? `Action proposée : ${proposition.capacite}` : `Proposed action: ${proposition.capacite}`)
-    : (fr ? `Action proposée : ${proposition.tool.replace(/_/g, ' ')}` : `Proposed action: ${proposition.tool.replace(/_/g, ' ')}`);
+  const titre = proposition.capacite || proposition.tool.replace(/_/g, ' ');
   // Les identifiants techniques (UUID, réfs opaques) ne disent rien à l'utilisateur.
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const entrees = Object.entries(proposition.args).filter(([k, v]) => v !== null && v !== undefined && v !== '' && !/(^|_)id$/.test(k) && !(typeof v === 'string' && UUID.test(v)));
   return (
-    <div className="mt-2 section-card p-3.5 text-[13px]">
-      <p className="font-semibold text-text-primary">{titre}</p>
+    <div className="mt-3 rounded-2xl border border-outline bg-surface px-4 py-3.5 text-[13.5px]">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{titre}</p>
       {entrees.length > 0 && (
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
           {entrees.map(([k, v]) => (
@@ -629,7 +717,7 @@ function PropositionCarte({ proposition, fr, busy, onDecision }: { proposition: 
         </dl>
       )}
       {proposition.statut === 'en_attente' ? (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3.5 flex gap-2">
           <button type="button" disabled={busy} onClick={() => onDecision('confirm')} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
             {fr ? 'Confirmer' : 'Confirm'}
           </button>
@@ -638,8 +726,8 @@ function PropositionCarte({ proposition, fr, busy, onDecision }: { proposition: 
           </button>
         </div>
       ) : (
-        <p className={cn('mt-2 inline-flex items-center gap-1.5 text-[11.5px]', proposition.statut === 'confirmee' ? 'text-emerald-600' : proposition.statut === 'echouee' ? 'text-danger' : 'text-text-tertiary')}>
-          {proposition.statut === 'confirmee' ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+        <p className={cn('mt-2.5 inline-flex items-center gap-2 text-[12px]', proposition.statut === 'confirmee' ? 'text-text-secondary' : proposition.statut === 'echouee' ? 'text-danger' : 'text-text-tertiary')}>
+          {proposition.statut === 'confirmee' ? <span className="h-2 w-2 rounded-full bg-[#3FAF97]" aria-hidden="true" /> : <XCircle size={12} />}
           {proposition.statut === 'confirmee' ? (fr ? 'Exécutée' : 'Executed') : proposition.statut === 'echouee' ? (fr ? 'Échouée' : 'Failed') : (fr ? 'Annulée' : 'Cancelled')}
         </p>
       )}
