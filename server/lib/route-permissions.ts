@@ -11,6 +11,7 @@
 
 import express from 'express';
 import { getUserContext, hasPermission, type UserContext } from './rbac';
+import type { PermissionKey } from '../../src/lib/permissions';
 import { requireAuthedClient } from './supabase';
 
 // Extend Express Request to carry user context
@@ -27,7 +28,8 @@ declare global {
  * Key: "METHOD /path" or "ALL /path" (prefix match).
  * Value: permission key string, or array (any = OR).
  */
-const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
+// Clés typées : une faute de frappe dans cette table est une erreur de compilation (audit bloc 3, C2).
+const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // ── Clients ──
   'GET /api/clients/search': 'clients.read',
   'POST /api/clients/by-ids': 'clients.read',
@@ -381,7 +383,7 @@ export function rbacMiddleware(): express.RequestHandler {
     const method = req.method.toUpperCase();
     const candidates = normalisePathForMatch(method, req.path);
 
-    let permissionKey: string | string[] | undefined;
+    let permissionKey: PermissionKey | PermissionKey[] | undefined;
     for (const candidate of candidates) {
       if (ROUTE_PERMISSIONS[candidate]) {
         permissionKey = ROUTE_PERMISSIONS[candidate];

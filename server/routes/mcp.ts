@@ -27,6 +27,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { Router } from 'express';
+import type { PermissionKey } from '../../src/lib/permissions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { validateApiKey } from '../lib/api-keys';
 import { getServiceClient, requireAuthedClient } from '../lib/supabase';
@@ -139,7 +140,7 @@ function outilsPour(auth: McpAuth): AgentTool[] {
    la MÊME mécanique que les routes de l'application (propriétaire
    toujours oui, technicien jamais financier, réglages de l'org par-
    dessus). Un outil sans entrée ici est ouvert à tout membre.          */
-const PERMISSION_PAR_OUTIL: Record<string, { cle: string; capacite: string }> = {
+const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite: string }> = {
   search_clients:            { cle: 'clients.read',       capacite: 'la consultation des clients' },
   get_client_profile:        { cle: 'clients.read',       capacite: 'la consultation des clients' },
   create_client:             { cle: 'clients.create',     capacite: 'la création de clients' },

@@ -63,7 +63,7 @@ describe('Server-side financial restriction', () => {
       'invoices.create', 'invoices.read', 'invoices.update', 'invoices.delete', 'invoices.send',
       'payments.read', 'payments.create', 'payments.refund',
       'reports.read', 'analytics.view',
-    ];
+    ] as const;
 
     for (const key of financialKeys) {
       expect(serverHasPermission(techCtx, key)).toBe(false);
@@ -189,5 +189,19 @@ describe('Financial entity filtering', () => {
 
     const filtered = filterFinancialEntities(adminCtx, items);
     expect(filtered).toHaveLength(2);
+  });
+});
+
+describe('une clé de permission inconnue est refusée à tout le monde (audit bloc 3, C2)', () => {
+  it('admin comme sales_rep : false, jamais true par défaut', () => {
+    const inconnue = 'factures.supprimer' as unknown as import('../../src/lib/permissions').PermissionKey;
+    const admin = { userId: 'u', orgId: 'o', role: 'admin', scope: 'company', teamId: null, departmentId: null, managerId: null, permissions: {} } as any;
+    const rep = { ...admin, role: 'sales_rep' };
+    const owner = { ...admin, role: 'owner' };
+    expect(serverHasPermission(admin, inconnue)).toBe(false);
+    expect(serverHasPermission(rep, inconnue)).toBe(false);
+    expect(serverHasPermission(owner, inconnue)).toBe(false);
+    // Une vraie clé reste accordée à l'admin.
+    expect(serverHasPermission(admin, 'invoices.delete')).toBe(true);
   });
 });

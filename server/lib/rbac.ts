@@ -14,7 +14,7 @@ import express from 'express';
 import { requireAuthedClient, getServiceClient } from './supabase';
 // Défauts de rôle partagés avec le client (fichier pur, sans dépendance
 // navigateur) — UNE seule source de vérité pour les presets.
-import { ROLE_PRESETS, type PermissionKey, type PermissionsMap } from '../../src/lib/permissions';
+import { ROLE_PRESETS, type PermissionKey, type PermissionsMap, PERMISSION_KEYS } from '../../src/lib/permissions';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -189,6 +189,8 @@ export async function getUserContext(
   return ctx;
 }
 
+const PERMISSION_KEY_SET: ReadonlySet<string> = new Set(PERMISSION_KEYS);
+
 // ── Permission check ────────────────────────────────────────────────
 
 /**
@@ -196,7 +198,13 @@ export async function getUserContext(
  * Owner always returns true. Admin returns true except protected actions.
  * Technician NEVER gets financial permissions regardless of overrides.
  */
-export function hasPermission(ctx: UserContext, key: string): boolean {
+export function hasPermission(ctx: UserContext, key: PermissionKey): boolean {
+  // Une clé inconnue est une faute de frappe, pas un droit : refusée pour
+  // TOUS les rôles. Avant, l'admin recevait `true` avant même d'atteindre les
+  // presets — un échec silencieux qui s'ouvrait au lieu de se fermer (audit
+  // bloc 3, C2). Le paramètre est typé PermissionKey : la faute de frappe est
+  // maintenant une erreur de compilation ; ce garde couvre le runtime.
+  if (!PERMISSION_KEY_SET.has(key)) return false;
   if (ctx.role === 'owner') return true;
 
   // Technician: hard block all financial permissions
@@ -259,7 +267,7 @@ export function checkScope(
  */
 export function can(
   ctx: UserContext,
-  action: string,
+  action: PermissionKey,
   resource?: {
     owner_id?: string | null;
     team_id?: string | null;
@@ -277,7 +285,7 @@ export function can(
  * Middleware that requires a specific permission.
  * Returns 403 if denied. Attaches UserContext to req.
  */
-export function requirePermission(permissionKey: string) {
+export function requirePermission(permissionKey: PermissionKey) {
   return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return; // 401 already sent
@@ -327,7 +335,7 @@ export function requireRole(...roles: TeamRole[]) {
  * Middleware that blocks financially restricted roles from accessing a route.
  * Use on invoice, payment, report, analytics routes.
  */
-export function requireFinancialAccess(permissionKey?: string) {
+export function requireFinancialAccess(permissionKey?: PermissionKey) {
   return async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
