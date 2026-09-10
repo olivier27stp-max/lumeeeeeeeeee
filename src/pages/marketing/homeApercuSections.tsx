@@ -248,20 +248,6 @@ export function Faq({ fr }: { fr: boolean }) {
   );
 }
 
-/* ── CTA final ── */
-export function FinalCta({ fr, onDemo }: { fr: boolean; onDemo: () => void }) {
-  return (
-    <section className="hs-final">
-      <h2>{fr ? 'Vingt minutes avec ton équipe, tes services, tes prix.' : 'Twenty minutes with your team, your services, your prices.'}</h2>
-      <p>{fr ? "Pas de carte de crédit. Pas d'installation. On configure ton compte avec toi." : 'No credit card. Nothing to install. We set up your account with you.'}</p>
-      <div className="ha-ctas">
-        <button type="button" className="ha-btn ha-dark" onClick={onDemo}>{fr ? 'Réserver une démo →' : 'Book a demo →'}</button>
-        <button type="button" className="ha-btn ha-ghost" onClick={() => window.dispatchEvent(new Event('lumi:open'))}>{fr ? 'Poser une question à Lumi' : 'Ask Lumi a question'}</button>
-      </div>
-    </section>
-  );
-}
-
 export const SECTIONS_CSS = `
 .home-apercu h2 { font-size:28px; font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#0a0a0a; margin:8px 0 0; max-width:26ch; }
 .home-apercu .hs-sub { margin:10px 0 0; font-size:15px; line-height:1.55; color:#333; max-width:70ch; }
@@ -313,11 +299,10 @@ export const SECTIONS_CSS = `
 .hs-pl p { margin:10px 0 0; font-size:13.5px; line-height:1.5; color:#333; }
 .hs-tag { position:absolute; top:-12px; left:22px; background:var(--forest); color:#fff; font-size:10px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; padding:4px 10px; border-radius:999px; }
 .hs-sgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:20px; } .hs-sgrid div { border-top:2px solid #111; padding-top:12px; } .hs-sgrid b { font-size:15px; color:#111; } .hs-sgrid p { margin:6px 0 0; font-size:13px; line-height:1.5; color:#333; }
-.hs-faq { max-width:820px; margin:0 auto; padding:52px 24px 24px; }
+.hs-faq { max-width:820px; margin:0 auto; padding:52px 24px 64px; }
 .hs-faq details { border-top:1px solid #d9d9d4; padding:14px 0; } .hs-faq details:last-of-type { border-bottom:1px solid #d9d9d4; }
 .hs-faq summary { cursor:pointer; font-weight:700; font-size:15.5px; color:#111; list-style:none; display:flex; justify-content:space-between; align-items:center; } .hs-faq summary::-webkit-details-marker { display:none; } .hs-faq summary::after { content:"+"; font-size:20px; color:#888; } .hs-faq details[open] summary::after { content:"–"; }
 .hs-faq p { margin:10px 0 0; font-size:14px; line-height:1.55; color:#333; max-width:68ch; }
-.hs-final { max-width:820px; margin:0 auto; padding:24px 24px 72px; text-align:center; } .hs-final h2 { font-size:30px; margin:0 auto; } .hs-final p { margin:12px 0 0; color:#333; font-size:15px; } .hs-final .ha-ctas { justify-content:center; }
 @media (max-width: 900px) {
   .hs-stoplist, .hs-pgrid, .hs-rp, .hs-lgrid, .hs-band, .hs-steps, .hs-plgrid, .hs-sgrid { grid-template-columns:1fr; }
   .hs-steps::before { display:none; }

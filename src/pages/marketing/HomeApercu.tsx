@@ -22,7 +22,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
-import { StopList, Pillars, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, FinalCta, SECTIONS_CSS } from './homeApercuSections';
+import { StopList, Pillars, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, SECTIONS_CSS } from './homeApercuSections';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 
@@ -200,7 +200,6 @@ export default function HomeApercu() {
       <PlansTeaser fr={fr} />
       <Security fr={fr} />
       <Faq fr={fr} />
-      <FinalCta fr={fr} onDemo={() => setDemoOpen(true)} />
 
       <BookDemoForm open={demoOpen} onClose={() => setDemoOpen(false)} source="home" />
     </div>
