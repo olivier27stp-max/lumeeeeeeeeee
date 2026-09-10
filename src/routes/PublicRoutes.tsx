@@ -10,7 +10,9 @@ const Terms = React.lazy(() => import('../pages/Terms'));
 const Subprocessors = React.lazy(() => import('../pages/Subprocessors'));
 const MarketingNotFound = React.lazy(() => import('../pages/marketing/NotFound'));
 import MarketingLayout from '../components/marketing/MarketingLayout';
-const MarketingHome = React.lazy(() => import('../pages/marketing/Home'));
+// Accueil « aperçu » (sept. 2026). L'ancienne page `pages/marketing/Home.tsx`
+// reste dans le dépôt, non routée, pour pouvoir y revenir.
+const MarketingHome = React.lazy(() => import('../pages/marketing/HomeApercu'));
 const MarketingFeatures = React.lazy(() => import('../pages/marketing/Features'));
 const MarketingSolutions = React.lazy(() => import('../pages/marketing/Solutions'));
 const MarketingIndustries = React.lazy(() => import('../pages/marketing/Industries'));
