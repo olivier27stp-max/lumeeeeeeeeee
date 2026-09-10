@@ -1494,6 +1494,8 @@ function AuthenticatedApp({
                   <Routes>
                     <Route path="/" element={<Navigate to="/day" replace />} />
                     <Route path="/pricing" element={<Navigate to="/settings/billing" replace />} />
+                    {/* Ancien chemin encore tapé à la main / dans des favoris (audit QA P2). */}
+                    <Route path="/marketplace" element={<Navigate to="/settings/marketplace" replace />} />
                     {/* Lume Agent masque — la fonctionnalite n'est pas encore ouverte aux
                         utilisateurs. La route est REDIRIGEE plutot que supprimee : un favori
                         ou un lien deja partage ne doit pas tomber sur une page blanche.

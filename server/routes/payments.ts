@@ -1024,6 +1024,22 @@ router.get('/payments/payouts/summary', async (req, res) => {
     const summary = await buildPayPalPayoutSummary(requestedOrgId);
     return res.json(summary);
   } catch (error: any) {
+    // « Aucun compte de paiement connecté » n'est pas une erreur : c'est
+    // l'état normal d'une org qui n'encaisse pas en ligne. Répondu 409, il
+    // finissait en erreur console rouge sur /insights à chaque chargement
+    // (audit QA 2026-09-09, P2). On renvoie un résumé vide, et meta.source
+    // dit pourquoi — les pages affichent déjà « aucun compte connecté ».
+    if (error?.status === 409) {
+      return res.json({
+        provider: parsePayoutProvider(req.query.provider) || 'stripe',
+        currency: 'CAD',
+        available: 0,
+        on_the_way: 0,
+        deposited_week: 0,
+        deposited_month: 0,
+        meta: { source: 'not_connected', note: String(error.message || '') },
+      });
+    }
     return sendSafeError(res, error, 'Unable to load payout summary.', '[payments/payouts/summary]');
   }
 });

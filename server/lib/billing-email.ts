@@ -198,7 +198,9 @@ export async function resendPaymentReceipt(subscriptionId: string): Promise<{
     companyName: bp?.company_name || '',
     planName: sub.plans?.name || 'Unknown',
     interval: sub.interval || 'monthly',
-    amountCents: sub.amount_cents || 0,
+    // Un abonnement posé à la main (amount_cents = 0) enverrait un reçu à
+    // 0 $ (audit QA 2026-09-09, P2) : on retombe sur le prix du plan.
+    amountCents: sub.amount_cents || prixDuPlan(sub.plans, sub.interval, sub.currency) || 0,
     currency: sub.currency || 'CAD',
     taxes: null,
     stripePaymentIntentId: sub.stripe_payment_intent_id,
@@ -242,4 +244,14 @@ async function insertReceiptLog(
     if (logErr?.code === '23505') return;
     console.error('[billing-email] Failed to insert receipt log:', logErr.message);
   }
+}
+
+/** Prix catalogue du plan pour l'intervalle et la devise de l'abonnement, en cents. */
+export function prixDuPlan(plan: any, interval: string | null | undefined, currency: string | null | undefined): number {
+  if (!plan) return 0;
+  const annuel = (interval || 'monthly') === 'yearly';
+  const usd = String(currency || 'CAD').toUpperCase() === 'USD';
+  const cle = `${annuel ? 'yearly' : 'monthly'}_price_${usd ? 'usd' : 'cad'}`;
+  const v = Number(plan[cle]);
+  return Number.isFinite(v) && v > 0 ? Math.round(v) : 0;
 }

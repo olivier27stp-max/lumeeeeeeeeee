@@ -191,15 +191,20 @@ async function groupOrgIds(admin: Admin, orgId: string): Promise<string[]> {
 // ── Sonde d'identité douce pour le gate frontend — ne 401 jamais. ─────────
 router.get('/creator-space/check', async (req, res) => {
   try {
-    if (platformAdminIds.size === 0) return res.json({ isCreator: false });
-    // Sans Authorization : pas d'identité → même réponse douce (jamais 401 ici).
+    // Un anonyme n'a aucune raison de demander s'il est administrateur de
+    // plateforme : 401 (audit QA 2026-09-09, phase 3 — la sonde répondait 200
+    // sans compte et révélait l'existence de la surface d'administration).
+    // Le client traite tout !res.ok comme « non » ; un membre ordinaire
+    // authentifié reçoit toujours 200 { isCreator: false }.
     const authorization = req.header('authorization');
-    if (!authorization) return res.json({ isCreator: false });
+    if (!authorization) return res.status(401).json({ error: 'Missing authorization header.' });
     const client = buildSupabaseWithAuth(authorization);
     const { data } = await client.auth.getUser();
-    return res.json({ isCreator: !!data?.user?.id && platformAdminIds.has(data.user.id) });
+    if (!data?.user?.id) return res.status(401).json({ error: 'Invalid auth token.' });
+    if (platformAdminIds.size === 0) return res.json({ isCreator: false });
+    return res.json({ isCreator: platformAdminIds.has(data.user.id) });
   } catch {
-    return res.json({ isCreator: false });
+    return res.status(401).json({ error: 'Invalid auth token.' });
   }
 });
 

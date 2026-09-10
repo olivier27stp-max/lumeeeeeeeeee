@@ -353,7 +353,6 @@ export const PUBLIC_ROUTE_PREFIXES: readonly string[] = [
     '/api/billing/subscribe',
     '/api/billing/onboarding',
     '/api/ai/health',
-    '/api/integrations-providers',
     '/api/payment-requests/',  // public status check
     '/api/security/csp-report',
     '/api/messages/inbound',   // Twilio webhook
