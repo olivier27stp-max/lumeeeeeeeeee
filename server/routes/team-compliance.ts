@@ -183,4 +183,69 @@ router.get('/team/:userId/audit', async (req, res) => {
   return res.status(200).json({ events: data ?? [] });
 });
 
+// ────────────────────────────────────────────────────────────────────
+// POST /api/team/:memberId/purge-now  (P1-D — vrai effacement)
+// L'effacement programmé (request-delete + grâce 30 j) ne faisait que RÉVOQUER
+// l'accès : le cron SQL supprime les lignes memberships/team_members, mais le
+// compte auth.users restait (avec sessions, MFA, push tokens, subscriptions…).
+// La promesse « suppression définitive » était donc fausse (enjeu Loi 25).
+// Le SQL ne peut pas supprimer dans le schéma `auth` — seul l'Admin API le peut.
+// Cette route, réservée admin/owner, supprime définitivement le compte quand la
+// grâce est expirée ; grâce aux FK ON DELETE CASCADE/SET NULL posées par
+// 20260910170000, deleteUser nettoie proprement toutes les données rattachées.
+// ────────────────────────────────────────────────────────────────────
+router.post('/team/:memberId/purge-now', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const memberId = String(req.params.memberId);
+  if (!UUID_RE.test(memberId)) return res.status(400).json({ error: 'Invalid member id' });
+
+  const svc = getServiceClient();
+
+  // Le membre doit exister dans l'org de l'appelant, avec une suppression
+  // programmée dont la grâce est ÉCHUE. On lit deletion_scheduled_at pour ne
+  // jamais supprimer un compte hors de la fenêtre prévue.
+  const { data: member } = await svc
+    .from('team_members')
+    .select('user_id, org_id, deletion_scheduled_at')
+    .eq('id', memberId)
+    .maybeSingle();
+  if (!member) return res.status(404).json({ error: 'Member not found' });
+  if (member.org_id !== auth.orgId) return res.status(403).json({ error: 'Cross-org operation not allowed' });
+
+  const { data: isAdmin } = await svc.rpc('has_org_admin_role', { p_user: auth.user.id, p_org: auth.orgId });
+  if (!isAdmin) return res.status(403).json({ error: 'Admin/Owner role required' });
+
+  if (!member.deletion_scheduled_at) {
+    return res.status(409).json({ error: 'Aucune suppression programmée pour ce membre.' });
+  }
+  if (new Date(member.deletion_scheduled_at).getTime() > Date.now()) {
+    return res.status(409).json({ error: 'La période de grâce n’est pas terminée.', scheduled_at: member.deletion_scheduled_at });
+  }
+
+  // Empêcher un admin de se supprimer lui-même par cette voie.
+  if (member.user_id === auth.user.id) {
+    return res.status(400).json({ error: 'Impossible de supprimer votre propre compte par cette route.' });
+  }
+
+  // Suppression définitive du compte auth. Les FK CASCADE/SET NULL font le reste.
+  const { error: delErr } = await (svc.auth.admin as any).deleteUser(member.user_id);
+  if (delErr) {
+    console.error('[team-compliance] deleteUser échoué:', member.user_id, delErr.message);
+    return res.status(500).json({ error: 'Suppression du compte échouée.' });
+  }
+
+  await svc.from('audit_events').insert({
+    org_id: auth.orgId,
+    actor_id: auth.user.id,
+    action: 'hard_delete_purged',
+    entity_type: 'team_member',
+    entity_id: memberId,
+    metadata: { target_user: member.user_id, scheduled_at: member.deletion_scheduled_at, at: new Date().toISOString() },
+  });
+
+  return res.status(200).json({ ok: true, purged_user: member.user_id });
+});
+
 export default router;
