@@ -22,6 +22,55 @@ function pickMimeType(): string {
   return '';
 }
 
+/** Navigateur courant, pour donner la bonne marche à suivre quand le micro est bloqué. */
+function navigateur(): 'safari-ios' | 'safari-mac' | 'firefox' | 'chrome' {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua)) return 'safari-ios';
+  if (/Firefox\//.test(ua)) return 'firefox';
+  if (/Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) return 'safari-mac';
+  return 'chrome';
+}
+
+/**
+ * Message lisible selon la raison réelle du refus. Un lien direct vers les
+ * réglages n'existe pas (les pages ne peuvent pas ouvrir chrome:// ni les
+ * réglages du système) : on donne les étapes exactes pour ce navigateur.
+ */
+export function messageMicro(err: unknown, fr: boolean): string {
+  const name = (err as { name?: string } | null)?.name ?? '';
+  const nav = navigateur();
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+    return fr ? 'Aucun micro détecté. Branche ou active un micro, puis réessaie.' : 'No microphone detected. Plug in or enable a microphone, then try again.';
+  }
+  if (name === 'NotReadableError' || name === 'AbortError') {
+    return fr ? "Le micro est utilisé par une autre application (Teams, Zoom, Discord…). Ferme-la, puis réessaie." : 'The microphone is in use by another app (Teams, Zoom, Discord…). Close it, then try again.';
+  }
+  if (name === 'SecurityError') {
+    return fr ? "Le micro n'est pas permis dans ce contexte (page intégrée ou connexion non sécurisée). Ouvre lumecrm.net directement dans le navigateur." : 'The microphone is not allowed in this context (embedded page or insecure connection). Open lumecrm.net directly in the browser.';
+  }
+  // NotAllowedError : refusé par la personne, par le navigateur ou par le système.
+  const etapes = {
+    'chrome': fr
+      ? "Clique sur l'icône à gauche de l'adresse (cadenas ou réglages), mets Microphone sur « Autoriser », puis recharge la page."
+      : 'Click the icon left of the address (lock or settings), set Microphone to “Allow”, then reload the page.',
+    'safari-ios': fr
+      ? 'Touche « AA » à gauche de l\'adresse, puis Réglages du site web, et mets Microphone sur « Autoriser ».'
+      : 'Tap “AA” left of the address, then Website Settings, and set Microphone to “Allow”.',
+    'safari-mac': fr
+      ? 'Menu Safari, Réglages pour lumecrm.net, puis Microphone sur « Autoriser ».'
+      : 'Safari menu, Settings for lumecrm.net, then Microphone to “Allow”.',
+    'firefox': fr
+      ? "Clique sur le cadenas à gauche de l'adresse, retire le blocage du micro, puis réessaie."
+      : 'Click the lock left of the address, remove the microphone block, then try again.',
+  }[nav];
+  const systeme = /Windows/.test(navigator.userAgent)
+    ? (fr ? ' Si ça bloque encore : Paramètres Windows, Confidentialité, Microphone, et autorise le navigateur.' : ' If it still fails: Windows Settings, Privacy, Microphone, and allow the browser.')
+    : /Mac OS/.test(navigator.userAgent)
+      ? (fr ? ' Si ça bloque encore : Réglages Système, Confidentialité et sécurité, Microphone.' : ' If it still fails: System Settings, Privacy & Security, Microphone.')
+      : '';
+  return (fr ? 'Micro refusé. ' : 'Microphone denied. ') + etapes + systeme;
+}
+
 export function isVoiceInputSupported(): boolean {
   return typeof window !== 'undefined'
     && typeof MediaRecorder !== 'undefined'
@@ -67,11 +116,17 @@ export function useVoiceInput(opts: {
       onError(fr ? "Ce navigateur n'a pas accès au micro. Essaie Chrome, Safari ou Edge." : 'This browser has no microphone access. Try Chrome, Safari or Edge.');
       return;
     }
+    // Déjà bloqué pour ce site ? Inutile de redemander : le navigateur ne
+    // réaffiche pas l'invite. On explique tout de suite comment débloquer.
+    try {
+      const st = await navigator.permissions?.query({ name: 'microphone' as PermissionName });
+      if (st?.state === 'denied') { onError(messageMicro({ name: 'NotAllowedError' }, fr)); return; }
+    } catch { /* API permissions absente (Safari) : on tente directement */ }
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    } catch {
-      onError(fr ? "Micro refusé. Autorise le micro dans les réglages du navigateur, puis réessaie." : 'Microphone denied. Allow the microphone in your browser settings, then try again.');
+    } catch (err) {
+      onError(messageMicro(err, fr));
       return;
     }
     const mimeType = pickMimeType();
