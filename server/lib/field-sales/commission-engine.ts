@@ -271,7 +271,9 @@ export async function voidProjectedCommissionForJob(
     .select('id');
   if (error) {
     console.error(`[commissions] void projected entries failed (org ${orgId}, job ${jobId}):`, error.message);
-    return { voided: 0 };
+    // Renvoyer `{ voided: 0 }` faisait passer l'échec pour « rien à annuler » :
+    // le job disparaissait, la commission restait, et on la payait. On lève.
+    throw new Error(`void projected entries failed: ${error.message}`);
   }
   return { voided: (data ?? []).length };
 }

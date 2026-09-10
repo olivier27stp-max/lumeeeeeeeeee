@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { sendSafeError } from '../lib/error-handler';
+import { withDeadLetter } from '../lib/dead-letter';
 import {
   getCommissionEntries,
   approveCommission,
@@ -19,6 +20,45 @@ import {
 const router = Router();
 router.use(maxBodySize());
 router.use(guardCommonShape);
+
+/**
+ * Les trois appels « en arrière-plan » (projeter, annuler, générer) sont
+ * lancés par le navigateur sans bloquer le flux métier. Si l'un d'eux échoue,
+ * un vendeur n'est pas payé — ou l'est pour un job supprimé — et personne ne
+ * le voit avant qu'il réclame. On persiste donc chaque échec dans
+ * `dead_letters` (payload rejouable) AVANT de répondre 500.
+ *
+ * Certains « succès » du moteur sont en réalité des échecs (lecture ratée →
+ * il s'abstient) : on les journalise aussi, sinon ils passent en 200 muets.
+ */
+const SKIPS_QUI_SONT_DES_ECHECS = new Set(['dup_check_failed', 'rules_load_failed', 'period_stats_failed', 'insert_failed']);
+
+async function commissionAvecTrace<T extends { skipped?: string | null }>(
+  res: any,
+  source: string,
+  payload: Record<string, unknown>,
+  fn: () => Promise<T>,
+) {
+  let echec: unknown = null;
+  const result = await withDeadLetter(source, payload, async () => {
+    try {
+      return await fn();
+    } catch (err) {
+      echec = err;
+      throw err;
+    }
+  });
+  if (result === null) {
+    return sendSafeError(res, echec, 'Commission operation failed.', '[commissions]');
+  }
+  if (result.skipped && SKIPS_QUI_SONT_DES_ECHECS.has(result.skipped)) {
+    await withDeadLetter(source, { ...payload, skipped: result.skipped }, async () => {
+      throw new Error(`commission engine skipped: ${result.skipped}`);
+    });
+    return res.status(500).json({ error: 'Commission operation failed.', skipped: result.skipped });
+  }
+  return res.json(result);
+}
 
 // GET /api/commissions?userId=...&status=...&from=...&to=...
 // Reps see only their own commissions; owners/admins see all (and can filter by userId).
@@ -58,13 +98,10 @@ router.post('/commissions/project-for-job', async (req, res) => {
   if (!jobId || typeof jobId !== 'string') {
     return res.status(400).json({ error: 'jobId is required.' });
   }
-  try {
-    const sc = getServiceClient();
-    const result = await projectCommissionForJob(sc, auth.orgId, jobId);
-    res.json(result);
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
-  }
+  const sc = getServiceClient();
+  return commissionAvecTrace(res, 'commissions:project-for-job',
+    { org_id: auth.orgId, job_id: jobId, user_id: auth.user.id },
+    () => projectCommissionForJob(sc, auth.orgId, jobId));
 });
 
 // POST /api/commissions/void-for-job
@@ -77,13 +114,10 @@ router.post('/commissions/void-for-job', async (req, res) => {
   if (!jobId || typeof jobId !== 'string') {
     return res.status(400).json({ error: 'jobId is required.' });
   }
-  try {
-    const sc = getServiceClient();
-    const result = await voidProjectedCommissionForJob(sc, auth.orgId, jobId);
-    res.json(result);
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
-  }
+  const sc = getServiceClient();
+  return commissionAvecTrace(res, 'commissions:void-for-job',
+    { org_id: auth.orgId, job_id: jobId, user_id: auth.user.id },
+    () => voidProjectedCommissionForJob(sc, auth.orgId, jobId));
 });
 
 // All write/admin endpoints below this point require owner/admin role.
@@ -99,19 +133,25 @@ async function requireAdmin(req: any, res: any) {
   return auth;
 }
 
-// POST /api/commissions/generate-for-invoice (admin) — manual re-run for an invoice
+// POST /api/commissions/generate-for-invoice
+// Appelé par le navigateur quand une facture est marquée payée à la main (Stripe
+// passe par le webhook). Ouvert à tout membre — pas seulement aux admins — parce
+// que c'est le rôle qui encaisse qui déclenche l'appel : en 403, un vendeur qui
+// marquait sa facture payée voyait sa commission ne jamais naître, sans trace.
+// Sans risque : le moteur est idempotent, borné à l'org du token, exige une
+// facture réellement payée et dérive le bénéficiaire de la facture, pas de
+// l'appelant.
 router.post('/commissions/generate-for-invoice', async (req, res) => {
-  const auth = await requireAdmin(req, res);
+  const auth = await requireAuthedClient(req, res);
   if (!auth) return;
-  const { invoiceId } = req.body;
-  if (!invoiceId) return res.status(400).json({ error: 'invoiceId is required.' });
-  try {
-    const sc = getServiceClient();
-    const result = await generateCommissionsForInvoice(sc, auth.orgId, invoiceId);
-    res.json(result);
-  } catch (err: any) {
-    return sendSafeError(res, err, 'Commission operation failed.', '[commissions]');
+  const { invoiceId } = req.body || {};
+  if (!invoiceId || typeof invoiceId !== 'string') {
+    return res.status(400).json({ error: 'invoiceId is required.' });
   }
+  const sc = getServiceClient();
+  return commissionAvecTrace(res, 'commissions:generate-for-invoice',
+    { org_id: auth.orgId, invoice_id: invoiceId, user_id: auth.user.id },
+    () => generateCommissionsForInvoice(sc, auth.orgId, invoiceId));
 });
 
 // POST /api/commissions/:id/mark-paid (admin)
