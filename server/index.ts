@@ -454,6 +454,11 @@ app.get('/api/auth/from-kairo', async (req, res) => {
 
     const maintenant = Math.floor(Date.now() / 1000);
     if (typeof exp !== 'number' || exp < maintenant) return refuser(401, 'jeton expiré');
+    // Lume impose SA propre borne de durée de vie (ne dépend pas de ce que Kairo
+    // met dans exp) : un lien qui fuit (historique, logs proxy, Referer) avec un
+    // exp lointain serait un mot de passe permanent vers le compte.
+    const TTL_MAX_SECONDES = 120;
+    if (exp > maintenant + TTL_MAX_SECONDES) return refuser(401, 'jeton expiré');
 
     // ── Usage unique ──
     for (const [cle, fin] of jetonsVus) if (fin < maintenant) jetonsVus.delete(cle);
@@ -478,12 +483,18 @@ app.get('/api/auth/from-kairo', async (req, res) => {
     const admin = getServiceClient();
 
     const courriel = email.toLowerCase();
-    const { data: liste, error: errListe } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-    if (errListe) {
-      console.error('[from-kairo] lecture des comptes impossible :', errListe.message);
+    // findUserByEmail interroge auth.users par courriel (RPC indexé), au lieu de
+    // télécharger et scanner 200 comptes : l'ancien listUsers(page:1,perPage:200)
+    // renvoyait « aucun compte » à tout utilisateur hors de la 1re page dès que
+    // la plateforme dépassait 200 inscrits — cassait la connexion Kairo pour eux.
+    const { findUserByEmail } = await import('./lib/supabase.js');
+    let utilisateur: { id: string; email: string | null } | null;
+    try {
+      utilisateur = await findUserByEmail(admin, courriel);
+    } catch (err: any) {
+      console.error('[from-kairo] lecture des comptes impossible :', err?.message);
       return res.status(503).json({ error: 'Service momentanément indisponible.' });
     }
-    const utilisateur = (liste?.users || []).find((u: any) => (u.email || '').toLowerCase() === courriel);
     if (!utilisateur) return refuser(403, 'aucun compte Lume pour ce courriel');
 
     // `status` compte autant que l'existence du lien : une adhésion révoquée
