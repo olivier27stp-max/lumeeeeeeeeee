@@ -978,7 +978,11 @@ const compareRevenue: AgentTool = {
       p_org: ctx.orgId, p_from: from, p_to: to,
     });
     if (error) return erreurOutil('comparaison', error);
+    // Mesures réellement renvoyées par rpc_insights_period_comparison (mêmes
+    // libellés que l'écran Insights) ; les anciennes clés restent par prudence.
     const LIB: Record<string, string> = {
+      new_leads: 'nouveaux clients', new_jobs: 'nouveaux jobs', invoiced_value: 'valeur facturée',
+      conversions: 'conversions', paid_invoices: 'factures payées',
       revenue: 'revenus', jobs: 'jobs', invoices: 'factures', quotes: 'devis',
       new_clients: 'nouveaux clients', collected: 'encaissé',
     };
@@ -987,7 +991,7 @@ const compareRevenue: AgentTool = {
       comparaison: (data || []).map((r: any) => ({
         mesure: LIB[r.metric] || String(r.metric).replace(/_/g, ' '),
         // Un montant garde son nom _cents (masquage + affichage $) ; un compte reste brut.
-        ...(/revenue|collected|amount|cents/i.test(r.metric)
+        ...(/revenue|collected|amount|cents|value/i.test(r.metric)
           ? { valeur_cents: Math.round(Number(r.current_value) || 0), precedent_cents: Math.round(Number(r.previous_value) || 0) }
           : { valeur: Number(r.current_value) || 0, precedent: Number(r.previous_value) || 0 }),
         variation_pct: r.change_pct == null ? null : Math.round(Number(r.change_pct) * 10) / 10,

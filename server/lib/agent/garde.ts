@@ -70,6 +70,7 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   // Agrégats financiers : permission dédiée, comme la paie.
   get_financial_overview:    { cle: 'financial.view_reports', capacite: 'la vue financière' },
   get_revenue_summary:       { cle: 'financial.view_reports', capacite: 'le résumé des revenus' },
+  build_report:              { cle: 'financial.view_reports', capacite: 'les rapports' },
   get_overdue_payments:      { cle: 'financial.view_invoices', capacite: 'les paiements en retard' },
   // Conseil / analyse : mêmes chiffres que les rapports financiers.
   compare_revenue:           { cle: 'financial.view_reports', capacite: 'la comparaison des revenus' },
@@ -93,6 +94,7 @@ export const OUTILS_FINANCIERS = new Set([
   'mark_invoice_paid', 'cancel_quote',
   'compare_revenue', 'get_top_clients', 'get_churn_risk',
   'get_job_profitability', 'get_top_services',
+  'build_report',
 ]);
 
 // Champs à blanchir pour un membre sans droit aux montants. On couvre les

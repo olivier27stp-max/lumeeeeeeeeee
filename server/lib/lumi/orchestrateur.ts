@@ -20,6 +20,7 @@ import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../agent/garde';
 import { masquerIds, demasquerIds } from '../agent/refs';
 import { buildSystemPrompt } from '../agent/systemPrompt';
 import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
+import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 
 const MAX_ETAPES = 8;
@@ -58,7 +59,8 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     )
     // Les mêmes consignes « collègue » que le MCP : jamais d'identifiant, de
     // nom d'outil, de champ ou de vocabulaire base de données dans une réponse.
-    + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : décris-la en mots courants et laisse l'utilisateur confirmer ; ne prétends jamais qu'elle est faite avant.`;
+    + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : décris-la en mots courants et laisse l'utilisateur confirmer ; ne prétends jamais qu'elle est faite avant.
+- Rapports : « un rapport », « un PDF », « un document pour mon comptable », « sors-moi mon mois » → build_report (type financier, retards, jobs ou client ; période = du 1er du mois à aujourd'hui si rien n'est précisé, sinon demande-la). La carte du rapport s'affiche SOUS ton message (dis « ci-dessous », jamais « ci-dessus ») avec le bouton de téléchargement ; toi, tu résumes les deux ou trois faits saillants en phrases — sans recopier les tableaux.`;
   const variable = ctx.language === 'fr'
     ? `Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
     : `Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`;
@@ -72,6 +74,7 @@ export type EvenementLumi =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
   | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null }
+  | { type: 'report'; tool_use_id: string; rapport: Rapport }
   | { type: 'usage'; model: string; usage: UsageTokens; cost_cents: number }
   | { type: 'error'; message: string };
 
@@ -159,6 +162,8 @@ export async function tourLumi(opts: {
           resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: r.refus }), is_error: true });
         } else {
           opts.emettre({ type: 'tool', name: appel.name, statut: 'fin' });
+          // Un rapport part tel quel à l'interface (carte + bouton PDF) ; le modèle reçoit la même structure.
+          if (appel.name === 'build_report' && r.result?.rapport) opts.emettre({ type: 'report', tool_use_id: appel.id, rapport: r.result.rapport });
           const masque = masquerIds(espaceRefs, r.result);
           resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify(masque ?? null).slice(0, 60_000) });
         }
