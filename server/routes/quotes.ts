@@ -1513,6 +1513,25 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
       return res.status(400).json({ error: `Cannot convert quote with status "${quote.status}".` });
     }
 
+    // Garde ANTI-DOUBLON atomique : on marque le devis « converted » AVANT de
+    // créer la facture, conditionné au statut lu ci-dessus. Deux appels
+    // concurrents (double-clic, retry réseau) ne peuvent donc pas créer deux
+    // factures pour le même devis — un seul gagne la mise à jour, l'autre voit
+    // 0 ligne et s'arrête ici. (rpc_create_invoice_draft ne déduplique pas sur
+    // quote_id, contrairement au flux from-job : cette route était l'exception
+    // non protégée.)
+    const { data: verrou, error: verrouErr } = await admin
+      .from('quotes')
+      .update({ status: 'converted', converted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', quoteId)
+      .eq('org_id', auth.orgId)
+      .eq('status', quote.status)
+      .select('id');
+    if (verrouErr) throw verrouErr;
+    if (!verrou || verrou.length === 0) {
+      return res.status(409).json({ error: 'Ce devis est déjà en cours de conversion ou déjà converti.' });
+    }
+
     // Create invoice via RPC
     const dueDate = new Date();
     dueDate.setDate(dueDate.getDate() + 30);
@@ -1572,13 +1591,8 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
       notes: quote.notes,
     }).eq('id', invoiceId).eq('org_id', auth.orgId);
 
-    // Mark quote as converted
-    await admin.from('quotes').update({
-      status: 'converted',
-      converted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq('id', quoteId).eq('org_id', auth.orgId);
-
+    // (Le devis a déjà été marqué « converted » atomiquement en tête de route,
+    // avant la création de la facture — voir la garde anti-doublon plus haut.)
     await admin.from('quote_status_history').insert({
       quote_id: quoteId,
       old_status: quote.status,
