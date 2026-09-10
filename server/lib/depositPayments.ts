@@ -13,8 +13,9 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { getServiceClient } from './supabase';
+import { creerClientStripe } from './stripe-sdk';
 import { getConnectedAccount, createDestinationPaymentIntent } from './stripe-connect';
-import { decryptSecret } from '../../src/lib/crypto';
+import { decryptSecret } from './crypto';
 
 export interface DepositIntent {
   client_secret: string | null;
@@ -106,7 +107,7 @@ export async function createDepositIntent(params: {
   const keys = await orgStripeKeys(orgId, contexte);
   if (keys) {
     const Stripe = (await import('stripe')).default;
-    const orgStripe = new Stripe(keys.secret);
+    const orgStripe = creerClientStripe(keys.secret);
     const intent = await orgStripe.paymentIntents.create(
       { amount: amountCents, currency, payment_method_types: ['card'], metadata },
       { idempotencyKey },
@@ -143,7 +144,7 @@ export async function verifyDepositIntent(params: {
   const platformKey = process.env.STRIPE_SECRET_KEY;
   if (platformKey) {
     try {
-      intent = await new Stripe(platformKey).paymentIntents.retrieve(paymentIntentId);
+      intent = await creerClientStripe(platformKey).paymentIntents.retrieve(paymentIntentId);
     } catch {
       intent = null; // L'intention appartient peut-être au compte de l'org.
     }
@@ -152,7 +153,7 @@ export async function verifyDepositIntent(params: {
     const keys = await orgStripeKeys(orgId, contexte);
     if (keys) {
       try {
-        intent = await new Stripe(keys.secret).paymentIntents.retrieve(paymentIntentId);
+        intent = await creerClientStripe(keys.secret).paymentIntents.retrieve(paymentIntentId);
       } catch {
         intent = null;
       }

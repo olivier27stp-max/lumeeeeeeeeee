@@ -4,7 +4,7 @@
    Never expose decrypted secrets to the frontend.
    ═══════════════════════════════════════════════════════════════ */
 
-import { encryptSecret, decryptSecret } from '../../../src/lib/crypto';
+import { encryptSecret, decryptSecret } from '../crypto';
 import type { DecryptedCredentials } from './types';
 
 export { encryptSecret, decryptSecret };

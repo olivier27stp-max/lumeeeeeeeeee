@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import Stripe from 'stripe';
+import { creerClientStripe } from '../lib/stripe-sdk';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail, companyOrgIds } from '../lib/supabase';
 import { getUserContext, hasPermission } from '../lib/rbac';
@@ -8,7 +9,7 @@ import { getUserContext, hasPermission } from '../lib/rbac';
 const router = Router();
 
 // ── Stripe client ──
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const stripe = process.env.STRIPE_SECRET_KEY ? creerClientStripe(process.env.STRIPE_SECRET_KEY) : null;
 
 // ─── Validation schemas ──────────────────────────────────────────
 

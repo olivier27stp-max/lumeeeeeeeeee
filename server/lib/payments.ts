@@ -1,9 +1,9 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import Stripe from 'stripe';
 import express from 'express';
-import { decryptSecret, encryptSecret } from '../../src/lib/crypto';
-import { getStripeClient as getStripeClientForOrg } from '../../src/lib/stripeClient';
-import { paypalFetch as paypalFetchForOrg } from '../../src/lib/paypalClient';
+import { decryptSecret, encryptSecret } from './crypto';
+import { getStripeClient as getStripeClientForOrg } from './stripeClient';
+import { paypalFetch as paypalFetchForOrg } from './paypalClient';
 import { supabaseUrl, supabaseServiceRoleKey, paypalEnv, paypalWebhookId } from './config';
 import { getServiceClient } from './supabase';
 import { normalizeAmountToCents } from './helpers';
@@ -715,7 +715,8 @@ export async function buildPayPalPayoutSummary(orgId: string) {
     dateTo: now,
   });
 
-  const details = Array.isArray(transactionsPayload?.transaction_details) ? transactionsPayload.transaction_details : [];
+  // unknown[] : le JSON PayPal est brut ; mapPayPalTransaction le normalise en PayoutListItem.
+  const details: unknown[] = Array.isArray(transactionsPayload?.transaction_details) ? transactionsPayload.transaction_details : [];
   const payoutLike = details.filter(isPayPalPayoutLike).map(mapPayPalTransaction);
   const sourceItems = payoutLike.length > 0 ? payoutLike : details.map(mapPayPalTransaction);
   if (payoutLike.length === 0) {
@@ -774,7 +775,7 @@ export async function listPayPalPayouts(params: {
     dateTo: params.dateTo || now,
   });
 
-  const details = Array.isArray(payload?.transaction_details) ? payload.transaction_details : [];
+  const details: unknown[] = Array.isArray(payload?.transaction_details) ? payload.transaction_details : [];
   const payoutLike = details.filter(isPayPalPayoutLike).map(mapPayPalTransaction);
   let items = payoutLike.length > 0 ? payoutLike : details.map(mapPayPalTransaction);
   if (params.method && params.method !== 'all') {

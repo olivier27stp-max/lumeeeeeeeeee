@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import express from 'express';
 import Stripe from 'stripe';
+import { creerClientStripe } from '../lib/stripe-sdk';
 import { z } from 'zod';
 import { requireAuthedClient, isOrgMember, isOrgAdminOrOwner, getServiceClient, findUserByEmail } from '../lib/supabase';
 import { parseOrgId, clampInt, resolvePublicBaseUrl } from '../lib/helpers';
@@ -1142,7 +1143,7 @@ router.get('/payments/:id/detail', async (req, res) => {
       if (payment.provider === 'stripe' && payment.stripe_charge_id) {
         const secrets = await getPaymentProviderSecrets(requestedOrgId);
         if (secrets.stripe_secret_key) {
-          const stripeClient = new Stripe(secrets.stripe_secret_key);
+          const stripeClient = creerClientStripe(secrets.stripe_secret_key);
           const ch = await stripeClient.charges.retrieve(payment.stripe_charge_id);
           receiptUrl = ch.receipt_url || null;
         }
@@ -1367,7 +1368,7 @@ router.post('/payments/stripe/create-intent', validate(stripeCreateIntentSchema)
     const balanceCents = Number(invoice.balance_cents || 0);
     if (balanceCents <= 0) return res.status(400).json({ error: 'Invoice has no balance to pay.' });
 
-    const stripeClient = new Stripe(secrets.stripe_secret_key);
+    const stripeClient = creerClientStripe(secrets.stripe_secret_key);
     const currency = String(invoice.currency || 'CAD').toLowerCase();
     const intent = await stripeClient.paymentIntents.create({
       amount: balanceCents,
@@ -1410,7 +1411,7 @@ router.get('/payments/stripe/transactions', async (req, res) => {
       return res.status(400).json({ error: 'Stripe secret key is not configured.' });
     }
 
-    const stripeClient = new Stripe(secrets.stripe_secret_key);
+    const stripeClient = creerClientStripe(secrets.stripe_secret_key);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 25));
     const startingAfter = String(req.query.starting_after || '').trim() || undefined;
 
@@ -1457,7 +1458,7 @@ router.get('/payments/stripe/balance', async (req, res) => {
       return res.status(400).json({ error: 'Stripe secret key is not configured.' });
     }
 
-    const stripeClient = new Stripe(secrets.stripe_secret_key);
+    const stripeClient = creerClientStripe(secrets.stripe_secret_key);
     const balance = await stripeClient.balance.retrieve();
 
     return res.json({

@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { creerClientStripe } from './stripe-sdk';
 import { createClient } from '@supabase/supabase-js';
 import { decryptSecret } from './crypto';
 
@@ -36,7 +37,7 @@ export async function getStripeClient(options: StripeClientOptions): Promise<{
 
   const secretKey = decryptSecret(encrypted);
   return {
-    stripe: new Stripe(secretKey),
+    stripe: creerClientStripe(secretKey),
     publishableKey: data?.stripe_publishable_key || null,
   };
 }
