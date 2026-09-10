@@ -207,6 +207,8 @@ const COPY = {
     annual: 'Annual',
     perMonth: '/mo',
     billedMonthly: 'Billed monthly · cancel anytime',
+    cornerTitle: 'Every plan includes',
+    cornerPoints: ['Guided onboarding with our team', 'Cancel anytime on monthly billing', 'Support in French and English'],
     billedAnnually: (firstYr: string, fullYr: string) =>
       `$${firstYr} billed for year one, then $${fullYr}/yr`,
     faqHeading: 'Frequently asked questions',
@@ -222,6 +224,8 @@ const COPY = {
     annual: 'Annuel',
     perMonth: '/mois',
     billedMonthly: 'Facturé mensuellement · annulez en tout temps',
+    cornerTitle: 'Tous les forfaits incluent',
+    cornerPoints: ['Une intégration guidée avec notre équipe', 'Annulation en tout temps en mensuel', 'Un soutien en français et en anglais'],
     billedAnnually: (firstYr: string, fullYr: string) =>
       `${firstYr} $ facturés la première année, puis ${fullYr} $/an`,
     faqHeading: 'Questions fréquentes',
@@ -268,30 +272,8 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
         </div>
       </section>
 
-      {/* Toggle */}
-      <div className="flex justify-center mb-10 px-6">
-        <div className="inline-flex items-center bg-white rounded-full p-1 border border-[#e5e5e0] shadow-sm">
-          <button
-            onClick={() => setAnnual(false)}
-            className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              !annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {c.monthly}
-          </button>
-          <button
-            onClick={() => setAnnual(true)}
-            className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {c.annual}
-            <span className="ml-1.5 text-[10px] font-semibold text-[#3FAF97]">-15%</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Grille unique : en-tête collant (étape, nom, prix, description, limites, CTA) + toutes les fonctionnalités */}
+      {/* Grille unique : en-tête riche (grille CSS aux mêmes colonnes que le tableau, hauteurs égales,
+          bouton démo aligné en bas), puis bande compacte collante + toutes les fonctionnalités. */}
       <section className="px-6 pb-20 md:pb-28">
         <div className="max-w-5xl mx-auto">
           <motion.div
@@ -300,66 +282,97 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
             transition={{ delay: 0.2 }}
             className="bg-white border border-[#e5e5e0] rounded-2xl shadow-sm overflow-x-auto md:overflow-visible"
           >
-            <table className="w-full min-w-[720px] border-collapse text-[13px]">
-              <thead>
-                <tr>
-                  <th scope="col" className="bg-white rounded-tl-2xl text-left px-5 pt-7 pb-6 align-bottom w-[34%]">
-                    <span className="sr-only">{language === 'fr' ? 'Fonctionnalité' : 'Feature'}</span>
-                  </th>
-                  {PLANS.map((plan, i) => (
-                    <th
-                      key={plan.slug}
-                      scope="col"
-                      className={`px-4 pt-7 pb-6 text-center align-top ${i === PLANS.length - 1 ? 'rounded-tr-2xl' : ''} ${
-                        plan.featured ? 'bg-[#f4f8f6]' : 'bg-white'
+            <div className="min-w-[720px]">
+              <div className="grid grid-cols-[34%_1fr_1fr_1fr] items-stretch">
+                {/* Coin : toggle de facturation + ce que tous les forfaits incluent */}
+                <div className="px-5 pt-7 pb-6 flex flex-col">
+                  <div className="inline-flex self-start items-center bg-[#fafaf8] rounded-full p-1 border border-[#e5e5e0]">
+                    <button
+                      onClick={() => setAnnual(false)}
+                      className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-all duration-200 ${
+                        !annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
                       }`}
                     >
-                      <p className="text-[11px] uppercase tracking-[0.15em] font-semibold text-[#1F5F4F]">{plan.stage[language]}</p>
-                      <p className="mt-2 text-[22px] font-extrabold tracking-[-0.02em] text-[#111] leading-tight">
-                        {plan.name}
-                        {plan.badge && (
-                          <span className="ml-2 align-middle inline-block bg-[#1F5F4F] text-white text-[9px] uppercase tracking-[0.15em] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
-                            {plan.badge[language]}
-                          </span>
-                        )}
-                      </p>
-                      <p className="mt-2 tabular-nums">
-                        {annual && (
-                          <span className="text-sm text-text-secondary line-through mr-1.5">${Math.round(plan.annualFullYr / 12)}</span>
-                        )}
-                        <span className="text-[26px] font-bold text-text-primary">${annual ? Math.round(plan.annualFirstYr / 12) : plan.monthlyPrice}</span>
-                        <span className="text-xs font-normal text-text-secondary">{c.perMonth}</span>
-                      </p>
-                      <p className="mt-1 text-[10px] text-text-tertiary leading-snug">
-                        {annual
-                          ? c.billedAnnually(
-                              plan.annualFirstYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA'),
-                              plan.annualFullYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')
-                            )
-                          : c.billedMonthly}
-                      </p>
-                      <p className="mt-3 text-xs text-text-secondary leading-relaxed font-normal max-w-[24ch] mx-auto">{plan.desc[language]}</p>
-                      <p className="mt-3 text-[10px] uppercase tracking-[0.14em] font-bold text-[#111]">
-                        {plan.users[language]} · {plan.offices[language]}
-                      </p>
-                      <p className="text-[11px] font-normal text-text-secondary">
-                        {plan.extraUserPrice[language]}{plan.extraOfficePrice ? ` · ${plan.extraOfficePrice[language]}` : ''}
-                      </p>
-                      <button
-                        onClick={() => setDemoOpen(true)}
-                        className={`mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
-                          plan.featured ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]' : 'bg-text-primary text-white hover:opacity-90'
-                        }`}
-                      >
-                        {plan.cta[language]}
-                        <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                      </button>
-                    </th>
-                  ))}
-                </tr>
+                      {c.monthly}
+                    </button>
+                    <button
+                      onClick={() => setAnnual(true)}
+                      className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-all duration-200 ${
+                        annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {c.annual}
+                      <span className="ml-1.5 text-[10px] font-semibold text-[#3FAF97]">-15%</span>
+                    </button>
+                  </div>
+                  <p className="mt-auto pt-6 text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary">{c.cornerTitle}</p>
+                  <ul className="mt-3 space-y-2.5">
+                    {c.cornerPoints.map(point => (
+                      <li key={point} className="flex items-center gap-2.5 text-[13px] text-text-secondary leading-snug">
+                        <CompareCell cell={true} language={language} yes={c.included} no={c.notIncluded} />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {PLANS.map((plan, i) => (
+                  <div
+                    key={plan.slug}
+                    className={`px-4 pt-7 pb-6 text-center flex flex-col ${i === PLANS.length - 1 ? 'rounded-tr-2xl' : ''} ${
+                      plan.featured ? 'bg-[#f4f8f6]' : 'bg-white'
+                    }`}
+                  >
+                    <p className="text-[11px] uppercase tracking-[0.15em] font-semibold text-[#1F5F4F]">{plan.stage[language]}</p>
+                    <p className="mt-2 text-[22px] font-extrabold tracking-[-0.02em] text-[#111] leading-tight">
+                      {plan.name}
+                      {plan.badge && (
+                        <span className="ml-2 align-middle inline-block bg-[#1F5F4F] text-white text-[9px] uppercase tracking-[0.15em] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+                          {plan.badge[language]}
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-2 tabular-nums">
+                      {annual && (
+                        <span className="text-sm text-text-secondary line-through mr-1.5">${Math.round(plan.annualFullYr / 12)}</span>
+                      )}
+                      <span className="text-[26px] font-bold text-text-primary">${annual ? Math.round(plan.annualFirstYr / 12) : plan.monthlyPrice}</span>
+                      <span className="text-xs font-normal text-text-secondary">{c.perMonth}</span>
+                    </p>
+                    <p className="mt-1 text-[10px] text-text-tertiary leading-snug">
+                      {annual
+                        ? c.billedAnnually(
+                            plan.annualFirstYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA'),
+                            plan.annualFullYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')
+                          )
+                        : c.billedMonthly}
+                    </p>
+                    <p className="mt-3 text-xs text-text-secondary leading-relaxed max-w-[24ch] mx-auto">{plan.desc[language]}</p>
+                    {/* mt-auto : les limites et le bouton se calent en bas, à la même hauteur dans les trois colonnes */}
+                    <p className="mt-auto pt-4 text-[10px] uppercase tracking-[0.14em] font-bold text-[#111]">
+                      {plan.users[language]} · {plan.offices[language]}
+                    </p>
+                    <p className="text-[11px] text-text-secondary">
+                      {plan.extraUserPrice[language]}{plan.extraOfficePrice ? ` · ${plan.extraOfficePrice[language]}` : ''}
+                    </p>
+                    <button
+                      onClick={() => setDemoOpen(true)}
+                      className={`mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
+                        plan.featured ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]' : 'bg-text-primary text-white hover:opacity-90'
+                      }`}
+                    >
+                      {plan.cta[language]}
+                      <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
                 {/* Bande compacte : la seule partie qui colle en haut pendant le défilement */}
                 <tr>
-                  <th scope="col" className="sticky top-0 z-10 bg-white border-y-2 border-[#e0e0e0] text-left px-5 py-3 text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary">
+                  <th scope="col" className="sticky top-0 z-10 bg-white border-y-2 border-[#e0e0e0] text-left px-5 py-3 text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary w-[34%]">
                     {language === 'fr' ? 'Fonctionnalité' : 'Feature'}
                   </th>
                   {PLANS.map(plan => (
@@ -406,6 +419,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                 ))}
               </tbody>
             </table>
+            </div>
           </motion.div>
         </div>
       </section>
