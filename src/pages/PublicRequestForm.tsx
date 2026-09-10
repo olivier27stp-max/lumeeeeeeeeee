@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useId, useState, useCallback } from 'react';
 import { Loader2, CheckCircle2, AlertCircle, ImagePlus, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { fetchPublicForm, submitPublicForm, uploadPublicFormPhoto, type PublicForm, type PublicFormSubmission } from '../lib/publicFormApi';
@@ -25,6 +25,7 @@ type PhotoItem = {
 export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
   const { t, language } = useTranslation();
   const tr = t.requestForm;
+  const id = useId();
 
   const [form, setForm] = useState<PublicForm | null>(null);
   const [loading, setLoading] = useState(true);
@@ -202,6 +203,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
         <input
           type="text"
           name="website"
+          id={`${id}-website`}
           tabIndex={-1}
           autoComplete="off"
           aria-hidden="true"
@@ -212,13 +214,13 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
         {/* Contact */}
         <Section title={tr.contactDetails}>
           <div className="grid grid-cols-2 gap-3">
-            <input className="glass-input w-full" placeholder={tr.firstName} value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-            <input className="glass-input w-full" placeholder={tr.lastName} value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            <input className="glass-input w-full" aria-label={tr.firstName} placeholder={tr.firstName} value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+            <input className="glass-input w-full" aria-label={tr.lastName} placeholder={tr.lastName} value={lastName} onChange={(e) => setLastName(e.target.value)} required />
           </div>
-          <input className="glass-input w-full" placeholder={t.modals.company} value={company} onChange={(e) => setCompany(e.target.value)} />
+          <input className="glass-input w-full" aria-label={t.modals.company} placeholder={t.modals.company} value={company} onChange={(e) => setCompany(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
-            <input type="email" className="glass-input w-full" placeholder={tr.email} value={email} onChange={(e) => setEmail(e.target.value)} required />
-            <input type="tel" className="glass-input w-full" placeholder={tr.phone} value={phone} onChange={(e) => setPhone(e.target.value)} required />
+            <input type="email" className="glass-input w-full" aria-label={tr.email} placeholder={tr.email} value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input type="tel" className="glass-input w-full" aria-label={tr.phone} placeholder={tr.phone} value={phone} onChange={(e) => setPhone(e.target.value)} required />
           </div>
         </Section>
 
@@ -239,13 +241,13 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
             hideStatusHint
           />
           <div className="grid grid-cols-2 gap-3">
-            <input className="glass-input w-full" placeholder={tr.unitApt} value={unit} onChange={(e) => setUnit(e.target.value)} />
-            <input className="glass-input w-full" placeholder={tr.city} value={city} onChange={(e) => setCity(e.target.value)} />
+            <input className="glass-input w-full" aria-label={tr.unitApt} placeholder={tr.unitApt} value={unit} onChange={(e) => setUnit(e.target.value)} />
+            <input className="glass-input w-full" aria-label={tr.city} placeholder={tr.city} value={city} onChange={(e) => setCity(e.target.value)} />
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <input className="glass-input w-full" placeholder={tr.country} value={country} onChange={(e) => setCountry(e.target.value)} />
-            <input className="glass-input w-full" placeholder={tr.stateregion} value={region} onChange={(e) => setRegion(e.target.value)} />
-            <input className="glass-input w-full" placeholder={tr.zipPostal} value={postal} onChange={(e) => setPostal(e.target.value)} />
+            <input className="glass-input w-full" aria-label={tr.country} placeholder={tr.country} value={country} onChange={(e) => setCountry(e.target.value)} />
+            <input className="glass-input w-full" aria-label={tr.stateregion} placeholder={tr.stateregion} value={region} onChange={(e) => setRegion(e.target.value)} />
+            <input className="glass-input w-full" aria-label={tr.zipPostal} placeholder={tr.zipPostal} value={postal} onChange={(e) => setPostal(e.target.value)} />
           </div>
         </Section>
 
@@ -269,8 +271,8 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
 
         {/* Default notes */}
         <div>
-          <label className="text-[12px] font-medium text-text-secondary">{tr.additionalNotes2}</label>
-          <textarea className="glass-input w-full mt-1 min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <label htmlFor={`${id}-notes`} className="text-[12px] font-medium text-text-secondary">{tr.additionalNotes2}</label>
+          <textarea id={`${id}-notes`} className="glass-input w-full mt-1 min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
         </div>
 
         {/* Photos (client uploads) */}
@@ -306,6 +308,7 @@ export default function PublicRequestForm({ apiKey }: { apiKey: string }) {
                   <button
                     type="button"
                     onClick={() => removePhoto(p.id)}
+                    aria-label={tr.remove}
                     className="absolute right-1 top-1 rounded-full bg-black/50 p-0.5 text-white transition-colors hover:bg-black/70"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -365,17 +368,24 @@ function CustomFieldInput({
   onChange: (v: unknown) => void;
   selectLabel: string;
 }) {
+  const fieldId = useId();
   const label = (
-    <label className="text-[12px] font-medium text-text-secondary">
+    <label htmlFor={fieldId} className="text-[12px] font-medium text-text-secondary">
       {field.label}{field.required ? ' *' : ''}
     </label>
+  );
+  // Groupe de cases à cocher : l'étiquette n'a pas de champ unique à cibler.
+  const groupLabel = (
+    <span className="text-[12px] font-medium text-text-secondary">
+      {field.label}{field.required ? ' *' : ''}
+    </span>
   );
 
   if (field.type === 'paragraph') {
     return (
       <div>
         {label}
-        <textarea className="glass-input w-full mt-1 min-h-[60px]" value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} required={field.required} />
+        <textarea id={fieldId} className="glass-input w-full mt-1 min-h-[60px]" value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} required={field.required} />
       </div>
     );
   }
@@ -389,7 +399,7 @@ function CustomFieldInput({
         onChange(selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt]);
       return (
         <div>
-          {label}
+          {groupLabel}
           <div className="mt-1 space-y-1.5">
             {opts.map((o) => (
               <label key={o} className="flex items-center gap-2 cursor-pointer">
@@ -414,7 +424,7 @@ function CustomFieldInput({
     return (
       <div>
         {label}
-        <select className="glass-input w-full mt-1" value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} required={field.required}>
+        <select id={fieldId} className="glass-input w-full mt-1" value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} required={field.required}>
           <option value="">{selectLabel}</option>
           {(field.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
@@ -428,7 +438,7 @@ function CustomFieldInput({
       onChange(selected.includes(opt) ? selected.filter((s) => s !== opt) : [...selected, opt]);
     return (
       <div>
-        {label}
+        {groupLabel}
         <div className="mt-1 space-y-1.5">
           {(field.options || []).map((o) => (
             <label key={o} className="flex items-center gap-2 cursor-pointer">
@@ -446,6 +456,7 @@ function CustomFieldInput({
     <div>
       {label}
       <input
+        id={fieldId}
         type={field.type === 'number' ? 'number' : 'text'}
         className="glass-input w-full mt-1"
         value={(value as string) || ''}

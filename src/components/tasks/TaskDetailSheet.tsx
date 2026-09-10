@@ -46,7 +46,7 @@ export default function TaskDetailSheet({ task, onClose, onEdit, onToggleStatus,
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/20 z-40" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/20 z-40" role="presentation" tabIndex={-1} onClick={onClose} />
 
       {/* Sheet */}
       <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-surface-elevated border-l border-outline shadow-xl z-50 flex flex-col">
@@ -66,6 +66,7 @@ export default function TaskDetailSheet({ task, onClose, onEdit, onToggleStatus,
           </div>
           <button
             onClick={onClose}
+            aria-label={fr ? 'Fermer' : 'Close'}
             className="p-1.5 rounded-xl border border-outline text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-all"
           >
             <X size={15} />

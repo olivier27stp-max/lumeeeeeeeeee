@@ -3,7 +3,7 @@
    profile, org, company_settings, industry presets, and invitations
    in one server-authoritative call. */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useId, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   User as UserIcon,
@@ -283,7 +283,7 @@ export default function OnboardingWizard({
               {step === 1 && (
                 <StepBusiness state={state} update={update} tt={tt} onLogoFile={onLogoFile} />
               )}
-              {step === 2 && <StepTeam state={state} update={update} tt={tt} />}
+              {step === 2 && <StepTeam state={state} update={update} tt={tt} fr={fr} />}
             </motion.div>
           </AnimatePresence>
 
@@ -343,6 +343,7 @@ function StepYou({
   fr: boolean;
   onPhotoFile: (f: File | null) => void;
 }) {
+  const id = useId();
   return (
     <div className="space-y-4">
       <div className="text-center mb-2">
@@ -354,10 +355,11 @@ function StepYou({
       </div>
 
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <label htmlFor={`${id}-full-name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
           {tt.fullName} *
         </label>
         <input
+          id={`${id}-full-name`}
           value={state.full_name}
           onChange={(e) => update('full_name', e.target.value)}
           className="glass-input w-full mt-1"
@@ -367,9 +369,9 @@ function StepYou({
       </div>
 
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
           {tt.language}
-        </label>
+        </span>
         <div className="mt-1 flex gap-2">
           {(['fr', 'en'] as const).map((lng) => (
             <button
@@ -390,9 +392,9 @@ function StepYou({
       </div>
 
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
           {tt.profilePhoto}
-        </label>
+        </span>
         <div className="mt-1 flex items-center gap-3">
           {state.photo_url ? (
             <img src={state.photo_url} alt="" className="w-14 h-14 rounded-full object-cover border border-outline" />
@@ -435,6 +437,7 @@ function StepBusiness({
   tt: any;
   onLogoFile: (f: File | null) => void;
 }) {
+  const id = useId();
   return (
     <div className="space-y-4">
       <div className="text-center mb-2">
@@ -446,10 +449,11 @@ function StepBusiness({
       </div>
 
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <label htmlFor={`${id}-company-name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
           {tt.companyName} *
         </label>
         <input
+          id={`${id}-company-name`}
           value={state.company_name}
           onChange={(e) => update('company_name', e.target.value)}
           className="glass-input w-full mt-1"
@@ -460,10 +464,11 @@ function StepBusiness({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+          <label htmlFor={`${id}-industry`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
             {tt.industry} *
           </label>
           <select
+            id={`${id}-industry`}
             value={state.industry}
             onChange={(e) => update('industry', e.target.value)}
             className="glass-input w-full mt-1"
@@ -477,10 +482,11 @@ function StepBusiness({
           </select>
         </div>
         <div>
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+          <label htmlFor={`${id}-employees`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
             {tt.employees} *
           </label>
           <select
+            id={`${id}-employees`}
             value={state.employee_count}
             onChange={(e) => update('employee_count', e.target.value as State['employee_count'])}
             className="glass-input w-full mt-1"
@@ -494,10 +500,11 @@ function StepBusiness({
       </div>
 
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <label htmlFor={`${id}-address`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
           {tt.address}
         </label>
         <input
+          id={`${id}-address`}
           value={state.address}
           onChange={(e) => update('address', e.target.value)}
           className="glass-input w-full mt-1"
@@ -506,9 +513,9 @@ function StepBusiness({
       </div>
 
       <div>
-        <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+        <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
           {tt.logo}
-        </label>
+        </span>
         <div className="mt-1 flex items-center gap-3">
           {state.logo_url ? (
             <img src={state.logo_url} alt="" className="w-14 h-14 rounded-lg object-contain border border-outline bg-white p-1" />
@@ -544,11 +551,12 @@ function StepBusiness({
 
 // ─── Step 3: Team ─────────────────────────────────────────────────
 function StepTeam({
-  state, update, tt,
+  state, update, tt, fr,
 }: {
   state: State;
   update: <K extends keyof State>(k: K, v: State[K]) => void;
   tt: any;
+  fr: boolean;
 }) {
   // Ensure at least 3 rows visible to start
   const rows = state.invites.length >= 3 ? state.invites : [
@@ -583,12 +591,14 @@ function StepTeam({
           <div key={idx} className="flex items-center gap-2">
             <input
               type="email"
+              aria-label={fr ? `Courriel du membre ${idx + 1}` : `Member ${idx + 1} email`}
               value={row.email}
               onChange={(e) => setRow(idx, { email: e.target.value })}
               className="glass-input flex-1"
               placeholder="email@example.com"
             />
             <select
+              aria-label={fr ? `Rôle du membre ${idx + 1}` : `Member ${idx + 1} role`}
               value={row.role}
               onChange={(e) => setRow(idx, { role: e.target.value as Invite['role'] })}
               className="glass-input w-28"

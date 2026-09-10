@@ -509,7 +509,13 @@ export default function WeeklyDispatchView({
                         data-week-cell
                         data-row-key={row.key}
                         data-day-key={dayKey}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => handleCellClick(dayKey)}
+                        onKeyDown={(e) => {
+                          if (e.target !== e.currentTarget) return;
+                          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleCellClick(dayKey); }
+                        }}
                         className={cn(
                           'flex min-w-0 flex-1 flex-col gap-1.5 border-l border-border/40 px-1.5 first:border-l-0',
                           extActive ? 'cursor-copy' : drag?.moved ? '' : 'cursor-pointer',

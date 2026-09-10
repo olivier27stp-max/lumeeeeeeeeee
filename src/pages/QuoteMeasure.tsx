@@ -1072,7 +1072,7 @@ export default function QuoteMeasure() {
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
       {/* ════ TOP BAR ════ */}
       <div className="h-12 border-b border-outline/20 flex items-center px-4 gap-3 bg-surface-card shrink-0">
-        <button onClick={() => nav(quoteId ? `/quotes/${quoteId}` : '/quotes')} className="p-1.5 hover:bg-surface-secondary rounded-lg transition-colors">
+        <button onClick={() => nav(quoteId ? `/quotes/${quoteId}` : '/quotes')} aria-label={fr ? 'Retour' : 'Back'} className="p-1.5 hover:bg-surface-secondary rounded-lg transition-colors">
           <ArrowLeft size={16} className="text-text-secondary" />
         </button>
         <div className="flex items-center gap-2 min-w-0">
@@ -1086,6 +1086,7 @@ export default function QuoteMeasure() {
               ? <Loader2 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted animate-spin" />
               : <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />}
             <input ref={searchInput} value={search} onChange={e => setSearch(e.target.value)}
+              aria-label={fr ? 'Rechercher une adresse' : 'Search address'}
               placeholder={fr ? 'Rechercher une adresse...' : 'Search address...'}
               className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-outline/30 bg-surface-secondary text-[12px] focus:outline-none focus:ring-2 focus:ring-text-primary/20 text-text-primary placeholder:text-text-muted" />
           </div>
@@ -1168,7 +1169,7 @@ export default function QuoteMeasure() {
 
       {ctxMenu && (
         <>
-          <div className="fixed inset-0 z-[64]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
+          <div role="presentation" tabIndex={-1} className="fixed inset-0 z-[64]" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null); }} />
           <div
             className="fixed z-[65] bg-surface-card border border-outline/40 rounded-xl shadow-2xl py-1.5 min-w-[170px]"
             style={{ left: ctxMenu.x, top: ctxMenu.y }}
@@ -1244,8 +1245,8 @@ function MeasureClientPicker({ fr, address, onClose, onPick }: {
   }, [q]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-outline/30 bg-surface-card p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div role="presentation" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" tabIndex={-1} className="w-full max-w-md rounded-xl border border-outline/30 bg-surface-card p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-[14px] font-semibold text-text-primary">{fr ? 'Créer le devis — pour quel client ?' : 'Create the quote — which client?'}</h2>
         <p className="mt-0.5 text-[11px] text-text-muted">
           {fr ? 'Le devis sera créé avec vos mesures en lignes.' : 'The quote will be created with your measurements as line items.'}
@@ -1253,6 +1254,7 @@ function MeasureClientPicker({ fr, address, onClose, onPick }: {
         </p>
         <input
           autoFocus
+          aria-label={fr ? 'Rechercher un client' : 'Search clients'}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder={fr ? 'Rechercher un client…' : 'Search clients…'}

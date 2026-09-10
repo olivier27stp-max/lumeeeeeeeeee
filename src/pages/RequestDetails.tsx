@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Archive,
@@ -253,7 +253,7 @@ export default function RequestDetails() {
               </button>
               {moreOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
+                  <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setMoreOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-lg border border-outline bg-surface shadow-lg py-1">
                     <DropdownItem
                       icon={<FileText size={13} className="text-entity-quote" />}
@@ -383,6 +383,7 @@ function AssessmentSection({
   fr: boolean;
   onSaved: (updated: FormSubmission) => void;
 }) {
+  const id = useId();
   const start = splitIso(s.assessment_start_at);
   const end = splitIso(s.assessment_end_at);
 
@@ -469,32 +470,32 @@ function AssessmentSection({
         {!multiDay ? (
           <>
             <div>
-              <label className={labelCls}>{fr ? 'Date' : 'Date'}</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+              <label htmlFor={`${id}-date`} className={labelCls}>{fr ? 'Date' : 'Date'}</label>
+              <input id={`${id}-date`} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>{fr ? 'Horaire' : 'Time'}</label>
+              <label htmlFor={`${id}-start-time`} className={labelCls}>{fr ? 'Horaire' : 'Time'}</label>
               <div className="flex items-center gap-2">
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                <input id={`${id}-start-time`} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
                 <span className="mt-1.5 text-text-muted">–</span>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
+                <input type="time" aria-label={fr ? 'Heure de fin' : 'End time'} value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
               </div>
             </div>
           </>
         ) : (
           <>
             <div>
-              <label className={labelCls}>{fr ? 'Début' : 'Start'}</label>
+              <label htmlFor={`${id}-start-date`} className={labelCls}>{fr ? 'Début' : 'Start'}</label>
               <div className="flex gap-2">
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
+                <input id={`${id}-start-date`} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputCls} />
+                <input type="time" aria-label={fr ? 'Heure de début' : 'Start time'} value={startTime} onChange={(e) => setStartTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
               </div>
             </div>
             <div>
-              <label className={labelCls}>{fr ? 'Fin' : 'End'}</label>
+              <label htmlFor={`${id}-end-date`} className={labelCls}>{fr ? 'Fin' : 'End'}</label>
               <div className="flex gap-2">
-                <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
+                <input id={`${id}-end-date`} type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputCls} />
+                <input type="time" aria-label={fr ? 'Heure de fin' : 'End time'} value={endTime} onChange={(e) => setEndTime(e.target.value)} className={cn(inputCls, 'max-w-[130px]')} />
               </div>
             </div>
           </>
@@ -514,8 +515,8 @@ function AssessmentSection({
         </label>
 
         <div>
-          <label className={labelCls}>{fr ? 'Membre de l’équipe' : 'Team member'}</label>
-          <select value={userId} onChange={(e) => setUserId(e.target.value)} className={inputCls}>
+          <label htmlFor={`${id}-member`} className={labelCls}>{fr ? 'Membre de l’équipe' : 'Team member'}</label>
+          <select id={`${id}-member`} value={userId} onChange={(e) => setUserId(e.target.value)} className={inputCls}>
             <option value="">{fr ? '— Aucun membre —' : '— No member —'}</option>
             {members.map((m) => (
               <option key={m.id} value={m.id}>{m.label}</option>
@@ -526,8 +527,9 @@ function AssessmentSection({
 
       {/* Instructions box */}
       <div className="mt-4">
-        <label className={labelCls}>{fr ? 'Instructions' : 'Instructions'}</label>
+        <label htmlFor={`${id}-instructions`} className={labelCls}>{fr ? 'Instructions' : 'Instructions'}</label>
         <textarea
+          id={`${id}-instructions`}
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
           rows={4}

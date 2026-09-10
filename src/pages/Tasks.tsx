@@ -215,6 +215,9 @@ function RowActions({ task, onEdit, onViewDetails, onDuplicate, onToggleStatus, 
     <div ref={ref} className="relative">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        aria-label={isFr ? 'Actions de la tâche' : 'Task actions'}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
       >
         <MoreHorizontal size={18} />
@@ -521,6 +524,7 @@ export default function Tasks() {
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder={isFr ? 'Filtrer les tâches...' : 'Filter tasks...'}
+            aria-label={isFr ? 'Filtrer les tâches' : 'Filter tasks'}
             className="h-9 w-[200px] pl-9 pr-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
           />
         </div>
@@ -557,6 +561,7 @@ export default function Tasks() {
               checked={allSelected}
               ref={(el) => { if (el) el.indeterminate = someSelected; }}
               onChange={toggleAll}
+              aria-label={isFr ? 'Tout sélectionner' : 'Select all'}
               className="rounded-[3px] border-outline w-[16px] h-[16px] accent-primary cursor-pointer"
             />
           </div>
@@ -626,11 +631,12 @@ export default function Tasks() {
             );
             return (
               <React.Fragment key={row.id}>
-                <div className={`pl-4 py-[13px] flex items-center ${rowCls}`} onClick={e => e.stopPropagation()}>
+                <div className={`pl-4 py-[13px] flex items-center ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selected.has(row.id)}
                     onChange={() => toggle(row.id)}
+                    aria-label={isFr ? `Sélectionner ${row.title}` : `Select ${row.title}`}
                     className="rounded-[3px] border-outline w-[16px] h-[16px] accent-primary cursor-pointer"
                   />
                 </div>

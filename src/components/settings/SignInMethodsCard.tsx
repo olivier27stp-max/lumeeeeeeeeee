@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { KeyRound, Loader2, Eye, EyeOff, Check } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,6 +23,7 @@ export default function SignInMethodsCard() {
   const navigate = useNavigate();
 
   const [methods, setMethods] = useState<SignInMethods | null>(null);
+  const id = useId();
   const [chargement, setChargement] = useState(true);
   const [editing, setEditing] = useState(false);
   const [current, setCurrent] = useState('');
@@ -156,8 +157,9 @@ export default function SignInMethodsCard() {
             <form onSubmit={soumettre} className="space-y-3 pt-1">
               {methods.hasPassword && (
                 <div>
-                  <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Mot de passe actuel' : 'Current password'}</label>
+                  <label htmlFor={`${id}-current`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Mot de passe actuel' : 'Current password'}</label>
                   <input
+                    id={`${id}-current`}
                     type="password"
                     autoComplete="current-password"
                     autoFocus
@@ -168,9 +170,10 @@ export default function SignInMethodsCard() {
                 </div>
               )}
               <div>
-                <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Nouveau mot de passe' : 'New password'}</label>
+                <label htmlFor={`${id}-next`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Nouveau mot de passe' : 'New password'}</label>
                 <div className="relative mt-1.5">
                   <input
+                    id={`${id}-next`}
                     type={showNext ? 'text' : 'password'}
                     autoComplete="new-password"
                     autoFocus={!methods.hasPassword}
@@ -178,15 +181,16 @@ export default function SignInMethodsCard() {
                     onChange={(e) => setNext(e.target.value)}
                     className="glass-input w-full pr-10"
                   />
-                  <button type="button" onClick={() => setShowNext(!showNext)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary">
+                  <button type="button" onClick={() => setShowNext(!showNext)} aria-label={showNext ? (isFr ? 'Masquer le mot de passe' : 'Hide password') : (isFr ? 'Afficher le mot de passe' : 'Show password')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary">
                     {showNext ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
                 </div>
                 <PasswordStrength password={next} />
               </div>
               <div>
-                <label className="text-xs font-medium text-text-tertiary">{t.register.confirmPassword}</label>
+                <label htmlFor={`${id}-confirm`} className="text-xs font-medium text-text-tertiary">{t.register.confirmPassword}</label>
                 <input
+                  id={`${id}-confirm`}
                   type={showNext ? 'text' : 'password'}
                   autoComplete="new-password"
                   value={confirm}

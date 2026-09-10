@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Code, Eye, Mail } from 'lucide-react';
 import DOMPurify from 'dompurify';
@@ -32,6 +32,7 @@ export default function EmailTemplatePicker({
   onBodyChange,
   variables,
 }: Props) {
+  const id = useId();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -83,10 +84,10 @@ export default function EmailTemplatePicker({
     <div className="space-y-3">
       {/* Template selector */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary flex items-center gap-1.5">
+        <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary flex items-center gap-1.5">
           <Mail size={12} />
           Email Template
-        </label>
+        </span>
         <div className="relative">
           <button
             type="button"
@@ -104,7 +105,7 @@ export default function EmailTemplatePicker({
 
           {dropdownOpen && templates.length > 0 && (
             <>
-              <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)} />
+              <div className="fixed inset-0 z-10" role="presentation" tabIndex={-1} onClick={() => setDropdownOpen(false)} />
               <div className="absolute left-0 right-0 top-full mt-1 z-20 max-h-48 overflow-y-auto rounded-xl border border-outline bg-surface shadow-xl py-1">
                 {templates.map((tpl) => (
                   <button
@@ -129,10 +130,11 @@ export default function EmailTemplatePicker({
 
       {/* Subject */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+        <label htmlFor={`${id}-subject`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
           Subject
         </label>
         <input
+          id={`${id}-subject`}
           value={subject}
           onChange={(e) => onSubjectChange(e.target.value)}
           placeholder="Email subject line"
@@ -143,7 +145,7 @@ export default function EmailTemplatePicker({
       {/* Body */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+          <label htmlFor={`${id}-body`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
             Body
           </label>
           <button
@@ -171,6 +173,7 @@ export default function EmailTemplatePicker({
           </div>
         ) : (
           <textarea
+            id={`${id}-body`}
             ref={bodyRef}
             value={body}
             onChange={(e) => onBodyChange(e.target.value)}
@@ -183,9 +186,9 @@ export default function EmailTemplatePicker({
 
       {/* Variable chips */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+        <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
           Available Variables
-        </label>
+        </span>
         <div className="flex flex-wrap gap-1.5">
           {AVAILABLE_VARIABLES.map((v) => (
             <button

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, Tooltip, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -288,7 +288,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
     }
   };
 
-  const inputCls = 'w-full px-3 py-2 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20';
+  const inputCls = 'w-full px-3 py-2 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40';
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -305,7 +305,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
             <h3 className="text-[13px] font-bold text-text-primary">{language === 'fr' ? 'Nouveau pin' : 'New Pin'}</h3>
             <p className="text-[10px] text-text-tertiary mt-0.5 truncate">{geocoding ? (language === 'fr' ? 'Résolution de l\'adresse...' : 'Resolving address...') : address}</p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={14} /></button>
+          <button onClick={onClose} aria-label={language === 'fr' ? 'Fermer' : 'Close'} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={14} /></button>
         </div>
 
         <div className="px-4 py-3 space-y-3">
@@ -315,16 +315,16 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <User size={12} className="text-text-tertiary shrink-0" />
-                <input ref={nameRef} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={language === 'fr' ? 'Nom' : 'Name'} className={inputCls} />
+                <input ref={nameRef} value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder={language === 'fr' ? 'Nom' : 'Name'} aria-label={language === 'fr' ? 'Nom' : 'Name'} className={inputCls} />
               </div>
               <div className="flex gap-1.5">
                 <div className="flex items-center gap-1.5 flex-1">
                   <PhoneIcon size={12} className="text-text-tertiary shrink-0" />
-                  <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder={language === 'fr' ? 'Téléphone' : 'Phone'} type="tel" className={inputCls} />
+                  <input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder={language === 'fr' ? 'Téléphone' : 'Phone'} aria-label={language === 'fr' ? 'Téléphone' : 'Phone'} type="tel" className={inputCls} />
                 </div>
                 <div className="flex items-center gap-1.5 flex-1">
                   <Mail size={12} className="text-text-tertiary shrink-0" />
-                  <input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder={language === 'fr' ? 'Courriel' : 'Email'} type="email" className={inputCls} />
+                  <input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder={language === 'fr' ? 'Courriel' : 'Email'} aria-label={language === 'fr' ? 'Courriel' : 'Email'} type="email" className={inputCls} />
                 </div>
               </div>
             </div>
@@ -356,7 +356,7 @@ function CreatePinModal({ latlng, onClose, onCreated, onContinueToJob, onContinu
           {/* Note */}
           <div>
             <p className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-1.5">Note</p>
-            <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)}
+            <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} aria-label="Note"
               className={cn(inputCls, 'resize-none')}
               rows={2} placeholder={language === 'fr' ? 'ex. Chien dans la cour, appeler avant de passer, paie comptant...' : 'e.g. Dog in yard, call before coming, pays cash...'} />
           </div>
@@ -395,6 +395,7 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
   reps: Array<{ id: string; display_name: string }>;
 }) {
   const { language } = useTranslation();
+  const id = useId();
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
   const [repId, setRepId] = useState('');
@@ -415,17 +416,17 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         {/* Name */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Nom' : 'Name'}</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={language === 'fr' ? 'ex. Secteur Nord' : 'e.g. North District'}
-            className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
+          <label htmlFor={`${id}-name`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Nom' : 'Name'}</label>
+          <input id={`${id}-name`} value={name} onChange={(e) => setName(e.target.value)} placeholder={language === 'fr' ? 'ex. Secteur Nord' : 'e.g. North District'}
+            className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40" />
         </div>
 
         {/* Color */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">{language === 'fr' ? 'Couleur' : 'Color'}</label>
+          <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">{language === 'fr' ? 'Couleur' : 'Color'}</span>
           <div className="flex gap-2">
             {COLORS.map((c) => (
-              <button key={c} onClick={() => setColor(c)}
+              <button key={c} type="button" onClick={() => setColor(c)} aria-label={`${language === 'fr' ? 'Couleur' : 'Color'} ${c}`} aria-pressed={color === c}
                 className={cn('w-7 h-7 rounded-full transition-all', color === c ? 'ring-2 ring-white ring-offset-2 ring-offset-surface scale-110' : 'opacity-60 hover:opacity-100')}
                 style={{ background: c }} />
             ))}
@@ -434,9 +435,9 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
 
         {/* Assign Rep */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Assigner à un rep' : 'Assign to Rep'}</label>
-          <select value={repId} onChange={(e) => setRepId(e.target.value)}
-            className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none focus:border-white/20">
+          <label htmlFor={`${id}-rep`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Assigner à un rep' : 'Assign to Rep'}</label>
+          <select id={`${id}-rep`} value={repId} onChange={(e) => setRepId(e.target.value)}
+            className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40">
             <option value="">{language === 'fr' ? 'Non assigné' : 'Unassigned'}</option>
             {reps.map((r) => (
               <option key={r.id} value={r.id}>{r.display_name}</option>
@@ -450,7 +451,7 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
             <p className="text-[12px] font-semibold text-text-primary">{language === 'fr' ? 'Territoire exclusif' : 'Exclusive Territory'}</p>
             <p className="text-[10px] text-text-tertiary mt-0.5">{language === 'fr' ? 'Seul le rep assigné peut opérer ici' : 'Only assigned rep can operate here'}</p>
           </div>
-          <button onClick={() => setExclusive(!exclusive)}
+          <button type="button" onClick={() => setExclusive(!exclusive)} aria-pressed={exclusive} aria-label={language === 'fr' ? 'Territoire exclusif' : 'Exclusive Territory'}
             className={cn('w-10 h-5 rounded-full transition-colors relative', exclusive ? 'bg-white' : 'bg-outline')}>
             <div className={cn('w-4 h-4 rounded-full absolute top-0.5 transition-all', exclusive ? 'left-5.5 bg-black left-[22px]' : 'left-0.5 bg-text-tertiary')} />
           </button>
@@ -458,9 +459,9 @@ function TerritorySetupPanel({ onSave, onCancel, reps }: {
 
         {/* Notes */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Notes</label>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={language === 'fr' ? 'Instructions pour le rep...' : 'Instructions for the rep...'}
-            rows={3} className="w-full px-3 py-2 bg-surface-secondary border border-outline rounded-lg text-[12px] text-text-primary placeholder:text-text-tertiary resize-none outline-none focus:border-white/20" />
+          <label htmlFor={`${id}-notes`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Notes</label>
+          <textarea id={`${id}-notes`} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={language === 'fr' ? 'Instructions pour le rep...' : 'Instructions for the rep...'}
+            rows={3} className="w-full px-3 py-2 bg-surface-secondary border border-outline rounded-lg text-[12px] text-text-primary placeholder:text-text-tertiary resize-none outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40" />
         </div>
       </div>
 
@@ -486,6 +487,7 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
   onUpdate: (id: string, data: any) => void;
 }) {
   const { language } = useTranslation();
+  const id = useId();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(territory.name);
   const [color, setColor] = useState(territory.color || '#6366f1');
@@ -507,7 +509,7 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
           <div className="w-3 h-3 rounded-full" style={{ background: territory.color || '#6366f1' }} />
           <h2 className="text-[15px] font-bold text-text-primary">{territory.name}</h2>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
+        <button onClick={onClose} aria-label={language === 'fr' ? 'Fermer' : 'Close'} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
       </div>
 
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
@@ -535,24 +537,24 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
           <>
             {/* Edit mode */}
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Nom' : 'Name'}</label>
-              <input value={name} onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none focus:border-white/20" />
+              <label htmlFor={`${id}-name`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Nom' : 'Name'}</label>
+              <input id={`${id}-name`} value={name} onChange={(e) => setName(e.target.value)}
+                className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40" />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">{language === 'fr' ? 'Couleur' : 'Color'}</label>
+              <span className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-2">{language === 'fr' ? 'Couleur' : 'Color'}</span>
               <div className="flex gap-2">
                 {COLORS.map((c) => (
-                  <button key={c} onClick={() => setColor(c)}
+                  <button key={c} type="button" onClick={() => setColor(c)} aria-label={`${language === 'fr' ? 'Couleur' : 'Color'} ${c}`} aria-pressed={color === c}
                     className={cn('w-7 h-7 rounded-full transition-all', color === c ? 'ring-2 ring-white ring-offset-2 ring-offset-surface scale-110' : 'opacity-60 hover:opacity-100')}
                     style={{ background: c }} />
                 ))}
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Assigner un rep' : 'Assign Rep'}</label>
-              <select value={repId} onChange={(e) => setRepId(e.target.value)}
-                className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none">
+              <label htmlFor={`${id}-rep`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">{language === 'fr' ? 'Assigner un rep' : 'Assign Rep'}</label>
+              <select id={`${id}-rep`} value={repId} onChange={(e) => setRepId(e.target.value)}
+                className="w-full px-3 py-2.5 bg-surface-secondary border border-outline rounded-lg text-[13px] text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                 <option value="">{language === 'fr' ? 'Non assigné' : 'Unassigned'}</option>
                 {reps.map((r) => <option key={r.id} value={r.id}>{r.display_name}</option>)}
               </select>
@@ -562,16 +564,16 @@ function TerritoryDetailPanel({ territory, reps, onClose, onDelete, onUpdate }: 
                 <p className="text-[12px] font-semibold text-text-primary">{language === 'fr' ? 'Exclusif' : 'Exclusive'}</p>
                 <p className="text-[10px] text-text-tertiary">{language === 'fr' ? 'Seul le rep assigné peut travailler ici' : 'Only assigned rep can work here'}</p>
               </div>
-              <button onClick={() => setExclusive(!exclusive)}
+              <button type="button" onClick={() => setExclusive(!exclusive)} aria-pressed={exclusive} aria-label={language === 'fr' ? 'Exclusif' : 'Exclusive'}
                 className={cn('w-10 h-5 rounded-full transition-colors relative', exclusive ? 'bg-white' : 'bg-outline')}>
                 <div className={cn('w-4 h-4 rounded-full absolute top-0.5 transition-all', exclusive ? 'left-[22px] bg-black' : 'left-0.5 bg-text-tertiary')} />
               </button>
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Notes</label>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+              <label htmlFor={`${id}-notes`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider block mb-1.5">Notes</label>
+              <textarea id={`${id}-notes`} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
                 placeholder={language === 'fr' ? 'Instructions pour le rep...' : 'Instructions for the rep...'}
-                className="w-full px-3 py-2 bg-surface-secondary border border-outline rounded-lg text-[12px] text-text-primary placeholder:text-text-tertiary resize-none outline-none" />
+                className="w-full px-3 py-2 bg-surface-secondary border border-outline rounded-lg text-[12px] text-text-primary placeholder:text-text-tertiary resize-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
             </div>
           </>
         )}
@@ -786,8 +788,8 @@ function AddEventForm({ houseId, onSuccess }: { houseId: string; onSuccess: () =
           ))}
         </div>
         <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)}
-          placeholder={language === 'fr' ? 'Ajouter une note...' : 'Add a note...'} rows={2}
-          className="w-full px-3 py-2 text-[12px] bg-surface border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary resize-none outline-none focus:border-primary" />
+          placeholder={language === 'fr' ? 'Ajouter une note...' : 'Add a note...'} aria-label={language === 'fr' ? 'Ajouter une note' : 'Add a note'} rows={2}
+          className="w-full px-3 py-2 text-[12px] bg-surface border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary resize-none outline-none focus:border-primary focus-visible:ring-2 focus-visible:ring-primary/40" />
         <div className="flex items-center gap-2">
           <button onClick={handleSubmit} disabled={submitting}
             className="glass-button-primary text-[11px] px-4 py-1.5 disabled:opacity-50">
@@ -967,7 +969,7 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
+          <button onClick={onClose} aria-label={language === 'fr' ? 'Fermer' : 'Close'} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
         </div>
 
         {/* Meta */}
@@ -1022,19 +1024,19 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5">
               <User size={11} className="text-text-tertiary shrink-0" />
-              <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder={language === 'fr' ? 'Nom du client' : 'Customer name'}
-                className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
+              <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder={language === 'fr' ? 'Nom du client' : 'Customer name'} aria-label={language === 'fr' ? 'Nom du client' : 'Customer name'}
+                className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40" />
             </div>
             <div className="flex gap-1.5">
               <div className="flex items-center gap-1.5 flex-1">
                 <PhoneIcon size={11} className="text-text-tertiary shrink-0" />
-                <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder={language === 'fr' ? 'Téléphone' : 'Phone'} type="tel"
-                  className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
+                <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder={language === 'fr' ? 'Téléphone' : 'Phone'} aria-label={language === 'fr' ? 'Téléphone' : 'Phone'} type="tel"
+                  className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40" />
               </div>
               <div className="flex items-center gap-1.5 flex-1">
                 <Mail size={11} className="text-text-tertiary shrink-0" />
-                <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder={language === 'fr' ? 'Courriel' : 'Email'} type="email"
-                  className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
+                <input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder={language === 'fr' ? 'Courriel' : 'Email'} aria-label={language === 'fr' ? 'Courriel' : 'Email'} type="email"
+                  className="flex-1 px-2.5 py-1.5 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40" />
               </div>
             </div>
           </div>
@@ -1099,7 +1101,8 @@ function HouseDrawer({ house, onClose, onRefresh, onDeleted, onOpenJob, onOpenQu
           <input value={noteText} onChange={(e) => setNoteText(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleQuickNote(); } }}
             placeholder={language === 'fr' ? 'Ajouter une note... (Entrée pour enregistrer)' : 'Add a note... (Enter to save)'}
-            className="flex-1 px-3 py-2 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20" />
+            aria-label={language === 'fr' ? 'Ajouter une note' : 'Add a note'}
+            className="flex-1 px-3 py-2 text-[11px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-white/20 focus-visible:ring-2 focus-visible:ring-primary/40" />
           <button onClick={handleQuickNote} disabled={savingNote || !noteText.trim()}
             className="px-3 py-2 rounded-lg bg-white text-black text-[10px] font-semibold hover:bg-white/90 transition-colors disabled:opacity-30">
             {savingNote ? '...' : (language === 'fr' ? 'Enregistrer' : 'Save')}
@@ -1842,8 +1845,8 @@ export default function FieldSales() {
             </button>
           ))}
           {reps.length > 0 && (
-            <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)}
-              className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-transparent text-text-tertiary outline-none cursor-pointer border border-outline">
+            <select value={repFilter} onChange={(e) => setRepFilter(e.target.value)} aria-label={fr ? 'Filtrer par rep' : 'Filter by rep'}
+              className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-transparent text-text-tertiary outline-none cursor-pointer border border-outline focus-visible:ring-2 focus-visible:ring-primary/40">
               <option value="all">{fr ? 'Tous les reps' : 'All Reps'}</option>
               {reps.map((r) => <option key={r.id} value={r.id}>{r.display_name}</option>)}
             </select>
@@ -1956,7 +1959,7 @@ export default function FieldSales() {
           className="absolute bottom-16 left-4 bg-surface/95 backdrop-blur-xl border border-outline rounded-xl px-4 py-3 shadow-2xl pointer-events-auto w-[280px]">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-[12px] font-bold text-text-primary">{territoryStats.name}</h4>
-            <button onClick={() => { setTerritoryStats(null); setSelectedTerritory(null); }} className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"><X size={12} /></button>
+            <button onClick={() => { setTerritoryStats(null); setSelectedTerritory(null); }} aria-label={fr ? 'Fermer' : 'Close'} className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"><X size={12} /></button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {[
@@ -1995,17 +1998,17 @@ export default function FieldSales() {
           className="absolute top-16 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-xl border border-outline rounded-xl px-4 py-3 shadow-2xl pointer-events-auto w-[520px] max-w-[90vw]">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-[12px] font-bold text-text-primary">{fr ? 'Comparaison de territoires' : 'Compare Territories'}</h4>
-            <button onClick={() => setShowCompare(false)} className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"><X size={12} /></button>
+            <button onClick={() => setShowCompare(false)} aria-label={fr ? 'Fermer' : 'Close'} className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"><X size={12} /></button>
           </div>
           <div className="flex gap-3 mb-3">
             {[0, 1].map((idx) => (
-              <select key={idx} value={compareTerritories[idx]?.id || ''}
+              <select key={idx} value={compareTerritories[idx]?.id || ''} aria-label={`${fr ? 'Territoire' : 'Territory'} ${idx + 1}`}
                 onChange={(e) => {
                   const t = territories.find(tr => tr.id === e.target.value) || null;
                   setCompareTerritories(prev => { const next = [...prev] as [FieldTerritory | null, FieldTerritory | null]; next[idx] = t; return next; });
                   if (t) fetchFieldStats({ territory_id: t.id }).then(s => setCompareStats(prev => { const next = [...prev] as [any, any]; next[idx] = { name: t.name, ...s }; return next; })).catch(() => {});
                 }}
-                className="flex-1 px-2 py-1.5 rounded-lg text-[11px] bg-surface-secondary border border-outline text-text-primary outline-none">
+                className="flex-1 px-2 py-1.5 rounded-lg text-[11px] bg-surface-secondary border border-outline text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
                 <option value="">{fr ? 'Choisir...' : 'Select...'}</option>
                 {territories.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
@@ -2041,7 +2044,7 @@ export default function FieldSales() {
         <div className="absolute top-16 right-4 bg-surface/95 backdrop-blur-xl border border-outline rounded-xl shadow-2xl pointer-events-auto w-[260px] max-h-[200px] overflow-y-auto">
           <div className="px-3 py-2 border-b border-outline flex items-center justify-between">
             <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1"><AlertCircle size={11} /> {fr ? 'Alertes' : 'Alerts'} ({geoAlerts.length})</span>
-            <button onClick={() => setGeoAlerts([])} className="text-text-tertiary hover:text-text-secondary"><X size={11} /></button>
+            <button onClick={() => setGeoAlerts([])} aria-label={fr ? 'Fermer' : 'Close'} className="text-text-tertiary hover:text-text-secondary"><X size={11} /></button>
           </div>
           {geoAlerts.map((a) => (
             <div key={a.id} className={cn('px-3 py-2 border-b border-outline/50 text-[10px]', a.type === 'idle' ? 'text-amber-400' : 'text-red-400')}>
@@ -2058,7 +2061,7 @@ export default function FieldSales() {
           className="absolute top-20 left-1/2 -translate-x-1/2 bg-surface/95 backdrop-blur-xl border border-outline rounded-xl shadow-2xl pointer-events-auto w-[420px] max-w-[90vw] max-h-[55vh] overflow-hidden flex flex-col">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-outline">
             <h4 className="text-[12px] font-bold text-text-primary flex items-center gap-1.5"><Sparkles size={13} className="text-amber-400" /> {fr ? 'Analyse AI du terrain' : 'AI Field Analysis'}</h4>
-            <button onClick={() => setShowAssignPanel(false)} className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"><X size={12} /></button>
+            <button onClick={() => setShowAssignPanel(false)} aria-label={fr ? 'Fermer' : 'Close'} className="p-0.5 rounded hover:bg-surface-secondary text-text-tertiary"><X size={12} /></button>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {assignRecommendations.length === 0 ? (
@@ -2156,7 +2159,7 @@ export default function FieldSales() {
             </motion.div>
           )}
         </AnimatePresence>
-        <button onClick={() => { setShowCreateMenu(!showCreateMenu); if (mode !== 'view') { setMode('view'); setTerritoryPoints([]); } }}
+        <button onClick={() => { setShowCreateMenu(!showCreateMenu); if (mode !== 'view') { setMode('view'); setTerritoryPoints([]); } }} aria-label={showCreateMenu ? (fr ? 'Fermer le menu de création' : 'Close create menu') : (fr ? 'Ouvrir le menu de création' : 'Open create menu')} aria-expanded={showCreateMenu}
           className={cn('w-12 h-12 rounded-full shadow-xl flex items-center justify-center transition-all',
             showCreateMenu ? 'bg-red-500 rotate-45' : 'bg-white hover:bg-white/90')}>
           <Plus size={22} className={showCreateMenu ? 'text-white' : 'text-black'} />
@@ -2238,7 +2241,7 @@ export default function FieldSales() {
               <Sparkles size={16} className="text-amber-400" />
               <h2 className="text-[15px] font-bold text-text-primary">{fr ? 'Recommandations IA' : 'AI Recommendations'}</h2>
             </div>
-            <button onClick={() => setShowAIPanel(false)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
+            <button onClick={() => setShowAIPanel(false)} aria-label={fr ? 'Fermer' : 'Close'} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
           </div>
           <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
             <div>

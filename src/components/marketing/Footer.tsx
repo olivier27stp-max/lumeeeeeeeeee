@@ -148,11 +148,11 @@ export default function Footer() {
                 </div>
               ) : (
                 <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input type="text" required name="full_name" autoComplete="name" value={form.full_name} onChange={onChange('full_name')} placeholder={f.fullNamePlaceholder} className={inputCls} />
-                  <input type="text" required name="company" autoComplete="organization" value={form.company} onChange={onChange('company')} placeholder={f.companyPlaceholder} className={inputCls} />
-                  <input type="email" required name="email" autoComplete="email" value={form.email} onChange={onChange('email')} placeholder={f.emailPlaceholder} className={inputCls} />
-                  <input type="tel" required name="phone" autoComplete="tel" value={form.phone} onChange={onChange('phone')} placeholder={f.phonePlaceholder} className={inputCls} />
-                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder={f.messagePlaceholder} className={`${inputCls} sm:col-span-2 resize-none`} />
+                  <input type="text" required name="full_name" autoComplete="name" value={form.full_name} onChange={onChange('full_name')} placeholder={f.fullNamePlaceholder} aria-label={f.fullNamePlaceholder} className={inputCls} />
+                  <input type="text" required name="company" autoComplete="organization" value={form.company} onChange={onChange('company')} placeholder={f.companyPlaceholder} aria-label={f.companyPlaceholder} className={inputCls} />
+                  <input type="email" required name="email" autoComplete="email" value={form.email} onChange={onChange('email')} placeholder={f.emailPlaceholder} aria-label={f.emailPlaceholder} className={inputCls} />
+                  <input type="tel" required name="phone" autoComplete="tel" value={form.phone} onChange={onChange('phone')} placeholder={f.phonePlaceholder} aria-label={f.phonePlaceholder} className={inputCls} />
+                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder={f.messagePlaceholder} aria-label={f.messagePlaceholder} className={`${inputCls} sm:col-span-2 resize-none`} />
                   {state === 'error' && errMsg && (
                     <p className="sm:col-span-2 text-xs text-red-600" role="alert">{errMsg}</p>
                   )}

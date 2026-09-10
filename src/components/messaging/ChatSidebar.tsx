@@ -29,7 +29,7 @@ export default function ChatSidebar({ activeChatId, onChatSelect }: ChatSidebarP
       {/* Header */}
       <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <h2 className="text-[20px] font-bold text-text-primary">{fr ? 'Conversations' : 'Chats'}</h2>
-        <button className="w-[30px] h-[30px] rounded-full border border-[#E5E7EB] flex items-center justify-center hover:bg-gray-50 transition-colors">
+        <button type="button" aria-label={fr ? 'Nouvelle conversation' : 'New chat'} className="w-[30px] h-[30px] rounded-full border border-[#E5E7EB] flex items-center justify-center hover:bg-gray-50 transition-colors">
           <Plus size={16} className="text-[#6B7280]" />
         </button>
       </div>
@@ -43,6 +43,7 @@ export default function ChatSidebar({ activeChatId, onChatSelect }: ChatSidebarP
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={fr ? 'Rechercher une conversation...' : 'Chats search...'}
+            aria-label={fr ? 'Rechercher une conversation' : 'Search chats'}
             className="w-full h-[36px] pl-9 pr-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
           />
         </div>

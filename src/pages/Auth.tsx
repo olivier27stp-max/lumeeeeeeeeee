@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
@@ -14,7 +14,8 @@ interface AuthProps {
 }
 
 export default function Auth({ onBack }: AuthProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const id = useId();
   const navigate = useNavigate();
   const location = useLocation();
   // Retour de /reset-password : le courriel est pré-rempli et un message
@@ -210,10 +211,11 @@ export default function Auth({ onBack }: AuthProps) {
 
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.emailLabel}</label>
+              <label htmlFor={`${id}-email`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.emailLabel}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-email`}
                   type="email"
                   required
                   value={email}
@@ -225,10 +227,11 @@ export default function Auth({ onBack }: AuthProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.passwordLabel}</label>
+              <label htmlFor={`${id}-password`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.passwordLabel}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-password`}
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
@@ -239,6 +242,8 @@ export default function Auth({ onBack }: AuthProps) {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? (language === 'fr' ? 'Masquer le mot de passe' : 'Hide password') : (language === 'fr' ? 'Afficher le mot de passe' : 'Show password')}
+                  aria-pressed={showPassword}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}

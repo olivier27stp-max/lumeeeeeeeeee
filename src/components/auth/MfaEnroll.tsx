@@ -164,7 +164,7 @@ export default function MfaEnroll({ onComplete, onCancel }: MfaEnrollProps) {
             </p>
           </div>
         </div>
-        <button onClick={onCancel} className="p-2 hover:bg-surface-secondary rounded-lg transition-colors">
+        <button onClick={onCancel} aria-label={fr ? 'Fermer' : 'Close'} className="p-2 hover:bg-surface-secondary rounded-lg transition-colors">
           <X size={16} className="text-text-tertiary" />
         </button>
       </div>
@@ -205,6 +205,7 @@ export default function MfaEnroll({ onComplete, onCancel }: MfaEnrollProps) {
                 onClick={copySecret}
                 className="p-2.5 border border-border rounded-xl hover:bg-surface-secondary transition-colors"
                 title={fr ? 'Copier' : 'Copy'}
+                aria-label={fr ? 'Copier la clé' : 'Copy the key'}
               >
                 {copied ? <Check size={14} className="text-green-600" /> : <Copy size={14} className="text-text-tertiary" />}
               </button>
@@ -232,6 +233,7 @@ export default function MfaEnroll({ onComplete, onCancel }: MfaEnrollProps) {
             value={code}
             onChange={(e) => onCodeChange(e.target.value)}
             placeholder="000000"
+            aria-label={fr ? 'Code à 6 chiffres' : '6-digit code'}
             disabled={verifying}
             className="glass-input w-full text-center text-2xl font-mono tracking-[0.5em] py-4 disabled:opacity-60"
             autoFocus

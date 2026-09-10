@@ -102,9 +102,9 @@ export default function MemberPermissionsEditor({ userId, isFr }: { userId: stri
     <div className="space-y-3 pt-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+          <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
             {isFr ? 'Permissions individuelles' : 'Individual permissions'}
-          </label>
+          </span>
           {custom && (
             <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold">
               {isFr ? 'Personnalisées' : 'Custom'}

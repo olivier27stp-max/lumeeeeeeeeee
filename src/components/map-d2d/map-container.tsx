@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useId } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import {
@@ -182,6 +182,7 @@ export interface MapContainerProps {
 export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialPins, onPinCreated, onPinDeleted, onPinUpdated, liveReps: liveRepsProp, pinLinkUpdates, focusCenter = null }: MapContainerProps = {}) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const uid = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -1964,7 +1965,8 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                     }
                   }}
                   placeholder={fr ? 'Rechercher une rue, un quartier, un code postal…' : 'Search a street, neighborhood, postal code…'}
-                  className="w-full bg-transparent py-4 pl-11 pr-20 text-[15px] text-white placeholder-white/30 outline-none"
+                  aria-label={fr ? 'Rechercher une rue, un quartier, un code postal' : 'Search a street, neighborhood, postal code'}
+                  className="w-full bg-transparent py-4 pl-11 pr-20 text-[15px] text-white placeholder-white/30 outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   /* le typebar global (index.css, non-layeré) force un fond
                      var(--color-surface) sur tous les inputs — blanc en mode
                      clair, donc texte blanc invisible; l'inline le neutralise */
@@ -2286,12 +2288,13 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
                     </div>
 
                     {/* Filter by rep */}
-                    <p className="mb-1.5 mt-2.5 text-[10px] font-medium text-white/25">{fr ? 'Par représentant' : 'By rep'}</p>
+                    <label htmlFor={`${uid}-filter-rep`} className="mb-1.5 mt-2.5 block text-[10px] font-medium text-white/25">{fr ? 'Par représentant' : 'By rep'}</label>
                     <select
+                      id={`${uid}-filter-rep`}
                       value={filterByRep}
                       onChange={(e) => setFilterByRep(e.target.value)}
                       style={{ colorScheme: 'dark', backgroundColor: '#171717', color: '#f5f5f5' }}
-                      className="w-full rounded-lg border border-white/10 px-2.5 py-1.5 text-[12px] outline-none"
+                      className="w-full rounded-lg border border-white/10 px-2.5 py-1.5 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       <option value="all" style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{fr ? 'Tous' : 'All'}</option>
                       {salesReps.map((r) => <option key={r.id} value={r.id} style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{r.name}</option>)}
@@ -2399,10 +2402,10 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
             <p className="mt-1 text-[12px] text-white/40">{drawingPoints.length} {fr ? 'points tracés' : 'points drawn'}</p>
 
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Nom de la zone' : 'Zone name'}</label>
-              <input type="text" value={zoneNameInput} onChange={(e) => setZoneNameInput(e.target.value)}
+              <label htmlFor={`${uid}-zone-name`} className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Nom de la zone' : 'Zone name'}</label>
+              <input id={`${uid}-zone-name`} type="text" value={zoneNameInput} onChange={(e) => setZoneNameInput(e.target.value)}
                 placeholder={`Zone ${zonesRef.current.length + 1}`}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[13px] text-white outline-none focus:border-indigo-500/50 focus-visible:ring-2 focus-visible:ring-primary/40"
                 /* neutralise le fond blanc du typebar global (mode clair) */
                 style={{ backgroundColor: 'rgba(255,255,255,.05)' }}
               />
@@ -2410,9 +2413,9 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
 
             {canAssignZone(CURRENT_USER.role) && (
               <div className="mt-4">
-                <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Assigner à un représentant' : 'Assign to a rep'}</label>
-                <select value={zoneAssignInput} onChange={(e) => setZoneAssignInput(e.target.value)}
-                  className="w-full rounded-lg border border-white/10 px-3 py-2 text-[13px] outline-none focus:border-white/30"
+                <label htmlFor={`${uid}-zone-assign`} className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-white/30">{fr ? 'Assigner à un représentant' : 'Assign to a rep'}</label>
+                <select id={`${uid}-zone-assign`} value={zoneAssignInput} onChange={(e) => setZoneAssignInput(e.target.value)}
+                  className="w-full rounded-lg border border-white/10 px-3 py-2 text-[13px] outline-none focus:border-white/30 focus-visible:ring-2 focus-visible:ring-primary/40"
                   style={{ colorScheme: 'dark', backgroundColor: '#171717', color: '#f5f5f5' }}
                 >
                   <option value="" style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{fr ? 'Non assigné' : 'Unassigned'}</option>
@@ -2545,12 +2548,13 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
             {/* Assignation */}
             {canAssignZone(CURRENT_USER.role) && (
               <div className="mt-3.5 border-t border-white/[0.06] pt-3.5">
-                <label className="mb-1.5 block text-[9.5px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Assigné à' : 'Assigned to'}</label>
+                <label htmlFor={`${uid}-zone-reassign`} className="mb-1.5 block text-[9.5px] font-medium uppercase tracking-[0.08em] text-neutral-500">{fr ? 'Assigné à' : 'Assigned to'}</label>
                 <select
+                  id={`${uid}-zone-reassign`}
                   value={selectedZone.assigned_to || ''}
                   onChange={(e) => reassignZone(selectedZone.id, e.target.value)}
                   style={{ colorScheme: 'dark', backgroundColor: '#171717', color: '#f5f5f5' }}
-                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] px-3 py-2 text-[12.5px] outline-none transition-colors hover:border-white/20 focus:border-white/30"
+                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] px-3 py-2 text-[12.5px] outline-none transition-colors hover:border-white/20 focus:border-white/30 focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <option value="" style={{ backgroundColor: '#171717', color: '#f5f5f5' }}>{fr ? 'Non assigné' : 'Unassigned'}</option>
                   {salesReps.map((rep) => (
@@ -2609,10 +2613,14 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       )}
       {actionPin && actionIsNew && (
         <div
+          role="presentation"
+          tabIndex={-1}
           className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
           onClick={() => setActionPin(null)}
         >
           <div
+            role="presentation"
+            tabIndex={-1}
             className="w-[380px] max-w-[92vw] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
             onClick={(e) => e.stopPropagation()}
           >
@@ -2771,22 +2779,22 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
           <div className="w-[340px] rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5">
             <h3 className="text-[15px] font-bold text-slate-900">{fr ? 'Modifier le pin' : 'Edit pin'}</h3>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Nom' : 'Name'}</label>
-              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+              <label htmlFor={`${uid}-edit-name`} className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Nom' : 'Name'}</label>
+              <input id={`${uid}-edit-name`} type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
                 className="w-full rounded-lg px-3 py-2 text-[13px] text-slate-800 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Téléphone' : 'Phone'}</label>
-              <input type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="819-555-0100"
+              <label htmlFor={`${uid}-edit-phone`} className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Téléphone' : 'Phone'}</label>
+              <input id={`${uid}-edit-phone`} type="tel" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="819-555-0100"
                 className="w-full rounded-lg px-3 py-2 text-[13px] text-slate-800 placeholder-slate-300 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Courriel' : 'Email'}</label>
-              <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="client@email.com"
+              <label htmlFor={`${uid}-edit-email`} className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Courriel' : 'Email'}</label>
+              <input id={`${uid}-edit-email`} type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="client@email.com"
                 className="w-full rounded-lg px-3 py-2 text-[13px] text-slate-800 placeholder-slate-300 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Statut' : 'Status'}</label>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Statut' : 'Status'}</span>
               <div className="flex flex-wrap gap-1.5">
                 {statuses.map(([key, cfg]) => (
                   <button key={key} onClick={() => setEditStatus(key)}
@@ -2800,12 +2808,12 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
               </div>
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Note</label>
-              <textarea value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder={fr ? 'Ajouter une note...' : 'Add a note...'} rows={3}
+              <label htmlFor={`${uid}-edit-note`} className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Note</label>
+              <textarea id={`${uid}-edit-note`} value={editNote} onChange={(e) => setEditNote(e.target.value)} placeholder={fr ? 'Ajouter une note...' : 'Add a note...'} rows={3}
                 className="w-full resize-none rounded-lg px-3 py-2 text-[13px] text-slate-800 placeholder-slate-300 outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-400" />
             </div>
             <div className="mt-4">
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Adresse' : 'Address'}</label>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-400">{fr ? 'Adresse' : 'Address'}</span>
               <p className="text-[12px] text-slate-500">{editingPin.address}</p>
             </div>
             <div className="mt-6 flex gap-2">
@@ -2823,10 +2831,14 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       {/* ================================================================== */}
       {(pinPendingDelete || bulkDeletePending) && (
         <div
+          role="presentation"
+          tabIndex={-1}
           className="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
           onClick={cancelPinDelete}
         >
           <div
+            role="presentation"
+            tabIndex={-1}
             className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0c0c14] p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >

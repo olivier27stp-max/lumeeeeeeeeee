@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useRecentItems } from '../hooks/useRecentItems';
 import {
   ArrowLeft,
@@ -139,6 +139,7 @@ interface ClientInfo {
 // ─── Component ───────────────────────────────────────────────────────
 export default function JobDetails() {
   const { t, language } = useTranslation();
+  const uid = useId();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
@@ -1193,13 +1194,16 @@ export default function JobDetails() {
             <div className="relative" ref={moreActionsRef}>
               <button
                 onClick={() => setMoreActionsOpen((prev) => !prev)}
+                aria-label={language === 'fr' ? 'Plus d’actions' : 'More actions'}
+                aria-haspopup="menu"
+                aria-expanded={moreActionsOpen}
                 className="glass-button inline-flex items-center gap-1"
               >
                 <MoreHorizontal size={14} />
               </button>
               {moreActionsOpen && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setMoreActionsOpen(false)} />
+                  <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setMoreActionsOpen(false)} />
                   <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-outline bg-surface shadow-lg py-1">
                     <DropdownItem icon={<CheckCircle2 size={13} />} label={isClosing ? (language === 'fr' ? 'Fermeture...' : 'Closing...') : (language === 'fr' ? 'Fermer le job' : 'Close Job')} onClick={handleCloseJob} disabled={isClosing} />
                     <DropdownItem icon={<MessageSquare size={13} />} label={language === 'fr' ? 'Envoyer une confirmation' : 'Send Confirmation'} onClick={() => { setConfirmPrompt('manual'); setMoreActionsOpen(false); }} />
@@ -1262,6 +1266,9 @@ export default function JobDetails() {
                     </div>
                     <span className={cn('text-[9px] font-medium whitespace-nowrap', step.done ? 'text-text-primary' : 'text-text-tertiary',
                       onClick && 'cursor-pointer hover:underline')}
+                      role={onClick ? 'button' : undefined}
+                      tabIndex={onClick ? 0 : undefined}
+                      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
                       onClick={onClick}>{language === 'fr' ? step.labelFr : step.label}</span>
                   </div>
                 </React.Fragment>
@@ -1625,7 +1632,10 @@ export default function JobDetails() {
         {approvedDoc?.type === 'QUOTE' && sourceQuote ? (
           <div
             className="rounded-xl border border-outline bg-surface overflow-hidden cursor-pointer transition-colors hover:border-primary/40"
+            role="button"
+            tabIndex={0}
             onClick={() => navigate(`/quotes/${sourceQuote.id}`)}
+            onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/quotes/${sourceQuote.id}`); } }}
             title={language === 'fr' ? 'Ouvrir la soumission' : 'Open the quote'}
           >
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
@@ -1676,7 +1686,7 @@ export default function JobDetails() {
                   : 'This quote serves as the approved document for this job. No separate agreement or second signature is required.'}
               </p>
 
-              <div className="flex flex-wrap gap-2 print:hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-wrap gap-2 print:hidden" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => navigate(`/quotes/${sourceQuote.id}`)}
                   className="bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
@@ -1696,7 +1706,10 @@ export default function JobDetails() {
         ) : agreement ? (
           <div
             className="rounded-xl border border-outline bg-surface overflow-hidden cursor-pointer transition-colors hover:border-primary/40"
+            role="button"
+            tabIndex={0}
             onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
+            onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); window.open(`/contract/${agreement.view_token}`, '_blank'); } }}
             title={language === 'fr' ? 'Voir le contrat tel que le client le voit' : 'View the contract as the client sees it'}
           >
             <div className="flex items-center justify-between px-5 py-3.5 border-b border-outline-subtle">
@@ -1805,7 +1818,7 @@ export default function JobDetails() {
                 </p>
               )}
 
-              <div className="flex flex-wrap gap-2 print:hidden" onClick={(e) => e.stopPropagation()}>
+              <div className="flex flex-wrap gap-2 print:hidden" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => window.open(`/contract/${agreement.view_token}`, '_blank')}
                   className="bg-primary text-primary-foreground rounded-lg px-3.5 py-1.5 text-[12px] font-semibold hover:opacity-90 transition-opacity inline-flex items-center gap-1.5"
@@ -1949,6 +1962,7 @@ export default function JobDetails() {
                               disabled={locked}
                               onChange={(e) => updateMilestone(m.key, { label: e.target.value })}
                               placeholder={`${t.jobDetails?.payment || (language === 'fr' ? 'Paiement' : 'Payment')} ${idx + 1}`}
+                              aria-label={`${t.jobDetails?.payment || (language === 'fr' ? 'Paiement' : 'Payment')} ${idx + 1} — ${language === 'fr' ? 'libellé' : 'label'}`}
                               className="flex-1 min-w-[120px] rounded-lg border border-outline bg-surface px-2.5 py-1.5 text-[12px] text-text-primary disabled:opacity-60"
                             />
                             <div className="relative">
@@ -1960,6 +1974,7 @@ export default function JobDetails() {
                                 value={m.amount_cents === 0 ? '' : m.amount_cents / 100}
                                 disabled={locked}
                                 onChange={(e) => handleMilestoneAmountChange(m.key, Number(e.target.value) || 0)}
+                                aria-label={`${t.jobDetails?.payment || (language === 'fr' ? 'Paiement' : 'Payment')} ${idx + 1} — ${language === 'fr' ? 'montant ($)' : 'amount ($)'}`}
                                 className="w-28 rounded-lg border border-outline bg-surface pl-5 pr-2 py-1.5 text-[12px] text-text-primary tabular-nums disabled:opacity-60"
                               />
                             </div>
@@ -1971,6 +1986,7 @@ export default function JobDetails() {
                                 value={m.percent ?? ''}
                                 disabled={locked}
                                 onChange={(e) => handleMilestonePercentChange(m.key, Number(e.target.value) || 0)}
+                                aria-label={`${t.jobDetails?.payment || (language === 'fr' ? 'Paiement' : 'Payment')} ${idx + 1} — ${language === 'fr' ? 'pourcentage' : 'percent'}`}
                                 className="w-20 rounded-lg border border-outline bg-surface pl-2 pr-6 py-1.5 text-[12px] text-text-primary tabular-nums disabled:opacity-60"
                               />
                               <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-tertiary">%</span>
@@ -1980,6 +1996,7 @@ export default function JobDetails() {
                               value={m.due_date || ''}
                               disabled={locked}
                               onChange={(e) => updateMilestone(m.key, { due_date: e.target.value || null })}
+                              aria-label={`${t.jobDetails?.payment || (language === 'fr' ? 'Paiement' : 'Payment')} ${idx + 1} — ${language === 'fr' ? 'échéance' : 'due date'}`}
                               className="rounded-lg border border-outline bg-surface px-2.5 py-1.5 text-[12px] text-text-primary disabled:opacity-60"
                             />
                             {linkedInvoice ? (
@@ -2069,7 +2086,10 @@ export default function JobDetails() {
                           <tr
                             key={inv.id}
                             className="border-b border-border-light cursor-pointer hover:bg-surface-secondary transition-colors"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => navigate(`/invoices/${inv.id}`)}
+                            onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/invoices/${inv.id}`); } }}
                           >
                             <td className="py-3 pr-3 text-[13px] font-semibold text-text-primary">
                               #{inv.invoice_number || '—'}
@@ -2225,8 +2245,8 @@ export default function JobDetails() {
             ) : showRecurrenceSetup ? (
               <div className="space-y-3">
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Fréquence' : 'Frequency'}</label>
-                  <select value={recFreq} onChange={(e) => setRecFreq(e.target.value as RecurrenceFrequency)} className="glass-input w-full mt-1">
+                  <label htmlFor={`${uid}-rec-freq`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{language === 'fr' ? 'Fréquence' : 'Frequency'}</label>
+                  <select id={`${uid}-rec-freq`} value={recFreq} onChange={(e) => setRecFreq(e.target.value as RecurrenceFrequency)} className="glass-input w-full mt-1">
                     <option value="daily">{language === 'fr' ? 'Quotidien' : 'Daily'}</option>
                     <option value="weekly">{language === 'fr' ? 'Hebdomadaire' : 'Weekly'}</option>
                     <option value="biweekly">{language === 'fr' ? 'Aux 2 semaines' : 'Every 2 weeks'}</option>
@@ -2542,9 +2562,12 @@ export default function JobDetails() {
               : (fr ? 'Visite à venir — elle apparaît au calendrier.' : 'Upcoming visit — it shows on the calendar.');
         const closePopup = () => { setSelectedVisitId(null); setEditingVisitId(null); setVisitMoreOpen(false); };
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4" onClick={closePopup}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4" role="presentation" tabIndex={-1} onClick={closePopup}>
             <div
               className="w-full max-w-md rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden"
+              role="dialog"
+              aria-modal="true"
+              tabIndex={-1}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -2553,7 +2576,7 @@ export default function JobDetails() {
                   <Calendar size={15} className="text-text-secondary" />
                   {fr ? 'Détails de la visite' : 'Visit details'}
                 </h2>
-                <button onClick={closePopup} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><X size={16} /></button>
+                <button type="button" onClick={closePopup} aria-label={fr ? 'Fermer' : 'Close'} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><X size={16} /></button>
               </div>
 
               <div className="px-5 py-4 space-y-4">
@@ -2569,8 +2592,8 @@ export default function JobDetails() {
                         Labels and input text: black bold (white in dark mode). */}
                     <div className="space-y-3">
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">Date</label>
-                        <input type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
+                        <label htmlFor={`${uid}-visit-date`} className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">Date</label>
+                        <input id={`${uid}-visit-date`} type="date" value={editVisitDate} onChange={(e) => setEditVisitDate(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
                       </div>
                       <label className="flex items-center gap-2 cursor-pointer select-none w-fit">
                         <input
@@ -2584,18 +2607,18 @@ export default function JobDetails() {
                       {!editVisitAnytime && (
                         <div className="grid grid-cols-2 gap-3">
                           <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Début' : 'Start'}</label>
-                            <input type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
+                            <label htmlFor={`${uid}-visit-start`} className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Début' : 'Start'}</label>
+                            <input id={`${uid}-visit-start`} type="time" value={editVisitStart} onChange={(e) => setEditVisitStart(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
                           </div>
                           <div>
-                            <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Fin' : 'End'}</label>
-                            <input type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
+                            <label htmlFor={`${uid}-visit-end`} className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Fin' : 'End'}</label>
+                            <input id={`${uid}-visit-end`} type="time" value={editVisitEnd} onChange={(e) => setEditVisitEnd(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white" />
                           </div>
                         </div>
                       )}
                       <div>
-                        <label className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Équipe' : 'Team'}</label>
-                        <select value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white">
+                        <label htmlFor={`${uid}-visit-team`} className="text-[10px] font-bold uppercase tracking-widest text-black dark:text-white">{fr ? 'Équipe' : 'Team'}</label>
+                        <select id={`${uid}-visit-team`} value={editVisitTeamId} onChange={(e) => setEditVisitTeamId(e.target.value)} className="glass-input mt-1 w-full !font-bold !text-black dark:!text-white">
                           <option value="">{fr ? 'Non assignée' : 'Unassigned'}</option>
                           {teams
                             .filter((tm) => tm.is_active !== false || tm.id === editVisitTeamId)
@@ -2673,7 +2696,7 @@ export default function JobDetails() {
                         </button>
                         {visitMoreOpen && (
                           <>
-                            <div className="fixed inset-0 z-10" onClick={() => setVisitMoreOpen(false)} />
+                            <div className="fixed inset-0 z-10" role="presentation" tabIndex={-1} onClick={() => setVisitMoreOpen(false)} />
                             <div className="absolute z-20 top-full left-0 mt-1 w-52 rounded-xl border border-border bg-surface shadow-lg overflow-hidden">
                               <button
                                 onClick={() => { setVisitMoreOpen(false); startEditVisit(visit); }}

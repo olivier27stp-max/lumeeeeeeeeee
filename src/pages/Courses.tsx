@@ -154,6 +154,7 @@ export default function Courses() {
           <input
             type="text"
             placeholder={t.courses.searchCourses}
+            aria-label={t.courses.searchCourses}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="glass-input w-full pl-10 pr-4 py-2.5 rounded-xl text-sm"
@@ -260,7 +261,10 @@ export default function Courses() {
                 transition={{ duration: 0.2, delay: idx * 0.03 }}
                 className="group bg-surface-card rounded-2xl border border-outline/30 overflow-hidden cursor-pointer
                            hover:shadow-card-hover hover:border-outline-strong transition-all duration-200"
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(`/courses/${course.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/courses/${course.id}`); } }}
               >
                 {/* Cover */}
                 <div className="aspect-[16/10] bg-surface-tertiary relative overflow-hidden">
@@ -294,6 +298,8 @@ export default function Courses() {
                   <div className="absolute top-3 right-3">
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === course.id ? null : course.id); }}
+                      aria-label={t.common.actions}
+                      aria-expanded={menuOpen === course.id}
                       className="w-7 h-7 rounded-lg bg-black/40 backdrop-blur-sm flex items-center justify-center
                                  text-white/80 hover:text-white hover:bg-black/60 transition-all
                                  opacity-0 group-hover:opacity-100"
@@ -401,6 +407,7 @@ export default function Courses() {
       <AnimatePresence>
         {courseToDelete && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            role="presentation" tabIndex={-1}
             onClick={() => !isDeleting && setCourseToDelete(null)}>
             <motion.div
               className="bg-surface-card rounded-2xl border border-outline/40 shadow-modal max-w-sm w-full mx-4 p-6"

@@ -229,8 +229,8 @@ export default function QuoteDetails() {
 
   const editButtons = (
     <div className="flex items-center gap-1.5">
-      <button onClick={saveEdit} disabled={busy} className="p-1.5 rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-50"><Check size={13} /></button>
-      <button onClick={cancelEdit} className="p-1.5 rounded-md bg-surface-tertiary text-text-secondary hover:bg-surface-secondary"><X size={13} /></button>
+      <button onClick={saveEdit} disabled={busy} aria-label={isFr ? 'Enregistrer' : 'Save'} className="p-1.5 rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-50"><Check size={13} /></button>
+      <button onClick={cancelEdit} aria-label={isFr ? 'Annuler' : 'Cancel'} className="p-1.5 rounded-md bg-surface-tertiary text-text-secondary hover:bg-surface-secondary"><X size={13} /></button>
     </div>
   );
 
@@ -244,21 +244,21 @@ export default function QuoteDetails() {
 
       {/* ── Header ── */}
       <div className="px-8 pt-5 pb-4">
-        <button onClick={() => navigate('/quotes')} className="mb-3 text-text-tertiary hover:text-text-primary transition-colors"><ArrowLeft size={16} /></button>
+        <button onClick={() => navigate('/quotes')} aria-label={isFr ? 'Retour aux soumissions' : 'Back to quotes'} className="mb-3 text-text-tertiary hover:text-text-primary transition-colors"><ArrowLeft size={16} /></button>
         <EntityHubHeader
           icon={<FileText size={18} strokeWidth={2} />}
           iconTileClass="text-entity-quote"
           status={quote.status}
           title={editing === 'title' ? (
             <span className="flex items-center gap-2">
-              <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+              <input value={editTitle} onChange={e => setEditTitle(e.target.value)} aria-label={isFr ? 'Titre de la soumission' : 'Quote title'}
                 className={cn(inputCls, 'text-[22px] font-bold py-1 w-96')} autoFocus />
               {editButtons}
             </span>
           ) : (
             <span className="group inline-flex items-center gap-2">
               {quote.title || (isFr ? `Soumission pour ${entityName}` : `Quote for ${entityName}`)}
-              <button onClick={() => startEdit('title')} className="p-1 text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-all"><Pencil size={15} /></button>
+              <button onClick={() => startEdit('title')} aria-label={isFr ? 'Modifier le titre' : 'Edit title'} className="p-1 text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-text-primary transition-all"><Pencil size={15} /></button>
             </span>
           )}
           number={
@@ -286,7 +286,7 @@ export default function QuoteDetails() {
             </button>
             {moreOpen && (
               <>
-                <div className="fixed inset-0 z-30" onClick={() => setMoreOpen(false)} />
+                <div className="fixed inset-0 z-30" role="presentation" tabIndex={-1} onClick={() => setMoreOpen(false)} />
                 <div className="absolute right-0 top-full mt-1 w-52 max-h-[70vh] overflow-y-auto bg-surface border border-outline rounded-xl shadow-xl z-40 py-1 text-[13px]">
                   <button onClick={() => act(async () => { const { jobId } = await convertQuoteToJob(quote.id); toast.success(isFr ? 'Convertie' : 'Converted'); navigate(`/jobs/${jobId}`); })}
                     disabled={quote.status !== 'approved' || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
@@ -450,11 +450,11 @@ export default function QuoteDetails() {
           <div className="section-card p-5">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Introduction' : 'Introduction'}</h4>
-              {editing !== 'intro' && <button onClick={() => startEdit('intro')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
+              {editing !== 'intro' && <button onClick={() => startEdit('intro')} aria-label={isFr ? "Modifier l'introduction" : 'Edit introduction'} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'intro' && editButtons}
             </div>
             {editing === 'intro' ? (
-              <textarea value={editIntro} onChange={e => setEditIntro(e.target.value)} className={cn(inputCls, 'min-h-[80px]')} autoFocus />
+              <textarea value={editIntro} onChange={e => setEditIntro(e.target.value)} aria-label="Introduction" className={cn(inputCls, 'min-h-[80px]')} autoFocus />
             ) : (
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{introSection?.content || <span className="text-text-tertiary italic">{language === 'fr' ? "Cliquez sur le crayon pour ajouter une introduction..." : 'Click the pencil to add an introduction...'}</span>}</p>
             )}
@@ -464,7 +464,7 @@ export default function QuoteDetails() {
           <div className="section-card overflow-hidden">
             <div className="px-5 py-3.5 border-b border-outline flex items-center justify-between">
               <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Produit / Service' : 'Product / Service'}</h4>
-              {editing !== 'lineItems' && <button onClick={() => startEdit('lineItems')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
+              {editing !== 'lineItems' && <button onClick={() => startEdit('lineItems')} aria-label={isFr ? 'Modifier les lignes' : 'Edit line items'} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'lineItems' && editButtons}
             </div>
 
@@ -481,11 +481,11 @@ export default function QuoteDetails() {
                     </div>
                     <div className="col-span-2">
                       <input value={item.quantity} onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], quantity: e.target.value }; setEditLineItems(u); }}
-                        className={cn(inputCls, 'py-1.5 text-center')} placeholder={isFr ? 'Qté' : 'Qty'} />
+                        aria-label={isFr ? 'Quantité' : 'Quantity'} className={cn(inputCls, 'py-1.5 text-center')} placeholder={isFr ? 'Qté' : 'Qty'} />
                     </div>
                     <div className="col-span-2">
                       <input value={item.unit_price} onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], unit_price: e.target.value }; setEditLineItems(u); }}
-                        className={cn(inputCls, 'py-1.5 text-right')} placeholder={isFr ? 'Prix' : 'Price'} />
+                        aria-label={isFr ? 'Prix unitaire' : 'Unit price'} className={cn(inputCls, 'py-1.5 text-right')} placeholder={isFr ? 'Prix' : 'Price'} />
                     </div>
                     <div className="col-span-2 text-right text-sm font-medium text-text-primary pt-2">
                       {(() => {
@@ -497,12 +497,12 @@ export default function QuoteDetails() {
                     </div>
                     <div className="col-span-1 flex justify-center pt-1.5">
                       <button onClick={() => { if (editLineItems.length <= 1) { toast.error(language === 'fr' ? 'Au moins un item requis' : 'At least one item required'); return; } setEditLineItems(p => p.filter((_, i) => i !== idx)); setEditDirty(true); }}
-                        disabled={editLineItems.length <= 1}
+                        disabled={editLineItems.length <= 1} aria-label={isFr ? 'Supprimer la ligne' : 'Remove line'}
                         className={cn("p-1 hover:text-danger", editLineItems.length <= 1 ? "text-text-muted cursor-not-allowed" : "text-text-tertiary")}><Trash2 size={13} /></button>
                     </div>
                     <div className="col-span-12 flex items-center gap-2 text-[12px] text-text-secondary">
                       <span>{isFr ? 'Rabais' : 'Discount'}</span>
-                      <select value={item.discount_type}
+                      <select value={item.discount_type} aria-label={isFr ? 'Type de rabais' : 'Discount type'}
                         onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], discount_type: e.target.value as '' | 'percentage' | 'fixed' }; setEditLineItems(u); setEditDirty(true); }}
                         className={cn(inputCls, 'py-1 w-auto text-[12px]')}>
                         <option value="">{isFr ? 'Aucun' : 'None'}</option>
@@ -510,7 +510,7 @@ export default function QuoteDetails() {
                         <option value="fixed">$</option>
                       </select>
                       {item.discount_type && (
-                        <input value={item.discount_value}
+                        <input value={item.discount_value} aria-label={isFr ? 'Valeur du rabais' : 'Discount value'}
                           onChange={e => { const u = [...editLineItems]; u[idx] = { ...u[idx], discount_value: e.target.value.replace(',', '.').replace(/[^\d.]/g, '') }; setEditLineItems(u); setEditDirty(true); }}
                           className={cn(inputCls, 'py-1 w-20 text-right text-[12px]')}
                           placeholder={item.discount_type === 'percentage' ? '10' : '25.00'} />
@@ -571,11 +571,11 @@ export default function QuoteDetails() {
           <div className="section-card p-5">
             <div className="flex items-center justify-between mb-2">
               <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Contrat / Clause de non-responsabilité' : 'Contract / Disclaimer'}</h4>
-              {editing !== 'disclaimer' && <button onClick={() => startEdit('disclaimer')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
+              {editing !== 'disclaimer' && <button onClick={() => startEdit('disclaimer')} aria-label={isFr ? 'Modifier la clause' : 'Edit disclaimer'} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'disclaimer' && editButtons}
             </div>
             {editing === 'disclaimer' ? (
-              <textarea value={editDisclaimer} onChange={e => setEditDisclaimer(e.target.value)} className={cn(inputCls, 'min-h-[80px]')} autoFocus />
+              <textarea value={editDisclaimer} onChange={e => setEditDisclaimer(e.target.value)} aria-label={isFr ? 'Contrat / Clause de non-responsabilité' : 'Contract / Disclaimer'} className={cn(inputCls, 'min-h-[80px]')} autoFocus />
             ) : (
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{disclaimerSection?.content || quote.contract_disclaimer || <span className="text-text-tertiary italic">{language === 'fr' ? 'Cliquez sur le crayon pour ajouter des conditions...' : 'Click the pencil to add terms...'}</span>}</p>
             )}
@@ -588,7 +588,7 @@ export default function QuoteDetails() {
           <div className="section-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Paramètres de paiement de dépôt' : 'Deposit payment settings'}</h4>
-              {editing !== 'deposit' && <button onClick={() => startEdit('deposit')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
+              {editing !== 'deposit' && <button onClick={() => startEdit('deposit')} aria-label={isFr ? 'Modifier le dépôt' : 'Edit deposit'} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'deposit' && editButtons}
             </div>
             {editing === 'deposit' ? (
@@ -625,16 +625,16 @@ export default function QuoteDetails() {
           <div className="section-card p-4">
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-[14px] font-semibold text-text-primary">{language === 'fr' ? 'Notes' : 'Notes'}</h4>
-              {editing !== 'notes' && <button onClick={() => startEdit('notes')} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
+              {editing !== 'notes' && <button onClick={() => startEdit('notes')} aria-label={isFr ? 'Modifier les notes' : 'Edit notes'} className="p-1 text-text-tertiary hover:text-text-primary"><Pencil size={13} /></button>}
               {editing === 'notes' && editButtons}
             </div>
             {editing === 'notes' ? (
-              <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)}
+              <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} aria-label="Notes"
                 className={cn(inputCls, 'min-h-[100px]')} autoFocus placeholder={isFr ? 'Notes visibles sur la soumission...' : 'Notes visible on the quote...'} />
             ) : quote.notes ? (
               <p className="text-[13px] text-text-secondary whitespace-pre-wrap">{quote.notes}</p>
             ) : (
-              <div className="border-2 border-dashed border-outline rounded-xl p-6 text-center cursor-pointer hover:bg-surface-secondary transition-colors" onClick={() => startEdit('notes')}>
+              <div className="border-2 border-dashed border-outline rounded-xl p-6 text-center cursor-pointer hover:bg-surface-secondary transition-colors" onClick={() => startEdit('notes')} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit('notes'); } }}>
                 <div className="w-10 h-10 rounded-full bg-surface-secondary flex items-center justify-center mx-auto mb-2">
                   <FileText size={16} className="text-text-tertiary" />
                 </div>
@@ -659,11 +659,11 @@ export default function QuoteDetails() {
 
       {/* Quote Preview Modal */}
       {showPreview && detail && companySettings && (
-        <div className="modal-overlay" onClick={() => setShowPreview(false)}>
-          <div className="modal-content max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" role="presentation" tabIndex={-1} onClick={() => setShowPreview(false)}>
+          <div className="modal-content max-w-3xl max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 z-10 bg-surface border-b border-border px-5 py-3 flex items-center justify-between">
               <p className="text-[14px] font-bold text-text-primary">{language === 'fr' ? 'Aperçu du devis' : 'Quote Preview'}</p>
-              <button onClick={() => setShowPreview(false)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
+              <button onClick={() => setShowPreview(false)} aria-label={t.common.close} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
                 <X size={16} />
               </button>
             </div>

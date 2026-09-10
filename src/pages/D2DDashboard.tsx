@@ -320,18 +320,24 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
 
       {/* Stat cards -- clickable */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {ownerStats.map((stat) => (
+        {ownerStats.map((stat) => {
+          const openStat = () => {
+            if (stat.label === 'Active Reps' || stat.label === 'Représentants actifs') navigate('/field-sales');
+            else if (stat.label === 'Pipeline Value' || stat.label === 'Valeur du pipeline') navigate('/pipeline');
+          };
+          return (
           <div
             key={stat.label}
             className="cursor-pointer transition-shadow hover:shadow-md rounded-xl"
-            onClick={() => {
-              if (stat.label === 'Active Reps' || stat.label === 'Représentants actifs') navigate('/field-sales');
-              else if (stat.label === 'Pipeline Value' || stat.label === 'Valeur du pipeline') navigate('/pipeline');
-            }}
+            role="button"
+            tabIndex={0}
+            onClick={openStat}
+            onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openStat(); } }}
           >
             <StatCard {...stat} />
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -352,7 +358,10 @@ function ManagerDashboard({ userId }: { userId: string | null }) {
                 <div
                   key={i}
                   className="flex items-center justify-between rounded-lg bg-surface-elevated px-3 py-2.5 cursor-pointer transition-colors hover:bg-surface-tertiary"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => navigate(`/reps/${win.userId}`)}
+                  onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); navigate(`/reps/${win.userId}`); } }}
                 >
                   <div className="flex items-center gap-3">
                     <Avatar name={win.rep} src={getRepAvatar(win.rep)} size="sm" />

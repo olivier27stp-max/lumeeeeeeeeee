@@ -169,6 +169,8 @@ export default function ExploreFeaturesModal({ open, onClose }: ExploreFeaturesM
     return (
       <div
         className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-md flex items-center justify-center p-4"
+        role="presentation"
+        tabIndex={-1}
         onClick={onClose}
       >
         <motion.div
@@ -216,6 +218,8 @@ export default function ExploreFeaturesModal({ open, onClose }: ExploreFeaturesM
     <AnimatePresence>
       <div
         className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto"
+        role="presentation"
+        tabIndex={-1}
         onClick={onClose}
       >
         <motion.div

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useId, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, GripVertical, Save, Eye, Upload, Link2, FileText,
@@ -95,8 +95,11 @@ function SortableLessonCard({
         isDragging && 'opacity-40',
       )}
       onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
     >
-      <div {...attributes} {...listeners} className="cursor-grab text-text-muted/40 hover:text-text-secondary shrink-0" onClick={e => e.stopPropagation()}>
+      <div {...attributes} {...listeners} role="button" tabIndex={0} className="cursor-grab text-text-muted/40 hover:text-text-secondary shrink-0" onClick={e => e.stopPropagation()}>
         <GripVertical size={13} />
       </div>
       <div className="w-8 h-8 rounded-md bg-surface-tertiary flex items-center justify-center shrink-0">
@@ -107,11 +110,11 @@ function SortableLessonCard({
         {lesson.duration_min > 0 && <p className="text-[10px] text-text-muted">{lesson.duration_min} min</p>}
       </div>
       <div className="shrink-0">
-        <button ref={menuBtnRef} onClick={openMenu} className="p-1 rounded-md hover:bg-surface-tertiary text-text-muted">
+        <button ref={menuBtnRef} onClick={openMenu} aria-label={fr ? 'Options de la leçon' : 'Lesson options'} className="p-1 rounded-md hover:bg-surface-tertiary text-text-muted">
           <MoreHorizontal size={13} />
         </button>
         {menuOpen && (
-          <div className="fixed w-40 bg-surface-elevated border border-outline/40 rounded-xl shadow-dropdown py-1 z-[200]"
+          <div role="presentation" tabIndex={-1} className="fixed w-40 bg-surface-elevated border border-outline/40 rounded-xl shadow-dropdown py-1 z-[200]"
             style={{ top: menuPos.top, left: menuPos.left }} onClick={e => e.stopPropagation()}>
             <button onClick={() => { onDuplicate(); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-text-primary hover:bg-surface-secondary"><Copy size={12} /> {fr ? 'Dupliquer' : 'Duplicate'}</button>
             <div className="border-t border-outline/20 my-0.5" />
@@ -131,6 +134,7 @@ export default function CourseBuilder() {
   const navigate = useNavigate();
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const uid = useId();
   const { currentOrgId } = useCompany();
   // Préfixe org: scelle les uploads de formation par organisation (le relais
   // serveur exige aussi ce préfixe). Sans org, on REFUSE l'upload plutôt que de
@@ -687,12 +691,13 @@ export default function CourseBuilder() {
                             </button>
 
                             {isEditingThis ? (
-                              <input ref={moduleInputRef} value={editingModuleTitle} maxLength={500} onChange={e => setEditingModuleTitle(e.target.value)}
+                              <input ref={moduleInputRef} aria-label={fr ? 'Nom du chapitre' : 'Chapter name'} value={editingModuleTitle} maxLength={500} onChange={e => setEditingModuleTitle(e.target.value)}
                                 onBlur={() => { handleRenameModule(mod.id, editingModuleTitle); setEditingModuleId(null); }}
                                 onKeyDown={e => { if (e.key === 'Enter') { handleRenameModule(mod.id, editingModuleTitle); setEditingModuleId(null); } if (e.key === 'Escape') setEditingModuleId(null); }}
-                                className="flex-1 bg-transparent text-[13px] font-semibold text-text-primary outline-none border-b border-primary" />
+                                className="flex-1 bg-transparent text-[13px] font-semibold text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40 border-b border-primary" />
                             ) : (
-                              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleModule(mod.id)}>
+                              <div className="flex-1 min-w-0 cursor-pointer" role="button" tabIndex={0} onClick={() => toggleModule(mod.id)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleModule(mod.id); } }}>
                                 <p className="text-[13px] font-semibold text-text-primary truncate">{mod.title || (fr ? 'Sans titre' : 'Untitled')}</p>
                                 <p className="text-[10px] text-text-muted">{lessonCount} {lessonCount === 1 ? (fr ? 'leçon' : 'lesson') : (fr ? 'leçons' : 'lessons')}</p>
                               </div>
@@ -705,7 +710,7 @@ export default function CourseBuilder() {
                             <button ref={el => { addLessonBtnRefs.current[mod.id] = el; }} onClick={(e) => { e.stopPropagation(); openAddLessonMenu(mod.id); }} className="p-1 rounded-md hover:bg-surface-secondary text-text-muted hover:text-text-secondary transition-colors" title={t.courses.addLesson}>
                               <Plus size={13} />
                             </button>
-                            <button onClick={async () => { if (await confirmer({ message: fr ? 'Supprimer ce chapitre ?' : 'Delete this chapter?', danger: true })) handleDeleteModule(mod.id); }} className="p-1 rounded-md hover:bg-danger-light text-text-muted hover:text-danger transition-colors">
+                            <button onClick={async () => { if (await confirmer({ message: fr ? 'Supprimer ce chapitre ?' : 'Delete this chapter?', danger: true })) handleDeleteModule(mod.id); }} aria-label={fr ? 'Supprimer le chapitre' : 'Delete chapter'} className="p-1 rounded-md hover:bg-danger-light text-text-muted hover:text-danger transition-colors">
                               <Trash2 size={12} />
                             </button>
                           </div>
@@ -814,25 +819,25 @@ export default function CourseBuilder() {
               )}
 
               <div>
-                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.courseTitle}</label>
-                <input value={title} maxLength={500} onChange={e => setTitle(e.target.value)} placeholder={fr ? 'Titre de la formation' : 'Course Title'}
+                <label htmlFor={`${uid}-title`} className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.courseTitle}</label>
+                <input id={`${uid}-title`} value={title} maxLength={500} onChange={e => setTitle(e.target.value)} placeholder={fr ? 'Titre de la formation' : 'Course Title'}
                   className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.courseDescription}</label>
-                <textarea value={description} maxLength={10000} onChange={e => setDescription(e.target.value)} placeholder={fr ? 'Description' : 'Description'} rows={4}
+                <label htmlFor={`${uid}-description`} className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.courseDescription}</label>
+                <textarea id={`${uid}-description`} value={description} maxLength={10000} onChange={e => setDescription(e.target.value)} placeholder={fr ? 'Description' : 'Description'} rows={4}
                   className="glass-input w-full px-4 py-2.5 rounded-xl text-sm resize-none" />
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.coverImage}</label>
+                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.coverImage}</span>
                 {coverImage ? (
                   <div className="relative group rounded-xl overflow-hidden">
                     {coverImageDisplayUrl
                       ? <img src={coverImageDisplayUrl} alt="" className="w-full h-40 object-cover" />
                       : <div className="w-full h-40 bg-surface-tertiary" />}
-                    <button onClick={() => setCoverImage('')} className="absolute top-2 right-2 w-7 h-7 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"><X size={13} /></button>
+                    <button onClick={() => setCoverImage('')} aria-label={fr ? 'Retirer l’image de couverture' : 'Remove cover image'} className="absolute top-2 right-2 w-7 h-7 bg-black/50 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity"><X size={13} /></button>
                   </div>
                 ) : (
                   <label className="flex items-center justify-center gap-2 h-28 rounded-xl border-2 border-dashed border-outline/40 hover:border-outline-strong cursor-pointer transition-colors text-text-muted hover:text-text-secondary text-sm">
@@ -883,9 +888,9 @@ export default function CourseBuilder() {
                       <div className="px-4 py-4 space-y-4">
                         {/* Role-based targeting */}
                         <div>
-                          <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 block">
+                          <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 block">
                             {fr ? 'Rôles ciblés' : 'Target Roles'}
-                          </label>
+                          </span>
                           <div className="flex flex-wrap gap-2">
                             {[
                               { key: 'sales_rep', label: fr ? 'Représentant' : 'Sales Rep' },
@@ -918,9 +923,9 @@ export default function CourseBuilder() {
 
                         {/* User-specific targeting */}
                         <div>
-                          <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 block">
+                          <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2 block">
                             {fr ? 'Utilisateurs spécifiques' : 'Specific Users'}
-                          </label>
+                          </span>
                           {orgMembers.length > 0 ? (
                             <div className="max-h-[200px] overflow-y-auto space-y-1 rounded-xl border border-outline/30 p-2">
                               {orgMembers
@@ -1015,6 +1020,7 @@ export default function CourseBuilder() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button onClick={async () => { if (activeLessonId && await confirmer({ message: fr ? 'Supprimer cette leçon ?' : 'Delete this lesson?', danger: true })) handleDeleteLesson(activeLessonId); }}
+                    aria-label={fr ? 'Supprimer la leçon' : 'Delete lesson'}
                     className="glass-button px-2.5 py-1.5 rounded-lg text-danger hover:bg-danger-light"><Trash2 size={13} /></button>
                   <button onClick={handleSaveLesson} disabled={lessonSaving} className="glass-button-primary flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-semibold">
                     {lessonSaving ? <span className="animate-pulse">{t.courses.saving}</span> : <><Save size={13} /> {t.courses.save}</>}
@@ -1025,13 +1031,13 @@ export default function CourseBuilder() {
               {/* Title + Duration */}
               <div className="flex gap-4 mb-6">
                 <div className="flex-1">
-                  <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.lessonTitle}</label>
-                  <input value={lessonTitle} maxLength={500} onChange={e => setLessonTitle(e.target.value)} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
+                  <label htmlFor={`${uid}-lesson-title`} className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.lessonTitle}</label>
+                  <input id={`${uid}-lesson-title`} value={lessonTitle} maxLength={500} onChange={e => setLessonTitle(e.target.value)} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
                 </div>
                 <div className="w-32">
-                  <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.duration}</label>
+                  <label htmlFor={`${uid}-lesson-duration`} className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-1.5 block">{t.courses.duration}</label>
                   <div className="relative">
-                    <input type="number" min={0} value={lessonDuration} onChange={e => { const n = parseInt(e.target.value, 10); setLessonDuration(Number.isFinite(n) && n >= 0 ? n : 0); }} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm pr-10" />
+                    <input id={`${uid}-lesson-duration`} type="number" min={0} value={lessonDuration} onChange={e => { const n = parseInt(e.target.value, 10); setLessonDuration(Number.isFinite(n) && n >= 0 ? n : 0); }} className="glass-input w-full px-4 py-2.5 rounded-xl text-sm pr-10" />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-text-muted">min</span>
                   </div>
                 </div>
@@ -1039,7 +1045,7 @@ export default function CourseBuilder() {
 
               {/* ── Content Type ── */}
               <div className="mb-6">
-                <label className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2.5 block">{t.courses.lessonContent}</label>
+                <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mb-2.5 block">{t.courses.lessonContent}</span>
                 <div className="flex gap-1 mb-4 p-1 bg-surface-secondary rounded-xl">
                   {([
                     { key: 'video', icon: Video, label: fr ? 'Vidéo' : 'Video' },
@@ -1081,13 +1087,13 @@ export default function CourseBuilder() {
                   {lessonContentType === 'embed' && (
                     <div className="space-y-3">
                       <p className="text-[12px] text-text-secondary">{fr ? 'YouTube, Loom ou Vimeo' : 'YouTube, Loom or Vimeo link'}</p>
-                      <input value={lessonEmbedUrl} onChange={e => setLessonEmbedUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
+                      <input aria-label={fr ? 'Lien à intégrer' : 'Embed link'} value={lessonEmbedUrl} onChange={e => setLessonEmbedUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
                       {lessonEmbedUrl && <div className="aspect-video rounded-xl overflow-hidden border border-outline/20">
                         <iframe src={(() => { const yt = lessonEmbedUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/); if (yt) return `https://www.youtube.com/embed/${yt[1]}`; const lo = lessonEmbedUrl.match(/loom\.com\/share\/([\w-]+)/); if (lo) return `https://www.loom.com/embed/${lo[1]}`; return lessonEmbedUrl; })()} className="w-full h-full" allowFullScreen />
                       </div>}
                     </div>
                   )}
-                  {lessonContentType === 'text' && <textarea value={lessonTextContent} onChange={e => setLessonTextContent(e.target.value)} rows={10} placeholder={fr ? 'Contenu...' : 'Content...'} className="glass-input w-full px-4 py-3 rounded-xl text-sm resize-none leading-relaxed" />}
+                  {lessonContentType === 'text' && <textarea aria-label={t.courses.lessonContent} value={lessonTextContent} onChange={e => setLessonTextContent(e.target.value)} rows={10} placeholder={fr ? 'Contenu...' : 'Content...'} className="glass-input w-full px-4 py-3 rounded-xl text-sm resize-none leading-relaxed" />}
                   {lessonContentType === 'pdf' && (<>
                     {videoUploading ? (
                       <div className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border-2 border-dashed border-outline/40">
@@ -1099,7 +1105,7 @@ export default function CourseBuilder() {
                         <p className="text-[11px] text-text-muted">{videoProgress}%</p>
                       </div>
                     ) : lessonVideoUrl ? (
-                      <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-secondary"><FileText size={20} className="text-info shrink-0" /><span className="flex-1 text-[13px] text-text-primary truncate">{lessonVideoUrl.split('/').pop()}</span><button onClick={() => setLessonVideoUrl('')} className="text-text-muted hover:text-danger"><X size={14} /></button></div>
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-secondary"><FileText size={20} className="text-info shrink-0" /><span className="flex-1 text-[13px] text-text-primary truncate">{lessonVideoUrl.split('/').pop()}</span><button onClick={() => setLessonVideoUrl('')} aria-label={fr ? 'Retirer le PDF' : 'Remove PDF'} className="text-text-muted hover:text-danger"><X size={14} /></button></div>
                     ) : (
                       <label className="flex flex-col items-center justify-center gap-3 py-10 rounded-xl border-2 border-dashed border-outline/40 hover:border-outline-strong cursor-pointer transition-colors">
                         <input type="file" accept=".pdf" onChange={handleVideoUpload} className="hidden" />
@@ -1110,7 +1116,7 @@ export default function CourseBuilder() {
                   {lessonContentType === 'link' && (
                     <div className="space-y-3">
                       <p className="text-[12px] text-text-secondary">{fr ? 'Quiz, site web ou ressource externe' : 'Quiz, website or external resource'}</p>
-                      <input value={lessonEmbedUrl} onChange={e => setLessonEmbedUrl(e.target.value)} placeholder="https://..." className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
+                      <input aria-label={fr ? 'Lien externe' : 'External link'} value={lessonEmbedUrl} onChange={e => setLessonEmbedUrl(e.target.value)} placeholder="https://..." className="glass-input w-full px-4 py-2.5 rounded-xl text-sm" />
                     </div>
                   )}
                 </div>
@@ -1126,7 +1132,7 @@ export default function CourseBuilder() {
                         <FileText size={14} className="text-text-muted shrink-0" />
                         <span className="flex-1 text-[12px] text-text-primary truncate">{att.name}</span>
                         <span className="text-[10px] text-text-muted uppercase">{att.type}</span>
-                        <button onClick={() => setLessonAttachments(p => p.filter((_, j) => j !== i))} className="p-0.5 rounded hover:bg-danger-light text-text-muted hover:text-danger transition-colors"><Trash2 size={11} /></button>
+                        <button onClick={() => setLessonAttachments(p => p.filter((_, j) => j !== i))} aria-label={fr ? 'Retirer la pièce jointe' : 'Remove attachment'} className="p-0.5 rounded hover:bg-danger-light text-text-muted hover:text-danger transition-colors"><Trash2 size={11} /></button>
                       </div>
                     ))}
                   </div>

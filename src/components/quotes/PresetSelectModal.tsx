@@ -61,6 +61,8 @@ export default function PresetSelectModal({
   return (
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-6"
+      role="presentation"
+      tabIndex={-1}
       onClick={onClose}
     >
       <motion.div
@@ -85,6 +87,7 @@ export default function PresetSelectModal({
           </div>
           <button
             onClick={onClose}
+            aria-label={isFr ? 'Fermer' : 'Close'}
             className={cn('w-[30px] h-[30px] rounded-lg flex items-center justify-center text-black dark:text-white', hoverFill)}
           >
             <X size={15} />

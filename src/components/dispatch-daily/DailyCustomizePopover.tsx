@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -25,6 +25,7 @@ const SECONDARY_FIELDS: DailyResourceField[] = ['teamName', 'vehicle', 'descript
 
 export default function DailyCustomizePopover({ prefs, teams, onChange }: DailyCustomizePopoverProps) {
   const { t } = useTranslation();
+  const id = useId();
   const [open, setOpen] = useState(false);
 
   const fieldLabel = (f: DailyResourceField): string => {
@@ -48,14 +49,15 @@ export default function DailyCustomizePopover({ prefs, teams, onChange }: DailyC
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div role="presentation" tabIndex={-1} className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full z-40 mt-1.5 w-72 rounded-xl border border-border bg-surface p-3 shadow-xl">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
               {t.schedule.customizeFieldsTitle}
             </p>
 
-            <label className="mb-1 block text-[11px] font-medium text-text-secondary">{t.schedule.primaryField}</label>
+            <label htmlFor={`${id}-primary`} className="mb-1 block text-[11px] font-medium text-text-secondary">{t.schedule.primaryField}</label>
             <select
+              id={`${id}-primary`}
               value={prefs.primary}
               onChange={(e) => onChange({ ...prefs, primary: e.target.value as DispatchDailyPrefs['primary'] })}
               className="mb-2.5 w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-[12px] text-text-primary"
@@ -65,8 +67,9 @@ export default function DailyCustomizePopover({ prefs, teams, onChange }: DailyC
               ))}
             </select>
 
-            <label className="mb-1 block text-[11px] font-medium text-text-secondary">{t.schedule.secondaryField}</label>
+            <label htmlFor={`${id}-secondary`} className="mb-1 block text-[11px] font-medium text-text-secondary">{t.schedule.secondaryField}</label>
             <select
+              id={`${id}-secondary`}
               value={prefs.secondary}
               onChange={(e) => onChange({ ...prefs, secondary: e.target.value as DailyResourceField })}
               className="mb-3 w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-[12px] text-text-primary"
@@ -85,6 +88,7 @@ export default function DailyCustomizePopover({ prefs, teams, onChange }: DailyC
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: c }} />
                     <span className="min-w-0 flex-1 truncate text-[12px] text-text-primary">{tm.name}</span>
                     <input
+                      aria-label={`${t.schedule.vehicleNumbers} — ${tm.name}`}
                       value={prefs.vehicleNumbers[tm.id] || ''}
                       placeholder={vehicleNumberForTeam(prefs, tm.id, i)}
                       onChange={(e) => onChange({

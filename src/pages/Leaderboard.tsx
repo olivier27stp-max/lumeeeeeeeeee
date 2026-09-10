@@ -245,7 +245,7 @@ export default function D2DLeaderboard() {
 
         {pickerOpen && (
           <>
-            <div className="fixed inset-0 z-10" onClick={() => setPickerOpen(false)} />
+            <div className="fixed inset-0 z-10" role="presentation" tabIndex={-1} onClick={() => setPickerOpen(false)} />
             <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-72 rounded-2xl border border-border-subtle bg-white p-4 shadow-xl">
               <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
                 {fr ? 'Date ou période' : 'Date or period'}
@@ -262,7 +262,7 @@ export default function D2DLeaderboard() {
                       if (!v) return;
                       setDraft((d) => ({ from: v, to: v > d.to ? v : d.to }));
                     }}
-                    className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none"
+                    className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   />
                 </label>
                 <label className="block">
@@ -277,7 +277,7 @@ export default function D2DLeaderboard() {
                       if (!v) return;
                       setDraft((d) => ({ from: v < d.from ? v : d.from, to: v }));
                     }}
-                    className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none"
+                    className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   />
                 </label>
               </div>
@@ -325,7 +325,8 @@ export default function D2DLeaderboard() {
           <select
             value={officeId}
             onChange={(e) => setOfficeId(e.target.value)}
-            className="rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-medium text-text-primary outline-none"
+            aria-label={fr ? 'Bureau' : 'Office'}
+            className="rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-xs font-medium text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <option value="">{fr ? 'Tous les bureaux' : 'All offices'}</option>
             {offices.map((o) => (
@@ -342,10 +343,11 @@ export default function D2DLeaderboard() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={fr ? 'Rechercher un rep…' : 'Search a rep…'}
-          className="flex-1 bg-transparent text-sm text-text-primary outline-none placeholder:text-text-muted"
+          aria-label={fr ? 'Rechercher un rep' : 'Search a rep'}
+          className="flex-1 bg-transparent text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40 placeholder:text-text-muted"
         />
         {searching && (
-          <button onClick={() => setQuery('')} className="text-text-muted hover:text-text-secondary">
+          <button onClick={() => setQuery('')} aria-label={fr ? 'Effacer la recherche' : 'Clear search'} className="text-text-muted hover:text-text-secondary">
             <X className="h-4 w-4" />
           </button>
         )}

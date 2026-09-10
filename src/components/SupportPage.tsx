@@ -55,6 +55,7 @@ export default function SupportPage() {
         <input
           value={query}
           onChange={(e) => { setQuery(e.target.value); setExpanded(null); }}
+          aria-label={ts.searchPlaceholder}
           placeholder={ts.searchPlaceholder}
           className="w-full pl-10 pr-3 py-3 rounded-xl bg-surface-secondary border border-outline-subtle text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
         />

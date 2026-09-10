@@ -138,7 +138,7 @@ export function CompanySwitcher() {
       {open && (
         <>
           {/* Backdrop */}
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setOpen(false)} />
 
           {/* Dropdown */}
           <div className="absolute left-0 bottom-full mb-1 w-64 bg-surface-raised border border-outline rounded-xl shadow-lg z-50 py-1 max-h-64 overflow-y-auto">

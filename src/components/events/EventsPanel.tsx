@@ -304,6 +304,7 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                 onChange={(e) => setNoteDraft(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddNote(); }}
                 placeholder={tp.addNotePlaceholder}
+                aria-label={tp.addNotePlaceholder}
                 className="flex-1 text-[13px] px-3 py-2 rounded-lg border border-outline bg-surface-secondary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary"
               />
               <button
@@ -319,6 +320,7 @@ export default function EventsPanel({ entityType, entityId, clientId }: EventsPa
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={tp.search}
+                aria-label={tp.search}
                 className="w-full text-[13px] px-3 py-2 rounded-lg border border-outline bg-surface-secondary text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary"
               />
             )}

@@ -419,8 +419,8 @@ export default function Insights() {
               {preset.label}
             </button>
           ))}
-          <input type="date" value={from} onChange={(e) => updateParam('from', e.target.value)} className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary outline-none" />
-          <input type="date" value={to} onChange={(e) => updateParam('to', e.target.value)} className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary outline-none" />
+          <input type="date" value={from} onChange={(e) => updateParam('from', e.target.value)} aria-label={fr ? 'Date de début' : 'Start date'} className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
+          <input type="date" value={to} onChange={(e) => updateParam('to', e.target.value)} aria-label={fr ? 'Date de fin' : 'End date'} className="h-9 px-3 bg-surface border border-outline rounded-md text-[13px] text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40" />
           <button onClick={exportCsv} className="inline-flex items-center gap-2 h-9 px-4 bg-surface border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">
             <Download size={14} /> {fr ? 'Exporter' : 'Export'}
           </button>

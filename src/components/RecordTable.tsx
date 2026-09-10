@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { ChevronUp, ChevronDown, Check, Minus, Trash2, Archive } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../i18n';
 
 export interface RecordColumn<T> {
   key: string;
@@ -44,6 +45,7 @@ export default function RecordTable<T extends { id: string }>({
   onSelectionChange,
   batchActions,
 }: RecordTableProps<T>) {
+  const { language } = useTranslation();
   const [internalSelectedIds, setInternalSelectedIds] = useState<Set<string>>(new Set());
   const selectedIds = controlledSelectedIds ?? internalSelectedIds;
   const setSelectedIds = onSelectionChange ?? setInternalSelectedIds;
@@ -114,6 +116,9 @@ export default function RecordTable<T extends { id: string }>({
                   <button
                     type="button"
                     onClick={toggleAll}
+                    role="checkbox"
+                    aria-checked={allSelected ? true : someSelected ? 'mixed' : false}
+                    aria-label={language === 'fr' ? 'Tout sélectionner' : 'Select all'}
                     className={cn(
                       'flex h-[18px] w-[18px] items-center justify-center rounded-md border-[1.5px] transition-all',
                       allSelected
@@ -179,7 +184,10 @@ export default function RecordTable<T extends { id: string }>({
                 return (
                   <tr
                     key={row.id}
+                    role={onRowClick ? 'button' : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
                     onClick={() => onRowClick?.(row)}
+                    onKeyDown={(e) => { if (onRowClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRowClick(row); } }}
                     className={cn(
                       'border-b border-border-light/60 transition-colors',
                       onRowClick && 'cursor-pointer',
@@ -196,6 +204,9 @@ export default function RecordTable<T extends { id: string }>({
                             e.stopPropagation();
                             toggleRow(row.id);
                           }}
+                          role="checkbox"
+                          aria-checked={isSelected}
+                          aria-label={language === 'fr' ? 'Sélectionner la ligne' : 'Select row'}
                           className={cn(
                             'flex h-[18px] w-[18px] items-center justify-center rounded-md border-[1.5px] transition-all',
                             isSelected

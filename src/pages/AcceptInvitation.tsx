@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Check, Loader2, X, Users, Lock, User, AlertTriangle } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -7,6 +7,7 @@ import { verifyInvitation, acceptInvitation } from '../lib/invitationsApi';
 export default function AcceptInvitation() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
+  const id = useId();
 
   const [state, setState] = useState<'loading' | 'form' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState('');
@@ -140,8 +141,9 @@ export default function AcceptInvitation() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email (read-only) */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Courriel' : 'Email'}</label>
+                <label htmlFor={`${id}-email`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Courriel' : 'Email'}</label>
                 <input
+                  id={`${id}-email`}
                   type="email"
                   value={email}
                   disabled
@@ -151,10 +153,11 @@ export default function AcceptInvitation() {
 
               {/* Full Name */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Nom complet *' : 'Full Name *'}</label>
+                <label htmlFor={`${id}-name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Nom complet *' : 'Full Name *'}</label>
                 <div className="relative mt-1">
                   <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
+                    id={`${id}-name`}
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -168,10 +171,11 @@ export default function AcceptInvitation() {
 
               {/* Password */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Mot de passe *' : 'Password *'}</label>
+                <label htmlFor={`${id}-password`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Mot de passe *' : 'Password *'}</label>
                 <div className="relative mt-1">
                   <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
+                    id={`${id}-password`}
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -192,10 +196,11 @@ export default function AcceptInvitation() {
 
               {/* Confirm Password */}
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Confirmer le mot de passe *' : 'Confirm Password *'}</label>
+                <label htmlFor={`${id}-confirm`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Confirmer le mot de passe *' : 'Confirm Password *'}</label>
                 <div className="relative mt-1">
                   <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                   <input
+                    id={`${id}-confirm`}
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}

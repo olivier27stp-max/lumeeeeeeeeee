@@ -599,6 +599,8 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
   return (
     <div
       className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      role="presentation"
+      tabIndex={-1}
       onClick={onClose}
     >
       <motion.div
@@ -616,6 +618,7 @@ function IntegrationDetailModal({ app, onClose, onConnectionChange }: DetailModa
           <div className="absolute right-4 top-4">
             <button
               onClick={onClose}
+              aria-label={isFr ? 'Fermer' : 'Close'}
               className="p-1.5 rounded-lg bg-surface/80 backdrop-blur-sm text-text-tertiary hover:text-text-primary transition-colors border border-outline-subtle/40"
             >
               <X size={14} />

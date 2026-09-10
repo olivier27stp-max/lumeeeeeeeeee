@@ -252,7 +252,8 @@ export default function CommandPalette({ open, onClose, language }: CommandPalet
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={t.commandPalette.searchOrRunACommand}
-              className="flex-1 bg-transparent border-none outline-none text-[14px] text-text-primary placeholder:text-text-tertiary"
+              aria-label={t.commandPalette.searchOrRunACommand}
+              className="flex-1 bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 text-[14px] text-text-primary placeholder:text-text-tertiary"
             />
             <kbd className="hidden sm:inline-flex px-1.5 py-0.5 rounded border border-outline text-[10px] text-text-tertiary font-mono">
               ESC

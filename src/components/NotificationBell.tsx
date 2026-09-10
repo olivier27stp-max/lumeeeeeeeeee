@@ -164,7 +164,7 @@ export default function NotificationBell() {
                     {t.notifications.toutMarquerLu}
                   </button>
                 )}
-                <button onClick={() => setOpen(false)} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary">
+                <button onClick={() => setOpen(false)} aria-label={t.common.close} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary">
                   <X size={14} />
                 </button>
               </div>
@@ -195,7 +195,7 @@ export default function NotificationBell() {
                       <p className={cn('text-[13px] leading-tight', !notif.read_at ? 'font-semibold text-text-primary' : 'text-text-secondary')}>
                         {notif.title}
                       </p>
-                      <button onClick={() => dismissNotif(notif.id)} className="shrink-0 p-0.5 rounded hover:bg-surface-secondary text-text-tertiary">
+                      <button onClick={() => dismissNotif(notif.id)} aria-label={language === 'fr' ? 'Ignorer la notification' : 'Dismiss notification'} className="shrink-0 p-0.5 rounded hover:bg-surface-secondary text-text-tertiary">
                         <X size={12} />
                       </button>
                     </div>

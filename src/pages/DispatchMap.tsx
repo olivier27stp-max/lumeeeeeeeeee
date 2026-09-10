@@ -232,6 +232,7 @@ export default function DispatchMap() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/settings/location')}
+            aria-label={fr ? 'Retour' : 'Back'}
             className="p-1.5 rounded-lg hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors"
           >
             <ChevronLeft size={18} />

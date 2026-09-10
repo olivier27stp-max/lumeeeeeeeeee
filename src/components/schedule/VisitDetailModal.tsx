@@ -244,9 +244,12 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
 
   return (
     <>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" role="presentation" tabIndex={-1} onClick={onClose}>
       <div
         className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-5 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -266,7 +269,7 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
               {isFr ? 'Visite' : 'Visit'}
             </p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary">
+          <button onClick={onClose} aria-label={t.common.close} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary">
             <XIcon size={16} />
           </button>
         </div>
@@ -297,7 +300,8 @@ export default function VisitDetailModal({ ev, color, teamName, onClose, onView,
                       value={teamId ?? ''}
                       disabled={teamBusy}
                       onChange={(e) => void changeTeam(e.target.value || null)}
-                      className="max-w-[180px] cursor-pointer truncate border-0 p-0 text-[11px] font-semibold outline-none disabled:opacity-50"
+                      aria-label={isFr ? 'Équipe' : 'Team'}
+                      className="max-w-[180px] cursor-pointer truncate border-0 p-0 text-[11px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
                       style={{ color: teamColor, background: 'transparent' }}
                       title={isFr ? "Changer l'équipe de cette visite seulement" : 'Change the team for this visit only'}
                     >

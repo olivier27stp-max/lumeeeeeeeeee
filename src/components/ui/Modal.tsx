@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../i18n';
 
 interface ModalProps {
   open: boolean;
@@ -20,6 +21,7 @@ const sizeMap = {
 };
 
 export default function Modal({ open, onClose, title, description, children, size = 'md', footer }: ModalProps) {
+  const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<Element | null>(null);
 
@@ -58,7 +60,7 @@ export default function Modal({ open, onClose, title, description, children, siz
   if (!open) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose} role="presentation">
+    <div className="modal-overlay" onClick={onClose} role="presentation" tabIndex={-1}>
       <div
         ref={dialogRef}
         tabIndex={-1}
@@ -79,6 +81,7 @@ export default function Modal({ open, onClose, title, description, children, siz
             <button
               type="button"
               onClick={onClose}
+              aria-label={t.common.close}
               className="p-1.5 rounded-xl border border-outline text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-all -mr-1 -mt-1"
             >
               <X size={15} />

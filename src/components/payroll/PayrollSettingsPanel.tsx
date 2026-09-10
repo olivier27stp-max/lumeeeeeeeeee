@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Loader2, Check, CalendarClock } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useCompany } from '../../contexts/CompanyContext';
@@ -21,6 +21,7 @@ const PERIOD_TYPES: PayPeriodType[] = ['weekly', 'biweekly', 'semimonthly', 'mon
 export default function PayrollSettingsPanel() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const tp = (t as any).payroll || {};
   const { currentRole } = useCompany();
   const isAdmin = currentRole === 'owner' || currentRole === 'admin';
@@ -98,7 +99,7 @@ export default function PayrollSettingsPanel() {
 
         {/* Pay period frequency */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary">{tp.payPeriodType}</label>
+          <span className="text-xs font-medium text-text-tertiary">{tp.payPeriodType}</span>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
             {PERIOD_TYPES.map((type) => (
               <button
@@ -121,8 +122,9 @@ export default function PayrollSettingsPanel() {
         {/* Cycle anchor — only relevant for weekly/biweekly */}
         {showAnchor && (
           <div>
-            <label className="text-xs font-medium text-text-tertiary">{tp.anchorDate}</label>
+            <label htmlFor={`${id}-anchor_date`} className="text-xs font-medium text-text-tertiary">{tp.anchorDate}</label>
             <input
+              id={`${id}-anchor_date`}
               type="date"
               disabled={!isAdmin}
               value={form.anchor_date}
@@ -135,8 +137,9 @@ export default function PayrollSettingsPanel() {
 
         {/* Pay-day offset */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary">{tp.payDayOffset}</label>
+          <label htmlFor={`${id}-pay_day_offset`} className="text-xs font-medium text-text-tertiary">{tp.payDayOffset}</label>
           <input
+            id={`${id}-pay_day_offset`}
             type="number"
             min={0}
             max={31}
@@ -151,8 +154,9 @@ export default function PayrollSettingsPanel() {
         {/* Timezone — payroll_settings.timezone was saved & used by the server
             pay-period calculation, but had no input control. */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary">{fr ? 'Fuseau horaire' : 'Timezone'}</label>
+          <label htmlFor={`${id}-timezone`} className="text-xs font-medium text-text-tertiary">{fr ? 'Fuseau horaire' : 'Timezone'}</label>
           <select
+            id={`${id}-timezone`}
             disabled={!isAdmin}
             value={form.timezone}
             onChange={(e) => setForm({ ...form, timezone: e.target.value })}

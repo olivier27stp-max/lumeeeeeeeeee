@@ -174,6 +174,7 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
                         <div key={tag.id} className="space-y-2 rounded-lg bg-surface-secondary p-2">
                           <input
                             value={editName}
+                            aria-label={fr ? 'Nom du tag' : 'Tag name'}
                             onChange={(e) => setEditName(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveEdit(); }}
                             className="w-full rounded-md border border-outline bg-white px-2 py-1.5 text-[12px] text-text-primary dark:bg-surface-tertiary"
@@ -238,6 +239,7 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
                     onChange={(e) => setNewName(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate(); }}
                     placeholder={fr ? 'Nom du tag…' : 'Tag name…'}
+                    aria-label={fr ? 'Nom du tag' : 'Tag name'}
                     className="w-full rounded-md border border-outline bg-white px-2 py-1.5 text-[12px] text-text-primary placeholder:text-text-tertiary dark:bg-surface-tertiary"
                   />
                   <TagColorSwatches size="sm" value={newColor} onChange={setNewColor} />

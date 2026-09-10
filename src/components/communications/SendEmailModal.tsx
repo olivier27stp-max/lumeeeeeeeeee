@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Mail, Paperclip, Send, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { sendEmail } from '../../lib/communicationsApi';
@@ -41,6 +41,7 @@ export default function SendEmailModal({
   onSent,
 }: SendEmailModalProps) {
   const { language } = useTranslation();
+  const id = useId();
   const fr = language === 'fr';
   const [to, setTo] = useState(email || '');
   const [subject, setSubject] = useState(defaultSubject);
@@ -154,13 +155,14 @@ export default function SendEmailModal({
           <div className="flex-[3] px-6 py-5 space-y-4 border-b lg:border-b-0 lg:border-r border-outline min-w-0">
             {/* To */}
             <div>
-              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'À' : 'To'}</label>
+              <label htmlFor={`${id}-to`} className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'À' : 'To'}</label>
               <div className="glass-input w-full flex items-center gap-2 flex-wrap min-h-[34px]">
                 {to.trim() && isEmailValid ? (
                   <span className="inline-flex items-center gap-1 bg-surface-tertiary text-text-primary text-[12px] font-medium rounded px-2 py-0.5">
                     {to.trim()}
                     <button
                       onClick={() => setTo('')}
+                      aria-label={fr ? 'Retirer le destinataire' : 'Remove recipient'}
                       className="text-text-tertiary hover:text-text-primary ml-0.5"
                       disabled={sent}
                     >
@@ -169,11 +171,12 @@ export default function SendEmailModal({
                   </span>
                 ) : (
                   <input
+                    id={`${id}-to`}
                     type="email"
                     value={to}
                     onChange={(e) => setTo(e.target.value)}
                     placeholder={fr ? 'client@exemple.com' : 'client@example.com'}
-                    className="flex-1 bg-transparent outline-none text-[13px] text-text-primary placeholder:text-text-tertiary min-w-[120px]"
+                    className="flex-1 bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-primary/40 text-[13px] text-text-primary placeholder:text-text-tertiary min-w-[120px]"
                     disabled={sent}
                     autoFocus
                   />
@@ -186,8 +189,9 @@ export default function SendEmailModal({
 
             {/* Subject */}
             <div>
-              <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'Objet' : 'Subject'}</label>
+              <label htmlFor={`${id}-subject`} className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'Objet' : 'Subject'}</label>
               <input
+                id={`${id}-subject`}
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
                 className="glass-input w-full"
@@ -201,6 +205,7 @@ export default function SendEmailModal({
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
+                aria-label={fr ? 'Message' : 'Message'}
                 rows={12}
                 className="glass-input w-full resize-none leading-relaxed"
                 disabled={sent}
@@ -285,6 +290,7 @@ export default function SendEmailModal({
                 ref={fileInputRef}
                 type="file"
                 multiple
+                aria-label={fr ? 'Choisir un fichier' : 'Select a File'}
                 className="hidden"
                 onChange={(e) => handleFileSelect(e.target.files)}
               />
@@ -296,7 +302,7 @@ export default function SendEmailModal({
                 {attachedFiles.map((file, i) => (
                   <div key={i} className="flex items-center justify-between px-2.5 py-1.5 bg-surface-secondary rounded border border-outline-subtle text-[12px]">
                     <span className="text-text-primary truncate mr-2">{file.name}</span>
-                    <button onClick={() => removeFile(i)} className="text-text-tertiary hover:text-danger shrink-0">
+                    <button onClick={() => removeFile(i)} aria-label={fr ? `Retirer ${file.name}` : `Remove ${file.name}`} className="text-text-tertiary hover:text-danger shrink-0">
                       <X size={12} />
                     </button>
                   </div>

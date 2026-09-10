@@ -83,7 +83,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div role="presentation" tabIndex={-1} className="modal-overlay" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, y: 16, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -97,7 +97,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
             <FileText size={18} className="text-primary" />
             <h3 className="text-2xl font-semibold tracking-tight">{t.modals.invoicePreview}</h3>
           </div>
-          <button onClick={onClose} className="rounded-lg p-2 hover:bg-surface-secondary"><X size={16} /></button>
+          <button onClick={onClose} aria-label={t.common.close} className="rounded-lg p-2 hover:bg-surface-secondary"><X size={16} /></button>
         </div>
 
         {loading ? <p className="mt-4 text-sm text-text-secondary px-6">{t.modals.loadingPreview}</p> : null}
@@ -126,6 +126,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
                 </label>
                 {emailEnabled && (
                   <input value={emailTo} onChange={(e) => setEmailTo(e.target.value)}
+                    aria-label={fr ? 'Courriel du destinataire' : 'Recipient email'}
                     placeholder={fr ? 'Courriel' : 'Email'} className="glass-input w-full text-sm" />
                 )}
 
@@ -136,6 +137,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
                 </label>
                 {smsEnabled && (
                   <input value={phoneTo} onChange={(e) => setPhoneTo(e.target.value)}
+                    aria-label={fr ? 'Téléphone du destinataire' : 'Recipient phone'}
                     placeholder={fr ? 'Téléphone' : 'Phone'} className="glass-input w-full text-sm" />
                 )}
 

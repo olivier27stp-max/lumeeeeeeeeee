@@ -214,7 +214,7 @@ export default function PayrollPage() {
 
       {/* Period navigation */}
       <div className="section-card px-4 py-3 flex items-center justify-between gap-2">
-        <button onClick={goPrev} disabled={loading} className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition">
+        <button onClick={goPrev} disabled={loading} aria-label={fr ? 'Période précédente' : 'Previous period'} className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition">
           <ChevronLeft size={16} />
         </button>
         <div className="text-center">
@@ -236,7 +236,7 @@ export default function PayrollPage() {
             <Loader2 size={15} className="animate-spin text-text-tertiary" />
           )}
         </div>
-        <button onClick={goNext} disabled={loading} className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition">
+        <button onClick={goNext} disabled={loading} aria-label={fr ? 'Période suivante' : 'Next period'} className="p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition">
           <ChevronRight size={16} />
         </button>
       </div>
@@ -358,6 +358,7 @@ export default function PayrollPage() {
                             value={adjAmount}
                             onChange={(e) => setAdjAmount(e.target.value)}
                             placeholder={fr ? 'Montant $ (négatif = retenue)' : 'Amount $ (negative = deduction)'}
+                            aria-label={fr ? 'Montant de l’ajustement' : 'Adjustment amount'}
                             inputMode="decimal"
                             className="glass-input w-48 !text-[12.5px]"
                           />
@@ -365,6 +366,7 @@ export default function PayrollPage() {
                             value={adjNote}
                             onChange={(e) => setAdjNote(e.target.value)}
                             placeholder={fr ? 'Note (ex. bonus vente)' : 'Note (e.g. sales bonus)'}
+                            aria-label={fr ? 'Note de l’ajustement' : 'Adjustment note'}
                             className="glass-input flex-1 !text-[12.5px]"
                           />
                           <button

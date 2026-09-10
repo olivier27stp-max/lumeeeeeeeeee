@@ -142,6 +142,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
           <button
             type="button"
             onClick={() => { setExpanded(false); setText(''); setFiles([]); }}
+            aria-label={fr ? 'Fermer les notes' : 'Close notes'}
             className="text-text-tertiary hover:text-danger"
           >
             <X size={14} />
@@ -152,6 +153,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder={fr ? 'Ajoutez des notes, détails, contexte...' : 'Add notes, details, context...'}
+          aria-label={fr ? 'Notes spécifiques' : 'Specific notes'}
           className="glass-input w-full min-h-[60px] text-[13px] resize-none"
         />
 
@@ -171,6 +173,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
                 <button
                   type="button"
                   onClick={() => setFiles((prev) => prev.filter((x) => x.path !== f.path))}
+                  aria-label={fr ? `Retirer ${f.name}` : `Remove ${f.name}`}
                   className="p-0.5 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-danger"
                 >
                   <X size={12} />
@@ -201,6 +204,7 @@ const SpecificNotesInline = forwardRef<SpecificNotesInlineHandle, SpecificNotesI
           multiple
           accept={ACCEPTED_TYPES}
           className="hidden"
+          aria-label={fr ? 'Ajouter des fichiers' : 'Add files'}
           onChange={(e) => {
             if (e.target.files) handleFiles(e.target.files);
             e.target.value = '';

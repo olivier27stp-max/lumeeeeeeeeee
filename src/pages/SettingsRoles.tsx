@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useId, useMemo, useCallback } from 'react';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { Shield, ChevronDown, ChevronRight, Lock, Loader2, Check, RotateCcw } from 'lucide-react';
@@ -51,6 +51,7 @@ async function saveRolePermissions(role: TeamRole, permissions: PermissionsMap, 
 export default function SettingsRoles() {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const { currentOrgId } = useCompany();
 
   const [selectedRole, setSelectedRole] = useState<TeamRole>('sales_rep');
@@ -287,6 +288,7 @@ export default function SettingsRoles() {
                         return (
                           <label
                             key={perm.key}
+                            htmlFor={`${id}-perm-${perm.key}`}
                             className={cn(
                               'flex items-center justify-between py-1.5 px-1 rounded',
                               disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-bg-secondary/40'
@@ -302,6 +304,7 @@ export default function SettingsRoles() {
 
                             </span>
                             <button
+                              id={`${id}-perm-${perm.key}`}
                               type="button"
                               role="switch"
                               aria-checked={enabled}

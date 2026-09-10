@@ -117,7 +117,7 @@ export default function SmsStepUp({ mode, phoneHint, onDone, onCancel }: SmsStep
             </p>
           </div>
         </div>
-        <button onClick={onCancel} className="p-2 hover:bg-surface-secondary rounded-lg transition-colors">
+        <button onClick={onCancel} aria-label={fr ? 'Annuler' : 'Cancel'} className="p-2 hover:bg-surface-secondary rounded-lg transition-colors">
           <X size={16} className="text-text-tertiary" />
         </button>
       </div>
@@ -145,6 +145,7 @@ export default function SmsStepUp({ mode, phoneHint, onDone, onCancel }: SmsStep
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder={fr ? '+1 514 555 0148' : '+1 555 555 0148'}
+            aria-label={fr ? 'Numéro de mobile' : 'Mobile number'}
             className="glass-input w-full"
             autoFocus
             disabled={busy}
@@ -176,6 +177,7 @@ export default function SmsStepUp({ mode, phoneHint, onDone, onCancel }: SmsStep
               value={code}
               onChange={(e) => onCodeChange(e.target.value)}
               placeholder="000000"
+              aria-label={fr ? 'Code à 6 chiffres' : '6-digit code'}
               disabled={busy}
               className="glass-input w-full text-center text-2xl font-mono tracking-[0.5em] py-4 disabled:opacity-60"
               autoFocus

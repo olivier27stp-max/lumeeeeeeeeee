@@ -30,12 +30,14 @@ export default function FilterBar({
             value={searchValue || ''}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={placeholder}
+            aria-label={placeholder}
             className="glass-input pl-9 pr-8 w-64"
           />
           {searchValue && (
             <button
               type="button"
               onClick={() => onSearchChange('')}
+              aria-label={language === 'fr' ? 'Effacer la recherche' : 'Clear search'}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary transition-colors"
             >
               <X size={14} />
@@ -54,9 +56,12 @@ interface FilterSelectProps {
   options: { value: string; label: string }[];
   icon?: React.ReactNode;
   className?: string;
+  /** Nom accessible du menu (lecteurs d'écran). */
+  ariaLabel?: string;
 }
 
-export function FilterSelect({ value, onChange, options, icon, className }: FilterSelectProps) {
+export function FilterSelect({ value, onChange, options, icon, className, ariaLabel }: FilterSelectProps) {
+  const { language } = useTranslation();
   return (
     <div className={cn(
       'inline-flex items-center gap-1.5 rounded-lg border border-outline bg-surface-card px-3 py-[7px] hover:border-outline-strong transition-colors',
@@ -66,6 +71,7 @@ export function FilterSelect({ value, onChange, options, icon, className }: Filt
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        aria-label={ariaLabel ?? (language === 'fr' ? 'Filtre' : 'Filter')}
         className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer"
       >
         {options.map((opt) => (

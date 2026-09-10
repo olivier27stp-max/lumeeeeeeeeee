@@ -73,7 +73,10 @@ export default function RepCommissionSummary({ entries, profileMap, onSelectRep 
                 <tr
                   key={r.userId}
                   className="border-b border-border-subtle last:border-b-0 table-row-hover cursor-pointer"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelectRep?.(r.userId)}
+                  onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSelectRep?.(r.userId); } }}
                 >
                   <td className="px-5 py-2.5">
                     {onSelectRep ? (

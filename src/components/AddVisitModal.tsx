@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { X, Search, Calendar, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
@@ -57,6 +57,7 @@ export default function AddVisitModal({
 }: AddVisitModalProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
 
   const baseStart = defaultStart || nextHour();
   const baseEnd = defaultEnd || new Date(baseStart.getTime() + 2 * 60 * 60 * 1000);
@@ -172,8 +173,11 @@ export default function AddVisitModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
+    <div role="presentation" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]" onClick={onClose}>
       <div
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
         onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
@@ -184,7 +188,7 @@ export default function AddVisitModal({
             <Calendar size={15} className="text-text-secondary" />
             {fr ? 'Nouvelle visite' : 'New visit'}
           </h2>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><X size={16} /></button>
+          <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><X size={16} /></button>
         </div>
 
         {/* Job selection */}
@@ -200,10 +204,11 @@ export default function AddVisitModal({
           </div>
         ) : allowJobPick ? (
           <div className="mb-4">
-            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Choisir un job' : 'Pick a job'}</label>
+            <label htmlFor={`${id}-job`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Choisir un job' : 'Pick a job'}</label>
             <div className="relative mt-1.5">
               <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
               <input
+                id={`${id}-job`}
                 autoFocus
                 value={jobQuery}
                 onChange={(e) => setJobQuery(e.target.value)}
@@ -234,8 +239,8 @@ export default function AddVisitModal({
         {/* Date + time */}
         <div className="space-y-3">
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Date' : 'Date'}</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="glass-input mt-1.5 w-full" />
+            <label htmlFor={`${id}-date`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Date' : 'Date'}</label>
+            <input id={`${id}-date`} type="date" value={date} onChange={(e) => setDate(e.target.value)} className="glass-input mt-1.5 w-full" />
           </div>
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input
@@ -249,19 +254,19 @@ export default function AddVisitModal({
           {!anytime && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Début' : 'Start'}</label>
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="glass-input mt-1.5 w-full" />
+                <label htmlFor={`${id}-start`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Début' : 'Start'}</label>
+                <input id={`${id}-start`} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="glass-input mt-1.5 w-full" />
               </div>
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Fin' : 'End'}</label>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="glass-input mt-1.5 w-full" />
+                <label htmlFor={`${id}-end`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted flex items-center gap-1"><Clock size={11} />{fr ? 'Fin' : 'End'}</label>
+                <input id={`${id}-end`} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="glass-input mt-1.5 w-full" />
               </div>
             </div>
           )}
           {teams.length > 0 && (
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Équipe (optionnel)' : 'Team (optional)'}</label>
-              <select value={teamId ?? ''} onChange={(e) => setTeamId(e.target.value || null)} className="glass-input mt-1.5 w-full">
+              <label htmlFor={`${id}-team`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Équipe (optionnel)' : 'Team (optional)'}</label>
+              <select id={`${id}-team`} value={teamId ?? ''} onChange={(e) => setTeamId(e.target.value || null)} className="glass-input mt-1.5 w-full">
                 <option value="">{fr ? 'Non assignée' : 'Unassigned'}</option>
                 {teams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
               </select>

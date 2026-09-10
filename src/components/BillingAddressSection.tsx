@@ -95,9 +95,9 @@ export function BillingAddressSection({
 
       {!sameAsService && (
         <div className="mt-3">
-          <label className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
+          <span className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
             {fr ? 'Adresse de facturation' : 'Billing address'}
-          </label>
+          </span>
           {/* Blur save is delayed: clicking a Google suggestion blurs the input
               first, then place_changed fires with the formatted address. */}
           <div className="mt-1" onBlur={() => window.setTimeout(saveAddr, 250)}>

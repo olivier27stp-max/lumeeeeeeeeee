@@ -553,6 +553,11 @@ export default function DailyDispatchView({
                     )}
                     style={{ width: timelineWidth }}
                     onClick={handleRowClick}
+                    // Le clic dépend de la position du pointeur (heure visée) :
+                    // pas d'équivalent clavier ; les visites de la ligne restent
+                    // des boutons focusables.
+                    role="presentation"
+                    tabIndex={-1}
                   >
                     {/* Séparateurs verticaux subtils (heure + demi-heure) */}
                     {range.hours.map((h) => (

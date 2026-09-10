@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { setInitialPassword, setupTaxRegion, completeSetup } from '../lib/billingApi';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
@@ -77,6 +77,7 @@ export default function CheckoutSetup({
   interval?: 'monthly' | 'yearly';
   currency?: string;
 }) {
+  const id = useId();
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [companyName, setCompanyName] = useState('');
@@ -180,11 +181,11 @@ export default function CheckoutSetup({
         <div className="cs-card">
           <div className="cs-ch"><span className="cs-n">01</span><h2>{isFr ? 'Ton accès' : 'Your access'}</h2></div>
           <div className="cs-fields">
-            <div><label>{isFr ? 'Courriel' : 'Email'}</label><div className="cs-field"><input type="email" value={email} readOnly /></div></div>
+            <div><label htmlFor={`${id}-email`}>{isFr ? 'Courriel' : 'Email'}</label><div className="cs-field"><input id={`${id}-email`} type="email" value={email} readOnly /></div></div>
             <div>
-              <label>{isFr ? 'Mot de passe' : 'Password'} <span className="cs-req">*</span></label>
+              <label htmlFor={`${id}-password`}>{isFr ? 'Mot de passe' : 'Password'} <span className="cs-req">*</span></label>
               <div className="cs-field">
-                <input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isFr ? '10 caractères minimum' : 'Minimum 10 characters'} />
+                <input id={`${id}-password`} type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} placeholder={isFr ? '10 caractères minimum' : 'Minimum 10 characters'} />
                 <button type="button" className="cs-eye" onClick={() => setShowPw((v) => !v)}>{showPw ? (isFr ? 'Cacher' : 'Hide') : (isFr ? 'Voir' : 'Show')}</button>
               </div>
               <div className="cs-hint">{isFr ? 'Minimum 10 caractères.' : 'Minimum 10 characters.'}</div>
@@ -196,12 +197,12 @@ export default function CheckoutSetup({
         <div className="cs-card">
           <div className="cs-ch"><span className="cs-n">02</span><h2>{isFr ? 'Ton entreprise' : 'Your company'}</h2><span className="cs-tail">{isFr ? 'sur tes devis & factures' : 'on your quotes & invoices'}</span></div>
           <div className="cs-fields">
-            <div><label>{isFr ? "Nom de l'entreprise" : 'Company name'} <span className="cs-req">*</span></label><div className="cs-field"><input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={isFr ? 'Rénovations Jean Tremblay' : 'Jean Tremblay Renovations'} /></div></div>
+            <div><label htmlFor={`${id}-company`}>{isFr ? "Nom de l'entreprise" : 'Company name'} <span className="cs-req">*</span></label><div className="cs-field"><input id={`${id}-company`} value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder={isFr ? 'Rénovations Jean Tremblay' : 'Jean Tremblay Renovations'} /></div></div>
             <div className="cs-row2">
-              <div><label>{isFr ? 'Téléphone' : 'Phone'} <span className="cs-req">*</span></label><div className="cs-field"><input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(514) 555-0199" /></div></div>
-              <div><label>{isFr ? 'Courriel entreprise' : 'Company email'}</label><div className="cs-field"><input value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="info@..." /></div></div>
+              <div><label htmlFor={`${id}-phone`}>{isFr ? 'Téléphone' : 'Phone'} <span className="cs-req">*</span></label><div className="cs-field"><input id={`${id}-phone`} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(514) 555-0199" /></div></div>
+              <div><label htmlFor={`${id}-company-email`}>{isFr ? 'Courriel entreprise' : 'Company email'}</label><div className="cs-field"><input id={`${id}-company-email`} value={companyEmail} onChange={(e) => setCompanyEmail(e.target.value)} placeholder="info@..." /></div></div>
             </div>
-            <div><label>{isFr ? 'Adresse' : 'Address'}</label>
+            <div><span className="cs-label">{isFr ? 'Adresse' : 'Address'}</span>
               <div className="cs-field cs-addr">
                 <AddressAutocomplete
                   value={address}
@@ -218,11 +219,11 @@ export default function CheckoutSetup({
               </div>
             </div>
             <div className="cs-row2">
-              <div><label>{isFr ? 'Ville' : 'City'}</label><div className="cs-field"><input value={city} onChange={(e) => setCity(e.target.value)} placeholder={isFr ? 'Montréal' : 'Montreal'} /></div></div>
-              <div><label>{isFr ? 'Code postal' : 'Postal code'}</label><div className="cs-field"><input value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="H2X 1K4" /></div></div>
+              <div><label htmlFor={`${id}-city`}>{isFr ? 'Ville' : 'City'}</label><div className="cs-field"><input id={`${id}-city`} value={city} onChange={(e) => setCity(e.target.value)} placeholder={isFr ? 'Montréal' : 'Montreal'} /></div></div>
+              <div><label htmlFor={`${id}-postal`}>{isFr ? 'Code postal' : 'Postal code'}</label><div className="cs-field"><input id={`${id}-postal`} value={postal} onChange={(e) => setPostal(e.target.value)} placeholder="H2X 1K4" /></div></div>
             </div>
             <div>
-              <label>Logo <span className="cs-opt">{isFr ? '— optionnel' : '— optional'}</span></label>
+              <span className="cs-label">Logo <span className="cs-opt">{isFr ? '— optionnel' : '— optional'}</span></span>
               <div className="cs-logo-up">
                 <div className="cs-logo-box">
                   {logoFile
@@ -260,9 +261,9 @@ export default function CheckoutSetup({
           </div>
 
           <div className="cs-tax">
-            <label>{isFr ? 'Taxes à facturer à tes clients' : 'Taxes to charge your clients'}</label>
+            <label htmlFor={`${id}-tax`}>{isFr ? 'Taxes à facturer à tes clients' : 'Taxes to charge your clients'}</label>
             <div className="cs-field">
-              <select value={taxKey} onChange={(e) => setTaxKey(e.target.value)}>
+              <select id={`${id}-tax`} value={taxKey} onChange={(e) => setTaxKey(e.target.value)}>
                 <optgroup label="Canada">
                   {CA_REGIONS.map((r) => <option key={r.key} value={r.key}>{isFr ? r.label.fr : r.label.en}</option>)}
                 </optgroup>
@@ -326,7 +327,7 @@ const CSS = `
 .cs-fields{display:flex;flex-direction:column;gap:15px}
 .cs-row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:470px){.cs-row2{grid-template-columns:1fr}}
-.cs-root label{font-size:11px;font-weight:700;color:var(--ink-2);margin-bottom:7px;display:flex;gap:5px;align-items:center;text-transform:uppercase;letter-spacing:.05em}
+.cs-root label,.cs-root .cs-label{font-size:11px;font-weight:700;color:var(--ink-2);margin-bottom:7px;display:flex;gap:5px;align-items:center;text-transform:uppercase;letter-spacing:.05em}
 .cs-opt{font-weight:600;color:var(--faint);text-transform:none;letter-spacing:0}
 .cs-req{color:var(--ink)}
 .cs-field{position:relative}

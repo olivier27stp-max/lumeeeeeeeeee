@@ -7,7 +7,7 @@
      SMS path in Messages.tsx stays untouched.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import {
   Mail, Plus, Loader2, CheckCircle2, AlertCircle, Trash2, RefreshCw,
   Search, Paperclip, ArrowLeft, ChevronLeft, Settings2,
@@ -226,6 +226,7 @@ function ManagePanel({ accounts, onConnect, onDisconnect, connecting, onClose }:
 // ═══════════════════════════════════════════════════════════════
 export default function EmailInbox() {
   const { language } = useTranslation();
+  const id = useId();
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
   const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -551,6 +552,7 @@ export default function EmailInbox() {
           <div className="relative">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={language === 'fr' ? 'Rechercher…' : 'Search…'}
+              aria-label={language === 'fr' ? 'Rechercher un courriel' : 'Search emails'}
               className="w-full h-[36px] pl-9 pr-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border" />
           </div>
         </div>
@@ -615,7 +617,7 @@ export default function EmailInbox() {
           <>
             {/* Subject header */}
             <div className="px-5 py-3.5 border-b border-border flex items-center gap-3 shrink-0">
-              <button onClick={() => setSelectedThreadId(null)} className="md:hidden p-1 rounded-lg hover:bg-surface-secondary text-text-secondary">
+              <button type="button" onClick={() => setSelectedThreadId(null)} aria-label={language === 'fr' ? 'Retour à la liste' : 'Back to list'} className="md:hidden p-1 rounded-lg hover:bg-surface-secondary text-text-secondary">
                 <ArrowLeft size={18} />
               </button>
               <h3 className="text-[16px] font-bold text-text-primary truncate flex-1">{threadSubject}</h3>
@@ -695,25 +697,26 @@ export default function EmailInbox() {
                       : composeMode === 'replyAll' ? (language === 'fr' ? 'Répondre à tous' : 'Reply all')
                       : (language === 'fr' ? 'Répondre' : 'Reply')}
                   </span>
-                  <button onClick={closeCompose} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={15} /></button>
+                  <button type="button" onClick={closeCompose} aria-label={language === 'fr' ? 'Fermer la réponse' : 'Close reply'} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={15} /></button>
                 </div>
                 <div className="px-5 py-3 space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-text-tertiary w-8">{language === 'fr' ? 'À' : 'To'}</span>
-                    <input value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder={language === 'fr' ? 'destinataire@exemple.com' : 'recipient@example.com'}
+                    <label htmlFor={`${id}-reply-to`} className="text-[12px] font-semibold text-text-tertiary w-8">{language === 'fr' ? 'À' : 'To'}</label>
+                    <input id={`${id}-reply-to`} value={composeTo} onChange={(e) => setComposeTo(e.target.value)} placeholder={language === 'fr' ? 'destinataire@exemple.com' : 'recipient@example.com'}
                       className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-text-tertiary w-8">Cc</span>
-                    <input value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder={language === 'fr' ? '(optionnel)' : '(optional)'}
+                    <label htmlFor={`${id}-reply-cc`} className="text-[12px] font-semibold text-text-tertiary w-8">Cc</label>
+                    <input id={`${id}-reply-cc`} value={composeCc} onChange={(e) => setComposeCc(e.target.value)} placeholder={language === 'fr' ? '(optionnel)' : '(optional)'}
                       className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[12px] font-semibold text-text-tertiary w-8">{language === 'fr' ? 'Objet' : 'Subj'}</span>
-                    <input value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)}
+                    <label htmlFor={`${id}-reply-subject`} className="text-[12px] font-semibold text-text-tertiary w-8">{language === 'fr' ? 'Objet' : 'Subj'}</label>
+                    <input id={`${id}-reply-subject`} value={composeSubject} onChange={(e) => setComposeSubject(e.target.value)}
                       className="flex-1 h-[34px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
                   </div>
                   <textarea value={composeBody} onChange={(e) => setComposeBody(e.target.value)} rows={6}
+                    aria-label="Message"
                     placeholder={language === 'fr' ? 'Votre message…' : 'Your message…'}
                     className="w-full px-3 py-2.5 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border resize-none" />
                   <div className="flex justify-end gap-2 pt-1">
@@ -735,29 +738,30 @@ export default function EmailInbox() {
 
       {/* ── New message modal ── */}
       {showNewCompose && (
-        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" onClick={() => setShowNewCompose(false)}>
-          <div className="bg-surface w-full md:max-w-[560px] md:mx-4 rounded-t-2xl md:rounded-2xl border border-border shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40" role="presentation" tabIndex={-1} onClick={() => setShowNewCompose(false)}>
+          <div className="bg-surface w-full md:max-w-[560px] md:mx-4 rounded-t-2xl md:rounded-2xl border border-border shadow-xl" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <h3 className="text-[15px] font-bold text-text-primary">{language === 'fr' ? 'Nouveau message' : 'New message'}</h3>
-              <button onClick={() => setShowNewCompose(false)} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
+              <button type="button" onClick={() => setShowNewCompose(false)} aria-label={language === 'fr' ? 'Fermer' : 'Close'} className="p-1 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={16} /></button>
             </div>
             <div className="px-5 py-4 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-[12px] font-semibold text-text-tertiary w-9">{language === 'fr' ? 'À' : 'To'}</span>
-                <input value={newTo} onChange={(e) => setNewTo(e.target.value)} placeholder={language === 'fr' ? 'destinataire@exemple.com' : 'recipient@example.com'}
+                <label htmlFor={`${id}-new-to`} className="text-[12px] font-semibold text-text-tertiary w-9">{language === 'fr' ? 'À' : 'To'}</label>
+                <input id={`${id}-new-to`} value={newTo} onChange={(e) => setNewTo(e.target.value)} placeholder={language === 'fr' ? 'destinataire@exemple.com' : 'recipient@example.com'}
                   className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] font-semibold text-text-tertiary w-9">Cc</span>
-                <input value={newCc} onChange={(e) => setNewCc(e.target.value)} placeholder={language === 'fr' ? '(optionnel)' : '(optional)'}
+                <label htmlFor={`${id}-new-cc`} className="text-[12px] font-semibold text-text-tertiary w-9">Cc</label>
+                <input id={`${id}-new-cc`} value={newCc} onChange={(e) => setNewCc(e.target.value)} placeholder={language === 'fr' ? '(optionnel)' : '(optional)'}
                   className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[12px] font-semibold text-text-tertiary w-9">{language === 'fr' ? 'Objet' : 'Subj'}</span>
-                <input value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
+                <label htmlFor={`${id}-new-subject`} className="text-[12px] font-semibold text-text-tertiary w-9">{language === 'fr' ? 'Objet' : 'Subj'}</label>
+                <input id={`${id}-new-subject`} value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
                   className="flex-1 h-[36px] px-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border" />
               </div>
               <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} rows={8}
+                aria-label="Message"
                 placeholder={language === 'fr' ? 'Votre message…' : 'Your message…'}
                 className="w-full px-3 py-2.5 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary outline-none focus:ring-1 focus:ring-border resize-none" />
             </div>

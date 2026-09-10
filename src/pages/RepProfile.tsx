@@ -362,7 +362,7 @@ export default function D2DRepProfile() {
             {p.tagline && <p className="mt-1 text-[13px] text-text-tertiary italic">"{p.tagline}"</p>}
             {/* Actions — Message / Email / Day-replay removed (features not shipping). */}
             <div className="mt-3 flex items-center gap-2">
-              <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} />
+              <ActionBtn icon={Phone} href={p.phone ? `tel:${p.phone}` : undefined} label={isFr ? 'Appeler' : 'Call'} />
             </div>
           </div>
 
@@ -477,7 +477,10 @@ export default function D2DRepProfile() {
                       {repJobs.slice(0, 15).map((j) => (
                         <tr
                           key={j.id}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => navigate(`/jobs/${j.id}`)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/jobs/${j.id}`); } }}
                           className="border-b border-outline/50 last:border-0 cursor-pointer hover:bg-surface-secondary dark:hover:bg-[rgba(255,255,255,0.03)] transition-colors"
                         >
                           <td className="px-2 py-2 text-text-tertiary tabular-nums text-[12px]">{j.job_number || '—'}</td>
@@ -504,12 +507,12 @@ export default function D2DRepProfile() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ActionBtn({ icon: Icon, href, className }: { icon: React.ComponentType<{ size: number; className?: string }>; href?: string; className?: string }) {
+function ActionBtn({ icon: Icon, href, className, label }: { icon: React.ComponentType<{ size: number; className?: string }>; href?: string; className?: string; label: string }) {
   const cls = `${className ? `${className} ` : ''}flex h-10 w-10 items-center justify-center rounded-xl border border-outline transition-all duration-200 hover:scale-110 hover:bg-surface-secondary active:scale-95`;
   if (href) {
-    return <a href={href} className={cls}><Icon size={18} className="text-text-tertiary" /></a>;
+    return <a href={href} aria-label={label} className={cls}><Icon size={18} className="text-text-tertiary" /></a>;
   }
-  return <button className={cls}><Icon size={18} className="text-text-tertiary" /></button>;
+  return <button aria-label={label} className={cls}><Icon size={18} className="text-text-tertiary" /></button>;
 }
 
 /** Cellule de la boxe Terrain — icône filaire, chiffre extrabold, libellé uppercase */
@@ -592,13 +595,14 @@ function EditableInfoRow({ icon: Icon, label, value, type, placeholder, canEdit,
         {editing ? (
           <input
             type={type}
+            aria-label={label}
             value={draft}
             autoFocus
             disabled={saving}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
             placeholder={placeholder}
-            className="mt-0.5 w-full rounded-lg border border-outline bg-surface px-2 py-1 text-[13px] font-semibold text-text-primary outline-none focus:border-text-tertiary dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
+            className="mt-0.5 w-full rounded-lg border border-outline bg-surface px-2 py-1 text-[13px] font-semibold text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus:border-text-tertiary dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
           />
         ) : (
           <p className={`text-[13px] font-semibold truncate ${value ? 'text-text-primary' : 'text-text-tertiary italic'}`}>
@@ -609,10 +613,10 @@ function EditableInfoRow({ icon: Icon, label, value, type, placeholder, canEdit,
       {canEdit ? (
         editing ? (
           <div className="flex shrink-0 items-center gap-1">
-            <button onClick={handleSave} disabled={saving} className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving} aria-label={isFr ? 'Enregistrer' : 'Save'} className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
               <Check size={14} />
             </button>
-            <button onClick={() => { setDraft(value); setEditing(false); }} disabled={saving} className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors dark:bg-[rgba(255,255,255,0.04)]">
+            <button onClick={() => { setDraft(value); setEditing(false); }} disabled={saving} aria-label={isFr ? 'Annuler' : 'Cancel'} className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors dark:bg-[rgba(255,255,255,0.04)]">
               <X size={14} />
             </button>
           </div>
@@ -666,7 +670,7 @@ function PeriodBar({ range, onChange }: {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div role="presentation" tabIndex={-1} className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-[calc(100%+8px)] z-20 w-72 rounded-2xl border border-border-subtle bg-white p-4 shadow-xl dark:bg-[#111519] dark:border-[rgba(255,255,255,0.08)]">
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
               {isFr ? 'Date ou période' : 'Date or period'}
@@ -683,7 +687,7 @@ function PeriodBar({ range, onChange }: {
                     if (!v) return;
                     setDraft((d) => ({ from: v, to: v > d.to ? v : d.to }));
                   }}
-                  className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
+                  className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
                 />
               </label>
               <label className="block">
@@ -698,7 +702,7 @@ function PeriodBar({ range, onChange }: {
                     if (!v) return;
                     setDraft((d) => ({ from: v < d.from ? v : d.from, to: v }));
                   }}
-                  className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
+                  className="w-full rounded-lg border border-border-subtle bg-white px-3 py-1.5 text-sm text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary/40 dark:bg-[rgba(255,255,255,0.04)] dark:border-[rgba(255,255,255,0.1)]"
                 />
               </label>
             </div>

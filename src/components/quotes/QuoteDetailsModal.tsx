@@ -209,7 +209,7 @@ export default function QuoteDetailsModal({
                 <MessageSquare size={14} /> {fr ? 'Envoyer un texto' : 'Send Text'}
               </button>
             )}
-            <button onClick={onClose} className="p-2 hover:bg-surface-tertiary rounded-full text-text-tertiary hover:text-text-secondary">
+            <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-2 hover:bg-surface-tertiary rounded-full text-text-tertiary hover:text-text-secondary">
               <X size={18} />
             </button>
           </div>
@@ -400,7 +400,7 @@ export default function QuoteDetailsModal({
       </motion.div>
 
       {/* Backdrop click to close more menu */}
-      {moreOpen && <div className="fixed inset-0 z-[131]" onClick={() => setMoreOpen(false)} />}
+      {moreOpen && <div className="fixed inset-0 z-[131]" role="presentation" tabIndex={-1} onClick={() => setMoreOpen(false)} />}
     </div>
   );
 }

@@ -17,8 +17,11 @@ export default function FinalVisitDialog({ open, fr, busy, onCloseJob, onSchedul
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4" onClick={onLeave}>
+    <div role="presentation" tabIndex={-1} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-[2px] p-4" onClick={onLeave}>
       <div
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         className="w-full max-w-sm rounded-2xl border border-border bg-surface p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

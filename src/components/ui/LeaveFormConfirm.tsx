@@ -17,10 +17,15 @@ export default function LeaveFormConfirm({ open, onConfirm, onCancel }: LeaveFor
   return (
     <div
       className="absolute inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      role="presentation"
+      tabIndex={-1}
       onClick={onCancel}
     >
       <div
         className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-3xl font-extrabold tracking-tight text-text-primary">{t.modals.leaveFormTitle}</h3>

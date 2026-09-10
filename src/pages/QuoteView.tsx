@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useId, useState, useRef } from 'react';
 import { captureClientException } from '../lib/sentry';
 import { resolveBrand, readableOn } from '../lib/brandColor';
 import { useParams } from 'react-router-dom';
@@ -162,6 +162,7 @@ function DepositPaymentForm({ brand, onSuccess, onError }: { brand: string; onSu
 
 export default function QuoteView() {
   const { token } = useParams<{ token: string }>();
+  const id = useId();
   const [data, setData] = useState<QuoteData | null>(null);
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [error, setError] = useState('');
@@ -856,8 +857,9 @@ export default function QuoteView() {
                       {isFr ? 'Demander des modifications' : 'Request Changes'}
                     </h3>
                     <div>
-                      <label className="block text-[12px] font-medium text-[#666] mb-1">{isFr ? 'Que souhaitez-vous modifier ?' : 'What would you like to change?'}</label>
+                      <label htmlFor={`${id}-change-message`} className="block text-[12px] font-medium text-[#666] mb-1">{isFr ? 'Que souhaitez-vous modifier ?' : 'What would you like to change?'}</label>
                       <textarea
+                        id={`${id}-change-message`}
                         value={changeMessage}
                         onChange={(e) => setChangeMessage(e.target.value)}
                         rows={4}
@@ -909,8 +911,9 @@ export default function QuoteView() {
 
                     {/* Signer name */}
                     <div>
-                      <label className="block text-[12px] font-medium text-[#666] mb-1">{isFr ? 'Votre nom complet' : 'Your Full Name'}</label>
+                      <label htmlFor={`${id}-signer-name`} className="block text-[12px] font-medium text-[#666] mb-1">{isFr ? 'Votre nom complet' : 'Your Full Name'}</label>
                       <input
+                        id={`${id}-signer-name`}
                         type="text"
                         value={signerName}
                         onChange={(e) => setSignerName(e.target.value)}
@@ -921,10 +924,11 @@ export default function QuoteView() {
 
                     {/* Signature canvas */}
                     <div>
-                      <label className="block text-[12px] font-medium text-[#666] mb-1">{isFr ? 'Signature' : 'Signature'}</label>
+                      <span className="block text-[12px] font-medium text-[#666] mb-1">{isFr ? 'Signature' : 'Signature'}</span>
                       <div className="border border-[#ddd] rounded-lg overflow-hidden bg-surface relative">
                         <canvas
                           ref={canvasRef}
+                          aria-label={isFr ? 'Zone de signature' : 'Signature area'}
                           width={500}
                           height={150}
                           className="w-full cursor-crosshair touch-none"

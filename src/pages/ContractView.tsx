@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { captureClientException } from '../lib/sentry';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle, CreditCard, FileText, Loader2, Lock, PenLine } from 'lucide-react';
@@ -157,6 +157,7 @@ const isFr = (): boolean => (typeof navigator !== 'undefined' && (navigator.lang
  * the public quote approval page.
  */
 export default function ContractView() {
+  const id = useId();
   const { token } = useParams<{ token: string }>();
   const fr = isFr();
   const [data, setData] = useState<PublicAgreementData | null>(null);
@@ -628,8 +629,9 @@ export default function ContractView() {
                 </h3>
 
                 <div>
-                  <label className="block text-[12px] font-medium text-[#666] mb-1">{fr ? 'Votre nom complet' : 'Your Full Name'}</label>
+                  <label htmlFor={`${id}-signerName`} className="block text-[12px] font-medium text-[#666] mb-1">{fr ? 'Votre nom complet' : 'Your Full Name'}</label>
                   <input
+                    id={`${id}-signerName`}
                     type="text"
                     value={signerName}
                     onChange={(e) => setSignerName(e.target.value)}
@@ -639,7 +641,7 @@ export default function ContractView() {
                 </div>
 
                 <div>
-                  <label className="block text-[12px] font-medium text-[#666] mb-1">Signature</label>
+                  <span className="block text-[12px] font-medium text-[#666] mb-1">Signature</span>
                   <div className="border border-[#ddd] rounded-lg overflow-hidden bg-white relative">
                     <canvas
                       ref={canvasRef}

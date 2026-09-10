@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import {
   Plus, Trash2, Clock, RefreshCw, Pencil, Users, Calendar,
   ChevronLeft, ChevronRight, Check, X, Ban,
@@ -64,6 +64,7 @@ export default function Availability() {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
   const qc = useQueryClient();
+  const id = useId();
 
   // ── State ──
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
@@ -340,7 +341,10 @@ export default function Availability() {
             {teams.map((team) => (
               <div
                 key={team.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedTeamId(team.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedTeamId(team.id); } }}
                 className={cn(
                   'flex items-center gap-2.5 rounded-md px-3 py-2.5 cursor-pointer transition-colors group',
                   selectedTeamId === team.id
@@ -364,6 +368,7 @@ export default function Availability() {
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); openEditTeam(team); }}
+                    aria-label={t.availability.editTeam}
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-secondary"
                   >
                     <Pencil size={12} />
@@ -371,6 +376,7 @@ export default function Availability() {
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); setConfirmDeleteTeam(team.id); }}
+                    aria-label={t.availability.deleteTeam}
                     className="p-1 rounded text-text-tertiary hover:text-danger hover:bg-danger-light"
                   >
                     <Trash2 size={12} />
@@ -390,13 +396,13 @@ export default function Availability() {
               {/* Week nav + actions */}
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))} className="glass-button p-1.5">
+                  <button type="button" onClick={() => setWeekStart(addDays(weekStart, -7))} aria-label={isFr ? 'Semaine précédente' : 'Previous week'} className="glass-button p-1.5">
                     <ChevronLeft size={14} />
                   </button>
                   <span className="text-[13px] font-medium text-text-primary min-w-[180px] text-center">
                     {formatDate(toDateStr(weekStart), isFr ? 'fr-CA' : 'en-CA')} — {formatDate(toDateStr(weekEnd), isFr ? 'fr-CA' : 'en-CA')}
                   </span>
-                  <button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))} className="glass-button p-1.5">
+                  <button type="button" onClick={() => setWeekStart(addDays(weekStart, 7))} aria-label={t.availability.nextWeek} className="glass-button p-1.5">
                     <ChevronRight size={14} />
                   </button>
                 </div>
@@ -483,6 +489,7 @@ export default function Availability() {
                                 <button
                                   type="button"
                                   onClick={() => deleteWeeklyMut.mutate(s.id)}
+                                  aria-label={isFr ? 'Retirer cet horaire' : 'Remove this schedule'}
                                   className="absolute -top-1 -right-1 p-0.5 rounded-full bg-surface-card border border-outline text-text-tertiary hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
                                 >
                                   <X size={8} />
@@ -517,6 +524,7 @@ export default function Availability() {
                       <button
                         type="button"
                         onClick={() => openCreateSlot(dateStr)}
+                        aria-label={t.availability.addSlot}
                         className="p-0.5 rounded text-text-tertiary hover:text-primary hover:bg-primary/10"
                       >
                         <Plus size={12} />
@@ -569,6 +577,7 @@ export default function Availability() {
                               <button
                                 type="button"
                                 onClick={() => openEditSlot(slot)}
+                                aria-label={t.availability.editSlot}
                                 className="p-0.5 rounded text-text-tertiary hover:text-text-primary"
                               >
                                 <Pencil size={11} />
@@ -576,6 +585,7 @@ export default function Availability() {
                               <button
                                 type="button"
                                 onClick={() => deleteSlotMut.mutate(slot.id)}
+                                aria-label={isFr ? 'Supprimer cette plage' : 'Delete this slot'}
                                 className="p-0.5 rounded text-text-tertiary hover:text-danger"
                               >
                                 <Trash2 size={11} />
@@ -595,8 +605,8 @@ export default function Availability() {
 
       {/* ═══ Team Modal ═══ */}
       {teamModal.open && (
-        <div className="modal-overlay" onClick={() => setTeamModal({ open: false })}>
-          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" role="presentation" tabIndex={-1} onClick={() => setTeamModal({ open: false })}>
+          <div className="modal-content max-w-md" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-5">
               <h3 className="text-[15px] font-semibold text-text-primary">
                 {teamModal.editing ? t.availability.editTeam : t.availability.addTeam}
@@ -604,8 +614,9 @@ export default function Availability() {
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamName}</label>
+                <label htmlFor={`${id}-team-name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamName}</label>
                 <input
+                  id={`${id}-team-name`}
                   value={teamForm.name}
                   onChange={(e) => setTeamForm((f) => ({ ...f, name: e.target.value }))}
                   className="glass-input mt-1 w-full"
@@ -614,8 +625,9 @@ export default function Availability() {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamDescription}</label>
+                <label htmlFor={`${id}-team-desc`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamDescription}</label>
                 <input
+                  id={`${id}-team-desc`}
                   value={teamForm.description || ''}
                   onChange={(e) => setTeamForm((f) => ({ ...f, description: e.target.value }))}
                   className="glass-input mt-1 w-full"
@@ -623,7 +635,7 @@ export default function Availability() {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamColor}</label>
+                <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamColor}</span>
                 <div className="mt-2">
                   <TeamColorSwatches
                     value={teamForm.color_hex ?? ''}
@@ -633,7 +645,7 @@ export default function Availability() {
               </div>
               {teamModal.editing && (
                 <div className="flex items-center gap-2">
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.status}</label>
+                  <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.status}</span>
                   <button
                     type="button"
                     onClick={() => setTeamForm((f) => ({ ...f, is_active: !f.is_active }))}
@@ -668,8 +680,8 @@ export default function Availability() {
 
       {/* ═══ Slot Modal ═══ */}
       {slotModal.open && (
-        <div className="modal-overlay" onClick={() => setSlotModal({ open: false })}>
-          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" role="presentation" tabIndex={-1} onClick={() => setSlotModal({ open: false })}>
+          <div className="modal-content max-w-md" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-5">
               <h3 className="text-[15px] font-semibold text-text-primary">
                 {slotModal.editing ? t.availability.editSlot : t.availability.addAvailabilitySlot}
@@ -677,8 +689,9 @@ export default function Availability() {
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.date}</label>
+                <label htmlFor={`${id}-slot-date`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.date}</label>
                 <input
+                  id={`${id}-slot-date`}
                   type="date"
                   value={slotForm.slot_date}
                   onChange={(e) => setSlotForm((f) => ({ ...f, slot_date: e.target.value }))}
@@ -687,8 +700,9 @@ export default function Availability() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.start}</label>
+                  <label htmlFor={`${id}-slot-start`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.start}</label>
                   <input
+                    id={`${id}-slot-start`}
                     type="time"
                     value={slotForm.start_time}
                     onChange={(e) => setSlotForm((f) => ({ ...f, start_time: e.target.value }))}
@@ -696,8 +710,9 @@ export default function Availability() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.end}</label>
+                  <label htmlFor={`${id}-slot-end`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.end}</label>
                   <input
+                    id={`${id}-slot-end`}
                     type="time"
                     value={slotForm.end_time}
                     onChange={(e) => setSlotForm((f) => ({ ...f, end_time: e.target.value }))}
@@ -706,7 +721,7 @@ export default function Availability() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.status}</label>
+                <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.status}</span>
                 <div className="flex gap-2 mt-1">
                   <button
                     type="button"
@@ -735,8 +750,9 @@ export default function Availability() {
                 </div>
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.notes}</label>
+                <label htmlFor={`${id}-slot-notes`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.notes}</label>
                 <input
+                  id={`${id}-slot-notes`}
                   value={slotNotes}
                   onChange={(e) => setSlotNotes(e.target.value)}
                   className="glass-input mt-1 w-full"
@@ -763,8 +779,8 @@ export default function Availability() {
 
       {/* ═══ Delete Team Confirmation ═══ */}
       {confirmDeleteTeam && (
-        <div className="modal-overlay" onClick={() => setConfirmDeleteTeam(null)}>
-          <div className="modal-content max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" role="presentation" tabIndex={-1} onClick={() => setConfirmDeleteTeam(null)}>
+          <div className="modal-content max-w-sm" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-5 space-y-3">
               <h3 className="text-[15px] font-semibold text-text-primary">{t.availability.deleteTeam}</h3>
               <p className="text-[13px] text-text-secondary">{t.availability.confirmDeleteTeam}</p>
@@ -785,16 +801,17 @@ export default function Availability() {
       )}
       {/* ═══ Weekly Schedule Modal ═══ */}
       {weeklyModalOpen && (
-        <div className="modal-overlay" onClick={() => setWeeklyModalOpen(false)}>
-          <div className="modal-content max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay" role="presentation" tabIndex={-1} onClick={() => setWeeklyModalOpen(false)}>
+          <div className="modal-content max-w-sm" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-5">
               <h3 className="text-[15px] font-semibold text-text-primary">{t.availability.addDefaultSchedule}</h3>
               <p className="text-[12px] text-text-tertiary mt-1">{t.availability.addDefaultScheduleHint}</p>
             </div>
             <div className="px-5 py-4 space-y-3">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.day}</label>
+                <label htmlFor={`${id}-weekly-day`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.day}</label>
                 <select
+                  id={`${id}-weekly-day`}
                   value={weeklyDay}
                   onChange={(e) => setWeeklyDay(Number(e.target.value))}
                   className="glass-input mt-1 w-full"
@@ -806,12 +823,12 @@ export default function Availability() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.start}</label>
-                  <input type="time" value={weeklyStart} onChange={(e) => setWeeklyStart(e.target.value)} className="glass-input mt-1 w-full" />
+                  <label htmlFor={`${id}-weekly-start`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.start}</label>
+                  <input id={`${id}-weekly-start`} type="time" value={weeklyStart} onChange={(e) => setWeeklyStart(e.target.value)} className="glass-input mt-1 w-full" />
                 </div>
                 <div>
-                  <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.end}</label>
-                  <input type="time" value={weeklyEnd} onChange={(e) => setWeeklyEnd(e.target.value)} className="glass-input mt-1 w-full" />
+                  <label htmlFor={`${id}-weekly-end`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.end}</label>
+                  <input id={`${id}-weekly-end`} type="time" value={weeklyEnd} onChange={(e) => setWeeklyEnd(e.target.value)} className="glass-input mt-1 w-full" />
                 </div>
               </div>
             </div>

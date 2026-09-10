@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Lock, ArrowRight, Eye, EyeOff, KeyRound, Mail } from 'lucide-react';
@@ -19,6 +19,7 @@ import PasswordStrength from '../components/auth/PasswordStrength';
  */
 export default function ResetPassword() {
   const { t } = useTranslation();
+  const id = useId();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const token = params.get('token') || '';
@@ -138,10 +139,11 @@ export default function ResetPassword() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.newPasswordLabel}</label>
+              <label htmlFor={`${id}-password`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.newPasswordLabel}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-password`}
                   type={showPassword ? 'text' : 'password'}
                   required
                   autoFocus
@@ -159,10 +161,11 @@ export default function ResetPassword() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.register.confirmPassword}</label>
+              <label htmlFor={`${id}-confirm`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.register.confirmPassword}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-confirm`}
                   type={showConfirm ? 'text' : 'password'}
                   required
                   autoComplete="new-password"

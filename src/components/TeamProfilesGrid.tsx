@@ -144,6 +144,7 @@ export default function TeamProfilesGrid({ orgId, fr = false }: { orgId: string;
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={fr ? 'Rechercher un employé…' : 'Search a member…'}
+            aria-label={fr ? 'Rechercher un employé' : 'Search a member'}
             className="w-full h-9 pl-9 pr-3 rounded-md border border-outline bg-surface text-[13px] placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-text-primary/20"
           />
         </div>

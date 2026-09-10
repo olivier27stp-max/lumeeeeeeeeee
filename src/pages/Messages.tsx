@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useId, useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -49,6 +49,7 @@ function NewConversationModal({
   language: string;
 }) {
   const { t } = useTranslation();
+  const id = useId();
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -103,7 +104,7 @@ function NewConversationModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="presentation" tabIndex={-1} onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -115,7 +116,7 @@ function NewConversationModal({
           <h3 className="text-[15px] font-bold text-text-primary">
             {t.messaging.newMessage}
           </h3>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface-tertiary text-text-tertiary">
+          <button onClick={onClose} aria-label={t.common.close} className="p-1 rounded-lg hover:bg-surface-tertiary text-text-tertiary">
             <X size={16} />
           </button>
         </div>
@@ -123,10 +124,11 @@ function NewConversationModal({
         <div className="p-5 space-y-4">
           {/* Client search */}
           <div>
-            <label className="block text-[12px] font-semibold text-text-secondary mb-1.5">
+            <label htmlFor={`${id}-client-search`} className="block text-[12px] font-semibold text-text-secondary mb-1.5">
               {t.messaging.searchClient}
             </label>
             <input
+              id={`${id}-client-search`}
               type="text"
               value={clientSearch}
               onChange={(e) => { setClientSearch(e.target.value); setSelectedClient(null); }}
@@ -155,7 +157,7 @@ function NewConversationModal({
               <div className="mt-1.5 flex items-center gap-2 px-3 py-1.5 bg-primary/5 border border-primary/20 rounded-lg text-[12px]">
                 <User size={12} className="text-primary" />
                 <span className="text-text-primary font-medium">{selectedClient.first_name} {selectedClient.last_name}</span>
-                <button onClick={() => { setSelectedClient(null); setClientSearch(''); }} className="ml-auto text-text-tertiary hover:text-danger">
+                <button onClick={() => { setSelectedClient(null); setClientSearch(''); }} aria-label={t.companySettings.remove} className="ml-auto text-text-tertiary hover:text-danger">
                   <X size={12} />
                 </button>
               </div>
@@ -165,10 +167,11 @@ function NewConversationModal({
           {/* Phone number */}
           {!selectedClient && (
             <div>
-              <label className="block text-[12px] font-semibold text-text-secondary mb-1.5">
+              <label htmlFor={`${id}-phone`} className="block text-[12px] font-semibold text-text-secondary mb-1.5">
                 {t.messaging.phoneNumber}
               </label>
               <input
+                id={`${id}-phone`}
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
@@ -180,8 +183,9 @@ function NewConversationModal({
 
           {/* Message */}
           <div>
-            <label className="block text-[12px] font-semibold text-text-secondary mb-1.5">Message</label>
+            <label htmlFor={`${id}-message`} className="block text-[12px] font-semibold text-text-secondary mb-1.5">Message</label>
             <textarea
+              id={`${id}-message`}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
@@ -551,6 +555,7 @@ export default function Messages() {
             </h2>
             <button
               onClick={() => setShowNewModal(true)}
+              aria-label={t.messaging.newMessage}
               className="w-[30px] h-[30px] rounded-full border border-border flex items-center justify-center hover:bg-surface-secondary transition-colors"
             >
               <Plus size={16} className="text-text-secondary" />
@@ -566,6 +571,7 @@ export default function Messages() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t.messaging.searchConversations}
+                aria-label={t.messaging.searchConversations}
                 className="w-full h-[36px] pl-9 pr-3 rounded-lg bg-surface-secondary border-0 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
               />
             </div>
@@ -665,6 +671,7 @@ export default function Messages() {
               <div className="px-4 py-3 border-b border-border flex items-center gap-3 bg-surface shrink-0">
                 <button
                   onClick={() => setSelectedConvo(null)}
+                  aria-label={t.companySettings.back}
                   className="md:hidden p-1 rounded-lg hover:bg-surface-secondary text-text-secondary"
                 >
                   <ArrowLeft size={18} />
@@ -735,6 +742,7 @@ export default function Messages() {
                     onKeyDown={handleKeyDown}
                     rows={1}
                     placeholder={t.messaging.typeAMessage}
+                    aria-label={t.messaging.typeAMessage}
                     className="flex-1 resize-none text-[13px] min-h-[40px] max-h-[120px] px-3 py-2.5 rounded-lg bg-surface-secondary border-0 text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
                     style={{ height: 'auto', overflow: 'auto' }}
                     onInput={(e) => {
@@ -746,6 +754,7 @@ export default function Messages() {
                   <button
                     onClick={handleSend}
                     disabled={!newMessage.trim() || sending}
+                    aria-label={t.messaging.send}
                     className={cn(
                       "p-2.5 rounded-xl transition-all shrink-0",
                       newMessage.trim() && !sending

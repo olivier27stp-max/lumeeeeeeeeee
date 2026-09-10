@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useId } from 'react';
 import { Plus, Trash2, Star, Check, Loader2, Pencil, X, MapPin, Info, DollarSign } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ export default function TaxSettings() {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const [loading, setLoading] = useState(true);
   const [configs, setConfigs] = useState<TaxConfig[]>([]);
   const [groups, setGroups] = useState<TaxGroup[]>([]);
@@ -247,7 +248,7 @@ export default function TaxSettings() {
                           <Star size={10} /> {fr ? 'Définir par défaut' : 'Set default'}
                         </button>
                       )}
-                      <button onClick={() => handleDeleteGroup(group.id, group.name)} disabled={busy}
+                      <button onClick={() => handleDeleteGroup(group.id, group.name)} disabled={busy} aria-label={fr ? 'Supprimer la région' : 'Delete region'}
                         className="text-text-tertiary hover:text-red-500 transition-colors p-1">
                         <Trash2 size={13} />
                       </button>
@@ -260,18 +261,18 @@ export default function TaxSettings() {
                       <div key={tax.id} className="px-5 py-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <button onClick={() => handleToggleTax(tax)}
+                            <button onClick={() => handleToggleTax(tax)} aria-label={fr ? `Activer ${tax.name}` : `Enable ${tax.name}`} aria-pressed={tax.is_active}
                               className={cn('w-8 h-[18px] rounded-full transition-colors relative', tax.is_active ? 'bg-primary' : 'bg-surface-tertiary')}>
                               <span className={cn('absolute top-[2px] w-[14px] h-[14px] rounded-full bg-surface-card transition-all shadow-sm', tax.is_active ? 'left-[17px]' : 'left-[2px]')} />
                             </button>
                             <div className="flex items-center gap-1.5">
                               {editingNameId === tax.id ? (
                                 <div className="flex items-center gap-1">
-                                  <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                                  <input type="text" value={editName} onChange={e => setEditName(e.target.value)} aria-label={fr ? 'Nom de la taxe' : 'Tax name'}
                                     className="glass-input w-28 text-[12px]" autoFocus
                                     onKeyDown={e => { if (e.key === 'Enter') handleSaveName(tax); if (e.key === 'Escape') setEditingNameId(null); }} />
-                                  <button onClick={() => handleSaveName(tax)} className="p-0.5 text-primary"><Check size={12} /></button>
-                                  <button onClick={() => setEditingNameId(null)} className="p-0.5 text-text-tertiary"><X size={12} /></button>
+                                  <button onClick={() => handleSaveName(tax)} aria-label={fr ? 'Enregistrer le nom' : 'Save name'} className="p-0.5 text-primary"><Check size={12} /></button>
+                                  <button onClick={() => setEditingNameId(null)} aria-label={fr ? 'Annuler' : 'Cancel'} className="p-0.5 text-text-tertiary"><X size={12} /></button>
                                 </div>
                               ) : (
                                 <button onClick={() => { setEditingNameId(tax.id); setEditName(tax.name); }}
@@ -286,13 +287,13 @@ export default function TaxSettings() {
                           <div className="flex items-center gap-2">
                             {editingId === tax.id ? (
                               <div className="flex items-center gap-1.5">
-                                <input type="number" step="0.001" value={editRate}
+                                <input type="number" step="0.001" value={editRate} aria-label={fr ? 'Taux %' : 'Rate %'}
                                   onChange={e => setEditRate(e.target.value)}
                                   className="glass-input w-20 text-[12px] text-right" autoFocus
                                   onKeyDown={e => { if (e.key === 'Enter') handleSaveRate(tax); if (e.key === 'Escape') setEditingId(null); }} />
                                 <span className="text-[12px] text-text-tertiary">%</span>
-                                <button onClick={() => handleSaveRate(tax)} className="p-1 text-primary hover:text-primary/80"><Check size={13} /></button>
-                                <button onClick={() => setEditingId(null)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={13} /></button>
+                                <button onClick={() => handleSaveRate(tax)} aria-label={fr ? 'Enregistrer le taux' : 'Save rate'} className="p-1 text-primary hover:text-primary/80"><Check size={13} /></button>
+                                <button onClick={() => setEditingId(null)} aria-label={fr ? 'Annuler' : 'Cancel'} className="p-1 text-text-tertiary hover:text-text-primary"><X size={13} /></button>
                               </div>
                             ) : (
                               <div className="flex items-center gap-2">
@@ -301,7 +302,7 @@ export default function TaxSettings() {
                                   <span className="tabular-nums font-medium">{tax.rate}%</span>
                                   <Pencil size={11} className="md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                                 </button>
-                                <button onClick={() => handleDeleteTax(tax)}
+                                <button onClick={() => handleDeleteTax(tax)} aria-label={fr ? `Supprimer ${tax.name}` : `Delete ${tax.name}`}
                                   className="p-1 text-text-tertiary hover:text-red-500 md:opacity-0 md:group-hover:opacity-100 transition-all">
                                   <Trash2 size={11} />
                                 </button>
@@ -313,11 +314,11 @@ export default function TaxSettings() {
                         <div className="ml-11 mt-1">
                           {editingRegNumId === tax.id ? (
                             <div className="flex items-center gap-1.5">
-                              <input type="text" value={editRegNum} onChange={e => setEditRegNum(e.target.value)}
+                              <input type="text" value={editRegNum} onChange={e => setEditRegNum(e.target.value)} aria-label={fr ? "Numéro d'enregistrement" : 'Registration number'}
                                 className="glass-input w-52 text-[11px]" placeholder={regNumPlaceholder(tax.name, fr)} autoFocus
                                 onKeyDown={e => { if (e.key === 'Enter') handleSaveRegNum(tax); if (e.key === 'Escape') setEditingRegNumId(null); }} />
-                              <button onClick={() => handleSaveRegNum(tax)} className="p-0.5 text-primary"><Check size={11} /></button>
-                              <button onClick={() => setEditingRegNumId(null)} className="p-0.5 text-text-tertiary"><X size={11} /></button>
+                              <button onClick={() => handleSaveRegNum(tax)} aria-label={fr ? 'Enregistrer le numéro' : 'Save number'} className="p-0.5 text-primary"><Check size={11} /></button>
+                              <button onClick={() => setEditingRegNumId(null)} aria-label={fr ? 'Annuler' : 'Cancel'} className="p-0.5 text-text-tertiary"><X size={11} /></button>
                             </div>
                           ) : (
                             <button onClick={() => { setEditingRegNumId(tax.id); setEditRegNum(tax.registration_number || ''); }}
@@ -395,7 +396,7 @@ export default function TaxSettings() {
             <div className="section-card p-5 space-y-5">
               <div className="flex items-center justify-between">
                 <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Ajouter une région de taxe' : 'Add Tax Region'}</p>
-                <button onClick={() => setShowAddRegion(false)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={14} /></button>
+                <button onClick={() => setShowAddRegion(false)} aria-label={fr ? 'Fermer' : 'Close'} className="p-1 text-text-tertiary hover:text-text-primary"><X size={14} /></button>
               </div>
 
               {/* Canada */}
@@ -466,7 +467,7 @@ export default function TaxSettings() {
             <div className="section-card p-5">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[13px] font-semibold text-text-primary">{fr ? 'Ajouter une taxe personnalisée' : 'Add Custom Tax'}</p>
-                <button onClick={() => setShowCustomTax(false)} className="p-1 text-text-tertiary hover:text-text-primary"><X size={14} /></button>
+                <button onClick={() => setShowCustomTax(false)} aria-label={fr ? 'Fermer' : 'Close'} className="p-1 text-text-tertiary hover:text-text-primary"><X size={14} /></button>
               </div>
               <p className="text-[11px] text-text-tertiary mb-3">
                 {fr
@@ -475,14 +476,14 @@ export default function TaxSettings() {
               </p>
               <div className="flex items-end gap-3">
                 <div className="flex-1">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">{fr ? 'Nom' : 'Name'}</label>
-                  <input type="text" value={customName} onChange={e => setCustomName(e.target.value)}
+                  <label htmlFor={`${id}-customName`} className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">{fr ? 'Nom' : 'Name'}</label>
+                  <input id={`${id}-customName`} type="text" value={customName} onChange={e => setCustomName(e.target.value)}
                     className="glass-input w-full text-[13px]" placeholder={fr ? 'ex. Taxe de service' : 'e.g. Service Tax'}
                     onKeyDown={e => { if (e.key === 'Enter') handleAddCustom(); }} />
                 </div>
                 <div className="w-28">
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">{fr ? 'Taux %' : 'Rate %'}</label>
-                  <input type="number" step="0.001" value={customRate} onChange={e => setCustomRate(e.target.value)}
+                  <label htmlFor={`${id}-customRate`} className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary block mb-1">{fr ? 'Taux %' : 'Rate %'}</label>
+                  <input id={`${id}-customRate`} type="number" step="0.001" value={customRate} onChange={e => setCustomRate(e.target.value)}
                     className="glass-input w-full text-[13px]" placeholder="0"
                     onKeyDown={e => { if (e.key === 'Enter') handleAddCustom(); }} />
                 </div>

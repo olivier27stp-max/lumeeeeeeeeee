@@ -263,6 +263,7 @@ export default function SatisfactionSurvey() {
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
           placeholder={T.feedbackPh}
+          aria-label={T.tellUs}
           autoFocus
           maxLength={4000}
           className="w-full rounded-xl border border-gray-200 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-neutral-400 focus:ring-1 focus:ring-neutral-400 resize-none"

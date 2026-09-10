@@ -517,7 +517,10 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
           'flex gap-4 px-5 sm:px-7 py-[17px] border-b border-outline-subtle last:border-b-0 transition-colors',
           item.link ? 'cursor-pointer hover:bg-surface-secondary/60' : 'hover:bg-surface-secondary/40',
         )}
+        role={item.link ? 'button' : undefined}
+        tabIndex={item.link ? 0 : undefined}
         onClick={item.link ? () => { navigate(item.link!); onClose(); } : undefined}
+        onKeyDown={item.link ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(item.link!); onClose(); } } : undefined}
       >
         <div className="shrink-0 pt-0.5">
           <item.icon size={18} strokeWidth={1.8} className={item.iconColor} />
@@ -564,6 +567,7 @@ export default function ActivityCenter({ open, onClose }: { open: boolean; onClo
                 </h2>
                 <button
                   onClick={onClose}
+                  aria-label={language === 'fr' ? 'Fermer' : 'Close'}
                   className="p-2 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors"
                 >
                   <X size={15} />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useId } from 'react';
 import {
   Plus, Trash2, GripVertical, Eye, EyeOff, ChevronDown, ChevronRight,
   Type, Hash, Calendar, CheckSquare, Mail, Phone, Link, DollarSign,
@@ -295,6 +295,7 @@ function AddColumnModal({
   onCreated: (col: CustomColumn) => void;
 }) {
   const { t } = useTranslation();
+  const id = useId();
   const [step, setStep] = useState<'type' | 'name'>('type');
   const [selectedType, setSelectedType] = useState<ColumnType | null>(null);
   const [name, setName] = useState('');
@@ -314,7 +315,7 @@ function AddColumnModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" role="presentation" tabIndex={-1} onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -329,7 +330,7 @@ function AddColumnModal({
               ? (t.customFields.chooseColumnType)
               : (t.customFields.nameYourColumn)}
           </h3>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-secondary text-text-tertiary">
+          <button onClick={onClose} aria-label={t.common.close} className="p-1 rounded-md hover:bg-surface-secondary text-text-tertiary">
             <X size={16} />
           </button>
         </div>
@@ -364,10 +365,11 @@ function AddColumnModal({
         ) : (
           <div className="p-5 space-y-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-column-name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {t.customFields.columnName}
               </label>
               <input
+                id={`${id}-column-name`}
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -413,6 +415,7 @@ function EditColumnModal({
   onUpdated: (col: CustomColumn) => void;
 }) {
   const { t } = useTranslation();
+  const id = useId();
   const [name, setName] = useState(column.name);
   const [required, setRequired] = useState(column.required);
   const [config, setConfig] = useState<ColumnConfig>(column.config || {});
@@ -481,7 +484,7 @@ function EditColumnModal({
   const isDropdownType = column.col_type === 'dropdown' || column.col_type === 'label';
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" role="presentation" tabIndex={-1} onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.97, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -494,7 +497,7 @@ function EditColumnModal({
           <h3 className="text-[14px] font-semibold text-text-primary">
             {t.customFields.editColumn}
           </h3>
-          <button onClick={onClose} className="p-1 rounded-md hover:bg-surface-secondary text-text-tertiary">
+          <button onClick={onClose} aria-label={t.common.close} className="p-1 rounded-md hover:bg-surface-secondary text-text-tertiary">
             <X size={16} />
           </button>
         </div>
@@ -502,10 +505,11 @@ function EditColumnModal({
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
           {/* Name */}
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+            <label htmlFor={`${id}-name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
               {t.customFields.name}
             </label>
             <input
+              id={`${id}-name`}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -515,9 +519,9 @@ function EditColumnModal({
 
           {/* Type (read-only) */}
           <div>
-            <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+            <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
               {t.customFields.type}
-            </label>
+            </span>
             <div className="mt-1 flex items-center gap-2 px-3 py-2 rounded-md bg-surface-secondary text-[13px] text-text-secondary">
               {React.createElement(COL_TYPE_META[column.col_type as ColumnType]?.icon || Type, { size: 14 })}
               {isFr ? COL_TYPE_META[column.col_type as ColumnType]?.labelFr : COL_TYPE_META[column.col_type as ColumnType]?.label}
@@ -529,6 +533,8 @@ function EditColumnModal({
             <span className="text-[13px] text-text-primary">{t.customFields.required}</span>
             <button
               onClick={() => setRequired(!required)}
+              aria-label={t.customFields.required}
+              aria-pressed={required}
               className={cn(
                 'relative w-9 h-5 rounded-full transition-colors',
                 required ? 'bg-primary' : 'bg-surface-tertiary'
@@ -544,9 +550,9 @@ function EditColumnModal({
           {/* Status options */}
           {isStatusType && (
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {t.customFields.statusOptions}
-              </label>
+              </span>
               <div className="mt-2 space-y-1.5">
                 {(config.statuses || []).map((status, idx) => (
                   <div key={idx} className="flex items-center gap-2">
@@ -554,11 +560,13 @@ function EditColumnModal({
                       type="color"
                       value={status.color}
                       onChange={(e) => updateStatusColor(idx, e.target.value)}
+                      aria-label={status.value}
                       className="w-6 h-6 rounded cursor-pointer border-0 p-0"
                     />
                     <span className="text-[13px] text-text-primary flex-1">{status.value}</span>
                     <button
                       onClick={() => removeStatusOption(idx)}
+                      aria-label={`${t.customFields.delete} ${status.value}`}
                       className="p-1 text-text-tertiary hover:text-red-500 transition-colors"
                     >
                       <X size={12} />
@@ -571,12 +579,14 @@ function EditColumnModal({
                     value={newOptionValue}
                     onChange={(e) => setNewOptionValue(e.target.value)}
                     placeholder={t.customFields.newStatus}
+                    aria-label={t.customFields.newStatus}
                     className="glass-input flex-1 text-[13px]"
                     onKeyDown={(e) => e.key === 'Enter' && addStatusOption()}
                   />
                   <button
                     onClick={addStatusOption}
                     disabled={!newOptionValue.trim()}
+                    aria-label={t.customFields.newStatus}
                     className="glass-button text-[12px] px-2 py-1.5"
                   >
                     <Plus size={13} />
@@ -589,15 +599,16 @@ function EditColumnModal({
           {/* Dropdown options */}
           {isDropdownType && (
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {t.customFields.options}
-              </label>
+              </span>
               <div className="mt-2 space-y-1.5">
                 {(config.options || []).map((opt, idx) => (
                   <div key={idx} className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-surface-secondary">
                     <span className="text-[13px] text-text-primary flex-1">{opt.value}</span>
                     <button
                       onClick={() => removeDropdownOption(idx)}
+                      aria-label={`${t.customFields.delete} ${opt.value}`}
                       className="p-1 text-text-tertiary hover:text-red-500 transition-colors"
                     >
                       <X size={12} />
@@ -610,12 +621,14 @@ function EditColumnModal({
                     value={newOptionValue}
                     onChange={(e) => setNewOptionValue(e.target.value)}
                     placeholder={t.customFields.newOption}
+                    aria-label={t.customFields.newOption}
                     className="glass-input flex-1 text-[13px]"
                     onKeyDown={(e) => e.key === 'Enter' && addDropdownOption()}
                   />
                   <button
                     onClick={addDropdownOption}
                     disabled={!newOptionValue.trim()}
+                    aria-label={t.customFields.newOption}
                     className="glass-button text-[12px] px-2 py-1.5"
                   >
                     <Plus size={13} />
@@ -628,10 +641,11 @@ function EditColumnModal({
           {/* Currency code */}
           {column.col_type === 'currency' && (
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-currency`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {t.customFields.currencyCode}
               </label>
               <select
+                id={`${id}-currency`}
                 value={config.currency_code || 'CAD'}
                 onChange={(e) => setConfig({ ...config, currency_code: e.target.value })}
                 className="glass-input w-full mt-1 text-[13px]"
@@ -647,10 +661,11 @@ function EditColumnModal({
           {/* Rating max */}
           {column.col_type === 'rating' && (
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-max-rating`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {t.customFields.maxRating}
               </label>
               <select
+                id={`${id}-max-rating`}
                 value={config.max_rating || 5}
                 onChange={(e) => setConfig({ ...config, max_rating: Number(e.target.value) })}
                 className="glass-input w-full mt-1 text-[13px]"

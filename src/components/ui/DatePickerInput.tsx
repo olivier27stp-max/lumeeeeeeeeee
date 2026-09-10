@@ -4,7 +4,7 @@ import { cn } from '../../lib/utils';
 
 /**
  * Champ de date maison : même look que les glass-inputs, mais le calendrier
- * qui s'ouvre est un popover stylé CRM (le popup natif de <input type="date">
+ * qui s'ouvre est un popover stylé CRM (le popup natif de input[type=date]
  * n'est pas stylable). Semaine Lun→Dim, bornes min/max respectées.
  */
 interface DatePickerInputProps {

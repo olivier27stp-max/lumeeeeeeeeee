@@ -168,6 +168,7 @@ export function CrmTableCard<T extends { id: string }>({
         <input
           value={search} onChange={e => onSearch(e.target.value)}
           placeholder={searchPlaceholder || (language === 'fr' ? 'Rechercher...' : 'Search...')}
+          aria-label={searchPlaceholder || t.common.search}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-text-tertiary focus:border-text-tertiary transition-all"
         />
         {filters}
@@ -186,7 +187,7 @@ export function CrmTableCard<T extends { id: string }>({
           <thead>
             <tr className="border-b border-outline">
               <th className="w-[48px] pl-4 pr-1 py-3">
-                <input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-[16px] h-[16px] accent-primary cursor-pointer" />
+                <input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={language === 'fr' ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-[16px] h-[16px] accent-primary cursor-pointer" />
               </th>
               {columns.map(col => (
                 <th key={col.key} className={cn('px-4 py-3 text-[14px] font-medium text-text-primary', col.align === 'right' && 'text-right')}>
@@ -215,9 +216,12 @@ export function CrmTableCard<T extends { id: string }>({
 
             {!loading && rows.map(row => (
               <tr key={row.id} onClick={() => onRowClick?.(row)}
+                role={onRowClick ? 'button' : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                onKeyDown={(e) => { if (onRowClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRowClick(row); } }}
                 className={cn('border-b border-[#f1f5f9] transition-colors', onRowClick && 'cursor-pointer', sel.has(row.id) ? 'bg-[#f0f4ff]' : 'hover:bg-surface-secondary')}>
-                <td className="pl-4 pr-1 py-[13px]" onClick={e => e.stopPropagation()}>
-                  <input type="checkbox" checked={sel.has(row.id)} onChange={() => toggle(row.id)} className="rounded-[3px] border-outline w-[16px] h-[16px] accent-primary cursor-pointer" />
+                <td className="pl-4 pr-1 py-[13px]" role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()}>
+                  <input type="checkbox" checked={sel.has(row.id)} onChange={() => toggle(row.id)} aria-label={language === 'fr' ? 'Sélectionner la ligne' : 'Select row'} className="rounded-[3px] border-outline w-[16px] h-[16px] accent-primary cursor-pointer" />
                 </td>
                 {columns.map(col => (
                   <td key={col.key} className={cn('px-4 py-[13px]', col.align === 'right' && 'text-right')}>
@@ -225,7 +229,7 @@ export function CrmTableCard<T extends { id: string }>({
                   </td>
                 ))}
                 <td className="pr-4 py-[13px] text-center">
-                  <button className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors" onClick={e => e.stopPropagation()}>
+                  <button className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors" aria-label={t.common.actions} onClick={e => e.stopPropagation()}>
                     <MoreHorizontal size={18} />
                   </button>
                 </td>

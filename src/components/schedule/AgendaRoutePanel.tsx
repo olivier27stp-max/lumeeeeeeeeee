@@ -437,7 +437,10 @@ function StopRow({
         </div>
       )}
       <div
+        role="button"
+        tabIndex={0}
         onClick={onFocus}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onFocus(); } }}
         className={
           'flex w-full cursor-pointer items-center gap-2 rounded-xl px-2 py-2 transition-colors ' +
           (selected ? 'bg-surface-secondary ring-1 ring-inset' : 'hover:bg-surface-secondary')

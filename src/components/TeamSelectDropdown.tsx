@@ -1,5 +1,5 @@
 /**
- * Sélecteur d'équipe du form de job — remplace le <select> natif pour pouvoir
+ * Sélecteur d'équipe du form de job — remplace le select natif pour pouvoir
  * afficher, SOUS chaque équipe disponible, les membres assignés à l'équipe
  * pour la date de la visite (onglet Horaire). Bouton volontairement plus
  * gros, fond blanc, texte bold (demande d'Olivier).

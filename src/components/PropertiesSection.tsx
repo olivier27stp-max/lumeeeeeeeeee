@@ -303,6 +303,7 @@ function PropertyEditor({
         autoFocus
         value={editor.name}
         onChange={(e) => setEditor((s) => ({ ...s, name: e.target.value }))}
+        aria-label={cd.propertyNamePlaceholder}
         className="glass-input w-full"
         placeholder={cd.propertyNamePlaceholder}
       />

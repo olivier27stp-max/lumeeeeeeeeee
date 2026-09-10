@@ -80,6 +80,7 @@ function ChampBloc({
       onFocus={onFocus}
       rows={1}
       placeholder={fr ? 'Écrivez ici…' : 'Type here…'}
+      aria-label={bloc.type === 'titre' ? (fr ? 'Titre' : 'Title') : bloc.type === 'puce' ? (fr ? 'Puce' : 'Bullet') : (fr ? 'Paragraphe' : 'Paragraph')}
       className={cn(
         'w-full bg-transparent border border-transparent rounded px-2 py-1 resize-none overflow-hidden',
         'hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors',
@@ -217,10 +218,14 @@ export default function EmailPreviewEditor({
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+      role="presentation"
+      tabIndex={-1}
       onClick={fermer}
     >
       <div
         className="w-full sm:max-w-3xl h-[95vh] sm:h-auto sm:max-h-[90vh] flex flex-col rounded-t-xl sm:rounded-xl bg-surface-secondary shadow-2xl overflow-hidden"
+        role="presentation"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         {/* En-tête */}
@@ -253,6 +258,7 @@ export default function EmailPreviewEditor({
                 onChange={(e) => setObjet(e.target.value)}
                 onFocus={() => setActif(null)}
                 placeholder={fr ? 'Objet du courriel' : 'Email subject'}
+                aria-label={fr ? 'Objet du courriel' : 'Email subject'}
                 className="w-full bg-transparent border border-transparent rounded px-2 py-1 text-[13px] font-semibold text-text-primary hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors"
               />
             </div>

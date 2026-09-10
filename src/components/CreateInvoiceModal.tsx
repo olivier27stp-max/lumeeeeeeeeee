@@ -6,7 +6,7 @@
    Step 3: Review draft with totals → save
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from '../i18n';
 import { AnimatePresence, motion } from 'motion/react';
 import { Briefcase, ChevronDown, ChevronLeft, Plus, Search, Trash2, User, X } from 'lucide-react';
@@ -70,6 +70,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
   const queryClient = useQueryClient();
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   // Default invoice subject when none is provided.
   const defaultSubject = fr ? 'Pour service rendu' : 'For services rendered';
 
@@ -417,6 +418,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                 {step !== 'choose-mode' && (
                   <button type="button"
                     onClick={() => setStep(step === 'draft' ? (mode === 'job' ? 'select-job' : 'select-client') : 'choose-mode')}
+                    aria-label={fr ? 'Retour' : 'Back'}
                     className="p-1.5 rounded-lg hover:bg-surface-secondary transition-colors text-text-muted hover:text-text-primary">
                     <ChevronLeft size={16} />
                   </button>
@@ -426,7 +428,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                   <p className="text-xs text-text-muted">{stepSubtitle[step]}</p>
                 </div>
               </div>
-              <button type="button" onClick={onClose}
+              <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'}
                 className="p-2 rounded-lg hover:bg-surface-secondary transition-colors text-text-muted hover:text-text-primary">
                 <X size={16} />
               </button>
@@ -465,6 +467,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                   <input value={searchValue} onChange={(e) => setSearchValue(e.target.value)}
                     placeholder={fr ? 'Rechercher un job...' : 'Search jobs...'}
+                    aria-label={fr ? 'Rechercher un job' : 'Search jobs'}
                     className="glass-input w-full pl-9" autoFocus />
                 </div>
                 <div className="max-h-[50vh] overflow-y-auto space-y-1.5 pr-1">
@@ -506,6 +509,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                   <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                   <input value={searchValue} onChange={(e) => setSearchValue(e.target.value)}
                     placeholder={fr ? 'Rechercher un client...' : 'Search clients...'}
+                    aria-label={fr ? 'Rechercher un client' : 'Search clients'}
                     className="glass-input w-full pl-9" autoFocus />
                 </div>
                 <div className="max-h-[50vh] overflow-y-auto space-y-1.5 pr-1">
@@ -545,21 +549,21 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                   {/* Subject + Invoice # + Due Date */}
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                     <div className="sm:col-span-2 space-y-1.5">
-                      <label className="text-xs font-medium text-text-secondary">{fr ? 'Sujet' : 'Subject'}</label>
-                      <input value={subject} onChange={(e) => setSubject(e.target.value)}
+                      <label htmlFor={`${id}-subject`} className="text-xs font-medium text-text-secondary">{fr ? 'Sujet' : 'Subject'}</label>
+                      <input id={`${id}-subject`} value={subject} onChange={(e) => setSubject(e.target.value)}
                         placeholder={fr ? 'Ex: Réparation plomberie' : 'Ex: Plumbing repair'}
                         className="glass-input w-full" />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-text-secondary">{fr ? 'Facture #' : 'Invoice #'}</label>
-                      <input value={invoiceNumber}
+                      <label htmlFor={`${id}-number`} className="text-xs font-medium text-text-secondary">{fr ? 'Facture #' : 'Invoice #'}</label>
+                      <input id={`${id}-number`} value={invoiceNumber}
                         onChange={(e) => { setInvoiceNumber(e.target.value); setInvoiceNumberTouched(true); }}
                         placeholder="Auto" disabled={!nextInvoice}
                         className="glass-input w-full" />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-text-secondary">{fr ? 'Échéance' : 'Due Date'}</label>
-                      <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                      <label htmlFor={`${id}-due`} className="text-xs font-medium text-text-secondary">{fr ? 'Échéance' : 'Due Date'}</label>
+                      <input id={`${id}-due`} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
                         className="glass-input w-full" />
                     </div>
                   </div>
@@ -567,8 +571,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                   {/* Property (client mode) */}
                   {mode === 'client' && properties.length > 0 && (
                     <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-text-secondary">{fr ? 'Propriété' : 'Property'}</label>
-                      <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} className="glass-input w-full">
+                      <label htmlFor={`${id}-property`} className="text-xs font-medium text-text-secondary">{fr ? 'Propriété' : 'Property'}</label>
+                      <select id={`${id}-property`} value={propertyId} onChange={(e) => setPropertyId(e.target.value)} className="glass-input w-full">
                         <option value="">{fr ? 'Sélectionner une propriété' : 'Select a property'}</option>
                         {properties.map((p) => (
                           <option key={p.id} value={p.id}>{p.name}{p.address ? ` — ${p.address}` : ''}</option>
@@ -632,6 +636,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                         <input value={line.description}
                           onChange={(e) => updateLine(line.id, { description: e.target.value })}
                           placeholder={fr ? 'Service ou produit...' : 'Service or product...'}
+                          aria-label="Description"
                           className="glass-input text-[13px]" />
                         <input
                           type="text" inputMode="numeric"
@@ -642,6 +647,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                           }}
                           onBlur={() => { if (!line.qty) updateLine(line.id, { qty: '1' }); }}
                           placeholder="1"
+                          aria-label={fr ? 'Quantité' : 'Quantity'}
                           className="glass-input text-[13px] text-center" />
                         <input
                           type="text" inputMode="decimal"
@@ -651,9 +657,11 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                             if (v === '' || /^\d*\.?\d*$/.test(v)) updateLine(line.id, { unitPrice: v });
                           }}
                           placeholder="0.00"
+                          aria-label={fr ? 'Prix unitaire' : 'Unit price'}
                           className="glass-input text-[13px] text-right" />
                         <button type="button" onClick={() => removeLine(line.id)}
                           disabled={lines.length === 1}
+                          aria-label={fr ? 'Retirer la ligne' : 'Remove line'}
                           className="p-1.5 rounded-lg text-text-muted hover:text-danger hover:bg-danger/8 disabled:opacity-20 transition-all">
                           <Trash2 size={14} />
                         </button>
@@ -678,6 +686,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                               const v = e.target.value;
                               if (v === '' || /^\d*\.?\d*$/.test(v)) setTaxRate(v);
                             }}
+                            aria-label={fr ? 'Taux de taxe (%)' : 'Tax rate (%)'}
                             className="glass-input w-20 !h-7 text-[12px] text-right !py-0 !pr-6" placeholder="0" />
                           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-text-muted font-medium">%</span>
                         </div>

@@ -148,7 +148,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
                 <h2 className="text-2xl font-semibold tracking-tight text-text-primary">{t.modals.teamsManager}</h2>
                 <p className="text-xs text-text-secondary">{t.modals.teamsManagerDesc}</p>
               </div>
-              <button type="button" onClick={onClose} className="glass-button !p-2">
+              <button type="button" onClick={onClose} aria-label={t.common.close} className="glass-button !p-2">
                 <X size={15} />
               </button>
             </div>
@@ -161,6 +161,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
                     <input
                       value={newTeamName}
                       onChange={(event) => setNewTeamName(event.target.value)}
+                      aria-label={t.modals.teamName}
                       placeholder={t.modals.teamName}
                       className="glass-input w-full"
                     />
@@ -192,6 +193,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
                         <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto]">
                           <input
                             value={draft.name}
+                            aria-label={t.modals.teamName}
                             onChange={(event) =>
                               setDrafts((prev) => ({
                                 ...prev,
@@ -212,6 +214,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
                             type="button"
                             onClick={() => void handleDeleteTeam(team.id, team.name)}
                             disabled={isBusy}
+                            aria-label={`${t.common.delete} ${team.name}`}
                             className="glass-button !px-3 text-danger hover:!bg-danger-light"
                           >
                             <Trash2 size={14} />

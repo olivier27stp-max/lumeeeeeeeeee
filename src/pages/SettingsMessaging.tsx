@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   MessageSquare,
   Loader2,
@@ -39,6 +39,7 @@ import { ChevronDown, Pencil } from 'lucide-react';
 export default function SettingsMessaging() {
   const { language } = useTranslation();
   const isFr = language === 'fr';
+  const id = useId();
 
   const [loading, setLoading] = useState(true);
   const [channel, setChannel] = useState<CommunicationChannel | null>(null);
@@ -273,10 +274,11 @@ export default function SettingsMessaging() {
 
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-medium text-text-tertiary">
+              <label htmlFor={`${id}-test-phone`} className="text-xs font-medium text-text-tertiary">
                 {isFr ? 'Numéro de destination' : 'Destination number'}
               </label>
               <input
+                id={`${id}-test-phone`}
                 type="tel"
                 value={testPhone}
                 onChange={(e) => setTestPhone(e.target.value)}
@@ -286,10 +288,11 @@ export default function SettingsMessaging() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-text-tertiary">
+              <label htmlFor={`${id}-test-body`} className="text-xs font-medium text-text-tertiary">
                 {isFr ? 'Message' : 'Message'}
               </label>
               <textarea
+                id={`${id}-test-body`}
                 value={testBody}
                 onChange={(e) => setTestBody(e.target.value)}
                 rows={3}
@@ -551,6 +554,7 @@ function AutomationSmsSection({ isFr }: { isFr: boolean }) {
                     {isOpen && (
                       <div className="px-4 pb-4 space-y-2">
                         <textarea
+                          aria-label={isFr ? `Texte du SMS — ${label}` : `SMS text — ${label}`}
                           value={draftBody}
                           onChange={(e) => setDraftBody(e.target.value)}
                           rows={3}
@@ -865,6 +869,7 @@ function BrandForm({
 
   const set = (k: keyof A2PBrandPayload) => (e: any) =>
     setForm({ ...form, [k]: e.target.value });
+  const id = useId();
 
   return (
     <div className="space-y-3 border-t border-outline pt-4">
@@ -873,47 +878,47 @@ function BrandForm({
       </h3>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={isFr ? 'Raison sociale' : 'Legal business name'}>
-          <input className="glass-input w-full" value={form.legal_business_name} onChange={set('legal_business_name')} />
+        <Field label={isFr ? 'Raison sociale' : 'Legal business name'} htmlFor={`${id}-legal_business_name`}>
+          <input id={`${id}-legal_business_name`} className="glass-input w-full" value={form.legal_business_name} onChange={set('legal_business_name')} />
         </Field>
-        <Field label="EIN">
-          <input className="glass-input w-full" placeholder="12-3456789" value={form.ein} onChange={set('ein')} />
+        <Field label="EIN" htmlFor={`${id}-ein`}>
+          <input id={`${id}-ein`} className="glass-input w-full" placeholder="12-3456789" value={form.ein} onChange={set('ein')} />
         </Field>
-        <Field label={isFr ? "Type d'entreprise" : 'Business type'}>
-          <select className="glass-input w-full" value={form.business_type} onChange={set('business_type')}>
+        <Field label={isFr ? "Type d'entreprise" : 'Business type'} htmlFor={`${id}-business_type`}>
+          <select id={`${id}-business_type`} className="glass-input w-full" value={form.business_type} onChange={set('business_type')}>
             <option value="PRIVATE_PROFIT">{isFr ? 'Entreprise privée à but lucratif' : 'Private for-profit'}</option>
             <option value="PUBLIC_PROFIT">{isFr ? 'Société publique à but lucratif' : 'Public for-profit'}</option>
             <option value="NON_PROFIT">{isFr ? 'Organisme sans but lucratif' : 'Non-profit'}</option>
             <option value="SOLE_PROPRIETOR">{isFr ? 'Entreprise individuelle' : 'Sole proprietor'}</option>
           </select>
         </Field>
-        <Field label={isFr ? 'Secteur' : 'Vertical'}>
-          <select className="glass-input w-full" value={form.vertical} onChange={set('vertical')}>
+        <Field label={isFr ? 'Secteur' : 'Vertical'} htmlFor={`${id}-vertical`}>
+          <select id={`${id}-vertical`} className="glass-input w-full" value={form.vertical} onChange={set('vertical')}>
             {VERTICAL_OPTIONS.map(v => (
               <option key={v.value} value={v.value}>{isFr ? v.fr : v.en}</option>
             ))}
           </select>
         </Field>
-        <Field label={isFr ? 'Adresse' : 'Street'}>
-          <input className="glass-input w-full" value={form.street} onChange={set('street')} />
+        <Field label={isFr ? 'Adresse' : 'Street'} htmlFor={`${id}-street`}>
+          <input id={`${id}-street`} className="glass-input w-full" value={form.street} onChange={set('street')} />
         </Field>
-        <Field label={isFr ? 'Ville' : 'City'}>
-          <input className="glass-input w-full" value={form.city} onChange={set('city')} />
+        <Field label={isFr ? 'Ville' : 'City'} htmlFor={`${id}-city`}>
+          <input id={`${id}-city`} className="glass-input w-full" value={form.city} onChange={set('city')} />
         </Field>
-        <Field label={isFr ? 'État' : 'State'}>
-          <input className="glass-input w-full" placeholder="NY" maxLength={2} value={form.region} onChange={set('region')} />
+        <Field label={isFr ? 'État' : 'State'} htmlFor={`${id}-region`}>
+          <input id={`${id}-region`} className="glass-input w-full" placeholder="NY" maxLength={2} value={form.region} onChange={set('region')} />
         </Field>
-        <Field label="ZIP">
-          <input className="glass-input w-full" value={form.postal_code} onChange={set('postal_code')} />
+        <Field label="ZIP" htmlFor={`${id}-postal_code`}>
+          <input id={`${id}-postal_code`} className="glass-input w-full" value={form.postal_code} onChange={set('postal_code')} />
         </Field>
-        <Field label={isFr ? 'Site web' : 'Website'}>
-          <input className="glass-input w-full" placeholder="https://…" value={form.website} onChange={set('website')} />
+        <Field label={isFr ? 'Site web' : 'Website'} htmlFor={`${id}-website`}>
+          <input id={`${id}-website`} className="glass-input w-full" placeholder="https://…" value={form.website} onChange={set('website')} />
         </Field>
-        <Field label={isFr ? 'Courriel support' : 'Support email'}>
-          <input className="glass-input w-full" type="email" value={form.support_email} onChange={set('support_email')} />
+        <Field label={isFr ? 'Courriel support' : 'Support email'} htmlFor={`${id}-support_email`}>
+          <input id={`${id}-support_email`} className="glass-input w-full" type="email" value={form.support_email} onChange={set('support_email')} />
         </Field>
-        <Field label={isFr ? 'Téléphone support' : 'Support phone'}>
-          <input className="glass-input w-full" value={form.support_phone} onChange={set('support_phone')} />
+        <Field label={isFr ? 'Téléphone support' : 'Support phone'} htmlFor={`${id}-support_phone`}>
+          <input id={`${id}-support_phone`} className="glass-input w-full" value={form.support_phone} onChange={set('support_phone')} />
         </Field>
       </div>
 
@@ -967,6 +972,7 @@ function CampaignForm({
     has_embedded_phone: initial?.has_embedded_phone || false,
   });
 
+  const id = useId();
   const updateSample = (idx: number, v: string) => {
     const next = [...form.message_samples];
     next[idx] = v;
@@ -979,8 +985,9 @@ function CampaignForm({
         {isFr ? 'Informations de la campagne' : 'Campaign information'}
       </h3>
 
-      <Field label={isFr ? "Cas d'usage" : 'Use case'}>
+      <Field label={isFr ? "Cas d'usage" : 'Use case'} htmlFor={`${id}-use_case`}>
         <select
+          id={`${id}-use_case`}
           className="glass-input w-full"
           value={form.use_case}
           onChange={(e) => setForm({ ...form, use_case: e.target.value })}
@@ -992,8 +999,9 @@ function CampaignForm({
         </select>
       </Field>
 
-      <Field label={isFr ? 'Description (min 40 caractères)' : 'Description (min 40 chars)'}>
+      <Field label={isFr ? 'Description (min 40 caractères)' : 'Description (min 40 chars)'} htmlFor={`${id}-description`}>
         <textarea
+          id={`${id}-description`}
           className="glass-input w-full resize-none"
           rows={3}
           value={form.description}
@@ -1007,12 +1015,13 @@ function CampaignForm({
       </Field>
 
       <div>
-        <label className="text-xs font-medium text-text-tertiary">
+        <span className="text-xs font-medium text-text-tertiary">
           {isFr ? 'Exemples de messages (2 min.)' : 'Message samples (2 min.)'}
-        </label>
+        </span>
         {form.message_samples.map((s, i) => (
           <textarea
             key={i}
+            aria-label={isFr ? `Exemple de message #${i + 1}` : `Message sample #${i + 1}`}
             rows={2}
             className="glass-input w-full mt-1.5 resize-none"
             value={s}
@@ -1032,8 +1041,9 @@ function CampaignForm({
         )}
       </div>
 
-      <Field label={isFr ? "Message d'opt-in" : 'Opt-in message'}>
+      <Field label={isFr ? "Message d'opt-in" : 'Opt-in message'} htmlFor={`${id}-opt_in_message`}>
         <input
+          id={`${id}-opt_in_message`}
           className="glass-input w-full"
           value={form.opt_in_message}
           onChange={(e) => setForm({ ...form, opt_in_message: e.target.value })}
@@ -1083,10 +1093,10 @@ function CampaignForm({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="text-xs font-medium text-text-tertiary">{label}</label>
+      <label htmlFor={htmlFor} className="text-xs font-medium text-text-tertiary">{label}</label>
       <div className="mt-1.5">{children}</div>
     </div>
   );

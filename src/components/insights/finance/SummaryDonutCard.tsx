@@ -47,7 +47,7 @@ export default function SummaryDonutCard({
           <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{ti.summary}</h3>
           <p className="text-xs text-zinc-400 dark:text-zinc-500">{dateRange}</p>
         </div>
-        <button className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors">
+        <button type="button" aria-label={language === 'fr' ? 'Voir le détail' : 'View details'} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors">
           <ChevronRight size={14} className="text-zinc-400 dark:text-zinc-500" />
         </button>
       </div>

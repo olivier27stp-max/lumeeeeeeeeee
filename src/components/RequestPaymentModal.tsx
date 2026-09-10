@@ -205,6 +205,7 @@ export default function RequestPaymentModal({
                   type="text"
                   readOnly
                   value={paymentUrl}
+                  aria-label={m.copyLink}
                   className="glass-input flex-1 text-[12px] font-mono"
                   onClick={(e) => (e.target as HTMLInputElement).select()}
                 />

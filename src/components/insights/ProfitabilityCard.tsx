@@ -12,6 +12,7 @@ import PeriodSelector from './PeriodSelector';
 import { type InsightsPeriod, type InsightsRange } from '../../lib/insightsPeriod';
 
 function ExpenseInput({ jobId, cents, onSaved }: { jobId: string; cents: number; onSaved: () => void }) {
+  const { language } = useTranslation();
   const [val, setVal] = useState(cents > 0 ? String(cents / 100) : '');
   const [saving, setSaving] = useState(false);
   useEffect(() => { setVal(cents > 0 ? String(cents / 100) : ''); }, [cents]);
@@ -29,6 +30,7 @@ function ExpenseInput({ jobId, cents, onSaved }: { jobId: string; cents: number;
       <span className="text-text-tertiary text-[12px]">$</span>
       <input
         value={val}
+        aria-label={language === 'fr' ? 'Dépenses du job' : 'Job expenses'}
         inputMode="decimal"
         placeholder="0"
         disabled={saving}
