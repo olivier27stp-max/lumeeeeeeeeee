@@ -74,7 +74,13 @@ export default function Lumi() {
   const nextId = () => idRef.current++;
 
   useEffect(() => {
-    quotaLumi().then(setBudget).catch(() => setBudget(null));
+    quotaLumi().then((b) => {
+      setBudget(b);
+      // Dire tout de suite POURQUOI Lumi est indisponible, sans attendre un envoi.
+      if (b.configured === false) setErreur({ code: 'lumi_not_configured', message: '' });
+      else if (!b.includes_ai) setErreur({ code: 'plan_sans_lumi', message: '' });
+      else if (b.epuise) setErreur({ code: 'quota_epuise', message: '' });
+    }).catch(() => setBudget(null));
     listerConversationsLumi().then(setConversations).catch(() => setConversations([]));
   }, []);
 
