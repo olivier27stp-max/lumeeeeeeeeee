@@ -124,18 +124,15 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
       return;
     }
 
-    // Reject events older than 5 minutes (anti-replay)
+    // Événement ancien = un RÉESSAI Stripe (Stripe retente pendant 3 jours avec
+    // backoff, en re-signant chaque tentative). On ne le jette PAS : le rejeter
+    // avec un 200 transformait toute panne > 5 min (redéploiement, incident DB)
+    // en perte sèche de paiements. L'anti-rejeu réel est déjà assuré par
+    // webhooks.constructEvent (tolérance 300 s sur l'horodatage signé) + la garde
+    // d'idempotence sur stripe_event_id. On se contente de tracer.
     const eventAge = Math.floor(Date.now() / 1000) - event.created;
     if (eventAge > 300) {
-      logSecurityEvent({
-        event_type: 'stripe_webhook_stale_event',
-        severity: 'medium',
-        source: 'webhook',
-        ip_address: extractIP(req),
-        details: { event_id: event.id, event_type: event.type, age_seconds: eventAge },
-      });
-      res.json({ received: true, note: 'stale_event_ignored' });
-      return;
+      console.warn('[webhook] réessai tardif traité', { id: event.id, type: event.type, age_seconds: eventAge });
     }
 
     // Log webhook event for auditing & idempotency
@@ -811,11 +808,16 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         await markWebhookEventProcessed(webhookEventId, 'processed');
       }
     } catch (processingError: any) {
-      // Mark as failed but don't re-throw — we still return 200 to Stripe
+      // On marque l'événement 'failed' (traçabilité + rejeu possible : la garde
+      // d'idempotence ne court-circuite plus une ligne 'failed'). Puis on renvoie
+      // un 5xx pour que Stripe RÉESSAIE — sinon l'argent est encaissé chez Stripe
+      // mais la facture reste impayée dans Lume, sans jamais de nouvelle chance.
       if (webhookEventId) {
         await markWebhookEventProcessed(webhookEventId, 'failed', processingError?.message);
       }
       console.error('[webhook] processing error:', processingError?.message);
+      res.status(500).json({ error: 'processing_failed' });
+      return;
     }
 
     res.json({ received: true });
