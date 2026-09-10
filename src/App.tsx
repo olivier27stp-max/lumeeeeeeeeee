@@ -282,6 +282,11 @@ export default function App() {
   );
 }
 
+/** Téléphone / petite tablette : là où la barre latérale devient un tiroir (< md). */
+function estEcranEtroit(): boolean {
+  try { return window.matchMedia('(max-width: 767px)').matches; } catch { return false; }
+}
+
 function AppInner() {
   const { t, language } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
@@ -289,14 +294,23 @@ function AppInner() {
 
   // Auto-signout after 4 h of inactivity (warns 5 min ahead)
   useSessionTimeout(user?.id || null);
+  // Le même état pilote la barre latérale (bureau) ET le tiroir (téléphone,
+  // < md). Il vaut `true` par défaut — juste pour le bureau. Sur téléphone,
+  // le tiroir s'ouvrait donc à CHAQUE chargement, et son voile fixed inset-0
+  // z-30 recouvrait toute la page : « Enregistrer le client » incliquable
+  // (audit QA prod 2026-09-09, n°5 + phase 3, prouvé en 390×844). Sur
+  // téléphone : fermé au chargement, fermé à chaque navigation, et le
+  // réglage bureau n'est jamais écrasé par un geste mobile.
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
+      if (estEcranEtroit()) return false;
       const saved = localStorage.getItem('lume-sidebar-open');
       if (saved === 'true' || saved === 'false') return saved === 'true';
     }
     return true;
   });
   useEffect(() => {
+    if (estEcranEtroit()) return;
     try { localStorage.setItem('lume-sidebar-open', String(isSidebarOpen)); } catch {}
   }, [isSidebarOpen]);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
@@ -332,6 +346,9 @@ function AppInner() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  useEffect(() => {
+    if (estEcranEtroit()) setIsSidebarOpen(false);
+  }, [location.pathname]);
   // NOTE: useRealtimeNotifications uses useCompany() internally, so it must be
   // called inside <CompanyProvider>. It's hoisted into AuthenticatedApp instead.
   const [unreadSms, setUnreadSms] = useState(0);

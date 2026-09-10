@@ -3,6 +3,8 @@ import { LifeBuoy } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import SupportDrawer from './SupportDrawer';
+import { useLocation } from 'react-router-dom';
+import { routeAvecBarreDAction } from './SetupChecklist';
 
 /**
  * Floating help button, bottom-right on every authenticated page.
@@ -14,6 +16,8 @@ import SupportDrawer from './SupportDrawer';
 export default function SupportFAB() {
   const { language } = useTranslation();
   const isFr = language === 'fr';
+  const { pathname } = useLocation();
+  const formulaire = routeAvecBarreDAction(pathname);
   const [open, setOpen] = useState(false);
   const [checklistVisible, setChecklistVisible] = useState(() => {
     try { return localStorage.getItem('lume-setup-checklist-visible') === 'true'; } catch { return false; }
@@ -61,6 +65,10 @@ export default function SupportFAB() {
           // on décale le FAB juste au-dessus de son en-tête (~4.5rem) pour ne
           // pas le chevaucher. Sur desktop (lg), la place est suffisante.
           bannerLift ? '' : checklistVisible ? 'bottom-5 max-lg:bottom-[4.5rem]' : 'bottom-5',
+          // Sur téléphone, un formulaire a sa barre d'action collée en bas, à
+          // droite — sous le bouton d'aide (audit QA 2026-09-09, n°5 :
+          // « Enregistrer le client » à moitié couvert). On remonte le bouton.
+          formulaire && 'max-md:bottom-24',
         )}
       >
         <LifeBuoy size={22} strokeWidth={2} />
