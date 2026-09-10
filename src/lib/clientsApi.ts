@@ -110,7 +110,8 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
   const orgId = await getCurrentOrgIdOrThrow();
   let request = supabase
     .from('clients')
-    .select('*', { count: 'exact' })
+    // count 'estimated' : évite le scan intégral sous RLS à chaque page.
+    .select('*', { count: 'estimated' })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .range(from, to);

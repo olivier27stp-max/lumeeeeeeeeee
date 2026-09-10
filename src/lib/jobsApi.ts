@@ -432,7 +432,9 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
   const rangeFrom = (page - 1) * pageSize;
   const rangeTo = rangeFrom + pageSize - 1;
 
-  let request = supabase.from('jobs_active').select('*', { count: 'exact' }).range(rangeFrom, rangeTo);
+  // count 'estimated' : exact sous un seuil, estimé (stats Postgres) au-dessus.
+  // 'exact' scannait toute la table filtrée sous RLS à CHAQUE page (O(n)/page).
+  let request = supabase.from('jobs_active').select('*', { count: 'estimated' }).range(rangeFrom, rangeTo);
   request = applyTableFilters(request, query);
   request = request.order(SORT_MAP[sort], { ascending: sortDirection === 'asc', nullsFirst: true });
   request = request.order('created_at', { ascending: false });
