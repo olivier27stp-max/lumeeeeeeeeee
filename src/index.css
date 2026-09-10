@@ -884,6 +884,7 @@ body.dark .job-title-input {
 /* ─── Page header ─── */
 @utility page-header {
   display: flex;
+  flex-wrap: wrap; /* mobile : les actions passent sous le titre au lieu de l'écraser */
   align-items: center;
   justify-content: space-between;
   gap: 1rem;

@@ -1509,7 +1509,7 @@ function AuthenticatedApp({
                         toujours importe) et l'entree de menu 'ai-helper'. */}
                     <Route path="/lume-agent" element={<Navigate to="/day" replace />} />
                     {/* Lumi — l'assistant IA dans l'app (Claude, outils Lume). Plans Scale et Autopilot. */}
-                    <Route path="/lumi" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><LumiPage /></PlanFeatureGate></Gated>} />
+                    <Route path="/lumi" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><PageWrapper><LumiPage /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/dashboard" element={<Navigate to="/day" replace />} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
                     <Route path="/messages" element={<Gated permission="messages.read"><PlanFeatureGate flag="includes_sms"><PageWrapper><Messages /></PageWrapper></PlanFeatureGate></Gated>} />
