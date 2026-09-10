@@ -12,6 +12,10 @@
    Le prompt système et les 66 définitions d'outils sont mis en cache
    (cache_control) : c'est ce qui divise le coût par trois. Toute variation
    d'un appel à l'autre (date, nom) est repoussée APRÈS le point de cache.
+   Cache d'UNE HEURE (ttl 1h) : avec les 5 minutes par défaut, chaque reprise
+   de conversation après une pause réécrivait ~4 000 tokens à 125 % du tarif
+   (2,6 ¢ sur les 6 ¢ d'un tour). L'écriture 1h coûte 2× le tarif d'entrée
+   au lieu de 1,25×, mais elle ne se répète plus de toute l'heure.
    ═══════════════════════════════════════════════════════════════ */
 import Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -25,6 +29,8 @@ import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 
 const MAX_ETAPES = 8;
 const MAX_TOKENS = 4096;
+/** Point de cache d'une heure (voir l'en-tête). Même objet partout : un seul endroit à changer. */
+const CACHE_1H: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral', ttl: '1h' };
 
 let clientAnthropic: Anthropic | null = null;
 export function isLumiConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -43,7 +49,7 @@ export function outilsClaude(): Anthropic.Messages.Tool[] {
     input_schema: (t.declaration.parameters ?? { type: 'object', properties: {} }) as Anthropic.Messages.Tool['input_schema'],
   }));
   const dernier = outils[outils.length - 1];
-  if (dernier) (dernier as Anthropic.Messages.Tool).cache_control = { type: 'ephemeral' };
+  if (dernier) (dernier as Anthropic.Messages.Tool).cache_control = CACHE_1H;
   return outils;
 }
 
@@ -65,7 +71,7 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     ? `Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
     : `Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`;
   return [
-    { type: 'text', text: stable, cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: stable, cache_control: CACHE_1H },
     { type: 'text', text: variable },
   ];
 }

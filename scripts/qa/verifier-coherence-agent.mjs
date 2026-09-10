@@ -128,8 +128,10 @@ function comparer(libelle, attendu, obtenu, note = '') {
   console.log('\n  ── CLIENTS ──');
   const clientsApp = await compte_('clients_active');
   const rc = await outil('search_clients', { query: '', limit: 25 });
-  console.log(`  · total réel de l'org : ${clientsApp} (search_clients plafonne à 25 — outil de recherche, pas de comptage)`);
-  comparer('search_clients renvoie des lignes', true, (rc.count ?? 0) > 0);
+  // total_matching = compte exact en base, même si seulement 25 fiches sont
+  // renvoyées : « combien de clients j'ai ? » doit donner le vrai chiffre.
+  comparer('clients (total exact)', clientsApp, rc.total_matching ?? '—');
+  comparer('search_clients renvoie des lignes', true, (rc.shown ?? 0) > 0);
 
   // ─────────────────────────────────────────────────────────────
   console.log('\n  ── FACTURES IMPAYÉES ──');
@@ -167,8 +169,7 @@ function comparer(libelle, attendu, obtenu, note = '') {
   const quotesApp = (await admin.from('quotes')
     .select('*', { count: 'exact', head: true }).eq('org_id', orgId).is('deleted_at', null)).count ?? 0;
   const rq = await outil('list_quotes', { limit: 30 });
-  if (quotesApp <= 30) comparer('devis (total)', quotesApp, rq.count ?? '—');
-  else console.log(`  · devis : app=${quotesApp} (au-delà du plafond)`);
+  comparer('devis (total exact)', quotesApp, rq.total_matching ?? '—');
 
   // ─────────────────────────────────────────────────────────────
   console.log('\n  ── ENTREPRISE ──');
