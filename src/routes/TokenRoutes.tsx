@@ -1,12 +1,13 @@
+import React from 'react';
 import type { ReactElement } from 'react';
 import { Route, Routes } from 'react-router-dom';
-import QuoteView from '../pages/QuoteView';
-import ContractView from '../pages/ContractView';
-import SatisfactionSurvey from '../pages/SatisfactionSurvey';
-import ClientPortal from '../pages/ClientPortal';
-import PublicPayment from '../pages/PublicPayment';
-import AcceptInvitation from '../pages/AcceptInvitation';
-import MigrationPortal from '../pages/MigrationPortal';
+const QuoteView = React.lazy(() => import('../pages/QuoteView'));
+const ContractView = React.lazy(() => import('../pages/ContractView'));
+const SatisfactionSurvey = React.lazy(() => import('../pages/SatisfactionSurvey'));
+const ClientPortal = React.lazy(() => import('../pages/ClientPortal'));
+const PublicPayment = React.lazy(() => import('../pages/PublicPayment'));
+const AcceptInvitation = React.lazy(() => import('../pages/AcceptInvitation'));
+const MigrationPortal = React.lazy(() => import('../pages/MigrationPortal'));
 
 type TokenKind = 'quote' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite' | 'migration';
 
