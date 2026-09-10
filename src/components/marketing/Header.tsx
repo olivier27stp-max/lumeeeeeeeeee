@@ -42,7 +42,6 @@ export default function Header() {
     { icon: Building2, label: m.industryItems.demolition, href: '/industries#demolition' },
   ];
 
-  const toggleLanguage = () => setLanguage(language === 'fr' ? 'en' : 'fr');
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [megaMenu, setMegaMenu] = useState<MegaMenu>(null);
@@ -128,14 +127,7 @@ export default function Header() {
 
         {/* Desktop CTA */}
         <div className="hidden lg:flex items-center gap-3 pr-6">
-          <button
-            onClick={toggleLanguage}
-            className="text-sm font-bold text-black hover:opacity-60 transition-colors"
-            aria-label={m.langToggleFull}
-            title={m.langToggleFull}
-          >
-            {m.langToggle}
-          </button>
+          <RegionPicker language={language} setLanguage={setLanguage} />
           <Link
             to="/auth"
             className="text-sm font-bold text-black hover:opacity-60 transition-colors"
@@ -223,12 +215,7 @@ export default function Header() {
               <MobileLink to="/pricing" label={m.nav.pricing} />
               <MobileLink to="/contact" label={m.nav.contact} />
               <div className="pt-4 space-y-2">
-                <button
-                  onClick={toggleLanguage}
-                  className="block w-full text-center text-sm font-bold text-text-secondary hover:text-text-primary py-2"
-                >
-                  {m.langToggleFull}
-                </button>
+                <RegionPicker language={language} setLanguage={setLanguage} compact />
                 <Link
                   to="/auth"
                   className="block w-full text-center text-sm font-medium text-text-secondary hover:text-text-primary py-2"
@@ -319,5 +306,79 @@ function MobileLink({ to, label }: { to: string; label: string }) {
     <Link to={to} className="block px-3 py-3 text-sm font-medium text-text-secondary hover:text-text-primary rounded-lg hover:bg-surface-tertiary transition-colors">
       {label}
     </Link>
+  );
+}
+
+
+/* ── Sélecteur de région et de langue (globe), façon Salesforce ──
+   La région est un choix d'affichage mémorisé (localStorage `lume-region`) ;
+   la langue suit la région et passe par le même setLanguage que le reste
+   du site. */
+const REGIONS: { id: string; label: string; lang: 'fr' | 'en' }[] = [
+  { id: 'ca-fr', label: 'Canada · Français', lang: 'fr' },
+  { id: 'ca-en', label: 'Canada · English', lang: 'en' },
+  { id: 'us-en', label: 'United States · English', lang: 'en' },
+];
+
+function RegionPicker({ language, setLanguage, compact }: { language: string; setLanguage: (l: 'fr' | 'en') => void; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const [region, setRegion] = useState<string>(() => {
+    try { return localStorage.getItem('lume-region') || (language === 'fr' ? 'ca-fr' : 'ca-en'); } catch { return language === 'fr' ? 'ca-fr' : 'ca-en'; }
+  });
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDoc); document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+  const current = REGIONS.find((r) => r.id === region && r.lang === language) || REGIONS.find((r) => r.lang === language) || REGIONS[0];
+  const choose = (r: typeof REGIONS[number]) => {
+    setRegion(r.id);
+    try { localStorage.setItem('lume-region', r.id); } catch { /* stockage indisponible */ }
+    if (r.lang !== language) setLanguage(r.lang);
+    setOpen(false);
+  };
+  const title = language === 'fr' ? 'Région et langue' : 'Region and language';
+  return (
+    <div ref={ref} className={compact ? 'relative' : 'relative'}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={title}
+        title={title}
+        className={`inline-flex items-center gap-2 text-sm font-semibold text-black hover:opacity-70 transition-opacity ${compact ? 'w-full justify-center py-2' : ''}`}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+        <span>{compact ? current.label : current.label.replace('United States', 'US').replace('Français', 'FR').replace('English', 'EN')}</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+      {open && (
+        <div role="menu" className={`absolute z-[70] mt-2 min-w-[220px] rounded-xl border border-[#e5e5e0] bg-white shadow-[0_20px_50px_-20px_rgba(0,0,0,.35)] p-1.5 ${compact ? 'left-1/2 -translate-x-1/2' : 'right-0'}`}>
+          <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-[0.15em] font-semibold text-[#8a8a84]">{title}</p>
+          {REGIONS.map((r) => {
+            const active = r.id === current.id;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => choose(r)}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between gap-3 ${active ? 'bg-[#f3f3ef] font-semibold text-black' : 'text-[#333] hover:bg-[#fafaf8]'}`}
+              >
+                {r.label}
+                {active && <span className="text-[#1F5F4F]" aria-hidden="true">✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
