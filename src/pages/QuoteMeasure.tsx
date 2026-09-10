@@ -15,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
+import { captureClientException } from '../lib/sentry';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { getQuoteById, saveQuoteLineItems, type QuoteLineItemInput, type QuoteDetail } from '../lib/quotesApi';
 import { listClients, clientDisplayName, type ClientRecord } from '../lib/clientsApi';
@@ -211,7 +212,7 @@ export default function QuoteMeasure() {
         } else if (elapsed >= 5000) {
           clearInterval(check);
           console.warn('[gmaps] 3D map failed to initialize, falling back to 2D');
-          try { mapDiv.current?.removeChild(map3d); } catch {}
+          try { mapDiv.current?.removeChild(map3d); } catch (e) { captureClientException(e, { contexte: 'QuoteMeasure: retrait de la carte 3D avant fallback 2D' }); }
           map3dRef.current = null;
           setIs3dMode(false);
           if (!mapDiv.current) return;
@@ -908,7 +909,7 @@ export default function QuoteMeasure() {
       const blob = await new Promise<Blob>((r, j) => canvas.toBlob(b => b ? r(b) : j(), 'image/png'));
       await uploadMeasurementScreenshot(quoteId, blob);
       toast.success(fr ? 'Capture sauvegardée' : 'Screenshot saved');
-      try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch {}
+      try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch (e) { captureClientException(e, { contexte: 'QuoteMeasure: copie de la capture dans le presse-papier' }); }
     } catch (e: any) { toast.error(e?.message || (fr ? 'Échec' : 'Failed')); }
   }
 

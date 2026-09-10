@@ -1620,7 +1620,7 @@ export default function NewJobModal({
       if (!addressLine1.trim()) {
         const msg = language === 'fr' ? 'L’adresse du client est requise.' : 'Client address is required.';
         setInlineError(msg);
-        try { toast.error(msg); } catch {}
+        try { toast.error(msg); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
         return;
       }
       try {
@@ -1655,7 +1655,7 @@ export default function NewJobModal({
         : t.modals.clientRequired;
       setInlineError(msg);
       // Toast so it's visible without scrolling
-      try { toast.error(msg); } catch {}
+      try { toast.error(msg); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
       return;
     }
 
@@ -1685,7 +1685,7 @@ export default function NewJobModal({
     // selected, or we create one on the fly from the address fields below.
     if (!propertyId && !addressLine1.trim()) {
       setInlineError(t.modals.propertyRequired);
-      try { toast.error(t.modals.propertyRequired); } catch {}
+      try { toast.error(t.modals.propertyRequired); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
       return;
     }
     // City/province are optional: jobs persist the address as a single
@@ -1727,7 +1727,7 @@ export default function NewJobModal({
     // the job's own schedule); at least one visit with its date is required.
     if (isServicePlan && sortedPlanVisits.length === 0) {
       setInlineError(t.modals.servicePlanNoMonths);
-      try { toast.error(t.modals.servicePlanNoMonths); } catch {}
+      try { toast.error(t.modals.servicePlanNoMonths); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
       return;
     }
     // Every planned visit needs a coherent time window (global hours, or the
@@ -1739,7 +1739,7 @@ export default function NewJobModal({
         const vEnd = buildDateTime(visit.date, end);
         if (!vStart || !vEnd || new Date(vEnd) <= new Date(vStart)) {
           setInlineError(t.modals.endTimeAfterStart);
-          try { toast.error(t.modals.endTimeAfterStart); } catch {}
+          try { toast.error(t.modals.endTimeAfterStart); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
           return;
         }
       }
@@ -1751,7 +1751,7 @@ export default function NewJobModal({
         if (!v.date) {
           const msg = language === 'fr' ? 'Chaque visite doit avoir une date.' : 'Every visit needs a date.';
           setInlineError(msg);
-          try { toast.error(msg); } catch {}
+          try { toast.error(msg); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
           return;
         }
         const vTimes = draftTimes(v);
@@ -1801,7 +1801,7 @@ export default function NewJobModal({
           ? 'Le numéro de job doit être un nombre.'
           : 'Job number must be a number.';
         setInlineError(msg);
-        try { toast.error(msg); } catch {}
+        try { toast.error(msg); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
         return;
       }
       if (nextJobNumber && parseInt(jobNumberToSend, 10) > parseInt(nextJobNumber, 10)) {
@@ -1809,7 +1809,7 @@ export default function NewJobModal({
           ? `Le numéro de job ${jobNumberToSend} n'existe pas — le prochain numéro disponible est ${nextJobNumber}.`
           : `Job number ${jobNumberToSend} doesn't exist yet — the next available number is ${nextJobNumber}.`;
         setInlineError(msg);
-        try { toast.error(msg); } catch {}
+        try { toast.error(msg); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
         return;
       }
       // Vérifier qu'il n'est pas déjà pris dans l'org (la RLS limite la
@@ -1828,7 +1828,7 @@ export default function NewJobModal({
             ? `Le numéro de job « ${jobNumberToSend} » est déjà utilisé.`
             : `Job number "${jobNumberToSend}" is already in use.`;
           setInlineError(msg);
-          try { toast.error(msg); } catch {}
+          try { toast.error(msg); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
           return;
         }
       } catch (err) {
@@ -2037,7 +2037,7 @@ export default function NewJobModal({
             });
           } catch (err) {
             console.error('[jobs] failed to create service contract', err);
-            try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The contract could not be created.'); } catch {}
+            try { toast.error(language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The contract could not be created.'); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
           }
         }
         // Billing & payments du plan : mode + paiement automatique, écrits en
@@ -2076,7 +2076,7 @@ export default function NewJobModal({
             await saveJobBillingMilestones(createdJob.id, drafts);
           } catch (err) {
             console.error('[jobs] failed to create billing installments', err);
-            try { toast.error(language === 'fr' ? 'L’échéancier n’a pas pu être créé.' : 'The payment schedule could not be created.'); } catch {}
+            try { toast.error(language === 'fr' ? 'L’échéancier n’a pas pu être créé.' : 'The payment schedule could not be created.'); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
           }
         }
         // Équipe assignée (même sans horaire créé ni disponibilité) : étiquette
@@ -2112,7 +2112,7 @@ export default function NewJobModal({
           }, language === 'fr' ? 'fr' : 'en');
         } catch (err: any) {
           console.error('[jobs] failed to create job agreement', err);
-          try { toast.error(err?.message || (language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The agreement could not be created.')); } catch {}
+          try { toast.error(err?.message || (language === 'fr' ? 'Le contrat n’a pas pu être créé.' : 'The agreement could not be created.')); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
         }
       }
 

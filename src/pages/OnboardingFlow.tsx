@@ -306,7 +306,7 @@ export default function OnboardingFlow() {
       }
 
       setUser(signInData.session?.user ?? null);
-      try { await provisionOrg(); } catch {}
+      try { await provisionOrg(); } catch (e) { captureClientException(e, { contexte: 'OnboardingFlow: provisionOrg (handleCreateAccount)' }); }
       goNext();
     } catch (err: any) {
       const msg = err.message || '';
@@ -338,7 +338,7 @@ export default function OnboardingFlow() {
     const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 
     // 1. Provision org
-    try { await provisionOrg(); } catch {}
+    try { await provisionOrg(); } catch (e) { captureClientException(e, { contexte: 'OnboardingFlow: provisionOrg (handleCheckout)' }); }
 
     // 1b. Seed the org baseline (taxes QC + automations + service catalog).
     // Ce chemin /checkout crée une org NUE et pose onboarding_done, ce qui
@@ -350,7 +350,7 @@ export default function OnboardingFlow() {
         method: 'POST', headers,
         body: JSON.stringify({ industry: industry || null, tax_region: 'QC' }),
       });
-    } catch {}
+    } catch (e) { captureClientException(e, { contexte: 'OnboardingFlow: seed-defaults org baseline' }); }
 
     // 2. Save onboarding
     try {
