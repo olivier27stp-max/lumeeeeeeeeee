@@ -8,6 +8,8 @@
      borné + rate-limité). Aucune donnée CRM, aucun token de session envoyé. */
 
 import { useEffect, useRef, useState } from 'react';
+
+const LUMI_CLOSED_KEY = 'lume-lumi-closed';
 import { X, Send } from 'lucide-react';
 
 type Msg = { role: 'user' | 'assistant'; content: string };
@@ -25,7 +27,16 @@ const ACCUEIL: Msg = {
 };
 
 export default function LumiAgent() {
-  const [open, setOpen] = useState(true);
+  // Ouvert par défaut ; si le visiteur l'a fermé, il reste fermé au prochain
+  // chargement (localStorage). Le bouton flottant et l'événement `lumi:open`
+  // le rouvrent et effacent ce choix.
+  const [open, setOpenState] = useState<boolean>(() => {
+    try { return localStorage.getItem(LUMI_CLOSED_KEY) !== '1'; } catch { return true; }
+  });
+  const setOpen = (v: boolean) => {
+    setOpenState(v);
+    try { if (v) localStorage.removeItem(LUMI_CLOSED_KEY); else localStorage.setItem(LUMI_CLOSED_KEY, '1'); } catch { /* stockage indisponible */ }
+  };
   const [messages, setMessages] = useState<Msg[]>([ACCUEIL]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
