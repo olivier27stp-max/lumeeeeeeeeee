@@ -29,14 +29,46 @@ export interface PredefinedService {
   updated_at: string;
 }
 
+/**
+ * Bureaux (orgs) de la compagnie de l'org active, org active incluse.
+ *
+ * Le catalogue est PARTAGÉ entre les bureaux d'une même compagnie
+ * (migration 20260910000000) : on lit donc sur tous les bureaux frères, mais
+ * jamais au-delà — une personne membre de deux compagnies distinctes ne doit
+ * pas voir leurs catalogues mélangés, ce que la RLS seule laisserait passer.
+ * Tant que la RPC n'est pas posée (ou si elle échoue), on retombe sur l'org
+ * active seule : comportement d'avant, jamais de page vide.
+ */
+const companyOrgIdsCache = new Map<string, Promise<string[]>>();
+
+export function getCompanyOrgIds(orgId: string): Promise<string[]> {
+  let pending = companyOrgIdsCache.get(orgId);
+  if (!pending) {
+    pending = (async () => {
+      try {
+        const { data, error } = await supabase.rpc('company_org_ids', { p_org: orgId });
+        if (error) throw error;
+        const ids = (data || []).map((v: unknown) => String((v as any)?.company_org_ids ?? v)).filter(Boolean);
+        return ids.includes(orgId) ? ids : [orgId, ...ids];
+      } catch {
+        companyOrgIdsCache.delete(orgId);
+        return [orgId];
+      }
+    })();
+    companyOrgIdsCache.set(orgId, pending);
+  }
+  return pending;
+}
+
 export async function listPredefinedServices(): Promise<PredefinedService[]> {
-  // Filter by the ACTIVE org explicitly — RLS alone lets every org the user
-  // belongs to through, which mixes catalogs for multi-office companies.
+  // Filtre explicite par les bureaux de la compagnie ACTIVE — la RLS seule
+  // laisse passer toutes les compagnies dont la personne est membre.
   const orgId = await getCurrentOrgIdOrThrow();
+  const orgIds = await getCompanyOrgIds(orgId);
   const { data, error } = await supabase
     .from('predefined_services')
     .select('*')
-    .eq('org_id', orgId)
+    .in('org_id', orgIds)
     .eq('is_active', true)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true });
@@ -58,6 +90,8 @@ export async function createPredefinedService(service: {
 }): Promise<PredefinedService> {
   // Use the ACTIVE org — resolving via `memberships … limit(1)` picked an
   // arbitrary org for multi-org users, so services landed in the wrong company.
+  // L'org active reste le « bureau créateur » ; la ligne est visible de tous
+  // les bureaux de la compagnie (catalogue partagé).
   const orgId = await getCurrentOrgIdOrThrow();
 
   const base = {

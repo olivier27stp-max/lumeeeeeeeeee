@@ -11,6 +11,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { companyOrgIds } from '../supabase';
 
 /**
  * Borne haute d'une plage sur une colonne timestamptz. Une date seule
@@ -400,9 +401,10 @@ export async function generateCommissionsForInvoice(
     const serviceIds = [...new Set((items ?? []).map((i: any) => i.source_id).filter(Boolean))];
     const catParService = new Map<string, string | null>();
     if (serviceIds.length) {
+      // Catalogue partagé : un service peut appartenir à un bureau frère.
       const { data: services } = await supabase
         .from('predefined_services')
-        .select('id, category').eq('org_id', orgId).in('id', serviceIds);
+        .select('id, category').in('org_id', await companyOrgIds(supabase, orgId)).in('id', serviceIds);
       for (const s of services ?? []) catParService.set(s.id, s.category ?? null);
     }
     const catsCouvertes = new Set(overridesRegle.map((o) => o.category));

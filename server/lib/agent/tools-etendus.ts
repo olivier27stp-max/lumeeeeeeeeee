@@ -22,7 +22,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import crypto from 'crypto';
-import { getServiceClient } from '../supabase';
+import { getServiceClient, companyOrgIds } from '../supabase';
 import { logSecurityEvent } from '../security';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../config';
 import { normalizeE164, findOrCreateConversation } from '../helpers';
@@ -721,10 +721,13 @@ const listServices: AgentTool = {
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
+    // Catalogue partagé entre les bureaux d'une compagnie (20260910000000) :
+    // on lit sur les bureaux frères de l'office actif, jamais au-delà.
+    const orgIds = await companyOrgIds(getServiceClient(), ctx.orgId);
     const { data, error } = await ctx.client
       .from('predefined_services')
       .select('id, name, description, default_price_cents, category, default_duration_minutes')
-      .eq('org_id', ctx.orgId)
+      .in('org_id', orgIds)
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true })

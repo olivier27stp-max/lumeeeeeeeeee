@@ -3,7 +3,9 @@ import { Clock, Edit2, Loader2, Package, Plus, Search, Trash2, X } from 'lucide-
 import { toast } from 'sonner';
 import { formatCurrency } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { getCurrentOrgId } from '../lib/orgApi';
 import {
+  getCompanyOrgIds,
   listPredefinedServices,
   createPredefinedService,
   updatePredefinedService,
@@ -17,6 +19,21 @@ export default function ProductsServices() {
   const isFr = language === 'fr';
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
+  // Nombre de bureaux de la compagnie : > 1 ⇒ on dit clairement que le
+  // catalogue est commun, sinon un changement fait ici surprendrait ailleurs.
+  const [officeCount, setOfficeCount] = useState(1);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const orgId = await getCurrentOrgId();
+        if (!orgId) return;
+        const ids = await getCompanyOrgIds(orgId);
+        if (!cancelled) setOfficeCount(ids.length);
+      } catch { /* sous-titre par défaut */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const [search, setSearch] = useState('');
 
   // Create/edit form
@@ -176,7 +193,13 @@ export default function ProductsServices() {
           </div>
           <div>
             <h1 className="text-[20px] font-bold text-text-primary tracking-tight">{isFr ? 'Produits & Services' : 'Products & Services'}</h1>
-            <p className="text-[12px] text-text-tertiary">{isFr ? 'Gérez votre catalogue de services prédéfinis' : 'Manage your predefined service catalog'}</p>
+            <p className="text-[12px] text-text-tertiary">
+              {officeCount > 1
+                ? (isFr
+                  ? `Catalogue commun à vos ${officeCount} bureaux — une modification ici s'applique partout`
+                  : `Shared across your ${officeCount} offices — a change here applies everywhere`)
+                : (isFr ? 'Gérez votre catalogue de services prédéfinis' : 'Manage your predefined service catalog')}
+            </p>
           </div>
         </div>
         <button onClick={openCreate} className="glass-button-primary !text-[12px] inline-flex items-center gap-1.5">
