@@ -2,7 +2,7 @@
  * Page « En savoir plus » d'une fonction (/fonctions/:slug).
  * Contenu dans fonctionsData.ts ; même ciel et mêmes styles que l'accueil.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
@@ -15,10 +15,6 @@ export default function FonctionDetail() {
   const fr = language === 'fr';
   const f = findFonction(slug);
   const [demoOpen, setDemoOpen] = useState(false);
-  useEffect(() => {
-    document.documentElement.classList.add('home-ciel');
-    return () => document.documentElement.classList.remove('home-ciel');
-  }, []);
   if (!f) return <Navigate to="/features" replace />;
   const pick = (b: Bi) => (fr ? b.fr : b.en);
   const others = FONCTIONS.filter((x) => x.slug !== f.slug);
@@ -94,9 +90,7 @@ export default function FonctionDetail() {
 }
 
 const FN_CSS = `
-.home-ciel .marketing-landing > header { background-color:rgba(230,240,255,.92) !important; background-image:none !important; border-bottom-color:rgba(11,92,173,.14) !important; backdrop-filter:blur(8px); }
-.home-ciel .marketing-landing footer { background-color:#eef5ff !important; background-image:none !important; border-top-color:rgba(11,92,173,.14) !important; }
-.fn-page { --forest:#1F5F4F; --mint:#3FAF97; color:#171717; background:linear-gradient(180deg,#e6f0ff 0%, #eef5ff 30%, #f3f8ff 100%); }
+.fn-page { --forest:#1F5F4F; --mint:#3FAF97; color:#171717; background:transparent; }
 .fn-wrap { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
 .fn-page h1 { font-size:clamp(34px,4vw,52px); font-weight:800; letter-spacing:-.035em; line-height:1.05; margin:12px 0 0; color:#0a0a0a; text-wrap:balance; }
 .fn-page h2 { font-size:28px; font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#0a0a0a; margin:8px 0 0; max-width:26ch; }

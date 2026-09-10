@@ -371,14 +371,14 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
               <thead>
                 {/* Bande compacte : la seule partie qui colle en haut pendant le défilement */}
                 <tr>
-                  <th scope="col" className="sticky top-0 z-10 bg-white border-y-2 border-[#e0e0e0] text-left px-5 py-3 text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary w-[34%]">
+                  <th scope="col" className="sticky top-0 z-10 bg-white/95 backdrop-blur border-y border-[#d9d9d4] text-left px-5 py-3 text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary w-[34%]">
                     {language === 'fr' ? 'Fonctionnalité' : 'Feature'}
                   </th>
                   {PLANS.map(plan => (
                     <th
                       key={plan.slug}
                       scope="col"
-                      className={`sticky top-0 z-10 border-y-2 border-[#e0e0e0] px-4 py-3 text-center ${plan.featured ? 'bg-[#f4f8f6]' : 'bg-white'}`}
+                      className={`sticky top-0 z-10 border-y border-[#d9d9d4] px-4 py-3 text-center backdrop-blur ${plan.featured ? 'bg-[#eef7f3]/95' : 'bg-white/95'}`}
                     >
                       <div className="flex items-center justify-center gap-3">
                         <span className="text-[15px] font-extrabold text-[#111]">{plan.name}</span>
@@ -405,10 +405,10 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                   <Fragment key={group.title.en}>
                     <CompareGroupHeader title={group.title[language]} />
                     {group.rows.map(row => (
-                      <tr key={row.label.en} className="border-t border-[#f0f0ec] hover:bg-[#fafaf8] transition-colors">
-                        <td className="px-5 py-3 text-text-secondary leading-snug">{row.label[language]}</td>
+                      <tr key={row.label.en} className="border-t border-[#ececea] hover:bg-[#f7faf8] transition-colors">
+                        <td className="px-5 py-3.5 text-[13.5px] text-[#171717] leading-snug">{row.label[language]}</td>
                         {row.cells.map((cell, i) => (
-                          <td key={i} className={`px-4 py-3 text-center ${PLANS[i].featured ? 'bg-[#1F5F4F]/[0.04]' : ''}`}>
+                          <td key={i} className={`px-4 py-3.5 text-center ${PLANS[i].featured ? 'bg-[#1F5F4F]/[0.05]' : ''}`}>
                             <CompareCell cell={cell} language={language} yes={c.included} no={c.notIncluded} />
                           </td>
                         ))}
@@ -471,8 +471,8 @@ function PricingFAQ({ q, a }: { q: string; a: string }) {
 
 function CompareGroupHeader({ title }: { title: string }) {
   return (
-    <tr className="bg-[#fafaf8] border-t border-[#e5e5e0]">
-      <th scope="colgroup" colSpan={4} className="text-left px-5 py-2.5 text-[11px] uppercase tracking-[0.15em] font-semibold text-[#1F5F4F]">
+    <tr>
+      <th scope="colgroup" colSpan={4} className="text-left px-5 pt-9 pb-3 text-[15px] font-extrabold tracking-[-0.01em] text-[#0a0a0a] border-b-2 border-[#111]">
         {title}
       </th>
     </tr>
@@ -482,15 +482,15 @@ function CompareGroupHeader({ title }: { title: string }) {
 function CompareCell({ cell, language, yes, no }: { cell: Cell; language: Language; yes: string; no: string }) {
   if (cell === true) {
     return (
-      <span className="inline-flex w-5 h-5 rounded-full items-center justify-center" style={{ border: '2px solid #3FAF97' }} role="img" aria-label={yes}>
-        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M3 8.5l3.5 3.5L13 5" stroke="#3FAF97" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <span className="inline-flex w-6 h-6 rounded-full items-center justify-center bg-[#3FAF97]" role="img" aria-label={yes}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 8.5l3.5 3.5L13 5" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </span>
     );
   }
   if (cell === false) {
-    return <span className="text-text-tertiary/60 select-none" role="img" aria-label={no}>—</span>;
+    return <span className="inline-block w-4 h-[2px] rounded bg-[#d9d9d4] align-middle" role="img" aria-label={no} />;
   }
-  return <span className="text-xs font-semibold text-[#1F5F4F]">{cell[language]}</span>;
+  return <span className="inline-block text-[11.5px] font-bold text-[#1F5F4F] bg-[#dff3ec] rounded-full px-2.5 py-1">{cell[language]}</span>;
 }
