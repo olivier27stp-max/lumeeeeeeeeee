@@ -21,6 +21,7 @@ import { listSalespeople } from '../lib/jobsApi';
 import { clientDisplayName } from '../lib/clientsApi';
 import { formatDate, cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import PresetSelectModal from '../components/quotes/PresetSelectModal';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import type { QuotePreset } from '../types';
@@ -221,7 +222,7 @@ export default function Quotes() {
   }
 
   async function onDel(id: string) {
-    if (!confirm(t.quotes.deleteThisQuote)) return;
+    if (!(await confirmer({ message: t.quotes.deleteThisQuote, danger: true }))) return;
     try { await deleteQuote(id); qc.invalidateQueries({ queryKey: ['quotes-list'] }); qc.invalidateQueries({ queryKey: ['quote-kpis'] }); toast.success(t.quotes.quoteDeleted); }
     catch { toast.error(fr ? 'Échec' : 'Failed'); }
   }

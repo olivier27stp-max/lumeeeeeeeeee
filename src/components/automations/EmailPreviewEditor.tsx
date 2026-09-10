@@ -13,6 +13,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { X, Loader2, Check, Plus, Trash2, Type, List } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmer } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
 import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
@@ -138,19 +139,19 @@ export default function EmailPreviewEditor({
    * clic sur le fond — passent par ici. Sans cette garde, un clic à côté
    * effaçait un courriel réécrit sans le moindre avertissement.
    */
-  const fermer = useCallback(() => {
+  const fermer = useCallback(async () => {
     if (modifie) {
       const question = fr
         ? 'Vos modifications ne sont pas enregistrées. Fermer quand même ?'
         : 'Your changes are not saved. Close anyway?';
-      if (!window.confirm(question)) return;
+      if (!(await confirmer({ message: question, danger: true }))) return;
     }
     onClose();
   }, [modifie, fr, onClose]);
 
   // Échap ferme la fenêtre — réflexe attendu d'une fenêtre superposée.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') fermer(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') void fermer(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [fermer]);

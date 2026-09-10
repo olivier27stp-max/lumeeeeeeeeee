@@ -3,6 +3,7 @@ import { Check, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { confirmer } from './ui/ConfirmDialog';
 import { toRgba } from '../lib/colorUtils';
 import { TAG_COLORS } from '../lib/tagPalette';
 import TagColorSwatches from './TagColorSwatches';
@@ -106,7 +107,7 @@ export default function JobTagsCard({ jobId, tagIds, onChange }: JobTagsCardProp
   }
 
   async function handleDelete(tag: JobTagRecord) {
-    if (!window.confirm(fr ? `Supprimer le tag « ${tag.name} » ?` : `Delete tag "${tag.name}"?`)) return;
+    if (!(await confirmer({ message: fr ? `Supprimer le tag « ${tag.name} » ?` : `Delete tag "${tag.name}"?`, danger: true }))) return;
     try {
       await softDeleteJobTag(tag.id);
       setTags((prev) => prev.filter((tg) => tg.id !== tag.id));

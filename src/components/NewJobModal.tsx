@@ -36,6 +36,7 @@ import { useTranslation } from '../i18n';
 import SpecificNotes from './SpecificNotes';
 import SpecificNotesInline, { type SpecificNotesInlineHandle } from './SpecificNotesInline';
 import { toast } from 'sonner';
+import { confirmer } from './ui/ConfirmDialog';
 
 interface LineItemForm {
   id: string;
@@ -1782,7 +1783,7 @@ export default function NewJobModal({
     if (!scheduledAt && String(status).toLowerCase() !== 'draft') {
       const msg = t.modals.statusWillDemoteToDraft
         || 'No start date set — this job will be saved as Draft and will not appear on the calendar. Continue?';
-      if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+      if (!(await confirmer({ message: msg }))) return;
     }
 
     // Numéro de job : le défaut auto non modifié est envoyé vide, le trigger

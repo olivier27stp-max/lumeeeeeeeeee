@@ -20,6 +20,7 @@ import {
   type DropdownOption,
 } from '../lib/customFieldsApi';
 import { useTranslation } from '../i18n';
+import { toast } from 'sonner';
 
 // ─── Column type icons & labels ─────────────────────────────────
 const COL_TYPE_META: Record<ColumnType, { icon: typeof Type; label: string; labelFr: string }> = {
@@ -307,7 +308,7 @@ function AddColumnModal({
       onCreated(col);
     } catch (e: any) {
       console.error('Failed to create column:', e);
-      alert(e.message || (isFr ? 'Échec de la création de la colonne' : 'Failed to create column'));
+      toast.error(e.message || (isFr ? 'Échec de la création de la colonne' : 'Failed to create column'));
     }
     setSaving(false);
   };

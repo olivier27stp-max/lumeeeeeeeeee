@@ -17,6 +17,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { confirmer } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
@@ -301,7 +302,7 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
     const confirmMsg = fr
       ? `Retirer toutes les assignations des ${cells.length} cellules sélectionnées ?`
       : `Remove all assignments from the ${cells.length} selected cells?`;
-    if (!window.confirm(confirmMsg)) return;
+    if (!(await confirmer({ message: confirmMsg, danger: true }))) return;
     setBusy(true);
     let removed = 0;
     try {

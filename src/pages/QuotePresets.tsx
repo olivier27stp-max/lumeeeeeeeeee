@@ -35,6 +35,7 @@ import QuoteRenderer from '../components/quote/QuoteRenderer';
 import ServicePicker from '../components/ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 
 type ViewMode = 'list' | 'edit';
 
@@ -325,7 +326,7 @@ export default function QuotePresets() {
   }
 
   async function handleDelete(preset: QuotePreset) {
-    if (!confirm(fr ? `Supprimer "${preset.name}" ?` : `Delete "${preset.name}"?`)) return;
+    if (!(await confirmer({ message: fr ? `Supprimer "${preset.name}" ?` : `Delete "${preset.name}"?`, danger: true }))) return;
     try { await deleteQuotePreset(preset.id); toast.success(fr ? 'Supprimé' : 'Deleted'); await loadPresets(); }
     catch { toast.error(fr ? 'Échec' : 'Failed'); }
   }

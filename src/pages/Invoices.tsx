@@ -39,6 +39,7 @@ import {
 import { cn, formatDate } from '../lib/utils';
 import { exportToCsv } from '../lib/exportCsv';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
@@ -434,7 +435,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     const confirmMsg = fr
       ? `Envoyer la facture à ${client.email} ?`
       : `Send invoice to ${client.email}?`;
-    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) {
+    if (!(await confirmer({ message: confirmMsg }))) {
       setActionMenuId(null);
       return;
     }
@@ -820,7 +821,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             onAction={async (actionId) => {
               const ids = Array.from(selectedIds);
               if (actionId === 'delete') {
-                if (!window.confirm(fr ? `Supprimer ${ids.length} facture(s) ?` : `Delete ${ids.length} invoice(s)?`)) return;
+                if (!(await confirmer({ message: fr ? `Supprimer ${ids.length} facture(s) ?` : `Delete ${ids.length} invoice(s)?`, danger: true }))) return;
                 let failed = 0;
                 for (const id of ids) {
                   try {

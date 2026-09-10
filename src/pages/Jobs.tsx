@@ -53,6 +53,7 @@ import StatusBadge, { statusDotColor } from '../components/ui/StatusBadge';
 import FilterPill from '../components/ui/FilterPill';
 import { CrmPageHeader, CrmFilterBtn, CrmTableCard, CrmAvatar, CrmBadge } from '../components/ui/CrmTable';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
@@ -789,7 +790,7 @@ export default function Jobs() {
             onAction={async (actionId) => {
               const ids = Array.from(selectedJobIds);
               if (actionId === 'delete') {
-                if (!window.confirm(fr ? `Supprimer ${ids.length} job(s) ?` : `Delete ${ids.length} jobs?`)) return;
+                if (!(await confirmer({ message: fr ? `Supprimer ${ids.length} job(s) ?` : `Delete ${ids.length} jobs?`, danger: true }))) return;
                 let deleteFailed = 0;
                 for (const jid of ids) { await softDeleteJob(String(jid)).catch(() => { deleteFailed++; }); }
                 setJobs((prev) => prev.filter((j) => !selectedJobIds.has(j.id)));

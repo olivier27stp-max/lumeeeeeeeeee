@@ -48,6 +48,7 @@ import { getInvoiceRowUiStatus } from '../lib/invoicesApi';
 import { StatusBadge, Skeleton } from '../components/ui';
 import EntityNumberEditor from '../components/EntityNumberEditor';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import ActivityTimeline from '../components/ActivityTimeline';
 import { displayEmail, displayPhone, displayAddress } from '../lib/piiSanitizer';
 import { useDropZone } from '../hooks/useDropZone';
@@ -396,7 +397,7 @@ export default function ClientDetails() {
     const msg = language === 'fr'
       ? `Archiver ${displayName} ? Ses jobs, factures et devis existants restent visibles.`
       : `Archive ${displayName}? Existing jobs, invoices and quotes remain visible.`;
-    if (typeof window !== 'undefined' && !window.confirm(msg)) {
+    if (!(await confirmer({ message: msg, danger: true }))) {
       setShowActionMenu(false);
       return;
     }
@@ -435,7 +436,7 @@ export default function ClientDetails() {
     const msg = language === 'fr'
       ? `Supprimer les données personnelles de ${displayName} ? Cette action anonymise le client de façon permanente (les factures sont conservées pour la loi fiscale). Irréversible.`
       : `Erase ${displayName}'s personal data? This permanently anonymizes the client (invoices are kept for tax law). Irreversible.`;
-    if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    if (!(await confirmer({ message: msg, danger: true }))) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const ok = await eraseClient(client.id, session?.access_token || '');

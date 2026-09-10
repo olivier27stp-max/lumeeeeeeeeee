@@ -32,6 +32,7 @@ import SpecificNotes from '../components/SpecificNotes';
 import { format } from 'date-fns';
 import { frCA as dfFr, enCA as dfEn } from 'date-fns/locale';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import ServicePicker from '../components/ServicePicker';
 import type { PredefinedService } from '../lib/servicesApi';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
@@ -302,18 +303,18 @@ export default function QuoteDetails() {
                     <Ruler size={14} /> {isFr ? 'Mesure' : 'Measure'}</button>
                   <div className="border-t border-outline my-1" />
                   <p className="px-4 py-1 text-[10px] text-text-tertiary uppercase tracking-wider font-semibold">{isFr ? 'Envoyer par...' : 'Send as...'}</p>
-                  <button onClick={() => {
+                  <button onClick={async () => {
                     const target = entityEmail || '';
                     if (!target) return;
-                    if (typeof window !== 'undefined' && !window.confirm(isFr ? `Envoyer la soumission à ${target}?` : `Send quote to ${target}?`)) return;
+                    if (!(await confirmer({ message: isFr ? `Envoyer la soumission à ${target}?` : `Send quote to ${target}?` }))) return;
                     act(async () => { await sendQuoteEmail(quote.id); toast.success(isFr ? 'Courriel envoyé' : 'Email sent'); loadQuote(); });
                   }}
                     disabled={!entityEmail || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                     <Mail size={14} /> {isFr ? 'Courriel' : 'Email'}</button>
-                  <button onClick={() => {
+                  <button onClick={async () => {
                     const target = entityPhone || '';
                     if (!target) return;
-                    if (typeof window !== 'undefined' && !window.confirm(isFr ? `Envoyer la soumission par texto à ${target}?` : `Send quote by text to ${target}?`)) return;
+                    if (!(await confirmer({ message: isFr ? `Envoyer la soumission par texto à ${target}?` : `Send quote by text to ${target}?` }))) return;
                     act(async () => { await sendQuoteSms(quote.id); toast.success(isFr ? 'Texto envoyé' : 'Text sent'); loadQuote(); });
                   }}
                     disabled={!entityPhone || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
@@ -326,8 +327,8 @@ export default function QuoteDetails() {
                   <button onClick={() => act(async () => { await updateQuoteStatus(quote.id, 'approved'); toast.success(isFr ? 'Approuvée' : 'Approved'); loadQuote(); })}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <CheckCircle2 size={14} /> {isFr ? 'Approuvée' : 'Approved'}</button>
-                  <button onClick={() => {
-                    if (typeof window !== 'undefined' && !window.confirm(isFr ? 'Marquer cette soumission comme refusée?' : 'Mark this quote as declined?')) return;
+                  <button onClick={async () => {
+                    if (!(await confirmer({ message: isFr ? 'Marquer cette soumission comme refusée?' : 'Mark this quote as declined?', danger: true }))) return;
                     act(async () => { await updateQuoteStatus(quote.id, 'declined', 'Marked declined by staff'); toast.success(isFr ? 'Refusée' : 'Declined'); loadQuote(); });
                   }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
@@ -349,7 +350,7 @@ export default function QuoteDetails() {
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Printer size={14} /> {isFr ? 'Imprimer ou enregistrer en PDF' : 'Print or Save PDF'}</button>
                   <div className="border-t border-outline my-1" />
-                  <button onClick={() => act(async () => { if (!confirm(isFr ? 'Supprimer?' : 'Delete?')) return; await deleteQuote(quote.id); toast.success(isFr ? 'Supprimée' : 'Deleted'); navigate('/quotes'); })}
+                  <button onClick={() => act(async () => { if (!(await confirmer({ message: isFr ? 'Supprimer?' : 'Delete?', danger: true }))) return; await deleteQuote(quote.id); toast.success(isFr ? 'Supprimée' : 'Deleted'); navigate('/quotes'); })}
                     className="w-full px-4 py-2 text-left hover:bg-danger-light text-danger flex items-center gap-2.5">
                     <Trash2 size={14} /> {isFr ? 'Supprimer' : 'Delete'}</button>
                 </div>

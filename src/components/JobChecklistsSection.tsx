@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ClipboardList, Plus, Trash2, Check, X, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { confirmer } from './ui/ConfirmDialog';
 import { uploadFile, STORAGE_BUCKETS } from '../lib/storage';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { SignedImg } from './ui/SignedMedia';
@@ -243,7 +244,7 @@ function ChecklistInstance({
   }
 
   async function remove() {
-    if (!confirm(fr ? 'Supprimer cette checklist ?' : 'Delete this checklist?')) return;
+    if (!(await confirmer({ message: fr ? 'Supprimer cette checklist ?' : 'Delete this checklist?', danger: true }))) return;
     try {
       await deleteJobChecklist(jobId, instance.id);
       onDelete();

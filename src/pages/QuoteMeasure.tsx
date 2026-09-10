@@ -15,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { getQuoteById, saveQuoteLineItems, type QuoteLineItemInput, type QuoteDetail } from '../lib/quotesApi';
 import { listClients, clientDisplayName, type ClientRecord } from '../lib/clientsApi';
 import { listPredefinedServices, type PredefinedService } from '../lib/servicesApi';
@@ -992,9 +993,9 @@ export default function QuoteMeasure() {
         !(((sh.metadata?.service_ids as string[] | undefined) || []).length));
       if (unpriced.length > 0) {
         const names = unpriced.map(sh => sh.label).join(', ');
-        const ok = window.confirm(fr
+        const ok = await confirmer({ message: fr
           ? `${unpriced.length} mesure(s) sans service (${names}) — elles iront au devis à 0 $. Envoyer quand même ?\n\nAstuce : cochez vos services dans le panneau de droite, ils s'appliquent aussi aux mesures déjà tracées.`
-          : `${unpriced.length} measurement(s) without a service (${names}) — they will land on the quote at $0. Send anyway?\n\nTip: check your services in the right panel; they also apply to already-drawn measurements.`);
+          : `${unpriced.length} measurement(s) without a service (${names}) — they will land on the quote at $0. Send anyway?\n\nTip: check your services in the right panel; they also apply to already-drawn measurements.` });
         if (!ok) return;
       }
     }

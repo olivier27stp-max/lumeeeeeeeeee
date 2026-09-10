@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { NavigationGuardProvider } from './contexts/NavigationGuard';
 import { LanguageProvider } from './i18n';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ConfirmDialogHost } from './components/ui/ConfirmDialog';
 import { initSentryClient } from './lib/sentry';
 import App from './App.tsx';
 import './index.css';
@@ -63,6 +64,8 @@ createRoot(document.getElementById('root')!).render(
             </NavigationGuardProvider>
           </BrowserRouter>
         </QueryClientProvider>
+        {/* Fenêtre de confirmation applicative (remplace confirm() natif) — montée une seule fois */}
+        <ConfirmDialogHost />
       </LanguageProvider>
     </ErrorBoundary>
   </StrictMode>,

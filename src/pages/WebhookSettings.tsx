@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Copy, Check, Loader2, Send, ListChecks, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import BackToSettings from '../components/ui/BackToSettings';
 import {
   listWebhooks,
@@ -77,7 +78,7 @@ export default function WebhookSettings() {
   };
 
   const onDelete = async (id: string) => {
-    if (!confirm(fr ? 'Désactiver ce webhook ?' : 'Deactivate this webhook?')) return;
+    if (!(await confirmer({ message: fr ? 'Désactiver ce webhook ?' : 'Deactivate this webhook?', danger: true }))) return;
     setBusyId(id);
     try {
       await deleteWebhook(id);

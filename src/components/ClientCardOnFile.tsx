@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CreditCard, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { confirmer } from './ui/ConfirmDialog';
 import { getClientCardOnFile, removeClientCardOnFile, type ClientCardOnFile as CardOnFile } from '../lib/cardOnFileApi';
 
 /**
@@ -29,7 +30,7 @@ export default function ClientCardOnFile({ clientId, fr }: { clientId: string; f
     const msg = fr
       ? 'Retirer la carte au dossier de ce client ? Elle sera aussi détachée chez Stripe et les paiements automatiques cesseront.'
       : 'Remove this client’s card on file? It will also be detached at Stripe and automatic payments will stop.';
-    if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    if (!(await confirmer({ message: msg, danger: true }))) return;
     setRemoving(true);
     try {
       await removeClientCardOnFile(clientId);

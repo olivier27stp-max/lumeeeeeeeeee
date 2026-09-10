@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { PageHeader } from '../components/ui';
 import type { RecurrenceRule, RecurrenceFrequency } from '../lib/recurringJobsApi';
 import { deactivateRecurrenceRule } from '../lib/recurringJobsApi';
@@ -76,7 +77,7 @@ export default function RecurringJobs() {
   };
 
   const handleDelete = async (rule: RuleWithJob) => {
-    if (!confirm(fr ? `Supprimer la récurrence pour "${rule.job_title}" ?` : `Delete recurrence for "${rule.job_title}"?`)) return;
+    if (!(await confirmer({ message: fr ? `Supprimer la récurrence pour "${rule.job_title}" ?` : `Delete recurrence for "${rule.job_title}"?`, danger: true }))) return;
     try {
       await deactivateRecurrenceRule(rule.id);
       setRules((prev) => prev.filter((r) => r.id !== rule.id));

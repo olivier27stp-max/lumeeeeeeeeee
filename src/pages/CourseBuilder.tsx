@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { useCompany } from '../contexts/CompanyContext';
 import {
   getCourse, createCourse, updateCourse, deleteCourse,
@@ -704,7 +705,7 @@ export default function CourseBuilder() {
                             <button ref={el => { addLessonBtnRefs.current[mod.id] = el; }} onClick={(e) => { e.stopPropagation(); openAddLessonMenu(mod.id); }} className="p-1 rounded-md hover:bg-surface-secondary text-text-muted hover:text-text-secondary transition-colors" title={t.courses.addLesson}>
                               <Plus size={13} />
                             </button>
-                            <button onClick={() => { if (confirm(fr ? 'Supprimer ce chapitre ?' : 'Delete this chapter?')) handleDeleteModule(mod.id); }} className="p-1 rounded-md hover:bg-danger-light text-text-muted hover:text-danger transition-colors">
+                            <button onClick={async () => { if (await confirmer({ message: fr ? 'Supprimer ce chapitre ?' : 'Delete this chapter?', danger: true })) handleDeleteModule(mod.id); }} className="p-1 rounded-md hover:bg-danger-light text-text-muted hover:text-danger transition-colors">
                               <Trash2 size={12} />
                             </button>
                           </div>
@@ -991,7 +992,7 @@ export default function CourseBuilder() {
               {courseId && (
                 <div className="pt-4 border-t border-outline/20">
                   <button onClick={async () => {
-                    if (!confirm(fr ? 'Supprimer ce cours définitivement ?' : 'Delete this course permanently?')) return;
+                    if (!(await confirmer({ message: fr ? 'Supprimer ce cours définitivement ?' : 'Delete this course permanently?', danger: true }))) return;
                     try { await deleteCourse(courseId); toast.success(t.courses.courseDeleted); navigate('/courses'); }
                     catch (err: any) { toast.error(err?.message || t.courses.failedDelete); }
                   }} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium text-danger hover:bg-danger-light transition-colors">
@@ -1013,7 +1014,7 @@ export default function CourseBuilder() {
                   <h2 className="text-lg font-bold text-text-primary truncate">{lessonTitle || (fr ? 'Sans titre' : 'Untitled')}</h2>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <button onClick={() => { if (activeLessonId && confirm(fr ? 'Supprimer cette leçon ?' : 'Delete this lesson?')) handleDeleteLesson(activeLessonId); }}
+                  <button onClick={async () => { if (activeLessonId && await confirmer({ message: fr ? 'Supprimer cette leçon ?' : 'Delete this lesson?', danger: true })) handleDeleteLesson(activeLessonId); }}
                     className="glass-button px-2.5 py-1.5 rounded-lg text-danger hover:bg-danger-light"><Trash2 size={13} /></button>
                   <button onClick={handleSaveLesson} disabled={lessonSaving} className="glass-button-primary flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[12px] font-semibold">
                     {lessonSaving ? <span className="animate-pulse">{t.courses.saving}</span> : <><Save size={13} /> {t.courses.save}</>}
