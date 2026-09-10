@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { captureClientException } from './lib/sentry';
 import {
   LayoutDashboard,
   Home,
@@ -540,8 +541,10 @@ function AppInner() {
         if (!profile?.onboarding_done) {
           setShowOnboarding(true);
         }
-      } catch {
-        // If profile table doesn't have onboarding_done column, skip
+      } catch (err) {
+        // Lecture du profil ratée : on n'affiche pas l'assistant, mais on le note.
+        console.error('[App] vérification onboarding échouée', err);
+        captureClientException(err, { operation: 'app.onboardingCheck' });
       } finally {
         setOnboardingChecked(true);
       }

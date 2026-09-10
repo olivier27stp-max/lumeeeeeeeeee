@@ -17,6 +17,7 @@
  * même pattern de repli silencieux que team_assignments.
  */
 import { supabase } from './supabase';
+import { captureClientException } from './sentry';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -530,9 +531,15 @@ async function audit(
       old_value: payload.old_value ?? null,
       new_value: payload.new_value ?? null,
     });
-    if (error) console.error('[teamSchedule] audit insert échoué', action, error.message);
-  } catch {
-    /* silencieux */
+    if (error) {
+      console.error('[teamSchedule] audit insert échoué', action, error.message);
+      captureClientException(new Error(error.message), { operation: 'teamSchedule.audit', action });
+    }
+  } catch (err) {
+    // Le journal d'audit ne doit pas bloquer l'action, mais un trou dans le
+    // journal est une information en soi : on le remonte.
+    console.error('[teamSchedule] audit insert échoué', action, err);
+    captureClientException(err, { operation: 'teamSchedule.audit', action });
   }
 }
 

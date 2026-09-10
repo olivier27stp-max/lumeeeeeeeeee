@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { captureClientException } from '../lib/sentry';
 import { useParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle, CreditCard, FileText, Loader2, Lock, PenLine } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js/pure';
@@ -353,13 +354,17 @@ export default function ContractView() {
   async function confirmDepositPayment(paymentIntentId: string) {
     try {
       const API_BASE = import.meta.env.VITE_API_URL || '';
-      await fetch(`${API_BASE}/api/agreements/public/deposit-confirm`, {
+      const res = await fetch(`${API_BASE}/api/agreements/public/deposit-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ view_token: token, payment_intent_id: paymentIntentId }),
       });
-    } catch {
-      // Le webhook Stripe rattrapera l'encaissement si cet appel échoue.
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      // Le webhook Stripe rattrapera l'encaissement — mais si cet appel
+      // échoue, le client ne voit pas la confirmation tout de suite. À tracer.
+      console.error('[agreement] deposit-confirm a échoué', err);
+      captureClientException(err, { operation: 'agreement.depositConfirm', paymentIntentId });
     }
   }
 

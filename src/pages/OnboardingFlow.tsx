@@ -14,6 +14,7 @@
  *   → Dashboard
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { captureClientException } from '../lib/sentry';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { translatePlanFeature } from '../lib/planFeatures';
 import {
@@ -352,7 +353,15 @@ export default function OnboardingFlow() {
     } catch {}
 
     // 2. Save onboarding
-    try { await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) }); } catch {}
+    try {
+      const res = await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      // Ne bloque pas le paiement, mais les infos saisies (nom, compagnie,
+      // téléphone) seraient perdues sans trace — c'est déjà arrivé en silence.
+      console.error('[onboarding] sauvegarde des infos de facturation échouée', err);
+      captureClientException(err, { operation: 'billing.onboarding' });
+    }
 
     // 3. Subscribe
     try {
