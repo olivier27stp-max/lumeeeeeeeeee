@@ -47,9 +47,9 @@ COPY --from=builder /app/dist ./dist
 
 # Copy server source (runs with tsx at runtime)
 COPY server ./server
-COPY src/lib/crypto.ts ./src/lib/crypto.ts
-COPY src/lib/stripeClient.ts ./src/lib/stripeClient.ts
-COPY src/lib/paypalClient.ts ./src/lib/paypalClient.ts
+# crypto.ts / stripeClient.ts / paypalClient.ts vivent sous server/lib/ depuis
+# l'audit du 2026-09-09 (I3) — déjà couverts par `COPY server`. Seul
+# permissions.ts est encore partagé entre le front et le serveur.
 COPY src/lib/permissions.ts ./src/lib/permissions.ts
 # `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
 # client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
