@@ -17,8 +17,11 @@ export const TRANSCRIBE_MIME_TYPES = ['audio/webm', 'audio/mp4', 'audio/ogg', 'a
 export type TranscribeMimeType = (typeof TRANSCRIBE_MIME_TYPES)[number];
 
 const PROMPT = {
-  fr: "Transcris fidèlement ce que dit la personne, en français (Québec), avec la ponctuation. Ne réponds pas, ne commente pas, ne traduis pas : renvoie uniquement le texte dit. Si l'audio est vide ou inaudible, renvoie une chaîne vide.",
-  en: 'Transcribe faithfully what the person says, in English, with punctuation. Do not answer, comment or translate: return only the spoken text. If the audio is empty or inaudible, return an empty string.',
+  fr: `Tu transcris un enregistrement vocal. Contexte : la personne dirige une entreprise de services (lavage de vitres, toiture, paysagement, CVAC…) au Québec et parle à son logiciel de gestion. Elle parle en français québécois, parfois avec des mots anglais (job, cash, lead, booké…) : garde-les tels quels.
+Vocabulaire fréquent : soumission, devis, facture, client, job, calendrier, horaire, rendez-vous, paie, feuille de temps, relance, rappel, texto, courriel, équipe, tournée, dispatch.
+Règles : transcris mot pour mot ce qui est dit, avec la ponctuation, sans rien résumer ni corriger le sens. Écris les nombres en chiffres (« 3 factures », « 1 250 $ », « 8 h 30 »). Ne réponds pas à la personne, ne commente pas, ne traduis pas. Si tu hésites sur un mot, écris ce que tu entends. Si l'audio est vide ou inaudible, renvoie une chaîne vide.`,
+  en: `You transcribe a voice recording. Context: the speaker runs a home-service business (window cleaning, roofing, landscaping, HVAC…) in Canada and is talking to their management software. Frequent words: quote, invoice, client, job, calendar, schedule, appointment, payroll, timesheet, follow-up, reminder, text, email, team, route, dispatch.
+Rules: transcribe word for word what is said, with punctuation, without summarizing or correcting the meaning. Write numbers as digits ("3 invoices", "$1,250", "8:30"). Do not answer the speaker, do not comment, do not translate. If unsure about a word, write what you hear. If the audio is empty or inaudible, return an empty string.`,
 } as const;
 
 export async function transcribeAudio(opts: {
