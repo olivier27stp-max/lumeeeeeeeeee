@@ -73,6 +73,15 @@ function toolError(scope: string, err: any): { error: string } {
 // READ TOOLS
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Somme d'une colonne en cents, calculée ICI et renvoyée au modèle : un LLM
+ * additionne mal de tête (constaté : 1 626,90 + 172,46 + 172,46 rendu
+ * « 2 071,82 »). Un total fourni par l'outil n'est jamais recalculé.
+ */
+function somme(rows: any[] | null | undefined, champ: string): number {
+  return (rows || []).reduce((acc, r) => acc + (Number(r?.[champ]) || 0), 0);
+}
+
 const searchClients: AgentTool = {
   kind: 'read',
   declaration: {
@@ -246,6 +255,7 @@ const listJobs: AgentTool = {
     return {
       total_matching: count ?? data?.length ?? 0,
       returned: data?.length || 0,
+      sum_total_cents_of_returned: somme(data, 'total_cents'),
       jobs: (data || []).map((j: any) => ({
         id: j.id, // interne : pour get_job / update_job / reschedule_job…
         job_number: j.job_number,
@@ -420,6 +430,7 @@ const listQuotes: AgentTool = {
     if (error) return toolError('db', error);
     return {
       count: data?.length || 0,
+      sum_total_cents: somme(data, 'total_cents'),
       quotes: (data || []).map((q: any) => ({
         id: q.id, // interne : pour send_quote / convert_quote_to_job
         quote_number: q.quote_number,
@@ -466,6 +477,8 @@ const listInvoices: AgentTool = {
     const rows = Array.isArray(data) ? data : (data as any)?.items || [];
     return {
       count: rows.length,
+      sum_total_cents: somme(rows.slice(0, limit), 'total_cents'),
+      sum_balance_cents: somme(rows.slice(0, limit), 'balance_cents'),
       invoices: rows.slice(0, limit).map((r: any) => ({
         id: r.id, // interne : pour send_invoice
         invoice_number: r.invoice_number,
@@ -542,6 +555,7 @@ const getOverduePayments: AgentTool = {
     const today = Date.now();
     return {
       count: rows.length,
+      sum_balance_cents: somme(rows, 'balance_cents'),
       overdue: rows.map((r) => ({
         invoice_number: r.invoice_number,
         client_id: r.client_id,
