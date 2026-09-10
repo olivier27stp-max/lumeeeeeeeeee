@@ -110,6 +110,16 @@ export default function InvoiceDetails() {
       toast.error(language === 'fr' ? 'Le client n\'a pas d\'email' : 'Client has no email');
       return;
     }
+    const alreadySent = ['sent', 'partial', 'sent_not_due', 'past_due'].includes(invoice.status);
+    const totalLabel = formatMoneyFromCents(invoice.total_cents, invoice.currency || 'CAD');
+    const confirmMsg = language === 'fr'
+      ? `${alreadySent ? 'Renvoyer' : 'Envoyer'} la facture ${invoice.invoice_number} à ${client.email} ?\nMontant : ${totalLabel}`
+      : `${alreadySent ? 'Resend' : 'Send'} invoice ${invoice.invoice_number} to ${client.email}?\nAmount: ${totalLabel}`;
+    if (!(await confirmer({
+      title: alreadySent ? t.invoiceDetails.resend : t.invoiceDetails.sendInvoice,
+      message: confirmMsg,
+      confirmLabel: alreadySent ? t.invoiceDetails.resend : t.invoiceDetails.sendInvoice,
+    }))) return;
     setSendLoading(true);
     try {
       await sendInvoice({ invoiceId: invoice.id, channels: ['email'], toEmail: client.email });
