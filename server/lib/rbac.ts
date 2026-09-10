@@ -14,7 +14,7 @@ import express from 'express';
 import { requireAuthedClient, getServiceClient } from './supabase';
 // Défauts de rôle partagés avec le client (fichier pur, sans dépendance
 // navigateur) — UNE seule source de vérité pour les presets.
-import { ROLE_PRESETS } from '../../src/lib/permissions';
+import { ROLE_PRESETS, type PermissionKey, type PermissionsMap } from '../../src/lib/permissions';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -219,7 +219,13 @@ export function hasPermission(ctx: UserContext, key: string): boolean {
   // membres, et le serveur refusait TOUT pendant que le client affichait
   // l'interface complète.
   const preset = ROLE_PRESETS[ctx.role as keyof typeof ROLE_PRESETS];
-  return preset?.[key] === true;
+  if (!preset || !isPermissionKey(key, preset)) return false;
+  return preset[key] === true;
+}
+
+/** Garde de type : `key` est une clé connue du preset (évite l'indexation par string). */
+function isPermissionKey(key: string, map: PermissionsMap): key is PermissionKey {
+  return key in map;
 }
 
 // ── Scope check ─────────────────────────────────────────────────────

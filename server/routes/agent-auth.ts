@@ -37,11 +37,13 @@ const router = express.Router();
 // Hard-fail if AGENT_JWT_SECRET is missing — falling back to a random per-process
 // key silently breaks token validation across replicas and invalidates all tokens
 // on restart. Set AGENT_JWT_SECRET to a stable 32+ byte base64 value.
-const JWT_SECRET = process.env.AGENT_JWT_SECRET;
-if (!JWT_SECRET) {
+const JWT_SECRET_ENV = process.env.AGENT_JWT_SECRET;
+if (!JWT_SECRET_ENV) {
   console.error('FATAL: AGENT_JWT_SECRET is not set. Generate one with `openssl rand -base64 48` and set it in your environment.');
   throw new Error('AGENT_JWT_SECRET environment variable is required');
 }
+// Const typée `string` : la garde ci-dessus ne rétrécit pas le type dans les fonctions plus bas.
+const JWT_SECRET: string = JWT_SECRET_ENV;
 const JWT_TTL_SECONDS = 15 * 60; // 15 minutes
 
 function b64url(buf: Buffer | string): string {

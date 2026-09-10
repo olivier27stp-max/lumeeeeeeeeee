@@ -48,7 +48,8 @@ function AddressErrorBoundary({ children, fallback }: { children: React.ReactNod
 // Minimal class error boundary (workaround for tsconfig class field issues)
 const ErrorCatcher = (() => {
   function EC(this: any, props: any) {
-    React.Component.call(this, props);
+    // Le constructeur de Component prend (props, context) ; context absent = undefined, même effet que l'omettre.
+    React.Component.call(this, props, undefined);
     this.state = { hasError: false };
   }
   EC.prototype = Object.create(React.Component.prototype);

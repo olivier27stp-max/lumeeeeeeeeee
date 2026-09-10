@@ -60,7 +60,7 @@ export default function InvoiceDetails() {
   // so hook order stays stable (React error #310 guard).
   const renderData = useMemo(
     () => detailsQuery.data
-      ? buildRenderData(detailsQuery.data, companyQuery.data, null, appliedTaxesQuery.data || null)
+      ? buildRenderData(detailsQuery.data, companyQuery.data ?? null, null, appliedTaxesQuery.data || null)
       : null,
     [detailsQuery.data, companyQuery.data, appliedTaxesQuery.data],
   );

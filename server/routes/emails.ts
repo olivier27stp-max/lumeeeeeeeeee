@@ -223,8 +223,8 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
           due_date: formatDate(invoice.due_date),
           payment_link: viewUrl || '',
         };
-        emailSubject = customSubject || tpl.subject.replace(/\{(\w+)\}/g, (_, k: string) => templateVars[k] ?? '');
-        bodyHtml = customBody || tpl.body.replace(/\{(\w+)\}/g, (_, k: string) => templateVars[k] ?? '');
+        emailSubject = customSubject || tpl.subject.replace(/\{(\w+)\}/g, (_: string, k: string) => templateVars[k] ?? '');
+        bodyHtml = customBody || tpl.body.replace(/\{(\w+)\}/g, (_: string, k: string) => templateVars[k] ?? '');
       }
     }
 

@@ -610,7 +610,7 @@ export default function Insights() {
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                       <XAxis dataKey="label" tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
                       <YAxis tick={{ fill: 'var(--color-text-secondary)', fontSize: 12 }} />
-                      <Tooltip formatter={(value: number, name: string) => [
+                      <Tooltip formatter={(value: number | undefined, name: string | undefined) => [
                         new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', { style: 'currency', currency: 'CAD' }).format(Number(value || 0)),
                         name === 'revenue' ? t.insights.revenue : t.insights.invoiced,
                       ]} />

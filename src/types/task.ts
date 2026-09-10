@@ -61,7 +61,8 @@ export interface TaskCreateInput {
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
-  type: string;
+  // Optionnel : createTask le défaulte à 'Admin' (TaskModal ne l'émet pas).
+  type?: string;
   due_date?: string | null;
   scheduled_at?: string | null;
   duration_minutes?: number | null;

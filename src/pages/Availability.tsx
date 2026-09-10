@@ -626,7 +626,7 @@ export default function Availability() {
                 <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.availability.teamColor}</label>
                 <div className="mt-2">
                   <TeamColorSwatches
-                    value={teamForm.color_hex}
+                    value={teamForm.color_hex ?? ''}
                     onChange={(hex) => setTeamForm((f) => ({ ...f, color_hex: hex }))}
                   />
                 </div>

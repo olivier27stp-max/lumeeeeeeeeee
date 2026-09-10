@@ -146,8 +146,8 @@ export default function RevenueOverviewCard({ className = '' }: { className?: st
                   boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                   fontSize: 13,
                 }}
-                formatter={(value: number, name: string) => [
-                  formatCurrency(value),
+                formatter={(value: number | undefined, name: string | undefined) => [
+                  formatCurrency(value ?? 0),
                   name === 'collected'
                     ? fr ? 'Collecté' : 'Collected'
                     : fr ? 'Planifié' : 'Scheduled',

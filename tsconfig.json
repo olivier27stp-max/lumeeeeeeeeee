@@ -24,7 +24,11 @@
     "noEmit": true,
     "types": ["vite/client", "google.maps"],
 
-    "alwaysStrict": true,
+    // Audit 2026-09-09 (I2) : sans `strict`, « 0 erreur TypeScript » ne garantissait
+    // presque rien (1 692 `: any`, aucun contrôle de null). Les 56 erreurs
+    // révélées par le mode strict ont été corrigées — dont 8 vrais risques
+    // d'écran blanc (déréférencement de null). Ne pas désactiver.
+    "strict": true,
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true
   }

@@ -62,7 +62,7 @@ export default function PaymentMethodMixCard() {
               <Pie data={data} dataKey="value" nameKey="name" innerRadius={45} outerRadius={75} paddingAngle={2}>
                 {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v: number) => fmtMoney(v, locale)} />
+              <Tooltip formatter={(v: number | undefined) => fmtMoney(v ?? 0, locale)} />
             </PieChart>
           </ResponsiveContainer>
           <ul className="space-y-1.5 text-sm self-center">

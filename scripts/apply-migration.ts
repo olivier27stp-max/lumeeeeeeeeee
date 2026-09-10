@@ -118,7 +118,7 @@ async function run() {
     WHERE table_name = 'company_settings' AND column_name IN ('review_enabled', 'review_widget_settings', 'review_template_id')
     ORDER BY column_name
   `);
-  console.log('company_settings new columns:', cols.map(r => r.column_name));
+  console.log('company_settings new columns:', cols.map((r: { column_name: string }) => r.column_name));
 
   const { rows: etCount } = await client.query(
     `SELECT count(*) as c FROM public.email_templates WHERE org_id = $1`,

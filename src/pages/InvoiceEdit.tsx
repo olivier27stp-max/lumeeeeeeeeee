@@ -379,7 +379,7 @@ export default function InvoiceEdit() {
 
   // ── Build preview data ──
   const previewData = useMemo(() => {
-    const company = companyQuery.data;
+    const company = companyQuery.data ?? null;
     return buildRenderData(
       {
         invoice: {

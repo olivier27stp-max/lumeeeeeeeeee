@@ -65,7 +65,7 @@ async function run() {
      WHERE table_name = 'quotes' AND column_name IN ('changes_requested_at', 'archived_at')
      ORDER BY column_name`
   );
-  console.log('Nouvelles colonnes présentes :', cols.map((r) => r.column_name));
+  console.log('Nouvelles colonnes présentes :', cols.map((r: { column_name: string }) => r.column_name));
 
   const { rows: def } = await client.query(
     `SELECT column_default FROM information_schema.columns

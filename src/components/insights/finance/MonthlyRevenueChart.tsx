@@ -77,8 +77,8 @@ export default function MonthlyRevenueChart({
                 boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                 fontSize: 13,
               }}
-              formatter={(value: number) => [
-                `$${value.toLocaleString()}`,
+              formatter={(value: number | undefined) => [
+                `$${(value ?? 0).toLocaleString()}`,
                 ti.totalIncome,
               ]}
             />

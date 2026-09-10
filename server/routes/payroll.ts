@@ -130,6 +130,26 @@ router.get('/payroll/current-period', async (req, res) => {
 // ── Shared period computation for summary + export ──────────
 // Builds one row per active team member with a linked user: punched hours,
 // hourly rate (from Membres), gross, commissions and adjustments in the window.
+/** Colonnes sélectionnées sur payroll_adjustments / payroll_payments (voir buildPeriodRows). */
+type PayrollAdjustment = { id: string; user_id: string; amount_cents: number; note: string | null; created_at: string };
+type PayrollPayment = { user_id: string; total_cents: number; paid_at: string; note: string | null };
+
+/** Ligne de paie calculée par membre pour une période. */
+type PayrollRow = {
+  user_id: string;
+  name: string;
+  role: string | null;
+  hours: number;
+  rate_cents: number;
+  gross_cents: number;
+  commission_cents: number;
+  punch_count: number;
+  adjustments: PayrollAdjustment[];
+  adjustments_cents: number;
+  total_cents: number;
+  payment: PayrollPayment | null;
+};
+
 async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
   const settings = await loadSettings(sc, orgId);
   const period = computePayPeriod(settings, ref);
@@ -171,8 +191,8 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
   if (commErr) throw new Error(commErr.message);
 
   // Adjustments/payments tables ship behind a migration — degrade gracefully.
-  let adjustments: any[] = [];
-  let payments: any[] = [];
+  let adjustments: PayrollAdjustment[] = [];
+  let payments: PayrollPayment[] = [];
   let migrationMissing = false;
   {
     const adjRes = await sc
@@ -195,7 +215,7 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
     else payments = payRes.data || [];
   }
 
-  const rows = active.map((m: any) => {
+  const rows: PayrollRow[] = active.map((m: any) => {
     const myEntries = (entries || []).filter((e: any) => e.employee_id === m.user_id);
     const hours = sumEntryHours(myEntries);
     const rateCents = Number(m.hourly_rate_cents)

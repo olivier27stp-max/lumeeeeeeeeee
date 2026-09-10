@@ -12,7 +12,6 @@ import { useTranslation } from '../../i18n';
 import type {
   TaskRow,
   TaskCreateInput,
-  TaskUpdateInput,
   TaskStatus,
   TaskPriority,
 } from '../../types/task';
@@ -23,7 +22,7 @@ interface TaskModalProps {
   open: boolean;
   onClose: () => void;
   task?: TaskRow | null;
-  onSubmit: (input: TaskCreateInput | TaskUpdateInput) => Promise<void>;
+  onSubmit: (input: TaskCreateInput) => Promise<void>;
   /** Valeurs pré-remplies à l'ouverture (ex. depuis le calendrier : jour+heure cliqués). */
   defaults?: { due_date?: string; scheduled_at?: string; duration_minutes?: number };
   /** Membres assignables (personnes). */
