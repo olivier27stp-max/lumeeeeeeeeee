@@ -1609,19 +1609,25 @@ export default function NewJobModal({
     event.preventDefault();
     setInlineError(null);
 
+    // Avec noValidate, le navigateur ne scrolle plus vers le champ fautif : la
+    // bannière peut être hors écran sur ce long formulaire. On double donc
+    // CHAQUE erreur de validation par un toast, toujours visible (audit QA B-1).
+    const fail = (msg: string) => {
+      setInlineError(msg);
+      try { toast.error(msg); } catch { /* toast best-effort */ }
+    };
+
     if (!title.trim()) {
-      setInlineError(t.modals.titleRequired);
+      fail(t.modals.titleRequired);
       return;
     }
 
     let resolvedClientId = clientId;
     if (isCreatingNewClient) {
-      if (!newClientFirst.trim()) { setInlineError(t.modals.newClientFirstNameRequired); return; }
-      if (!newClientLast.trim()) { setInlineError(t.modals.newClientLastNameRequired); return; }
+      if (!newClientFirst.trim()) { fail(t.modals.newClientFirstNameRequired); return; }
+      if (!newClientLast.trim()) { fail(t.modals.newClientLastNameRequired); return; }
       if (!addressLine1.trim()) {
-        const msg = language === 'fr' ? 'L’adresse du client est requise.' : 'Client address is required.';
-        setInlineError(msg);
-        try { toast.error(msg); } catch { /* toast cosmétique : l échec d affichage n est pas une erreur métier (déjà gérée par setInlineError) */ }
+        fail(language === 'fr' ? 'L’adresse du client est requise.' : 'Client address is required.');
         return;
       }
       try {
@@ -1635,7 +1641,7 @@ export default function NewJobModal({
         });
         resolvedClientId = created.id;
       } catch (err: any) {
-        setInlineError(err?.message || t.clients.failedCreate);
+        fail(err?.message || t.clients.failedCreate);
         return;
       }
     }
@@ -2281,7 +2287,11 @@ export default function NewJobModal({
               </button>
             </div>
 
-            <form id="new-job-form" onSubmit={handleSubmit} className="item-form flex-1 overflow-y-auto px-6 py-6 space-y-5">
+            {/* noValidate : on laisse React gérer la validation (bannière + toast
+                dans la langue de l'app) plutôt que le message natif du navigateur,
+                qui apparaissait dans la langue de Chrome, hors charte, et hors
+                écran sur un long formulaire (audit QA B-1). */}
+            <form id="new-job-form" noValidate onSubmit={handleSubmit} className="item-form flex-1 overflow-y-auto px-6 py-6 space-y-5">
               <Box title={language === 'fr' ? 'Détails' : 'Details'}>
                 <div className="relative">
                   <input
