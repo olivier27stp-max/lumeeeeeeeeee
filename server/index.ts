@@ -34,6 +34,7 @@ import { emailWebhookHandler } from './routes/webhooks-email';
 import messagesRouter from './routes/messages';
 import quotesRouter, { quoteRedirectRouter } from './routes/quotes';
 import invoicesPublicRouter from './routes/invoices-public';
+import lumiRouter from './routes/lumi';
 import agreementsRouter from './routes/agreements';
 import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
@@ -607,6 +608,7 @@ if (!useRedis) {
   app.use('/api/agreements/public', agreementPublicLimiter);
   app.use('/api/automations/events', automationLimiter);
   app.use('/api/agent', agentLimiter);
+  app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
   app.use('/api/incidents', incidentsLimiterMem);
 }
@@ -641,6 +643,7 @@ app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
 // AI agent (Gemini tool-loop) — cap per-user cost abuse
 app.use('/api/agent', redisRateLimit({ preset: 'standard', keyFn: (req) => `agent:${userKey(req)}` }));
+app.use('/api/lumi', redisRateLimit({ preset: 'standard', keyFn: (req) => `lumi:${userKey(req)}` }));
 // ── OAuth 2.1 — Lume est le serveur d'autorisation du serveur MCP ──
 // Monté avec le MCP (mêmes raisons : guardCommonShape des routers nus, et
 // porte MFA — un échange de jeton n'a pas de session à faire valoir).
@@ -773,6 +776,7 @@ app.use('/q', redisRateLimit({
 app.use('/', quoteRedirectRouter);
 app.use('/api', quotesRouter);
 app.use('/api', invoicesPublicRouter);
+app.use('/api', lumiRouter);
 app.use('/api', agreementsRouter);
 const surveyLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP
 app.use('/api/survey', surveyLimiter);

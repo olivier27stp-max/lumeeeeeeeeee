@@ -58,6 +58,7 @@ import { cn } from './lib/utils';
 // les rendus hors coquille, une interne autour des routes pour que la barre
 // latérale reste affichée pendant qu'une page se charge.
 const CrmWorkspace = React.lazy(() => import('./pages/CrmWorkspace'));
+const LumiPage = React.lazy(() => import('./pages/Lumi'));
 const Clients = React.lazy(() => import('./pages/Clients'));
 const NewClient = React.lazy(() => import('./pages/NewClient'));
 const ClientDetails = React.lazy(() => import('./pages/ClientDetails'));
@@ -1065,6 +1066,7 @@ function AuthenticatedApp({
     {
       label: language === 'fr' ? 'Outils' : 'Tools',
       items: [
+        { id: 'lumi', label: 'Lumi', icon: Sparkles, path: '/lumi', tileColor: 'blue', requiredPermission: 'external_agent.use', requiredPlanFlag: 'includes_ai' },
         { id: 'messages', label: t.nav.messages, icon: MessageSquare, path: '/messages', tileColor: 'blue', requiredPermission: 'messages.read', requiredPlanFlag: 'includes_sms' },
         { id: 'timesheets', label: t.nav.timesheets, icon: Timer, path: '/timesheets', tileColor: 'blue', requiredPermission: 'timesheets.read', requiredPlanFlag: 'includes_timesheets' },
         { id: 'courses', label: t.courses?.title || 'Courses', icon: GraduationCap, path: '/courses', tileColor: 'blue', requiredPlanFlag: 'includes_courses' },
@@ -1506,6 +1508,8 @@ function AuthenticatedApp({
                         Pour la remettre : restaurer l'element d'origine (MrLumePage est
                         toujours importe) et l'entree de menu 'ai-helper'. */}
                     <Route path="/lume-agent" element={<Navigate to="/day" replace />} />
+                    {/* Lumi — l'assistant IA dans l'app (Claude, outils Lume). Plans Scale et Autopilot. */}
+                    <Route path="/lumi" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><LumiPage /></PlanFeatureGate></Gated>} />
                     <Route path="/dashboard" element={<Navigate to="/day" replace />} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
                     <Route path="/messages" element={<Gated permission="messages.read"><PlanFeatureGate flag="includes_sms"><PageWrapper><Messages /></PageWrapper></PlanFeatureGate></Gated>} />
