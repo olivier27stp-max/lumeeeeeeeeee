@@ -377,7 +377,8 @@ export async function searchActiveClients(query: { q: string; page: number; page
 
   let request = supabase
     .from('clients')
-    .select('id,first_name,last_name,company,email,status', { count: 'exact' })
+    // count 'estimated' : évite le scan intégral sous RLS à chaque page.
+    .select('id,first_name,last_name,company,email,status', { count: 'estimated' })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .range(from, to)
