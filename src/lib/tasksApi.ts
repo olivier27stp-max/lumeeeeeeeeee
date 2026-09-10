@@ -75,26 +75,33 @@ export interface AssignableMember {
   name: string;
 }
 
-// Membres actifs de l'org, pour le sélecteur « Assigné à » d'une tâche.
+// Membres de l'org, pour le sélecteur « Assigné à » d'une tâche.
+//
+// Audit QA prod 2026-09-09, n°6 (prouvé en prod) : cette liste lisait
+// `team_members` avec une colonne `full_name` qui n'existe pas → 400 à chaque
+// ouverture de /tasks et /calendar, sélecteur toujours vide. Et même sans
+// cette colonne, `team_members` n'a une ligne que pour 1 membre sur 10 en
+// prod (le propriétaire n'y est jamais inséré). La source de vérité des
+// membres, c'est `memberships` + `profiles` — comme listSalespeople().
 export async function listAssignableMembers(): Promise<AssignableMember[]> {
   const orgId = await getCurrentOrgIdOrThrow();
-  const { data, error } = await supabase
-    .from('team_members')
-    .select('user_id, first_name, last_name, full_name')
+  const { data: memberships, error } = await supabase
+    .from('memberships')
+    .select('user_id')
     .eq('org_id', orgId)
-    .eq('status', 'active')
-    .not('user_id', 'is', null);
+    .limit(200);
   if (error) throw error;
-  const seen = new Set<string>();
-  const out: AssignableMember[] = [];
-  for (const m of (data || []) as any[]) {
-    if (!m.user_id || seen.has(m.user_id)) continue;
-    seen.add(m.user_id);
-    const name = [m.first_name, m.last_name].filter(Boolean).join(' ').trim()
-      || String(m.full_name || '').trim()
-      || 'Sans nom';
-    out.push({ user_id: m.user_id, name });
-  }
+  const ids = Array.from(new Set((memberships || []).map((m: { user_id: string | null }) => m.user_id).filter(Boolean))) as string[];
+  if (ids.length === 0) return [];
+
+  const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', ids);
+  const noms = new Map<string, string>();
+  for (const p of profiles || []) noms.set(p.id, String(p.full_name || '').trim());
+
+  const out: AssignableMember[] = ids.map((user_id) => ({
+    user_id,
+    name: noms.get(user_id) || 'Sans nom',
+  }));
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 }
