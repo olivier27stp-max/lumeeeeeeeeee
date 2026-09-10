@@ -177,6 +177,7 @@ const D2DOnboarding = React.lazy(() => import('./pages/D2DOnboarding'));
 const SettingsRoles = React.lazy(() => import('./pages/SettingsRoles'));
 const DevPlanSwitch = React.lazy(() => import('./pages/DevPlanSwitch'));
 import PermissionGate from './components/PermissionGate';
+import { TenantGuardRoute } from './components/TenantGuard';
 import ModuleGate from './components/ModuleGate';
 import { useModuleAccess } from './hooks/useModuleAccess';
 import type { PermissionKey } from './lib/permissions';
@@ -1478,11 +1479,11 @@ function AuthenticatedApp({
                     <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
                     {/* Edit reuses the Clients list page, which opens its edit drawer from the :id route param */}
                     <Route path="/clients/:id/edit" element={<Gated permission="clients.update"><div className="px-8 py-6"><Clients /></div></Gated>} />
-                    <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
+                    <Route path="/clients/:id" element={<Gated permission="clients.read"><TenantGuardRoute table="clients" redirectTo="/clients"><div className="px-8 py-6"><ClientDetails /></div></TenantGuardRoute></Gated>} />
                     <Route path="/requests" element={<Gated permission="clients.read"><div className="px-8 py-6"><Requests /></div></Gated>} />
                     <Route path="/requests/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><RequestDetails /></div></Gated>} />
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
-                    <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><React.Suspense fallback={null}><JobDetails /></React.Suspense></PageWrapper></Gated>} />
+                    <Route path="/jobs/:id" element={<Gated permission="jobs.read"><TenantGuardRoute table="jobs" redirectTo="/jobs"><PageWrapper><React.Suspense fallback={null}><JobDetails /></React.Suspense></PageWrapper></TenantGuardRoute></Gated>} />
                     <Route path="/calendar" element={<Gated permission="calendar.read"><React.Suspense fallback={null}><Schedule /></React.Suspense></Gated>} />
                     <Route path="/availability" element={<Navigate to="/timesheets?view=horaire" replace />} />
                     <Route path="/search" element={<Gated permission="settings.read"><PageWrapper><SearchResultsPage /></PageWrapper></Gated>} />
@@ -1491,12 +1492,12 @@ function AuthenticatedApp({
                     <Route path="/quotes/measure" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteMeasure /></React.Suspense></Gated>} />
                     <Route path="/quotes/presets" element={<Gated permission="settings.read"><PageWrapper><QuotePresets /></PageWrapper></Gated>} />
                     <Route path="/quotes/templates" element={<Gated permission="settings.read"><PageWrapper><QuotePresets /></PageWrapper></Gated>} />
-                    <Route path="/quotes/:id" element={<Gated permission="quotes.read"><PageWrapper><QuoteDetails /></PageWrapper></Gated>} />
+                    <Route path="/quotes/:id" element={<Gated permission="quotes.read"><TenantGuardRoute table="quotes" redirectTo="/quotes"><PageWrapper><QuoteDetails /></PageWrapper></TenantGuardRoute></Gated>} />
                     <Route path="/quotes/:id/measure" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteMeasure /></React.Suspense></Gated>} />
                     <Route path="/finances" element={<Gated permission="invoices.read"><PageWrapper><Finances /></PageWrapper></Gated>} />
                     <Route path="/invoices" element={<Navigate to="/finances" replace />} />
                     <Route path="/invoices/new" element={<Gated permission="invoices.create"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
-                    <Route path="/invoices/:id" element={<Gated permission="invoices.read"><PageWrapper><InvoiceDetails /></PageWrapper></Gated>} />
+                    <Route path="/invoices/:id" element={<Gated permission="invoices.read"><TenantGuardRoute table="invoices" redirectTo="/finances"><PageWrapper><InvoiceDetails /></PageWrapper></TenantGuardRoute></Gated>} />
                     <Route path="/invoices/:id/edit" element={<Gated permission="invoices.update"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
                     <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><React.Suspense fallback={null}><Statistiques /></React.Suspense></PageWrapper></Gated>} />
                     <Route path="/payments" element={<PaymentsRedirect />} />
