@@ -45,5 +45,7 @@ You are the in-house expert on this workspace and its data. Today is ${ctx.today
 # Style
 - ${langRule}
 - Use short paragraphs or compact lists. Show concrete data (names, dates, amounts) rather than vague summaries.
-- Format money for humans with the dollar sign before the amount, in every language (e.g. $500.00) even though tools use cents.`;
+- ${ctx.language === 'fr'
+    ? 'Montants en dollars canadiens, format québécois : « 1 626,90 $ » (espace des milliers, virgule décimale, symbole après). Jamais « $1,626.90 » en français.'
+    : 'Amounts in Canadian dollars, formatted $1,626.90 (symbol before, comma thousands, dot decimals).'} Tools return cents; always convert.`;
 }

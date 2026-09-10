@@ -254,3 +254,28 @@ describe('le client lit le flux SSE', () => {
     vi.unstubAllGlobals();
   });
 });
+
+// ── Consignes « collègue » : jamais de langage base de données ──────────
+describe('Lumi parle comme un collègue, pas comme une base de données', () => {
+  it('le prompt de Lumi porte les mêmes consignes de présentation que le MCP, dans la partie mise en cache', async () => {
+    const { promptSystemeLumi } = await import('../server/lib/lumi/orchestrateur');
+    const { CONSIGNES_COLLEGUE } = await import('../server/lib/agent/consignesCollegue');
+    const blocs = promptSystemeLumi({ companyName: 'Coquin lavage', userName: 'Will', language: 'fr', todayIso: '2026-09-10' });
+    const stable = blocs[0].text;
+    expect(blocs[0].cache_control).toEqual({ type: 'ephemeral' });
+    expect(stable).toContain(CONSIGNES_COLLEGUE);
+    // Les règles qui comptent, nommément — si quelqu'un raccourcit le texte, ce test le dit.
+    for (const regle of [
+      "N'affiche JAMAIS d'identifiant technique",
+      "Ne mentionne jamais les noms d'outils",
+      'affiche-les en dollars canadiens (12500 → 125,00 $)',
+      'Ne parle pas de la mécanique (outils, base de données, MCP, session, colonnes)',
+      "N'expose JAMAIS de noms d'outils, de signatures, de champs, de messages d'erreur bruts",
+    ]) expect(stable).toContain(regle);
+    // Dans Lumi l'utilisateur est déjà connecté : pas de consigne de reconnexion OAuth.
+    expect(stable).not.toContain('session_a_reconnecter');
+    // La partie variable (date, prénom) reste hors cache.
+    expect(stable).not.toContain('2026-09-10');
+    expect(blocs[1].text).toContain('2026-09-10');
+  });
+});

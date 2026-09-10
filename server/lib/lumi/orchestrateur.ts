@@ -19,6 +19,7 @@ import { AGENT_TOOLS, TOOLS_BY_NAME } from '../agent/tools';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../agent/garde';
 import { masquerIds, demasquerIds } from '../agent/refs';
 import { buildSystemPrompt } from '../agent/systemPrompt';
+import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 
 const MAX_ETAPES = 8;
@@ -54,7 +55,10 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     .replace(
       'WRITE actions — create_quote, create_invoice, create_job, send_sms — are PROPOSALS only.',
       'WRITE actions (anything that creates, changes, sends or deletes something) are PROPOSALS only.',
-    );
+    )
+    // Les mêmes consignes « collègue » que le MCP : jamais d'identifiant, de
+    // nom d'outil, de champ ou de vocabulaire base de données dans une réponse.
+    + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : décris-la en mots courants et laisse l'utilisateur confirmer ; ne prétends jamais qu'elle est faite avant.`;
   const variable = ctx.language === 'fr'
     ? `Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
     : `Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`;
