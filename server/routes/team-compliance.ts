@@ -132,17 +132,15 @@ router.post('/team/:memberId/force-logout', async (req, res) => {
   });
   if (rErr || !isAdmin) return res.status(403).json({ error: 'Admin/Owner role required' });
 
-  try {
-    // Supabase Admin API — signs out the user everywhere
-    await (svc.auth as any).admin.signOut(member.user_id, 'global');
-  } catch (e: any) {
-    console.warn('[force-logout] admin.signOut failed:', e?.message);
-    // Fallback DB-level RPC if present (swallow errors silently)
-    try {
-      const { error: invErr } = await svc.rpc('invalidate_user_sessions', { p_user_id: member.user_id });
-      // Une session non révoquée = un membre retiré qui garde l'accès. À tracer.
-      if (invErr) console.error('[team-compliance] sessions non révoquées:', member.user_id, invErr.message);
-    } catch (err: any) { console.error('[team-compliance] sessions non révoquées:', member.user_id, err?.message || err); }
+  // Révocation en base : invalidate_user_sessions() supprime auth.sessions
+  // (les jetons de rafraîchissement suivent). Avant : `admin.signOut(userId)`
+  // — l'API admin GoTrue attend un JWT, pas un identifiant — échouait TOUJOURS,
+  // puis retombait sur cette RPC qui n'existait pas. Un membre retiré gardait
+  // ses sessions, et la route répondait 200. Ici, un échec est un 500.
+  const { data: revoquees, error: invErr } = await svc.rpc('invalidate_user_sessions', { p_user_id: member.user_id });
+  if (invErr) {
+    console.error('[team-compliance] sessions non révoquées:', member.user_id, invErr.message);
+    return res.status(500).json({ error: 'Session revocation failed.' });
   }
 
   await svc.from('audit_events').insert({
@@ -151,10 +149,10 @@ router.post('/team/:memberId/force-logout', async (req, res) => {
     action: 'force_logout',
     entity_type: 'team_member',
     entity_id: memberId,
-    metadata: { target_user: member.user_id },
+    metadata: { target_user: member.user_id, sessions_revoked: Number(revoquees ?? 0) },
   });
 
-  return res.status(200).json({ ok: true });
+  return res.status(200).json({ ok: true, sessions_revoked: Number(revoquees ?? 0) });
 });
 
 // ────────────────────────────────────────────────────────────────────

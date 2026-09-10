@@ -77,6 +77,18 @@ jobs:
             exit 0
           fi
           npm run test:rls
+      # Le détecteur qui aurait attrapé team_members.full_name (sélecteur
+      # d'assignation mort, audit QA 2026-09-09) — il n'était jamais lancé.
+      # Lit pg_catalog via la même connexion staging ; aucun jeton d'API.
+      - name: Colonnes / valeurs / RPC citées par le code existent en base
+        env:
+          DB_URL: ${{ secrets.RLS_TEST_DB_URL }}
+        run: |
+          if [ -z "$DB_URL" ]; then
+            echo "::warning::RLS_TEST_DB_URL not set — skipping check:schema-refs."
+            exit 0
+          fi
+          npm run check:schema-refs
 
   # Non-blocking: surfaces vulnerable dependencies without failing the merge.
   # Promote to blocking later by removing continue-on-error.

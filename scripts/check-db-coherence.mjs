@@ -75,7 +75,9 @@ async function query(sql) {
  */
 const EXCEPTIONS = new Map([
   ['get_user_id_by_email', "server/lib/supabase.ts:29 documente un repli : requête directe sur auth.users si la RPC est absente. Seul le chemin rapide (indexé) est perdu."],
-  ['invalidate_user_sessions', "team-compliance.ts:141 ne l'appelle qu'en repli de admin.signOut(), erreurs volontairement avalées. La déconnexion passe par le chemin principal."],
+  // invalidate_user_sessions : retirée de la liste le 2026-09-10 — elle existe
+  // maintenant en base (20260910140000) et EST le chemin principal ; le
+  // « chemin principal » admin.signOut(userId) ne fonctionnait pas (il attend un JWT).
   ['ensure_payment_settings_row', "server/lib/payments.ts:101 documente un repli explicite pour les environnements où la fonction est absente."],
 ]);
 

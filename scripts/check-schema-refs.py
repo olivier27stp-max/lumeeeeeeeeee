@@ -78,8 +78,22 @@ def env(name):
 def fetch_catalog():
     token = env('SUPABASE_ACCESS_TOKEN')
     ref = env('SUPABASE_PROJECT_REF_PROD' if PROD else 'SUPABASE_PROJECT_REF')
+    # Mode CI : pas de jeton d'API de gestion (il peut appliquer du SQL sur la
+    # prod), mais une connexion Postgres directe au staging (DB_URL). Le
+    # catalogue est lu par scripts/catalog-via-pg.mjs.
+    db_url = os.environ.get('DB_URL')
+    if db_url and not PROD:  # DB_URL explicite dans l'environnement = intention
+        import subprocess
+        out = subprocess.run(
+            ['node', os.path.join(ROOT, 'scripts', 'catalog-via-pg.mjs')],
+            input=CATALOG_SQL.encode(), capture_output=True, timeout=180,
+            env={**os.environ, 'DB_URL': db_url},
+        )
+        if out.returncode != 0:
+            sys.exit('ERREUR: catalogue via DB_URL — ' + out.stderr.decode(errors='replace')[:500])
+        return json.loads(out.stdout.decode())[0]['cat'], 'DB_URL'
     if not token or not ref:
-        sys.exit('ERREUR: SUPABASE_ACCESS_TOKEN et SUPABASE_PROJECT_REF requis dans .env.local')
+        sys.exit('ERREUR: SUPABASE_ACCESS_TOKEN et SUPABASE_PROJECT_REF requis dans .env.local (ou DB_URL en CI)')
     req = urllib.request.Request(
         f'https://api.supabase.com/v1/projects/{ref}/database/query',
         data=json.dumps({'query': CATALOG_SQL}).encode(),

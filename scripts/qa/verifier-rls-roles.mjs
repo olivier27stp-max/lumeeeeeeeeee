@@ -107,7 +107,7 @@ try {
   }
 } finally {
   if (crees.orgId) {
-    for (const t of ['payments', 'quote_line_items', 'invoice_items', 'quotes', 'invoices', 'clients', 'memberships']) {
+    for (const t of ['payments', 'quote_line_items', 'invoice_items', 'quotes', 'invoices', 'clients', 'memberships', 'team_members']) {
       await admin.from(t).delete().eq('org_id', crees.orgId).then(() => {}, () => {});
     }
     await admin.from('orgs').delete().eq('id', crees.orgId);
