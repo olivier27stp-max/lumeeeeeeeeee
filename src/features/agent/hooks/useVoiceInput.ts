@@ -18,7 +18,7 @@ export const MAX_SECONDS = 60;
 /** Taux d'échantillonnage envoyé : suffisant pour la parole, léger (32 ko/s). */
 const SAMPLE_RATE = 16_000;
 /** Silence après la parole (ms) qui déclenche l'envoi tout seul. */
-const SILENCE_MS = 1_800;
+const SILENCE_MS = 2_500;
 /** Niveau RMS en deçà duquel on considère que c'est du silence. */
 const SILENCE_RMS = 0.012;
 

@@ -202,6 +202,8 @@ export default function Lumi() {
   const scrollRef = useRef<HTMLDivElement>(null);
   /* Vrai si la dernière question a été dite au micro : la réponse est alors lue. */
   const spokenRef = useRef(false);
+  /* Le micro a rempli la zone de saisie ; au prochain envoi, on lira la réponse. */
+  const pendingSpokenRef = useRef(false);
   const speech = useSpeakReplies(lang);
   const abortRef = useRef<AbortController | null>(null);
   const nextId = () => idRef.current++;
@@ -338,7 +340,8 @@ export default function Lumi() {
     const t = texte.trim();
     if (!t || enCours) return;
     setInput('');
-    spokenRef.current = !!opts.spoken;
+    spokenRef.current = !!opts.spoken || pendingSpokenRef.current;
+    pendingSpokenRef.current = false;
     speech.stopSpeaking();
     setItems((prev) => [
       ...prev.map((m) => (m.proposal?.statut === 'en_attente' ? { ...m, proposal: { ...m.proposal, statut: 'annulee' as const } } : m)),
@@ -359,7 +362,12 @@ export default function Lumi() {
      le texte part comme un message et la réponse est lue à voix haute. */
   const voice = useVoiceInput({
     language: lang,
-    onTranscript: (text) => { void envoyer(text, { spoken: true }); },
+    // Rien ne part tout seul : le texte va dans la zone, on relit, on envoie.
+    onTranscript: (text) => {
+      setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text));
+      pendingSpokenRef.current = true;
+      requestAnimationFrame(() => { const el = document.getElementById(`${uid}-lumi-input`) as HTMLTextAreaElement | null; el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); });
+    },
     onError: (message) => setErreur({ code: 'voix', message }),
   });
   const listening = voice.state === 'recording';
@@ -637,7 +645,7 @@ export default function Lumi() {
           </div>
           <p className="text-[10.5px] text-text-tertiary text-center mt-2">
             {listening
-              ? (fr ? `Parle, puis touche le carré pour envoyer. ${MAX_SECONDS} s max.` : `Speak, then tap the square to send. ${MAX_SECONDS} s max.`)
+              ? (fr ? `Parle ; à la fin, le texte apparaît dans la zone et tu l’envoies toi-même. ${MAX_SECONDS} s max.` : `Speak; when done, the text appears in the box and you send it yourself. ${MAX_SECONDS} s max.`)
               : (fr ? 'Lumi ne crée et n’envoie rien sans ta confirmation. Vérifie les montants avant d’agir.' : 'Lumi never creates or sends anything without your confirmation. Check amounts before acting.')}
           </p>
         </div>
