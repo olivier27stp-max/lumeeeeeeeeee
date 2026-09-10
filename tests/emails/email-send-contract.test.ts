@@ -265,12 +265,20 @@ describe('BUG CONNU B7 — reminders-cron : un échec transitoire bloque la rela
 // ───────────────────────────────────────────────────────────────────
 
 describe('effets de bord — ce que chaque envoi déclenche', () => {
-  it('send-invoice : timestamps, invoice_send_events, activity_log, puis event', () => {
+  it('send-invoice : timestamps, invoice_send_events, puis event (UNE seule écriture activity_log)', () => {
     const emails = read('server/routes/emails.ts');
     const route = routeBody(emails, "router.post('/emails/send-invoice'", "router.post('/emails/send-quote'");
     expect(route).toContain("from('invoice_send_events')");
-    expect(route).toContain("event_type: 'invoice_sent'");
+    // A-2 : le journal 'invoice_sent' passe UNIQUEMENT par l'event bus (source
+    // unique). L'insert manuel dans activity_log (qui doublait la ligne) a été
+    // retiré — donc plus de `event_type: 'invoice_sent'` en dur dans la route,
+    // ni de second insert activity_log.
     expect(route).toContain("eventBus.emit('invoice.sent'");
+    expect(route).not.toContain("event_type: 'invoice_sent'");
+    expect(route).not.toContain("from('activity_log')");
+    // Les métadonnées (sujet, destinataire) migrent dans l'emit.
+    expect(route).toContain('subject_sent: emailSubject');
+    expect(route).toContain('to_email: clientData.email');
     // 'sent' vs 'resent' selon que la facture était en draft.
     expect(route).toMatch(/'sent'\s*:\s*'resent'|'resent'\s*:\s*'sent'/);
   });
