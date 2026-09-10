@@ -104,6 +104,7 @@ import creatorSpaceAuditRouter, { creatorSpaceViewLogger } from './routes/creato
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
 import { redisRateLimit, useRedis } from './lib/rate-limiter';
 import { rbacMiddleware } from './lib/route-permissions';
+import { subscriptionGuard } from './lib/subscription-guard';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
 import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure, withCronCheckIn } from './lib/sentry';
@@ -688,6 +689,10 @@ app.use(mfaEnforcementMiddleware());
 
 // ── RBAC permission enforcement (before route handlers) ──
 app.use(rbacMiddleware());
+// Paywall côté serveur (audit 2026-09-09, C1) : sans abonnement actif, l'API
+// répond 402 — le check dans App.tsx n'est plus qu'un confort d'affichage.
+// Mode via SUBSCRIPTION_GUARD=enforce|log|off. Voir server/lib/subscription-guard.ts.
+app.use(subscriptionGuard());
 
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);

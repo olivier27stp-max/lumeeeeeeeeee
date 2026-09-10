@@ -33,7 +33,7 @@ router.use(guardCommonShape);
  */
 const SKIPS_QUI_SONT_DES_ECHECS = new Set(['dup_check_failed', 'rules_load_failed', 'period_stats_failed', 'insert_failed']);
 
-async function commissionAvecTrace<T extends { skipped?: string | null }>(
+async function commissionAvecTrace<T extends { skipped?: string | null; voided?: number }>(
   res: any,
   source: string,
   payload: Record<string, unknown>,

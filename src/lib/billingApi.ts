@@ -165,6 +165,24 @@ export async function fetchCurrentBilling(): Promise<{
   return res.json();
 }
 
+/**
+ * Bypass bêta — verdict rendu par le serveur (GET /api/me/is-beta-bypassed).
+ * La liste d'emails vit dans l'env du serveur ; elle ne doit JAMAIS revenir
+ * dans une variable VITE_* (publiée en clair dans le bundle — audit C2).
+ * En cas d'échec réseau on répond « non » : le bypass est un privilège, pas
+ * un droit par défaut.
+ */
+export async function fetchIsBetaBypassed(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/me/is-beta-bypassed`, { headers: await authHeaders() });
+    if (!res.ok) return false;
+    const body = await res.json();
+    return body?.bypassed === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function saveOnboarding(data: OnboardingData): Promise<void> {
   const res = await fetch(`${API_BASE}/billing/onboarding`, {
     method: 'POST',

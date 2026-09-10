@@ -70,7 +70,7 @@ import Subprocessors from './pages/Subprocessors';
 import { CookieBanner } from './components/CookieBanner';
 import Landing from './pages/Landing';
 import { supabase } from './lib/supabase';
-import { fetchCurrentBilling, type GraceImpaye } from './lib/billingApi';
+import { fetchCurrentBilling, fetchIsBetaBypassed, type GraceImpaye } from './lib/billingApi';
 import { countPendingQuotes } from './lib/quotesApi';
 import { countOverdueInvoices } from './lib/invoicesApi';
 import { User } from '@supabase/supabase-js';
@@ -516,26 +516,25 @@ export default function App() {
     })();
   }, [user, onboardingChecked]);
 
-  // Check if user has an active subscription — redirect to /checkout if not
-  // Beta bypass list sourced exclusively from env (comma-separated emails).
-  const BYPASS_EMAILS = (import.meta.env.VITE_BETA_BYPASS_EMAILS || '')
-    .split(',')
-    .map((e: string) => e.trim().toLowerCase())
-    .filter(Boolean);
+  // Check if user has an active subscription — redirect to /checkout if not.
+  // Ce check n'est qu'un CONFORT D'AFFICHAGE : l'autorité est le middleware
+  // serveur (server/lib/subscription-guard.ts) qui répond 402 sans abonnement.
+  // Le bypass bêta est demandé au serveur — plus jamais lu depuis une
+  // variable VITE_*, qui finit en clair dans le bundle public (audit C2).
   useEffect(() => {
     if (!user || !onboardingChecked || showOnboarding) {
       setHasSubscription(null);
       setAccessBlockedReason(null);
       return;
     }
-    // Bypass for beta emails whitelisted via env
-    if (user.email && BYPASS_EMAILS.includes(user.email.toLowerCase())) {
-      setHasSubscription(true);
-      setAccessBlockedReason(null);
-      return;
-    }
     (async () => {
       try {
+        if (await fetchIsBetaBypassed()) {
+          setHasSubscription(true);
+          setAccessBlockedReason(null);
+          setGraceImpaye(null);
+          return;
+        }
         const { data: mem } = await supabase
           .from('memberships')
           .select('org_id')
