@@ -4,6 +4,7 @@ import { Mail, MapPin, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
+import { usePageMeta } from '../../hooks/usePageMeta';
 
 // Copie locale bilingue — les dictionnaires i18n globaux (en.ts / fr.ts) ne
 // contiennent pas ces clés et ne doivent pas être modifiés d'ici.
@@ -58,6 +59,9 @@ export default function Contact() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(true);
   const { language } = useTranslation();
+  usePageMeta(language === 'fr'
+    ? { title: 'Réserver une démo', description: 'Trente minutes avec notre équipe : vos vraies questions, la plateforme en direct, aucun engagement.', path: '/contact' }
+    : { title: 'Book a demo', description: 'Thirty minutes with our team: your real questions, the platform live, no commitment.', path: '/contact' });
   const c = COPY[language];
 
   return (
