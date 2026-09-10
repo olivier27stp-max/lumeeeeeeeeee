@@ -39,6 +39,14 @@ export default function LumiAgent() {
     return () => root.classList.remove('lumi-open');
   }, [open]);
 
+  // Un bouton ailleurs sur la page peut ouvrir le panneau :
+  // window.dispatchEvent(new Event('lumi:open')).
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener('lumi:open', onOpen);
+    return () => window.removeEventListener('lumi:open', onOpen);
+  }, []);
+
   // Auto-scroll vers le dernier message.
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });

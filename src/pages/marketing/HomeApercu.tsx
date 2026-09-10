@@ -22,6 +22,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
+import { StopList, Pillars, Roles, LumiSection, StatsBand, Flow, PlansTeaser, DemoVideo, Security, Faq, FinalCta, SECTIONS_CSS } from './homeApercuSections';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 
@@ -67,53 +68,6 @@ export default function HomeApercu() {
     ? ['Sans engagement en mensuel', 'Intégration guidée incluse', 'Support FR / EN']
     : ['No commitment on monthly plans', 'Guided onboarding included', 'Support in FR / EN'];
 
-  const tiles: { key: Tab; title: string; text: string; scene: React.ReactNode }[] = [
-    {
-      key: 'accueil',
-      title: fr ? 'Soumissions en 4 minutes' : 'Quotes in 4 minutes',
-      text: fr ? 'Modèles, préréglages et mesure satellite. Le client signe sur son téléphone.' : 'Templates, presets and satellite measuring. The client signs on their phone.',
-      scene: (
-        <div className="ha-scene ha-s1"><div className="ha-doc"><i /><i /><i style={{ width: '60%' }} /><span className="ha-stamp">{fr ? 'Signée ✓' : 'Signed ✓'}</span></div></div>
-      ),
-    },
-    {
-      key: 'calendrier',
-      title: fr ? 'Calendrier et équipes' : 'Calendar and crews',
-      text: fr ? 'Jobs récurrents, répartition par équipe, trajets optimisés, GPS en direct.' : 'Recurring jobs, crew dispatch, optimized routes, live GPS.',
-      scene: (
-        <div className="ha-scene ha-s2">
-          <div className="ha-wk">
-            <div><em>{fr ? 'Jeu' : 'Thu'}</em><span className="ha-blk ha-rain">Excavation</span></div>
-            <div><em>{fr ? 'Ven' : 'Fri'}</em><span className="ha-blk ha-ok">Excavation</span></div>
-          </div>
-          <small className="ha-why">{fr ? 'Pluie 90 % → déplacé au vendredi' : 'Rain 90% → moved to Friday'}</small>
-        </div>
-      ),
-    },
-    {
-      key: 'messages',
-      title: fr ? 'SMS et relances automatiques' : 'Automatic SMS and follow-ups',
-      text: fr ? 'Rappels de rendez-vous, relances de soumissions et de factures, numéro dédié.' : 'Appointment reminders, quote and invoice follow-ups, dedicated number.',
-      scene: (
-        <div className="ha-scene ha-s3">
-          <div className="ha-sms ha-out">{fr ? 'Rappel : demain 9 h. Répondez OK.' : 'Reminder: tomorrow 9 AM. Reply OK.'}</div>
-          <div className="ha-sms ha-in">{fr ? 'OK merci !' : 'OK thanks!'}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'finances',
-      title: fr ? 'Facturation et paie' : 'Invoicing and payroll',
-      text: fr ? 'Paiement en ligne, feuilles de temps, paie prête le vendredi, export QuickBooks.' : 'Online payment, timesheets, payroll ready on Friday, QuickBooks export.',
-      scene: (
-        <div className="ha-scene ha-s4">
-          <div className="ha-pay"><span className="ha-amt">1 250 $</span><span className="ha-pill">{fr ? 'Payée' : 'Paid'}</span></div>
-          <div className="ha-prog"><i /></div>
-        </div>
-      ),
-    },
-  ];
-
   const before = fr
     ? [
         ['7 h', 'Appels et textos de confirmation faits un par un, depuis le camion, avant la première job.'],
@@ -143,7 +97,7 @@ export default function HomeApercu() {
 
   return (
     <div className="home-apercu">
-      <style>{HOME_APERCU_CSS}</style>
+      <style>{HOME_APERCU_CSS + SECTIONS_CSS}</style>
 
       {/* ── 1. Hero compact ── */}
       <section className="ha-hero">
@@ -201,21 +155,12 @@ export default function HomeApercu() {
         </div>
       </section>
 
-      {/* ── 3. Tuiles ── */}
-      <section className="ha-feats" aria-labelledby="ha-feats-h">
-        <p className="ha-kicker">{fr ? 'Tout au même endroit' : 'All in one place'}</p>
-        <h2 id="ha-feats-h">{fr ? 'Ce que Lume fait à ta place' : 'What Lume does for you'}</h2>
-        <p className="ha-fsub">{fr ? "Clique sur une tuile pour l'ouvrir dans l'aperçu." : 'Click a tile to open it in the preview.'}</p>
-        <div className="ha-fgrid">
-          {tiles.map((tile) => (
-            <button key={tile.key} type="button" className="ha-ft" onClick={() => goTo(tile.key)}>
-              {tile.scene}
-              <b>{tile.title}</b>
-              <p>{tile.text}</p>
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* ── 3. Sous le pli ── */}
+      <StopList fr={fr} />
+      <Pillars fr={fr} />
+      <Roles fr={fr} goTo={goTo} />
+      <LumiSection fr={fr} />
+      <StatsBand fr={fr} />
 
       {/* ── 4. Étude de cas ── */}
       <section className="ha-case" aria-label={fr ? 'Étude de cas Vision Lavage' : 'Vision Lavage case study'}>
@@ -241,12 +186,15 @@ export default function HomeApercu() {
             <dl>{after.map(([k, v]) => <div key={k} className="contents"><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
           </div>
         </div>
-        <div className="ha-nums">
-          <div><b>12 h</b><span>{fr ? "d'administration en moins par semaine" : 'less admin per week'}</span></div>
-          <div><b>4 min</b><span>{fr ? 'entre la fin de la visite et la soumission envoyée' : 'from the end of the visit to the quote being sent'}</span></div>
-          <div><b>2×</b><span>{fr ? 'plus de soumissions signées, grâce aux relances' : 'more quotes signed, thanks to follow-ups'}</span></div>
-        </div>
+        <p className="ha-case-note">{fr ? 'Les horaires décrivent un fonctionnement type, pas une journée précise.' : 'The times describe a typical day, not a specific one.'}</p>
       </section>
+
+      <Flow fr={fr} />
+      <PlansTeaser fr={fr} />
+      <DemoVideo fr={fr} />
+      <Security fr={fr} />
+      <Faq fr={fr} />
+      <FinalCta fr={fr} onDemo={() => setDemoOpen(true)} />
 
       <BookDemoForm open={demoOpen} onClose={() => setDemoOpen(false)} source="home" />
     </div>
@@ -289,35 +237,7 @@ const HOME_APERCU_CSS = `
 .ha-f1 { left:6px; top:-22px; } .ha-f2 { right:6px; top:120px; animation-delay:-2.5s; }
 @keyframes ha-float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
 
-.ha-feats { max-width:1180px; margin:0 auto; padding:44px 24px 8px; }
-.ha-feats h2 { font-size:26px; font-weight:800; letter-spacing:-.02em; margin:8px 0 6px; color:#111; }
-.ha-fsub { margin:0 0 16px; font-size:13px; color:#555; }
-.ha-fgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
-.ha-ft { background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:16px; padding:18px 18px 16px; box-shadow:0 10px 30px -22px rgba(0,0,0,.25); text-align:left; cursor:pointer; font:inherit; color:inherit; transition:transform .2s, box-shadow .2s; }
-.ha-ft:hover { transform:translateY(-3px); box-shadow:0 24px 40px -24px rgba(0,0,0,.35); }
-.ha-ft > b { display:block; margin-top:12px; font-size:14.5px; color:#111; }
-.ha-ft > p { margin:6px 0 0; font-size:13px; line-height:1.5; color:#333; }
-.ha-scene { height:96px; border-radius:12px; background:#f6f7f5; border:1px solid #ececec; position:relative; overflow:hidden; padding:12px; }
-.ha-s1 .ha-doc { width:120px; margin:0 auto; background:#fff; border:1px solid #e5e5e5; border-radius:6px; padding:10px; position:relative; height:72px; }
-.ha-s1 .ha-doc i { display:block; height:5px; background:#e5e5e5; border-radius:3px; margin-bottom:6px; width:85%; }
-.ha-stamp { position:absolute; right:8px; bottom:8px; font-size:10px; font-weight:800; color:var(--forest); border:2px solid var(--forest); border-radius:6px; padding:2px 6px; transform:rotate(-8deg) scale(0); animation:ha-stamp 5s infinite; }
-@keyframes ha-stamp { 0%,40% { transform:rotate(-8deg) scale(0); opacity:0; } 48%,90% { transform:rotate(-8deg) scale(1); opacity:1; } 100% { opacity:0; } }
-.ha-wk { display:grid; grid-template-columns:1fr 1fr; gap:8px; height:56px; } .ha-wk em { display:block; font-style:normal; font-size:9px; font-weight:700; color:#888; text-transform:uppercase; letter-spacing:.1em; margin-bottom:4px; }
-.ha-blk { display:block; font-size:10px; font-weight:600; border-radius:5px; padding:4px 6px; border-left:3px solid; }
-.ha-rain { background:var(--amber-soft); color:var(--amber); border-color:var(--amber); animation:ha-fadeout 5s infinite; }
-.ha-ok { background:#eef0fb; color:#3b4a9e; border-color:#5b6cd6; animation:ha-fadein 5s infinite; }
-.ha-why { position:absolute; left:12px; bottom:8px; font-size:10px; color:#555; }
-@keyframes ha-fadeout { 0%,45% { opacity:1; transform:none; } 55%,100% { opacity:.15; transform:translateY(-4px); } }
-@keyframes ha-fadein { 0%,45% { opacity:0; transform:translateY(8px); } 55%,100% { opacity:1; transform:none; } }
-.ha-sms { max-width:78%; font-size:10.5px; padding:6px 9px; border-radius:10px; margin-bottom:6px; opacity:0; }
-.ha-out { background:var(--forest); color:#fff; border-bottom-left-radius:3px; animation:ha-pop1 5s infinite; }
-.ha-in { background:#fff; border:1px solid #e5e5e5; margin-left:auto; border-bottom-right-radius:3px; animation:ha-pop2 5s infinite; }
-@keyframes ha-pop1 { 0% { opacity:0; transform:translateY(6px); } 12%,90% { opacity:1; transform:none; } 100% { opacity:0; } }
-@keyframes ha-pop2 { 0%,40% { opacity:0; transform:translateY(6px); } 52%,90% { opacity:1; transform:none; } 100% { opacity:0; } }
-.ha-pay { display:flex; align-items:center; justify-content:space-between; margin-top:10px; } .ha-amt { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; color:#111; }
-.ha-pill { font-size:9px; font-weight:800; letter-spacing:.08em; border-radius:999px; padding:2px 8px; text-transform:uppercase; background:#dcfce7; color:#166534; animation:ha-pop2 5s infinite; }
-.ha-prog { height:6px; background:#e9e9e6; border-radius:999px; margin-top:14px; overflow:hidden; } .ha-prog i { display:block; height:100%; width:0; background:var(--mint); animation:ha-fill 5s infinite; }
-@keyframes ha-fill { 0% { width:0; } 45%,90% { width:100%; } 100% { width:0; } }
+.ha-case-note { margin:28px 0 0; padding-top:12px; border-top:1px solid #d9d9d4; font-size:12.5px; color:#555; }
 
 .ha-case { max-width:1000px; margin:56px auto 0; padding:0 24px 64px; color:#111; }
 .ha-case-head { display:flex; align-items:center; justify-content:space-between; gap:20px; padding-bottom:18px; border-bottom:1px solid #d9d9d4; }
@@ -333,19 +253,13 @@ const HOME_APERCU_CSS = `
 .ha-day dt { font-variant-numeric:tabular-nums; font-size:13px; font-weight:700; color:#111; padding-top:1px; }
 .ha-day dd { margin:0; font-size:14.5px; line-height:1.5; color:#333; }
 .ha-before dd { color:#555; }
-.ha-nums { margin-top:44px; padding-top:22px; border-top:1px solid #d9d9d4; display:grid; grid-template-columns:repeat(3,1fr); gap:24px; }
-.ha-nums b { display:block; font-size:34px; font-weight:800; letter-spacing:-.03em; line-height:1; color:#111; font-variant-numeric:tabular-nums; }
-.ha-nums span { display:block; margin-top:8px; font-size:13px; line-height:1.4; color:#333; max-width:24ch; }
 
 @media (max-width: 900px) {
-  .ha-fgrid, .ha-day, .ha-nums { grid-template-columns:1fr; }
+  .ha-day { grid-template-columns:1fr; }
   .ha-float { display:none; }
   .ha-hint { display:none; }
   .ha-bar { height:auto; flex-wrap:wrap; padding:8px 12px; } .ha-seg { margin-left:0; width:100%; justify-content:space-between; }
   .ha-case-head { flex-direction:column; align-items:flex-start; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .ha-float, .ha-stamp, .ha-rain, .ha-ok, .ha-sms, .ha-pill, .ha-prog i { animation:none !important; }
-  .ha-stamp { transform:rotate(-8deg) scale(1); opacity:1; } .ha-sms { opacity:1; } .ha-ok { opacity:1; } .ha-prog i { width:100%; }
-}
+@media (prefers-reduced-motion: reduce) { .ha-float { animation:none !important; } }
 `;
