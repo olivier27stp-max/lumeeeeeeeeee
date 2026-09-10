@@ -7,6 +7,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
+import { usePageMeta } from '../../hooks/usePageMeta';
 import { FONCTIONS, findFonction, type Bi } from './fonctionsData';
 
 export default function FonctionDetail() {
@@ -15,6 +16,9 @@ export default function FonctionDetail() {
   const fr = language === 'fr';
   const f = findFonction(slug);
   const [demoOpen, setDemoOpen] = useState(false);
+  usePageMeta(f
+    ? { title: fr ? f.title.fr : f.title.en, description: fr ? f.lead.fr : f.lead.en, path: `/fonctions/${f.slug}`, image: f.shot }
+    : { title: fr ? 'Fonction introuvable' : 'Feature not found', description: '', path: '/features' });
   if (!f) return <Navigate to="/features" replace />;
   const pick = (b: Bi) => (fr ? b.fr : b.en);
   const others = FONCTIONS.filter((x) => x.slug !== f.slug);

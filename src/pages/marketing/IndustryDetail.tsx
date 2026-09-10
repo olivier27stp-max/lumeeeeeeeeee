@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from '../../i18n';
+import { usePageMeta } from '../../hooks/usePageMeta';
 import TrustSection from '../../components/marketing/TrustSection';
 import type { Language } from '../../i18n';
 
@@ -196,6 +197,10 @@ export default function IndustryDetail() {
   const { language, t } = useTranslation();
   const c = COPY[language];
   const industry = slug ? INDUSTRY_DATA[slug] : null;
+  const name = industry?.name[language] ?? '';
+  usePageMeta(language === 'fr'
+    ? { title: industry ? `CRM pour ${name}` : 'Industrie introuvable', description: industry ? `Lume pour les entreprises de ${name.toLowerCase()} : soumissions, calendrier, textos, factures et paie au même endroit, avec Lumi, l'assistant IA.` : 'Cette industrie n\'existe pas.', path: `/industries/${slug ?? ''}` }
+    : { title: industry ? `CRM for ${name}` : 'Industry not found', description: industry ? `Lume for ${name.toLowerCase()} businesses: quotes, calendar, texts, invoices and payroll in one place, with Lumi, the AI assistant.` : 'This industry does not exist.', path: `/industries/${slug ?? ''}` });
 
   if (!industry) {
     return (

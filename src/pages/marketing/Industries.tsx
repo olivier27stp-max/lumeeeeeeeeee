@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from '../../i18n';
+import { usePageMeta } from '../../hooks/usePageMeta';
 
 // Noms bilingues locaux — les dictionnaires i18n globaux ne couvrent pas ces
 // entrées et ne doivent pas être modifiés d'ici.
@@ -44,6 +45,9 @@ const COPY = {
 
 export default function Industries() {
   const { language } = useTranslation();
+  usePageMeta(language === 'fr'
+    ? { title: 'Industries', description: 'Lavage de vitres, toiture, paysagement, CVAC, pavé uni, peinture, extermination et plus : Lume s\'adapte à chaque métier de services à domicile.', path: '/industries' }
+    : { title: 'Industries', description: 'Window cleaning, roofing, landscaping, HVAC, pavers, painting, pest control and more: Lume adapts to every home service trade.', path: '/industries' });
   const c = COPY[language];
   return (
     <div style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>

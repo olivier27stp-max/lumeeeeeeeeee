@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import Section, { FadeIn } from '../../components/marketing/Section';
 import { useTranslation } from '../../i18n';
+import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Language } from '../../i18n';
 
 // Copie locale bilingue — les dictionnaires i18n globaux ne couvrent pas ces
@@ -191,6 +192,9 @@ const COPY = {
 
 export default function Solutions() {
   const { language } = useTranslation();
+  usePageMeta(language === 'fr'
+    ? { title: 'Solutions', description: 'Ce que Lume règle pour une entreprise de services : ventes, répartition, service client, comptabilité et croissance.', path: '/solutions' }
+    : { title: 'Solutions', description: 'What Lume solves for a service business: sales, dispatch, customer service, accounting and growth.', path: '/solutions' });
   const c = COPY[language];
   return (
     <>

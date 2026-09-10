@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowRight, BellRing, Calendar, CreditCard, FileText, Kanban, Map, Mic, Star, Trophy, Zap } from 'lucide-react';
 import { useTranslation } from '../../i18n';
+import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Language } from '../../i18n';
 
 // Copie bilingue locale — les dictionnaires i18n globaux ne couvrent pas ces
@@ -168,6 +169,9 @@ const Check = ({ label }: { label: string }) => (
 export default function Features() {
   const { language } = useTranslation();
   const c = COPY[language];
+  usePageMeta(language === 'fr'
+    ? { title: 'Fonctionnalités', description: 'Assistant IA, pipeline, formulaires de demande, carte porte-à-porte, classement, relances de soumissions, avis Google, planification, automatisations et paiements : tout ce que Lume fait pour une entreprise de services.', path: '/features' }
+    : { title: 'Features', description: 'AI assistant, pipeline, request forms, door-to-door map, leaderboard, quote follow-ups, Google reviews, scheduling, automations and payments: everything Lume does for a service business.', path: '/features' });
   const learnMore = language === 'fr' ? 'En savoir plus →' : 'Learn more →';
   const included = language === 'fr' ? 'Inclus' : 'Included';
 

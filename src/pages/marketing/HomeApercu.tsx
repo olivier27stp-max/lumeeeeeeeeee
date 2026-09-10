@@ -22,6 +22,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
+import { usePageMeta, HOME_META } from '../../hooks/usePageMeta';
 import { StopList, Pillars, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, SECTIONS_CSS } from './homeApercuSections';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
@@ -53,6 +54,7 @@ const dicebear = (seed: string) => `https://api.dicebear.com/9.x/notionists/svg?
 export default function HomeApercu() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  usePageMeta(HOME_META[language]);
   const h = t.marketingSite.hero;
   const [demoOpen, setDemoOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('accueil');

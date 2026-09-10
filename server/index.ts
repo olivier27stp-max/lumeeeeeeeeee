@@ -34,7 +34,6 @@ import { emailWebhookHandler } from './routes/webhooks-email';
 import messagesRouter from './routes/messages';
 import quotesRouter, { quoteRedirectRouter } from './routes/quotes';
 import invoicesPublicRouter from './routes/invoices-public';
-import lumiRouter from './routes/lumi';
 import agreementsRouter from './routes/agreements';
 import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
@@ -608,7 +607,6 @@ if (!useRedis) {
   app.use('/api/agreements/public', agreementPublicLimiter);
   app.use('/api/automations/events', automationLimiter);
   app.use('/api/agent', agentLimiter);
-  app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
   app.use('/api/incidents', incidentsLimiterMem);
 }
@@ -643,7 +641,6 @@ app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
 // AI agent (Gemini tool-loop) — cap per-user cost abuse
 app.use('/api/agent', redisRateLimit({ preset: 'standard', keyFn: (req) => `agent:${userKey(req)}` }));
-app.use('/api/lumi', redisRateLimit({ preset: 'standard', keyFn: (req) => `lumi:${userKey(req)}` }));
 // ── OAuth 2.1 — Lume est le serveur d'autorisation du serveur MCP ──
 // Monté avec le MCP (mêmes raisons : guardCommonShape des routers nus, et
 // porte MFA — un échange de jeton n'a pas de session à faire valoir).
@@ -776,7 +773,6 @@ app.use('/q', redisRateLimit({
 app.use('/', quoteRedirectRouter);
 app.use('/api', quotesRouter);
 app.use('/api', invoicesPublicRouter);
-app.use('/api', lumiRouter);
 app.use('/api', agreementsRouter);
 const surveyLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP
 app.use('/api/survey', surveyLimiter);
@@ -1030,6 +1026,44 @@ app.get('/robots.txt', (_req, res) => {
   );
 });
 
+/* Titre et description par page, injectés dans le HTML servi pour que les
+   robots les lisent sans exécuter l'application. Miroir de src/hooks/usePageMeta.ts
+   et des pages marketing : garder les deux cohérents. */
+const PAGE_META: Record<string, { title: string; description: string }> = {
+  "/": { title: "Lume · CRM et assistant IA pour entreprises de services", description: "Arrêtez de gérer manuellement, commencez à croître automatiquement. Clients, soumissions, calendrier, textos, factures et paie au même endroit, avec Lumi, l'assistant IA." },
+  "/features": { title: "Fonctionnalités · Lume", description: "Assistant IA, pipeline, formulaires de demande, carte porte-à-porte, classement, relances de soumissions, avis Google, planification, automatisations et paiements." },
+  "/pricing": { title: "Tarifs · Lume", description: "Trois forfaits qui s'emboîtent : Minimum, Scale et Autopilot. Prix simples, sans surprises, en CAD ou USD." },
+  "/industries": { title: "Industries · Lume", description: "Lavage de vitres, toiture, paysagement, CVAC, pavé uni, peinture, extermination et plus : Lume s'adapte à chaque métier de services à domicile." },
+  "/solutions": { title: "Solutions · Lume", description: "Ce que Lume règle pour une entreprise de services : ventes, répartition, service client, comptabilité et croissance." },
+  "/contact": { title: "Réserver une démo · Lume", description: "Trente minutes avec notre équipe : vos vraies questions, la plateforme en direct, aucun engagement." },
+  "/fonctions/clients": { title: "Clients et demandes · Lume", description: "Clients et demandes dans Lume, le CRM des entreprises de services." },
+  "/fonctions/soumissions": { title: "Soumissions · Lume", description: "Soumissions dans Lume, le CRM des entreprises de services." },
+  "/fonctions/calendrier": { title: "Calendrier et dispatch · Lume", description: "Calendrier et dispatch dans Lume, le CRM des entreprises de services." },
+  "/fonctions/messages": { title: "Messages · Lume", description: "Messages dans Lume, le CRM des entreprises de services." },
+  "/fonctions/finances": { title: "Finances et paie · Lume", description: "Finances et paie dans Lume, le CRM des entreprises de services." },
+  "/fonctions/lumi": { title: "Lumi, l'assistant · Lume", description: "Lumi, l'assistant dans Lume, le CRM des entreprises de services." },
+  "/industries/hvac": { title: "CRM pour CVAC · Lume", description: "Lume pour les entreprises de cvac : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/window-cleaning": { title: "CRM pour Lavage de vitres · Lume", description: "Lume pour les entreprises de lavage de vitres : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/roofing": { title: "CRM pour Toiture · Lume", description: "Lume pour les entreprises de toiture : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/paver": { title: "CRM pour Pavé uni · Lume", description: "Lume pour les entreprises de pavé uni : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/power-washing": { title: "CRM pour Lavage à pression · Lume", description: "Lume pour les entreprises de lavage à pression : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/led-lighting": { title: "CRM pour Éclairage DEL · Lume", description: "Lume pour les entreprises de éclairage del : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/lawn-care": { title: "CRM pour Entretien de pelouse · Lume", description: "Lume pour les entreprises de entretien de pelouse : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/landscaping": { title: "CRM pour Aménagement paysager · Lume", description: "Lume pour les entreprises de aménagement paysager : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/painting": { title: "CRM pour Peinture · Lume", description: "Lume pour les entreprises de peinture : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/fencing": { title: "CRM pour Clôtures · Lume", description: "Lume pour les entreprises de clôtures : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/auto-detailing": { title: "CRM pour Esthétique automobile · Lume", description: "Lume pour les entreprises de esthétique automobile : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/pest-control": { title: "CRM pour Extermination · Lume", description: "Lume pour les entreprises de extermination : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/plumbing": { title: "CRM pour Plomberie · Lume", description: "Lume pour les entreprises de plomberie : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/electrician": { title: "CRM pour Électricien · Lume", description: "Lume pour les entreprises de électricien : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/cleaning": { title: "CRM pour Entretien ménager · Lume", description: "Lume pour les entreprises de entretien ménager : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/junk-removal": { title: "CRM pour Ramassage de débris · Lume", description: "Lume pour les entreprises de ramassage de débris : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/construction": { title: "CRM pour Construction · Lume", description: "Lume pour les entreprises de construction : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/renovation": { title: "CRM pour Rénovation · Lume", description: "Lume pour les entreprises de rénovation : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/pool-maintenance": { title: "CRM pour Entretien de piscine · Lume", description: "Lume pour les entreprises de entretien de piscine : soumissions, calendrier, textos, factures et paie au même endroit." },
+  "/industries/excavation": { title: "CRM pour Excavation · Lume", description: "Lume pour les entreprises de excavation : soumissions, calendrier, textos, factures et paie au même endroit." },
+};
+
 // SPA fallback — serve index.html fresh from disk every time.
 // Reading once at boot caused stale HTML referencing old hashed assets
 // after a redeploy (dist/ rewritten but template in memory).
@@ -1046,17 +1080,34 @@ app.get('*', (_req, res, next) => {
     return;
   }
 
-  const routeFallback = CRAWLER_FALLBACKS[_req.path.replace(/\/+$/, '') || '/'];
-  if (routeFallback) {
+  const cleanPath = _req.path.replace(/\/+$/, '') || '/';
+  const routeFallback = CRAWLER_FALLBACKS[cleanPath];
+  const pageMeta = PAGE_META[cleanPath];
+  if (routeFallback || pageMeta) {
     try {
-      const html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
-      // Substitue au résumé de l'accueil celui de la route demandée ; le tout
-      // est remplacé par l'application au chargement.
-      const swapped = html.replace(
-        /(<main[^>]*>)[\s\S]*?(<\/main>)/,
-        (_m, open: string, close: string) => `${open}${routeFallback}${close}`,
-      );
-      res.type('html').send(swapped);
+      let html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
+      if (routeFallback) {
+        // Substitue au résumé de l'accueil celui de la route demandée ; le tout
+        // est remplacé par l'application au chargement.
+        html = html.replace(
+          /(<main[^>]*>)[\s\S]*?(<\/main>)/,
+          (_m, open: string, close: string) => `${open}${routeFallback}${close}`,
+        );
+      }
+      if (pageMeta) {
+        const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        const url = `https://lumecrm.net${cleanPath === '/' ? '/' : cleanPath}`;
+        html = html
+          .replace(/<title>[^<]*<\/title>/, `<title>${esc(pageMeta.title)}</title>`)
+          .replace(/(<meta name="description" content=")[^"]*(")/, `$1${esc(pageMeta.description)}$2`)
+          .replace(/(<meta property="og:title" content=")[^"]*(")/, `$1${esc(pageMeta.title)}$2`)
+          .replace(/(<meta property="og:description" content=")[^"]*(")/, `$1${esc(pageMeta.description)}$2`)
+          .replace(/(<meta property="og:url" content=")[^"]*(")/, `$1${url}$2`)
+          .replace(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${esc(pageMeta.title)}$2`)
+          .replace(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${esc(pageMeta.description)}$2`)
+          .replace(/(<link rel="canonical" href=")[^"]*(")/, `$1${url}$2`);
+      }
+      res.type('html').send(html);
       return;
     } catch {
       /* si la lecture echoue, on retombe sur le sendFile standard */

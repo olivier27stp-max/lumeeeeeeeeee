@@ -19,6 +19,7 @@ import { useMemo, useRef, useState } from 'react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
 import { useRegion } from '../../hooks/useRegion';
+import { usePageMeta } from '../../hooks/usePageMeta';
 import type { Language } from '../../i18n';
 
 // Copie bilingue locale — les dictionnaires i18n globaux ne couvrent pas ces
@@ -431,6 +432,9 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
   const compareRef = useRef<HTMLDetailsElement>(null);
   const { language } = useTranslation();
   const c = COPY[language];
+  usePageMeta(language === 'fr'
+    ? { title: 'Tarifs', description: 'Trois forfaits qui s\'emboîtent : Minimum, Scale et Autopilot. Prix simples, sans surprises, en CAD ou USD. Cochez ce dont vous avez besoin, le forfait se trouve tout seul.', path: '/pricing' }
+    : { title: 'Pricing', description: 'Three plans that build on each other: Minimum, Scale and Autopilot. Simple pricing, no surprises, in CAD or USD. Check what you need, the plan picks itself.', path: '/pricing' });
   const { currency } = useRegion();
   const money = (n: number) => (language === 'fr' ? `${n.toLocaleString('fr-CA')} $` : `$${n.toLocaleString('en-CA')}`);
   const pr = (plan: Plan) => plan.prices[currency];
