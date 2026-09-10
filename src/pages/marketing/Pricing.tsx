@@ -3,6 +3,7 @@ import { ArrowRight, ChevronDown } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
+import { useRegion } from '../../hooks/useRegion';
 import TrustSection from '../../components/marketing/TrustSection';
 import type { Language } from '../../i18n';
 
@@ -19,9 +20,8 @@ interface Plan {
   extraUserPrice: Bi;
   offices: Bi;
   extraOfficePrice?: Bi;
-  monthlyPrice: number;
-  annualFullYr: number;
-  annualFirstYr: number;
+  /** Prix par devise (source : table `plans` en prod, colonnes *_cad / *_usd). */
+  prices: Record<'CAD' | 'USD', { monthly: number; annualFullYr: number; annualFirstYr: number; extraUser: number; extraOffice: number }>;
   badge?: Bi;
   desc: Bi;
   cta: Bi;
@@ -34,12 +34,10 @@ const PLANS: Plan[] = [
     slug: 'starter',
     stage: { en: 'Getting started', fr: 'Je démarre' },
     users: { en: 'Includes 3 users', fr: '3 utilisateurs inclus' },
-    extraUserPrice: { en: '+$35/extra user/mo', fr: '+35 $/utilisateur suppl./mois' },
+    extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
     offices: { en: '1 office', fr: '1 bureau' },
-    extraOfficePrice: { en: '+$100/extra office', fr: '+100 $/bureau suppl.' },
-    monthlyPrice: 150,
-    annualFullYr: 1530,
-    annualFirstYr: 1300,
+    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
+    prices: { CAD: { monthly: 150, annualFullYr: 1530, annualFirstYr: 1300, extraUser: 35, extraOffice: 100 }, USD: { monthly: 110, annualFullYr: 1122, annualFirstYr: 954, extraUser: 35, extraOffice: 100 } },
     desc: {
       en: 'Everything you need to run the business solo or with a small crew.',
       fr: 'Tout ce qu\'il faut pour rouler votre entreprise seul ou avec une petite équipe.',
@@ -52,12 +50,10 @@ const PLANS: Plan[] = [
     slug: 'pro',
     stage: { en: 'I have a team', fr: 'J\'ai une équipe' },
     users: { en: 'Includes 10 users', fr: '10 utilisateurs inclus' },
-    extraUserPrice: { en: '+$30/extra user/mo', fr: '+30 $/utilisateur suppl./mois' },
+    extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
     offices: { en: '2 offices', fr: '2 bureaux' },
-    extraOfficePrice: { en: '+$100/extra office', fr: '+100 $/bureau suppl.' },
-    monthlyPrice: 340,
-    annualFullYr: 3468,
-    annualFirstYr: 2948,
+    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
+    prices: { CAD: { monthly: 340, annualFullYr: 3468, annualFirstYr: 2948, extraUser: 30, extraOffice: 100 }, USD: { monthly: 250, annualFullYr: 2550, annualFirstYr: 2168, extraUser: 30, extraOffice: 100 } },
     badge: { en: 'Most Popular', fr: 'Le plus populaire' },
     desc: {
       en: 'For growing teams — stop being the dispatcher and let the system run the day.',
@@ -71,12 +67,10 @@ const PLANS: Plan[] = [
     slug: 'autopilot',
     stage: { en: 'Runs without me', fr: 'Ça roule sans moi' },
     users: { en: 'Includes 20 users', fr: '20 utilisateurs inclus' },
-    extraUserPrice: { en: '+$25/extra user/mo', fr: '+25 $/utilisateur suppl./mois' },
+    extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
     offices: { en: '5 offices', fr: '5 bureaux' },
-    extraOfficePrice: { en: '+$100/extra office', fr: '+100 $/bureau suppl.' },
-    monthlyPrice: 495,
-    annualFullYr: 5049,
-    annualFirstYr: 4292,
+    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
+    prices: { CAD: { monthly: 495, annualFullYr: 5049, annualFirstYr: 4292, extraUser: 25, extraOffice: 100 }, USD: { monthly: 360, annualFullYr: 3672, annualFirstYr: 3121, extraUser: 25, extraOffice: 100 } },
     desc: {
       en: 'For businesses that grow without the owner — AI, sales teams and full control.',
       fr: 'Pour les entreprises qui grandissent sans le propriétaire — IA, équipes de vente et contrôle complet.',
@@ -239,6 +233,10 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
   const [demoOpen, setDemoOpen] = useState(false);
   const { language, t } = useTranslation();
   const c = COPY[language];
+  const { currency } = useRegion();
+  const money = (n: number) => (language === 'fr' ? `${n.toLocaleString('fr-CA')} $` : `$${n.toLocaleString('en-CA')}`);
+  const pr = (plan: Plan) => plan.prices[currency];
+  const fill = (bi: Bi, n: number) => bi[language].replace('{x}', money(n));
   return (
     <div style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
       {/* Hero */}
@@ -334,16 +332,17 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                     </p>
                     <p className="mt-2 tabular-nums">
                       {annual && (
-                        <span className="text-sm text-text-secondary line-through mr-1.5">${Math.round(plan.annualFullYr / 12)}</span>
+                        <span className="text-sm text-text-secondary line-through mr-1.5">{money(Math.round(pr(plan).annualFullYr / 12))}</span>
                       )}
-                      <span className="text-[26px] font-bold text-text-primary">${annual ? Math.round(plan.annualFirstYr / 12) : plan.monthlyPrice}</span>
+                      <span className="text-[26px] font-bold text-text-primary">{money(annual ? Math.round(pr(plan).annualFirstYr / 12) : pr(plan).monthly)}</span>
+                        <span className="ml-1 text-[10px] font-semibold text-text-tertiary align-top">{currency}</span>
                       <span className="text-xs font-normal text-text-secondary">{c.perMonth}</span>
                     </p>
                     <p className="mt-1 text-[10px] text-text-tertiary leading-snug">
                       {annual
                         ? c.billedAnnually(
-                            plan.annualFirstYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA'),
-                            plan.annualFullYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')
+                            pr(plan).annualFirstYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA'),
+                            pr(plan).annualFullYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')
                           )
                         : c.billedMonthly}
                     </p>
@@ -353,7 +352,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                       {plan.users[language]} · {plan.offices[language]}
                     </p>
                     <p className="text-[11px] text-text-secondary">
-                      {plan.extraUserPrice[language]}{plan.extraOfficePrice ? ` · ${plan.extraOfficePrice[language]}` : ''}
+                      {fill(plan.extraUserPrice, pr(plan).extraUser)}{plan.extraOfficePrice ? ` · ${fill(plan.extraOfficePrice, pr(plan).extraOffice)}` : ''}
                     </p>
                     <button
                       onClick={() => setDemoOpen(true)}
@@ -384,7 +383,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                       <div className="flex items-center justify-center gap-3">
                         <span className="text-[15px] font-extrabold text-[#111]">{plan.name}</span>
                         <span className="tabular-nums text-[15px] font-bold text-text-primary">
-                          ${annual ? Math.round(plan.annualFirstYr / 12) : plan.monthlyPrice}
+                          {money(annual ? Math.round(pr(plan).annualFirstYr / 12) : pr(plan).monthly)}
                           <span className="text-[11px] font-normal text-text-secondary">{c.perMonth}</span>
                         </span>
                         <button

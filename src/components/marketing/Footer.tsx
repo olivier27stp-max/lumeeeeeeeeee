@@ -41,24 +41,24 @@ export default function Footer() {
   const fr = language === 'fr';
   const START = fr
     ? [
-        { label: 'Fonctionnalités', href: '/features' },
-        { label: 'Soumissions et relances', href: '/features#notifications' },
-        { label: 'Calendrier et dispatch', href: '/features#scheduling' },
-        { label: 'Formulaire de demande', href: '/features#request-form' },
-        { label: 'Paiements en ligne', href: '/features#payments' },
-        { label: "Lumi, l'assistant IA", href: '/features#ai-voice' },
+        { label: 'Toutes les fonctionnalités', href: '/features' },
+        { label: 'Clients et demandes', href: '/fonctions/clients' },
+        { label: 'Soumissions', href: '/fonctions/soumissions' },
+        { label: 'Calendrier et dispatch', href: '/fonctions/calendrier' },
+        { label: 'Messages', href: '/fonctions/messages' },
+        { label: 'Finances et paie', href: '/fonctions/finances' },
+        { label: "Lumi, l'assistant", href: '/fonctions/lumi' },
         { label: 'Porte-à-porte', href: '/features#d2d-map' },
-        { label: 'Solutions', href: '/solutions' },
       ]
     : [
-        { label: 'Features', href: '/features' },
-        { label: 'Quotes and follow-ups', href: '/features#notifications' },
-        { label: 'Calendar and dispatch', href: '/features#scheduling' },
-        { label: 'Request form', href: '/features#request-form' },
-        { label: 'Online payments', href: '/features#payments' },
-        { label: 'Lumi, the AI assistant', href: '/features#ai-voice' },
+        { label: 'All features', href: '/features' },
+        { label: 'Clients and requests', href: '/fonctions/clients' },
+        { label: 'Quotes', href: '/fonctions/soumissions' },
+        { label: 'Calendar and dispatch', href: '/fonctions/calendrier' },
+        { label: 'Messages', href: '/fonctions/messages' },
+        { label: 'Finances and payroll', href: '/fonctions/finances' },
+        { label: 'Lumi, the assistant', href: '/fonctions/lumi' },
         { label: 'Door-to-door', href: '/features#d2d-map' },
-        { label: 'Solutions', href: '/solutions' },
       ];
   const INDUSTRIES = fr
     ? [
@@ -148,11 +148,11 @@ export default function Footer() {
                 </div>
               ) : (
                 <form onSubmit={onSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <input type="text" required name="full_name" autoComplete="name" value={form.full_name} onChange={onChange('full_name')} placeholder={f.fullNamePlaceholder} aria-label={f.fullNamePlaceholder} className={inputCls} />
-                  <input type="text" required name="company" autoComplete="organization" value={form.company} onChange={onChange('company')} placeholder={f.companyPlaceholder} aria-label={f.companyPlaceholder} className={inputCls} />
-                  <input type="email" required name="email" autoComplete="email" value={form.email} onChange={onChange('email')} placeholder={f.emailPlaceholder} aria-label={f.emailPlaceholder} className={inputCls} />
-                  <input type="tel" required name="phone" autoComplete="tel" value={form.phone} onChange={onChange('phone')} placeholder={f.phonePlaceholder} aria-label={f.phonePlaceholder} className={inputCls} />
-                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder={f.messagePlaceholder} aria-label={f.messagePlaceholder} className={`${inputCls} sm:col-span-2 resize-none`} />
+                  <input type="text" required name="full_name" autoComplete="name" value={form.full_name} onChange={onChange('full_name')} placeholder={f.fullNamePlaceholder} className={inputCls} />
+                  <input type="text" required name="company" autoComplete="organization" value={form.company} onChange={onChange('company')} placeholder={f.companyPlaceholder} className={inputCls} />
+                  <input type="email" required name="email" autoComplete="email" value={form.email} onChange={onChange('email')} placeholder={f.emailPlaceholder} className={inputCls} />
+                  <input type="tel" required name="phone" autoComplete="tel" value={form.phone} onChange={onChange('phone')} placeholder={f.phonePlaceholder} className={inputCls} />
+                  <textarea rows={3} name="message" value={form.message} onChange={onChange('message')} placeholder={f.messagePlaceholder} className={`${inputCls} sm:col-span-2 resize-none`} />
                   {state === 'error' && errMsg && (
                     <p className="sm:col-span-2 text-xs text-red-600" role="alert">{errMsg}</p>
                   )}

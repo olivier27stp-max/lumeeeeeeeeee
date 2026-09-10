@@ -14,6 +14,7 @@ import MarketingLayout from '../components/marketing/MarketingLayout';
 // Accueil « aperçu » (sept. 2026). L'ancienne page `pages/marketing/Home.tsx`
 // reste dans le dépôt, non routée, pour pouvoir y revenir.
 const MarketingHome = React.lazy(() => import('../pages/marketing/HomeApercu'));
+const MarketingFonction = React.lazy(() => import('../pages/marketing/FonctionDetail'));
 const MarketingFeatures = React.lazy(() => import('../pages/marketing/Features'));
 const MarketingSolutions = React.lazy(() => import('../pages/marketing/Solutions'));
 const MarketingIndustries = React.lazy(() => import('../pages/marketing/Industries'));
@@ -61,6 +62,7 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
       <Route element={<MarketingLayout />}>
         <Route index element={<MarketingHome />} />
         <Route path="features" element={<MarketingFeatures />} />
+        <Route path="fonctions/:slug" element={<MarketingFonction />} />
         <Route path="solutions" element={<MarketingSolutions />} />
         <Route path="industries" element={<MarketingIndustries />} />
         <Route path="industries/:slug" element={<MarketingIndustryDetail />} />

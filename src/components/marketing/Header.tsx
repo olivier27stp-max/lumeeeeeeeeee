@@ -337,6 +337,7 @@ function RegionPicker({ language, setLanguage, compact }: { language: string; se
   const choose = (r: typeof REGIONS[number]) => {
     setRegion(r.id);
     try { localStorage.setItem('lume-region', r.id); } catch { /* stockage indisponible */ }
+    window.dispatchEvent(new CustomEvent('lume:region', { detail: r.id }));
     if (r.lang !== language) setLanguage(r.lang);
     setOpen(false);
   };
