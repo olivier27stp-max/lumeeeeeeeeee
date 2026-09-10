@@ -246,6 +246,46 @@ describe('outils différés (tool search)', () => {
   });
 });
 
+describe('cache glissant de la conversation', () => {
+  it('le dernier message porte un point de cache 5 min, et l historique d origine n est pas touché', async () => {
+    const { avecCacheConversation } = await import('../server/lib/lumi/orchestrateur');
+    const hist: any[] = [
+      { role: 'user', content: 'Bonjour' },
+      { role: 'assistant', content: [{ type: 'text', text: 'Salut' }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: '{}' }, { type: 'tool_result', tool_use_id: 't2', content: '{}' }] },
+    ];
+    const copie = JSON.parse(JSON.stringify(hist));
+    const out = avecCacheConversation(hist) as any[];
+    expect(out).toHaveLength(3);
+    expect(out[2].content[1].cache_control).toEqual({ type: 'ephemeral' });
+    expect(out[2].content[0].cache_control).toBeUndefined();
+    expect(out[0]).toBe(hist[0]); // les messages précédents sont les mêmes objets
+    expect(hist).toEqual(copie);  // rien de muté : la base ne stocke jamais cache_control
+  });
+
+  it('un message texte (string) devient un bloc texte avec point de cache', async () => {
+    const { avecCacheConversation } = await import('../server/lib/lumi/orchestrateur');
+    const out = avecCacheConversation([{ role: 'user', content: 'Bonjour' }]) as any[];
+    expect(out[0].content).toEqual([{ type: 'text', text: 'Bonjour', cache_control: { type: 'ephemeral' } }]);
+  });
+
+  it('chaque appel au modèle passe l historique avec le point de cache', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'tu1', name: 'list_invoices', input: {} }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Fini.' }], stop_reason: 'end_turn', usage });
+    await tourLumi(baseTour([], []));
+    expect(instantanes).toHaveLength(2);
+    for (const p of instantanes) {
+      const dernier = p.messages[p.messages.length - 1];
+      const blocs = dernier.content;
+      expect(blocs[blocs.length - 1].cache_control).toEqual({ type: 'ephemeral' });
+      // Un seul point de cache dans les messages (max 4 par requête, 2 déjà pris par outils + prompt).
+      const points = p.messages.flatMap((m: any) => (Array.isArray(m.content) ? m.content : [])).filter((b: any) => b.cache_control).length;
+      expect(points).toBe(1);
+    }
+  });
+});
+
 describe('proposition en attente', () => {
   it('retrouvée quand le dernier tool_use d écriture n a pas de tool_result', async () => {
     const { propositionEnAttente } = await import('../server/routes/lumi');
