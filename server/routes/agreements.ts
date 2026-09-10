@@ -930,6 +930,7 @@ ${refTitle ? `<p style="margin:0 0 16px;color:#6b7280;font-size:13px;">${String(
       to: clientData.email,
       subject: `Contrat ${number}${company.company_name ? ` — ${company.company_name}` : ''}`,
       html: buildEmailLayout(company, bodyHtml),
+      suivi: { orgId, entityType: 'agreement', entityId: agreement.id },
     });
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 

@@ -370,6 +370,7 @@ router.post('/quotes/send-email', async (req, res) => {
       to: recipientEmail,
       subject: finalSubject,
       html: emailHtml,
+      suivi: { orgId: auth.orgId, entityType: 'quote', entityId: quote.id },
     });
     if (!emailResult.sent) {
       return res.status(502).json({

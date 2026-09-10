@@ -1,16 +1,32 @@
 import nodemailer from 'nodemailer';
 import { redirigerEmail } from './qa-redirect';
 import { logger } from './logger';
+import { getServiceClient } from './supabase';
 
 /**
- * Centralized email sender using Nodemailer + Gmail SMTP.
+ * Centralized email sender.
  *
- * Required env vars:
- *   SMTP_HOST     — SMTP server (default: smtp.gmail.com)
- *   SMTP_PORT     — SMTP port (default: 587)
- *   SMTP_USER     — Gmail address (e.g. you@gmail.com)
- *   SMTP_PASS     — Gmail App Password (16-char code from Google)
- *   EMAIL_FROM    — Default "from" (e.g. "Lume CRM <you@gmail.com>")
+ * Deux fournisseurs, choisis par l'environnement :
+ *
+ *   RESEND_API_KEY présent → API Resend (https://resend.com), domaine
+ *     lumecrm.net avec SPF / DKIM / DMARC, webhooks de rebond captés par
+ *     POST /api/webhooks/email. C'est le chemin de production visé.
+ *
+ *   sinon → SMTP (Gmail par défaut). Audit QA 2026-09-09, n°8 : un seul
+ *     compte Gmail pour tout le transactionnel de tous les clients — plafond
+ *     ~500 destinataires/jour, expéditeur @gmail.com, et AUCUN rebond capté :
+ *     une adresse mal saisie donnait une facture « envoyée, en attente de
+ *     paiement » pour toujours.
+ *
+ * Quel que soit le fournisseur, chaque envoi laisse une ligne dans
+ * `email_deliveries` (statut `sent`), que le webhook fait évoluer. L'interface
+ * lit la dernière ligne d'une entité pour afficher « courriel non livré », et
+ * les relances sautent une adresse qui a rebondi.
+ *
+ * Env :
+ *   RESEND_API_KEY — active Resend
+ *   EMAIL_FROM     — expéditeur par défaut (ex. "Lume CRM <factures@lumecrm.net>")
+ *   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS — repli SMTP
  */
 
 let transporter: nodemailer.Transporter | null = null;
@@ -38,6 +54,19 @@ function getTransporter(): nodemailer.Transporter {
   return transporter;
 }
 
+export type FournisseurCourriel = 'resend' | 'smtp';
+
+export function fournisseurCourriel(env: NodeJS.ProcessEnv = process.env): FournisseurCourriel {
+  return env.RESEND_API_KEY ? 'resend' : 'smtp';
+}
+
+/** Ce que le courriel concerne — pour retrouver son sort depuis la facture. */
+export interface SuiviCourriel {
+  orgId: string | null;
+  entityType: string;
+  entityId?: string | null;
+}
+
 export interface SendEmailParams {
   from?: string;
   to: string | string[];
@@ -52,6 +81,8 @@ export interface SendEmailParams {
    * les courriels commerciaux sont davantage classés en pourriel.
    */
   headers?: Record<string, string>;
+  /** Journalise l'envoi dans email_deliveries (badge « non livré », relances). */
+  suivi?: SuiviCourriel;
 }
 
 export interface SendEmailResult {
@@ -60,8 +91,55 @@ export interface SendEmailResult {
   error?: string;
 }
 
+const RESEND_API = 'https://api.resend.com/emails';
+
+async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: string; subject: string; html: string; headers?: Record<string, string> }): Promise<{ id: string }> {
+  const res = await fetch(RESEND_API, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: p.from,
+      to: p.to,
+      ...(p.replyTo ? { reply_to: p.replyTo } : {}),
+      subject: p.subject,
+      html: p.html,
+      ...(p.headers ? { headers: p.headers } : {}),
+    }),
+  });
+  const body: any = await res.json().catch(() => ({}));
+  if (!res.ok || !body?.id) {
+    throw new Error(`Resend ${res.status}: ${body?.message || body?.name || 'unknown error'}`);
+  }
+  return { id: String(body.id) };
+}
+
 /**
- * Send an email via SMTP (Gmail by default).
+ * Journal d'envoi. Best-effort : un échec ici ne doit jamais faire échouer
+ * l'envoi — mais il est journalisé, un trou dans ce journal est une
+ * information (la table peut manquer sur un environnement pas encore migré).
+ */
+async function journaliserEnvoi(entree: {
+  provider: FournisseurCourriel; messageId: string; to: string; subject: string; suivi?: SuiviCourriel;
+}): Promise<void> {
+  try {
+    const { error } = await getServiceClient().from('email_deliveries').insert({
+      org_id: entree.suivi?.orgId ?? null,
+      provider: entree.provider,
+      message_id: entree.messageId,
+      to_email: entree.to,
+      subject: entree.subject.slice(0, 500),
+      entity_type: entree.suivi?.entityType ?? null,
+      entity_id: entree.suivi?.entityId ?? null,
+      status: 'sent',
+    });
+    if (error) logger.error('[mailer] email_deliveries non journalisé', { error: error.message, messageId: entree.messageId });
+  } catch (err: any) {
+    logger.error('[mailer] email_deliveries non journalisé', { error: err?.message || String(err) });
+  }
+}
+
+/**
+ * Send an email — Resend si configuré, sinon SMTP.
  * Drop-in replacement for Resend's `resend.emails.send()`.
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
@@ -73,19 +151,45 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   if (qa.redirige) {
     console.warn(`[qa] courriel redirigé : ${qa.destinataireOrigine} → ${qa.to}`);
   }
+  const destinataires = Array.isArray(qa.to) ? qa.to : [qa.to];
+  const provider = fournisseurCourriel();
 
   try {
-    const transport = getTransporter();
-    const info = await transport.sendMail({
-      from: params.from || defaultFrom,
-      to: Array.isArray(qa.to) ? qa.to.join(', ') : qa.to,
-      replyTo: params.replyTo,
-      subject: qa.subject,
-      html: params.html,
-      ...(params.headers ? { headers: params.headers } : {}),
-    });
+    let messageId: string;
+    if (provider === 'resend') {
+      const { id } = await envoyerViaResend({
+        from: params.from || defaultFrom,
+        to: destinataires,
+        replyTo: params.replyTo,
+        subject: qa.subject,
+        html: params.html,
+        headers: params.headers,
+      });
+      messageId = id;
+    } else {
+      const transport = getTransporter();
+      const info = await transport.sendMail({
+        from: params.from || defaultFrom,
+        to: destinataires.join(', '),
+        replyTo: params.replyTo,
+        subject: qa.subject,
+        html: params.html,
+        ...(params.headers ? { headers: params.headers } : {}),
+      });
+      messageId = info.messageId;
+    }
 
-    return { sent: true, messageId: info.messageId };
+    // Une ligne par destinataire réel (pas l'adresse de redirection QA).
+    const originaux = Array.isArray(params.to) ? params.to : [params.to];
+    await Promise.all(originaux.map((to, i) => journaliserEnvoi({
+      provider,
+      messageId: originaux.length > 1 ? `${messageId}#${i}` : messageId,
+      to,
+      subject: params.subject,
+      suivi: params.suivi,
+    })));
+
+    return { sent: true, messageId };
   } catch (err: any) {
     console.error('[mailer] send failed:', err.message);
     // Remonté à Sentry : cette erreur est attrapée volontairement (pour ne pas
@@ -105,8 +209,29 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 }
 
 /**
- * Check if SMTP is configured (non-throwing check for optional email features).
+ * Check if a mail provider is configured (non-throwing check for optional email features).
  */
 export function isMailerConfigured(): boolean {
-  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+  return !!process.env.RESEND_API_KEY || !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+/**
+ * Cette adresse a-t-elle rebondi (ou signalé un pourriel) pour cette org ?
+ * Les relances automatiques s'en servent : relancer une adresse morte ne
+ * sert à rien et abîme la réputation du domaine.
+ */
+export async function adresseInjoignable(orgId: string, email: string): Promise<boolean> {
+  try {
+    const { data, error } = await getServiceClient()
+      .from('email_deliveries')
+      .select('id')
+      .eq('org_id', orgId)
+      .ilike('to_email', email.trim())
+      .in('status', ['bounced', 'complained'])
+      .limit(1);
+    if (error) return false;
+    return (data?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
 }

@@ -133,6 +133,7 @@ async function sendPaymentEmail(params: {
   currency: string;
   paymentUrl: string;
   orgId: string;
+  invoiceId?: string | null;
 }) {
   if (!isMailerConfigured()) return { sent: false, reason: 'SMTP not configured' };
 
@@ -143,6 +144,7 @@ async function sendPaymentEmail(params: {
     from: emailFrom,
     to: params.clientEmail,
     subject: `Payment request — ${amountFormatted} for ${params.invoiceNumber}`,
+    suivi: { orgId: params.orgId, entityType: 'payment_request', entityId: params.invoiceId ?? null },
     html: buildPaymentEmailHtml({
       company,
       clientName: params.clientName,
@@ -270,6 +272,7 @@ router.post('/payment-requests/create', validate(createPaymentRequestSchema), as
         currency,
         paymentUrl,
         orgId,
+        invoiceId,
       });
     }
 
@@ -341,6 +344,7 @@ router.post('/payment-requests/resend', async (req, res) => {
           currency: active.currency || 'CAD',
           paymentUrl,
           orgId,
+          invoiceId,
         });
       }
 

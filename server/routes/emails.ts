@@ -276,6 +276,7 @@ ${viewUrl ? `
       to: clientData.email,
       subject: emailSubject,
       html: buildEmailLayout(company, bodyHtml),
+      suivi: { orgId, entityType: 'invoice', entityId: invoiceId },
     });
 
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
@@ -429,6 +430,7 @@ ${viewUrl ? `
       to: clientData.email,
       subject: `Quote ${quote.invoice_number || ''} — ${amountStr}`,
       html: buildEmailLayout(company, bodyHtml),
+      suivi: { orgId, entityType: 'invoice', entityId: quote.id },
     });
 
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
@@ -516,6 +518,7 @@ ${viewUrl ? `<div style="text-align:center;margin-bottom:16px;"><a href="${viewU
       to: clientData.email,
       subject: `Soumission ${quote.quote_number || ''} — ${amountStr}`,
       html: buildEmailLayout(company, bodyHtml),
+      suivi: { orgId, entityType: 'quote', entityId: quoteId },
     });
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
@@ -557,6 +560,7 @@ router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, 
       to,
       subject: sanitizeHtml(subject),
       html: buildEmailLayout(company, sanitizeHtml(html)),
+      suivi: { orgId: auth.orgId, entityType: 'message' },
     });
 
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');

@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
 import {
   ArrowLeft, Eye, EyeOff, Copy, Link2, Check, Download, RefreshCw, Send,
   Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, ReceiptText,
@@ -366,6 +367,9 @@ export default function InvoiceDetails() {
             ) : null}
           </div>
         </div>
+
+        {/* Courriel non livré (rebond capté par le webhook) — audit QA n°8 */}
+        {invoice.status !== 'draft' && <EmailDeliveryBadge entityType="invoice" entityId={invoice.id} />}
 
         {/* View Tracking */}
         {invoice.status !== 'draft' && (
