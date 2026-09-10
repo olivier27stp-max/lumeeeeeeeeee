@@ -321,26 +321,11 @@ ${viewUrl ? `
       console.error(`[emails/send-invoice] invoice_send_events insert failed (invoice ${invoiceId}, org ${orgId}):`, sendEventError.message);
     }
 
-    // Log to activity_log with template & subject info
-    const { error: activityError } = await serviceClient.from('activity_log').insert({
-      org_id: orgId,
-      entity_type: 'invoice',
-      entity_id: invoiceId,
-      event_type: 'invoice_sent',
-      actor_id: auth.user.id,
-      metadata: {
-        invoice_number: invoice.invoice_number,
-        client_name: clientName,
-        subject_sent: emailSubject,
-        email_template_id: emailTemplateId,
-        to_email: clientData.email,
-      },
-    });
-    if (activityError) {
-      console.error(`[emails/send-invoice] activity_log insert failed (invoice ${invoiceId}, org ${orgId}):`, activityError.message);
-    }
-
-    // Emit event
+    // Journal d'activité : UNE SEULE écriture, via l'event bus (source unique).
+    // L'insert manuel dans activity_log qui existait ici faisait DOUBLE emploi
+    // avec le bus (qui écrit lui aussi 'invoice_sent' dans activity_log), d'où
+    // deux lignes « Invoice sent » par envoi. On garde uniquement l'emit,
+    // enrichi des métadonnées qui étaient dans l'insert manuel.
     eventBus.emit('invoice.sent', {
       orgId,
       entityType: 'invoice',
@@ -348,7 +333,14 @@ ${viewUrl ? `
       actorId: auth.user.id,
       relatedEntityType: invoice.client_id ? 'client' : undefined,
       relatedEntityId: invoice.client_id || undefined,
-      metadata: { invoice_number: invoice.invoice_number, client_name: clientName, client_id: invoice.client_id || null },
+      metadata: {
+        invoice_number: invoice.invoice_number,
+        client_name: clientName,
+        client_id: invoice.client_id || null,
+        subject_sent: emailSubject,
+        email_template_id: emailTemplateId,
+        to_email: clientData.email,
+      },
     });
 
     return res.json({ ok: true, emailId: emailResult?.messageId || null });
