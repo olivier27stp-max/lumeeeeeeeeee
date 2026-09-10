@@ -204,6 +204,8 @@ export default function Lumi() {
   const spokenRef = useRef(false);
   /* Le micro a rempli la zone de saisie ; au prochain envoi, on lira la réponse. */
   const pendingSpokenRef = useRef(false);
+  /* Ce qu'il y avait dans la zone avant de parler : l'aperçu s'écrit à la suite. */
+  const baseSaisieRef = useRef('');
   const speech = useSpeakReplies(lang);
   const abortRef = useRef<AbortController | null>(null);
   const nextId = () => idRef.current++;
@@ -362,9 +364,12 @@ export default function Lumi() {
      le texte part comme un message et la réponse est lue à voix haute. */
   const voice = useVoiceInput({
     language: lang,
-    // Rien ne part tout seul : le texte va dans la zone, on relit, on envoie.
+    // Aperçu en direct : les mots s'écrivent pendant qu'on parle.
+    onInterim: (text) => { const base = baseSaisieRef.current; setInput(base ? `${base} ${text}` : text); },
+    // Rien ne part tout seul : le texte final remplace l'aperçu, on relit, on envoie.
     onTranscript: (text) => {
-      setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text));
+      const base = baseSaisieRef.current;
+      setInput(base ? `${base} ${text}` : text);
       pendingSpokenRef.current = true;
       requestAnimationFrame(() => { const el = document.getElementById(`${uid}-lumi-input`) as HTMLTextAreaElement | null; el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); });
     },
@@ -374,7 +379,7 @@ export default function Lumi() {
   const transcribing = voice.state === 'transcribing';
   function toggleVoice() {
     if (listening) voice.stop();
-    else if (voice.state === 'idle') void voice.start();
+    else if (voice.state === 'idle') { baseSaisieRef.current = input.trim(); void voice.start(); }
   }
   const chrono = `${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`;
 
