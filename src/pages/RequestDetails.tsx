@@ -23,6 +23,7 @@ import {
 import EntityHubHeader from '../components/EntityHubHeader';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { cn } from '../lib/utils';
 import { SignedImg, SignedLink } from '../components/ui/SignedMedia';
 import { fetchFormSubmission, fetchRequestForm, updateFormSubmission, deleteFormSubmission } from '../lib/requestFormsApi';
@@ -144,7 +145,7 @@ export default function RequestDetails() {
   const handleDelete = async () => {
     if (!submission) return;
     const msg = fr ? 'Supprimer cette demande ?' : 'Delete this request?';
-    if (!window.confirm(msg)) return;
+    if (!(await confirmer({ message: msg, danger: true }))) return;
     setIsDeleting(true);
     try {
       await deleteFormSubmission(submission.id);

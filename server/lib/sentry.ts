@@ -7,6 +7,7 @@
 
 import type { Express } from 'express';
 import { createRequire } from 'node:module';
+import { logger } from './logger';
 
 // Lazy-load @sentry/node so the dependency is optional until installed.
 // Le serveur roule en ESM ("type": "module") : `require` n'existe pas au
@@ -17,7 +18,7 @@ let sentryNode: any = null;
 export function initSentry(app: Express): void {
   const dsn = process.env.SENTRY_DSN;
   if (!dsn) {
-    console.log('[sentry] SENTRY_DSN not set — error tracking disabled');
+    logger.info('[sentry] SENTRY_DSN not set — error tracking disabled');
     return;
   }
   try {
@@ -61,7 +62,7 @@ export function initSentry(app: Express): void {
     // Le tracing handler suit le request handler et précède les routes : c'est
     // lui qui ouvre une transaction par requête.
     if (sentryNode.Handlers?.tracingHandler) app.use(sentryNode.Handlers.tracingHandler());
-    console.log('[sentry] initialized');
+    logger.info('[sentry] initialized');
   } catch (e: any) {
     console.warn('[sentry] @sentry/node not installed — run: npm i @sentry/node', e?.message);
   }

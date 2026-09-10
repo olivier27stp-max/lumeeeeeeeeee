@@ -14,6 +14,7 @@
  *   → Dashboard
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { captureClientException } from '../lib/sentry';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { translatePlanFeature } from '../lib/planFeatures';
 import {
@@ -352,7 +353,15 @@ export default function OnboardingFlow() {
     } catch {}
 
     // 2. Save onboarding
-    try { await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) }); } catch {}
+    try {
+      const res = await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      // Ne bloque pas le paiement, mais les infos saisies (nom, compagnie,
+      // téléphone) seraient perdues sans trace — c'est déjà arrivé en silence.
+      console.error('[onboarding] sauvegarde des infos de facturation échouée', err);
+      captureClientException(err, { operation: 'billing.onboarding' });
+    }
 
     // 3. Subscribe
     try {
@@ -377,8 +386,9 @@ export default function OnboardingFlow() {
       // Success — clean up and redirect
       ['onb_step','onb_plan','onb_interval','onb_name','onb_email','onb_token','onb_uid'].forEach(k => sessionStorage.removeItem(k));
       try { localStorage.removeItem('lume_referral_code'); } catch { /* ignore */ }
-      alert(isFr ? 'Abonnement activé! Bienvenue sur Lume.' : 'Subscription activated! Welcome to Lume.');
-      window.location.href = '/';
+      toast.success(isFr ? 'Abonnement activé! Bienvenue sur Lume.' : 'Subscription activated! Welcome to Lume.');
+      // Laisse le temps de lire le toast avant la redirection (l'alert() natif bloquait, lui).
+      setTimeout(() => { window.location.href = '/'; }, 1200);
       return;
     } catch (err: any) {
       toast.error(err.message || (isFr ? 'Erreur réseau' : 'Network error'));
@@ -1016,7 +1026,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                       toast.error(isFr ? 'Vérifiez votre email d\'abord' : 'Verify your email first');
                       return;
                     }
-                    alert((isFr ? 'Erreur : ' : 'Error: ') + (d.error || (isFr ? 'Échec' : 'Failed')));
+                    toast.error((isFr ? 'Erreur : ' : 'Error: ') + (d.error || (isFr ? 'Échec' : 'Failed')));
                     return;
                   }
                   if (!isAllowedStripeRedirect(d.url)) {
@@ -1024,7 +1034,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
                     return;
                   }
                   window.location.href = d.url;
-                } catch (e: any) { alert((isFr ? 'Erreur : ' : 'Error: ') + e.message); }
+                } catch (e: any) { toast.error((isFr ? 'Erreur : ' : 'Error: ') + e.message); }
               }}
                 disabled={emailVerified === false}
                 className="w-full py-4 rounded-xl bg-[#1F5F4F] text-white text-base font-bold hover:bg-[#174a3d] transition-colors flex items-center justify-center gap-2 shadow-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">

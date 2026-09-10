@@ -110,8 +110,10 @@ router.post('/route-optimization/optimize', async (req, res) => {
               })
               .eq('id', id)
               .eq('org_id', orgId);
-          } catch {
-            /* non-fatal */
+          } catch (err: any) {
+            // Le job garde ses anciennes coordonnées ; on le dit pour que le
+            // géocodage puisse être rejoué.
+            console.error(`[route-optimization] géocodage non sauvegardé (job ${id}):`, err?.message || err);
           }
         }
       }

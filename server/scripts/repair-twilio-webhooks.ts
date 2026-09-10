@@ -17,6 +17,7 @@
 import 'dotenv/config';
 import { twilioClient } from '../lib/config';
 import { getServiceClient } from '../lib/supabase';
+import { logger } from '../lib/logger';
 
 const APPLY = process.argv.includes('--apply');
 
@@ -33,10 +34,10 @@ async function main() {
   const expectedSmsUrl = `${publicUrl}/api/messages/inbound`;
   const expectedStatusUrl = `${publicUrl}/api/messages/status`;
 
-  console.log(`Mode: ${APPLY ? 'APPLY' : 'DRY-RUN'}`);
-  console.log(`Expected smsUrl:    ${expectedSmsUrl}`);
-  console.log(`Expected statusUrl: ${expectedStatusUrl}`);
-  console.log('');
+  logger.info(`Mode: ${APPLY ? 'APPLY' : 'DRY-RUN'}`);
+  logger.info(`Expected smsUrl:    ${expectedSmsUrl}`);
+  logger.info(`Expected statusUrl: ${expectedStatusUrl}`);
+  logger.info('');
 
   const admin = getServiceClient();
   const { data: channels, error } = await admin
@@ -56,19 +57,19 @@ async function main() {
 
   for (const ch of channels || []) {
     const phone = ch.phone_number;
-    console.log(`\n[${phone}] org=${ch.org_id}`);
+    logger.info(`\norg=${ch.org_id}`, { phone });
 
     // Find the number on Twilio
     const matches = await twilioClient.incomingPhoneNumbers.list({ phoneNumber: phone, limit: 1 });
     const twNumber = matches[0];
     if (!twNumber) {
-      console.log('  ❌ Not found on Twilio account.');
+      logger.info('  ❌ Not found on Twilio account.');
       missing++;
       continue;
     }
-    console.log(`  Twilio SID: ${twNumber.sid}`);
-    console.log(`  Current smsUrl:    ${twNumber.smsUrl || '(empty)'}`);
-    console.log(`  Current statusCb:  ${twNumber.statusCallback || '(empty)'}`);
+    logger.info(`  Twilio SID: ${twNumber.sid}`);
+    logger.info(`  Current smsUrl:    ${twNumber.smsUrl || '(empty)'}`);
+    logger.info(`  Current statusCb:  ${twNumber.statusCallback || '(empty)'}`);
 
     const needsSmsUrl = twNumber.smsUrl !== expectedSmsUrl;
     const needsStatusCb = twNumber.statusCallback !== expectedStatusUrl;
@@ -76,16 +77,16 @@ async function main() {
     const needsSidBackfill = !ch.metadata || (ch.metadata as any).twilio_sid !== twNumber.sid;
 
     if (!needsSmsUrl && !needsStatusCb && !needsMethod && !needsSidBackfill) {
-      console.log('  ✅ Already configured correctly.');
+      logger.info('  ✅ Already configured correctly.');
       alreadyOk++;
       continue;
     }
 
-    console.log('  ⚠️  Needs update:');
-    if (needsSmsUrl) console.log('     - smsUrl');
-    if (needsStatusCb) console.log('     - statusCallback');
-    if (needsMethod) console.log('     - smsMethod (should be POST)');
-    if (needsSidBackfill) console.log('     - metadata.twilio_sid (Supabase backfill)');
+    logger.info('  ⚠️  Needs update:');
+    if (needsSmsUrl) logger.info('     - smsUrl');
+    if (needsStatusCb) logger.info('     - statusCallback');
+    if (needsMethod) logger.info('     - smsMethod (should be POST)');
+    if (needsSidBackfill) logger.info('     - metadata.twilio_sid (Supabase backfill)');
 
     if (!APPLY) continue;
 
@@ -102,19 +103,19 @@ async function main() {
       .from('communication_channels')
       .update({ metadata: newMeta })
       .eq('id', ch.id);
-    console.log('  ✅ Patched.');
+    logger.info('  ✅ Patched.');
     fixed++;
   }
 
-  console.log('');
-  console.log('─────────────────────────────────────');
-  console.log(`Already OK: ${alreadyOk}`);
-  console.log(`Fixed:      ${fixed}`);
-  console.log(`Missing on Twilio: ${missing}`);
+  logger.info('');
+  logger.info('─────────────────────────────────────');
+  logger.info(`Already OK: ${alreadyOk}`);
+  logger.info(`Fixed:      ${fixed}`);
+  logger.info(`Missing on Twilio: ${missing}`);
   if (!APPLY && (fixed === 0 && alreadyOk === (channels?.length || 0))) {
-    console.log('Nothing to do.');
+    logger.info('Nothing to do.');
   } else if (!APPLY) {
-    console.log('\nRe-run with --apply to push these changes to Twilio.');
+    logger.info('\nRe-run with --apply to push these changes to Twilio.');
   }
 }
 

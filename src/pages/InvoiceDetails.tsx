@@ -19,6 +19,7 @@ import { downloadInvoicePdf } from '../lib/generateInvoicePdf';
 import EntityHubHeader from '../components/EntityHubHeader';
 import EntityNumberEditor from '../components/EntityNumberEditor';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { supabase } from '../lib/supabase';
 import ActivityTimeline from '../components/ActivityTimeline';
 import RequestPaymentModal from '../components/RequestPaymentModal';
@@ -60,7 +61,7 @@ export default function InvoiceDetails() {
   // so hook order stays stable (React error #310 guard).
   const renderData = useMemo(
     () => detailsQuery.data
-      ? buildRenderData(detailsQuery.data, companyQuery.data, null, appliedTaxesQuery.data || null)
+      ? buildRenderData(detailsQuery.data, companyQuery.data ?? null, null, appliedTaxesQuery.data || null)
       : null,
     [detailsQuery.data, companyQuery.data, appliedTaxesQuery.data],
   );
@@ -121,7 +122,7 @@ export default function InvoiceDetails() {
   }
 
   async function handleVoid() {
-    if (!window.confirm(t.invoiceDetails.voidThisInvoice)) return;
+    if (!(await confirmer({ message: t.invoiceDetails.voidThisInvoice, danger: true }))) return;
     try {
       await voidInvoice(invoice.id);
       invalidateAll();
@@ -146,7 +147,7 @@ export default function InvoiceDetails() {
 
   async function handleMarkPaid() {
     if (markingPaid) return; // prevent double-click race
-    if (!window.confirm(t.invoiceDetails.markAsPaid)) return;
+    if (!(await confirmer({ message: t.invoiceDetails.markAsPaid }))) return;
     setMarkingPaid(true);
     try {
       await markInvoicePaidManually(invoice.id);

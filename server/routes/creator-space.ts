@@ -192,7 +192,10 @@ async function groupOrgIds(admin: Admin, orgId: string): Promise<string[]> {
 router.get('/creator-space/check', async (req, res) => {
   try {
     if (platformAdminIds.size === 0) return res.json({ isCreator: false });
-    const client = buildSupabaseWithAuth(req.header('authorization'));
+    // Sans Authorization : pas d'identité → même réponse douce (jamais 401 ici).
+    const authorization = req.header('authorization');
+    if (!authorization) return res.json({ isCreator: false });
+    const client = buildSupabaseWithAuth(authorization);
     const { data } = await client.auth.getUser();
     return res.json({ isCreator: !!data?.user?.id && platformAdminIds.has(data.user.id) });
   } catch {

@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { redirigerEmail } from './qa-redirect';
+import { logger } from './logger';
 
 /**
  * Centralized email sender using Nodemailer + Gmail SMTP.
@@ -33,7 +34,7 @@ function getTransporter(): nodemailer.Transporter {
     auth: { user, pass },
   });
 
-  console.log(`[mailer] SMTP transport ready (${host}:${port})`);
+  logger.info(`[mailer] SMTP transport ready (${host}:${port})`);
   return transporter;
 }
 

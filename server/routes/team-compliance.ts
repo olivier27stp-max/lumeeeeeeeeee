@@ -138,7 +138,11 @@ router.post('/team/:memberId/force-logout', async (req, res) => {
   } catch (e: any) {
     console.warn('[force-logout] admin.signOut failed:', e?.message);
     // Fallback DB-level RPC if present (swallow errors silently)
-    try { await svc.rpc('invalidate_user_sessions', { p_user_id: member.user_id }); } catch { /* no-op */ }
+    try {
+      const { error: invErr } = await svc.rpc('invalidate_user_sessions', { p_user_id: member.user_id });
+      // Une session non révoquée = un membre retiré qui garde l'accès. À tracer.
+      if (invErr) console.error('[team-compliance] sessions non révoquées:', member.user_id, invErr.message);
+    } catch (err: any) { console.error('[team-compliance] sessions non révoquées:', member.user_id, err?.message || err); }
   }
 
   await svc.from('audit_events').insert({

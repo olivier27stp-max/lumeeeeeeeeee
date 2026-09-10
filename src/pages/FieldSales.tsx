@@ -706,7 +706,7 @@ function TimelineEvent({ event, isLast, onDelete }: { event: FieldHouseEvent; is
               <X size={11} />
             </button>
           )}
-          {confirming && (
+          {onDelete && confirming && (
             <div className="flex items-center gap-1">
               <button onClick={() => { onDelete(event.id); setConfirming(false); }} className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-semibold hover:bg-red-500/30">{language === 'fr' ? 'Supprimer' : 'Delete'}</button>
               <button onClick={() => setConfirming(false)} className="text-[9px] px-1.5 py-0.5 rounded text-text-tertiary hover:text-text-secondary">{language === 'fr' ? 'Annuler' : 'Cancel'}</button>

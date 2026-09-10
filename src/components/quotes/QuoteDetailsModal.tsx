@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { displayEmail, displayPhone, displayAddress } from '../../lib/piiSanitizer';
 import SpecificNotes from '../SpecificNotes';
 import { useTranslation } from '../../i18n';
+import { confirmer } from '../ui/ConfirmDialog';
 
 interface QuoteDetailsModalProps {
   isOpen: boolean;
@@ -95,7 +96,7 @@ export default function QuoteDetailsModal({
   });
 
   const handleDelete = () => handleAction(async () => {
-    if (!window.confirm(fr ? 'Supprimer ce devis ?' : 'Delete this quote?')) return;
+    if (!(await confirmer({ message: fr ? 'Supprimer ce devis ?' : 'Delete this quote?', danger: true }))) return;
     await deleteQuote(quote.id);
     toast.success(fr ? 'Devis supprimé.' : 'Quote deleted.');
     onClose();

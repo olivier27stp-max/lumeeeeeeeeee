@@ -20,6 +20,7 @@ import 'dotenv/config';
 import { provisionSmsNumber, getOrgSmsChannel } from '../lib/twilioProvisioning';
 import { twilioClient } from '../lib/config';
 import { getServiceClient } from '../lib/supabase';
+import { logger } from '../lib/logger';
 
 async function main() {
   const orgId = process.argv[2];
@@ -28,9 +29,9 @@ async function main() {
     process.exit(1);
   }
 
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(' Twilio auto-provisioning test');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  logger.info(' Twilio auto-provisioning test');
+  logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
   // ── 1. Sanity check Twilio credentials
   if (!twilioClient) {
@@ -38,7 +39,7 @@ async function main() {
     console.error('   Account SID must start with "AC".');
     process.exit(1);
   }
-  console.log('✅ Twilio client initialized');
+  logger.info('✅ Twilio client initialized');
 
   // ── 2. Load org info
   // L'adresse vit dans company_settings (`orgs` n'a aucune colonne d'adresse),
@@ -70,11 +71,11 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`✅ Org loaded: ${org.name}`);
-  console.log(`   Country: ${settings?.country || '(empty)'}`);
-  console.log(`   Region:  ${settings?.province || '(empty)'}`);
-  console.log(`   City:    ${settings?.city || '(empty)'}`);
-  console.log(`   Postal:  ${settings?.postal_code || '(empty)'}`);
+  logger.info(`✅ Org loaded: ${org.name}`);
+  logger.info(`   Country: ${settings?.country || '(empty)'}`);
+  logger.info(`   Region:  ${settings?.province || '(empty)'}`);
+  logger.info(`   City:    ${settings?.city || '(empty)'}`);
+  logger.info('   Postal:', { postalCode: settings?.postal_code || '(empty)' });
 
   if (!settings?.country && !settings?.city && !settings?.postal_code) {
     console.warn('⚠️  Org has no address data — Twilio will pick a number anywhere in the default country (CA).');
@@ -83,32 +84,32 @@ async function main() {
   // ── 3. Idempotency check
   const existing = await getOrgSmsChannel(orgId);
   if (existing) {
-    console.log(`✅ Org already has an active SMS channel: ${existing.phone_number}`);
-    console.log('   (Skipping purchase to avoid duplicate billing.)');
+    logger.info('✅ Org already has an active SMS channel', { phone: existing.phone_number });
+    logger.info('   (Skipping purchase to avoid duplicate billing.)');
     process.exit(0);
   }
 
   // ── 4. Confirm before spending
-  console.log('');
-  console.log('💰 About to purchase a Twilio number (~$1 USD/month).');
-  console.log('   Press Ctrl+C in the next 5 seconds to abort.');
+  logger.info('');
+  logger.info('💰 About to purchase a Twilio number (~$1 USD/month).');
+  logger.info('   Press Ctrl+C in the next 5 seconds to abort.');
   await new Promise((r) => setTimeout(r, 5000));
 
   // ── 5. Purchase
-  console.log('🔄 Provisioning…');
+  logger.info('🔄 Provisioning…');
   try {
     const result = await provisionSmsNumber(orgId);
-    console.log('');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(' ✅ SUCCESS');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`   Phone number: ${result.phoneNumber}`);
-    console.log(`   Channel ID:   ${result.channelId}`);
-    console.log('');
-    console.log('Next steps:');
-    console.log(`   1. Send a test SMS:  Settings → SMS Messaging in the app`);
-    console.log(`   2. Verify webhooks reach: ${process.env.PUBLIC_URL}/api/messages/inbound`);
-    console.log(`   3. To release this number later: Twilio console → Phone Numbers → ${result.phoneNumber} → Release`);
+    logger.info('');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info(' ✅ SUCCESS');
+    logger.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    logger.info('   Phone number:', { phone: result.phoneNumber });
+    logger.info(`   Channel ID:   ${result.channelId}`);
+    logger.info('');
+    logger.info('Next steps:');
+    logger.info(`   1. Send a test SMS:  Settings → SMS Messaging in the app`);
+    logger.info(`   2. Verify webhooks reach: ${process.env.PUBLIC_URL}/api/messages/inbound`);
+    logger.info('   3. To release this number later: Twilio console → Phone Numbers → (the number above) → Release');
   } catch (err: any) {
     console.error('');
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');

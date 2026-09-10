@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import Stripe from 'stripe';
+import { creerClientStripe } from './stripe-sdk';
 import Twilio from 'twilio';
 import { envelopperTwilio } from './qa-redirect';
 
@@ -73,7 +73,7 @@ export function getTwilioStatusCallbackUrl(): string | undefined {
   return `${base}/api/messages/status`;
 }
 
-export const stripeWebhookClient = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+export const stripeWebhookClient = process.env.STRIPE_SECRET_KEY ? creerClientStripe(process.env.STRIPE_SECRET_KEY) : null;
 
 // ── Lume Agent (Google Gemini) ──
 // Free API key from Google AI Studio (https://aistudio.google.com/apikey).

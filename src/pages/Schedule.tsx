@@ -14,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import AddVisitModal from '../components/AddVisitModal';
 import DailyDispatchView from '../components/dispatch-daily/DailyDispatchView';
 import WeeklyDispatchView from '../components/dispatch-weekly/WeeklyDispatchView';
@@ -718,11 +719,12 @@ function ScheduleContent() {
                 return;
               }
               const team = teams.find((tm) => tm.id === selectedTeamIds[0]);
-              const proceed = window.confirm(
-                (t.routing?.confirmApply || 'This will reschedule {n} jobs for {rep}. Proceed?')
+              const proceed = await confirmer({
+                message: (t.routing?.confirmApply || 'This will reschedule {n} jobs for {rep}. Proceed?')
                   .replace('{n}', String(dayJobs.length))
                   .replace('{rep}', team?.name || (language === 'fr' ? 'équipe' : 'team')),
-              );
+                danger: false,
+              });
               if (!proceed) return;
               try {
                 const dayStart = startOfDay(selectedDate);

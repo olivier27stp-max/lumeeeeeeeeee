@@ -57,9 +57,11 @@ for (const m of blocRegles.matchAll(/'(ALL|GET|POST|PUT|PATCH|DELETE)\s+([^']+)'
   REGLES.set(`${m[1]} ${m[2]}`, m[3]);
 }
 
+// La liste est exportee (PUBLIC_ROUTE_PREFIXES) : la garde d abonnement la
+// reprend telle quelle. Le bloc va de sa declaration a la fonction middleware.
 const blocPublics = source.slice(
-  source.indexOf('const publicPrefixes'),
-  source.indexOf('return async (req, res, next)'),
+  source.indexOf('export const PUBLIC_ROUTE_PREFIXES'),
+  source.indexOf('export function rbacMiddleware'),
 );
 const PUBLICS = [...blocPublics.matchAll(/'([^']+)'/g)].map((m) => m[1]);
 

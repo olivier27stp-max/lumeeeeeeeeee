@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import {
   listTaxes, setupTaxPreset, updateTaxConfig, deleteTaxConfig, deleteTaxGroup, setDefaultTaxGroup, createTaxConfig, updateTaxRegistrationNumber, calculateTaxes,
@@ -92,7 +93,7 @@ export default function TaxSettings() {
   };
 
   const handleDeleteGroup = async (id: string, name: string) => {
-    if (!confirm(fr ? `Supprimer la région « ${name} » et toutes ses taxes ?` : `Delete tax region "${name}" and all its taxes?`)) return;
+    if (!(await confirmer({ message: fr ? `Supprimer la région « ${name} » et toutes ses taxes ?` : `Delete tax region "${name}" and all its taxes?`, danger: true }))) return;
     setBusy(true);
     try {
       await deleteTaxGroup(id);
@@ -143,7 +144,7 @@ export default function TaxSettings() {
   };
 
   const handleDeleteTax = async (config: TaxConfig) => {
-    if (!confirm(fr ? `Supprimer la taxe « ${config.name} » ?` : `Remove tax "${config.name}"?`)) return;
+    if (!(await confirmer({ message: fr ? `Supprimer la taxe « ${config.name} » ?` : `Remove tax "${config.name}"?`, danger: true }))) return;
     try {
       // Real delete (was a deactivate stub — the "removed" tax reappeared
       // struck-through on the next load).

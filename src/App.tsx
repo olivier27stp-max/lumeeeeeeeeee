@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { captureClientException } from './lib/sentry';
 import {
   LayoutDashboard,
   Home,
@@ -49,61 +50,69 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
-import CrmWorkspace from './pages/CrmWorkspace';
-import Clients from './pages/Clients';
-import NewClient from './pages/NewClient';
-import ClientDetails from './pages/ClientDetails';
-import SettingsLayout, { SettingsIndex } from './pages/settings/SettingsLayout';
-import ProfileSettings from './pages/settings/ProfileSettings';
-import BillingSettings from './pages/settings/BillingSettings';
-import LocationSettings from './pages/settings/LocationSettings';
-import ArchivesPanel from './components/ArchivesPanel';
-import SupportPage from './components/SupportPage';
-import PayrollPage from './pages/settings/PayrollPage';
-import ApiMcpSettings from './pages/settings/ApiMcpSettings';
-import OAuthConsent from './pages/OAuthConsent';
-import Auth from './pages/Auth';
-import Privacy from './pages/Privacy';
-import Terms from './pages/Terms';
-import PrivacyCenter from './pages/PrivacyCenter';
-import Subprocessors from './pages/Subprocessors';
+// ── Pages en chargement différé (audit 2026-09-09, I4) ──
+// 65 pages étaient importées en dur : tout partait dans le chunk initial
+// (3,2 Mo, 869 ko gzip), y compris les pages qu'un utilisateur ne verra
+// jamais. Chaque page est maintenant son propre chunk, chargé à la première
+// visite. Deux frontières Suspense : une externe (plein écran, spinner) pour
+// les rendus hors coquille, une interne autour des routes pour que la barre
+// latérale reste affichée pendant qu'une page se charge.
+const CrmWorkspace = React.lazy(() => import('./pages/CrmWorkspace'));
+const Clients = React.lazy(() => import('./pages/Clients'));
+const NewClient = React.lazy(() => import('./pages/NewClient'));
+const ClientDetails = React.lazy(() => import('./pages/ClientDetails'));
+const SettingsLayout = React.lazy(() => import('./pages/settings/SettingsLayout'));
+const SettingsIndex = React.lazy(() => import('./pages/settings/SettingsLayout').then((m) => ({ default: m.SettingsIndex })));
+const ProfileSettings = React.lazy(() => import('./pages/settings/ProfileSettings'));
+const BillingSettings = React.lazy(() => import('./pages/settings/BillingSettings'));
+const LocationSettings = React.lazy(() => import('./pages/settings/LocationSettings'));
+const ArchivesPanel = React.lazy(() => import('./components/ArchivesPanel'));
+const SupportPage = React.lazy(() => import('./components/SupportPage'));
+const PayrollPage = React.lazy(() => import('./pages/settings/PayrollPage'));
+const ApiMcpSettings = React.lazy(() => import('./pages/settings/ApiMcpSettings'));
+const OAuthConsent = React.lazy(() => import('./pages/OAuthConsent'));
+const Auth = React.lazy(() => import('./pages/Auth'));
+const Privacy = React.lazy(() => import('./pages/Privacy'));
+const Terms = React.lazy(() => import('./pages/Terms'));
+const PrivacyCenter = React.lazy(() => import('./pages/PrivacyCenter'));
+const Subprocessors = React.lazy(() => import('./pages/Subprocessors'));
 import { CookieBanner } from './components/CookieBanner';
-import Landing from './pages/Landing';
+const Landing = React.lazy(() => import('./pages/Landing'));
 import { supabase } from './lib/supabase';
-import { fetchCurrentBilling, type GraceImpaye } from './lib/billingApi';
+import { fetchCurrentBilling, fetchIsBetaBypassed, type GraceImpaye } from './lib/billingApi';
 import { countPendingQuotes } from './lib/quotesApi';
 import { countOverdueInvoices } from './lib/invoicesApi';
 import { User } from '@supabase/supabase-js';
-import Jobs from './pages/Jobs';
-import NotFound from './pages/NotFound';
+const Jobs = React.lazy(() => import('./pages/Jobs'));
+const NotFound = React.lazy(() => import('./pages/NotFound'));
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { JobModalControllerProvider } from './contexts/JobModalController';
 import { useTranslation } from './i18n';
-import InvoiceDetails from './pages/InvoiceDetails';
-import InvoiceEdit from './pages/InvoiceEdit';
-import Finances from './pages/Finances';
-import PaymentSettings from './pages/PaymentSettings';
-import Automations from './pages/Automations';
-import CompanySettings from './pages/CompanySettings';
-import ManageTeam from './pages/ManageTeam';
-import TeamMemberDetails from './pages/TeamMemberDetails';
+const InvoiceDetails = React.lazy(() => import('./pages/InvoiceDetails'));
+const InvoiceEdit = React.lazy(() => import('./pages/InvoiceEdit'));
+const Finances = React.lazy(() => import('./pages/Finances'));
+const PaymentSettings = React.lazy(() => import('./pages/PaymentSettings'));
+const Automations = React.lazy(() => import('./pages/Automations'));
+const CompanySettings = React.lazy(() => import('./pages/CompanySettings'));
+const ManageTeam = React.lazy(() => import('./pages/ManageTeam'));
+const TeamMemberDetails = React.lazy(() => import('./pages/TeamMemberDetails'));
 import GlobalSearch from './components/GlobalSearch';
 import { OfficeSwitcher } from './components/OfficeSwitcher';
-import SearchResultsPage from './pages/SearchResults';
-import Quotes from './pages/Quotes';
-import QuoteDetails from './pages/QuoteDetails';
+const SearchResultsPage = React.lazy(() => import('./pages/SearchResults'));
+const Quotes = React.lazy(() => import('./pages/Quotes'));
+const QuoteDetails = React.lazy(() => import('./pages/QuoteDetails'));
 import type { TileColor } from './components/ui';
 import ActivityCenter from './components/ActivityCenter';
 import HeaderUserAvatar from './components/HeaderUserAvatar';
 import SupportFAB from './components/SupportFAB';
 import ErrorBoundary from './components/ErrorBoundary';
-import ProductsServices from './pages/ProductsServices';
-import AppMarketplace from './pages/AppMarketplace';
-import SettingsMessaging from './pages/SettingsMessaging';
-import SettingsReviews from './pages/SettingsReviews';
-import RequestFormSettings from './pages/RequestFormSettings';
-import QuotePresets from './pages/QuotePresets';
+const ProductsServices = React.lazy(() => import('./pages/ProductsServices'));
+const AppMarketplace = React.lazy(() => import('./pages/AppMarketplace'));
+const SettingsMessaging = React.lazy(() => import('./pages/SettingsMessaging'));
+const SettingsReviews = React.lazy(() => import('./pages/SettingsReviews'));
+const RequestFormSettings = React.lazy(() => import('./pages/RequestFormSettings'));
+const QuotePresets = React.lazy(() => import('./pages/QuotePresets'));
 // Pages porteuses de CARTES (leaflet + mapbox-gl, ~1,9 Mo). Importees
 // statiquement, elles entrainaient ce poids dans le bundle principal :
 // il partait sur CHAQUE page, /checkout compris. En differe, les cartes
@@ -123,58 +132,59 @@ const AdminMigrations = React.lazy(() => import('./pages/AdminMigrations'));
 // Creator Space — espace interne plateforme (platformAdminIds), la page se
 // gate elle-même via GET /api/creator-space/check et redirige sinon.
 const CreatorSpace = React.lazy(() => import('./pages/creator-space/CreatorSpace'));
-import TaxSettings from './pages/TaxSettings';
-import OAuthCallback from './pages/OAuthCallback';
-import EmailOAuthCallback from './pages/EmailOAuthCallback';
-import OnboardingFlow from './pages/OnboardingFlow';
-import CheckoutSuccess from './pages/CheckoutSuccess';
-import AcceptInvitation from './pages/AcceptInvitation';
-import Register from './pages/Register';
-import AccessBlocked from './pages/AccessBlocked';
-import VerifyEmail from './pages/VerifyEmail';
+const TaxSettings = React.lazy(() => import('./pages/TaxSettings'));
+const OAuthCallback = React.lazy(() => import('./pages/OAuthCallback'));
+const EmailOAuthCallback = React.lazy(() => import('./pages/EmailOAuthCallback'));
+const OnboardingFlow = React.lazy(() => import('./pages/OnboardingFlow'));
+const CheckoutSuccess = React.lazy(() => import('./pages/CheckoutSuccess'));
+const AcceptInvitation = React.lazy(() => import('./pages/AcceptInvitation'));
+const Register = React.lazy(() => import('./pages/Register'));
+const AccessBlocked = React.lazy(() => import('./pages/AccessBlocked'));
+const VerifyEmail = React.lazy(() => import('./pages/VerifyEmail'));
 import VerifyEmailGate from './components/auth/VerifyEmailGate';
-import ResetPassword from './pages/ResetPassword';
+const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
 // Conserves volontairement bien que non montes : ils permettent de remettre
 // Lume Agent en service en restaurant sa route et son entree de menu.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import MrLumePage from './features/agent/components/MrLumeChat';
-import Messages from './pages/Messages';
-import TasksPage from './pages/Tasks';
+const MrLumePage = React.lazy(() => import('./features/agent/components/MrLumeChat'));
+const Messages = React.lazy(() => import('./pages/Messages'));
+const TasksPage = React.lazy(() => import('./pages/Tasks'));
 import PlanFeatureGate from './components/PlanFeatureGate';
 import { useCurrentPlan } from './hooks/usePlanFeature';
-import Courses from './pages/Courses';
-import CourseView from './pages/CourseView';
-import CourseBuilder from './pages/CourseBuilder';
+const Courses = React.lazy(() => import('./pages/Courses'));
+const CourseView = React.lazy(() => import('./pages/CourseView'));
+const CourseBuilder = React.lazy(() => import('./pages/CourseBuilder'));
 // Lume Agent icon for sidebar — brain
 const LumeAgentIcon = ({ size = 20, className = '' }: { size?: number; className?: string }) => (
   <Brain size={size} className={className} />
 );
-import SatisfactionSurvey from './pages/SatisfactionSurvey';
-import ClientPortal from './pages/ClientPortal';
-import PublicPayment from './pages/PublicPayment';
-import MobileAppGate from './pages/MobileAppGate';
+const SatisfactionSurvey = React.lazy(() => import('./pages/SatisfactionSurvey'));
+const ClientPortal = React.lazy(() => import('./pages/ClientPortal'));
+const PublicPayment = React.lazy(() => import('./pages/PublicPayment'));
+const MobileAppGate = React.lazy(() => import('./pages/MobileAppGate'));
 import { afficherPorteMobile } from './lib/mobileGate';
-import PublicRequestForm from './pages/PublicRequestForm';
-import Requests from './pages/Requests';
-import RequestDetails from './pages/RequestDetails';
-import Leaderboard from './pages/Leaderboard';
-import Commissions from './pages/Commissions';
-import D2DPipeline from './pages/D2DPipeline';
-import D2DReports from './pages/D2DReports';
+const PublicRequestForm = React.lazy(() => import('./pages/PublicRequestForm'));
+const Requests = React.lazy(() => import('./pages/Requests'));
+const RequestDetails = React.lazy(() => import('./pages/RequestDetails'));
+const Leaderboard = React.lazy(() => import('./pages/Leaderboard'));
+const Commissions = React.lazy(() => import('./pages/Commissions'));
+const D2DPipeline = React.lazy(() => import('./pages/D2DPipeline'));
+const D2DReports = React.lazy(() => import('./pages/D2DReports'));
 // D2DSettingsGeneral (mock non branché) puis D2DSettingsTeams (config terrain)
 // retirées sur demande de Rafba — les équipes restent assignables à
 // l'invitation ; /d2d-settings/* redirige vers /settings/team.
-import D2DOnboarding from './pages/D2DOnboarding';
-import SettingsRoles from './pages/SettingsRoles';
-import DevPlanSwitch from './pages/DevPlanSwitch';
+const D2DOnboarding = React.lazy(() => import('./pages/D2DOnboarding'));
+const SettingsRoles = React.lazy(() => import('./pages/SettingsRoles'));
+const DevPlanSwitch = React.lazy(() => import('./pages/DevPlanSwitch'));
 import PermissionGate from './components/PermissionGate';
+import { TenantGuardRoute } from './components/TenantGuard';
 import ModuleGate from './components/ModuleGate';
 import { useModuleAccess } from './hooks/useModuleAccess';
 import type { PermissionKey } from './lib/permissions';
 import { hasPermission, ROLE_LABELS } from './lib/permissions';
 import { usePermissions } from './hooks/usePermissions';
 import { useRealtimeNotifications } from './hooks/useRealtimeNotifications';
-import OnboardingWizard from './components/OnboardingWizard';
+const OnboardingWizard = React.lazy(() => import('./components/OnboardingWizard'));
 import SetupChecklist from './components/SetupChecklist';
 import CommandPalette from './components/CommandPalette';
 import DevRoleSwitcher from './components/DevRoleSwitcher';
@@ -248,7 +258,31 @@ function OnboardingWizardWrapper({ userId, language, onComplete }: { userId: str
   return <OnboardingWizard userId={userId} orgId={currentOrgId || ''} language={language} onComplete={onComplete} />;
 }
 
+function LoadingScreen() {
+  const { t } = useTranslation();
+  return (
+    <div className="h-screen w-screen flex items-center justify-center bg-surface">
+      <div className="flex flex-col items-center gap-3">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-6 h-6 border-2 border-outline border-t-text-primary rounded-full"
+        />
+        <span className="text-xs text-text-tertiary font-medium">{t.nav.loadingWorkspace}</span>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  return (
+    <React.Suspense fallback={<LoadingScreen />}>
+      <AppInner />
+    </React.Suspense>
+  );
+}
+
+function AppInner() {
   const { t, language } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -508,34 +542,35 @@ export default function App() {
         if (!profile?.onboarding_done) {
           setShowOnboarding(true);
         }
-      } catch {
-        // If profile table doesn't have onboarding_done column, skip
+      } catch (err) {
+        // Lecture du profil ratée : on n'affiche pas l'assistant, mais on le note.
+        console.error('[App] vérification onboarding échouée', err);
+        captureClientException(err, { operation: 'app.onboardingCheck' });
       } finally {
         setOnboardingChecked(true);
       }
     })();
   }, [user, onboardingChecked]);
 
-  // Check if user has an active subscription — redirect to /checkout if not
-  // Beta bypass list sourced exclusively from env (comma-separated emails).
-  const BYPASS_EMAILS = (import.meta.env.VITE_BETA_BYPASS_EMAILS || '')
-    .split(',')
-    .map((e: string) => e.trim().toLowerCase())
-    .filter(Boolean);
+  // Check if user has an active subscription — redirect to /checkout if not.
+  // Ce check n'est qu'un CONFORT D'AFFICHAGE : l'autorité est le middleware
+  // serveur (server/lib/subscription-guard.ts) qui répond 402 sans abonnement.
+  // Le bypass bêta est demandé au serveur — plus jamais lu depuis une
+  // variable VITE_*, qui finit en clair dans le bundle public (audit C2).
   useEffect(() => {
     if (!user || !onboardingChecked || showOnboarding) {
       setHasSubscription(null);
       setAccessBlockedReason(null);
       return;
     }
-    // Bypass for beta emails whitelisted via env
-    if (user.email && BYPASS_EMAILS.includes(user.email.toLowerCase())) {
-      setHasSubscription(true);
-      setAccessBlockedReason(null);
-      return;
-    }
     (async () => {
       try {
+        if (await fetchIsBetaBypassed()) {
+          setHasSubscription(true);
+          setAccessBlockedReason(null);
+          setGraceImpaye(null);
+          return;
+        }
         const { data: mem } = await supabase
           .from('memberships')
           .select('org_id')
@@ -1426,6 +1461,7 @@ function AuthenticatedApp({
           <div id="page-content-area" className="relative flex-1 min-h-0">
             <div className="absolute inset-0 overflow-y-auto">
             <ErrorBoundary labels={t.errorBoundary}>
+                <React.Suspense fallback={null}>
                   <Routes>
                     <Route path="/" element={<Navigate to="/day" replace />} />
                     <Route path="/pricing" element={<Navigate to="/settings/billing" replace />} />
@@ -1443,11 +1479,11 @@ function AuthenticatedApp({
                     <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
                     {/* Edit reuses the Clients list page, which opens its edit drawer from the :id route param */}
                     <Route path="/clients/:id/edit" element={<Gated permission="clients.update"><div className="px-8 py-6"><Clients /></div></Gated>} />
-                    <Route path="/clients/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><ClientDetails /></div></Gated>} />
+                    <Route path="/clients/:id" element={<Gated permission="clients.read"><TenantGuardRoute table="clients" redirectTo="/clients"><div className="px-8 py-6"><ClientDetails /></div></TenantGuardRoute></Gated>} />
                     <Route path="/requests" element={<Gated permission="clients.read"><div className="px-8 py-6"><Requests /></div></Gated>} />
                     <Route path="/requests/:id" element={<Gated permission="clients.read"><div className="px-8 py-6"><RequestDetails /></div></Gated>} />
                     <Route path="/jobs" element={<Gated permission="jobs.read"><div className="px-8 py-6"><Jobs /></div></Gated>} />
-                    <Route path="/jobs/:id" element={<Gated permission="jobs.read"><PageWrapper><React.Suspense fallback={null}><JobDetails /></React.Suspense></PageWrapper></Gated>} />
+                    <Route path="/jobs/:id" element={<Gated permission="jobs.read"><TenantGuardRoute table="jobs" redirectTo="/jobs"><PageWrapper><React.Suspense fallback={null}><JobDetails /></React.Suspense></PageWrapper></TenantGuardRoute></Gated>} />
                     <Route path="/calendar" element={<Gated permission="calendar.read"><React.Suspense fallback={null}><Schedule /></React.Suspense></Gated>} />
                     <Route path="/availability" element={<Navigate to="/timesheets?view=horaire" replace />} />
                     <Route path="/search" element={<Gated permission="settings.read"><PageWrapper><SearchResultsPage /></PageWrapper></Gated>} />
@@ -1456,12 +1492,12 @@ function AuthenticatedApp({
                     <Route path="/quotes/measure" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteMeasure /></React.Suspense></Gated>} />
                     <Route path="/quotes/presets" element={<Gated permission="settings.read"><PageWrapper><QuotePresets /></PageWrapper></Gated>} />
                     <Route path="/quotes/templates" element={<Gated permission="settings.read"><PageWrapper><QuotePresets /></PageWrapper></Gated>} />
-                    <Route path="/quotes/:id" element={<Gated permission="quotes.read"><PageWrapper><QuoteDetails /></PageWrapper></Gated>} />
+                    <Route path="/quotes/:id" element={<Gated permission="quotes.read"><TenantGuardRoute table="quotes" redirectTo="/quotes"><PageWrapper><QuoteDetails /></PageWrapper></TenantGuardRoute></Gated>} />
                     <Route path="/quotes/:id/measure" element={<Gated permission="quotes.read"><React.Suspense fallback={null}><QuoteMeasure /></React.Suspense></Gated>} />
                     <Route path="/finances" element={<Gated permission="invoices.read"><PageWrapper><Finances /></PageWrapper></Gated>} />
                     <Route path="/invoices" element={<Navigate to="/finances" replace />} />
                     <Route path="/invoices/new" element={<Gated permission="invoices.create"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
-                    <Route path="/invoices/:id" element={<Gated permission="invoices.read"><PageWrapper><InvoiceDetails /></PageWrapper></Gated>} />
+                    <Route path="/invoices/:id" element={<Gated permission="invoices.read"><TenantGuardRoute table="invoices" redirectTo="/finances"><PageWrapper><InvoiceDetails /></PageWrapper></TenantGuardRoute></Gated>} />
                     <Route path="/invoices/:id/edit" element={<Gated permission="invoices.update"><PageWrapper><InvoiceEdit /></PageWrapper></Gated>} />
                     <Route path="/insights" element={<Gated permission="reports.read"><PageWrapper><React.Suspense fallback={null}><Statistiques /></React.Suspense></PageWrapper></Gated>} />
                     <Route path="/payments" element={<PaymentsRedirect />} />
@@ -1562,6 +1598,7 @@ function AuthenticatedApp({
                     <Route path="/creator-space/*" element={<React.Suspense fallback={null}><CreatorSpace /></React.Suspense>} />
                     <Route path="*" element={<PageWrapper><NotFound /></PageWrapper>} />
                   </Routes>
+                </React.Suspense>
             </ErrorBoundary>
             </div>
           </div>

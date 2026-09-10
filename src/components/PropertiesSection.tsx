@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { MapPin, Plus, Navigation, ExternalLink, Edit2, Trash2, Check, X } from 'lucide-react';
 import { useTranslation } from '../i18n';
+import { confirmer } from './ui/ConfirmDialog';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
 import {
   listPropertiesByClient,
@@ -146,7 +147,7 @@ export default function PropertiesSection({ clientId, highlightId }: { clientId:
   }
 
   async function remove(p: PropertyRecord) {
-    if (!window.confirm(cd.confirmDeleteProperty)) return;
+    if (!(await confirmer({ message: cd.confirmDeleteProperty, danger: true }))) return;
     try {
       await softDeleteProperty(p.id);
       toast.success(cd.propertyDeleted);

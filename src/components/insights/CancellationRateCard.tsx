@@ -64,7 +64,7 @@ export default function CancellationRateCard() {
               <CartesianGrid vertical={false} stroke="#e4e4e7" />
               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
-              <Tooltip formatter={(v: number) => `${v}%`} />
+              <Tooltip formatter={(v: number | undefined) => `${v ?? 0}%`} />
               <Line type="monotone" dataKey="rate" stroke="var(--color-chart-primary)" strokeWidth={2.5} dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>

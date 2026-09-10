@@ -8,6 +8,7 @@ import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '.
 import { validate, messageSendSchema } from '../lib/validation';
 import { logSecurityEvent, sanitizeText, checkAnomalies, extractIP } from '../lib/security';
 import { withDeadLetter } from '../lib/dead-letter';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -119,9 +120,9 @@ router.post('/messages/inbound', (req, res) => {
     return res.send('<Response></Response>');
   };
 
-  console.log('[SMS Inbound] Received webhook:', {
-    from: req.body?.From,
-    body: req.body?.Body?.substring(0, 50),
+  logger.debug('[SMS Inbound] Received webhook:', {
+    phone: req.body?.From,
+    bodyLength: req.body?.Body?.length ?? 0,
     sid: req.body?.MessageSid,
   });
 
@@ -186,7 +187,7 @@ router.post('/messages/inbound', (req, res) => {
 
   // In-memory dedup: reject if we already saw this MessageSid
   if (MessageSid && recentMessageSids.has(MessageSid)) {
-    console.log('[SMS Inbound] Duplicate MessageSid (in-memory), skipping:', MessageSid);
+    logger.info('[SMS Inbound] Duplicate MessageSid (in-memory), skipping:', { messageSid: MessageSid });
     return sendTwiml();
   }
   if (MessageSid) markSidProcessed(MessageSid);
@@ -227,7 +228,7 @@ router.post('/messages/inbound', (req, res) => {
             optedOut++;
           }
         }
-        console.log(`[SMS Inbound] Opted-out ${normalizedPhone} from ${optedOut}/${orgIds.length} org(s)`);
+        logger.info(`[SMS Inbound] Opted-out from ${optedOut}/${orgIds.length} org(s)`, { phone: normalizedPhone });
       } catch (e: any) {
         console.error('[SMS Inbound] Opt-out handling failed:', e?.message);
       }
@@ -274,7 +275,7 @@ router.post('/messages/inbound', (req, res) => {
             optedIn++;
           }
         }
-        console.log(`[SMS Inbound] Opt-out removed for ${normalizedPhone} in ${optedIn}/${optInOrgIds.length} org(s)`);
+        logger.info(`[SMS Inbound] Opt-out removed in ${optedIn}/${optInOrgIds.length} org(s)`, { phone: normalizedPhone });
       } catch (e: any) {
         console.error('[SMS Inbound] Opt-in handling failed:', e?.message);
       }
@@ -421,7 +422,7 @@ router.post('/messages/inbound', (req, res) => {
 
         // If upsert returned null, the row already existed — skip everything
         if (!inserted) {
-          console.log('[SMS Inbound] Duplicate MessageSid (upsert), skipping:', MessageSid);
+          logger.info('[SMS Inbound] Duplicate MessageSid (upsert), skipping:', { messageSid: MessageSid });
           return;
         }
       } else {
@@ -483,7 +484,7 @@ router.post('/messages/inbound', (req, res) => {
         }
       }
 
-      console.log('[SMS Inbound] Processed OK:', { from: normalizedPhone?.slice(-4) ? `***${normalizedPhone.slice(-4)}` : 'unknown', conversation_id: conversation.id });
+      logger.info('[SMS Inbound] Processed OK:', { from: normalizedPhone?.slice(-4) ? `***${normalizedPhone.slice(-4)}` : 'unknown', conversation_id: conversation.id });
     } catch (error: any) {
       console.error('[SMS Inbound] Background processing error:', error?.message || error);
       throw error; // bubble to withDeadLetter so it's persisted

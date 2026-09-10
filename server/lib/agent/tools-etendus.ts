@@ -2229,6 +2229,9 @@ const sendEmailTool: AgentTool = {
     }),
 };
 
+/** Ligne renvoyée par le RPC `get_available_slots` (TABLE slot_start, slot_end, team_id). */
+type CreneauLibre = { slot_start: string; slot_end: string; team_id: string | null };
+
 const findFreeSlotTool: AgentTool = {
   kind: 'read',
   needsIdentity: true,
@@ -2258,10 +2261,20 @@ const findFreeSlotTool: AgentTool = {
     if (error) return erreurOutil('creneaux', error);
     return {
       count: data?.length || 0,
-      creneaux: (data || []).slice(0, 40).map((sl) => ({ debut: sl.slot_start, fin: sl.slot_end })),
+      creneaux: (data || []).slice(0, 40).map((sl: CreneauLibre) => ({ debut: sl.slot_start, fin: sl.slot_end })),
       ...((data?.length || 0) === 0 ? { note: 'Aucun créneau libre trouvé sur la période — élargis les dates ou vérifie les disponibilités de l’équipe dans Lume.' } : {}),
     };
   },
+};
+
+/** Élément de `ordered_jobs` renvoyé par POST /route-optimization/optimize. */
+type ArretOrdonne = {
+  job_id: string;
+  order: number;
+  title: string;
+  address: string | null;
+  distance_km_from_prev: number;
+  eta_minutes_from_prev: number;
 };
 
 const optimizeRouteTool: AgentTool = {
@@ -2294,7 +2307,7 @@ const optimizeRouteTool: AgentTool = {
     if (!res.ok) return { error: res.json?.error || `Optimisation impossible (${res.status}).` };
     const j = res.json || {};
     return {
-      ordre_propose: (j.ordered_jobs || []).map((st) => ({
+      ordre_propose: (j.ordered_jobs || []).map((st: ArretOrdonne) => ({
         position: st.order,
         job: st.title,
         adresse: st.address,

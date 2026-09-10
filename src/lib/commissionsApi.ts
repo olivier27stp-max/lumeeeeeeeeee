@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { captureClientException } from './sentry';
 import type { FsCommissionEntry, FsCommissionRule, CommissionPayrollPreview, CommissionSettings } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -55,6 +56,42 @@ export function generateCommissionsForInvoice(invoiceId: string): Promise<{ crea
     method: 'POST',
     body: JSON.stringify({ invoiceId }),
   });
+}
+
+export function projectCommissionForJob(jobId: string): Promise<{ created: number; skipped: string | null }> {
+  return apiFetch('/commissions/project-for-job', {
+    method: 'POST',
+    body: JSON.stringify({ jobId }),
+  });
+}
+
+export function voidCommissionForJob(jobId: string): Promise<{ voided: number }> {
+  return apiFetch('/commissions/void-for-job', {
+    method: 'POST',
+    body: JSON.stringify({ jobId }),
+  });
+}
+
+/**
+ * Lance un appel de commission « en arrière-plan » : il ne doit jamais casser
+ * le flux qui l'appelle (marquer payé, créer ou supprimer un job), mais son
+ * échec doit laisser une trace. Avant, l'échec était avalé et `res.ok` jamais
+ * lu : un 500 passait pour un succès, et un vendeur pouvait ne jamais être
+ * payé sans que personne le sache. Le serveur consigne de son côté chaque
+ * échec dans `dead_letters` ; ici on remonte le signal à Sentry pour les
+ * échecs réseau que le serveur ne voit pas.
+ */
+export async function commissionEnArrierePlan(
+  operation: string,
+  contexte: Record<string, unknown>,
+  fn: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`[commissions] ${operation} a échoué`, contexte, err);
+    captureClientException(err, { operation: `commissions.${operation}`, ...contexte });
+  }
 }
 
 export function approveCommission(entryId: string): Promise<FsCommissionEntry> {

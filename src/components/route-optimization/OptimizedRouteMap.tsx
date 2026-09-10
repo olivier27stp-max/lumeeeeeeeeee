@@ -60,7 +60,8 @@ export default function OptimizedRouteMap({ stops, totalDistanceKm, totalDriveMi
     const map = mapRef.current;
     if (!map) return;
 
-    function onReady() {
+    // Expression de fonction (pas de hoisting) : conserve le narrowing de `map` non nul ci-dessus.
+    const onReady = () => {
       // Clear existing markers.
       markersRef.current.forEach((m) => m.remove());
       markersRef.current = [];
@@ -134,7 +135,7 @@ export default function OptimizedRouteMap({ stops, totalDistanceKm, totalDriveMi
         );
         map.fitBounds(bounds, { padding: 60, maxZoom: 14, duration: 600 });
       }
-    }
+    };
 
     if (map.isStyleLoaded()) onReady();
     else map.once('load', onReady);

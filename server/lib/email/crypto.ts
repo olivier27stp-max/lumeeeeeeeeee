@@ -1,11 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════
    Email Crypto
-   Re-exports the app's AES-256-GCM crypto (src/lib/crypto.ts) so email
+   Re-exports the app's AES-256-GCM crypto (server/lib/crypto.ts) so email
    OAuth tokens are encrypted at rest with the same key + versioning as
    the rest of the platform. Never expose decrypted tokens to the client.
    ═══════════════════════════════════════════════════════════════ */
 
-import { encryptSecret, decryptSecret } from '../../../src/lib/crypto';
+import { encryptSecret, decryptSecret } from '../crypto';
 
 export { encryptSecret, decryptSecret };
 

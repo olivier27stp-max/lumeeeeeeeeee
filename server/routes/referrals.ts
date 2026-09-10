@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import crypto from 'crypto';
-import Stripe from 'stripe';
+import { creerClientStripe } from '../lib/stripe-sdk';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { getBaseUrl } from '../lib/config';
 
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const stripe = process.env.STRIPE_SECRET_KEY ? creerClientStripe(process.env.STRIPE_SECRET_KEY) : null;
 
 // ── Programme de parrainage: entièrement désactivé ──
 // La récompense du parrain est un crédit Stripe qui n'a pas encore été validé

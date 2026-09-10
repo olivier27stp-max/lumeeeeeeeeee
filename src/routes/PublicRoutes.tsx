@@ -1,24 +1,25 @@
-import { Route, Routes } from 'react-router-dom';
-import Auth from '../pages/Auth';
-import Register from '../pages/Register';
-import ResetPassword from '../pages/ResetPassword';
-import VerifyEmail from '../pages/VerifyEmail';
-import Privacy from '../pages/Privacy';
-import Terms from '../pages/Terms';
-import Subprocessors from '../pages/Subprocessors';
-import MarketingNotFound from '../pages/marketing/NotFound';
-import MarketingLayout from '../components/marketing/MarketingLayout';
-import MarketingHome from '../pages/marketing/Home';
-import MarketingFeatures from '../pages/marketing/Features';
-import MarketingSolutions from '../pages/marketing/Solutions';
-import MarketingIndustries from '../pages/marketing/Industries';
-import MarketingIndustryDetail from '../pages/marketing/IndustryDetail';
-import MarketingContact from '../pages/marketing/Contact';
-import MarketingPricing from '../pages/marketing/Pricing';
-import CheckoutSuccess from '../pages/CheckoutSuccess';
-import OnboardingFlow from '../pages/OnboardingFlow';
-import OAuthConsent from '../pages/OAuthConsent';
 import React from 'react';
+import { Route, Routes } from 'react-router-dom';
+// Pages en chargement différé (audit I4) : chaque page est son propre chunk.
+const Auth = React.lazy(() => import('../pages/Auth'));
+const Register = React.lazy(() => import('../pages/Register'));
+const ResetPassword = React.lazy(() => import('../pages/ResetPassword'));
+const VerifyEmail = React.lazy(() => import('../pages/VerifyEmail'));
+const Privacy = React.lazy(() => import('../pages/Privacy'));
+const Terms = React.lazy(() => import('../pages/Terms'));
+const Subprocessors = React.lazy(() => import('../pages/Subprocessors'));
+const MarketingNotFound = React.lazy(() => import('../pages/marketing/NotFound'));
+import MarketingLayout from '../components/marketing/MarketingLayout';
+const MarketingHome = React.lazy(() => import('../pages/marketing/Home'));
+const MarketingFeatures = React.lazy(() => import('../pages/marketing/Features'));
+const MarketingSolutions = React.lazy(() => import('../pages/marketing/Solutions'));
+const MarketingIndustries = React.lazy(() => import('../pages/marketing/Industries'));
+const MarketingIndustryDetail = React.lazy(() => import('../pages/marketing/IndustryDetail'));
+const MarketingContact = React.lazy(() => import('../pages/marketing/Contact'));
+const MarketingPricing = React.lazy(() => import('../pages/marketing/Pricing'));
+const CheckoutSuccess = React.lazy(() => import('../pages/CheckoutSuccess'));
+const OnboardingFlow = React.lazy(() => import('../pages/OnboardingFlow'));
+const OAuthConsent = React.lazy(() => import('../pages/OAuthConsent'));
 
 type PublicRoutesProps = {
   /** Called when the user clicks Back from the Auth page. */

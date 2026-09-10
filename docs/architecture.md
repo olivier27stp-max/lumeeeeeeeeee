@@ -54,7 +54,7 @@ Requests to `/api/*` are proxied from `:5173` to `:3002`.
 
 ## Integrations
 - **Stripe**: webhooks at `/api/webhooks/stripe`, raw body required (mounted before JSON middleware)
-- **PayPal**: `src/lib/paypalClient.ts`
+- **PayPal**: `server/lib/paypalClient.ts`
 - **QuickBooks**: `server/lib/integrations/providers/quickbooks.ts`
 - **Twilio**: SMS sending via `server/routes/messages.ts`
 - **Slack**: `server/lib/integrations/providers/slack.ts`

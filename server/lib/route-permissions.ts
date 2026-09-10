@@ -330,9 +330,9 @@ function normalisePathForMatch(method: string, path: string): string[] {
  *
  * Public routes (webhooks, portals, public forms) are skipped.
  */
-export function rbacMiddleware(): express.RequestHandler {
-  // Paths that are public and should never be permission-checked
-  const publicPrefixes = [
+// Paths that are public and should never be permission-checked.
+// Exporté : la garde d'abonnement (subscription-guard.ts) reprend la même liste.
+export const PUBLIC_ROUTE_PREFIXES: readonly string[] = [
     '/api/quotes/public',
     '/api/public/book-demo',
     '/api/survey/',
@@ -363,7 +363,10 @@ export function rbacMiddleware(): express.RequestHandler {
     '/api/agent/connect',      // External agent login (own auth)
     '/api/agent/webhook',      // External agent webhook (own auth)
     '/api/quotes/:id/track-view',
-  ];
+];
+
+export function rbacMiddleware(): express.RequestHandler {
+  const publicPrefixes = PUBLIC_ROUTE_PREFIXES;
 
   return async (req, res, next) => {
     // Skip non-API routes

@@ -101,7 +101,7 @@ export default function HomeServiceMixCard({ className = '' }: { className?: str
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number, name: string) => [formatCurrency(value), name]}
+                  formatter={(value: number | undefined, name: string | undefined) => [formatCurrency(value ?? 0), name ?? '']}
                   contentStyle={{
                     borderRadius: 12,
                     border: '1px solid var(--color-border)',

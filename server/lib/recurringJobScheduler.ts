@@ -3,11 +3,12 @@
 */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from './logger';
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
 export function startRecurringJobScheduler(supabase: SupabaseClient) {
-  console.log('[recurring-jobs] scheduler started (interval: 5 min)');
+  logger.info('[recurring-jobs] scheduler started (interval: 5 min)');
 
   // Run immediately on startup
   void passageProtege(supabase);
@@ -43,7 +44,7 @@ async function passageProtege(supabase: SupabaseClient) {
     const { withAdvisoryLock } = await import('./advisory-lock');
     const { acquired } = await withAdvisoryLock('recurring-jobs', () => processRecurringJobs(supabase));
     if (!acquired) {
-      console.log('[recurring-jobs] passage pris par une autre instance — ignoré');
+      logger.info('[recurring-jobs] passage pris par une autre instance — ignoré');
     }
   } catch (err: any) {
     console.error('[recurring-jobs] passage échoué:', err?.message);
@@ -84,7 +85,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
 
     if (!rules || rules.length === 0) return;
 
-    console.log(`[recurring-jobs] processing ${rules.length} due rules`);
+    logger.info(`[recurring-jobs] processing ${rules.length} due rules`);
 
     for (const rule of rules) {
       try {
@@ -238,7 +239,7 @@ async function processRecurringJobs(supabase: SupabaseClient) {
           continue;
         }
 
-        console.log(`[recurring-jobs] created job ${newJob?.id} from rule ${rule.id}, next: ${nextRunAt.toISOString()}`);
+        logger.info(`[recurring-jobs] created job ${newJob?.id} from rule ${rule.id}, next: ${nextRunAt.toISOString()}`);
       } catch (err: any) {
         console.error(`[recurring-jobs] error processing rule ${rule.id}:`, err?.message);
       }

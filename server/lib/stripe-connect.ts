@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { creerClientStripe } from './stripe-sdk';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from './supabase';
 
@@ -10,7 +11,7 @@ export function getPlatformStripe(): Stripe {
   if (_platformStripe) return _platformStripe;
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('STRIPE_SECRET_KEY is not configured on the server.');
-  _platformStripe = new Stripe(key);
+  _platformStripe = creerClientStripe(key);
   return _platformStripe;
 }
 

@@ -593,7 +593,7 @@ router.post('/agreements/public/sign', async (req, res) => {
       // supabase-js ne lève pas : sans cette lecture, le catch
       // ci-dessous n'attrape rien et la notification disparaît en silence.
       if (notifErr) console.error('[agreements] notification non créée:', notifErr.message);
-    } catch { /* non-critical */ }
+    } catch (err: any) { console.error('[agreements] notification non créée:', err?.message || err); }
 
     // Le client vient de signer : c'est le moment de lui confirmer, avec sa
     // copie et le dépôt s'il en reste un. Passe par le moteur d'automatisation
@@ -830,7 +830,7 @@ router.post('/agreements/public/deposit-confirm', async (req, res) => {
       // supabase-js ne lève pas : sans cette lecture, le catch
       // ci-dessous n'attrape rien et la notification disparaît en silence.
       if (notifErr) console.error('[agreements] notification non créée:', notifErr.message);
-    } catch { /* non-critical */ }
+    } catch (err: any) { console.error('[agreements] notification non créée:', err?.message || err); }
 
     return res.json({ ok: true, status: 'paid' });
   } catch (error: any) {

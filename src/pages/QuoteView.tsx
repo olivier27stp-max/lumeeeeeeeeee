@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { captureClientException } from '../lib/sentry';
 import { resolveBrand, readableOn } from '../lib/brandColor';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
@@ -335,13 +336,17 @@ export default function QuoteView() {
   async function confirmDepositPayment(paymentIntentId: string) {
     try {
       const API_BASE = import.meta.env.VITE_API_URL || '';
-      await fetch(`${API_BASE}/api/quotes/public/deposit-confirm`, {
+      const res = await fetch(`${API_BASE}/api/quotes/public/deposit-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ view_token: token, payment_intent_id: paymentIntentId }),
       });
-    } catch {
-      // Webhook will handle it if this fails
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      // Le webhook Stripe rattrapera l'encaissement — mais si cet appel
+      // échoue, le client ne voit pas la confirmation tout de suite. À tracer.
+      console.error('[quote] deposit-confirm a échoué', err);
+      captureClientException(err, { operation: 'quote.depositConfirm', paymentIntentId });
     }
   }
 

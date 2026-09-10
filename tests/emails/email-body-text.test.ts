@@ -308,14 +308,15 @@ describe('éditeur — on ne perd pas son travail', () => {
     // Sans cette garde, un clic à côté effaçait un courriel réécrit sans le
     // moindre avertissement.
     expect(ed).toContain('const fermer = useCallback');
-    expect(ed).toContain('window.confirm');
+    // Confirmation applicative (plus de window.confirm natif depuis l'audit 2026-09-09).
+    expect(ed).toContain('await confirmer({');
     expect(ed).toContain('ne sont pas enregistrées');
   });
 
   it('les quatre chemins de fermeture passent par la garde', () => {
     // Fond, croix, bouton Fermer, touche Échap.
     expect((ed.match(/onClick=\{fermer\}/g) || []).length).toBe(3);
-    expect(ed).toContain("e.key === 'Escape') fermer()");
+    expect(ed).toContain("e.key === 'Escape') void fermer()");
     // Plus aucun appel direct qui contournerait la confirmation.
     expect(ed).not.toContain('onClick={onClose}');
   });

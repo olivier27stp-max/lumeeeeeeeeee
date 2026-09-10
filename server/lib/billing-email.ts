@@ -10,6 +10,7 @@
 import { getServiceClient } from './supabase';
 import { sendEmail, isMailerConfigured } from './mailer';
 import { renderPaymentReceiptEmail, type ReceiptTemplateData } from './email-templates/payment-receipt';
+import { logger } from './logger';
 
 export interface SendReceiptParams {
   orgId: string;
@@ -51,7 +52,7 @@ export async function sendPaymentReceipt(params: SendReceiptParams): Promise<{
         .maybeSingle();
 
       if (existing && existing.status === 'sent') {
-        console.log(`[billing-email] Receipt already sent for session ${params.stripeCheckoutSessionId}, skipping`);
+        logger.info(`[billing-email] Receipt already sent for session ${params.stripeCheckoutSessionId}, skipping`);
         return { sent: false, skipped: true };
       }
     }
@@ -67,7 +68,7 @@ export async function sendPaymentReceipt(params: SendReceiptParams): Promise<{
         .maybeSingle();
 
       if (existing) {
-        console.log(`[billing-email] Receipt already sent for PI ${params.stripePaymentIntentId}, skipping`);
+        logger.info(`[billing-email] Receipt already sent for PI ${params.stripePaymentIntentId}, skipping`);
         return { sent: false, skipped: true };
       }
     }
@@ -117,7 +118,7 @@ export async function sendPaymentReceipt(params: SendReceiptParams): Promise<{
 
     // ── 5. Log result ──
     if (result.sent) {
-      console.log(`[billing-email] Receipt sent to ${params.recipientEmail} for session ${params.stripeCheckoutSessionId || 'N/A'}`);
+      logger.info('[billing-email] Receipt sent', { email: params.recipientEmail, session: params.stripeCheckoutSessionId || 'N/A' });
       await insertReceiptLog(admin, params, 'sent', result.messageId || null, null);
 
       // Also update subscription receipt tracking

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { commissionEnArrierePlan, projectCommissionForJob, voidCommissionForJob } from './commissionsApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { Job } from '../types';
 import type { JobDraftInitialValues } from '../components/NewJobModal';
@@ -1078,22 +1079,12 @@ export async function createJob(payload: {
 
 /**
  * Ask the server to create a pending (estimated) commission entry for the
- * newly created job's rep. Non-blocking; errors are swallowed (e.g. no rule
- * configured, no rep) — they should never break job creation.
+ * newly created job's rep. Non-blocking (« no rule », « no rep » sont des
+ * réponses normales du moteur, pas des erreurs) — mais un vrai échec HTTP ou
+ * réseau est journalisé au lieu d'être avalé.
  */
-async function projectJobCommission(jobId: string): Promise<void> {
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) return;
-    await fetch('/api/commissions/project-for-job', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
-    });
-  } catch {
-    // Best-effort only.
-  }
+function projectJobCommission(jobId: string): Promise<void> {
+  return commissionEnArrierePlan('project-for-job', { jobId }, () => projectCommissionForJob(jobId));
 }
 
 export async function getActiveJobByLeadId(leadId: string): Promise<Job | null> {
@@ -1395,19 +1386,9 @@ export async function softDeleteJob(jobId: string): Promise<SoftDeleteJobResult>
 
 /**
  * Ask the server to void the job's pending (unconfirmed) projected commission
- * when the job is deleted. Non-blocking; errors are swallowed.
+ * when the job is deleted. Non-blocking, mais un échec est journalisé : sinon
+ * on paie une commission sur un job qui n'existe plus.
  */
-async function voidJobCommission(jobId: string): Promise<void> {
-  try {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) return;
-    await fetch('/api/commissions/void-for-job', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jobId }),
-    });
-  } catch {
-    // Best-effort only.
-  }
+function voidJobCommission(jobId: string): Promise<void> {
+  return commissionEnArrierePlan('void-for-job', { jobId }, () => voidCommissionForJob(jobId));
 }

@@ -150,7 +150,7 @@ export default function ManageTeam() {
     if (cents === prev) return;
     setRates((r) => ({ ...r, [member.user_id]: cents }));
     try {
-      await setHourlyRate({ userId: member.user_id, email: member.email, fullName: member.full_name, cents });
+      await setHourlyRate({ userId: member.user_id, email: member.email ?? null, fullName: member.full_name, cents });
       toast.success(isFr ? 'Taux horaire enregistré' : 'Hourly rate saved');
     } catch (err: any) {
       setRates((r) => ({ ...r, [member.user_id]: prev }));

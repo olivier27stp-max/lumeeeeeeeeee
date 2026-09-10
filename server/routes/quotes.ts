@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { creerClientStripe } from '../lib/stripe-sdk';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { emailFrom, twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
@@ -8,7 +9,7 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
 import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
-import { decryptSecret } from '../../src/lib/crypto';
+import { decryptSecret } from '../lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
@@ -1263,7 +1264,7 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
       }
 
       const Stripe = (await import('stripe')).default;
-      const orgStripe = new Stripe(decryptedSecret);
+      const orgStripe = creerClientStripe(decryptedSecret);
       const intent = await orgStripe.paymentIntents.create({
         amount: depositCents,
         currency,
@@ -1321,7 +1322,7 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
     const platformKey = process.env.STRIPE_SECRET_KEY;
     let intent;
     try {
-      const stripe = new Stripe(platformKey!);
+      const stripe = creerClientStripe(platformKey!);
       intent = await stripe.paymentIntents.retrieve(payment_intent_id);
     } catch {
       // Try with org keys if platform key doesn't own this intent
@@ -1335,7 +1336,7 @@ router.post('/quotes/public/deposit-confirm', async (req, res) => {
         // clé invalide, donc ce repli n'a jamais fonctionné. Même correction
         // qu'en haut dans deposit-intent.
         const Stripe = (await import('stripe')).default;
-        const orgStripe = new Stripe(decryptSecret(orgSecrets.stripe_secret_key_enc));
+        const orgStripe = creerClientStripe(decryptSecret(orgSecrets.stripe_secret_key_enc));
         intent = await orgStripe.paymentIntents.retrieve(payment_intent_id);
       }
     }

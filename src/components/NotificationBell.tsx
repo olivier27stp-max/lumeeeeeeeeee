@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { captureClientException } from '../lib/sentry';
 import { createPortal } from 'react-dom';
 import { Bell, Check, X, AlertTriangle, Info, CheckCircle2, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -43,7 +44,10 @@ export default function NotificationBell() {
         const data = await res.json();
         setUnreadCount(data.count || 0);
       }
-    } catch { /* silent */ }
+    } catch (err) {
+      // Lecture périodique : on n'alerte pas l'utilisateur, mais on ne perd pas le signal.
+      console.error('[notifications] compteur non lu injoignable', err);
+    }
   }, []);
 
   const fetchNotifications = useCallback(async () => {
@@ -57,7 +61,9 @@ export default function NotificationBell() {
         setNotifications(data);
         setUnreadCount(data.filter((n: Notification) => !n.read_at).length);
       }
-    } catch { /* silent */ }
+    } catch (err) {
+      console.error('[notifications] liste injoignable', err);
+    }
     setLoading(false);
   }, []);
 
@@ -65,19 +71,29 @@ export default function NotificationBell() {
     try {
       const headers = await getAuthHeaders();
       if (!headers) return;
-      await fetch('/api/notifications/read', { method: 'POST', headers, body: '{}' });
+      const res = await fetch('/api/notifications/read', { method: 'POST', headers, body: '{}' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setNotifications((prev) => prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() })));
       setUnreadCount(0);
-    } catch { /* silent */ }
+    } catch (err) {
+      // Écriture : si elle échoue, l'état local ne doit pas mentir (les
+      // notifications reviendraient « non lues » au prochain rafraîchissement).
+      console.error('[notifications] marquer tout lu a échoué', err);
+      captureClientException(err, { operation: 'notifications.markAllRead' });
+    }
   }, []);
 
   const dismissNotif = useCallback(async (id: string) => {
     try {
       const headers = await getAuthHeaders();
       if (!headers) return;
-      await fetch(`/api/notifications/${id}`, { method: 'DELETE', headers });
+      const res = await fetch(`/api/notifications/${id}`, { method: 'DELETE', headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } catch { /* silent */ }
+    } catch (err) {
+      console.error('[notifications] suppression a échoué', err);
+      captureClientException(err, { operation: 'notifications.dismiss', id });
+    }
   }, []);
 
   // Poll every 60s

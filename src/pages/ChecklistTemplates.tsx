@@ -18,6 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   listChecklistTemplates,
   createChecklistTemplate,
@@ -197,7 +198,7 @@ export default function ChecklistTemplates() {
   }
 
   async function remove(tpl: ChecklistTemplate) {
-    if (!confirm(fr ? `Supprimer "${tpl.name}" ?` : `Delete "${tpl.name}"?`)) return;
+    if (!(await confirmer({ message: fr ? `Supprimer "${tpl.name}" ?` : `Delete "${tpl.name}"?`, danger: true }))) return;
     try {
       await deleteChecklistTemplate(tpl.id);
       toast.success(t.checklists.templateDeleted);

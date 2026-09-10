@@ -68,7 +68,7 @@ export default function AverageJobValueCard() {
               <CartesianGrid vertical={false} stroke="#e4e4e7" />
               <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
               <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 100).toFixed(0)}`} />
-              <Tooltip formatter={(v: number) => fmtMoney(v, locale)} />
+              <Tooltip formatter={(v: number | undefined) => fmtMoney(v ?? 0, locale)} />
               <Bar dataKey="value" fill="var(--color-chart-primary)" radius={[6, 6, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>

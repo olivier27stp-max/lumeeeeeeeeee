@@ -1607,6 +1607,9 @@ const en = {
     leaveAnywayBtn: 'Leave anyway',
     keepEditingBtn: 'Keep editing',
 
+    // Generic confirmation dialog (replaces the browser's confirm()) — buttons reuse confirmBtn/cancelBtn above
+    confirmTitle: 'Are you sure?',
+
     // Validation
     titleRequired: 'Job title is required.',
     clientRequired: 'Please select a client.',

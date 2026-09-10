@@ -7,6 +7,7 @@ import { createTeam, listTeams, softDeleteTeam, updateTeam } from '../lib/teamsA
 import { PRESET_GRADIENTS } from '../lib/presetPalette';
 import TeamColorSwatches from './TeamColorSwatches';
 import { useTranslation } from '../i18n';
+import { confirmer } from './ui/ConfirmDialog';
 
 interface TeamsManagerModalProps {
   isOpen: boolean;
@@ -128,7 +129,7 @@ export default function TeamsManagerModal({ isOpen, onClose }: TeamsManagerModal
   }
 
   async function handleDeleteTeam(teamId: string, teamName: string) {
-    if (!window.confirm(t.modals.deleteTeamConfirm.replace('{name}', teamName))) return;
+    if (!(await confirmer({ message: t.modals.deleteTeamConfirm.replace('{name}', teamName), danger: true }))) return;
     await deleteMutation.mutateAsync(teamId);
   }
 

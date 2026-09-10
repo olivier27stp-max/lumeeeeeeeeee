@@ -53,6 +53,7 @@ import { Job } from '../types';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useJobModalController } from '../contexts/JobModalController';
 import { useTranslation } from '../i18n';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import ActivityTimeline from '../components/ActivityTimeline';
 import EventsPanel from '../components/events/EventsPanel';
 import { useDropZone } from '../hooks/useDropZone';
@@ -549,7 +550,7 @@ export default function JobDetails() {
     const msg = language === 'fr'
       ? 'Retirer cette visite du calendrier ? Le job est conservé.'
       : 'Remove this visit from the calendar? The job itself is kept.';
-    if (typeof window !== 'undefined' && !window.confirm(msg)) return;
+    if (!(await confirmer({ message: msg, danger: true }))) return;
     setVisitActionBusy(true);
     try {
       await unscheduleJob({ jobId: id, eventId: visitId });
@@ -897,7 +898,7 @@ export default function JobDetails() {
       || (language === 'fr'
         ? 'Marquer ce job comme complété ? Cela verrouille le job (sauf action admin).'
         : 'Mark this job as completed? This locks the job for edits (except via admin action).');
-    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return;
+    if (!(await confirmer({ message: confirmMsg }))) return;
     setIsClosing(true);
     try {
       const updated = await updateJob(job.id, { status: 'completed' });
@@ -908,10 +909,10 @@ export default function JobDetails() {
       // Auto-propose invoice creation if no invoice exists
       // (split jobs are billed through their payment schedule instead)
       if (invoices.length === 0 && !job.billing_split) {
-        const shouldCreate = window.confirm(
-          t.jobDetails?.createInvoicePrompt
-            || (language === 'fr' ? 'Job complété ! Voulez-vous créer une facture maintenant ?' : 'Job completed! Would you like to create an invoice now?')
-        );
+        const shouldCreate = await confirmer({
+          message: t.jobDetails?.createInvoicePrompt
+            || (language === 'fr' ? 'Job complété ! Voulez-vous créer une facture maintenant ?' : 'Job completed! Would you like to create an invoice now?'),
+        });
         if (shouldCreate) {
           handleCreateInvoice();
         }

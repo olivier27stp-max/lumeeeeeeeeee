@@ -3,6 +3,7 @@ import { Archive, Loader2, RotateCcw, Search, Trash2, User, Briefcase, Contact }
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from '../i18n';
+import { confirmer } from './ui/ConfirmDialog';
 import { usePermissions } from '../hooks/usePermissions';
 import { formatDate, cn } from '../lib/utils';
 import {
@@ -47,7 +48,7 @@ export default function ArchivesPanel() {
   }, []);
 
   const handleRestore = async (item: ArchivedItem) => {
-    if (!window.confirm((t as any).archives?.confirmRestore || 'Restore this item?')) return;
+    if (!(await confirmer({ message: (t as any).archives?.confirmRestore || 'Restore this item?' }))) return;
     setActionId(item.id);
     try {
       await restoreItem(item.type, item.id);
@@ -61,7 +62,7 @@ export default function ArchivesPanel() {
   };
 
   const handleDelete = async (item: ArchivedItem) => {
-    if (!window.confirm((t as any).archives?.confirmDelete || 'Permanently delete?')) return;
+    if (!(await confirmer({ message: (t as any).archives?.confirmDelete || 'Permanently delete?', danger: true }))) return;
     setActionId(item.id);
     try {
       await permanentDeleteItem(item.type, item.id);

@@ -1599,6 +1599,9 @@ const fr: TranslationKeys = {
     leaveAnywayBtn: 'Quitter quand même',
     keepEditingBtn: 'Continuer l\'édition',
 
+    // Fenêtre de confirmation générique (remplace le confirm() du navigateur) — boutons : confirmBtn/cancelBtn ci-dessus
+    confirmTitle: 'Êtes-vous sûr ?',
+
     // Validation
     titleRequired: 'Le titre de la job est requis.',
     clientRequired: 'Veuillez sélectionner un client.',

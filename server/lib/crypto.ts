@@ -1,3 +1,13 @@
+/**
+ * Chiffrement des secrets de paiement (clés Stripe/PayPal des orgs).
+ *
+ * SERVEUR SEULEMENT. Ce fichier vivait dans src/lib/ — le dossier que Vite
+ * bundle : un seul import accidentel depuis un composant React aurait
+ * embarqué la logique de déchiffrement dans le JavaScript public (audit
+ * 2026-09-09, I3 ; déjà arrivé une fois avec supabaseAdmin.ts). Le test
+ * tests/frontiere-serveur-client.test.ts interdit désormais à src/ d'importer
+ * node:crypto, la clé service_role ou ce module.
+ */
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 
 const IV_LENGTH = 12;

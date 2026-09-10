@@ -268,12 +268,12 @@ async function main() {
   const childTbls = (await c.query(`select c.relname n from pg_class c join pg_namespace ns on ns.oid=c.relnamespace and ns.nspname='public'
     where c.relkind='r' and has_table_privilege('authenticated',c.oid,'SELECT')
       and exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='id' and not a.attisdropped)
-      and not exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='org_id' and not a.attisdropped)`)).rows.map(r => r.n);
+      and not exists(select 1 from pg_attribute a where a.attrelid=c.oid and a.attname='org_id' and not a.attisdropped)`)).rows.map((r: { n: string }) => r.n);
   for (const t of childTbls) {
     if (GLOBAL.has(t)) continue;
     try {
-      const idsA: Set<string> = await inRole('authenticated', claimsA, async () => new Set((await c.query(`select id from public."${t}" limit 5000`)).rows.map(r => String(r.id))));
-      const idsB: Set<string> = await inRole('authenticated', claimsB, async () => new Set((await c.query(`select id from public."${t}" limit 5000`)).rows.map(r => String(r.id))));
+      const idsA: Set<string> = await inRole('authenticated', claimsA, async () => new Set((await c.query(`select id from public."${t}" limit 5000`)).rows.map((r: { id: unknown }) => String(r.id))));
+      const idsB: Set<string> = await inRole('authenticated', claimsB, async () => new Set((await c.query(`select id from public."${t}" limit 5000`)).rows.map((r: { id: unknown }) => String(r.id))));
       if (idsA.size && idsB.size && [...idsA].some(x => idsB.has(x))) leaks.push(`CHILD ${t} shares rows between two orgs`);
     } catch { /* skip */ }
   }
@@ -361,7 +361,7 @@ async function main() {
       and p.with_check is null
       and has_table_privilege('authenticated', k.oid, 'update')`)).rows;
   if (noCheck.length) {
-    console.log(`ℹ ${noCheck.length} policy(ies) UPDATE/ALL sans WITH CHECK explicite — non bloquant, Postgres réutilise USING : ${noCheck.map(r => r.p).join(', ')}`);
+    console.log(`ℹ ${noCheck.length} policy(ies) UPDATE/ALL sans WITH CHECK explicite — non bloquant, Postgres réutilise USING : ${noCheck.map((r: { p: string }) => r.p).join(', ')}`);
   }
 
   // ── J. pg_net — NON traité comme une fuite, volontairement ──

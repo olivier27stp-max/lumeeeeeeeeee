@@ -13,7 +13,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
@@ -115,5 +115,30 @@ export default function TenantGuard({ table, id, children, redirectTo }: TenantG
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Variante pour les routes de détail : lit l'identifiant dans l'URL
+ * (`/clients/:id`) et garde la page. Branchée dans App.tsx sur clients,
+ * jobs, devis et factures (audit 2026-09-09 : le composant existait, documenté,
+ * mais n'enveloppait aucune route).
+ *
+ * Ce n'est PAS une couche de sécurité — le navigateur ne protège rien ; la
+ * RLS et le middleware serveur s'en chargent. C'est une page « introuvable /
+ * refusé » cohérente à la place d'un écran cassé, et un filet si un chargeur
+ * de page oublie un jour son filtre `org_id`.
+ */
+export function TenantGuardRoute({ table, param = 'id', children, redirectTo }: {
+  table: string;
+  param?: string;
+  children: React.ReactNode;
+  redirectTo?: string;
+}) {
+  const params = useParams();
+  return (
+    <TenantGuard table={table} id={params[param]} redirectTo={redirectTo}>
+      {children}
+    </TenantGuard>
   );
 }

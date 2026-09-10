@@ -73,7 +73,10 @@ async function getMigration(admin: ReturnType<typeof getServiceClient>, id: stri
 router.get('/migration-admin/check', async (req, res) => {
   try {
     if (platformAdminIds.size === 0) return res.json({ isPlatformAdmin: false });
-    const client = buildSupabaseWithAuth(req.header('authorization'));
+    // Sans Authorization : pas d'identité → même réponse douce (jamais 401 ici).
+    const authorization = req.header('authorization');
+    if (!authorization) return res.json({ isPlatformAdmin: false });
+    const client = buildSupabaseWithAuth(authorization);
     const { data } = await client.auth.getUser();
     return res.json({ isPlatformAdmin: !!data?.user?.id && platformAdminIds.has(data.user.id) });
   } catch {
