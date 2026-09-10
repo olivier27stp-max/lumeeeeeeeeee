@@ -10,7 +10,7 @@ import { LEGAL_LABELS } from '../content/legal';
  * ⚠️ Template content — must be reviewed by legal counsel before production use.
  */
 
-const LAST_UPDATED = '2026-08-30';
+const LAST_UPDATED = '2026-09-10';
 const CONTACT_EMAIL = 'willhebert30@gmail.com';
 
 const SECTIONS = {
@@ -28,6 +28,7 @@ const SECTIONS = {
     { id: 'droit', label: '11. Droit applicable' },
     { id: 'modifications', label: '12. Modifications' },
     { id: 'contact', label: '13. Contact' },
+    { id: 'agent-ia', label: '14. Agent IA (Lumi)' },
   ],
   en: [
     { id: 'accord', label: '1. Agreement' },
@@ -43,6 +44,7 @@ const SECTIONS = {
     { id: 'droit', label: '11. Governing law' },
     { id: 'modifications', label: '12. Changes' },
     { id: 'contact', label: '13. Contact' },
+    { id: 'agent-ia', label: '14. AI Agent (Lumi)' },
   ],
 } as const;
 
@@ -264,6 +266,34 @@ export default function Terms() {
                 {CONTACT_EMAIL}
               </a>
             </div>
+          </Section>
+
+          <Section id="agent-ia" title={sections[13].label}>
+            <p>
+              {fr ? (
+                <>Le Service comprend un assistant conversationnel propulsé par intelligence artificielle (« Lumi »), destiné à répondre aux questions sur Lume et à vous aider dans votre travail. Vous acceptez ce qui suit à son sujet.</>
+              ) : (
+                <>The Service includes an AI-powered conversational assistant (“Lumi”) designed to answer questions about Lume and help you in your work. You agree to the following regarding it.</>
+              )}
+            </p>
+            <ul className="space-y-2 list-disc pl-5 marker:text-gray-300">
+              {(fr
+                ? [
+                    "À titre informatif seulement : les réponses de Lumi sont fournies à titre d'information générale. Elles ne sont pas contractuelles et ne remplacent aucun conseil professionnel (comptable, fiscal, juridique). Pour vos droits et obligations, référez-vous à la présente entente et aux sources officielles.",
+                    "L'IA est faillible : Lumi peut, à l'occasion, fournir une information inexacte, incomplète ou périmée. Vérifiez toute information critique de façon indépendante avant de prendre une décision.",
+                    "Vos échanges : les messages que vous soumettez à Lumi sont traités pour générer une réponse. Ne lui transmettez pas de renseignements sensibles dont vous n'avez pas besoin dans la conversation. Le traitement se fait via nos sous-traitants d'IA, avec caviardage des renseignements personnels lorsque applicable (voir la page Sous-traitants).",
+                    "Pas de décision automatisée déterminante : Lumi ne rend aucune décision produisant un effet juridique sur vous ou vos clients ; il vous assiste, la décision finale vous revient.",
+                    "Usage conforme : vous vous engagez à ne pas utiliser Lumi pour générer un contenu illégal, trompeur ou portant atteinte aux droits d'autrui, ni à tenter de contourner ses limites de sécurité.",
+                  ]
+                : [
+                    'For information only: Lumi’s answers are provided for general information. They are non-binding and are not a substitute for professional advice (accounting, tax, legal). For your rights and obligations, refer to this agreement and the official sources.',
+                    'AI is fallible: Lumi may occasionally provide inaccurate, incomplete, or outdated information. Verify any critical information independently before making a decision.',
+                    'Your inputs: the messages you submit to Lumi are processed to generate a response. Do not share sensitive information you do not need in the conversation. Processing occurs through our AI subprocessors, with personal information redacted where applicable (see the Subprocessors page).',
+                    'No determinative automated decision: Lumi does not make any decision producing legal effects on you or your customers; it assists you, and the final decision remains yours.',
+                    'Acceptable use: you agree not to use Lumi to generate unlawful, deceptive, or infringing content, nor to attempt to bypass its safety limits.',
+                  ]
+              ).map((item) => <li key={item}>{item}</li>)}
+            </ul>
           </Section>
 
           <p className="text-xs text-gray-400 pt-4 border-t border-gray-200">
