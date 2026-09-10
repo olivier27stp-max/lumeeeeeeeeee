@@ -41,6 +41,34 @@ const MAX_ETAPES = 8;
 const MAX_TOKENS = 4096;
 /** Point de cache d'une heure (voir l'en-tête). Même objet partout : un seul endroit à changer. */
 const CACHE_1H: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral', ttl: '1h' };
+/** Point de cache 5 min pour la CONVERSATION (les appels d'un tour sont à quelques secondes, les tours à quelques minutes). */
+const CACHE_5M: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral' };
+
+/**
+ * Historique avec un point de cache GLISSANT sur le dernier message : sans
+ * lui, toute la conversation (messages, résultats d'outils) était relue au
+ * plein tarif à CHAQUE appel — mesuré au 5e tour : 2 663 + 2 977 tokens, les
+ * deux tiers du coût du tour. Avec, le préfixe déjà vu est lu au dixième du
+ * prix et seul le nouveau contenu est écrit (une fois).
+ *
+ * Copie superficielle du dernier message seulement : l'historique stocké en
+ * base ne doit JAMAIS porter cache_control (rejoué tel quel, on dépasserait
+ * les 4 points de cache autorisés → 400). Un TTL de 5 min peut suivre les
+ * points 1 h des outils/prompt (l'inverse est refusé par l'API).
+ */
+export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[]): Anthropic.Messages.MessageParam[] {
+  if (messages.length === 0) return messages;
+  const dernier = messages[messages.length - 1];
+  const blocs: Anthropic.Messages.ContentBlockParam[] = typeof dernier.content === 'string'
+    ? [{ type: 'text', text: dernier.content }]
+    : dernier.content.map((b) => ({ ...b }));
+  if (blocs.length === 0) return messages;
+  const cible = blocs[blocs.length - 1];
+  // Les blocs de réflexion ne peuvent pas porter de point de cache.
+  if (cible.type === 'thinking' || cible.type === 'redacted_thinking') return messages;
+  (cible as { cache_control?: Anthropic.Messages.CacheControlEphemeral }).cache_control = CACHE_5M;
+  return [...messages.slice(0, -1), { role: dernier.role, content: blocs }];
+}
 
 let clientAnthropic: Anthropic | null = null;
 export function isLumiConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -154,7 +182,7 @@ export async function tourLumi(opts: {
       max_tokens: MAX_TOKENS,
       system: opts.systeme,
       tools: outils,
-      messages,
+      messages: avecCacheConversation(messages),
       thinking: { type: 'adaptive' },
       output_config: { effort: 'medium' },
     });
