@@ -77,6 +77,14 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/payment-requests/create': 'financial.view_payments',
   'POST /api/payment-requests/resend': 'financial.view_payments',
 
+  // ── Lumi (assistant IA dans l'app) — même clé que l'agent externe ──
+  'POST /api/lumi/chat': 'external_agent.use',
+  'POST /api/lumi/execute': 'external_agent.use',
+  'GET /api/lumi/quota': 'external_agent.use',
+  'GET /api/lumi/conversations': 'external_agent.use',
+  'GET /api/lumi/conversations/:id': 'external_agent.use',
+  'DELETE /api/lumi/conversations/:id': 'external_agent.use',
+
   // ── Messages ──
   'POST /api/messages/send': 'messages.send',
 
