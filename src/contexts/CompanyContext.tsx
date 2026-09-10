@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import type { TeamRole, Scope, PermissionsMap } from '../lib/permissions';
 import { resolvePermissions, getDefaultPermissions, getDefaultScope } from '../lib/permissions';
 import { getDevRoleOverride } from '../hooks/usePermissions';
-import { setSentryOrgContext } from '../lib/sentry';
+import { setSentryOrgContext, captureClientException } from '../lib/sentry';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -205,7 +205,7 @@ export function CompanyProvider({ children, userId }: { children: React.ReactNod
           const dbOrgs = mapped.map((m) => m.orgId);
           const stale = dbOrgs.length !== claimOrgs.length || dbOrgs.some((o) => !claimOrgs.includes(o));
           if (stale) await supabase.auth.refreshSession();
-        } catch { /* non-fatal */ }
+        } catch (e) { captureClientException(e, { contexte: 'CompanyContext: sync JWT org claim (refreshSession)' }); }
       }
 
       // 4. Auto-select company if needed

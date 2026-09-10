@@ -16,6 +16,7 @@ import { PinHub } from './PinHub';
 import { getRepAvatar } from '../../lib/constants/avatars';
 import { useTranslation } from '../../i18n';
 import { listTerritories, createTerritory, updateTerritory, deleteTerritory, listReps } from '../../lib/fieldSalesApi';
+import { captureClientException } from '../../lib/sentry';
 import { toast } from 'sonner';
 
 // Current app language at call time. LanguageProvider mirrors the chosen
@@ -1094,7 +1095,7 @@ export function MapContainer({ onPinClosedWon, onPinLead, onOpenClient, initialP
       try {
         const st = await navigator.permissions?.query?.({ name: 'geolocation' as PermissionName });
         if (st?.state === 'denied') locationOff = true;
-      } catch {}
+      } catch (e) { captureClientException(e, { contexte: 'map-container: geolocation permission query' }); }
       if (disposed || !containerRef.current) return;
 
       // Open immediately — on the deep-link focus point if one is set, else the

@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { Z } from '../lib/zIndex';
 import { useTranslation } from '../i18n';
+import { captureClientException } from '../lib/sentry';
 import { supabase } from '../lib/supabase';
 import { useJobModalController } from '../contexts/JobModalController';
 import { useCompany } from '../contexts/CompanyContext';
@@ -1428,7 +1429,7 @@ export default function FieldSales() {
             if (!coords) continue;
             const polygon = L.polygon(coords.map((c: number[]) => [c[1], c[0]] as L.LatLngTuple));
             if (polygon.getBounds().contains(repPoint)) { insideAny = true; break; }
-          } catch {}
+          } catch (e) { captureClientException(e, { contexte: 'FieldSales: test rep hors territoire (parsing geojson polygone)' }); }
         }
         if (!insideAny) {
           newAlerts.push({
