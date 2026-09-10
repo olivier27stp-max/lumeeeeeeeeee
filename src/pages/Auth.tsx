@@ -1,6 +1,6 @@
 import React, { useId, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -18,6 +18,7 @@ export default function Auth({ onBack }: AuthProps) {
   const id = useId();
   const navigate = useNavigate();
   const location = useLocation();
+  const reduceMotion = useReducedMotion();
   // Retour de /reset-password : le courriel est pré-rempli et un message
   // confirme que le nouveau mot de passe est actif.
   const etatRetour = (location.state as { passwordReset?: boolean; email?: string } | null) || null;
@@ -136,23 +137,29 @@ export default function Auth({ onBack }: AuthProps) {
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F8F9FA]">
-      {/* Left visual panel — hidden on small screens */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        <img
-          src="/auth-hero.webp"
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        {/* Voile dégradé depuis le bas : assombrit la moitié basse (nuages,
-            ponton) pour que le texte blanc ressorte, sans salir le ciel clair. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent" />
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="relative z-10 flex flex-col justify-end p-14 text-white"
-        >
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-6 bg-[#0b1220]">
+      {/* L'illustration couvre tout l'écran ; zoom très lent (coupé si
+          l'utilisateur a réduit les animations). Zoomée de 12 % pour cacher
+          le cadre dessiné sur les bords en format paysage. */}
+      <motion.img
+        src="/auth-hero.webp"
+        alt=""
+        initial={{ scale: 1.12 }}
+        animate={{ scale: reduceMotion ? 1.12 : 1.16 }}
+        transition={{ duration: 20, ease: 'easeOut' }}
+        className="absolute inset-0 w-full h-full object-cover object-[center_40%] origin-[center_40%]"
+      />
+      {/* Voile dégradé depuis le bas : assombrit la moitié basse (nuages,
+          ponton) pour que le texte blanc ressorte, sans salir le ciel clair. */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/5 pointer-events-none" />
+
+      {/* Accroche en bas à gauche — grands écrans seulement */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="hidden lg:flex absolute left-14 bottom-12 z-10 flex-col text-white max-w-sm drop-shadow-[0_2px_16px_rgba(0,0,0,0.6)]"
+      >
           <h2 className="text-4xl font-extrabold leading-none tracking-tight">
             {t.auth.welcomeBack}
           </h2>
@@ -163,24 +170,12 @@ export default function Auth({ onBack }: AuthProps) {
             <span className="h-0.5 w-9 bg-white/70" />
             {t.auth.companyOS}
           </div>
-        </motion.div>
-      </div>
+      </motion.div>
 
-      {/* Right form panel — planche de BD : trame de points en fond, encre noire */}
-      <div
-        className="flex-1 flex items-center justify-center p-6 relative"
-        style={{
-          backgroundColor: '#f7f5ef',
-          backgroundImage: 'radial-gradient(#141414 0.9px, transparent 0.9px)',
-          backgroundSize: '14px 14px',
-        }}
-      >
-        {/* Voile radial pour aérer la trame au centre (lisibilité du formulaire) */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: 'radial-gradient(ellipse at center, rgba(247,245,239,0.93) 42%, rgba(247,245,239,0.68) 100%)' }}
-        />
-      <div className="w-full max-w-md relative z-10">
+      {/* Formulaire sans panneau : seuls les champs et boutons flottent sur
+          l'image. Un flou doux derrière (sans bordure ni fond visible) garde
+          les libellés blancs lisibles quand ils tombent sur le ciel clair. */}
+      <div className="w-full max-w-md relative z-10 isolate before:content-[''] before:absolute before:-inset-x-12 before:-inset-y-10 before:-z-10 before:pointer-events-none before:bg-black/15 before:backdrop-blur-md before:[mask-image:radial-gradient(closest-side,#000_35%,transparent_100%)]">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -198,20 +193,21 @@ export default function Auth({ onBack }: AuthProps) {
                   onBack?.();
                   navigate('/');
                 }}
-                className="text-[10px] uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
+                className="text-[10px] uppercase tracking-widest text-white/75 hover:text-white transition-colors drop-shadow-[0_1px_6px_rgba(0,0,0,0.5)]"
               >
                 {t.auth.backToHome}
               </button>
             </div>
-            <h1 className="text-3xl font-black tracking-[0.3em]" style={{ textShadow: '2px 2px 0 rgba(20,20,20,0.10)' }}>LUME</h1>
-            <p className="text-gray-500 font-medium text-sm">
+            <h1 className="text-3xl font-black tracking-[0.3em] text-white" style={{ textShadow: '0 2px 14px rgba(0,0,0,0.55)' }}>LUME</h1>
+            {/* Déjà affiché en bas à gauche sur grand écran : pas de doublon */}
+            <p className="text-white/80 font-medium text-sm lg:hidden drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)]">
               {t.auth.welcomeBack}
             </p>
           </div>
 
           <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor={`${id}-email`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.emailLabel}</label>
+              <label htmlFor={`${id}-email`} className="text-xs font-medium text-white/80 uppercase tracking-wider ml-1 drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]">{t.auth.emailLabel}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
@@ -227,7 +223,7 @@ export default function Auth({ onBack }: AuthProps) {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor={`${id}-password`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.passwordLabel}</label>
+              <label htmlFor={`${id}-password`} className="text-xs font-medium text-white/80 uppercase tracking-wider ml-1 drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]">{t.auth.passwordLabel}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
@@ -275,13 +271,10 @@ export default function Auth({ onBack }: AuthProps) {
             </button>
           </form>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t-2 border-dotted border-gray-900/40"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="px-3 text-gray-500 font-semibold tracking-wide" style={{ backgroundColor: '#f7f5ef' }}>{t.auth.orContinueWith}</span>
-            </div>
+          <div className="flex items-center gap-3 text-xs uppercase">
+            <span aria-hidden="true" className="flex-1 border-t-2 border-dotted border-white/55" />
+            <span className="text-white/80 font-semibold tracking-wide drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]">{t.auth.orContinueWith}</span>
+            <span aria-hidden="true" className="flex-1 border-t-2 border-dotted border-white/55" />
           </div>
 
           <div className="grid grid-cols-1 gap-3">
@@ -315,7 +308,7 @@ export default function Auth({ onBack }: AuthProps) {
           <div className="text-center space-y-2">
             <button
               onClick={() => navigate('/register')}
-              className="text-xs text-gray-500 hover:text-black transition-colors font-light"
+              className="text-xs text-white/80 hover:text-white transition-colors font-light drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]"
             >
               {t.auth.dontHaveAccount} {t.auth.signUp}
             </button>
@@ -339,14 +332,13 @@ export default function Auth({ onBack }: AuthProps) {
                   }
                 }}
                 disabled={loading}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors font-light underline"
+                className="text-xs text-white/65 hover:text-white transition-colors font-light underline drop-shadow-[0_1px_6px_rgba(0,0,0,0.6)]"
               >
                 {t.auth.forgotPassword}
               </button>
             </div>
           </div>
         </motion.div>
-      </div>
       </div>
     </div>
   );
