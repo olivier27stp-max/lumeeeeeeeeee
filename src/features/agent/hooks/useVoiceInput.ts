@@ -9,6 +9,11 @@
  *
  * États : idle → recording (compteur, niveau sonore, arrêt automatique après
  * un silence) → transcribing → idle. Arrêt forcé à MAX_SECONDS.
+ *
+ * Aperçu en direct : pendant l'enregistrement, la reconnaissance vocale du
+ * navigateur (Chrome, Edge, Safari) écrit les mots au fur et à mesure
+ * (onInterim). C'est un aperçu, moins juste ; le texte final vient toujours
+ * du serveur et remplace l'aperçu. Sans reconnaissance (Firefox), pas d'aperçu.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { transcribeAudio } from '../lib/agentApi';
@@ -111,10 +116,18 @@ function encoderWav(chunks: Float32Array[], sampleRate: number): Blob {
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
+type Reconnaissance = { lang: string; continuous: boolean; interimResults: boolean; start: () => void; stop: () => void; abort: () => void; onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null };
+function reconnaissanceNavigateur(): (new () => Reconnaissance) | null {
+  const w = window as unknown as { SpeechRecognition?: new () => Reconnaissance; webkitSpeechRecognition?: new () => Reconnaissance };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
 export function useVoiceInput(opts: {
   language: 'fr' | 'en';
   /** Reçoit le texte transcrit (jamais vide). */
   onTranscript: (text: string) => void;
+  /** Aperçu en direct pendant qu'on parle (mots provisoires, peuvent changer). */
+  onInterim?: (text: string) => void;
   onError: (message: string) => void;
 }) {
   const [state, setState] = useState<VoiceState>('idle');
@@ -131,10 +144,55 @@ export function useVoiceInput(opts: {
   const heardVoiceRef = useRef(false);
   const stoppingRef = useRef(false);
   const cancelledRef = useRef(false);
-  const { language, onTranscript, onError } = opts;
+  const recoRef = useRef<Reconnaissance | null>(null);
+  const recoActifRef = useRef(false);
+  const { language, onTranscript, onInterim, onError } = opts;
   const fr = language === 'fr';
 
+  const arreterApercu = () => {
+    recoActifRef.current = false;
+    try { recoRef.current?.abort(); } catch { /* déjà arrêtée */ }
+    recoRef.current = null;
+  };
+
+  /** Lance la reconnaissance du navigateur pour l'aperçu ; silencieuse si absente. */
+  const demarrerApercu = () => {
+    if (!onInterim) return;
+    const Reco = reconnaissanceNavigateur();
+    if (!Reco) return;
+    let acquis = '';
+    const lancer = () => {
+      if (!recoActifRef.current) return;
+      let reco: Reconnaissance;
+      try { reco = new Reco(); } catch { return; }
+      reco.lang = language === 'fr' ? 'fr-CA' : 'en-US';
+      reco.continuous = true;
+      reco.interimResults = true;
+      reco.onresult = (e) => {
+        let texte = '';
+        for (let i = 0; i < e.results.length; i++) texte += e.results[i][0]?.transcript ?? '';
+        dernierTexteRef.current = texte;
+        onInterim((acquis + ' ' + texte).trim());
+      };
+      // Chrome coupe la reconnaissance après quelques secondes de silence :
+      // on repart tant que l'enregistrement continue, en gardant l'acquis.
+      reco.onend = () => {
+        if (!recoActifRef.current) return;
+        acquis = (acquis + ' ' + dernierTexteRef.current).trim();
+        dernierTexteRef.current = '';
+        lancer();
+      };
+      reco.onerror = () => { /* aperçu seulement : on laisse l'enregistrement continuer */ };
+      recoRef.current = reco;
+      try { reco.start(); } catch { /* déjà en cours */ }
+    };
+    recoActifRef.current = true;
+    lancer();
+  };
+  const dernierTexteRef = useRef('');
+
   const liberer = () => {
+    arreterApercu();
     if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
     try { nodeRef.current?.disconnect(); } catch { /* déjà déconnecté */ }
     nodeRef.current = null;
@@ -225,6 +283,8 @@ export function useVoiceInput(opts: {
     ctxRef.current = ctx; streamRef.current = stream; nodeRef.current = node;
     setSeconds(0);
     setState('recording');
+    dernierTexteRef.current = '';
+    demarrerApercu();
     timerRef.current = window.setInterval(() => {
       const s = Math.floor((Date.now() - startedAtRef.current) / 1000);
       setSeconds(s);

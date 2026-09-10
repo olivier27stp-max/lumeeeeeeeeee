@@ -39,6 +39,7 @@ export default function MrLumeChat() {
   /* Vrai si la dernière question a été dite au micro : la réponse est alors lue. */
   const spokenRef = useRef(false);
   const pendingSpokenRef = useRef(false);
+  const baseSaisieRef = useRef('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const speech = useSpeakReplies(lang);
 
@@ -97,9 +98,11 @@ export default function MrLumeChat() {
      et la réponse est lue à voix haute (désactivable). */
   const voice = useVoiceInput({
     language: lang,
-    // Rien ne part tout seul : le texte va dans la zone, on relit, on envoie.
+    onInterim: (text) => { const base = baseSaisieRef.current; setInput(base ? `${base} ${text}` : text); },
+    // Rien ne part tout seul : le texte final remplace l'aperçu, on relit, on envoie.
     onTranscript: (text) => {
-      setInput((v) => (v.trim() ? `${v.trim()} ${text}` : text));
+      const base = baseSaisieRef.current;
+      setInput(base ? `${base} ${text}` : text);
       pendingSpokenRef.current = true;
       requestAnimationFrame(() => { const el = inputRef.current; el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); });
     },
@@ -109,7 +112,7 @@ export default function MrLumeChat() {
   const transcribing = voice.state === 'transcribing';
   function toggleVoice() {
     if (listening) voice.stop();
-    else if (voice.state === 'idle') void voice.start();
+    else if (voice.state === 'idle') { baseSaisieRef.current = input.trim(); void voice.start(); }
   }
   const mm = String(Math.floor(voice.seconds / 60));
   const ss = String(voice.seconds % 60).padStart(2, '0');
