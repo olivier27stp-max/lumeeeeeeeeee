@@ -1,10 +1,13 @@
+/**
+ * Page Fonctionnalités publique.
+ * Même mécanique qu'avant : le menu Fonctionnalités de l'en-tête et les puces
+ * sous le titre mènent à une carte par son ancre (#pipeline, #d2d-map…), puis
+ * on défile pour voir les autres. Seuls le style (ciel, cartes blanches) et
+ * les images (vraies captures de l'app dans /landing) ont changé.
+ */
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import {
-  ArrowRight,
-  Kanban, FileText, Map, Trophy, Mic, BellRing,
-  Star, Calendar, Zap, CreditCard,
-} from 'lucide-react';
+import { ArrowRight, BellRing, Calendar, CreditCard, FileText, Kanban, Map, Mic, Star, Trophy, Zap } from 'lucide-react';
 import { useTranslation } from '../../i18n';
 import type { Language } from '../../i18n';
 
@@ -15,6 +18,8 @@ type Bi = Record<Language, string>;
 interface Feature {
   id: string;
   icon: typeof Mic;
+  /** Capture réelle de l'app (public/landing). */
+  shot: string;
   title: Bi;
   subtitle: Bi;
   bullets: Record<Language, string[]>;
@@ -23,6 +28,7 @@ interface Feature {
 const FEATURES: Feature[] = [
   {
     id: 'ai-voice',
+    shot: '/landing/apercu-accueil.webp',
     icon: Mic,
     title: { en: 'AI Voice Assistant', fr: 'Assistant vocal IA' },
     subtitle: { en: 'Speak. Lume acts.', fr: 'Parlez. Lume s\'exécute.' },
@@ -33,6 +39,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'pipeline',
+    shot: '/landing/apercu-quotes.webp',
     icon: Kanban,
     title: { en: 'Visual Pipeline', fr: 'Pipeline visuel' },
     subtitle: { en: 'Never lose a lead again', fr: 'Ne perdez plus jamais un lead' },
@@ -43,6 +50,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'request-form',
+    shot: '/landing/apercu-formulaire.webp',
     icon: FileText,
     title: { en: 'Request Forms', fr: 'Formulaires de demande' },
     subtitle: { en: 'Capture leads 24/7', fr: 'Captez des leads 24/7' },
@@ -53,6 +61,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'd2d-map',
+    shot: '/landing/apercu-porte-a-porte.webp',
     icon: Map,
     title: { en: 'D2D Map', fr: 'Carte porte-à-porte' },
     subtitle: { en: 'Your territory, mastered', fr: 'Votre territoire, maîtrisé' },
@@ -63,6 +72,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'leaderboard',
+    shot: '/landing/apercu-classement.webp',
     icon: Trophy,
     title: { en: 'Leaderboard', fr: 'Classement' },
     subtitle: { en: 'Performance becomes a game', fr: 'La performance devient un jeu' },
@@ -73,6 +83,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'notifications',
+    shot: '/landing/apercu-messages.webp',
     icon: BellRing,
     title: { en: 'Quote Notifications', fr: 'Notifications de soumission' },
     subtitle: { en: 'Follow up at the right time', fr: 'Relancez au bon moment' },
@@ -83,6 +94,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'reviews',
+    shot: '/landing/apercu-avis.webp',
     icon: Star,
     title: { en: 'Google Reviews', fr: 'Avis Google' },
     subtitle: { en: 'Build reputation on autopilot', fr: 'Bâtissez votre réputation en pilote automatique' },
@@ -93,6 +105,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'scheduling',
+    shot: '/landing/apercu-dispatch.webp',
     icon: Calendar,
     title: { en: 'Scheduling & Dispatch', fr: 'Planification et répartition' },
     subtitle: { en: 'Centralized team scheduling', fr: 'Une planification d\'équipe centralisée' },
@@ -103,6 +116,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'automation',
+    shot: '/landing/apercu-automatisations.webp',
     icon: Zap,
     title: { en: 'Automations', fr: 'Automatisations' },
     subtitle: { en: 'Eliminate repetitive work', fr: 'Éliminez le travail répétitif' },
@@ -113,6 +127,7 @@ const FEATURES: Feature[] = [
   },
   {
     id: 'payments',
+    shot: '/landing/apercu-finances.webp',
     icon: CreditCard,
     title: { en: 'Lume Payments', fr: 'Lume Payments' },
     subtitle: { en: 'Get paid faster, every time', fr: 'Soyez payé plus vite, chaque fois' },
@@ -144,374 +159,92 @@ const COPY = {
   },
 } as const;
 
-function FeatureMockup({ id }: { id: string }) {
-  const { language } = useTranslation();
-  // Petit sélecteur local pour les textes des maquettes UI.
-  const L = (en: string, fr: string) => (language === 'fr' ? fr : en);
-
-  const shell = (children: React.ReactNode) => (
-    <div className="rounded-lg border border-white/10 overflow-hidden bg-[#111]" style={{ boxShadow: '0 4px 16px rgba(0,0,0,0.4)' }}>
-      <div className="bg-white aspect-[16/9]">
-        <div className="h-full flex">{children}</div>
-      </div>
-    </div>
-  );
-
-  const sidebar = (active: number) => (
-    <div className="hidden sm:flex w-28 bg-[#f8f8f8] border-r border-[#e8e8e8] flex-col p-2">
-      <div className="h-3 bg-[#e0e0e0] rounded w-12 mb-4" />
-      <div className="space-y-2">
-        {[...Array(6)].map((_, i) => (
-          <div key={i} className={`h-2.5 rounded w-${i === active ? 'full' : '4/5'} ${i === active ? 'bg-primary/15' : 'bg-[#ebebeb]'}`} />
-        ))}
-      </div>
-    </div>
-  );
-
-  const mockups: Record<string, React.ReactNode> = {
-    'ai-voice': shell(
-      <>{sidebar(4)}
-        <div className="flex-1 p-3 flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <div className="h-3 bg-[#ebebeb] rounded w-20" />
-            <div className="w-5 h-5 rounded-full bg-[#ebebeb]" />
-          </div>
-          <div className="flex-1 space-y-2">
-            <div className="flex justify-end"><div className="bg-[#f0f0f0] rounded-lg rounded-tr-sm px-2.5 py-1.5 max-w-[70%]"><div className="flex items-center gap-1 mb-0.5"><div className="w-2 h-2 rounded-full bg-primary/30" /><span className="text-[7px] font-semibold text-primary">{L('Voice', 'Voix')}</span></div><p className="text-[8px] text-[#333]">{L('"Quote for 123 Main St, $350"', '« Soumission pour le 123 rue Principale, 350 $ »')}</p></div></div>
-            <div className="flex gap-1.5"><div className="w-4 h-4 rounded-full bg-[#1a1a1a] shrink-0" /><div className="bg-[#1a1a1a] rounded-lg rounded-tl-sm px-2.5 py-1.5 max-w-[70%]"><p className="text-[8px] text-white font-medium mb-1">{L('Quote created', 'Soumission créée')}</p><div className="text-[7px] text-white/50 space-y-0.5"><p>{L('$350.00 — Window Cleaning', '350,00 $ — Lavage de vitres')}</p><p>{L('Status: Draft', 'Statut : Brouillon')}</p></div></div></div>
-            <div className="flex gap-1.5"><div className="w-4 h-4" /><div className="bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1"><p className="text-[7px] text-primary">{L('Send to client?', 'Envoyer au client ?')}</p></div></div>
-          </div>
-          <div className="flex items-center gap-1.5 bg-[#f5f5f5] rounded-lg px-2.5 py-1.5 border border-[#e5e5e5] mt-2">
-            <div className="w-4 h-4 rounded-full bg-primary" />
-            <span className="text-[7px] text-[#aaa] flex-1">{L('Speak a command...', 'Dictez une commande...')}</span>
-          </div>
-        </div>
-      </>
-    ),
-    'pipeline': shell(
-      <>{sidebar(0)}
-        <div className="flex-1 p-3">
-          <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
-          <div className="flex gap-1.5 h-[calc(100%-20px)]">
-            {[{t:L('New','Nouveau'),n:3,c:'bg-blue-500'},{t:L('Contact','Contact'),n:2,c:'bg-amber-500'},{t:L('Quote','Soumission'),n:2,c:'bg-purple-500'},{t:L('Won','Gagné'),n:1,c:'bg-emerald-500'}].map((col,ci) => (
-              <div key={ci} className="flex-1 min-w-0">
-                <div className="flex items-center gap-1 mb-1.5"><div className={`w-1.5 h-1.5 rounded-full ${col.c}`} /><span className="text-[6px] font-semibold text-[#555]">{col.t}</span></div>
-                <div className="space-y-1">
-                  {[...Array(col.n)].map((_,j) => (
-                    <div key={j} className="p-1.5 rounded border border-[#eee] bg-[#fafafa]">
-                      <div className="h-1.5 bg-[#e5e5e5] rounded w-4/5 mb-1" />
-                      <div className="h-1 bg-[#eee] rounded w-3/5" />
-                      <div className="flex items-center gap-0.5 mt-1"><div className="w-2.5 h-2.5 rounded-full bg-[#e0e0e0]" /><div className="h-1 bg-[#eee] rounded w-6" /></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </>
-    ),
-    'request-form': shell(
-      <>{sidebar(1)}
-        <div className="flex-1 p-3">
-          <div className="h-3 bg-[#ebebeb] rounded w-28 mb-3" />
-          <div className="max-w-[65%] space-y-2">
-            {[L('Name', 'Nom'), L('Email', 'Courriel'), L('Phone', 'Téléphone'), L('Service', 'Service')].map((label) => (
-              <div key={label}><div className="text-[6px] text-[#999] mb-0.5">{label}</div><div className="h-5 bg-[#f5f5f5] rounded border border-[#e5e5e5]" /></div>
-            ))}
-            <div><div className="text-[6px] text-[#999] mb-0.5">{L('Message', 'Message')}</div><div className="h-10 bg-[#f5f5f5] rounded border border-[#e5e5e5]" /></div>
-            <div className="h-5 bg-primary rounded w-20 mt-1" />
-          </div>
-        </div>
-      </>
-    ),
-    'd2d-map': shell(
-      <>{sidebar(3)}
-        <div className="flex-1 relative bg-[#e8f4e8]">
-          <div className="absolute inset-0 opacity-15" style={{backgroundImage:'linear-gradient(#999 1px,transparent 1px),linear-gradient(90deg,#999 1px,transparent 1px)',backgroundSize:'24px 24px'}} />
-          <div className="absolute top-[10%] left-[8%] w-[35%] h-[40%] border border-primary/30 rounded-lg bg-primary/5" />
-          {[{x:'15%',y:'20%',c:'bg-emerald-500'},{x:'30%',y:'35%',c:'bg-primary'},{x:'45%',y:'25%',c:'bg-amber-500'},{x:'60%',y:'50%',c:'bg-emerald-500'},{x:'25%',y:'55%',c:'bg-red-500'},{x:'70%',y:'35%',c:'bg-emerald-500'},{x:'50%',y:'70%',c:'bg-primary'},{x:'80%',y:'60%',c:'bg-amber-500'}].map((p,i) => (
-            <div key={i} className="absolute" style={{left:p.x,top:p.y}}><div className={`w-2 h-2 rounded-full ${p.c} ring-1 ring-white`} /></div>
-          ))}
-          <div className="absolute" style={{left:'32%',top:'40%'}}><div className="w-5 h-5 rounded-full bg-primary ring-2 ring-white shadow flex items-center justify-center"><span className="text-[5px] font-bold text-white">MD</span></div></div>
-        </div>
-      </>
-    ),
-    'leaderboard': shell(
-      <>{sidebar(2)}
-        <div className="flex-1 p-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-[7px] font-bold text-[#333]">{L('Leaderboard', 'Classement')}</div>
-            <div className="flex gap-1">{(language === 'fr' ? ['J','S','M'] : ['D','W','M']).map((t,i) => (<div key={t} className={`px-1.5 py-0.5 rounded text-[6px] font-medium ${i===1?'bg-[#1a1a1a] text-white':'text-[#999]'}`}>{t}</div>))}</div>
-          </div>
-          {[{n:'Marc D.',s:L('14 sales','14 ventes'),r:1},{n:'Sophie L.',s:L('12 sales','12 ventes'),r:2},{n:'Antoine R.',s:L('9 sales','9 ventes'),r:3},{n:'Julie M.',s:L('7 sales','7 ventes'),r:4},{n:'Phil K.',s:L('5 sales','5 ventes'),r:5}].map((rep) => (
-            <div key={rep.n} className="flex items-center gap-2 py-1.5 border-t border-[#f0f0f0]">
-              <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[6px] font-bold ${rep.r===1?'bg-yellow-100 text-yellow-700':rep.r===2?'bg-gray-100 text-gray-600':rep.r===3?'bg-orange-100 text-orange-700':'bg-[#f5f5f5] text-[#aaa]'}`}>{rep.r}</span>
-              <div className="w-4 h-4 rounded-full bg-[#e5e5e5]" />
-              <span className="text-[7px] font-medium text-[#1a1a1a] flex-1">{rep.n}</span>
-              <span className="text-[7px] font-semibold text-[#1a1a1a]">{rep.s}</span>
-            </div>
-          ))}
-        </div>
-      </>
-    ),
-    'notifications': shell(
-      <>{sidebar(5)}
-        <div className="flex-1 p-3">
-          <div className="h-3 bg-[#ebebeb] rounded w-28 mb-3" />
-          <div className="space-y-2">
-            {[
-              {t:L('Quote #1042 opened','Soumission #1042 ouverte'),d:L('John Smith — 2 min ago','John Smith — il y a 2 min'),s:'bg-emerald-500'},
-              {t:L('Quote #1038 viewed 3x','Soumission #1038 vue 3x'),d:L('Maria Johnson — 1h ago','Maria Johnson — il y a 1 h'),s:'bg-primary'},
-              {t:L('Reminder: Follow up #1035','Rappel : relancer #1035'),d:L('Robert Davis — overdue','Robert Davis — en retard'),s:'bg-amber-500'},
-              {t:L('Quote #1031 expired','Soumission #1031 expirée'),d:L('Lisa Chen — 3 days ago','Lisa Chen — il y a 3 jours'),s:'bg-red-500'},
-            ].map((n) => (
-              <div key={n.t} className="flex items-start gap-2 p-2 rounded-lg bg-[#fafafa] border border-[#eee]">
-                <div className={`w-2 h-2 rounded-full ${n.s} mt-1 shrink-0`} />
-                <div><div className="text-[7px] font-semibold text-[#1a1a1a]">{n.t}</div><div className="text-[6px] text-[#999]">{n.d}</div></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </>
-    ),
-    'reviews': shell(
-      <>{sidebar(5)}
-        <div className="flex-1 p-3">
-          <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
-          <div className="flex gap-2 mb-3">
-            {[{l:L('Avg Rating','Note moyenne'),v:'4.8',c:''},{l:L('Total','Total'),v:'127',c:''},{l:L('This Month','Ce mois-ci'),v:'+12',c:'text-emerald-600'}].map((s) => (
-              <div key={s.l} className="flex-1 p-2 rounded-lg border border-[#eee]"><div className="text-[6px] text-[#999]">{s.l}</div><div className={`text-[10px] font-bold text-[#1a1a1a] ${s.c}`}>{s.v}</div></div>
-            ))}
-          </div>
-          <div className="space-y-1.5">
-            {[
-              {n:'J. Smith',r:5,t:L('Excellent service!','Excellent service !')},
-              {n:'M. Johnson',r:5,t:L('Very professional','Très professionnel')},
-              {n:'R. Davis',r:4,t:L('Good work, on time','Bon travail, à l\'heure')},
-            ].map((rev) => (
-              <div key={rev.n} className="flex items-start gap-2 p-1.5 rounded-lg bg-[#fafafa] border border-[#eee]">
-                <div className="w-4 h-4 rounded-full bg-[#e5e5e5] shrink-0" />
-                <div><div className="text-[7px] font-semibold text-[#1a1a1a]">{rev.n}</div><div className="flex gap-0.5">{[...Array(rev.r)].map((_,i)=>(<span key={i} className="text-[6px] text-amber-400">★</span>))}</div><div className="text-[6px] text-[#999]">{rev.t}</div></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </>
-    ),
-    'scheduling': shell(
-      <>{sidebar(3)}
-        <div className="flex-1 p-3">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[7px] font-bold text-[#333]">{L('April 2026', 'Avril 2026')}</div>
-            <div className="flex gap-1">{[L('Day','Jour'),L('Week','Semaine'),L('Month','Mois')].map((t,i) => (<div key={t} className={`px-1.5 py-0.5 rounded text-[6px] font-medium ${i===0?'bg-[#1a1a1a] text-white':'text-[#999]'}`}>{t}</div>))}</div>
-          </div>
-          <div className="space-y-1">
-            {['8:00','9:00','10:00','11:00','12:00','1:00','2:00','3:00'].map((time,i) => (
-              <div key={time} className="flex items-stretch gap-1.5">
-                <span className="text-[6px] text-[#999] w-6 pt-0.5">{time}</span>
-                <div className="flex-1 border-t border-[#f0f0f0] min-h-[12px] relative">
-                  {i===1 && <div className="absolute inset-x-0 top-0 h-[20px] bg-primary/10 border-l-2 border-primary rounded-r px-1"><span className="text-[5px] font-medium text-primary">{L('J. Smith — Window cleaning', 'J. Smith — Lavage de vitres')}</span></div>}
-                  {i===3 && <div className="absolute inset-x-0 top-0 h-[20px] bg-emerald-50 border-l-2 border-emerald-500 rounded-r px-1"><span className="text-[5px] font-medium text-emerald-700">{L('M. Johnson — Pressure wash', 'M. Johnson — Lavage à pression')}</span></div>}
-                  {i===5 && <div className="absolute inset-x-0 top-0 h-[20px] bg-amber-50 border-l-2 border-amber-500 rounded-r px-1"><span className="text-[5px] font-medium text-amber-700">{L('R. Davis — Gutter cleaning', 'R. Davis — Nettoyage de gouttières')}</span></div>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </>
-    ),
-    'automation': shell(
-      <>{sidebar(4)}
-        <div className="flex-1 p-3">
-          <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
-          <div className="flex flex-col items-center gap-1.5 py-2">
-            <div className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[7px] font-semibold text-primary">{L('New Lead Created', 'Nouveau lead créé')}</div>
-            <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-[7px] text-[#555]">{L('Wait 2 hours', 'Attendre 2 heures')}</div>
-            <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[7px] text-emerald-700">{L('Send welcome email', 'Envoyer le courriel de bienvenue')}</div>
-            <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-[#f5f5f5] border border-[#e5e5e5] text-[7px] text-[#555]">{L('Wait 24 hours', 'Attendre 24 heures')}</div>
-            <div className="w-px h-4 bg-[#ddd]" />
-            <div className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[7px] text-amber-700">{L('Send follow-up SMS', 'Envoyer le texto de relance')}</div>
-          </div>
-        </div>
-      </>
-    ),
-    'payments': shell(
-      <>{sidebar(5)}
-        <div className="flex-1 p-3">
-          <div className="h-3 bg-[#ebebeb] rounded w-24 mb-3" />
-          <div className="flex gap-2 mb-3">
-            {[{l:L('Collected','Encaissé'),v:'$24,800'},{l:L('Pending','En attente'),v:'$3,200'},{l:L('Overdue','En retard'),v:'$850'}].map((s) => (
-              <div key={s.l} className="flex-1 p-2 rounded-lg border border-[#eee]"><div className="text-[6px] text-[#999]">{s.l}</div><div className="text-[10px] font-bold text-[#1a1a1a]">{s.v}</div></div>
-            ))}
-          </div>
-          <div className="space-y-1.5">
-            {[
-              {n:'INV-1042',c:'J. Smith',a:'$350',s:L('Paid','Payée'),sc:'text-emerald-600 bg-emerald-50'},
-              {n:'INV-1041',c:'M. Johnson',a:'$780',s:L('Pending','En attente'),sc:'text-amber-600 bg-amber-50'},
-              {n:'INV-1040',c:'R. Davis',a:'$1,200',s:L('Paid','Payée'),sc:'text-emerald-600 bg-emerald-50'},
-              {n:'INV-1039',c:'L. Chen',a:'$450',s:L('Overdue','En retard'),sc:'text-red-600 bg-red-50'},
-            ].map((inv) => (
-              <div key={inv.n} className="flex items-center gap-2 p-1.5 rounded-lg bg-[#fafafa] border border-[#eee]">
-                <div className="text-[7px] font-semibold text-[#1a1a1a] w-14">{inv.n}</div>
-                <div className="text-[7px] text-[#666] flex-1">{inv.c}</div>
-                <div className="text-[7px] font-bold text-[#1a1a1a]">{inv.a}</div>
-                <span className={`text-[6px] font-medium px-1.5 py-0.5 rounded ${inv.sc}`}>{inv.s}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </>
-    ),
-  };
-
-  return mockups[id] || null;
-}
+const Check = ({ label }: { label: string }) => (
+  <svg className="ft-ck" viewBox="0 0 16 16" fill="none" role="img" aria-label={label}>
+    <path d="M2.5 8.5l3.5 3.5L13.5 4" stroke="#0a0a0a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 export default function Features() {
   const { language } = useTranslation();
   const c = COPY[language];
+  const learnMore = language === 'fr' ? 'En savoir plus →' : 'Learn more →';
+  const included = language === 'fr' ? 'Inclus' : 'Included';
+
   return (
-    <div className="min-h-screen">
-      {/* Hero */}
-      <section className="pt-28 pb-12 md:pt-36 md:pb-16 px-6" style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
-        <div className="max-w-4xl mx-auto text-center">
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-[11px] uppercase tracking-[0.2em] font-semibold text-[#1F5F4F] mb-4"
-          >
-            {c.kicker}
-          </motion.p>
-          <motion.h1
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-[-0.03em] leading-[1.08] text-text-primary"
-          >
-            {c.titleLine1}
-            <br />
-            {c.titleLine2}
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="mt-5 text-lg font-normal text-text-tertiary max-w-2xl mx-auto leading-relaxed"
-          >
-            {c.subtitle}
-          </motion.p>
-        </div>
+    <div className="ft-page">
+      <style>{FEATURES_CSS}</style>
+
+      <section className="ft-hero">
+        <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="ft-kicker">{c.kicker}</motion.p>
+        <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          {c.titleLine1}<br />{c.titleLine2}
+        </motion.h1>
+        <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="ft-sub">{c.subtitle}</motion.p>
       </section>
 
-      {/* Quick Nav */}
-      <section className="px-6 pb-12" style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
-        <div className="max-w-5xl mx-auto">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.25 }}
-            className="flex flex-wrap justify-center gap-2"
-          >
-            {FEATURES.map(f => (
-              <a
-                key={f.id}
-                href={`#${f.id}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-tertiary border border-outline transition-colors"
-              >
-                <f.icon size={12} />
-                {f.title[language]}
-              </a>
-            ))}
-          </motion.div>
-        </div>
-      </section>
+      {/* Puces : même ancres que le menu de l'en-tête */}
+      <nav className="ft-chips" aria-label={c.kicker}>
+        {FEATURES.map(f => <a key={f.id} href={`#${f.id}`}>{f.title[language]}</a>)}
+      </nav>
 
-      {/* Feature Cards */}
-      <section className="px-6 py-24 md:py-32 bg-text-primary">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
-          {FEATURES.map((feature, i) => (
-            <motion.div
-              key={feature.id}
-              id={feature.id}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-60px' }}
-              transition={{ delay: i % 2 === 0 ? 0 : 0.1 }}
-              className="relative rounded-[28px] p-8 md:p-12 lg:p-14 overflow-hidden h-full"
-              style={{
-                background: 'linear-gradient(180deg, #000000 0%, #0B0F0F 20%, #0F1F1C 40%, #12332C 55%, #1F5F4F 75%, #3FAF97 92%, #6FD1B8 100%)',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.6), 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
-              }}
-            >
-              {/* Light effects */}
-              <div className="absolute inset-0 pointer-events-none opacity-60" style={{ background: 'linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.08) 45%, rgba(255,255,255,0.04) 55%, transparent 80%)' }} />
-              <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at ${i % 2 === 0 ? '15% 10%' : '85% 10%'}, rgba(63,175,151,0.12) 0%, transparent 50%)` }} />
-              <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at ${i % 2 === 0 ? '85% 90%' : '15% 90%'}, rgba(111,209,184,0.1) 0%, transparent 45%)` }} />
-              <div className="absolute inset-0 rounded-[28px] pointer-events-none" style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), inset 1px 0 0 rgba(255,255,255,0.03)' }} />
-
-              <div className="relative flex flex-col h-full">
-                <div className="space-y-5">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <feature.icon size={14} className="text-[#3FAF97]" />
-                    <span className="text-[10px] uppercase tracking-[0.15em] font-semibold text-white/60">{feature.title[language]}</span>
-                  </div>
-                  <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-white leading-[1.1]">
-                    {feature.subtitle[language]}
-                  </h2>
-                  <ul className="space-y-3">
-                    {feature.bullets[language].map(b => (
-                      <li key={b} className="flex items-center gap-3 text-sm font-bold text-white">
-                        <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ border: '2px solid #ffffff' }}>
-                          <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-                            <path d="M3 8.5l3.5 3.5L13 5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </div>
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* CRM Mockup — always at bottom */}
-                <div className="mt-auto pt-6">
-                  <FeatureMockup id={feature.id} />
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="px-6 pb-24 md:pb-32 bg-text-primary">
-        <div className="max-w-4xl mx-auto text-center">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
+      <div className="ft-grid">
+        {FEATURES.map((feature, i) => (
+          <motion.article
+            key={feature.id}
+            id={feature.id}
+            className="ft-card"
+            initial={{ opacity: 0, y: 18 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            viewport={{ once: true, margin: '-40px' }}
+            transition={{ delay: i % 2 === 0 ? 0 : 0.08 }}
           >
-            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white">
-              {c.ctaHeading}
-            </h2>
-            <p className="mt-3 text-white/50 font-normal max-w-lg mx-auto">
-              {c.ctaDesc}
-            </p>
-            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link
-                to="/contact"
-                className="inline-flex items-center gap-2 bg-white text-text-primary px-8 py-4 rounded-xl text-sm font-bold hover:bg-white/90 transition-colors group"
-              >
-                {c.bookDemo}
-                <ArrowRight size={16} className="group-hover:translate-x-0.5 transition-transform" />
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </section>
+            <p className="ft-kicker">{feature.title[language]}</p>
+            <h2>{feature.subtitle[language]}</h2>
+            <ul>
+              {feature.bullets[language].map(b => <li key={b}><Check label={included} /><span>{b}</span></li>)}
+            </ul>
+            <Link to="/contact" className="ft-lnk">{learnMore}</Link>
+            <div className="ft-shot"><img src={feature.shot} alt="" width={1800} height={1125} loading="lazy" decoding="async" /></div>
+          </motion.article>
+        ))}
+      </div>
+
+      <div className="ft-cta">
+        <div><h2>{c.ctaHeading}</h2><p>{c.ctaDesc}</p></div>
+        <Link to="/contact" className="ft-btn">{c.bookDemo}<ArrowRight size={16} /></Link>
+      </div>
     </div>
   );
 }
+
+const FEATURES_CSS = `
+.ft-page { --ink:#0a0a0a; --ink2:#171717; --ink3:#4a4f57; --forest:#1F5F4F; --mint:#3FAF97; --rule:#111; --hair:rgba(11,40,80,.12); --hair2:rgba(11,40,80,.07); color:var(--ink2); max-width:1180px; margin:0 auto; padding:0 24px 96px; }
+.ft-page h1, .ft-page h2 { margin:0; color:var(--ink); letter-spacing:-.02em; text-wrap:balance; }
+.ft-kicker { font-size:11px; letter-spacing:.2em; text-transform:uppercase; font-weight:600; color:var(--forest); margin:0 0 10px; }
+.ft-hero { padding:120px 0 22px; text-align:center; }
+.ft-hero h1 { font-size:clamp(34px,4.6vw,56px); font-weight:800; letter-spacing:-.04em; line-height:1.02; }
+.ft-sub { max-width:60ch; margin:16px auto 0; font-size:17px; color:var(--ink3); }
+.ft-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; padding:14px 0 34px; }
+.ft-chips a { font-size:12.5px; font-weight:600; color:var(--ink2); text-decoration:none; padding:7px 12px; border-radius:999px; border:1px solid rgba(11,40,80,.16); background:rgba(255,255,255,.7); }
+.ft-chips a:hover { border-color:#111; background:#fff; }
+.ft-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+.ft-card { background:#fff; border:1px solid var(--hair); border-radius:22px; padding:30px 30px 0; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 30px 60px -44px rgba(11,40,80,.35); scroll-margin-top:84px; }
+.ft-card .ft-kicker { margin:0; }
+.ft-card h2 { font-size:26px; font-weight:800; letter-spacing:-.03em; line-height:1.1; margin-top:8px; }
+.ft-card ul { list-style:none; margin:16px 0 0; padding:0; }
+.ft-card li { display:flex; gap:10px; align-items:flex-start; padding:7px 0; border-top:1px solid var(--hair2); font-size:14px; font-weight:600; color:var(--ink); }
+.ft-card li:first-child { border-top:0; }
+.ft-ck { display:inline-block; width:14px; height:14px; flex:none; margin-top:3px; }
+.ft-lnk { display:inline-block; margin-top:12px; font-weight:700; font-size:13px; color:var(--forest); text-decoration:none; border-bottom:1.5px solid var(--mint); align-self:flex-start; }
+.ft-shot { margin:22px -30px 0 30px; border-radius:12px 0 0 0; border:1px solid rgba(11,92,173,.14); border-right:0; border-bottom:0; box-shadow:0 30px 60px -30px rgba(0,0,0,.35); aspect-ratio:16/9.6; overflow:hidden; background:#fff; margin-top:auto; padding-top:0; }
+.ft-shot img { width:130%; height:auto; display:block; }
+.ft-card:target { outline:2px solid #111; outline-offset:3px; }
+.ft-cta { margin-top:56px; padding-top:36px; border-top:1px solid var(--rule); display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; }
+.ft-cta h2 { font-size:28px; font-weight:800; letter-spacing:-.03em; }
+.ft-cta p { margin:6px 0 0; color:var(--ink3); }
+.ft-btn { display:inline-flex; align-items:center; gap:8px; background:#111; color:#fff; border-radius:12px; padding:14px 22px; font-weight:700; font-size:15px; text-decoration:none; }
+.ft-btn:hover { background:#000; }
+@media (max-width: 900px) { .ft-grid { grid-template-columns:1fr; } .ft-hero { padding-top:104px; } .ft-shot { margin-left:0; } }
+@media (prefers-reduced-motion: reduce) { .ft-card { transition:none !important; } }
+`;
