@@ -3,7 +3,7 @@
  * Chaque section est un composant sans état propre, bilingue via `fr`.
  * Le CSS est regroupé dans SECTIONS_CSS, préfixe `hs-`.
  */
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
@@ -211,35 +211,6 @@ export function PlansTeaser({ fr }: { fr: boolean }) {
   );
 }
 
-/* ── Démo vidéo ── */
-export function DemoVideo({ fr }: { fr: boolean }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const chapters: { t: number; l: Bi }[] = [
-    { t: 0, l: { fr: 'Ta journée', en: 'Your day' } },
-    { t: 15, l: { fr: 'Le calendrier', en: 'The calendar' } },
-    { t: 30, l: { fr: 'Les messages', en: 'Messages' } },
-    { t: 45, l: { fr: 'Les finances', en: 'Finances' } },
-    { t: 60, l: { fr: 'Lumi', en: 'Lumi' } },
-  ];
-  const seek = (t: number) => { const v = ref.current; if (!v) return; v.currentTime = t; void v.play().catch(() => {}); };
-  const fmt = (t: number) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-  return (
-    <section className="hs-demo">
-      <p className="ha-kicker">{fr ? 'Deux minutes' : 'Two minutes'}</p>
-      <h2>{fr ? 'Vois Lume tourner, sans réserver.' : 'See Lume run, no booking needed.'}</h2>
-      <p className="hs-sub">{fr ? "Une visite guidée de l'app, écran par écran, avec les vrais écrans." : 'A guided tour of the app, screen by screen, with the real screens.'}</p>
-      <div className="hs-player">
-        <video ref={ref} controls preload="none" poster="/landing/apercu-accueil.webp" playsInline aria-label={fr ? 'Visite guidée de Lume' : 'Lume guided tour'}>
-          <source src="/landing/demo.mp4" type="video/mp4" />
-        </video>
-      </div>
-      <div className="hs-chap">
-        {chapters.map((c) => <button key={c.t} type="button" onClick={() => seek(c.t)}>{fmt(c.t)} {pick(fr, c.l)}</button>)}
-      </div>
-    </section>
-  );
-}
-
 /* ── Tes données ── */
 export function Security({ fr }: { fr: boolean }) {
   const items: { t: Bi; d: Bi }[] = [
@@ -295,7 +266,7 @@ export const SECTIONS_CSS = `
 .home-apercu h2 { font-size:28px; font-weight:800; letter-spacing:-.025em; line-height:1.12; color:#0a0a0a; margin:8px 0 0; max-width:26ch; }
 .home-apercu .hs-sub { margin:10px 0 0; font-size:15px; line-height:1.55; color:#333; max-width:70ch; }
 .home-apercu .hs-link { display:inline-block; margin-top:16px; font-weight:700; font-size:13.5px; color:var(--forest); background:none; border:0; padding:0; cursor:pointer; text-decoration:none; font-family:inherit; }
-.hs-stop, .hs-pillars, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-demo, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
+.hs-stop, .hs-pillars, .hs-roles, .hs-lumi, .hs-flow, .hs-plans, .hs-secu { max-width:1180px; margin:0 auto; padding:52px 24px 8px; }
 .hs-stoplist { list-style:none; margin:22px 0 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:6px 40px; }
 .hs-stoplist li { font-size:clamp(17px,1.6vw,22px); font-weight:600; letter-spacing:-.01em; line-height:1.3; color:#0a0a0a; padding:14px 0; border-top:1px solid #d9d9d4; }
 .hs-stoplist li span { position:relative; display:inline; }
@@ -303,7 +274,7 @@ export const SECTIONS_CSS = `
 @keyframes hs-strike { to { transform:scaleX(1); } }
 .hs-stopnote { margin:22px 0 0; font-size:14.5px; color:#171717; }
 .hs-pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; }
-.hs-pc { display:flex; flex-direction:column; background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:18px; padding:22px; text-decoration:none; color:inherit; transition:transform .2s, box-shadow .2s; }
+.hs-pc { display:flex; flex-direction:column; background:#fff; border:1px solid rgba(11,92,173,.12); border-radius:18px; padding:22px; text-decoration:none; color:inherit; transition:transform .2s, box-shadow .2s; }
 .hs-pc:hover { transform:translateY(-3px); box-shadow:0 24px 40px -24px rgba(0,0,0,.3); }
 .hs-pc em { font-style:normal; font-size:11px; letter-spacing:.16em; text-transform:uppercase; font-weight:800; color:var(--forest); }
 .hs-pc b { margin-top:6px; font-size:19px; letter-spacing:-.015em; color:#111; }
@@ -314,7 +285,7 @@ export const SECTIONS_CSS = `
 .hs-rtabs button { border:0; background:transparent; font-size:13px; font-weight:600; color:#555; padding:8px 16px; border-radius:999px; cursor:pointer; white-space:nowrap; font-family:inherit; } .hs-rtabs button[aria-selected="true"] { background:#111; color:#fff; }
 .hs-rp { display:grid; grid-template-columns:.9fr 1.4fr; gap:36px; align-items:center; margin-top:24px; }
 .hs-rtxt h3 { font-size:24px; font-weight:800; letter-spacing:-.02em; margin:0; color:#111; line-height:1.15; } .hs-rtxt ul { margin:14px 0 0; padding-left:18px; font-size:14px; line-height:1.55; color:#333; } .hs-rtxt li { margin-bottom:6px; }
-.hs-rp img { width:100%; height:auto; border-radius:14px; border:1px solid rgba(0,0,0,.08); box-shadow:0 30px 60px -30px rgba(0,0,0,.35); }
+.hs-rp img { width:100%; height:auto; border-radius:14px; border:1px solid rgba(11,92,173,.12); box-shadow:0 30px 60px -30px rgba(0,0,0,.35); }
 .hs-lgrid { display:grid; grid-template-columns:1fr 1fr; gap:40px; align-items:center; }
 .hs-lumi h2 { font-size:32px; }
 .hs-lsub { font-size:16px; line-height:1.55; color:#171717; margin:14px 0 0; max-width:46ch; }
@@ -336,14 +307,11 @@ export const SECTIONS_CSS = `
 .hs-indline b { font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:#8a8a84; margin-right:6px; }
 .hs-indline span + span::before { content:"·"; color:#bbb; margin-right:18px; }
 .hs-plgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:20px; }
-.hs-pl { position:relative; display:block; background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:18px; padding:22px; text-decoration:none; color:inherit; } .hs-pl.feat { border:2px solid var(--forest); }
+.hs-pl { position:relative; display:block; background:#fff; border:1px solid rgba(11,92,173,.12); border-radius:18px; padding:22px; text-decoration:none; color:inherit; } .hs-pl.feat { border:2px solid var(--forest); }
 .hs-pl em { font-style:normal; font-size:11px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; color:var(--forest); } .hs-pl b { display:block; font-size:24px; font-weight:800; letter-spacing:-.02em; margin-top:6px; color:#111; }
 .hs-pp { font-size:30px; font-weight:800; letter-spacing:-.02em; margin-top:8px; color:#111; font-variant-numeric:tabular-nums; } .hs-pp span { font-size:13px; font-weight:500; color:#555; }
 .hs-pl p { margin:10px 0 0; font-size:13.5px; line-height:1.5; color:#333; }
 .hs-tag { position:absolute; top:-12px; left:22px; background:var(--forest); color:#fff; font-size:10px; letter-spacing:.14em; text-transform:uppercase; font-weight:700; padding:4px 10px; border-radius:999px; }
-.hs-player { margin-top:20px; border-radius:18px; overflow:hidden; box-shadow:0 40px 90px -36px rgba(0,0,0,.5); background:#111; aspect-ratio:16/9; }
-.hs-player video { width:100%; height:100%; display:block; object-fit:cover; }
-.hs-chap { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; } .hs-chap button { font-size:12.5px; font-weight:600; color:#171717; background:#fff; border:1px solid rgba(0,0,0,.15); border-radius:999px; padding:7px 12px; cursor:pointer; font-family:inherit; } .hs-chap button:hover { background:#111; color:#fff; }
 .hs-sgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:20px; } .hs-sgrid div { border-top:2px solid #111; padding-top:12px; } .hs-sgrid b { font-size:15px; color:#111; } .hs-sgrid p { margin:6px 0 0; font-size:13px; line-height:1.5; color:#333; }
 .hs-faq { max-width:820px; margin:0 auto; padding:52px 24px 24px; }
 .hs-faq details { border-top:1px solid #d9d9d4; padding:14px 0; } .hs-faq details:last-of-type { border-bottom:1px solid #d9d9d4; }

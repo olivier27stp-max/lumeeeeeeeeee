@@ -22,7 +22,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
-import { StopList, Pillars, Roles, LumiSection, StatsBand, Flow, PlansTeaser, DemoVideo, Security, Faq, FinalCta, SECTIONS_CSS } from './homeApercuSections';
+import { StopList, Pillars, Roles, LumiSection, StatsBand, Flow, PlansTeaser, Security, Faq, FinalCta, SECTIONS_CSS } from './homeApercuSections';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 
@@ -50,6 +50,13 @@ export default function HomeApercu() {
   const [tab, setTab] = useState<Tab>('accueil');
   const frameRef = useRef<HTMLDivElement>(null);
   const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Tant que l'accueil est affiché, le header et le pied de page prennent le
+  // même ciel que la page (ils ont un fond papier gris en style inline).
+  useEffect(() => {
+    document.documentElement.classList.add('home-ciel');
+    return () => document.documentElement.classList.remove('home-ciel');
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -191,7 +198,6 @@ export default function HomeApercu() {
 
       <Flow fr={fr} />
       <PlansTeaser fr={fr} />
-      <DemoVideo fr={fr} />
       <Security fr={fr} />
       <Faq fr={fr} />
       <FinalCta fr={fr} onDemo={() => setDemoOpen(true)} />
@@ -204,10 +210,12 @@ export default function HomeApercu() {
 /* CSS de la page, à côté du composant : pas de dépendance à la config
    Tailwind, préfixe `ha-` pour ne rien écraser ailleurs. */
 const HOME_APERCU_CSS = `
-.home-apercu { --forest:#1F5F4F; --mint:#3FAF97; --mint-soft:#dff3ec; --amber:#b45309; --amber-soft:#fef3c7; --line:#e5e5e0; color:#171717; }
+.home-apercu { --forest:#1F5F4F; --mint:#3FAF97; --mint-soft:#dff3ec; --amber:#b45309; --amber-soft:#fef3c7; --line:#e5e5e0; color:#171717; background:linear-gradient(180deg,#e6f0ff 0%, #eef5ff 30%, #f3f8ff 100%); }
+.home-ciel .marketing-landing > header { background-color:rgba(230,240,255,.92) !important; background-image:none !important; border-bottom-color:rgba(11,92,173,.14) !important; backdrop-filter:blur(8px); }
+.home-ciel .marketing-landing footer { background-color:#eef5ff !important; background-image:none !important; border-top-color:rgba(11,92,173,.14) !important; }
 .home-apercu .ha-kicker { font-size:11px; letter-spacing:.2em; text-transform:uppercase; font-weight:600; color:var(--forest); margin:0; }
 
-.ha-hero { position:relative; overflow:hidden; background:linear-gradient(180deg,#e9f2ff 0%, #f5f9ff 40%, #ffffff 100%); padding-top:88px; }
+.ha-hero { position:relative; overflow:hidden; background:transparent; padding-top:88px; }
 .ha-cloud { position:absolute; border-radius:50%; background:#fff; filter:blur(2px); opacity:.9; pointer-events:none; }
 .ha-c1 { width:520px; height:170px; left:-120px; top:140px; } .ha-c2 { width:380px; height:130px; right:-60px; top:100px; }
 .ha-head { position:relative; z-index:2; max-width:820px; margin:0 auto; padding:26px 24px 8px; text-align:center; }
