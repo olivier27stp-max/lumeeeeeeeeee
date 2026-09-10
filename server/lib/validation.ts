@@ -130,6 +130,13 @@ export const messageSendSchema = z.object({
 
 // ─── Lume Agent ───────────────────────────────────────────────────────────────
 
+/* POST /agent/transcribe — audio du micro (base64), 60 s max ≈ 4 Mo encodés. */
+export const agentTranscribeSchema = z.object({
+  audio: z.string().min(100, 'Audio is empty.').max(5_600_000, 'Audio too long (60 s max).'),
+  mimeType: z.enum(['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/wav', 'audio/mpeg', 'audio/aac']),
+  language: z.enum(['fr', 'en']).optional(),
+});
+
 export const agentChatSchema = z.object({
   messages: z
     .array(
