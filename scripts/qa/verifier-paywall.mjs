@@ -75,7 +75,7 @@ try {
   ok('avec abonnement actif, /api/clients/search répond (200)', r4.status === 200, `→ ${r4.status}`);
 } finally {
   if (subId) await admin.from('subscriptions').delete().eq('id', subId);
-  if (orgId) { await admin.from('memberships').delete().eq('org_id', orgId); await admin.from('orgs').delete().eq('id', orgId); }
+  if (orgId) { await admin.from('memberships').delete().eq('org_id', orgId); await admin.from('team_members').delete().eq('org_id', orgId); await admin.from('orgs').delete().eq('id', orgId); }
   if (userId) await admin.auth.admin.deleteUser(userId);
 }
 
