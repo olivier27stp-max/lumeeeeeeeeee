@@ -288,6 +288,17 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.text(`${footerLabel} ${footerDate}`, marginL, footerY);
 
   // ── Download ────────────────────────────────────────────────────
-  const filename = `${invoice.invoice_number.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`;
+  // Nom parlant : « facture-<numéro>-<org>-<AAAA-MM-JJ>.pdf » au lieu d'un
+  // simple « 2.pdf » (audit QA C-2). Chaque partie est nettoyée pour un nom de
+  // fichier valide, et les segments vides sont sautés.
+  const slug = (s: string) => s.trim().replace(/[^a-zA-Z0-9-_]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+  const prefix = isFr() ? 'facture' : 'invoice';
+  const parts = [
+    prefix,
+    slug(String(invoice.invoice_number || '')),
+    company?.company_name ? slug(company.company_name) : '',
+    new Date().toISOString().slice(0, 10),
+  ].filter(Boolean);
+  const filename = `${parts.join('-')}.pdf`;
   doc.save(filename);
 }

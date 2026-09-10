@@ -1191,6 +1191,11 @@ function AuthenticatedApp({
                     setIsSidebarHovered(false);
                   }
                 }}
+                aria-label={
+                  isSidebarOpen
+                    ? (language === 'fr' ? 'Réduire le menu' : 'Collapse menu')
+                    : (language === 'fr' ? 'Étendre le menu' : 'Expand menu')
+                }
                 className="p-1.5 rounded-lg text-sidebar-text hover:text-sidebar-text-active hover:bg-sidebar-hover transition-all"
               >
                 {isSidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
