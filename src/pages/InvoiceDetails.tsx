@@ -257,8 +257,11 @@ export default function InvoiceDetails() {
                 type="button"
                 className="glass-button inline-flex items-center gap-1.5 text-[12px]"
                 onClick={() => {
-                  const API_BASE = import.meta.env.VITE_API_URL || window.location.origin;
-                  const link = `${API_BASE}/q/${invoice.view_token}`;
+                  // Lien direct vers la page publique de facture (audit QA
+                  // 2026-09-09 n°1 : /q/ redirigeait vers la page de DEVIS →
+                  // « Soumission introuvable » pour le client). /q/ redirige
+                  // encore, pour les liens déjà envoyés.
+                  const link = `${window.location.origin}/invoice/${invoice.view_token}`;
                   navigator.clipboard.writeText(link);
                   setLinkCopied(true);
                   toast.success(t.invoiceDetails.linkCopied);

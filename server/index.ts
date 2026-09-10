@@ -32,6 +32,7 @@ import leadsRouter from './routes/leads';
 import paymentsRouter, { stripeWebhookHandler } from './routes/payments';
 import messagesRouter from './routes/messages';
 import quotesRouter, { quoteRedirectRouter } from './routes/quotes';
+import invoicesPublicRouter from './routes/invoices-public';
 import agreementsRouter from './routes/agreements';
 import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
@@ -756,6 +757,7 @@ app.use('/q', redisRateLimit({
 }));
 app.use('/', quoteRedirectRouter);
 app.use('/api', quotesRouter);
+app.use('/api', invoicesPublicRouter);
 app.use('/api', agreementsRouter);
 const surveyLimiter = rateLimit({ windowMs: 60_000, max: 10 }); // per IP
 app.use('/api/survey', surveyLimiter);

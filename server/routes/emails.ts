@@ -199,7 +199,8 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     const company = await getCompanySettings(orgId);
     const amountStr = formatCurrency(invoice.total_cents || invoice.balance_cents || 0, invoice.currency || 'CAD');
     const baseUrl = resolvePublicBaseUrl(req);
-    const viewUrl = invoice.view_token ? `${baseUrl}/q/${invoice.view_token}` : null;
+    // Page publique de facture (audit QA 2026-09-09 n°1) — /q/ redirige encore.
+    const viewUrl = invoice.view_token ? `${baseUrl}/invoice/${invoice.view_token}` : null;
 
     // Resolve email subject and body
     let emailSubject = customSubject || `Invoice ${invoice.invoice_number || ''} — ${amountStr}`;

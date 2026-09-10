@@ -24,6 +24,7 @@
  */
 export const CHEMINS_PUBLICS = [
   '/quote/',     // soumission envoyée par texto ou courriel
+  '/invoice/',   // facture envoyée au client (lien « Link » de la fiche)
   '/contract/',  // contrat à signer
   '/survey/',    // sondage après intervention
   '/portal/',    // portail client
