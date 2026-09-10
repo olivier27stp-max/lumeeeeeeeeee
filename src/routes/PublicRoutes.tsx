@@ -8,7 +8,10 @@ import Terms from '../pages/Terms';
 import Subprocessors from '../pages/Subprocessors';
 import MarketingNotFound from '../pages/marketing/NotFound';
 import MarketingLayout from '../components/marketing/MarketingLayout';
-import MarketingHome from '../pages/marketing/Home';
+// Accueil « aperçu » (sept. 2026). L'ancienne page `pages/marketing/Home.tsx`
+// reste dans le dépôt, non routée, pour pouvoir y revenir.
+import MarketingHome from '../pages/marketing/HomeApercu';
+import MarketingFonction from '../pages/marketing/FonctionDetail';
 import MarketingFeatures from '../pages/marketing/Features';
 import MarketingSolutions from '../pages/marketing/Solutions';
 import MarketingIndustries from '../pages/marketing/Industries';
@@ -57,6 +60,7 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
       <Route element={<MarketingLayout />}>
         <Route index element={<MarketingHome />} />
         <Route path="features" element={<MarketingFeatures />} />
+        <Route path="fonctions/:slug" element={<MarketingFonction />} />
         <Route path="solutions" element={<MarketingSolutions />} />
         <Route path="industries" element={<MarketingIndustries />} />
         <Route path="industries/:slug" element={<MarketingIndustryDetail />} />

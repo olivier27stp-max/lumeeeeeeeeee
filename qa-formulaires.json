@@ -1,0 +1,52 @@
+{
+  "genereLe": "2026-09-02T21:09:43.577Z",
+  "passees": 3,
+  "total": 9,
+  "resultats": [
+    {
+      "nom": "le champ « Acme Corp » accepte la saisie",
+      "vrai": true,
+      "detail": ""
+    },
+    {
+      "nom": "la valeur survit au rechargement",
+      "vrai": false,
+      "detail": "PERDUE — la saisie ne tient pas"
+    },
+    {
+      "nom": "elle est bien arrivée en base",
+      "vrai": false,
+      "detail": "absente de company_settings — l'écran affiche une valeur qui n'existe pas"
+    },
+    {
+      "nom": "le champ « Olivier » accepte la saisie",
+      "vrai": true,
+      "detail": ""
+    },
+    {
+      "nom": "la valeur survit au rechargement",
+      "vrai": false,
+      "detail": "PERDUE — la saisie ne tient pas"
+    },
+    {
+      "nom": "elle est bien arrivée en base",
+      "vrai": false,
+      "detail": "absente de profiles — l'écran affiche une valeur qui n'existe pas"
+    },
+    {
+      "nom": "le champ « Demande de service » accepte la saisie",
+      "vrai": true,
+      "detail": ""
+    },
+    {
+      "nom": "la valeur survit au rechargement",
+      "vrai": false,
+      "detail": "PERDUE — la saisie ne tient pas"
+    },
+    {
+      "nom": "elle est bien arrivée en base",
+      "vrai": false,
+      "detail": "absente de request_forms — l'écran affiche une valeur qui n'existe pas"
+    }
+  ]
+}

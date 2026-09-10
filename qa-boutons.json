@@ -1,0 +1,120 @@
+{
+  "genereLe": "2026-09-06T17:19:09.145Z",
+  "compte": "willhebert30@gmail.com",
+  "orgId": "eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+  "resume": {
+    "pages": 18,
+    "boutonsTrouves": 0,
+    "boutonsTestes": 0
+  },
+  "pages": [
+    {
+      "chemin": "/day",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/messages",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/clients",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/requests",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/jobs",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/calendar",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/quotes",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/finances",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/insights",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/timesheets",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/settings/marketplace",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/automations",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/tasks",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/courses",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/field-sales",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/pipeline",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/leaderboard",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    },
+    {
+      "chemin": "/commissions",
+      "total": 0,
+      "testes": 0,
+      "resultats": []
+    }
+  ]
+}

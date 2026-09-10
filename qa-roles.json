@@ -1,0 +1,92 @@
+{
+  "genereLe": "2026-09-03T21:10:05.841Z",
+  "passees": 17,
+  "total": 17,
+  "resultats": [
+    {
+      "nom": "les jobs lui sont refusés en bloc",
+      "vrai": true,
+      "detail": "refus : column jobs.unit_price_cents does not exist"
+    },
+    {
+      "nom": "les factures lui sont inaccessibles",
+      "vrai": true,
+      "detail": "0 facture(s) visible(s)"
+    },
+    {
+      "nom": "les devis lui sont inaccessibles",
+      "vrai": true,
+      "detail": "0 devis visible(s)"
+    },
+    {
+      "nom": "il ne voit rien d'une autre organisation",
+      "vrai": true,
+      "detail": ""
+    },
+    {
+      "nom": "il accède à ses clients",
+      "vrai": true,
+      "detail": "3 client(s)"
+    },
+    {
+      "nom": "il accède aux devis",
+      "vrai": true,
+      "detail": "3 devis"
+    },
+    {
+      "nom": "il ne voit rien d'une autre organisation",
+      "vrai": true,
+      "detail": ""
+    },
+    {
+      "nom": "il accède à invoices",
+      "vrai": true,
+      "detail": "3 ligne(s)"
+    },
+    {
+      "nom": "il accède à quotes",
+      "vrai": true,
+      "detail": "3 ligne(s)"
+    },
+    {
+      "nom": "il accède à jobs",
+      "vrai": true,
+      "detail": "3 ligne(s)"
+    },
+    {
+      "nom": "il accède à clients",
+      "vrai": true,
+      "detail": "3 ligne(s)"
+    },
+    {
+      "nom": "il voit les montants des factures",
+      "vrai": true,
+      "detail": "162690 cents"
+    },
+    {
+      "nom": "il ne voit rien d’une autre organisation",
+      "vrai": true,
+      "detail": ""
+    },
+    {
+      "nom": "il voit les prix (financial.view_pricing)",
+      "vrai": true,
+      "detail": "oui"
+    },
+    {
+      "nom": "il ne peut pas modifier les réglages de l’entreprise",
+      "vrai": true,
+      "detail": "création refusée : new row violates row-level security poli"
+    },
+    {
+      "nom": "il voit les factures et leurs montants",
+      "vrai": true,
+      "detail": "3 facture(s)"
+    },
+    {
+      "nom": "même lui ne voit rien d'une autre organisation",
+      "vrai": true,
+      "detail": ""
+    }
+  ]
+}

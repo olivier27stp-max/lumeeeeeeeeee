@@ -1438,6 +1438,30 @@ tr[data-status="cancelled"] {
 .marketing-landing {
   transition: margin-right 0.28s ease;
 }
+/* Ciel bleu clair sur toutes les pages marketing (accueil, tarifs, fonctions,
+   industries…). Les sections qui posaient leur propre fond papier en style
+   inline sont neutralisées ici pour prendre le ciel ; les sections sombres
+   (bg-text-primary) gardent leur fond. */
+.marketing-landing {
+  background: linear-gradient(180deg, #e6f0ff 0%, #eef5ff 30%, #f3f8ff 100%);
+  background-attachment: fixed;
+}
+.marketing-landing [style*="paper-texture.png"] {
+  background-image: none !important;
+  background-color: transparent !important;
+}
+.marketing-landing > header {
+  background-color: rgba(230, 240, 255, 0.92) !important;
+  background-image: none !important;
+  border-bottom-color: rgba(11, 92, 173, 0.14) !important;
+  backdrop-filter: blur(8px);
+}
+.marketing-landing footer {
+  background-color: #eef5ff !important;
+  background-image: none !important;
+  border-top-color: rgba(11, 92, 173, 0.14) !important;
+}
+
 /* Le header marketing est en position:fixed w-full — la marge du parent ne
    le décale donc pas. On rétrécit sa largeur pour qu'il s'arrête au bord du
    panneau Lumi au lieu de passer dessous. */

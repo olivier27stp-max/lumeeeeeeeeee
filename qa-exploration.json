@@ -1,0 +1,1188 @@
+{
+  "genereLe": "2026-09-03T18:22:51.425Z",
+  "mode": "observation",
+  "environnement": "staging",
+  "compte": "willhebert30@gmail.com",
+  "orgId": "eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+  "role": "owner",
+  "resume": {
+    "pagesVisitees": 53,
+    "sansProbleme": 44,
+    "avecAnomalie": 3,
+    "pagesBlanches": 1,
+    "pagesIntrouvables": 0,
+    "accesRefuses": 0,
+    "reponsesVides": 53
+  },
+  "pages": [
+    {
+      "chemin": "/checkout/success",
+      "permission": null,
+      "fichier": "src/pages/CheckoutSuccess",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "erreur",
+      "dureeMs": 11723,
+      "anomalies": [
+        "chargement lent : 11.7 s"
+      ],
+      "capture": "qa-captures/checkout_success.png"
+    },
+    {
+      "chemin": "/checkout",
+      "permission": null,
+      "fichier": "src/pages/OnboardingFlow",
+      "erreursConsole": [
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "[exception] AbortError: Lock broken by another request with the 'steal' option.",
+        "Failed to load resource: the server responded with a status of 403 ()"
+      ],
+      "requetesEchouees": [
+        {
+          "code": 403,
+          "url": "/rest/v1/orgs?select=id"
+        }
+      ],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "page_blanche",
+      "dureeMs": 12202,
+      "anomalies": [
+        "la page est vide — aucun contenu affiché",
+        "9 erreur(s) dans la console",
+        "1 requête(s) en échec",
+        "chargement lent : 12.2 s"
+      ],
+      "capture": "qa-captures/checkout.png"
+    },
+    {
+      "chemin": "/privacy",
+      "permission": null,
+      "fichier": "src/pages/Privacy",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 4031,
+      "anomalies": [],
+      "consentementsFermes": 1,
+      "capture": "qa-captures/privacy.png"
+    },
+    {
+      "chemin": "/terms",
+      "permission": null,
+      "fichier": "src/pages/Terms",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3857,
+      "anomalies": [],
+      "capture": "qa-captures/terms.png"
+    },
+    {
+      "chemin": "/subprocessors",
+      "permission": null,
+      "fichier": "src/pages/Subprocessors",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3842,
+      "anomalies": [],
+      "capture": "qa-captures/subprocessors.png"
+    },
+    {
+      "chemin": "/day",
+      "permission": "settings.read",
+      "fichier": "src/pages/CrmWorkspace",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/tasks_active?select=id%2Ctitle%2Cdue_date%2Cpriority%2Cstatus&status=eq.open&due_date=not.is.null&order=due_date.asc&limit=100",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/invoices?select=invoice_number%2Ctotal_cents%2Cpaid_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&status=eq.paid&deleted_at=is.null&paid_at=gte.202",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/schedule_events?select=id%2Cstart_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&start_at=gte.2026-09-03T18%3A18%3A49.123Z&start_",
+        "/rest/v1/pipeline_deals?select=id%2Clead_id%2Cstage%2Cvalue%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&org_id=eq.eeda2ab3-08",
+        "/rest/v1/schedule_events?select=id&deleted_at=is.null&start_at=gte.2026-09-03T04%3A00%3A00.000Z&start_at=lte.2026-09-04T03%3A59%3A59.999Z&org_id=eq.eeda2ab3-08d",
+        "/rest/v1/schedule_events?select=id%2Cjob_id%2Cstart_at%2Cstatus&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&job_id=not.is.null&start_at=gt",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/pipeline_deals?select=id%2Cstage&deleted_at=is.null&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/jobs_active?select=id%2Cstatus%2Ctotal_amount%2Ctotal_cents%2Cupdated_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&updated_at=gte.2026-09-03T04%3A",
+        "/rest/v1/pipeline_deals?select=id%2Cstage%2Ccreated_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&created_at=gte.2026-09-03T04%3A00%3A00.",
+        "/rest/v1/schedule_events?select=id%2Cjob_id%2Cstart_at%2Cend_at%2Cstatus%2Cteam_id%2Cteam%3Ateams%21schedule_events_team_id_fkey%28id%2Ccolor_hex%29%2Cjob%3Ajob",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3833,
+      "anomalies": [],
+      "capture": "qa-captures/day.png"
+    },
+    {
+      "chemin": "/messages",
+      "permission": "messages.read",
+      "fichier": "src/pages/Messages",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=last_message_at.desc",
+        "/rest/v1/conversations?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=last_message_at.desc"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3697,
+      "anomalies": [],
+      "capture": "qa-captures/messages.png"
+    },
+    {
+      "chemin": "/clients",
+      "permission": "clients.read",
+      "fichier": "src/pages/Clients",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/client_tags?select=client_id%2Ctag&client_id=in.%28b35c3341-a3f4-45f6-a1fc-43bfc8e399c4%2C4c5f8cdc-f865-4a8b-825a-bedaedbe0b2e%2Cb33cf33a-f23d-4e80-bb7",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/client_tags?select=client_id%2Ctag&client_id=in.%28b35c3341-a3f4-45f6-a1fc-43bfc8e399c4%2C4c5f8cdc-f865-4a8b-825a-bedaedbe0b2e%2Cb33cf33a-f23d-4e80-bb7"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3697,
+      "anomalies": [],
+      "capture": "qa-captures/clients.png"
+    },
+    {
+      "chemin": "/clients/new",
+      "permission": "clients.create",
+      "fichier": "src/pages/NewClient",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/lead_sources?select=id%2Corg_id%2Cname&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=name.asc",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/lead_sources?select=id%2Corg_id%2Cname&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=name.asc",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3812,
+      "anomalies": [],
+      "capture": "qa-captures/clients_new.png"
+    },
+    {
+      "chemin": "/requests",
+      "permission": "clients.read",
+      "fichier": "src/pages/Requests",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3735,
+      "anomalies": [],
+      "capture": "qa-captures/requests.png"
+    },
+    {
+      "chemin": "/jobs",
+      "permission": "jobs.read",
+      "fichier": "src/pages/Jobs",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/quotes?select=id%2Cclients%21quotes_client_id_fkey%28id%29%2Cleads%3Aclients%21quotes_lead_id_fkey%28id%29%2Cproperties%21quotes_property_id_fkey%28id%",
+        "/rest/v1/invoices?select=id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&status=eq.sent&due_date=lt.2026-09-03",
+        "/rest/v1/notifications?select=id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&is_read=eq.false",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/jobs_active?select=job_type&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&job_type=not.is.null&limit=500",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/job_tags?select=id%2Corg_id%2Cname%2Ccolor_hex&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&order=name.asc",
+        "/rest/v1/jobs_active?select=job_type&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&job_type=not.is.null&limit=500",
+        "/rest/v1/job_tags?select=id%2Corg_id%2Cname%2Ccolor_hex&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&order=name.asc",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3557,
+      "anomalies": [],
+      "capture": "qa-captures/jobs.png"
+    },
+    {
+      "chemin": "/calendar",
+      "permission": "calendar.read",
+      "fichier": "src/pages/Schedule",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/job_tags?select=id%2Corg_id%2Cname%2Ccolor_hex&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&order=name.asc",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/schedule_events?select=id%2Cjob_id%2Cteam_id%2Cstart_at%2Cend_at%2Ctimezone%2Cstatus%2Cnotes%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833c",
+        "/rest/v1/job_tags?select=id%2Corg_id%2Cname%2Ccolor_hex&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&order=name.asc",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/job_tags?select=id%2Corg_id%2Cname%2Ccolor_hex&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&order=name.asc",
+        "/rest/v1/job_tags?select=id%2Corg_id%2Cname%2Ccolor_hex&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&order=name.asc"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3701,
+      "anomalies": [],
+      "capture": "qa-captures/calendar.png"
+    },
+    {
+      "chemin": "/search",
+      "permission": "settings.read",
+      "fichier": "src/pages/SearchResults",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/tasks_active?select=id%2Ctitle%2Cdue_date%2Cpriority%2Cstatus&status=eq.open&due_date=not.is.null&order=due_date.asc&limit=100",
+        "/rest/v1/schedule_events?select=id%2Cjob_id%2Cstart_at%2Cstatus&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&job_id=not.is.null&start_at=gt",
+        "/rest/v1/invoices?select=invoice_number%2Ctotal_cents%2Cpaid_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&status=eq.paid&deleted_at=is.null&paid_at=gte.202",
+        "/rest/v1/schedule_events?select=id%2Cjob_id%2Cstart_at%2Cend_at%2Cstatus%2Cteam_id%2Cteam%3Ateams%21schedule_events_team_id_fkey%28id%2Ccolor_hex%29%2Cjob%3Ajob",
+        "/rest/v1/pipeline_deals?select=id%2Clead_id%2Cstage%2Cvalue%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&org_id=eq.eeda2ab3-08",
+        "/rest/v1/schedule_events?select=id%2Cstart_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&start_at=gte.2026-09-03T18%3A19%3A24.463Z&start_",
+        "/rest/v1/jobs_active?select=id%2Cstatus%2Ctotal_amount%2Ctotal_cents%2Cupdated_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&updated_at=gte.2026-09-03T04%3A",
+        "/rest/v1/pipeline_deals?select=id%2Cstage%2Ccreated_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&created_at=gte.2026-09-03T04%3A00%3A00.",
+        "/rest/v1/schedule_events?select=id&deleted_at=is.null&start_at=gte.2026-09-03T04%3A00%3A00.000Z&start_at=lte.2026-09-04T03%3A59%3A59.999Z&org_id=eq.eeda2ab3-08d",
+        "/rest/v1/pipeline_deals?select=id%2Cstage&deleted_at=is.null&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3830,
+      "anomalies": [],
+      "redirigeVers": "/day",
+      "capture": "qa-captures/search.png"
+    },
+    {
+      "chemin": "/quotes",
+      "permission": "quotes.read",
+      "fichier": "src/pages/Quotes",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3679,
+      "anomalies": [],
+      "capture": "qa-captures/quotes.png"
+    },
+    {
+      "chemin": "/quotes/new",
+      "permission": "quotes.read",
+      "fichier": "src/pages/QuoteNew",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 4195,
+      "anomalies": [],
+      "capture": "qa-captures/quotes_new.png"
+    },
+    {
+      "chemin": "/quotes/measure",
+      "permission": "quotes.read",
+      "fichier": "src/pages/QuoteMeasure",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/predefined_services?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&is_active=eq.true&order=sort_order.asc%2Cname.asc"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 5028,
+      "anomalies": [],
+      "capture": "qa-captures/quotes_measure.png"
+    },
+    {
+      "chemin": "/quotes/presets",
+      "permission": "settings.read",
+      "fichier": "src/pages/QuotePresets",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3521,
+      "anomalies": [],
+      "capture": "qa-captures/quotes_presets.png"
+    },
+    {
+      "chemin": "/quotes/templates",
+      "permission": "settings.read",
+      "fichier": "src/pages/QuotePresets",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3803,
+      "anomalies": [],
+      "capture": "qa-captures/quotes_templates.png"
+    },
+    {
+      "chemin": "/finances",
+      "permission": "invoices.read",
+      "fichier": "src/pages/Finances",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3697,
+      "anomalies": [],
+      "capture": "qa-captures/finances.png"
+    },
+    {
+      "chemin": "/invoices/new",
+      "permission": "invoices.create",
+      "fichier": "src/pages/InvoiceEdit",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3805,
+      "anomalies": [],
+      "capture": "qa-captures/invoices_new.png"
+    },
+    {
+      "chemin": "/insights",
+      "permission": "reports.read",
+      "fichier": "src/pages/Statistiques",
+      "erreursConsole": [
+        "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+      ],
+      "requetesEchouees": [
+        {
+          "code": 403,
+          "url": "http://localhost:5173/api/payments/payouts/summary?orgId=eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&provider=stripe"
+        }
+      ],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/rpc/rpc_list_payments",
+        "/rest/v1/quotes?select=total_cents%2Clead_id%2Cclient_id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&status=in.%28awaiting_response%2Cchan",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/rpc/rpc_insights_team_performance",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/time_entries?select=job_id%2Cemployee_id%2Cpunch_in%2Cpunch_out%2Cbreaks&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&job_id=in.%28122ea5de-bf7a-4fa3"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3807,
+      "anomalies": [
+        "1 erreur(s) dans la console",
+        "1 requête(s) en échec"
+      ],
+      "capture": "qa-captures/insights.png"
+    },
+    {
+      "chemin": "/payments",
+      "permission": null,
+      "fichier": null,
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/rpc/rpc_list_payments",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3884,
+      "anomalies": [],
+      "redirigeVers": "/finances?tab=paiements",
+      "capture": "qa-captures/payments.png"
+    },
+    {
+      "chemin": "/timesheets",
+      "permission": "timesheets.read",
+      "fichier": "src/pages/Timesheets",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/time_entries?select=id%2Cpunch_in_at%2Cstatus%2Cbreaks&employee_id=eq.49e36525-d8f8-4acd-aa01-5e1baf4b2652&status=eq.active",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/team_assignments?select=user_id%2Cteam_id%2Cis_primary&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/time_entries?select=id%2Cemployee_id%2Cemployee_name%2Cdate%2Cpunch_in%2Cpunch_out%2Cpunch_in_at%2Cpunch_out_at%2Cbreaks%2Cnotes%2Cjob_id%2Cstatus&org_",
+        "/rest/v1/time_entries?select=id%2Cpunch_in_at%2Cstatus%2Cbreaks&employee_id=eq.49e36525-d8f8-4acd-aa01-5e1baf4b2652&status=eq.active",
+        "/rest/v1/time_entries?select=id%2Cemployee_id%2Cemployee_name%2Cdate%2Cpunch_in%2Cpunch_out%2Cpunch_in_at%2Cpunch_out_at%2Cbreaks%2Cnotes%2Cjob_id%2Cstatus&org_",
+        "/rest/v1/time_entries?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=date.desc",
+        "/rest/v1/time_entries?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=date.desc"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3854,
+      "anomalies": [],
+      "capture": "qa-captures/timesheets.png"
+    },
+    {
+      "chemin": "/settings",
+      "permission": null,
+      "fichier": null,
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3731,
+      "anomalies": [],
+      "redirigeVers": "/settings/profile",
+      "capture": "qa-captures/settings.png"
+    },
+    {
+      "chemin": "/settings/profile",
+      "permission": "settings.read",
+      "fichier": "src/pages/settings/ProfileSettings",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3718,
+      "anomalies": [],
+      "capture": "qa-captures/settings_profile.png"
+    },
+    {
+      "chemin": "/settings/company",
+      "permission": "settings.update",
+      "fichier": "src/pages/CompanySettings",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3702,
+      "anomalies": [],
+      "capture": "qa-captures/settings_company.png"
+    },
+    {
+      "chemin": "/settings/billing",
+      "permission": "settings.read",
+      "fichier": "src/pages/settings/BillingSettings",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3844,
+      "anomalies": [],
+      "capture": "qa-captures/settings_billing.png"
+    },
+    {
+      "chemin": "/settings/products",
+      "permission": "settings.update",
+      "fichier": "src/pages/ProductsServices",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/predefined_services?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&is_active=eq.true&order=sort_order.asc%2Cname.asc",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/predefined_services?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&is_active=eq.true&order=sort_order.asc%2Cname.asc",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3802,
+      "anomalies": [],
+      "capture": "qa-captures/settings_products.png"
+    },
+    {
+      "chemin": "/settings/taxes",
+      "permission": "settings.update",
+      "fichier": "src/pages/TaxSettings",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3340,
+      "anomalies": [],
+      "capture": "qa-captures/settings_taxes.png"
+    },
+    {
+      "chemin": "/settings/payments",
+      "permission": "settings.read",
+      "fichier": "src/pages/PaymentSettings",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3805,
+      "anomalies": [],
+      "capture": "qa-captures/settings_payments.png"
+    },
+    {
+      "chemin": "/settings/messaging",
+      "permission": "settings.read",
+      "fichier": "src/pages/SettingsMessaging",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "abonnement_bloque",
+      "dureeMs": 3335,
+      "anomalies": [],
+      "capture": "qa-captures/settings_messaging.png"
+    },
+    {
+      "chemin": "/settings/request-form",
+      "permission": "settings.update",
+      "fichier": "src/pages/RequestFormSettings",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3921,
+      "anomalies": [],
+      "capture": "qa-captures/settings_request_form.png"
+    },
+    {
+      "chemin": "/settings/team",
+      "permission": "team.read",
+      "fichier": "src/pages/ManageTeam",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/time_entries?select=punch_in_at%2Cpunch_out_at%2Cbreaks%2Cemployee_id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&employee_id=in.%2805d44ec1-fb4c-49",
+        "/rest/v1/jobs?select=status%2Ctotal_amount%2Csalesperson_id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&salesperson_id=in.%2805d44ec1-fb4c-49ae-82a6-cf3f52f6",
+        "/rest/v1/jobs?select=status%2Ctotal_amount%2Csalesperson_id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&salesperson_id=in.%2805d44ec1-fb4c-49ae-82a6-cf3f52f6",
+        "/rest/v1/time_entries?select=punch_in_at%2Cpunch_out_at%2Cbreaks%2Cemployee_id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&employee_id=in.%2805d44ec1-fb4c-49",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3854,
+      "anomalies": [],
+      "capture": "qa-captures/settings_team.png"
+    },
+    {
+      "chemin": "/settings/roles",
+      "permission": "users.update_role",
+      "fichier": "src/pages/SettingsRoles",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3694,
+      "anomalies": [],
+      "capture": "qa-captures/settings_roles.png"
+    },
+    {
+      "chemin": "/settings/payroll",
+      "permission": "settings.read",
+      "fichier": "src/pages/settings/PayrollPage",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3718,
+      "anomalies": [],
+      "capture": "qa-captures/settings_payroll.png"
+    },
+    {
+      "chemin": "/settings/location",
+      "permission": "settings.read",
+      "fichier": "src/pages/settings/LocationSettings",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3714,
+      "anomalies": [],
+      "capture": "qa-captures/settings_location.png"
+    },
+    {
+      "chemin": "/settings/archives",
+      "permission": "settings.read",
+      "fichier": "src/components/ArchivesPanel",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/invoices?select=id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&deleted_at=is.null&status=eq.sent&due_date=lt.2026-09-03",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 2862,
+      "anomalies": [],
+      "capture": "qa-captures/settings_archives.png"
+    },
+    {
+      "chemin": "/settings/marketplace",
+      "permission": "integrations.read",
+      "fichier": "src/pages/AppMarketplace",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3919,
+      "anomalies": [],
+      "capture": "qa-captures/settings_marketplace.png"
+    },
+    {
+      "chemin": "/settings/support",
+      "permission": "settings.read",
+      "fichier": "src/components/SupportPage",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 2527,
+      "anomalies": [],
+      "capture": "qa-captures/settings_support.png"
+    },
+    {
+      "chemin": "/account/privacy",
+      "permission": null,
+      "fichier": "src/pages/PrivacyCenter",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3559,
+      "anomalies": [],
+      "capture": "qa-captures/account_privacy.png"
+    },
+    {
+      "chemin": "/automations",
+      "permission": "automations.read",
+      "fichier": "src/pages/Automations",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/notifications?select=id&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&is_read=eq.false",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3956,
+      "anomalies": [],
+      "capture": "qa-captures/automations.png"
+    },
+    {
+      "chemin": "/tasks",
+      "permission": "settings.read",
+      "fichier": "src/pages/Tasks",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/tasks_active?select=*&order=created_at.desc&offset=0&limit=20",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3364,
+      "anomalies": [],
+      "capture": "qa-captures/tasks.png"
+    },
+    {
+      "chemin": "/courses",
+      "permission": "settings.read",
+      "fichier": "src/pages/Courses",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3834,
+      "anomalies": [],
+      "capture": "qa-captures/courses.png"
+    },
+    {
+      "chemin": "/courses/new",
+      "permission": "settings.update",
+      "fichier": "src/pages/CourseBuilder",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3873,
+      "anomalies": [],
+      "capture": "qa-captures/courses_new.png"
+    },
+    {
+      "chemin": "/dispatch",
+      "permission": "map.access",
+      "fichier": "src/pages/DispatchMap",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/tracking_live_locations?select=*&tracking_status=in.%28active%2Cidle%29&recorded_at=gte.2026-09-03T18%3A12%3A06.438Z",
+        "/rest/v1/tracking_live_locations?select=*&tracking_status=in.%28active%2Cidle%29&recorded_at=gte.2026-09-03T18%3A12%3A06.441Z",
+        "/rest/v1/schedule_events?select=id%2Cstart_at%2Cend_at%2Cstatus%2Cteam_id%2Cteam%3Ateams%21schedule_events_team_id_fkey%28name%2Ccolor_hex%29%2Cjob%3Ajobs%21sch",
+        "/rest/v1/technician_locations?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=recorded_at.desc",
+        "/rest/v1/schedule_events?select=id%2Cstart_at%2Cend_at%2Cstatus%2Cteam_id%2Cteam%3Ateams%21schedule_events_team_id_fkey%28name%2Ccolor_hex%29%2Cjob%3Ajobs%21sch",
+        "/rest/v1/geofences?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&active=eq.true&order=created_at.desc",
+        "/rest/v1/technician_locations?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=recorded_at.desc",
+        "/rest/v1/gps_providers?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&active=eq.true&limit=1",
+        "/rest/v1/gps_providers?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&active=eq.true&limit=1",
+        "/rest/v1/geofences?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&active=eq.true&order=created_at.desc",
+        "/rest/v1/time_entries?select=employee_id&date=eq.2026-09-03&punch_out=is.null",
+        "/rest/v1/time_entries?select=employee_id&date=eq.2026-09-03&punch_out=is.null"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3863,
+      "anomalies": [],
+      "capture": "qa-captures/dispatch.png"
+    },
+    {
+      "chemin": "/field-sales",
+      "permission": "door_to_door.access",
+      "fichier": "src/pages/D2DMap",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "module_verrouille",
+      "dureeMs": 3857,
+      "anomalies": [],
+      "capture": "qa-captures/field_sales.png"
+    },
+    {
+      "chemin": "/pipeline",
+      "permission": "door_to_door.access",
+      "fichier": "src/pages/D2DPipeline",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "module_verrouille",
+      "dureeMs": 3914,
+      "anomalies": [],
+      "capture": "qa-captures/pipeline.png"
+    },
+    {
+      "chemin": "/leaderboard",
+      "permission": "reports.read",
+      "fichier": "src/pages/Leaderboard",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "module_verrouille",
+      "dureeMs": 3832,
+      "anomalies": [],
+      "capture": "qa-captures/leaderboard.png"
+    },
+    {
+      "chemin": "/commissions",
+      "permission": "commissions.read",
+      "fichier": "src/pages/Commissions",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3849,
+      "anomalies": [],
+      "capture": "qa-captures/commissions.png"
+    },
+    {
+      "chemin": "/d2d-reports",
+      "permission": "door_to_door.access",
+      "fichier": "src/pages/D2DReports",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "module_verrouille",
+      "dureeMs": 3604,
+      "anomalies": [],
+      "capture": "qa-captures/d2d_reports.png"
+    },
+    {
+      "chemin": "/d2d-onboarding",
+      "permission": "door_to_door.access",
+      "fichier": "src/pages/D2DOnboarding",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "module_verrouille",
+      "dureeMs": 3713,
+      "anomalies": [],
+      "capture": "qa-captures/d2d_onboarding.png"
+    },
+    {
+      "chemin": "/apps/callback",
+      "permission": "integrations.update",
+      "fichier": "src/pages/OAuthCallback",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3677,
+      "anomalies": [],
+      "redirigeVers": "/settings/marketplace",
+      "capture": "qa-captures/apps_callback.png"
+    },
+    {
+      "chemin": "/email/callback",
+      "permission": null,
+      "fichier": "src/pages/EmailOAuthCallback",
+      "erreursConsole": [],
+      "requetesEchouees": [],
+      "reponsesVides": [
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/location_tracking_settings?select=enabled&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/teams?select=id%2Corg_id%2Cname%2Ccolor_hex%2Cdescription%2Cis_active%2Ccreated_at%2Cupdated_at%2Cdeleted_at&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d8",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=unread_count&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf",
+        "/rest/v1/conversations?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=last_message_at.desc",
+        "/rest/v1/conversations?select=*&org_id=eq.eeda2ab3-08df-4fce-82e1-3aa9b7d833cf&order=last_message_at.desc"
+      ],
+      "ecran": "contenu",
+      "dureeMs": 3703,
+      "anomalies": [],
+      "redirigeVers": "/messages",
+      "capture": "qa-captures/email_callback.png"
+    }
+  ]
+}

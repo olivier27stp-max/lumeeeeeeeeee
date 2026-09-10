@@ -1,8 +1,9 @@
 import { motion } from 'motion/react';
 import { ArrowRight, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import BookDemoForm from '../../components/marketing/BookDemoForm';
 import { useTranslation } from '../../i18n';
+import { useRegion } from '../../hooks/useRegion';
 import TrustSection from '../../components/marketing/TrustSection';
 import type { Language } from '../../i18n';
 
@@ -13,16 +14,16 @@ type Bi = Record<Language, string>;
 interface Plan {
   name: string;
   slug: string;
+  /** L'étape de vie de l'entreprise que le forfait adresse — affichée au-dessus du nom. */
+  stage: Bi;
   users: Bi;
   extraUserPrice: Bi;
   offices: Bi;
   extraOfficePrice?: Bi;
-  monthlyPrice: number;
-  annualFullYr: number;
-  annualFirstYr: number;
+  /** Prix par devise (source : table `plans` en prod, colonnes *_cad / *_usd). */
+  prices: Record<'CAD' | 'USD', { monthly: number; annualFullYr: number; annualFirstYr: number; extraUser: number; extraOffice: number }>;
   badge?: Bi;
   desc: Bi;
-  features: Record<Language, string[]>;
   cta: Bi;
   featured: boolean;
 }
@@ -31,39 +32,15 @@ const PLANS: Plan[] = [
   {
     name: 'Minimum',
     slug: 'starter',
+    stage: { en: 'Getting started', fr: 'Je démarre' },
     users: { en: 'Includes 3 users', fr: '3 utilisateurs inclus' },
-    extraUserPrice: { en: '+$35/extra user/mo', fr: '+35 $/utilisateur suppl./mois' },
+    extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
     offices: { en: '1 office', fr: '1 bureau' },
-    monthlyPrice: 150,
-    annualFullYr: 1530,
-    annualFirstYr: 1300,
+    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
+    prices: { CAD: { monthly: 150, annualFullYr: 1530, annualFirstYr: 1300, extraUser: 35, extraOffice: 100 }, USD: { monthly: 110, annualFullYr: 1122, annualFirstYr: 954, extraUser: 35, extraOffice: 100 } },
     desc: {
-      en: 'Perfect for small teams getting started and staying organized.',
-      fr: 'Parfait pour les petites équipes qui démarrent et veulent rester organisées.',
-    },
-    features: {
-      en: [
-        'CRM dashboard',
-        'Client management + client portal',
-        'Quotes & invoicing',
-        'Jobs & calendar',
-        'Online payments (Stripe & PayPal)',
-        'Tasks & leads pipeline',
-        'Email communications',
-        'Mobile access',
-        'Basic reporting',
-      ],
-      fr: [
-        'Tableau de bord CRM',
-        'Gestion des clients + portail client',
-        'Soumissions et facturation',
-        'Jobs et calendrier',
-        'Paiements en ligne (Stripe et PayPal)',
-        'Tâches et pipeline de leads',
-        'Communications par courriel',
-        'Accès mobile',
-        'Rapports de base',
-      ],
+      en: 'Everything you need to run the business solo or with a small crew.',
+      fr: 'Tout ce qu\'il faut pour rouler votre entreprise seul ou avec une petite équipe.',
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: false,
@@ -71,57 +48,16 @@ const PLANS: Plan[] = [
   {
     name: 'Scale',
     slug: 'pro',
+    stage: { en: 'I have a team', fr: 'J\'ai une équipe' },
     users: { en: 'Includes 10 users', fr: '10 utilisateurs inclus' },
-    extraUserPrice: { en: '+$30/extra user/mo', fr: '+30 $/utilisateur suppl./mois' },
+    extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
     offices: { en: '2 offices', fr: '2 bureaux' },
-    extraOfficePrice: { en: '+$100/extra office', fr: '+100 $/bureau suppl.' },
-    monthlyPrice: 340,
-    annualFullYr: 3468,
-    annualFirstYr: 2948,
+    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
+    prices: { CAD: { monthly: 340, annualFullYr: 3468, annualFirstYr: 2948, extraUser: 30, extraOffice: 100 }, USD: { monthly: 250, annualFullYr: 2550, annualFirstYr: 2168, extraUser: 30, extraOffice: 100 } },
     badge: { en: 'Most Popular', fr: 'Le plus populaire' },
     desc: {
-      en: 'Built for growing teams that want to automate and scale faster.',
-      fr: 'Conçu pour les équipes en croissance qui veulent automatiser et croître plus vite.',
-    },
-    features: {
-      en: [
-        'Everything in Minimum',
-        'Lume AI Agent (voice + unlimited)',
-        'Two-way SMS texting with customers (dedicated number)',
-        'Door-to-door sales suite (map, pipeline, leaderboard, commissions)',
-        'Courses / LMS for team training',
-        'Full API access',
-        'Automated quote & invoice follow-ups',
-        'Quote templates, presets & satellite measure tool',
-        'Employee timesheets',
-        'Track employee performance',
-        'Recurring jobs, checklists & GPS tracking',
-        'Dispatch map & batch messaging',
-        'Internal team chat',
-        'Advanced analytics & insights',
-        'QuickBooks export',
-        'Marketplace integrations & webhooks',
-        'Custom request forms',
-      ],
-      fr: [
-        'Tout ce qui est inclus dans Minimum',
-        'Agent IA Lume (voix + illimité)',
-        'Textos bidirectionnels avec vos clients (numéro dédié)',
-        'Suite de vente porte-à-porte (carte, pipeline, leaderboard, commissions)',
-        'Formations / LMS pour votre équipe',
-        'Accès complet à l\'API',
-        'Relances automatiques de soumissions et factures',
-        'Modèles de soumission, préréglages et outil de mesure satellite',
-        'Feuilles de temps des employés',
-        'Suivi de la performance des employés',
-        'Jobs récurrentes, listes de vérification et suivi GPS',
-        'Carte de répartition et messagerie en lot',
-        'Clavardage d\'équipe interne',
-        'Analyses et statistiques avancées',
-        'Exportation QuickBooks',
-        'Intégrations marketplace et webhooks',
-        'Formulaires de demande personnalisés',
-      ],
+      en: 'For growing teams — stop being the dispatcher and let the system run the day.',
+      fr: 'Pour les équipes en croissance — arrêtez d\'être le répartiteur et laissez le système gérer la journée.',
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: true,
@@ -129,39 +65,91 @@ const PLANS: Plan[] = [
   {
     name: 'Autopilot',
     slug: 'autopilot',
+    stage: { en: 'Runs without me', fr: 'Ça roule sans moi' },
     users: { en: 'Includes 20 users', fr: '20 utilisateurs inclus' },
-    extraUserPrice: { en: '+$25/extra user/mo', fr: '+25 $/utilisateur suppl./mois' },
+    extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
     offices: { en: '5 offices', fr: '5 bureaux' },
-    extraOfficePrice: { en: '+$100/extra office', fr: '+100 $/bureau suppl.' },
-    monthlyPrice: 495,
-    annualFullYr: 5049,
-    annualFirstYr: 4292,
+    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
+    prices: { CAD: { monthly: 495, annualFullYr: 5049, annualFirstYr: 4292, extraUser: 25, extraOffice: 100 }, USD: { monthly: 360, annualFullYr: 3672, annualFirstYr: 3121, extraUser: 25, extraOffice: 100 } },
     desc: {
-      en: 'For high-performance teams that want full automation and control.',
-      fr: 'Pour les équipes performantes qui veulent une automatisation et un contrôle complets.',
-    },
-    features: {
-      en: [
-        'Everything in Scale',
-        'Multi-team management',
-        'Advanced roles & permissions',
-        'Team availability management',
-        'Automated satisfaction surveys',
-        'Premium support',
-        'Dedicated onboarding specialist',
-      ],
-      fr: [
-        'Tout ce qui est inclus dans Scale',
-        'Gestion multi-équipes',
-        'Rôles et permissions avancés',
-        'Gestion des disponibilités de l\'équipe',
-        'Sondages de satisfaction automatisés',
-        'Soutien prioritaire',
-        'Spécialiste d\'intégration dédié',
-      ],
+      en: 'For businesses that grow without the owner — AI, sales teams and full control.',
+      fr: 'Pour les entreprises qui grandissent sans le propriétaire — IA, équipes de vente et contrôle complet.',
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: false,
+  },
+];
+
+// ── Tableau comparatif ────────────────────────────────────────────
+// `true` = inclus, `false` = non inclus, un objet Bi = texte (ex. quota).
+type Cell = boolean | Bi;
+interface CompareRow { label: Bi; cells: [Cell, Cell, Cell] }
+interface CompareGroup { title: Bi; rows: CompareRow[] }
+
+const COMPARISON: CompareGroup[] = [
+  {
+    title: { en: 'Core CRM', fr: 'Cœur du CRM' },
+    rows: [
+      { label: { en: 'Dashboard & global search', fr: 'Tableau de bord et recherche globale' }, cells: [true, true, true] },
+      { label: { en: 'Clients, notes, history & archives', fr: 'Clients, notes, historique et archives' }, cells: [true, true, true] },
+      { label: { en: 'Incoming requests', fr: 'Demandes entrantes' }, cells: [true, true, true] },
+      { label: { en: 'Quotes, invoicing, e-signatures & contracts', fr: 'Soumissions, facturation, signatures et contrats' }, cells: [true, true, true] },
+      { label: { en: 'Products, services & taxes', fr: 'Produits, services et taxes' }, cells: [true, true, true] },
+      { label: { en: 'Online payments (Stripe & PayPal)', fr: 'Paiements en ligne (Stripe et PayPal)' }, cells: [true, true, true] },
+      { label: { en: 'Jobs, calendar, day view & tasks', fr: 'Jobs, calendrier, vue Jour et tâches' }, cells: [true, true, true] },
+      { label: { en: 'Recurring jobs', fr: 'Jobs récurrentes' }, cells: [true, true, true] },
+      { label: { en: 'Client emails & appointment reminders', fr: 'Courriels clients et rappels de rendez-vous' }, cells: [true, true, true] },
+      { label: { en: 'Client portal', fr: 'Portail client' }, cells: [true, true, true] },
+      { label: { en: 'Basic finances & reporting', fr: 'Finances et rapports de base' }, cells: [true, true, true] },
+      { label: { en: 'Mobile access', fr: 'Accès mobile' }, cells: [true, true, true] },
+      { label: { en: 'Referral program', fr: 'Programme de parrainage' }, cells: [true, true, true] },
+    ],
+  },
+  {
+    title: { en: 'Team & operations', fr: 'Équipe et opérations' },
+    rows: [
+      { label: { en: 'Two-way SMS with a dedicated number', fr: 'Textos bidirectionnels avec numéro dédié' }, cells: [false, true, true] },
+      { label: { en: 'Batch messaging', fr: 'Messages groupés' }, cells: [false, true, true] },
+      { label: { en: 'Automations & quote/invoice follow-ups', fr: 'Automatisations et relances de soumissions et factures' }, cells: [false, true, true] },
+      { label: { en: 'Custom request forms', fr: 'Formulaires de demande personnalisés' }, cells: [false, true, true] },
+      { label: { en: 'Employee timesheets & payroll', fr: 'Feuilles de temps et paie' }, cells: [false, true, true] },
+      { label: { en: 'Dispatch map & live GPS', fr: 'Carte de répartition et GPS en direct' }, cells: [false, true, true] },
+      { label: { en: 'Checklists & checklist templates', fr: 'Listes de vérification et modèles' }, cells: [false, true, true] },
+      { label: { en: 'Internal team chat', fr: 'Clavardage d\'équipe interne' }, cells: [false, true, true] },
+      { label: { en: 'Quote templates, presets & satellite measure tool', fr: 'Modèles de soumission, préréglages et mesure satellite' }, cells: [false, true, true] },
+      { label: { en: 'Employee performance tracking', fr: 'Suivi de la performance des employés' }, cells: [false, true, true] },
+      { label: { en: 'Insights & advanced analytics', fr: 'Insights et statistiques avancées' }, cells: [false, true, true] },
+      { label: { en: 'QuickBooks export', fr: 'Exportation QuickBooks' }, cells: [false, true, true] },
+      { label: { en: 'Webhooks', fr: 'Webhooks' }, cells: [false, true, true] },
+    ],
+  },
+  {
+    title: { en: 'Artificial intelligence', fr: 'Intelligence artificielle' },
+    rows: [
+      { label: { en: 'Lume AI Agent — text', fr: 'Agent IA Lume — texte' }, cells: [false, { en: 'Monthly quota', fr: 'Quota mensuel' }, { en: 'Unlimited', fr: 'Illimité' }] },
+      { label: { en: 'Lume AI Agent — voice', fr: 'Agent IA Lume — voix' }, cells: [false, false, { en: 'Unlimited', fr: 'Illimité' }] },
+    ],
+  },
+  {
+    title: { en: 'Growth & control', fr: 'Croissance et contrôle' },
+    rows: [
+      { label: { en: 'Door-to-door: map, pipeline, leaderboard, commissions, reports', fr: 'Porte-à-porte : carte, pipeline, leaderboard, commissions, rapports' }, cells: [false, false, true] },
+      { label: { en: 'Courses / LMS', fr: 'Formations / LMS' }, cells: [false, false, true] },
+      { label: { en: 'Full API access', fr: 'Accès complet à l\'API' }, cells: [false, false, true] },
+      { label: { en: 'Integrations marketplace', fr: 'Marketplace d\'intégrations' }, cells: [false, false, true] },
+      { label: { en: 'Advanced roles & permissions', fr: 'Rôles et permissions avancés' }, cells: [false, false, true] },
+      { label: { en: 'Multi-team management', fr: 'Gestion multi-équipes' }, cells: [false, false, true] },
+      { label: { en: 'Team availability management', fr: 'Gestion des disponibilités' }, cells: [false, false, true] },
+      { label: { en: 'Automated satisfaction surveys', fr: 'Sondages de satisfaction automatisés' }, cells: [false, false, true] },
+    ],
+  },
+  {
+    title: { en: 'Support', fr: 'Accompagnement' },
+    rows: [
+      { label: { en: 'Standard support', fr: 'Soutien standard' }, cells: [true, true, true] },
+      { label: { en: 'Premium support', fr: 'Soutien prioritaire' }, cells: [false, false, true] },
+      { label: { en: 'Dedicated onboarding specialist', fr: 'Spécialiste d\'intégration dédié' }, cells: [false, false, true] },
+    ],
   },
 ];
 
@@ -208,27 +196,35 @@ const COPY = {
     kicker: 'Pricing',
     titleLine1: 'Simple pricing,',
     titleUnderlined: 'no surprises',
-    subtitle: 'Choose the plan that fits your team',
+    subtitle: 'Three plans, one grid. Pick the stage your business is at today — upgrade whenever you\'re ready.',
     monthly: 'Monthly',
     annual: 'Annual',
     perMonth: '/mo',
     billedMonthly: 'Billed monthly · cancel anytime',
+    cornerTitle: 'Every plan includes',
+    cornerPoints: ['Guided onboarding with our team', 'Cancel anytime on monthly billing', 'Support in French and English'],
     billedAnnually: (firstYr: string, fullYr: string) =>
       `$${firstYr} billed for year one, then $${fullYr}/yr`,
     faqHeading: 'Frequently asked questions',
+    included: 'Included',
+    notIncluded: 'Not included',
   },
   fr: {
     kicker: 'Tarifs',
     titleLine1: 'Des prix simples,',
     titleUnderlined: 'sans surprises',
-    subtitle: 'Choisissez le forfait qui convient à votre équipe',
+    subtitle: 'Trois forfaits, une seule grille. Choisissez l\'étape où votre entreprise est aujourd\'hui — passez au suivant quand vous serez prêt.',
     monthly: 'Mensuel',
     annual: 'Annuel',
     perMonth: '/mois',
     billedMonthly: 'Facturé mensuellement · annulez en tout temps',
+    cornerTitle: 'Tous les forfaits incluent',
+    cornerPoints: ['Une intégration guidée avec notre équipe', 'Annulation en tout temps en mensuel', 'Un soutien en français et en anglais'],
     billedAnnually: (firstYr: string, fullYr: string) =>
       `${firstYr} $ facturés la première année, puis ${fullYr} $/an`,
     faqHeading: 'Questions fréquentes',
+    included: 'Inclus',
+    notIncluded: 'Non inclus',
   },
 } as const;
 
@@ -237,6 +233,10 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
   const [demoOpen, setDemoOpen] = useState(false);
   const { language, t } = useTranslation();
   const c = COPY[language];
+  const { currency } = useRegion();
+  const money = (n: number) => (language === 'fr' ? `${n.toLocaleString('fr-CA')} $` : `$${n.toLocaleString('en-CA')}`);
+  const pr = (plan: Plan) => plan.prices[currency];
+  const fill = (bi: Bi, n: number) => bi[language].replace('{x}', money(n));
   return (
     <div style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}>
       {/* Hero */}
@@ -270,134 +270,156 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
         </div>
       </section>
 
-      {/* Toggle */}
-      <div className="flex justify-center mb-10 px-6">
-        <div className="inline-flex items-center bg-white rounded-full p-1 border border-[#e5e5e0] shadow-sm">
-          <button
-            onClick={() => setAnnual(false)}
-            className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              !annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {c.monthly}
-          </button>
-          <button
-            onClick={() => setAnnual(true)}
-            className={`px-5 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            {c.annual}
-            <span className="ml-1.5 text-[10px] font-semibold text-[#3FAF97]">-15%</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Plans */}
+      {/* Grille unique : en-tête riche (grille CSS aux mêmes colonnes que le tableau, hauteurs égales,
+          bouton démo aligné en bas), puis bande compacte collante + toutes les fonctionnalités. */}
       <section className="px-6 pb-20 md:pb-28">
         <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-            {PLANS.map((plan, i) => (
-              <motion.div
-                key={plan.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-40px' }}
-                transition={{ delay: i * 0.08 }}
-                className={`relative rounded-2xl p-7 flex flex-col h-full transition-shadow duration-300 ${
-                  plan.featured
-                    ? 'bg-white border-2 border-[#1F5F4F] shadow-xl shadow-[#1F5F4F]/8'
-                    : 'bg-white border border-[#e5e5e0] shadow-sm hover:shadow-md'
-                }`}
-              >
-                {/* Badge */}
-                {plan.badge && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="inline-block bg-[#1F5F4F] text-white text-[10px] uppercase tracking-[0.15em] font-semibold px-4 py-1.5 rounded-full">
-                      {plan.badge[language]}
-                    </span>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-white border border-[#e5e5e0] rounded-2xl shadow-sm overflow-x-auto md:overflow-visible"
+          >
+            <div className="min-w-[720px]">
+              <div className="grid grid-cols-[34%_1fr_1fr_1fr] items-stretch">
+                {/* Coin : toggle de facturation + ce que tous les forfaits incluent */}
+                <div className="px-5 pt-7 pb-6 flex flex-col">
+                  <div className="inline-flex self-start items-center bg-[#fafaf8] rounded-full p-1 border border-[#e5e5e0]">
+                    <button
+                      onClick={() => setAnnual(false)}
+                      className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-all duration-200 ${
+                        !annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {c.monthly}
+                    </button>
+                    <button
+                      onClick={() => setAnnual(true)}
+                      className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-all duration-200 ${
+                        annual ? 'bg-[#111] text-white' : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                    >
+                      {c.annual}
+                      <span className="ml-1.5 text-[10px] font-semibold text-[#3FAF97]">-15%</span>
+                    </button>
                   </div>
-                )}
-
-                {/* Users + Plan name + description */}
-                {plan.users && (
-                  <p className="text-[11px] uppercase tracking-[0.15em] font-bold text-[#111] mb-1">
-                    {plan.users[language]}
-                    {plan.extraUserPrice && (
-                      <span className="ml-1 font-medium normal-case tracking-normal text-text-secondary">· {plan.extraUserPrice[language]}</span>
-                    )}
-                  </p>
-                )}
-                {plan.offices && (
-                  <p className="text-[11px] uppercase tracking-[0.15em] font-bold text-[#111] mb-1">
-                    {plan.offices[language]}
-                    {plan.extraOfficePrice && (
-                      <span className="ml-1 font-medium normal-case tracking-normal text-text-secondary">· {plan.extraOfficePrice[language]}</span>
-                    )}
-                  </p>
-                )}
-                <p className="text-3xl font-extrabold text-[#111]">
-                  {plan.name}
-                </p>
-                <p className="text-[13px] text-text-secondary leading-relaxed mt-1 mb-5">
-                  {plan.desc[language]}
-                </p>
-
-                {/* Price */}
-                <div className="mb-1">
-                  {annual && (
-                    <span className="text-base text-text-secondary line-through mr-2">
-                      ${Math.round(plan.annualFullYr / 12)}
-                    </span>
-                  )}
-                  <span className="text-4xl font-bold tabular-nums text-text-primary">
-                    ${annual ? Math.round(plan.annualFirstYr / 12) : plan.monthlyPrice}
-                  </span>
-                  <span className="text-sm font-normal text-text-secondary">{c.perMonth}</span>
+                  <p className="mt-auto pt-6 text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary">{c.cornerTitle}</p>
+                  <ul className="mt-3 space-y-2.5">
+                    {c.cornerPoints.map(point => (
+                      <li key={point} className="flex items-center gap-2.5 text-[13px] text-text-secondary leading-snug">
+                        <CompareCell cell={true} language={language} yes={c.included} no={c.notIncluded} />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <p className="text-[11px] text-text-secondary mb-5">
-                  {annual
-                    ? c.billedAnnually(
-                        plan.annualFirstYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA'),
-                        plan.annualFullYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')
-                      )
-                    : c.billedMonthly}
-                </p>
 
-                {/* Divider */}
-                <hr className="border-0 border-t-2 border-[#e0e0e0] mb-6" />
-
-                {/* Features */}
-                <ul className="space-y-3 flex-1">
-                  {plan.features[language].map(f => (
-                    <li key={f} className="flex items-center gap-3 text-[13px] font-normal leading-snug text-text-secondary">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0" style={{ border: '2px solid #3FAF97' }}>
-                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-                          <path d="M3 8.5l3.5 3.5L13 5" stroke="#3FAF97" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-
-                {/* CTA — demo-only: no direct self-serve checkout from the landing */}
-                <div className="mt-8">
-                  <button
-                    onClick={() => setDemoOpen(true)}
-                    className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
-                      plan.featured
-                        ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]'
-                        : 'bg-text-primary text-white hover:opacity-90'
+                {PLANS.map((plan, i) => (
+                  <div
+                    key={plan.slug}
+                    className={`px-4 pt-7 pb-6 text-center flex flex-col ${i === PLANS.length - 1 ? 'rounded-tr-2xl' : ''} ${
+                      plan.featured ? 'bg-[#f4f8f6]' : 'bg-white'
                     }`}
                   >
-                    {plan.cta[language]}
-                    <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
+                    <p className="text-[11px] uppercase tracking-[0.15em] font-semibold text-[#1F5F4F]">{plan.stage[language]}</p>
+                    <p className="mt-2 text-[22px] font-extrabold tracking-[-0.02em] text-[#111] leading-tight">
+                      {plan.name}
+                      {plan.badge && (
+                        <span className="ml-2 align-middle inline-block bg-[#1F5F4F] text-white text-[9px] uppercase tracking-[0.15em] font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+                          {plan.badge[language]}
+                        </span>
+                      )}
+                    </p>
+                    <p className="mt-2 tabular-nums">
+                      {annual && (
+                        <span className="text-sm text-text-secondary line-through mr-1.5">{money(Math.round(pr(plan).annualFullYr / 12))}</span>
+                      )}
+                      <span className="text-[26px] font-bold text-text-primary">{money(annual ? Math.round(pr(plan).annualFirstYr / 12) : pr(plan).monthly)}</span>
+                        <span className="ml-1 text-[10px] font-semibold text-text-tertiary align-top">{currency}</span>
+                      <span className="text-xs font-normal text-text-secondary">{c.perMonth}</span>
+                    </p>
+                    <p className="mt-1 text-[10px] text-text-tertiary leading-snug">
+                      {annual
+                        ? c.billedAnnually(
+                            pr(plan).annualFirstYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA'),
+                            pr(plan).annualFullYr.toLocaleString(language === 'fr' ? 'fr-CA' : 'en-CA')
+                          )
+                        : c.billedMonthly}
+                    </p>
+                    <p className="mt-3 text-xs text-text-secondary leading-relaxed max-w-[24ch] mx-auto">{plan.desc[language]}</p>
+                    {/* mt-auto : les limites et le bouton se calent en bas, à la même hauteur dans les trois colonnes */}
+                    <p className="mt-auto pt-4 text-[10px] uppercase tracking-[0.14em] font-bold text-[#111]">
+                      {plan.users[language]} · {plan.offices[language]}
+                    </p>
+                    <p className="text-[11px] text-text-secondary">
+                      {fill(plan.extraUserPrice, pr(plan).extraUser)}{plan.extraOfficePrice ? ` · ${fill(plan.extraOfficePrice, pr(plan).extraOffice)}` : ''}
+                    </p>
+                    <button
+                      onClick={() => setDemoOpen(true)}
+                      className={`mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-[13px] font-medium transition-all duration-200 group ${
+                        plan.featured ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]' : 'bg-text-primary text-white hover:opacity-90'
+                      }`}
+                    >
+                      {plan.cta[language]}
+                      <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+            <table className="w-full border-collapse text-[13px]">
+              <thead>
+                {/* Bande compacte : la seule partie qui colle en haut pendant le défilement */}
+                <tr>
+                  <th scope="col" className="sticky top-0 z-10 bg-white/95 backdrop-blur border-y border-[#d9d9d4] text-left px-5 py-3 text-[11px] uppercase tracking-[0.15em] font-semibold text-text-tertiary w-[34%]">
+                    {language === 'fr' ? 'Fonctionnalité' : 'Feature'}
+                  </th>
+                  {PLANS.map(plan => (
+                    <th
+                      key={plan.slug}
+                      scope="col"
+                      className={`sticky top-0 z-10 border-y border-[#d9d9d4] px-4 py-3 text-center backdrop-blur ${plan.featured ? 'bg-[#eef7f3]/95' : 'bg-white/95'}`}
+                    >
+                      <div className="flex items-center justify-center gap-3">
+                        <span className="text-[15px] font-extrabold text-[#111]">{plan.name}</span>
+                        <span className="tabular-nums text-[15px] font-bold text-text-primary">
+                          {money(annual ? Math.round(pr(plan).annualFirstYr / 12) : pr(plan).monthly)}
+                          <span className="text-[11px] font-normal text-text-secondary">{c.perMonth}</span>
+                        </span>
+                        <button
+                          onClick={() => setDemoOpen(true)}
+                          aria-label={plan.cta[language]}
+                          className={`hidden md:inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
+                            plan.featured ? 'bg-[#1F5F4F] text-white hover:bg-[#174a3d]' : 'bg-text-primary text-white hover:opacity-90'
+                          }`}
+                        >
+                          <ArrowRight size={13} />
+                        </button>
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {COMPARISON.map(group => (
+                  <Fragment key={group.title.en}>
+                    <CompareGroupHeader title={group.title[language]} />
+                    {group.rows.map(row => (
+                      <tr key={row.label.en} className="border-t border-[#ececea] hover:bg-[#f7faf8] transition-colors">
+                        <td className="px-5 py-3.5 text-[13.5px] text-[#171717] leading-snug">{row.label[language]}</td>
+                        {row.cells.map((cell, i) => (
+                          <td key={i} className={`px-4 py-3.5 text-center ${PLANS[i].featured ? 'bg-[#1F5F4F]/[0.05]' : ''}`}>
+                            <CompareCell cell={cell} language={language} yes={c.included} no={c.notIncluded} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+            </div>
+          </motion.div>
         </div>
       </section>
 
@@ -445,4 +467,30 @@ function PricingFAQ({ q, a }: { q: string; a: string }) {
       )}
     </div>
   );
+}
+
+function CompareGroupHeader({ title }: { title: string }) {
+  return (
+    <tr>
+      <th scope="colgroup" colSpan={4} className="text-left px-5 pt-9 pb-3 text-[15px] font-extrabold tracking-[-0.01em] text-[#0a0a0a] border-b-2 border-[#111]">
+        {title}
+      </th>
+    </tr>
+  );
+}
+
+function CompareCell({ cell, language, yes, no }: { cell: Cell; language: Language; yes: string; no: string }) {
+  if (cell === true) {
+    return (
+      <span className="inline-flex w-6 h-6 rounded-full items-center justify-center bg-[#3FAF97]" role="img" aria-label={yes}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 8.5l3.5 3.5L13 5" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    );
+  }
+  if (cell === false) {
+    return <span className="inline-block w-4 h-[2px] rounded bg-[#d9d9d4] align-middle" role="img" aria-label={no} />;
+  }
+  return <span className="inline-block text-[11.5px] font-bold text-[#1F5F4F] bg-[#dff3ec] rounded-full px-2.5 py-1">{cell[language]}</span>;
 }
