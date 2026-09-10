@@ -114,7 +114,7 @@ const searchClients: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search text (name, company, email, phone, or city).' },
+        query: { type: 'string', description: 'Search text (name, company, email, phone, or city). Omit it to get ALL clients — required for a total count: any text, even one letter, filters and shrinks total_matching.' },
         limit: { type: 'integer', description: 'Max results (default 10, max 25).' },
       },
     },
@@ -170,7 +170,7 @@ const searchLeads: AgentTool = {
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search text.' },
+        query: { type: 'string', description: 'Search text (name, company, email, phone). Omit it to get ALL leads — required for a total count: any text filters and shrinks total_matching.' },
         limit: { type: 'integer', description: 'Max results (default 10, max 25).' },
       },
     },
@@ -251,7 +251,7 @@ const listJobs: AgentTool = {
             "Optional filter. Accepts what the user sees ('late', 'upcoming', 'action_required', "
             + "'requires_invoicing', 'archived') or a raw status ('scheduled', 'completed', 'draft', 'in_progress').",
         },
-        query: { type: 'string', description: 'Optional search text (job number, title, address, client).' },
+        query: { type: 'string', description: 'Optional search text (job number, title, address, client). Omit it to count ALL jobs: any text filters and shrinks total_matching.' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
@@ -432,7 +432,7 @@ const listQuotes: AgentTool = {
       type: 'object',
       properties: {
         status: { type: 'string', description: "Optional status filter. One of: 'draft', 'awaiting_response', 'changes_requested', 'approved', 'declined', 'expired', 'converted', 'archived'." },
-        query: { type: 'string', description: 'Optional search (quote number or title).' },
+        query: { type: 'string', description: 'Optional search (quote number or title). Omit it to count ALL quotes: any text filters and shrinks total_matching.' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },

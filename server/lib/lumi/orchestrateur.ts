@@ -9,13 +9,23 @@
      PROPOSITION, l'utilisateur confirme dans l'interface, et c'est
      POST /api/lumi/execute qui l'exécute — puis le modèle reprend.
 
-   Le prompt système et les 66 définitions d'outils sont mis en cache
+   Le prompt système et les définitions d'outils sont mis en cache
    (cache_control) : c'est ce qui divise le coût par trois. Toute variation
    d'un appel à l'autre (date, nom) est repoussée APRÈS le point de cache.
    Cache d'UNE HEURE (ttl 1h) : avec les 5 minutes par défaut, chaque reprise
    de conversation après une pause réécrivait ~4 000 tokens à 125 % du tarif
    (2,6 ¢ sur les 6 ¢ d'un tour). L'écriture 1h coûte 2× le tarif d'entrée
    au lieu de 1,25×, mais elle ne se répète plus de toute l'heure.
+
+   Outils différés (tool search) : mesuré le 2026-09-10, les 67 définitions
+   pesaient 13 128 tokens sur un contexte fixe de 17 336 — relus à CHAQUE
+   appel, et réécrits en cache toutes les heures. Seuls les outils du
+   quotidien (OUTILS_DE_BASE) restent chargés ; les autres portent
+   `defer_loading: true` et n'entrent dans le contexte que lorsque le modèle
+   les découvre via `tool_search_tool_regex` (recherche côté API, gratuite,
+   qui ajoute la définition APRÈS le préfixe : le cache tient). Le modèle
+   les cherche par mot-clé anglais (nom, description, arguments) ; le prompt
+   lui dit quelles familles existent.
    ═══════════════════════════════════════════════════════════════ */
 import Anthropic from '@anthropic-ai/sdk';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -41,16 +51,41 @@ function anthropic(): Anthropic {
   return clientAnthropic;
 }
 
-/** Définitions d'outils au format Claude — ordre stable, sinon le cache saute. */
-export function outilsClaude(): Anthropic.Messages.Tool[] {
-  const outils = AGENT_TOOLS.map((t) => ({
+/**
+ * Outils TOUJOURS chargés : ceux du quotidien d'un patron de PME (chercher,
+ * compter, regarder l'agenda, les retards, créer un suivi). Tout le reste est
+ * différé et découvert à la demande. Ajouter ici un outil coûte ~200 tokens
+ * par appel pour TOUTES les orgs : ne le faire que si l'usage réel le justifie.
+ */
+export const OUTILS_DE_BASE: ReadonlySet<string> = new Set([
+  'search_clients', 'search_leads', 'get_client_profile',
+  'list_jobs', 'get_job', 'query_schedule',
+  'list_invoices', 'get_overdue_payments', 'list_quotes',
+  'create_task', 'list_tasks',
+  'get_company_info', 'recall_notes',
+]);
+
+export const OUTIL_RECHERCHE: Anthropic.Messages.ToolSearchToolRegex20251119 = {
+  type: 'tool_search_tool_regex_20251119',
+  name: 'tool_search_tool_regex',
+};
+
+/**
+ * Définitions d'outils au format Claude — ordre stable, sinon le cache saute.
+ * [recherche, outils de base (le dernier porte le point de cache), outils différés].
+ * Un outil différé ne peut pas porter cache_control (400 de l'API).
+ */
+export function outilsClaude(): Anthropic.Messages.ToolUnion[] {
+  const defs: Anthropic.Messages.Tool[] = AGENT_TOOLS.map((t) => ({
     name: t.declaration.name,
     description: t.declaration.description,
     input_schema: (t.declaration.parameters ?? { type: 'object', properties: {} }) as Anthropic.Messages.Tool['input_schema'],
   }));
-  const dernier = outils[outils.length - 1];
-  if (dernier) (dernier as Anthropic.Messages.Tool).cache_control = CACHE_1H;
-  return outils;
+  const base = defs.filter((d) => OUTILS_DE_BASE.has(d.name));
+  const differes = defs.filter((d) => !OUTILS_DE_BASE.has(d.name)).map((d) => ({ ...d, defer_loading: true }));
+  const dernier = base[base.length - 1];
+  if (dernier) dernier.cache_control = CACHE_1H;
+  return [OUTIL_RECHERCHE, ...base, ...differes];
 }
 
 /** Prompt système Lumi : le prompt de l'agent, au nom de Lumi, partie stable en cache. */
@@ -65,7 +100,8 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     )
     // Les mêmes consignes « collègue » que le MCP : jamais d'identifiant, de
     // nom d'outil, de champ ou de vocabulaire base de données dans une réponse.
-    + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : la carte EST le « oui » explicite. Quand tu as tout ce qu'il faut, propose directement (appelle l'outil) — ne demande pas « je le fais ? » en texte avant, ça ferait confirmer deux fois. Décris l'action en mots courants et ne prétends jamais qu'elle est faite avant la confirmation.
+    + `\n\n# Finding the right tool\nOnly the everyday tools are loaded. Lume has ~55 more, hidden until you look them up with tool_search_tool_regex (a case-insensitive pattern on tool names and descriptions). Families and useful patterns: quotes, invoices & payments (\`quote|invoice|payment|paid|reminder\`), jobs, scheduling & routes (\`job|schedule|route|visit|free_slot\`), clients & leads (\`client|lead|note|remember\`), messaging (\`sms|email|conversation\`), reports & finances (\`report|revenue|financial|profit|churn|top_\`), team & field (\`team|timesheet|payroll|location|d2d|course\`), automations (\`automation|request_submission\`). Search BEFORE saying you can't do something; one search with an alternation pattern usually finds it.`
+    + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : la carte EST le « oui » explicite. Quand tu as tout ce qu'il faut, propose directement (appelle l'outil) — ne demande pas « je le fais ? » en texte avant, ça ferait confirmer deux fois. Décris l'action en mots courants et ne prétends jamais qu'elle est faite avant la confirmation. Si l'outil d'écriture n'est pas chargé, cherche-le avec tool_search_tool_regex puis appelle-le.
 - Chaque mot que tu écris est dans la langue de l'utilisateur — y compris la courte phrase avant de consulter quelque chose (« je regarde ça », jamais « I'll check »).
 - Rapports : « un rapport », « un PDF », « un document pour mon comptable », « sors-moi mon mois » → build_report (type financier, retards, jobs ou client ; période = du 1er du mois à aujourd'hui si rien n'est précisé, sinon demande-la). La carte du rapport s'affiche SOUS ton message (dis « ci-dessous », jamais « ci-dessus ») avec le bouton de téléchargement ; toi, tu résumes les deux ou trois faits saillants en phrases — sans recopier les tableaux.`;
   const variable = ctx.language === 'fr'
@@ -138,11 +174,17 @@ export async function tourLumi(opts: {
       opts.emettre({ type: 'error', message: 'refusal' });
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
     }
+    // pause_turn : l'API a interrompu le tour après un outil serveur (recherche
+    // d'outils) ; on relance avec l'historique tel quel, sans message utilisateur.
+    if (reponse.stop_reason === 'pause_turn') continue;
     if (reponse.stop_reason !== 'tool_use') {
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
     }
 
     const appels = reponse.content.filter((b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use');
+    // Rien à exécuter côté client (seule une recherche d'outils a eu lieu) :
+    // un message utilisateur vide serait refusé par l'API.
+    if (appels.length === 0) continue;
     const resultats: Anthropic.Messages.ToolResultBlockParam[] = [];
     let proposition: ResultatTour['proposition'] = null;
 
