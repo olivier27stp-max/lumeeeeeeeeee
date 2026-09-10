@@ -9,7 +9,9 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowUp, AudioLines, AlertTriangle, CheckCircle2, Download, FileText, History, Loader2, MessageSquarePlus, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { ArrowUp, AudioLines, AlertTriangle, CheckCircle2, Download, FileText, History, Loader2, MessageSquarePlus, Mic, Sparkles, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
+import { useVoiceInput, MAX_SECONDS } from '../features/agent/hooks/useVoiceInput';
+import { useSpeakReplies } from '../features/agent/hooks/useSpeakReplies';
 import { toast } from 'sonner';
 import PageHeader from '../components/ui/PageHeader';
 import { useTranslation } from '../i18n';
@@ -153,11 +155,12 @@ export default function Lumi() {
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<{ code: string; message: string } | null>(null);
   const [budget, setBudget] = useState<BudgetLumi | null>(null);
-  const [listening, setListening] = useState(false);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
   const idRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
+  /* Vrai si la dernière question a été dite au micro : la réponse est alors lue. */
+  const spokenRef = useRef(false);
+  const speech = useSpeakReplies(lang);
   const abortRef = useRef<AbortController | null>(null);
   const nextId = () => idRef.current++;
 
@@ -252,6 +255,14 @@ export default function Lumi() {
       return next;
     });
     if (e.type === 'done') {
+      if (spokenRef.current) {
+        // Lire la réponse complète, seulement si la question a été dite au micro.
+        setItems((prev) => {
+          const dernier = [...prev].reverse().find((m) => m.role === 'assistant' && m.text);
+          if (dernier?.text) speech.speak(dernier.text);
+          return prev;
+        });
+      }
       setBudget(e.budget);
       if (!conversationId) {
         setConversationId(e.conversation_id);
@@ -279,10 +290,12 @@ export default function Lumi() {
     }
   }
 
-  async function envoyer(texte: string) {
+  async function envoyer(texte: string, opts: { spoken?: boolean } = {}) {
     const t = texte.trim();
     if (!t || enCours) return;
     setInput('');
+    spokenRef.current = !!opts.spoken;
+    speech.stopSpeaking();
     setItems((prev) => [
       ...prev.map((m) => (m.proposal?.statut === 'en_attente' ? { ...m, proposal: { ...m.proposal, statut: 'annulee' as const } } : m)),
       { id: nextId(), role: 'user', text: t, tools: [] },
@@ -298,27 +311,20 @@ export default function Lumi() {
     await lancer((onEvent, signal) => deciderPropositionLumi({ conversation_id: conversationId, tool_use_id: p.tool_use_id, decision, language: lang }, onEvent, signal));
   }
 
+  /* Micro : enregistre (MediaRecorder, tous navigateurs), le serveur transcrit,
+     le texte part comme un message et la réponse est lue à voix haute. */
+  const voice = useVoiceInput({
+    language: lang,
+    onTranscript: (text) => { void envoyer(text, { spoken: true }); },
+    onError: (message) => setErreur({ code: 'voix', message }),
+  });
+  const listening = voice.state === 'recording';
+  const transcribing = voice.state === 'transcribing';
   function toggleVoice() {
-    if (listening) { recognitionRef.current?.stop(); return; }
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) {
-      setErreur({ code: 'voix', message: fr ? "La reconnaissance vocale n'est pas supportée par ce navigateur." : 'Voice recognition is not supported in this browser.' });
-      return;
-    }
-    const rec = new SR();
-    rec.lang = fr ? 'fr-CA' : 'en-US';
-    rec.interimResults = true;
-    rec.onresult = (e: any) => {
-      const text = Array.from(e.results as ArrayLike<any>).map((r) => r[0].transcript).join('');
-      setInput(text);
-      if (e.results[e.results.length - 1].isFinal) { rec.stop(); void envoyer(text); }
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    recognitionRef.current = rec;
-    setListening(true);
-    rec.start();
+    if (listening) voice.stop();
+    else if (voice.state === 'idle') void voice.start();
   }
+  const chrono = `${Math.floor(voice.seconds / 60)}:${String(voice.seconds % 60).padStart(2, '0')}`;
 
   const suggestions = fr
     ? ['Quel est mon chiffre du mois ?', 'Quelles factures sont en retard ?', 'Prépare ma journée de demain', 'Qui sont mes meilleurs clients ?']
@@ -404,8 +410,13 @@ export default function Lumi() {
                 title={fr ? 'Parler à Lumi' : 'Talk to Lumi'}
                 className={cn('w-12 h-12 rounded-2xl flex items-center justify-center transition-colors disabled:opacity-50', listening ? 'bg-primary text-white animate-pulse' : 'bg-primary/10 text-primary hover:bg-primary/20')}
               >
-                <AudioLines size={22} strokeWidth={2.75} />
+                {transcribing ? <Loader2 size={22} className="animate-spin" /> : <AudioLines size={22} strokeWidth={2.75} />}
               </button>
+              {(listening || transcribing) && (
+                <p className="text-[12px] font-medium text-primary -mt-2" aria-live="polite">
+                  {listening ? `${fr ? 'Je t’écoute' : 'Listening'} · ${chrono}` : (fr ? 'Je transcris…' : 'Transcribing…')}
+                </p>
+              )}
               <div>
                 <h2 className="text-[18px] font-semibold text-text-primary">Lumi</h2>
                 <p className="text-[13px] text-text-tertiary mt-1 max-w-[420px]">
@@ -496,18 +507,34 @@ export default function Lumi() {
                 : (fr ? 'Pose-moi une question ou donne-moi une instruction…' : 'Ask a question or give an instruction…')}
               className="w-full resize-none bg-transparent px-4 pt-3.5 pb-12 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-0 leading-relaxed disabled:opacity-60"
             />
-            {items.length > 0 && (
-              <button
-                type="button"
-                onClick={toggleVoice}
-                disabled={!!bloque}
-                aria-label={listening ? (fr ? 'Arrêter la dictée' : 'Stop dictation') : (fr ? 'Dicter' : 'Dictate')}
-                aria-pressed={listening}
-                className={cn('absolute bottom-2.5 right-12 w-8 h-8 rounded-full flex items-center justify-center transition-colors', listening ? 'bg-danger/10 text-danger' : 'text-text-tertiary hover:bg-surface-secondary')}
-              >
-                <AudioLines size={16} />
-              </button>
-            )}
+            <div className="absolute bottom-2.5 left-3 flex items-center gap-1.5">
+              {voice.supported && (
+                <button
+                  type="button"
+                  onClick={toggleVoice}
+                  disabled={!!bloque || transcribing || enCours}
+                  aria-label={listening ? (fr ? "Arrêter l'enregistrement" : 'Stop recording') : (fr ? 'Parler à Lumi' : 'Talk to Lumi')}
+                  aria-pressed={listening}
+                  className={cn('h-8 rounded-full flex items-center gap-2 px-2.5 text-[12px] font-semibold transition-colors disabled:opacity-50', listening ? 'bg-danger text-white' : 'bg-primary/10 text-primary hover:bg-primary/20')}
+                >
+                  {transcribing ? <Loader2 size={15} className="animate-spin" /> : listening ? <Square size={13} fill="currentColor" /> : <Mic size={15} strokeWidth={2.5} />}
+                  {listening && <span className="tabular-nums" aria-live="polite">{chrono}</span>}
+                  {transcribing && <span>{fr ? 'Transcription…' : 'Transcribing…'}</span>}
+                </button>
+              )}
+              {speech.supported && (
+                <button
+                  type="button"
+                  onClick={() => { if (speech.speaking) speech.stopSpeaking(); else speech.setEnabled(!speech.enabled); }}
+                  aria-pressed={speech.enabled}
+                  aria-label={speech.enabled ? (fr ? 'Ne plus lire les réponses' : 'Stop reading replies aloud') : (fr ? 'Lire les réponses à voix haute' : 'Read replies aloud')}
+                  title={speech.speaking ? (fr ? 'Arrêter la lecture' : 'Stop reading') : speech.enabled ? (fr ? 'Réponses lues quand tu parles' : 'Replies read aloud when you speak') : (fr ? 'Lecture désactivée' : 'Reading off')}
+                  className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', speech.speaking ? 'bg-primary text-white animate-pulse' : speech.enabled ? 'text-text-secondary hover:bg-surface-secondary' : 'text-text-tertiary hover:bg-surface-secondary')}
+                >
+                  {speech.enabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => envoyer(input)}
@@ -519,7 +546,9 @@ export default function Lumi() {
             </button>
           </div>
           <p className="text-[10.5px] text-text-tertiary text-center mt-2">
-            {fr ? 'Lumi ne crée et n’envoie rien sans ta confirmation. Vérifie les montants avant d’agir.' : 'Lumi never creates or sends anything without your confirmation. Check amounts before acting.'}
+            {listening
+              ? (fr ? `Parle, puis touche le carré pour envoyer. ${MAX_SECONDS} s max.` : `Speak, then tap the square to send. ${MAX_SECONDS} s max.`)
+              : (fr ? 'Lumi ne crée et n’envoie rien sans ta confirmation. Vérifie les montants avant d’agir.' : 'Lumi never creates or sends anything without your confirmation. Check amounts before acting.')}
           </p>
         </div>
       </div>
