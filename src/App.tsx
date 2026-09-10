@@ -198,7 +198,7 @@ import SessionTimeoutModal from './components/SessionTimeoutModal';
 
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
-import { rendueSansSession } from './lib/routesSansSession';
+import { rendueSansSession, estCibleInterne, CLE_NEXT } from './lib/routesSansSession';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkCreatorAccess } from './lib/creatorSpaceApi';
@@ -491,6 +491,18 @@ function AppInner() {
 
   // Ctrl+K opens command palette
   useCommandPaletteShortcut(setCommandPaletteOpen);
+
+  // Destination demandée avant une connexion Google (Auth.tsx la range dans
+  // sessionStorage parce que Google revient toujours sur l'origine). Rejouée
+  // une fois la session là, puis oubliée. Audit QA 2026-09-09, n°7.
+  useEffect(() => {
+    if (!user) return;
+    let cible: string | null = null;
+    try { cible = sessionStorage.getItem(CLE_NEXT); sessionStorage.removeItem(CLE_NEXT); } catch { /* stockage indisponible */ }
+    if (cible && estCibleInterne(cible) && cible !== location.pathname + location.search) {
+      navigate(cible, { replace: true });
+    }
+  }, [user]);
 
   // Check if user needs onboarding — only for brand new sign-ups
   // Also ensures every user has an org + membership (auto-provision on first login)

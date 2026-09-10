@@ -7,6 +7,7 @@ import { useTranslation } from '../i18n';
 import { useNavigate, useLocation } from 'react-router-dom';
 import MfaChallenge from '../components/auth/MfaChallenge';
 import { forgotPassword } from '../lib/authApi';
+import { cibleApresConnexion, CLE_NEXT } from '../lib/routesSansSession';
 
 interface AuthProps {
   onBack?: () => void;
@@ -58,7 +59,8 @@ export default function Auth({ onBack }: AuthProps) {
       }
       // No MFA — send them into the app. Without this the URL stays on /auth,
       // which doesn't exist in the authenticated route tree → NotFound (404).
-      navigate('/', { replace: true });
+      // `next` : la page protégée demandée avant la connexion (audit n°7).
+      navigate(cibleApresConnexion(location.search), { replace: true });
     } catch (error: any) {
       // Signaler l'échec au serveur pour qu'il soit enregistré. L'authentification
       // se fait entièrement ici, dans le navigateur : sans ce signalement, le
@@ -98,6 +100,7 @@ export default function Auth({ onBack }: AuthProps) {
         onSuccess={() => {
           setMfaFactorId(null);
           // Session is now AAL2 — App.tsx AaL2Guard will allow render.
+          navigate(cibleApresConnexion(location.search), { replace: true });
         }}
         onCancel={async () => {
           await supabase.auth.signOut();
@@ -112,6 +115,10 @@ export default function Auth({ onBack }: AuthProps) {
     setLoading(true);
     setMessage(null);
     try {
+      // Google revient sur l'origine (liste blanche Supabase) : on garde la
+      // destination dans sessionStorage, App.tsx la rejoue à l'arrivée.
+      const cible = cibleApresConnexion(location.search);
+      try { if (cible !== '/') sessionStorage.setItem(CLE_NEXT, cible); } catch { /* stockage indisponible */ }
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {

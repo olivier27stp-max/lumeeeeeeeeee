@@ -38,3 +38,26 @@ export function rendueSansSession(pathname: string): boolean {
     (p) => pathname === p || (p !== '/' && pathname.startsWith(p + '/')),
   );
 }
+
+/**
+ * Où renvoyer l'utilisateur après la connexion ?
+ *
+ * Audit QA prod 2026-09-09, n°7 (prouvé en prod) : ouvrir /jobs ou
+ * /settings/billing sans session (signet, lien reçu, session expirée)
+ * affichait le 404 marketing. PublicRoutes redirige maintenant vers
+ * /auth?next=<chemin>, et cette fonction lit `next` en refusant tout ce qui
+ * n'est pas un chemin interne (pas de redirection ouverte vers un autre site).
+ */
+export const CLE_NEXT = 'lume-next';
+
+export function cibleApresConnexion(search: string): string {
+  const next = new URLSearchParams(search).get('next') || '';
+  return estCibleInterne(next) ? next : '/';
+}
+
+export function estCibleInterne(next: string): boolean {
+  if (!next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return false;
+  if (/^\/(auth|register|reset-password|verify-email)(\/|\?|$)/.test(next)) return false;
+  if (/[\r\n]/.test(next)) return false;
+  return true;
+}
