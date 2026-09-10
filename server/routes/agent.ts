@@ -10,8 +10,9 @@
 import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
-import { validate, agentChatSchema } from '../lib/validation';
+import { validate, agentChatSchema, agentTranscribeSchema } from '../lib/validation';
 import { isGeminiConfigured } from '../lib/agent/gemini';
+import { transcribeAudio, type TranscribeMimeType } from '../lib/agent/transcribe';
 import { buildSystemPrompt } from '../lib/agent/systemPrompt';
 import { runAgent } from '../lib/agent/orchestrator';
 import type { GeminiContent } from '../lib/agent/gemini';
@@ -19,6 +20,24 @@ import type { GeminiContent } from '../lib/agent/gemini';
 const router = Router();
 
 // POST /api/agent/chat
+/* Transcription du micro : l'audio enregistré par le navigateur arrive en
+   base64, Gemini le transcrit, le texte revient au chat comme s'il avait été
+   tapé. Réservé aux membres connectés (même limite de débit que le chat). */
+router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, res) => {
+  try {
+    if (!isGeminiConfigured()) {
+      return res.status(503).json({ error: 'Lume Agent is not configured. Set GEMINI_API_KEY on the server.', code: 'agent_not_configured' });
+    }
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    const { audio, mimeType, language } = req.body as { audio: string; mimeType: TranscribeMimeType; language?: 'fr' | 'en' };
+    const text = await transcribeAudio({ base64: audio, mimeType, language: language ?? 'fr' });
+    res.json({ text });
+  } catch (err) {
+    sendSafeError(res, err, 'Transcription failed.');
+  }
+});
+
 router.post('/agent/chat', validate(agentChatSchema), async (req, res) => {
   try {
     if (!isGeminiConfigured()) {

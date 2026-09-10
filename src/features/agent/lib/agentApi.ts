@@ -60,6 +60,26 @@ export async function sendAgentMessage(
   return { reply: json.reply || '', proposedAction: json.proposedAction || null };
 }
 
+/** Envoie l'audio du micro au serveur et rend la transcription (peut être vide). */
+export async function transcribeAudio(blob: Blob, language: 'fr' | 'en'): Promise<string> {
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+    r.onerror = () => reject(new Error('Could not read the recording.'));
+    r.readAsDataURL(blob);
+  });
+  // Le serveur n'accepte que le type de base (sans « ;codecs=… »).
+  const mimeType = (blob.type.split(';')[0] || 'audio/webm') as 'audio/webm' | 'audio/mp4' | 'audio/ogg' | 'audio/wav' | 'audio/mpeg' | 'audio/aac';
+  const res = await fetch('/api/agent/transcribe', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ audio: base64, mimeType, language }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json?.error || `Transcription failed (${res.status}).`);
+  return String(json.text ?? '');
+}
+
 export interface ActionResult {
   reference: string; // e.g. quote/invoice/job number, or 'SMS'
 }
