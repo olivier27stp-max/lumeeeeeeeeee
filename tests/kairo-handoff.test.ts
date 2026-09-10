@@ -56,6 +56,7 @@ function verifier(jeton: string, vus = new Map<string, number>()): string | null
   if (typeof target !== 'string' || !target) return 'destination';
   const maintenant = Math.floor(Date.now() / 1000);
   if (typeof exp !== 'number' || exp < maintenant) return 'expire';
+  if (exp > maintenant + 120) return 'expire'; // TTL max imposé par Lume
   if (vus.has(jti)) return 'rejeu';
   vus.set(jti, exp);
   if (target.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(target)) return 'destination absolue';
@@ -129,6 +130,12 @@ describe('la fenêtre de validité est respectée', () => {
     // Sans `exp`, le lien vaudrait pour toujours.
     const { exp, ...sansExp } = valide();
     expect(verifier(signer(sansExp))).toBe('expire');
+  });
+
+  it('refuse un exp trop lointain (au-delà du TTL max de Lume)', () => {
+    // Un jeton avec un exp dans une heure serait un mot de passe permanent s'il
+    // fuit : Lume plafonne la durée de vie même si Kairo met un exp lointain.
+    expect(verifier(signer({ ...valide(), exp: Math.floor(Date.now() / 1000) + 3600 }))).toBe('expire');
   });
 
   it('refuse un émetteur autre que Kairo', () => {
@@ -205,7 +212,24 @@ describe('les garde-fous côté serveur', () => {
     // supabase-js ne lève pas : sans ce test, une panne de base donnerait
     // « non membre », un message trompeur pour un utilisateur légitime.
     expect(bloc).toContain('errAdhesion');
-    expect(bloc).toContain('errListe');
+    // La recherche du compte se fait par findUserByEmail (RPC indexé, remplace
+    // l'ancien listUser paginé) : son échec doit renvoyer un 503, pas un refus.
+    expect(bloc).toContain('findUserByEmail');
+    expect(bloc).toContain("Service momentanément indisponible");
+  });
+
+  it('la recherche de compte ne scanne pas une page bornée (findUserByEmail)', () => {
+    // L'ancien listUsers(page:1,perPage:200) renvoyait « aucun compte » à tout
+    // utilisateur hors de la 1re page dès 200 inscrits sur la plateforme.
+    expect(bloc).not.toContain('perPage: 200');
+    expect(bloc).toContain('findUserByEmail(admin, courriel)');
+  });
+
+  it('la durée de vie du jeton est bornée côté Lume (TTL max)', () => {
+    // Lume impose sa propre borne : un lien qui fuit avec un exp lointain ne
+    // doit pas être un mot de passe permanent.
+    expect(bloc).toContain('TTL_MAX_SECONDES');
+    expect(bloc).toContain('exp > maintenant + TTL_MAX_SECONDES');
   });
 
   it('le motif détaillé ne fuit pas vers le client', () => {
