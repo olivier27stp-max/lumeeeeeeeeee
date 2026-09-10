@@ -1286,7 +1286,19 @@ export async function listSalespeople(): Promise<SalespersonOption[]> {
 
 export async function exportJobsCsv(query: Omit<JobsQuery, 'page' | 'pageSize'>): Promise<string> {
   const orgId = await getCurrentOrgIdOrThrow();
-  let request = supabase.from('jobs_active').select('*').eq('org_id', orgId).order('created_at', { ascending: false }).limit(2000);
+  // Projection explicite (au lieu de select('*')) : on ne charge que les
+  // colonnes réellement lues par mapJob, pas les colonnes/JSON lourds inutiles.
+  // Réduit le poids transféré et parsé pour un export de 2000 lignes.
+  const COLONNES_EXPORT =
+    'id,org_id,client_id,client_name,lead_id,job_number,title,job_type,property_address,' +
+    'scheduled_at,end_at,sale_date,created_at,updated_at,derived_status,status,currency,' +
+    'total_cents,subtotal_cents,tax_cents,total_amount,subtotal,total,tax_total,tax_lines,' +
+    'salesperson_id,team_id,tag_ids,latitude,longitude,notes,invoice_url,' +
+    // Champs supplémentaires lus par mapJob (gardés pour ne pas altérer son
+    // résultat) : dépôt, géocodage, drapeaux facturation, pièces jointes.
+    'attachments,billing_split,deposit_cents,deposit_required,deposit_type,deposit_value,' +
+    'geocode_status,geocoded_at,require_payment_method,requires_invoicing,show_on_leaderboard';
+  let request = supabase.from('jobs_active').select(COLONNES_EXPORT).eq('org_id', orgId).order('created_at', { ascending: false }).limit(2000);
   request = applyTableFilters(request, query);
   const { data, error } = await request;
   if (error) throw error;
