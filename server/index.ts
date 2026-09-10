@@ -71,6 +71,7 @@ import activityNotesRouter from './routes/activity-notes';
 import orgKnowledgeRouter from './routes/org-knowledge';
 import agentAuthRouter from './routes/agent-auth';
 import agentRouter from './routes/agent';
+import lumiRouter from './routes/lumi';
 import mcpRouter from './routes/mcp';
 import oauthRouter, { protectedResourceMetadata, authorizationServerMetadata } from './routes/oauth';
 import invitationsRouter from './routes/invitations';
@@ -607,6 +608,7 @@ if (!useRedis) {
   app.use('/api/agreements/public', agreementPublicLimiter);
   app.use('/api/automations/events', automationLimiter);
   app.use('/api/agent', agentLimiter);
+  app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
   app.use('/api/incidents', incidentsLimiterMem);
 }
@@ -641,6 +643,7 @@ app.use('/api/incidents/failed-login', redisRateLimit({ preset: 'auth' }));
 app.use('/api/incidents', redisRateLimit({ preset: 'standard', keyFn: (req) => `inc:${userKey(req)}` }));
 // AI agent (Gemini tool-loop) — cap per-user cost abuse
 app.use('/api/agent', redisRateLimit({ preset: 'standard', keyFn: (req) => `agent:${userKey(req)}` }));
+app.use('/api/lumi', redisRateLimit({ preset: 'standard', keyFn: (req) => `lumi:${userKey(req)}` }));
 // ── OAuth 2.1 — Lume est le serveur d'autorisation du serveur MCP ──
 // Monté avec le MCP (mêmes raisons : guardCommonShape des routers nus, et
 // porte MFA — un échange de jeton n'a pas de session à faire valoir).
@@ -756,6 +759,7 @@ app.use('/api/org-knowledge', orgKnowledgeRouter);
 app.use('/api', agentAuthRouter);
 // Lume Agent — in-app AI chat (Gemini). Auth per-request via requireAuthedClient.
 app.use('/api', agentRouter);
+app.use('/api', lumiRouter);
 
 // Quote redirect at root level (/q/:token), API routes under /api — rate limited.
 // Per-token limiter on top of IP limiter to block token brute-force via IP rotation.

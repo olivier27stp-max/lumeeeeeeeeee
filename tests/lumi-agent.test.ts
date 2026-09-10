@@ -279,3 +279,15 @@ describe('Lumi parle comme un collègue, pas comme une base de données', () => 
     expect(blocs[1].text).toContain('2026-09-10');
   });
 });
+
+// ── Le routeur est monté (la PR SEO #329 l'avait fait disparaître de server/index.ts) ──
+describe('le routeur Lumi est monté dans le serveur', () => {
+  it('server/index.ts importe et monte routes/lumi, avec ses limiteurs', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('server/index.ts', 'utf8');
+    expect(src).toContain("import lumiRouter from './routes/lumi';");
+    expect(src).toContain("app.use('/api', lumiRouter);");
+    expect(src).toContain("app.use('/api/lumi', agentLimiter);");
+    expect(src).toContain("app.use('/api/lumi', redisRateLimit(");
+  });
+});
