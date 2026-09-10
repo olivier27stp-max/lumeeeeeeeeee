@@ -16,6 +16,7 @@ import {
   handlerCreateQuote, handlerCreateInvoice, handlerCreateJob, handlerSendSms,
   STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut,
 } from './tools-etendus';
+import { OUTILS_RAPPORTS } from './tools-rapports';
 
 export interface ToolContext {
   client: SupabaseClient;
@@ -50,6 +51,12 @@ export interface AgentTool {
    * GPS ou toute écriture, un repli contournerait les permissions par rôle.
    */
   needsIdentity?: boolean;
+  /**
+   * Réservé à un canal : 'lumi' = l'assistant dans l'application (l'outil
+   * a besoin de l'interface pour montrer son résultat, ex. un rapport PDF).
+   * Absent = tous les canaux (MCP inclus).
+   */
+  canal?: 'lumi';
 }
 
 const clamp = (n: any, def: number, max: number) => {
@@ -861,6 +868,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   sendSms,
   ...OUTILS_LECTURE_ETENDUS,
   ...OUTILS_ECRITURE_ETENDUS,
+  ...OUTILS_RAPPORTS,
 ];
 
 export const TOOLS_BY_NAME: Record<string, AgentTool> = Object.fromEntries(

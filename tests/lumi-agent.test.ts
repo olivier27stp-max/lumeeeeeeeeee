@@ -102,6 +102,7 @@ vi.mock('../server/lib/agent/garde', () => ({
   executerOutilGarde: async (o: any) => {
     outilsExecutes.push({ name: o.name, args: o.args });
     if (o.name === 'get_payroll_summary') return { refus: 'Les accès Lume de cette personne n\'incluent pas la paie.' };
+    if (o.name === 'build_report') return { result: { rapport: { type: 'retards', titre: 'Comptes à recevoir', sous_titre: 'En date du 10 sept.', periode: null, genere_le: '2026-09-10T12:00:00Z', langue: 'fr', sections: [{ titre: 'Retards', kpis: [{ label: 'Total', valeur: '1 971,82 $' }] }] } } };
     return { result: { ok: true, lignes: [{ id: 'inv-1', total_cents: 100 }] } };
   },
 }));
@@ -110,11 +111,13 @@ vi.mock('../server/lib/agent/tools', () => ({
     { kind: 'read', declaration: { name: 'list_invoices', description: 'Liste', parameters: { type: 'object', properties: {} } } },
     { kind: 'read', declaration: { name: 'get_payroll_summary', description: 'Paie', parameters: { type: 'object', properties: {} } } },
     { kind: 'write', declaration: { name: 'create_job', description: 'Crée', parameters: { type: 'object', properties: { title: { type: 'string' } } } } },
+    { kind: 'read', canal: 'lumi', declaration: { name: 'build_report', description: 'Rapport', parameters: { type: 'object', properties: {} } } },
   ],
   TOOLS_BY_NAME: {
     list_invoices: { kind: 'read', handler: async () => ({}) },
     get_payroll_summary: { kind: 'read', handler: async () => ({}) },
     create_job: { kind: 'write', handler: async () => ({}) },
+    build_report: { kind: 'read', handler: async () => ({}) },
   },
 }));
 
@@ -188,6 +191,21 @@ describe('orchestrateur', () => {
     expect(emis.find((e) => e.type === 'tool' && e.statut === 'refus')).toBeTruthy();
   });
 
+  it('un rapport (build_report) part à l interface en événement report, et au modèle en tool_result', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push(
+      { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'tu_r', name: 'build_report', input: { type: 'retards' } }], usage },
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Voilà ton rapport ci-dessous.' }], usage },
+    );
+    const emis: any[] = [];
+    await tourLumi(baseTour(emis, []));
+    const ev = emis.find((e) => e.type === 'report');
+    expect(ev).toMatchObject({ tool_use_id: 'tu_r', rapport: { type: 'retards', titre: 'Comptes à recevoir' } });
+    const second = instantanes[1].messages.at(-1);
+    expect(second.content[0]).toMatchObject({ type: 'tool_result', tool_use_id: 'tu_r' });
+    expect(second.content[0].content).toContain('"rapport"');
+  });
+
   it('refus du modèle (stop_reason refusal) → événement error, pas de boucle', async () => {
     const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
     reponses.push({ content: [], stop_reason: 'refusal', usage });
@@ -223,6 +241,20 @@ describe('proposition en attente', () => {
     expect(r[0]).toEqual({ role: 'user', text: 'Factures ?', tools: [] });
     expect(r[1]).toMatchObject({ role: 'assistant', tools: ['list_invoices'] });
     expect(r[2]).toMatchObject({ role: 'assistant', text: 'Aucune.', proposal: { tool: 'create_job', statut: 'confirmee' } });
+  });
+
+  it('rendreMessages : un rapport stocké dans le tool_result revient avec sa carte au rechargement', async () => {
+    const { rendreMessages } = await import('../server/routes/lumi');
+    const rapport = { type: 'jobs', titre: 'Rapport des jobs', sous_titre: 'Semaine', periode: { du: '2026-09-07', au: '2026-09-13' }, genere_le: '2026-09-10T12:00:00Z', langue: 'fr', sections: [{ titre: 'En chiffres', kpis: [{ label: 'Jobs', valeur: '5' }] }] };
+    const r = rendreMessages([
+      { role: 'user', content: 'Rapport ?' },
+      { role: 'assistant', content: [{ type: 'tool_use', id: 'tu_r', name: 'build_report', input: { type: 'jobs' } }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_r', content: JSON.stringify({ rapport, note: 'x' }) }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Voilà.' }] },
+    ] as any);
+    expect(r[1]).toMatchObject({ role: 'assistant', tools: ['build_report'], report: { titre: 'Rapport des jobs' } });
+    expect(r[2]).toMatchObject({ role: 'assistant', text: 'Voilà.' });
+    expect(r[2]).not.toHaveProperty('report');
   });
 });
 

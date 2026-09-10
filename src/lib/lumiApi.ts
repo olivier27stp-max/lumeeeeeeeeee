@@ -43,11 +43,29 @@ export interface PropositionLumi {
   statut: StatutProposition;
 }
 
+/** Rapport composé par le serveur (build_report) : déjà formaté, rendu en carte et en PDF côté client. */
+export interface SectionRapportLumi {
+  titre: string;
+  kpis?: Array<{ label: string; valeur: string; detail?: string }>;
+  tableau?: { colonnes: string[]; lignes: string[][]; alignements?: Array<'g' | 'd'> };
+  note?: string;
+}
+export interface RapportLumi {
+  type: 'financier' | 'retards' | 'jobs' | 'client';
+  titre: string;
+  sous_titre: string;
+  periode: { du: string; au: string } | null;
+  genere_le: string;
+  langue: 'fr' | 'en';
+  sections: SectionRapportLumi[];
+}
+
 export interface MessageLumi {
   role: 'user' | 'assistant';
   text: string;
   tools: string[];
   proposal?: PropositionLumi;
+  report?: RapportLumi;
 }
 
 export interface ConversationLumi {
@@ -61,6 +79,7 @@ export type EvenementFlux =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
   | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null }
+  | { type: 'report'; tool_use_id: string; rapport: RapportLumi }
   | { type: 'usage'; model: string; cost_cents: number }
   | { type: 'done'; conversation_id: string; cost_cents: number; budget: BudgetLumi; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }
   | { type: 'error'; message: string };

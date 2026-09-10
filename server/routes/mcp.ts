@@ -64,7 +64,7 @@ const SERVER_INSTRUCTIONS = `Tu es branché sur Lume, le CRM d'une entreprise de
 ${CONSIGNES_COLLEGUE.replace('SIGNAUX DISCRETS DANS LES RÉSULTATS (réagis-y en collègue, sans les nommer) :\n', `SIGNAUX DISCRETS DANS LES RÉSULTATS (réagis-y en collègue, sans les nommer) :\n${CONSIGNE_SESSION_MCP}\n`)}`;
 
 /** Tout ce qui est exécutable, lecture et écriture confondues. */
-const MCP_TOOLS: AgentTool[] = AGENT_TOOLS.filter((t) => typeof t.handler === 'function');
+const MCP_TOOLS: AgentTool[] = AGENT_TOOLS.filter((t) => typeof t.handler === 'function' && t.canal !== 'lumi');
 
 /**
  * Les outils que CET appelant peut voir et appeler.

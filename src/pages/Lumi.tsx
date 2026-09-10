@@ -9,14 +9,15 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowUp, AudioLines, AlertTriangle, CheckCircle2, History, Loader2, MessageSquarePlus, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { ArrowUp, AudioLines, AlertTriangle, CheckCircle2, Download, FileText, History, Loader2, MessageSquarePlus, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import PageHeader from '../components/ui/PageHeader';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
-  ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type MessageLumi, type PropositionLumi,
+  ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type MessageLumi, type PropositionLumi, type RapportLumi,
 } from '../lib/lumiApi';
 
 interface Item extends MessageLumi {
@@ -42,6 +43,7 @@ const LIBELLES_OUTILS: Record<string, [string, string]> = {
   get_morning_briefing: ['Prépare le survol du jour', 'Preparing the daily brief'],
   get_team: ["Consulte l'équipe", 'Checking the team'],
   recall_notes: ['Se souvient', 'Recalling notes'],
+  build_report: ['Prépare le rapport', 'Building the report'],
 };
 
 function libelleOutil(name: string, fr: boolean): string {
@@ -230,6 +232,9 @@ export default function Lumi() {
           dernier.proposal = { tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: 'en_attente' };
           // Le modèle propose parfois l'action sans un mot : on l'annonce.
           if (!dernier.text.trim()) dernier.text = fr ? "J'ai préparé l'action ci-dessous. Confirmez pour l'exécuter." : 'I prepared the action below. Confirm to run it.';
+          break;
+        case 'report':
+          dernier.report = e.rapport;
           break;
         case 'done':
           dernier.enCours = false;
@@ -447,6 +452,7 @@ export default function Lumi() {
                       : <Loader2 size={16} className="animate-spin text-text-tertiary" />}
                   </div>
                 )}
+                {m.report && <RapportCarte rapport={m.report} fr={fr} />}
                 {m.proposal && (
                   <PropositionCarte proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} />
                 )}
@@ -516,6 +522,58 @@ export default function Lumi() {
             {fr ? 'Lumi ne crée et n’envoie rien sans ta confirmation. Vérifie les montants avant d’agir.' : 'Lumi never creates or sends anything without your confirmation. Check amounts before acting.'}
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Carte d'un rapport : titre, période, chiffres clés et bouton PDF. Le PDF
+ * se rend côté client (jsPDF, chargé à la demande pour ne pas alourdir la page).
+ */
+function RapportCarte({ rapport, fr }: { rapport: RapportLumi; fr: boolean }) {
+  const [enCours, setEnCours] = useState(false);
+  const kpis = rapport.sections.flatMap((s) => s.kpis ?? []).slice(0, 6);
+  const nbTableaux = rapport.sections.filter((s) => s.tableau && s.tableau.lignes.length > 0).length;
+  async function telecharger() {
+    setEnCours(true);
+    try {
+      const { telechargerRapportPdf } = await import('../lib/generateRapportPdf');
+      telechargerRapportPdf(rapport);
+    } catch (e) {
+      console.error('[lumi] PDF du rapport', e);
+      toast.error(fr ? 'Le PDF n’a pas pu être généré.' : 'The PDF could not be generated.');
+    } finally {
+      setEnCours(false);
+    }
+  }
+  return (
+    <div className="mt-2 section-card p-3.5 text-[13px]">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><FileText size={17} /></div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-text-primary truncate">{rapport.titre}</p>
+          <p className="text-[12px] text-text-tertiary">{rapport.sous_titre}</p>
+        </div>
+      </div>
+      {kpis.length > 0 && (
+        <dl className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {kpis.map((k) => (
+            <div key={k.label} className="rounded-lg bg-surface-secondary px-2.5 py-2">
+              <dt className="text-[11px] text-text-tertiary truncate">{k.label}</dt>
+              <dd className="text-[14px] font-semibold text-text-primary tabular-nums">{k.valeur}</dd>
+              {k.detail && <dd className="text-[10.5px] text-text-tertiary truncate">{k.detail}</dd>}
+            </div>
+          ))}
+        </dl>
+      )}
+      <div className="mt-3 flex items-center gap-3">
+        <button type="button" onClick={telecharger} disabled={enCours} className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
+          {enCours ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} {fr ? 'Télécharger le PDF' : 'Download PDF'}
+        </button>
+        <span className="text-[11.5px] text-text-tertiary">
+          {rapport.sections.length} {fr ? 'sections' : 'sections'}{nbTableaux ? ` · ${nbTableaux} ${fr ? 'tableaux' : 'tables'}` : ''}
+        </span>
       </div>
     </div>
   );

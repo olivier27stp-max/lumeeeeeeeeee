@@ -24,6 +24,7 @@ import { etatBudget, journaliserUsage } from '../lib/lumi/budget';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, type EvenementLumi } from '../lib/lumi/orchestrateur';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
+import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
 
@@ -288,14 +289,18 @@ router.get('/lumi/conversations', async (req, res) => {
 });
 
 /** Rend les blocs stockés en éléments d'interface : texte, appels d'outils, propositions et leur sort. */
-export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee' } }> {
+export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee' }; report?: Rapport }> {
   const sorts = new Map<string, 'confirmee' | 'annulee' | 'echouee'>();
+  const rapports = new Map<string, Rapport>();
   for (const m of msgs) {
     if (m.role === 'user' && Array.isArray(m.content)) {
       for (const b of m.content as any[]) {
         if (b.type !== 'tool_result') continue;
         const txt = typeof b.content === 'string' ? b.content : JSON.stringify(b.content);
         sorts.set(b.tool_use_id, /"cancelled":true/.test(txt) ? 'annulee' : /"executed":true/.test(txt) ? 'confirmee' : 'echouee');
+        if (txt.startsWith('{"rapport":')) {
+          try { const r = JSON.parse(txt)?.rapport; if (r?.sections) rapports.set(b.tool_use_id, r); } catch { /* résultat tronqué : pas de carte */ }
+        }
       }
     }
   }
@@ -309,14 +314,16 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
     const texte = blocs.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
     const tools: string[] = [];
     let proposal: ReturnType<typeof rendreMessages>[number]['proposal'];
+    let report: Rapport | undefined;
     for (const b of blocs) {
       if (b.type !== 'tool_use') continue;
+      if (rapports.has(b.id)) report = rapports.get(b.id);
       const outil = TOOLS_BY_NAME[b.name];
       if (outil?.kind === 'write') {
         proposal = { tool_use_id: b.id, tool: b.name, args: b.input ?? {}, capacite: PERMISSION_PAR_OUTIL[b.name]?.capacite ?? null, statut: sorts.get(b.id) ?? 'en_attente' };
       } else tools.push(b.name);
     }
-    if (texte || proposal || tools.length) out.push({ role: 'assistant', text: texte, tools, ...(proposal ? { proposal } : {}) });
+    if (texte || proposal || tools.length) out.push({ role: 'assistant', text: texte, tools, ...(proposal ? { proposal } : {}), ...(report ? { report } : {}) });
   }
   return out;
 }
