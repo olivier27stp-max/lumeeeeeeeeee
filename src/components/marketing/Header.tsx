@@ -268,8 +268,7 @@ function MegaPanel({ children }: { children: React.ReactNode }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -4 }}
       transition={{ duration: 0.15 }}
-      className="hidden lg:block absolute left-0 w-full border-t border-[#c5c5c5] border-b border-b-[#c5c5c5] shadow-lg"
-      style={{ backgroundColor: '#fafaf8', backgroundImage: 'url("/paper-texture.png")', backgroundRepeat: 'repeat', backgroundSize: '300px 300px' }}
+      className="hidden lg:block absolute left-0 w-full border-t border-b border-[rgba(11,92,173,0.14)] bg-white shadow-[0_30px_60px_-30px_rgba(11,40,80,0.35)]"
     >
       <div className="max-w-7xl mx-auto px-6 py-5">
         {children}
