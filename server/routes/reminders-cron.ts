@@ -136,7 +136,14 @@ router.post('/cron/payment-reminders', async (req, res) => {
     return sendSafeError(res, e, 'Server PUBLIC_URL not configured.', '[cron/reminders]');
   }
 
+  // Verrou d'exclusion mutuelle : ce cron est un endpoint HTTP externe qui peut
+  // double-tirer (scheduler qui relance, retry après timeout). Sans lui, deux
+  // exécutions concurrentes passent toutes deux le SELECT de dédup avant que
+  // l'INSERT ne bloque — et envoient toutes deux le courriel/SMS (l'index UNIQUE
+  // protège la LIGNE, pas l'ENVOI). Le lock garantit un seul run à la fois.
+  const { withAdvisoryLock } = await import('../lib/advisory-lock');
   try {
+  const verrou = await withAdvisoryLock('cron-payment-reminders', async () => {
     // 1. Load orgs with reminders enabled
     const { data: settingsRows, error: settingsErr } = await svc
       .from('reminder_settings')
@@ -372,13 +379,21 @@ router.post('/cron/payment-reminders', async (req, res) => {
       }
     }
 
-    return res.json({
+    return {
       ok: true,
       processed,
       sent,
       failed,
       errors: errors.slice(0, 20),
-    });
+    };
+  }); // fin withAdvisoryLock (le finally interne libère toujours le verrou)
+
+  if (!verrou.acquired) {
+    // Un autre passage du cron tient déjà le verrou : rien à faire, ce n'est
+    // pas une erreur (évite le double-envoi).
+    return res.json({ ok: true, skipped: 'already_running' });
+  }
+  return res.json(verrou.result);
   } catch (error: any) {
     return sendSafeError(res, error, 'Cron job failed.', '[cron/reminders]');
   }
