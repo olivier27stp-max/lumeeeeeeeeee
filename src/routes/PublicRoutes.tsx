@@ -1,5 +1,6 @@
 import React from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { rendueSansSession } from '../lib/routesSansSession';
 // Pages en chargement différé (audit I4) : chaque page est son propre chunk.
 const Auth = React.lazy(() => import('../pages/Auth'));
 const Register = React.lazy(() => import('../pages/Register'));
@@ -65,8 +66,23 @@ export function PublicRoutes({ onAuthBack, includeCheckout = false }: PublicRout
         <Route path="industries/:slug" element={<MarketingIndustryDetail />} />
         <Route path="pricing" element={<MarketingPricing />} />
         <Route path="contact" element={<MarketingContact />} />
-        <Route path="*" element={<MarketingNotFound />} />
+        <Route path="*" element={<PublicCatchAll />} />
       </Route>
     </Routes>
   );
+}
+
+/**
+ * Le catch-all hors session. Une URL inconnue de la vitrine → 404 marketing.
+ * Une URL de l'application (/jobs, /clients/…, /settings/billing) ouverte
+ * sans session → la page de connexion, qui ramènera ici après.
+ *
+ * Audit QA prod 2026-09-09, n°7 : avant, tout finissait en 404 marketing —
+ * signet, lien reçu par courriel, onglet restauré, session expirée depuis la
+ * veille. Sans connaître le code, on concluait que l'app avait perdu les données.
+ */
+function PublicCatchAll() {
+  const { pathname, search } = useLocation();
+  if (rendueSansSession(pathname)) return <MarketingNotFound />;
+  return <Navigate to={`/auth?next=${encodeURIComponent(pathname + search)}`} replace />;
 }

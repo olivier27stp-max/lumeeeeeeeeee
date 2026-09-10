@@ -199,7 +199,8 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     const company = await getCompanySettings(orgId);
     const amountStr = formatCurrency(invoice.total_cents || invoice.balance_cents || 0, invoice.currency || 'CAD');
     const baseUrl = resolvePublicBaseUrl(req);
-    const viewUrl = invoice.view_token ? `${baseUrl}/q/${invoice.view_token}` : null;
+    // Page publique de facture (audit QA 2026-09-09 n°1) — /q/ redirige encore.
+    const viewUrl = invoice.view_token ? `${baseUrl}/invoice/${invoice.view_token}` : null;
 
     // Resolve email subject and body
     let emailSubject = customSubject || `Invoice ${invoice.invoice_number || ''} — ${amountStr}`;
@@ -275,6 +276,7 @@ ${viewUrl ? `
       to: clientData.email,
       subject: emailSubject,
       html: buildEmailLayout(company, bodyHtml),
+      suivi: { orgId, entityType: 'invoice', entityId: invoiceId },
     });
 
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
@@ -428,6 +430,7 @@ ${viewUrl ? `
       to: clientData.email,
       subject: `Quote ${quote.invoice_number || ''} — ${amountStr}`,
       html: buildEmailLayout(company, bodyHtml),
+      suivi: { orgId, entityType: 'invoice', entityId: quote.id },
     });
 
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
@@ -515,6 +518,7 @@ ${viewUrl ? `<div style="text-align:center;margin-bottom:16px;"><a href="${viewU
       to: clientData.email,
       subject: `Soumission ${quote.quote_number || ''} — ${amountStr}`,
       html: buildEmailLayout(company, bodyHtml),
+      suivi: { orgId, entityType: 'quote', entityId: quoteId },
     });
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
 
@@ -556,6 +560,7 @@ router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, 
       to,
       subject: sanitizeHtml(subject),
       html: buildEmailLayout(company, sanitizeHtml(html)),
+      suivi: { orgId: auth.orgId, entityType: 'message' },
     });
 
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');

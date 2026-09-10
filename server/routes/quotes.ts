@@ -77,91 +77,25 @@ const trackViewSchema = z.object({
 // Separate router for root-level quote redirect (/q/:token)
 export const quoteRedirectRouter = Router();
 
-// Public route: client opens quote via unique token
-// GET /q/:token — serves a redirect to frontend quote view page
+// Lien copié depuis la fiche facture : GET /q/:token → /invoice/:token.
+// Audit QA 2026-09-09 (n°1) : redirigeait vers /quote/:token (page de DEVIS,
+// qui cherchait le jeton dans `quotes` → 404 pour toutes les factures) ET
+// comptait une vue avant même de savoir si la page allait s'afficher. Le suivi
+// de vue vit maintenant dans GET /api/invoices/public/:token, qui sert la page.
 quoteRedirectRouter.get('/q/:token', async (req, res) => {
   try {
     const { token } = req.params;
     if (!token) return res.status(400).send('Invalid link');
 
-    const serviceClient = getServiceClient();
-
-    // Find the invoice by view_token
-    const { data: invoice, error } = await serviceClient
+    const { data: invoice, error } = await getServiceClient()
       .from('invoices')
-      .select('id, invoice_number, client_id, org_id, is_viewed, view_count')
+      .select('id')
       .eq('view_token', token)
       .is('deleted_at', null)
       .maybeSingle();
+    if (error || !invoice) return res.status(404).send('Invoice not found');
 
-    if (error || !invoice) {
-      return res.status(404).send('Quote not found');
-    }
-
-    const isFirstView = !invoice.is_viewed;
-    const now = new Date().toISOString();
-    const frontendUrl = getBaseUrl();
-
-    // Redirect immediately — tracking writes happen in background (non-critical for UX)
-    res.redirect(`${frontendUrl}/quote/${token}`);
-
-    // Fire-and-forget: update invoice + insert view log in parallel
-    const bgTasks: Promise<unknown>[] = [
-      Promise.resolve(
-        serviceClient
-          .from('invoices')
-          .update({
-            is_viewed: true,
-            viewed_at: isFirstView ? now : undefined,
-            view_count: (invoice.view_count || 0) + 1,
-            last_viewed_at: now,
-          })
-          .eq('id', invoice.id)
-      ),
-      Promise.resolve(
-        serviceClient
-          .from('quote_views')
-          .insert({
-            invoice_id: invoice.id,
-            client_id: invoice.client_id,
-            ip_address: req.ip || req.headers['x-forwarded-for'] || null,
-            user_agent: req.headers['user-agent'] || null,
-          })
-      ),
-    ];
-
-    if (isFirstView) {
-      bgTasks.push((async () => {
-        let clientName = 'Client';
-        if (invoice.client_id) {
-          const { data: client } = await serviceClient
-            .from('clients')
-            .select('first_name, last_name')
-            .eq('id', invoice.client_id)
-            .is('deleted_at', null)
-            .maybeSingle();
-          if (client) {
-            clientName = `${client.first_name || ''} ${client.last_name || ''}`.trim() || 'Client';
-          }
-        }
-        await serviceClient
-          .from('notifications')
-          .insert({
-            org_id: invoice.org_id,
-            type: 'quote_opened',
-            title: `${clientName} opened quote ${invoice.invoice_number}`,
-            body: `${clientName} has viewed their quote for the first time.`,
-            icon: 'eye',
-            link: `/invoices/${invoice.id}`,
-            reference_id: invoice.id,
-          });
-      })());
-    }
-
-    Promise.all(bgTasks).catch((err) => {
-      console.error('[quotes/view-redirect] background tracking failed:', err?.message || err);
-    });
-    return;
+    return res.redirect(`${getBaseUrl()}/invoice/${token}`);
   } catch (error: any) {
     return sendSafeError(res, error, 'Something went wrong.', '[quotes/view-redirect]');
   }
@@ -436,6 +370,7 @@ router.post('/quotes/send-email', async (req, res) => {
       to: recipientEmail,
       subject: finalSubject,
       html: emailHtml,
+      suivi: { orgId: auth.orgId, entityType: 'quote', entityId: quote.id },
     });
     if (!emailResult.sent) {
       return res.status(502).json({

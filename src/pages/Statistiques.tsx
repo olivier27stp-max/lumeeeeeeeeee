@@ -135,7 +135,8 @@ export default function Statistiques() {
   const velo = veloQ.data;
   const quote = quoteQ.data;
   const inv = invQ.data;
-  const payout = payoutQ.data;
+  // meta.source === 'not_connected' : aucun compte de paiement (réponse 200 vide, plus un 409).
+  const payout = payoutQ.data && payoutQ.data.meta?.source !== 'not_connected' ? payoutQ.data : undefined;
 
   const funnel = [
     { label: fr ? 'Nouveaux leads' : 'New leads', v: conv?.leads_created ?? 0 },

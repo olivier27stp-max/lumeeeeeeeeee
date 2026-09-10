@@ -123,7 +123,12 @@ router.get('/integrations/:appId/provider', async (req, res) => {
 });
 
 // ── List registered providers ─────────────────────────────────
-router.get('/integrations-providers', async (_req, res) => {
+// Catalogue des intégrations : réservé aux comptes connectés. Servi sans
+// authentification, il renseignait un attaquant sur la pile technique
+// (audit QA 2026-09-09, phase 3).
+router.get('/integrations-providers', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
   const providers = getAllProviders().map((p) => ({
     slug: p.slug,
     display_name: p.display_name,

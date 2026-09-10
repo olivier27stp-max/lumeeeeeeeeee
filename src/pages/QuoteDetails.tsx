@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useState, useEffect } from 'react';
+import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
@@ -405,6 +406,8 @@ export default function QuoteDetails() {
                 <span className="text-text-tertiary">{language === 'fr' ? 'Pas encore' : 'Not yet'}</span>
               )}
             </div>
+            {/* Courriel non livré (rebond capté par le webhook) — audit QA n°8 */}
+            <EmailDeliveryBadge entityType="quote" entityId={quote.id} />
           </div>
 
           {/* Plan de service — calendrier des visites (visible aussi par le client) */}

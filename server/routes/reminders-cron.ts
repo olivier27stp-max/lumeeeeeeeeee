@@ -22,7 +22,8 @@ import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
-import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { sendEmail, isMailerConfigured, adresseInjoignable } from '../lib/mailer';
+import { logger } from '../lib/logger';
 import { sendSmsIfConfigured, applyTemplate, isSmsOptedOut } from '../lib/notificationHelpers';
 import { twilioClient, twilioPhoneNumber } from '../lib/config';
 import { resolvePublicBaseUrl, normalizeE164 } from '../lib/helpers';
@@ -231,10 +232,15 @@ router.post('/cron/payment-reminders', async (req, res) => {
             };
 
             // EMAIL leg
-            if ((channel === 'email' || channel === 'both') && toEmail && isMailerConfigured()) {
+            // Une adresse qui a rebondi ne sera pas relancée : ça ne sert à
+            // rien et ça abîme la réputation du domaine (audit QA n°8). Le
+            // propriétaire a reçu une notification « courriel non livré ».
+            const adresseMorte = toEmail ? await adresseInjoignable(orgId, toEmail) : false;
+            if (adresseMorte) logger.warn('[reminders] adresse injoignable, relance courriel sautée', { invoiceId: inv.id, email: toEmail });
+            if ((channel === 'email' || channel === 'both') && toEmail && !adresseMorte && isMailerConfigured()) {
               const subject = applyTemplate(settings.custom_email_subject || DEFAULT_EMAIL_SUBJECT, vars);
               const body = applyTemplate(settings.custom_email_body || DEFAULT_EMAIL_BODY, vars);
-              const result = await sendEmail({ to: toEmail, subject, html: bodyToHtml(body) });
+              const result = await sendEmail({ to: toEmail, subject, html: bodyToHtml(body), suivi: { orgId, entityType: 'reminder', entityId: inv.id } });
               const emailChannel = channel === 'email' ? 'email' : 'both';
               if (channel === 'both') {
                 // For 'both', defer logging until SMS attempted (single row with channel='both').

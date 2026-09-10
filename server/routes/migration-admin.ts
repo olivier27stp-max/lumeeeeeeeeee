@@ -72,15 +72,16 @@ async function getMigration(admin: ReturnType<typeof getServiceClient>, id: stri
 // Sonde d'identité douce pour le gate frontend — ne 401 jamais.
 router.get('/migration-admin/check', async (req, res) => {
   try {
-    if (platformAdminIds.size === 0) return res.json({ isPlatformAdmin: false });
-    // Sans Authorization : pas d'identité → même réponse douce (jamais 401 ici).
+    // Anonyme → 401 : voir creator-space/check (audit QA 2026-09-09, phase 3).
     const authorization = req.header('authorization');
-    if (!authorization) return res.json({ isPlatformAdmin: false });
+    if (!authorization) return res.status(401).json({ error: 'Missing authorization header.' });
     const client = buildSupabaseWithAuth(authorization);
     const { data } = await client.auth.getUser();
-    return res.json({ isPlatformAdmin: !!data?.user?.id && platformAdminIds.has(data.user.id) });
+    if (!data?.user?.id) return res.status(401).json({ error: 'Invalid auth token.' });
+    if (platformAdminIds.size === 0) return res.json({ isPlatformAdmin: false });
+    return res.json({ isPlatformAdmin: platformAdminIds.has(data.user.id) });
   } catch {
-    return res.json({ isPlatformAdmin: false });
+    return res.status(401).json({ error: 'Invalid auth token.' });
   }
 });
 

@@ -22,8 +22,9 @@ import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
 import { getMcpInfo, type McpInfo } from '../../lib/mcpApi';
 
-// Logo Claude : image officielle déposée dans /public par le propriétaire.
-// Tant qu'elle n'est pas là, on retombe sur une marque neutre (voir ClaudeMark).
+// Logo Claude : public/claude-logo.svg (marque neutre livrée avec l'app — le
+// propriétaire peut la remplacer par le logo officiel, même nom de fichier).
+// Le fichier manquait : 404 à chaque ouverture de /settings/api (audit QA P2).
 const CLAUDE_LOGO_URL = '/claude-logo.svg';
 // Image de fond optionnelle du hero (générée par le propriétaire). Absente =
 // dégradé de marque uniquement.

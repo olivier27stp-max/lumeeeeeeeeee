@@ -4,12 +4,31 @@
    done (or manually via the X button — stored per-user in localStorage). */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Check, ChevronDown, X, Sparkles, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
+
+/**
+ * Routes où la carte ne s'affiche PAS : formulaires et réglages, dont la
+ * barre « Enregistrer » est ancrée en bas — exactement là où la carte se pose.
+ *
+ * Audit QA prod 2026-09-09, n°5 (prouvé en prod, 1440×900 ET 390×844) :
+ * sur /clients/new, /quotes/new, /settings/company et la pagination de
+ * /finances, elementFromPoint(centre du bouton) renvoyait un bouton de la
+ * carte Setup ; sur téléphone, le clic réel sur « Save Client » expirait. La
+ * carte ne s'affiche que pour les nouveaux comptes, et son premier item est
+ * « Ajouter votre premier client » — précisément le formulaire qu'ils ne
+ * pouvaient pas enregistrer.
+ */
+export function routeAvecBarreDAction(pathname: string): boolean {
+  return /\/(new|edit)(\/|$)/.test(pathname)
+    || pathname.startsWith('/settings')
+    || pathname.startsWith('/finances')
+    || pathname.startsWith('/checkout');
+}
 
 type Status = {
   clients_count: number;
@@ -29,6 +48,7 @@ type ManualChecks = { templates?: boolean; import?: boolean };
 export default function SetupChecklist() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   const [status, setStatus] = useState<Status | null>(null);
   // Repliée par défaut sur mobile (juste l'en-tête, ~44px) pour ne pas couvrir
@@ -160,8 +180,10 @@ export default function SetupChecklist() {
     try { localStorage.setItem(MANUAL_KEY, JSON.stringify(next)); } catch (err) { console.warn(err); }
   };
 
-  // Don't render until we have status + not dismissed + not server-completed
-  const hidden = dismissed || !status || !!status?.setup_completed || total === 0;
+  // Don't render until we have status + not dismissed + not server-completed.
+  // Ni sur un formulaire / une page de réglages : la carte recouvrait la
+  // barre Enregistrer (audit n°5). Elle revient sur les pages de liste.
+  const hidden = dismissed || !status || !!status?.setup_completed || total === 0 || routeAvecBarreDAction(pathname);
 
   // Signale au SupportFAB si la carte occupe le coin bas-droit, pour qu'il se
   // décale au-dessus au lieu de chevaucher (dispatché à chaque changement).
@@ -175,7 +197,11 @@ export default function SetupChecklist() {
   if (hidden) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-[300px] max-w-[calc(100vw-2rem)] pointer-events-auto">
+    // z-30 : sous les modaux, les tiroirs et les barres d'action collantes
+    // (CompanySettings est z-30 aussi mais la carte n'y est plus rendue).
+    // Sur téléphone, la carte se colle à GAUCHE : le coin bas-droit reste
+    // libre pour les boutons d'action et le bouton d'aide.
+    <div data-setup-checklist className="fixed bottom-4 left-4 sm:left-auto sm:right-4 z-30 w-[300px] max-w-[calc(100vw-2rem)] pointer-events-auto">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}

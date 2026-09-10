@@ -334,6 +334,7 @@ function normalisePathForMatch(method: string, path: string): string[] {
 // Exporté : la garde d'abonnement (subscription-guard.ts) reprend la même liste.
 export const PUBLIC_ROUTE_PREFIXES: readonly string[] = [
     '/api/quotes/public',
+    '/api/invoices/public',
     '/api/public/book-demo',
     '/api/survey/',
     '/api/portal/',
@@ -352,7 +353,6 @@ export const PUBLIC_ROUTE_PREFIXES: readonly string[] = [
     '/api/billing/subscribe',
     '/api/billing/onboarding',
     '/api/ai/health',
-    '/api/integrations-providers',
     '/api/payment-requests/',  // public status check
     '/api/security/csp-report',
     '/api/messages/inbound',   // Twilio webhook

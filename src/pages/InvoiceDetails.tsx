@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
 import {
   ArrowLeft, Eye, EyeOff, Copy, Link2, Check, Download, RefreshCw, Send,
   Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, ReceiptText,
@@ -257,8 +258,11 @@ export default function InvoiceDetails() {
                 type="button"
                 className="glass-button inline-flex items-center gap-1.5 text-[12px]"
                 onClick={() => {
-                  const API_BASE = import.meta.env.VITE_API_URL || window.location.origin;
-                  const link = `${API_BASE}/q/${invoice.view_token}`;
+                  // Lien direct vers la page publique de facture (audit QA
+                  // 2026-09-09 n°1 : /q/ redirigeait vers la page de DEVIS →
+                  // « Soumission introuvable » pour le client). /q/ redirige
+                  // encore, pour les liens déjà envoyés.
+                  const link = `${window.location.origin}/invoice/${invoice.view_token}`;
                   navigator.clipboard.writeText(link);
                   setLinkCopied(true);
                   toast.success(t.invoiceDetails.linkCopied);
@@ -363,6 +367,9 @@ export default function InvoiceDetails() {
             ) : null}
           </div>
         </div>
+
+        {/* Courriel non livré (rebond capté par le webhook) — audit QA n°8 */}
+        {invoice.status !== 'draft' && <EmailDeliveryBadge entityType="invoice" entityId={invoice.id} />}
 
         {/* View Tracking */}
         {invoice.status !== 'draft' && (

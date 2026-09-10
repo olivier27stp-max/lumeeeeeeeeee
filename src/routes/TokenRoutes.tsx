@@ -6,13 +6,16 @@ const ContractView = React.lazy(() => import('../pages/ContractView'));
 const SatisfactionSurvey = React.lazy(() => import('../pages/SatisfactionSurvey'));
 const ClientPortal = React.lazy(() => import('../pages/ClientPortal'));
 const PublicPayment = React.lazy(() => import('../pages/PublicPayment'));
+const InvoiceView = React.lazy(() => import('../pages/InvoiceView'));
 const AcceptInvitation = React.lazy(() => import('../pages/AcceptInvitation'));
 const MigrationPortal = React.lazy(() => import('../pages/MigrationPortal'));
 
-type TokenKind = 'quote' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite' | 'migration';
+type TokenKind = 'quote' | 'invoice' | 'contract' | 'survey' | 'portal' | 'pay' | 'invite' | 'migration';
 
 const ELEMENTS: Record<TokenKind, { path: string; element: ReactElement }> = {
   quote: { path: '/quote/:token', element: <QuoteView /> },
+  // Facture vue par le client (audit QA 2026-09-09 n°1 : n'existait pas).
+  invoice: { path: '/invoice/:token', element: <InvoiceView /> },
   contract: { path: '/contract/:token', element: <ContractView /> },
   survey: { path: '/survey/:token', element: <SatisfactionSurvey /> },
   portal: { path: '/portal/:token', element: <ClientPortal /> },
@@ -40,6 +43,7 @@ export function TokenRoute({ kind }: { kind: TokenKind }) {
 /** Returns the token kind for a pathname, or null if not a public token URL. */
 export function detectTokenKind(pathname: string): TokenKind | null {
   if (pathname.startsWith('/quote/')) return 'quote';
+  if (pathname.startsWith('/invoice/')) return 'invoice';
   if (pathname.startsWith('/contract/')) return 'contract';
   if (pathname.startsWith('/survey/')) return 'survey';
   if (pathname.startsWith('/portal/')) return 'portal';

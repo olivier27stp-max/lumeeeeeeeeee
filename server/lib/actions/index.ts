@@ -82,7 +82,10 @@ async function depassePlafondFrequence(
       .select('id', { count: 'exact', head: true })
       .eq('org_id', ctx.orgId)
       .eq('event_type', 'email_sent')
-      .ilike('description', `%${destinataire}%`)
+      // Le destinataire est dans metadata.to (voir l'insert plus bas) :
+      // `activity_log` n'a pas de colonne `description` — la requête échouait
+      // et le plafond courriel ne s'appliquait jamais (check:schema-refs).
+      .eq('metadata->>to', destinataire)
       .gte('created_at', depuis);
     return (count ?? 0) >= PLAFOND_MSG_COMMERCIAUX_24H;
   } catch (e: any) {

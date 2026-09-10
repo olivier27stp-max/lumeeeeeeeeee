@@ -198,7 +198,7 @@ import SessionTimeoutModal from './components/SessionTimeoutModal';
 
 // Route groups (extracted to src/routes/* to keep this file from growing further)
 import { PublicRoutes } from './routes/PublicRoutes';
-import { rendueSansSession } from './lib/routesSansSession';
+import { rendueSansSession, estCibleInterne, CLE_NEXT } from './lib/routesSansSession';
 import { TokenRoute, detectTokenKind } from './routes/TokenRoutes';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { checkCreatorAccess } from './lib/creatorSpaceApi';
@@ -282,6 +282,11 @@ export default function App() {
   );
 }
 
+/** Téléphone / petite tablette : là où la barre latérale devient un tiroir (< md). */
+function estEcranEtroit(): boolean {
+  try { return window.matchMedia('(max-width: 767px)').matches; } catch { return false; }
+}
+
 function AppInner() {
   const { t, language } = useTranslation();
   const [user, setUser] = useState<User | null>(null);
@@ -289,14 +294,23 @@ function AppInner() {
 
   // Auto-signout after 4 h of inactivity (warns 5 min ahead)
   useSessionTimeout(user?.id || null);
+  // Le même état pilote la barre latérale (bureau) ET le tiroir (téléphone,
+  // < md). Il vaut `true` par défaut — juste pour le bureau. Sur téléphone,
+  // le tiroir s'ouvrait donc à CHAQUE chargement, et son voile fixed inset-0
+  // z-30 recouvrait toute la page : « Enregistrer le client » incliquable
+  // (audit QA prod 2026-09-09, n°5 + phase 3, prouvé en 390×844). Sur
+  // téléphone : fermé au chargement, fermé à chaque navigation, et le
+  // réglage bureau n'est jamais écrasé par un geste mobile.
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
+      if (estEcranEtroit()) return false;
       const saved = localStorage.getItem('lume-sidebar-open');
       if (saved === 'true' || saved === 'false') return saved === 'true';
     }
     return true;
   });
   useEffect(() => {
+    if (estEcranEtroit()) return;
     try { localStorage.setItem('lume-sidebar-open', String(isSidebarOpen)); } catch {}
   }, [isSidebarOpen]);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
@@ -332,6 +346,9 @@ function AppInner() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  useEffect(() => {
+    if (estEcranEtroit()) setIsSidebarOpen(false);
+  }, [location.pathname]);
   // NOTE: useRealtimeNotifications uses useCompany() internally, so it must be
   // called inside <CompanyProvider>. It's hoisted into AuthenticatedApp instead.
   const [unreadSms, setUnreadSms] = useState(0);
@@ -491,6 +508,18 @@ function AppInner() {
 
   // Ctrl+K opens command palette
   useCommandPaletteShortcut(setCommandPaletteOpen);
+
+  // Destination demandée avant une connexion Google (Auth.tsx la range dans
+  // sessionStorage parce que Google revient toujours sur l'origine). Rejouée
+  // une fois la session là, puis oubliée. Audit QA 2026-09-09, n°7.
+  useEffect(() => {
+    if (!user) return;
+    let cible: string | null = null;
+    try { cible = sessionStorage.getItem(CLE_NEXT); sessionStorage.removeItem(CLE_NEXT); } catch { /* stockage indisponible */ }
+    if (cible && estCibleInterne(cible) && cible !== location.pathname + location.search) {
+      navigate(cible, { replace: true });
+    }
+  }, [user]);
 
   // Check if user needs onboarding — only for brand new sign-ups
   // Also ensures every user has an org + membership (auto-provision on first login)
@@ -1465,6 +1494,8 @@ function AuthenticatedApp({
                   <Routes>
                     <Route path="/" element={<Navigate to="/day" replace />} />
                     <Route path="/pricing" element={<Navigate to="/settings/billing" replace />} />
+                    {/* Ancien chemin encore tapé à la main / dans des favoris (audit QA P2). */}
+                    <Route path="/marketplace" element={<Navigate to="/settings/marketplace" replace />} />
                     {/* Lume Agent masque — la fonctionnalite n'est pas encore ouverte aux
                         utilisateurs. La route est REDIRIGEE plutot que supprimee : un favori
                         ou un lien deja partage ne doit pas tomber sur une page blanche.

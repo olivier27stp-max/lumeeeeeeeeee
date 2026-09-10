@@ -79,6 +79,10 @@ supabase/
   - pas de `console.log` dans `server/` : `logger` de `server/lib/logger.ts` (masque les champs sensibles)
 - **Paywall côté serveur** : `server/lib/subscription-guard.ts` répond 402 sans abonnement actif (`SUBSCRIPTION_GUARD=enforce|log|off`, bypass bêta via `BETA_BYPASS_EMAILS` serveur — jamais de variable `VITE_*` pour ça). Le check dans `App.tsx` n'est qu'un confort d'affichage. `node --env-file=.env.local scripts/qa/verifier-paywall.mjs` le vérifie contre staging.
 - Les pages sont en `React.lazy` (App.tsx, PublicRoutes, TokenRoutes) : une nouvelle page s'ajoute en lazy, pas en import statique
+- **Pages publiques par jeton** : `/quote/`, `/invoice/` (facture, `GET /api/invoices/public/:token`), `/contract/`, `/pay/`… — déclarées à la fois dans `TokenRoutes.tsx` et `CHEMINS_PUBLICS` (mobileGate), les tests croisent les deux. Le suivi de vue s'écrit quand la page est SERVIE, jamais sur une redirection.
+- **Courriels** : `sendEmail({ …, suivi: { orgId, entityType, entityId } })` journalise dans `email_deliveries` ; `POST /api/webhooks/email` (Resend, Svix) y écrit les rebonds ; `adresseInjoignable()` avant toute relance. Fournisseur : Resend si `RESEND_API_KEY`, sinon SMTP.
+- **Hors session**, une route de l'app redirige vers `/auth?next=…` (PublicCatchAll) ; `next` n'est honoré que s'il est interne (`estCibleInterne`).
+- Sur téléphone (< md), le tiroir de navigation est fermé au chargement et à chaque navigation ; la carte Setup ne s'affiche pas sur `/new`, `/edit`, `/settings`, `/finances` (`routeAvecBarreDAction`). `npm run qa:boutons-atteignables` vérifie qu'aucun bouton d'action n'est recouvert (1440×900 et 390×844, vrai clic).
 
 ## AI Behavior
 - Always read `CLAUDE.md` first
