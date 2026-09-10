@@ -70,6 +70,15 @@ supabase/
 - All API calls go through `src/lib/*Api.ts` files — never fetch directly from pages
 - Server routes validate input with Zod schemas in `server/lib/validation.ts`
 - Zod `nullable()` required for fields that can receive `null` from clients
+- **Règles figées par des tests statiques (audit 2026-09-09)** — chacune a son test dans `tests/`, ne pas contourner :
+  - `tsconfig` est en `strict: true` (`tests/` + `npm run lint`) — pas de `any` nouveau, pas de `!` sans commentaire
+  - aucun `catch` vide sur un chemin d'écriture (`catch-vides-chemins-ecriture.test.ts`) : journaliser (`console.error` + `captureClientException` côté client, `dead_letters` côté serveur si rejouable)
+  - `src/` n'importe jamais `node:crypto`, la clé service_role ni un module de `server/` (`frontiere-serveur-client.test.ts`) — les secrets de paiement vivent dans `server/lib/{crypto,stripeClient,paypalClient}.ts`
+  - un client Stripe se construit UNIQUEMENT via `creerClientStripe()` (`server/lib/stripe-sdk.ts`, version d'API épinglée)
+  - pas d'`alert()` / `confirm()` natifs (`dialogues-natifs-bannis.test.ts`) : `confirmer()` de `src/components/ui/ConfirmDialog.tsx` et les toasts `sonner`
+  - pas de `console.log` dans `server/` : `logger` de `server/lib/logger.ts` (masque les champs sensibles)
+- **Paywall côté serveur** : `server/lib/subscription-guard.ts` répond 402 sans abonnement actif (`SUBSCRIPTION_GUARD=enforce|log|off`, bypass bêta via `BETA_BYPASS_EMAILS` serveur — jamais de variable `VITE_*` pour ça). Le check dans `App.tsx` n'est qu'un confort d'affichage. `node --env-file=.env.local scripts/qa/verifier-paywall.mjs` le vérifie contre staging.
+- Les pages sont en `React.lazy` (App.tsx, PublicRoutes, TokenRoutes) : une nouvelle page s'ajoute en lazy, pas en import statique
 
 ## AI Behavior
 - Always read `CLAUDE.md` first
