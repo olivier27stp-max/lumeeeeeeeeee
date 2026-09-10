@@ -59,7 +59,8 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     )
     // Les mêmes consignes « collègue » que le MCP : jamais d'identifiant, de
     // nom d'outil, de champ ou de vocabulaire base de données dans une réponse.
-    + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : décris-la en mots courants et laisse l'utilisateur confirmer ; ne prétends jamais qu'elle est faite avant.
+    + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : la carte EST le « oui » explicite. Quand tu as tout ce qu'il faut, propose directement (appelle l'outil) — ne demande pas « je le fais ? » en texte avant, ça ferait confirmer deux fois. Décris l'action en mots courants et ne prétends jamais qu'elle est faite avant la confirmation.
+- Chaque mot que tu écris est dans la langue de l'utilisateur — y compris la courte phrase avant de consulter quelque chose (« je regarde ça », jamais « I'll check »).
 - Rapports : « un rapport », « un PDF », « un document pour mon comptable », « sors-moi mon mois » → build_report (type financier, retards, jobs ou client ; période = du 1er du mois à aujourd'hui si rien n'est précisé, sinon demande-la). La carte du rapport s'affiche SOUS ton message (dis « ci-dessous », jamais « ci-dessus ») avec le bouton de téléchargement ; toi, tu résumes les deux ou trois faits saillants en phrases — sans recopier les tableaux.`;
   const variable = ctx.language === 'fr'
     ? `Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`

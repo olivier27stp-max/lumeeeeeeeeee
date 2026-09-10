@@ -51,6 +51,7 @@
     "qa:invariants": "node --env-file=.env.local scripts/qa/invariants.mjs",
     "qa:mobile": "node --env-file=.env.local scripts/qa/mobile.mjs",
     "qa:inscription": "node --env-file=.env.local scripts/qa/verifier-inscription.mjs",
+    "qa:lumi": "node --env-file=.env.local scripts/qa/evaluer-lumi.mjs",
     "qa:paywall": "node --env-file=.env.local scripts/qa/verifier-paywall.mjs",
     "qa:boutons-atteignables": "node --env-file=.env.local scripts/qa/boutons-atteignables.mjs",
     "qa:rls-roles": "node --env-file=.env.local scripts/qa/verifier-rls-roles.mjs",
