@@ -51,35 +51,86 @@ function libelleOutil(name: string, fr: boolean): string {
 }
 
 /**
- * Rendu du texte de Lumi : gras (**x**), puces (- x) et titres (### x), sans
- * bibliothèque ni HTML injecté. Le modèle écrit un peu de Markdown ; l'afficher
- * brut (étoiles, dièses) faisait « brouillon ».
+ * Rendu du texte de Lumi : gras (**x**), puces (- x), titres (### x) et
+ * tableaux Markdown (| a | b |), sans bibliothèque ni HTML injecté. Le modèle
+ * écrit un peu de Markdown ; l'afficher brut (étoiles, dièses, barres |)
+ * faisait « brouillon » — un tableau de forfaits ressortait en bouillie de |.
  */
 function Gras({ texte }: { texte: string }) {
   const morceaux = texte.split(/\*\*(.+?)\*\*/g);
   return <>{morceaux.map((m, i) => (i % 2 === 1 ? <strong key={i} className="font-semibold">{m}</strong> : <React.Fragment key={i}>{m}</React.Fragment>))}</>;
 }
 
+/** Découpe une ligne de tableau Markdown en cellules, sans les | de bord. */
+function cellulesTableau(ligne: string): string[] {
+  return ligne.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+}
+
+/** Une ligne est-elle un séparateur d'en-tête Markdown (|---|:--:|) ? */
+function estSeparateurTableau(ligne: string): boolean {
+  return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(ligne);
+}
+
+function TableauLumi({ lignes }: { lignes: string[] }) {
+  const entete = cellulesTableau(lignes[0]);
+  const corps = lignes.slice(2).map(cellulesTableau);
+  return (
+    <div className="my-1 overflow-x-auto">
+      <table className="w-full border-collapse text-[12px]">
+        <thead>
+          <tr>
+            {entete.map((c, i) => (
+              <th key={i} className="border border-outline/60 px-2 py-1 text-left font-semibold whitespace-nowrap"><Gras texte={c} /></th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {corps.map((rangee, r) => (
+            <tr key={r}>
+              {rangee.map((c, i) => (
+                <td key={i} className="border border-outline/60 px-2 py-1 align-top"><Gras texte={c} /></td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function TexteLumi({ texte }: { texte: string }) {
   const lignes = texte.replace(/\r/g, '').split('\n');
-  return (
-    <>
-      {lignes.map((l, i) => {
-        const puce = /^\s*[-*•]\s+(.*)$/.exec(l);
-        const titre = /^\s*#{1,4}\s+(.*)$/.exec(l);
-        if (puce) {
-          return (
-            <span key={i} className="flex gap-2 pl-1">
-              <span aria-hidden="true">•</span>
-              <span className="flex-1"><Gras texte={puce[1]} /></span>
-            </span>
-          );
-        }
-        if (titre) return <span key={i} className="block font-semibold mt-1"><Gras texte={titre[1]} /></span>;
-        return <span key={i} className="block min-h-[0.6em]"><Gras texte={l} /></span>;
-      })}
-    </>
-  );
+  const blocs: React.ReactNode[] = [];
+  for (let i = 0; i < lignes.length; i++) {
+    const l = lignes[i];
+
+    // Tableau Markdown : ligne | … | suivie d'un séparateur |---|---|.
+    const estRangee = /^\s*\|.*\|\s*$/.test(l);
+    if (estRangee && i + 1 < lignes.length && estSeparateurTableau(lignes[i + 1])) {
+      const debut = i;
+      let j = i + 2;
+      while (j < lignes.length && /^\s*\|.*\|\s*$/.test(lignes[j])) j++;
+      blocs.push(<TableauLumi key={`t${debut}`} lignes={lignes.slice(debut, j)} />);
+      i = j - 1;
+      continue;
+    }
+
+    const puce = /^\s*[-*•]\s+(.*)$/.exec(l);
+    const titre = /^\s*#{1,4}\s+(.*)$/.exec(l);
+    if (puce) {
+      blocs.push(
+        <span key={i} className="flex gap-2 pl-1">
+          <span aria-hidden="true">•</span>
+          <span className="flex-1"><Gras texte={puce[1]} /></span>
+        </span>,
+      );
+    } else if (titre) {
+      blocs.push(<span key={i} className="block font-semibold mt-1"><Gras texte={titre[1]} /></span>);
+    } else {
+      blocs.push(<span key={i} className="block min-h-[0.6em]"><Gras texte={l} /></span>);
+    }
+  }
+  return <>{blocs}</>;
 }
 
 function fmtDollars(cents: number): string {
