@@ -5,6 +5,7 @@
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useRegion } from '../../hooks/useRegion';
 
 type Tab = 'accueil' | 'calendrier' | 'messages' | 'finances';
 type Bi = { fr: string; en: string };
@@ -38,17 +39,17 @@ export function StopList({ fr }: { fr: boolean }) {
 export function Pillars({ fr }: { fr: boolean }) {
   const cards: { job: Bi; title: Bi; lead: Bi; items: Bi[]; to: string }[] = [
     { job: { fr: 'Administration', en: 'Admin' }, title: { fr: 'Clients et demandes', en: 'Clients and requests' }, lead: { fr: 'Un client, une fiche, tout son historique.', en: 'One client, one record, the whole history.' },
-      items: [{ fr: 'Formulaire de demande sur ton site', en: 'Request form on your website' }, { fr: 'Propriétés, notes, photos, contrats', en: 'Properties, notes, photos, contracts' }, { fr: 'Portail client : approuver, payer, revoir', en: 'Client portal: approve, pay, review' }], to: '/features#request-form' },
+      items: [{ fr: 'Formulaire de demande sur ton site', en: 'Request form on your website' }, { fr: 'Propriétés, notes, photos, contrats', en: 'Properties, notes, photos, contracts' }, { fr: 'Portail client : approuver, payer, revoir', en: 'Client portal: approve, pay, review' }], to: '/fonctions/clients' },
     { job: { fr: 'Ventes', en: 'Sales' }, title: { fr: 'Soumissions', en: 'Quotes' }, lead: { fr: 'Envoyée de la job, signée sur le téléphone.', en: 'Sent from the job site, signed on the phone.' },
-      items: [{ fr: 'Modèles et préréglages par service', en: 'Templates and presets per service' }, { fr: 'Mesure satellite du terrain', en: 'Satellite measuring of the property' }, { fr: 'Relance automatique, conversion en job', en: 'Automatic follow-up, conversion to job' }], to: '/features#notifications' },
+      items: [{ fr: 'Modèles et préréglages par service', en: 'Templates and presets per service' }, { fr: 'Mesure satellite du terrain', en: 'Satellite measuring of the property' }, { fr: 'Relance automatique, conversion en job', en: 'Automatic follow-up, conversion to job' }], to: '/fonctions/soumissions' },
     { job: { fr: 'Répartition', en: 'Dispatch' }, title: { fr: 'Calendrier et dispatch', en: 'Calendar and dispatch' }, lead: { fr: 'La journée de chaque équipe, sur une carte.', en: "Each crew's day, on a map." },
-      items: [{ fr: 'Jobs récurrents, vue jour, semaine, mois', en: 'Recurring jobs, day, week and month views' }, { fr: 'Trajets optimisés sur de vraies routes', en: 'Routes optimized on real roads' }, { fr: 'GPS en direct, checklists sur le terrain', en: 'Live GPS, checklists in the field' }], to: '/features#scheduling' },
+      items: [{ fr: 'Jobs récurrents, vue jour, semaine, mois', en: 'Recurring jobs, day, week and month views' }, { fr: 'Trajets optimisés sur de vraies routes', en: 'Routes optimized on real roads' }, { fr: 'GPS en direct, checklists sur le terrain', en: 'Live GPS, checklists in the field' }], to: '/fonctions/calendrier' },
     { job: { fr: 'Service client', en: 'Customer service' }, title: { fr: 'Messages', en: 'Messages' }, lead: { fr: "Les textos des clients dans l'app, pas sur le cell perso.", en: 'Client texts in the app, not on a personal phone.' },
-      items: [{ fr: 'SMS bidirectionnels, numéro dédié', en: 'Two-way SMS, dedicated number' }, { fr: 'Rappels de rendez-vous automatiques', en: 'Automatic appointment reminders' }, { fr: 'Messages groupés, courriels depuis la fiche', en: 'Batch messages, emails from the record' }], to: '/features#notifications' },
+      items: [{ fr: 'SMS bidirectionnels, numéro dédié', en: 'Two-way SMS, dedicated number' }, { fr: 'Rappels de rendez-vous automatiques', en: 'Automatic appointment reminders' }, { fr: 'Messages groupés, courriels depuis la fiche', en: 'Batch messages, emails from the record' }], to: '/fonctions/messages' },
     { job: { fr: 'Comptabilité', en: 'Accounting' }, title: { fr: 'Finances et paie', en: 'Finances and payroll' }, lead: { fr: 'La facture part quand la job finit.', en: 'The invoice goes out when the job ends.' },
-      items: [{ fr: 'Paiement en ligne Stripe ou PayPal', en: 'Online payment with Stripe or PayPal' }, { fr: "Payées, en attente, en retard, d'un coup d'œil", en: 'Paid, pending, overdue at a glance' }, { fr: 'Feuilles de temps, paie, export QuickBooks', en: 'Timesheets, payroll, QuickBooks export' }], to: '/features#payments' },
+      items: [{ fr: 'Paiement en ligne Stripe ou PayPal', en: 'Online payment with Stripe or PayPal' }, { fr: "Payées, en attente, en retard, d'un coup d'œil", en: 'Paid, pending, overdue at a glance' }, { fr: 'Feuilles de temps, paie, export QuickBooks', en: 'Timesheets, payroll, QuickBooks export' }], to: '/fonctions/finances' },
     { job: { fr: 'Bras droit', en: 'Right hand' }, title: { fr: "Lumi, l'assistant", en: 'Lumi, the assistant' }, lead: { fr: 'Il propose, tu confirmes, tout est journalisé.', en: 'It proposes, you confirm, everything is logged.' },
-      items: [{ fr: 'Répond aux clients, propose un créneau', en: 'Answers clients, proposes a time slot' }, { fr: 'Replanifie quand la météo change', en: 'Reschedules when the weather changes' }, { fr: 'Relance ce qui traîne, te brief le matin', en: 'Follows up on stragglers, briefs you each morning' }], to: '/features#ai-voice' },
+      items: [{ fr: 'Répond aux clients, propose un créneau', en: 'Answers clients, proposes a time slot' }, { fr: 'Replanifie quand la météo change', en: 'Reschedules when the weather changes' }, { fr: 'Relance ce qui traîne, te brief le matin', en: 'Follows up on stragglers, briefs you each morning' }], to: '/fonctions/lumi' },
   ];
   return (
     <section className="hs-pillars">
@@ -186,10 +187,11 @@ export function Flow({ fr }: { fr: boolean }) {
 
 /* ── Forfaits ── */
 export function PlansTeaser({ fr }: { fr: boolean }) {
-  const plans: { stage: Bi; name: string; price: number; d: Bi; feat?: boolean }[] = [
-    { stage: { fr: 'Je démarre', en: 'Getting started' }, name: 'Minimum', price: 150, d: { fr: 'Clients, soumissions, jobs, calendrier, factures, paiements. 3 utilisateurs.', en: 'Clients, quotes, jobs, calendar, invoices, payments. 3 users.' } },
-    { stage: { fr: "J'ai une équipe", en: 'I have a team' }, name: 'Scale', price: 340, feat: true, d: { fr: 'Tout Minimum, plus SMS, automatisations, feuilles de temps, dispatch, Lumi en texte. 10 utilisateurs.', en: 'Everything in Minimum, plus SMS, automations, timesheets, dispatch, Lumi in text. 10 users.' } },
-    { stage: { fr: 'Ça roule sans moi', en: 'Runs without me' }, name: 'Autopilot', price: 495, d: { fr: 'Tout Scale, plus Lumi en voix illimité, porte-à-porte, formations, API. 20 utilisateurs.', en: 'Everything in Scale, plus unlimited voice Lumi, door-to-door, courses, API. 20 users.' } },
+  const { currency } = useRegion();
+  const plans: { stage: Bi; name: string; price: Record<'CAD' | 'USD', number>; d: Bi; feat?: boolean }[] = [
+    { stage: { fr: 'Je démarre', en: 'Getting started' }, name: 'Minimum', price: { CAD: 150, USD: 110 }, d: { fr: 'Clients, soumissions, jobs, calendrier, factures, paiements. 3 utilisateurs.', en: 'Clients, quotes, jobs, calendar, invoices, payments. 3 users.' } },
+    { stage: { fr: "J'ai une équipe", en: 'I have a team' }, name: 'Scale', price: { CAD: 340, USD: 250 }, feat: true, d: { fr: 'Tout Minimum, plus SMS, automatisations, feuilles de temps, dispatch, Lumi en texte. 10 utilisateurs.', en: 'Everything in Minimum, plus SMS, automations, timesheets, dispatch, Lumi in text. 10 users.' } },
+    { stage: { fr: 'Ça roule sans moi', en: 'Runs without me' }, name: 'Autopilot', price: { CAD: 495, USD: 360 }, d: { fr: 'Tout Scale, plus Lumi en voix illimité, porte-à-porte, formations, API. 20 utilisateurs.', en: 'Everything in Scale, plus unlimited voice Lumi, door-to-door, courses, API. 20 users.' } },
   ];
   return (
     <section className="hs-plans">
@@ -201,7 +203,7 @@ export function PlansTeaser({ fr }: { fr: boolean }) {
             {p.feat && <span className="hs-tag">{fr ? 'Le plus populaire' : 'Most popular'}</span>}
             <em>{pick(fr, p.stage)}</em>
             <b>{p.name}</b>
-            <div className="hs-pp">{fr ? `${p.price} $` : `$${p.price}`}<span>{fr ? '/mois' : '/mo'}</span></div>
+            <div className="hs-pp">{fr ? `${p.price[currency]} $` : `$${p.price[currency]}`}<span>{fr ? '/mois' : '/mo'} {currency}</span></div>
             <p>{pick(fr, p.d)}</p>
           </Link>
         ))}
