@@ -214,13 +214,13 @@ const outil = async (jeton, name, args = {}) => {
   if (unVrai?.first_name && unVrai?.last_name) {
     const nomComplet = `${unVrai.first_name} ${unVrai.last_name}`;
     const rechComplet = await outil(jLecture, 'search_clients', { query: nomComplet, limit: 5 });
-    R((rechComplet.count ?? 0) >= 1, 'search_clients trouve Prenom Nom complet (multi-tokens)', `"${nomComplet}" -> ${rechComplet.count}`);
+    R((rechComplet.total_matching ?? 0) >= 1, 'search_clients trouve Prenom Nom complet (multi-tokens)', `"${nomComplet}" -> ${rechComplet.total_matching}`);
   } else {
     console.log('  . recherche multi-tokens : aucun client prenom+nom en staging, saute');
   }
   const clientsTech = await outil(jTech, 'search_clients', { query: '', limit: 5 });
-  R((clientsTech.count ?? clientsTech.clients?.length ?? 0) >= 0 && !clientsTech.error,
-    'Technicien : le reste du CRM fonctionne normalement', `${clientsTech.count ?? 0} client(s)`);
+  R((clientsTech.total_matching ?? clientsTech.clients?.length ?? 0) >= 0 && !clientsTech.error,
+    'Technicien : le reste du CRM fonctionne normalement', `${clientsTech.total_matching ?? 0} client(s)`);
 
   // Et le PROPRIÉTAIRE, lui, voit toujours tout — même appel, même org.
   const jobsProprio = await outil(jLecture, 'list_jobs', { limit: 5 });

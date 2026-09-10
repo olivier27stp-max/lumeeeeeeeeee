@@ -32,8 +32,10 @@ describe('coût d un appel', () => {
   it('LUMI_MODEL n est honoré que s il est tarifé', async () => {
     const { modeleLumi } = await import('../server/lib/lumi/tarifs');
     expect(modeleLumi({ LUMI_MODEL: 'claude-sonnet-5' } as any)).toBe('claude-sonnet-5');
-    expect(modeleLumi({ LUMI_MODEL: 'gpt-9' } as any)).toBe('claude-opus-5');
-    expect(modeleLumi({} as any)).toBe('claude-opus-5');
+    // Défaut Sonnet 5 depuis le 2026-09-10 (mêmes tâches, 2,5× moins cher).
+    expect(modeleLumi({ LUMI_MODEL: 'claude-opus-5' } as any)).toBe('claude-opus-5');
+    expect(modeleLumi({ LUMI_MODEL: 'gpt-9' } as any)).toBe('claude-sonnet-5');
+    expect(modeleLumi({} as any)).toBe('claude-sonnet-5');
   });
 });
 
@@ -143,11 +145,13 @@ describe('orchestrateur', () => {
     expect(r.texte).toBe('Bonjour !');
     expect(r.proposition).toBeNull();
     expect(journal).toHaveLength(1);
-    expect(journal[0].model).toBe('claude-opus-5');
+    expect(journal[0].model).toBe('claude-sonnet-5');
     expect(emis.some((e) => e.type === 'text' && e.delta === 'Bonjour !')).toBe(true);
     // Le prompt système et les outils sont mis en cache ; effort medium ; réflexion adaptative.
     const params = instantanes[0];
-    expect(params.tools[params.tools.length - 1].cache_control).toEqual({ type: 'ephemeral' });
+    // Cache d'une heure : la reprise d'une conversation après une pause ne
+    // réécrit plus le contexte (2,6 ¢ sur les 6 ¢ d'un tour, mesuré en prod).
+    expect(params.tools[params.tools.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(params.thinking).toEqual({ type: 'adaptive' });
     expect(params.output_config).toEqual({ effort: 'medium' });
   });
@@ -294,7 +298,7 @@ describe('Lumi parle comme un collègue, pas comme une base de données', () => 
     const { CONSIGNES_COLLEGUE } = await import('../server/lib/agent/consignesCollegue');
     const blocs = promptSystemeLumi({ companyName: 'Coquin lavage', userName: 'Will', language: 'fr', todayIso: '2026-09-10' });
     const stable = blocs[0].text;
-    expect(blocs[0].cache_control).toEqual({ type: 'ephemeral' });
+    expect(blocs[0].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(stable).toContain(CONSIGNES_COLLEGUE);
     // Les règles qui comptent, nommément — si quelqu'un raccourcit le texte, ce test le dit.
     for (const regle of [

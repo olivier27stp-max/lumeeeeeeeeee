@@ -89,12 +89,28 @@ function somme(rows: any[] | null | undefined, champ: string): number {
   return (rows || []).reduce((acc, r) => acc + (Number(r?.[champ]) || 0), 0);
 }
 
+/**
+ * En-tête de tout résultat de liste plafonnée : le total EXACT en base
+ * (count: 'exact') avant les lignes. Quand la liste est tronquée, une note
+ * explicite le dit — sans elle, le modèle répondait « 20 clients » en lisant
+ * le nombre de lignes renvoyées alors que l'org en avait 21.
+ */
+function enTeteListe(count: number | null | undefined, rows: any[] | null | undefined): {
+  total_matching: number; shown: number; note?: string;
+} {
+  const shown = rows?.length || 0;
+  const total = count ?? shown;
+  return total > shown
+    ? { total_matching: total, shown, note: `Only ${shown} of ${total} are listed below. The exact total is ${total}.` }
+    : { total_matching: total, shown };
+}
+
 const searchClients: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_clients',
     description:
-      'Search the CRM clients by name, company, email, phone, or city. Returns matching clients with their id (needed to create quotes/invoices/jobs or send SMS), contact info and city.',
+      'Search the CRM clients by name, company, email, phone, or city. Returns total_matching (the EXACT number of matching clients, even when fewer rows are returned — use it to answer "how many"), plus matching clients with their id (needed to create quotes/invoices/jobs or send SMS), contact info and city.',
     parameters: {
       type: 'object',
       properties: {
@@ -107,7 +123,11 @@ const searchClients: AgentTool = {
     const limit = clamp(args.limit, 10, 25);
     let q = ctx.client
       .from('clients')
-      .select('id, first_name, last_name, company, email, phone, address, city, status')
+      // `count: 'exact'` : le total RÉEL voyage avec les lignes plafonnées.
+      // Sans lui, « combien de clients j'ai ? » recevait 25 fiches et
+      // l'assistant répondait « au moins 25, probablement plus » — faux et
+      // cher (25 fiches renvoyées au modèle pour un chiffre).
+      .select('id, first_name, last_name, company, email, phone, address, city, status', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .is('deleted_at', null)
       .limit(limit);
@@ -124,10 +144,10 @@ const searchClients: AgentTool = {
         );
       }
     }
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return toolError('db', error);
     return {
-      count: data?.length || 0,
+      ...enTeteListe(count, data),
       clients: (data || []).map((c) => ({
         id: c.id, // interne : pour create_job / create_quote / get_client_profile…
         name: fullName(c),
@@ -146,7 +166,7 @@ const searchLeads: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_leads',
-    description: 'Search CRM leads (prospects) by name, company, email or phone. Returns matching leads with their id and status.',
+    description: 'Search CRM leads (prospects) by name, company, email or phone. Returns total_matching (exact count, even when fewer rows are returned) and matching leads with their id and status.',
     parameters: {
       type: 'object',
       properties: {
@@ -159,7 +179,7 @@ const searchLeads: AgentTool = {
     const limit = clamp(args.limit, 10, 25);
     let q = ctx.client
       .from('clients')
-      .select('id, first_name, last_name, company, email, phone, status:lead_status, value, address')
+      .select('id, first_name, last_name, company, email, phone, status:lead_status, value, address', { count: 'exact' })
       .eq('status', 'lead')
       .is('deleted_at', null)
       .eq('org_id', ctx.orgId)
@@ -171,10 +191,10 @@ const searchLeads: AgentTool = {
         `first_name.ilike.%${t}%,last_name.ilike.%${t}%,company.ilike.%${t}%,email.ilike.%${t}%,phone.ilike.%${t}%`,
       );
     }
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return toolError('db', error);
     return {
-      count: data?.length || 0,
+      ...enTeteListe(count, data),
       leads: (data || []).map((l) => ({
         id: l.id,
         name: fullName(l),
@@ -260,8 +280,7 @@ const listJobs: AgentTool = {
     const { data, error, count } = await q;
     if (error) return toolError('db', error);
     return {
-      total_matching: count ?? data?.length ?? 0,
-      returned: data?.length || 0,
+      ...enTeteListe(count, data),
       sum_total_cents_of_returned: somme(data, 'total_cents'),
       jobs: (data || []).map((j: any) => ({
         id: j.id, // interne : pour get_job / update_job / reschedule_job…
@@ -408,7 +427,7 @@ const listQuotes: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_quotes',
-    description: 'List quotes, optionally filtered by status or a search term. Returns quote number, title, status and total.',
+    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count, even when fewer rows are returned), then quote number, title, status and total.',
     parameters: {
       type: 'object',
       properties: {
@@ -422,7 +441,7 @@ const listQuotes: AgentTool = {
     const limit = clamp(args.limit, 15, 30);
     let q = ctx.client
       .from('quotes')
-      .select('id, quote_number, title, status, total_cents, currency, valid_until, created_at')
+      .select('id, quote_number, title, status, total_cents, currency, valid_until, created_at', { count: 'exact' })
       .eq('org_id', ctx.orgId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -433,11 +452,11 @@ const listQuotes: AgentTool = {
       const t = term.replace(/[%,()]/g, ' ');
       q = q.or(`quote_number.ilike.%${t}%,title.ilike.%${t}%`);
     }
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return toolError('db', error);
     return {
-      count: data?.length || 0,
-      sum_total_cents: somme(data, 'total_cents'),
+      ...enTeteListe(count, data),
+      sum_total_cents_of_returned: somme(data, 'total_cents'),
       quotes: (data || []).map((q: any) => ({
         id: q.id, // interne : pour send_quote / convert_quote_to_job
         quote_number: q.quote_number,
