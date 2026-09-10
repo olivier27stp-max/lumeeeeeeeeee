@@ -23,19 +23,20 @@
 import 'dotenv/config';
 import { twilioClient, twilioAccountSid, getTwilioStatusCallbackUrl } from '../lib/config';
 import { getServiceClient } from '../lib/supabase';
+import { logger } from '../lib/logger';
 
-const ok = (m: string) => console.log(`  ✅ ${m}`);
-const ko = (m: string) => console.log(`  ❌ ${m}`);
-const warn = (m: string) => console.log(`  ⚠️  ${m}`);
-const info = (m: string) => console.log(`     ${m}`);
-const titre = (m: string) => console.log(`\n━━ ${m} ${'━'.repeat(Math.max(0, 56 - m.length))}`);
+const ok = (m: string) => logger.info(`  ✅ ${m}`);
+const ko = (m: string) => logger.info(`  ❌ ${m}`);
+const warn = (m: string) => logger.info(`  ⚠️  ${m}`);
+const info = (m: string) => logger.info(`     ${m}`);
+const titre = (m: string) => logger.info(`\n━━ ${m} ${'━'.repeat(Math.max(0, 56 - m.length))}`);
 
 let bloquants = 0;
 
 async function main() {
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
-  console.log('║  Diagnostic du provisionnement SMS — aucun achat         ║');
-  console.log('╚══════════════════════════════════════════════════════════╝');
+  logger.info('\n╔══════════════════════════════════════════════════════════╗');
+  logger.info('║  Diagnostic du provisionnement SMS — aucun achat         ║');
+  logger.info('╚══════════════════════════════════════════════════════════╝');
 
   // ── 1. Identifiants Twilio ────────────────────────────────────────
   titre('1. Identifiants Twilio');
@@ -207,17 +208,17 @@ async function main() {
   }
 
   // ── Verdict ───────────────────────────────────────────────────────
-  console.log('\n╔══════════════════════════════════════════════════════════╗');
+  logger.info('\n╔══════════════════════════════════════════════════════════╗');
   if (bloquants === 0) {
-    console.log('║  ✅ VERDICT : un nouvel abonné recevra son numéro.       ║');
-    console.log('╚══════════════════════════════════════════════════════════╝');
-    console.log('\nToute la chaîne répond. Le prochain abonnement sur un forfait');
-    console.log('incluant les SMS déclenchera l’achat automatiquement.\n');
+    logger.info('║  ✅ VERDICT : un nouvel abonné recevra son numéro.       ║');
+    logger.info('╚══════════════════════════════════════════════════════════╝');
+    logger.info('\nToute la chaîne répond. Le prochain abonnement sur un forfait');
+    logger.info('incluant les SMS déclenchera l’achat automatiquement.\n');
   } else {
-    console.log(`║  ❌ VERDICT : ${bloquants} problème(s) bloquant(s).                     ║`);
-    console.log('╚══════════════════════════════════════════════════════════╝');
-    console.log('\nTant qu’ils ne sont pas réglés, aucun numéro ne sera acheté.');
-    console.log('L’échec sera toutefois tracé dans `provisioning_events`.\n');
+    logger.info(`║  ❌ VERDICT : ${bloquants} problème(s) bloquant(s).                     ║`);
+    logger.info('╚══════════════════════════════════════════════════════════╝');
+    logger.info('\nTant qu’ils ne sont pas réglés, aucun numéro ne sera acheté.');
+    logger.info('L’échec sera toutefois tracé dans `provisioning_events`.\n');
   }
   process.exit(bloquants === 0 ? 0 : 1);
 }

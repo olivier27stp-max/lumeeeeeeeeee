@@ -1,5 +1,6 @@
 import { twilioClient } from './config';
 import { getServiceClient } from './supabase';
+import { logger } from './logger';
 
 /**
  * Releasing a Twilio number back to the pool.
@@ -47,8 +48,9 @@ export async function scheduleSmsNumberRelease(orgId: string, reason: string): P
       })
       .eq('id', ch.id);
 
-    console.log(
-      `[sms-release] Org ${orgId} lost SMS (${reason}) — ${ch.phone_number} deactivated, release on ${releaseAt}`,
+    logger.info(
+      `[sms-release] Org ${orgId} lost SMS (${reason}) — number deactivated, release on ${releaseAt}`,
+      { phone: ch.phone_number },
     );
   }
 }
@@ -81,7 +83,7 @@ export async function cancelSmsNumberRelease(orgId: string): Promise<boolean> {
       .update({ status: 'active', metadata: meta })
       .eq('id', ch.id);
 
-    console.log(`[sms-release] Org ${orgId} regained SMS — ${ch.phone_number} reactivated`);
+    logger.info(`[sms-release] Org ${orgId} regained SMS — number reactivated`, { phone: ch.phone_number });
   }
   return true;
 }
@@ -119,7 +121,7 @@ export async function releaseExpiredSmsNumbers(): Promise<{
     // Safety net: never release a number for an org that has regained SMS.
     const { orgPlanIncludesSms } = await import('./twilioProvisioning');
     if (await orgPlanIncludesSms(ch.org_id)) {
-      console.log(`[sms-release] Org ${ch.org_id} pays for SMS again — cancelling release`);
+      logger.info(`[sms-release] Org ${ch.org_id} pays for SMS again — cancelling release`);
       await cancelSmsNumberRelease(ch.org_id);
       skipped++;
       continue;
@@ -141,7 +143,7 @@ export async function releaseExpiredSmsNumbers(): Promise<{
           metadata: { ...meta, released_at: new Date().toISOString() },
         })
         .eq('id', ch.id);
-      console.log(`[sms-release] Released ${ch.phone_number} (org ${ch.org_id})`);
+      logger.info(`[sms-release] Released number (org ${ch.org_id})`, { phone: ch.phone_number });
       released++;
     } catch (err: any) {
       // 404 = already gone on Twilio's side; treat as released so we stop retrying.

@@ -14,6 +14,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { getServiceClient } from './supabase';
+import { logger } from './logger';
 
 // ============================================================================
 // 1. ENHANCED RATE LIMITER — Sliding window with burst detection
@@ -911,7 +912,7 @@ export function applySecurityMiddleware(app: any) {
     },
   }));
 
-  console.log('[security] All middleware layers applied');
+  logger.info('[security] All middleware layers applied');
 }
 
 // ============================================================================
@@ -944,7 +945,7 @@ export async function runSecurityMaintenance() {
     // 4. Flush any remaining security events
     await flushSecurityEvents();
 
-    console.log('[security] Maintenance completed');
+    logger.info('[security] Maintenance completed');
   } catch (err: any) {
     console.error('[security] Maintenance error:', err?.message);
   }

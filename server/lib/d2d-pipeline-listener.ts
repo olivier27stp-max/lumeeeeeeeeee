@@ -8,6 +8,7 @@
 import { eventBus, type CRMEvent } from './eventBus';
 import { getServiceClient } from './supabase';
 import { syncPipelineStage } from './d2d-pipeline-sync';
+import { logger } from './logger';
 
 /**
  * Initialize the D2D pipeline sync listeners.
@@ -101,5 +102,5 @@ export function initD2DPipelineListeners() {
     }
   });
 
-  console.log('[d2d-pipeline] Event listeners initialized');
+  logger.info('[d2d-pipeline] Event listeners initialized');
 }

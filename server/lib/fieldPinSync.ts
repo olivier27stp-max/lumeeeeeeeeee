@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { geocodeAddress, normalizeAddress, type GeocodePrecision, type GeocodeResult } from './helpers';
+import { logger } from './logger';
 
 const STATUS_COLORS: Record<string, string> = {
   unknown: '#6b7280', no_answer: '#9ca3af', not_interested: '#ef4444',
@@ -368,6 +369,6 @@ export async function repairMissingPinCoords(admin: SupabaseClient): Promise<num
     }
   }
 
-  if (repaired > 0) console.log(`[field-pin-repair] repaired ${repaired} pin(s)`);
+  if (repaired > 0) logger.info(`[field-pin-repair] repaired ${repaired} pin(s)`);
   return repaired;
 }

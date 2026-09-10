@@ -66,6 +66,7 @@ import {
 import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -1772,7 +1773,7 @@ async function handleCheckoutSessionCompleted(
     .maybeSingle();
 
   if (existing) {
-    console.log(`[webhook/checkout] Session ${sessionId} already processed, skipping`);
+    logger.info(`[webhook/checkout] Session ${sessionId} already processed, skipping`);
     return;
   }
 
@@ -2038,7 +2039,7 @@ async function handleCheckoutSessionCompleted(
         now,
       });
       if (!result.awarded) {
-        console.log(`[webhook/checkout] Referral ${referralCode} not rewarded: ${result.reason}`);
+        logger.info(`[webhook/checkout] Referral ${referralCode} not rewarded: ${result.reason}`);
       }
     } catch (err: any) {
       console.error('[webhook/checkout] Referral reward error (non-blocking):', err?.message);
@@ -2104,7 +2105,7 @@ async function handleCheckoutSessionCompleted(
     }
   }
 
-  console.log(`[webhook/checkout] Subscription activated for ${userEmail} — plan: ${plan.name}, org: ${orgId}`);
+  logger.info(`[webhook/checkout] Subscription activated — plan: ${plan.name}, org: ${orgId}`, { email: userEmail });
 }
 
 // ─── Provisionnement du numéro SMS ─────────────────────────────────────────

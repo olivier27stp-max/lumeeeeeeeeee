@@ -6,6 +6,7 @@ import {
   validate, upsertCourseSchema, upsertCourseModuleSchema, upsertCourseLessonSchema,
   courseReorderSchema, courseAssignSchema, courseProgressSchema,
 } from '../lib/validation';
+import { logger } from '../lib/logger';
 
 const router = express.Router();
 router.use(maxBodySize());
@@ -23,8 +24,8 @@ async function checkTargetingColumns() {
   const { error } = await admin.from('courses').select('target_roles').limit(1);
   hasTargetingColumns = !error;
   if (!hasTargetingColumns) {
-    console.log('[courses] target_roles column not found — audience targeting features disabled until migration is applied.');
-    console.log('[courses] Apply: supabase/migrations/20260412100000_courses_audience_targeting.sql');
+    logger.info('[courses] target_roles column not found — audience targeting features disabled until migration is applied.');
+    logger.info('[courses] Apply: supabase/migrations/20260412100000_courses_audience_targeting.sql');
   }
 }
 
@@ -34,14 +35,14 @@ async function checkOptionalColumns() {
     const { error } = await admin.from('courses').select('visibility').limit(1);
     hasVisibilityColumn = !error;
     if (!hasVisibilityColumn) {
-      console.log('[courses] visibility column not found — treating all courses as visibility=all.');
+      logger.info('[courses] visibility column not found — treating all courses as visibility=all.');
     }
   }
   if (!hasCategoryColumn) {
     const { error } = await admin.from('courses').select('category').limit(1);
     hasCategoryColumn = !error;
     if (!hasCategoryColumn) {
-      console.log('[courses] category column not found — category filter disabled.');
+      logger.info('[courses] category column not found — category filter disabled.');
     }
   }
 }
@@ -57,7 +58,7 @@ async function ensureTables() {
     return;
   }
 
-  console.log('[courses] Tables not found, attempting auto-migration...');
+  logger.info('[courses] Tables not found, attempting auto-migration...');
   const dbUrl = process.env.DATABASE_URL || process.env.SUPABASE_DB_URL;
   if (dbUrl) {
     try {
@@ -73,7 +74,7 @@ async function ensureTables() {
       await client.connect();
       await client.query(sql);
       await client.end();
-      console.log('[courses] Migration applied successfully!');
+      logger.info('[courses] Migration applied successfully!');
       tablesReady = true;
       return;
     } catch (e: any) {

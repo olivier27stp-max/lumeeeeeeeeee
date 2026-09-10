@@ -108,6 +108,7 @@ import { subscriptionGuard } from './lib/subscription-guard';
 import { mfaEnforcementMiddleware } from './lib/mfa-enforcement';
 import { auditRequestMiddleware } from './lib/audit-middleware';
 import { initSentry, attachSentryErrorHandler, captureException, captureCronFailure, withCronCheckIn } from './lib/sentry';
+import { logger } from './lib/logger';
 
 const app = express();
 
@@ -1112,7 +1113,7 @@ if (encKeyRaw) {
   try {
     const keyBuf = Buffer.from(encKeyRaw, 'base64');
     if (keyBuf.length !== 32) throw new Error(`Expected 32 bytes, got ${keyBuf.length}`);
-    console.log('[security] payments encryption key validated (32 bytes)');
+    logger.info('[security] payments encryption key validated (32 bytes)');
   } catch (err: any) {
     console.error(`FATAL: Invalid PAYMENTS_ENCRYPTION_KEY — ${err.message}`);
     process.exit(1);
@@ -1138,7 +1139,7 @@ process.on('uncaughtException', (err: Error) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`API listening on 0.0.0.0:${port}`);
+  logger.info(`API listening on 0.0.0.0:${port}`);
 
   // Mode QA : impossible de l'oublier armé. Sans cette bannière, on pourrait
   // croire que les messages partent aux clients alors qu'ils sont tous détournés
@@ -1189,7 +1190,7 @@ app.listen(port, '0.0.0.0', () => {
         });
         if (!res.acquired) { /* another replica owns this tick */ }
       }, 30 * 60 * 1000);
-      console.log('[alerts] Engine started (every 30min, lock-guarded)');
+      logger.info('[alerts] Engine started (every 30min, lock-guarded)');
       setTimeout(() => withAdvisoryLock('alerts-engine-startup', () => runAlertScan())
         .catch((e: any) => captureCronFailure('alerts-engine-startup', e)), 10_000);
     // Un import() qui échoue laisse la tâche non démarrée, sans erreur ni trace :
@@ -1205,7 +1206,7 @@ app.listen(port, '0.0.0.0', () => {
             .catch((e: any) => captureCronFailure('dunning-engine', e));
         setInterval(runDunning, 6 * 60 * 60 * 1000);
         setTimeout(runDunning, 30_000);
-        console.log('[dunning] Cron started (every 6h, lock-guarded)');
+        logger.info('[dunning] Cron started (every 6h, lock-guarded)');
 
         // Abonnements figés — période dépassée alors que le statut reste
         // `active`. Ne suspend RIEN : pose une trace dans security_events.
@@ -1218,7 +1219,7 @@ app.listen(port, '0.0.0.0', () => {
               .catch((e: any) => captureCronFailure('abonnements-figes', e));
           setInterval(runFiges, 24 * 60 * 60 * 1000);
           setTimeout(runFiges, 45_000);
-          console.log('[abonnements-figes] Cron started (daily, lock-guarded)');
+          logger.info('[abonnements-figes] Cron started (daily, lock-guarded)');
         }).catch((e: any) => captureCronFailure('abonnements-figes-import', e));
 
     // Ménage OAuth : codes périmés et jetons morts (fonction oauth_menage,
@@ -1230,7 +1231,7 @@ app.listen(port, '0.0.0.0', () => {
         if (error) throw new Error(error.message);
       })).catch((err: any) => captureCronFailure('oauth-menage', err));
     }, 6 * 60 * 60_000);
-    console.log('[oauth] Ménage des jetons planifié (toutes les 6 h, verrouillé)');
+    logger.info('[oauth] Ménage des jetons planifié (toutes les 6 h, verrouillé)');
       },
     ).catch((e: any) => captureCronFailure('dunning-engine-import', e));
 
@@ -1242,7 +1243,7 @@ app.listen(port, '0.0.0.0', () => {
             .catch((e: any) => captureCronFailure('field-pin-repair', e));
         setInterval(runRepair, 10 * 60 * 1000);
         setTimeout(runRepair, 20_000);
-        console.log('[field-pin-repair] Cron started (every 10min, lock-guarded)');
+        logger.info('[field-pin-repair] Cron started (every 10min, lock-guarded)');
       },
     ).catch((e: any) => captureCronFailure('field-pin-repair-import', e));
 
@@ -1259,11 +1260,11 @@ app.listen(port, '0.0.0.0', () => {
       setInterval(async () => {
         const res = await withAdvisoryLock('scheduled-reports', () => withCronCheckIn('scheduled-reports', async () => {
           const sent = await processScheduledReports();
-          if (sent > 0) console.log(`[scheduled-reports] Sent ${sent} report(s)`);
+          if (sent > 0) logger.info(`[scheduled-reports] Sent ${sent} report(s)`);
         })).catch((e: any) => { captureCronFailure('scheduled-reports', e); return { acquired: true }; });
         if (!res.acquired) { /* skipped */ }
       }, 60 * 60 * 1000);
-      console.log('[scheduled-reports] Cron started (hourly, lock-guarded)');
+      logger.info('[scheduled-reports] Cron started (hourly, lock-guarded)');
     }).catch((e: any) => captureCronFailure('scheduled-reports-import', e));
 
     // Security maintenance — every 15 minutes
@@ -1271,7 +1272,7 @@ app.listen(port, '0.0.0.0', () => {
       withAdvisoryLock('security-maintenance', () => withCronCheckIn('security-maintenance', () => runSecurityMaintenance()))
         .catch((err: any) => captureCronFailure('security-maintenance', err));
     }, 15 * 60 * 1000);
-    console.log('[security] Maintenance job started (every 15min, lock-guarded)');
+    logger.info('[security] Maintenance job started (every 15min, lock-guarded)');
     setTimeout(() => withAdvisoryLock('security-maintenance-startup', () => runSecurityMaintenance())
       .catch((e: any) => captureCronFailure('security-maintenance-startup', e)), 15_000);
 
@@ -1282,7 +1283,7 @@ app.listen(port, '0.0.0.0', () => {
         .catch((e: any) => captureCronFailure('migration-cleanup', e));
       setInterval(run, 24 * 60 * 60 * 1000);
       setTimeout(run, 60_000);
-      console.log('[migration-cleanup] Cron started (daily, lock-guarded)');
+      logger.info('[migration-cleanup] Cron started (daily, lock-guarded)');
     }).catch((e: any) => captureCronFailure('migration-cleanup-import', e));
 
     // Migration assistée — récupération des imports zombies (audit S7) : un
@@ -1294,7 +1295,7 @@ app.listen(port, '0.0.0.0', () => {
         .catch((e: any) => captureCronFailure('migration-recovery', e));
       setInterval(run, 10 * 60 * 1000);
       setTimeout(run, 90_000);
-      console.log('[migration-recovery] Zombie watchdog started (10 min, lock-guarded)');
+      logger.info('[migration-recovery] Zombie watchdog started (10 min, lock-guarded)');
     }).catch((e: any) => captureCronFailure('migration-recovery-import', e));
   });
 });

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getServiceClient } from '../lib/supabase';
+import { logger } from '../lib/logger';
 
 /**
  * Désinscription courriel — route PUBLIQUE, sans authentification.
@@ -104,7 +105,7 @@ router.get('/unsubscribe/:token', async (req, res) => {
       ));
     }
 
-    console.log('[unsubscribe] désabonnement enregistré pour', ligne.email, 'org', ligne.org_id);
+    logger.info('[unsubscribe] désabonnement enregistré', { email: ligne.email, orgId: ligne.org_id });
     return res.send(page(
       'Désinscription confirmée',
       `L'adresse <strong>${ligne.email}</strong> ne recevra plus de communications commerciales de cette entreprise. Les documents que vous demandez (factures, reçus, soumissions) continueront de vous être envoyés.`,

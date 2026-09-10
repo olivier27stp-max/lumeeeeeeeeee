@@ -15,6 +15,7 @@
 
 import type Stripe from 'stripe';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from './logger';
 
 /** One free month, in cents, resolved from the referrer's own active plan + currency. */
 const FALLBACK_REWARD_CENTS = 2900; // Pro monthly USD — used only if the plan lookup fails.
@@ -173,7 +174,7 @@ export async function ensureStripeCustomerForOrg(
       await admin.from('subscriptions').update({ stripe_customer_id: customer.id }).eq('id', sub.id);
     }
 
-    console.log(`[referral-rewards] Created Stripe customer ${customer.id} for org ${orgId}`);
+    logger.info('[referral-rewards] Created Stripe customer', { stripeCustomerId: customer.id, orgId });
     return customer.id;
   } catch (err: any) {
     console.error('[referral-rewards] Stripe customer create failed for org', orgId, err?.message);

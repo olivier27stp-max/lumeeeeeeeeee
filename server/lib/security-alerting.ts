@@ -30,6 +30,7 @@
  */
 import { getServiceClient } from './supabase';
 import { sendEmail, isMailerConfigured } from './mailer';
+import { logger } from './logger';
 
 const INTERVALLE_MS = 10 * 60_000;
 const SEVERITES = ['high', 'critical'];
@@ -141,12 +142,14 @@ export function demarrerAlertingSecurite(): void {
   (globalThis as any).__lumeAlertingDemarre = true;
 
   const destination = process.env.SECURITY_ALERT_EMAIL;
-  console.log(
-    destination
-      ? `[alerting] surveillance de security_events active — alertes vers ${destination}`
-      : '[alerting] surveillance de security_events active — journaux seulement ' +
+  if (destination) {
+    logger.info('[alerting] surveillance de security_events active — alertes par courriel', { email: destination });
+  } else {
+    logger.info(
+      '[alerting] surveillance de security_events active — journaux seulement ' +
         '(définir SECURITY_ALERT_EMAIL pour recevoir les alertes par courriel)',
-  );
+    );
+  }
 
   // Premier passage rapide, puis rythme de croisière.
   setTimeout(() => { void verifierUneFois(); }, 30_000);

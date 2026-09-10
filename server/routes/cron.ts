@@ -15,6 +15,7 @@ import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { runDueSchedules } from '../lib/recurringInvoicesEngine';
 import { processPendingDeliveries } from '../lib/webhookDispatcher';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -50,7 +51,7 @@ router.post('/cron/retention', async (req, res) => {
   const svc = getServiceClient();
   const { data, error } = await svc.rpc('run_retention_job');
   if (error) return sendSafeError(res, error, 'Cron job failed.', '[cron]');
-  console.log('[cron] retention_job:', JSON.stringify(data));
+  logger.info('[cron] retention_job:', { result: data });
   return res.status(200).json({ ok: true, result: data });
 });
 
@@ -59,7 +60,7 @@ router.post('/cron/purge-audit', async (req, res) => {
   const svc = getServiceClient();
   const { data, error } = await svc.rpc('purge_old_audit_events', { p_retention_days: 1095 });
   if (error) return sendSafeError(res, error, 'Cron job failed.', '[cron]');
-  console.log('[cron] purge_old_audit_events:', data);
+  logger.info('[cron] purge_old_audit_events:', { purged: data });
   return res.status(200).json({ ok: true, purged: data });
 });
 
@@ -68,9 +69,9 @@ router.post('/cron/recurring-invoices', async (req, res) => {
   try {
     const svc = getServiceClient();
     const summary = await runDueSchedules(svc);
-    console.log('[cron] recurring-invoices:', JSON.stringify({
+    logger.info('[cron] recurring-invoices:', {
       processed: summary.processed, errors: summary.errors,
-    }));
+    });
     return res.status(200).json({ ok: true, ...summary });
   } catch (err: any) {
     return sendSafeError(res, err, 'Cron job failed.', '[cron/recurring-invoices]');
@@ -81,7 +82,7 @@ router.post('/cron/webhook-retries', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   try {
     const summary = await processPendingDeliveries({ concurrency: 5 });
-    console.log('[cron] webhook-retries:', JSON.stringify(summary));
+    logger.info('[cron] webhook-retries:', { ...summary });
     return res.status(200).json({ ok: true, ...summary });
   } catch (err: any) {
     return sendSafeError(res, err, 'Cron job failed.', '[cron/webhook-retries]');
@@ -96,7 +97,7 @@ router.post('/cron/release-sms-numbers', async (req, res) => {
   try {
     const { releaseExpiredSmsNumbers } = await import('../lib/twilioRelease');
     const summary = await releaseExpiredSmsNumbers();
-    console.log('[cron] release-sms-numbers:', JSON.stringify(summary));
+    logger.info('[cron] release-sms-numbers:', { ...summary });
     return res.status(200).json({ ok: true, ...summary });
   } catch (err: any) {
     return sendSafeError(res, err, 'Cron job failed.', '[cron/release-sms-numbers]');

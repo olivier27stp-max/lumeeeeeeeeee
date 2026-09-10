@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import { logger } from './logger';
 
 // ============================================================================
 // SCHEMA DEFINITIONS
@@ -177,7 +178,7 @@ function runSecurityChecks(): ValidationResult {
  * Exits process on critical errors.
  */
 export function validateEnvironment() {
-  console.log('[env] Validating environment variables...');
+  logger.info('[env] Validating environment variables...');
 
   // 1. Validate required vars
   const requiredResult = requiredEnvSchema.safeParse(process.env);
@@ -218,5 +219,5 @@ export function validateEnvironment() {
     }
   }
 
-  console.log('[env] Environment validation passed');
+  logger.info('[env] Environment validation passed');
 }

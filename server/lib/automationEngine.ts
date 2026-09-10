@@ -12,6 +12,7 @@ import {
   executeAction,
   resolveEntityVariables,
 } from './actions';
+import { logger } from './logger';
 
 interface AutomationRule {
   id: string;
@@ -227,7 +228,7 @@ async function executeRuleActions(
           console.error(`[automationEngine] failed to defer quiet-hours SMS (rule ${rule.id}, org ${event.orgId}):`, deferError.message);
         }
       } else {
-        console.log(`[automationEngine] ${action.type} deferred to send window (quiet hours) for rule "${rule.name}"`);
+        logger.info(`[automationEngine] ${action.type} deferred to send window (quiet hours) for rule "${rule.name}"`);
       }
       continue;
     }
@@ -339,7 +340,7 @@ async function resolveExecuteAt(
       if (retard > RETARD_TOLERE_MS) {
         // Le créneau du rappel est franchement dépassé : l'envoyer dirait au
         // client quelque chose de faux.
-        console.log(
+        logger.info(
           `[automationEngine] rappel abandonné (créneau dépassé de ${Math.round(retard / 60000)} min) — règle "${rule.name}"`,
         );
         return null;
@@ -389,7 +390,7 @@ async function scheduleDelayedActions(
     if (insertError) {
       // Unique constraint violation = duplicate, skip
       if (insertError.code === '23505') {
-        console.log(`[automationEngine] skipped duplicate scheduled task: ${executionKey}`);
+        logger.info(`[automationEngine] skipped duplicate scheduled task: ${executionKey}`);
       } else {
         console.error(`[automationEngine] failed to schedule task (rule ${rule.id}, org ${event.orgId}):`, insertError.message);
       }
@@ -437,7 +438,7 @@ async function handleEvent(event: CRMEvent) {
           // au client. Les rappels datés (délai négatif) ne sont pas touchés :
           // ils passent par scheduleDelayedActions ci-dessus et restent calés
           // sur la date de CHAQUE visite.
-          console.log(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
+          logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
         } else {
           await executeRuleActions(rule, event, engineConfig);
         }
@@ -864,5 +865,5 @@ export function initAutomationEngine(config: EngineConfig) {
   // Listen to all events
   eventBus.onAnyEvent(handleEvent);
 
-  console.log('[automationEngine] initialized and listening for events');
+  logger.info('[automationEngine] initialized and listening for events');
 }

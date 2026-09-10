@@ -1,5 +1,6 @@
 import { twilioClient, twilioAccountSid } from './config';
 import { getServiceClient } from './supabase';
+import { logger } from './logger';
 
 /**
  * Purchase a Twilio phone number and provision it as the org's SMS channel.
@@ -95,7 +96,7 @@ export async function provisionSmsForNewSubscription(params: {
   try {
     const { cancelSmsNumberRelease } = await import('./twilioRelease');
     if (await cancelSmsNumberRelease(orgId)) {
-      console.log(`[provisioning] Org ${orgId} re-subscribed — restored its existing number`);
+      logger.info(`[provisioning] Org ${orgId} re-subscribed — restored its existing number`);
       return { provisioned: false, skipped: 'restored_pending_release' };
     }
   } catch (err: any) {
@@ -111,7 +112,7 @@ export async function provisionSmsForNewSubscription(params: {
     .maybeSingle();
 
   if (existingChannel) {
-    console.log(`[provisioning] Org ${orgId} already has SMS channel ${existingChannel.phone_number}, skipping`);
+    logger.info(`[provisioning] Org ${orgId} already has SMS channel, skipping`, { phone: existingChannel.phone_number });
     return { provisioned: false, skipped: 'already_has_channel', phoneNumber: existingChannel.phone_number };
   }
 
@@ -143,7 +144,7 @@ export async function provisionSmsForNewSubscription(params: {
         .update({ status: 'success', twilio_number: result.phoneNumber })
         .eq('id', eventRow.id);
     }
-    console.log(`[provisioning] SMS number ${result.phoneNumber} assigned to org ${orgId}`);
+    logger.info(`[provisioning] SMS number assigned to org ${orgId}`, { phone: result.phoneNumber });
     return { provisioned: true, phoneNumber: result.phoneNumber };
   } catch (err: any) {
     const message = String(err?.message || err).slice(0, 500);

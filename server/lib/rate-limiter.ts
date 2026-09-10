@@ -9,6 +9,7 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { Request, Response, NextFunction } from 'express';
 import { extractIP } from './security';
+import { logger } from './logger';
 
 // ── Redis client (optional — falls back to in-memory) ──
 let redis: Redis | null = null;
@@ -21,12 +22,12 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
       token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
     useRedis = true;
-    console.log('[rate-limiter] Using Upstash Redis for persistent rate limiting');
+    logger.info('[rate-limiter] Using Upstash Redis for persistent rate limiting');
   } catch (err: any) {
     console.warn('[rate-limiter] Failed to init Redis, falling back to in-memory:', err.message);
   }
 } else {
-  console.log('[rate-limiter] No UPSTASH_REDIS_REST_URL set, using in-memory rate limiting');
+  logger.info('[rate-limiter] No UPSTASH_REDIS_REST_URL set, using in-memory rate limiting');
 }
 
 // ── Pre-configured rate limiters ──

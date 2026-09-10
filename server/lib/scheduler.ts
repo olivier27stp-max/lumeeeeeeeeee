@@ -10,6 +10,7 @@ import {
   subtractDelay,
   computeNextRecurrenceDate,
 } from './scheduler-utils';
+import { logger } from './logger';
 
 const INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -572,7 +573,7 @@ async function handleRecurringInvoices(supabase: SupabaseClient) {
         cloned?.id,
       );
 
-      console.log(`[scheduler] cloned recurring invoice ${inv.invoice_number} -> ${newInvoiceNumber}`);
+      logger.info(`[scheduler] cloned recurring invoice ${inv.invoice_number} -> ${newInvoiceNumber}`);
     } catch (err: any) {
       console.error(`[scheduler] error processing recurring invoice ${inv.id}:`, err.message);
     }
@@ -672,7 +673,7 @@ async function expireOverdueQuotes(supabase: SupabaseClient) {
       q.id,
     );
 
-    console.log(`[scheduler] auto-expired quote ${q.quote_number}`);
+    logger.info(`[scheduler] auto-expired quote ${q.quote_number}`);
   }
 }
 
@@ -792,7 +793,7 @@ export function startScheduler(
   const twilioConfig: TwilioConfig | null =
     twilio && twilio.client && twilio.phoneNumber ? twilio : null;
 
-  console.log('[scheduler] automation scheduler started (interval: 5 min)');
+  logger.info('[scheduler] automation scheduler started (interval: 5 min)');
 
   // Run once immediately, then every 5 minutes
   void tickProtege(supabase, twilioConfig);
@@ -826,7 +827,7 @@ async function tickProtege(supabase: SupabaseClient, twilio: TwilioConfig | null
     const { withAdvisoryLock } = await import('./advisory-lock');
     const { acquired } = await withAdvisoryLock('automation-scheduler', () => tick(supabase, twilio));
     if (!acquired) {
-      console.log('[scheduler] tick pris par une autre instance — passage ignoré');
+      logger.info('[scheduler] tick pris par une autre instance — passage ignoré');
     }
   } catch (err: any) {
     console.error('[scheduler] tick échoué:', err?.message);
@@ -839,6 +840,6 @@ export function stopScheduler() {
   if (intervalHandle) {
     clearInterval(intervalHandle);
     intervalHandle = null;
-    console.log('[scheduler] automation scheduler stopped');
+    logger.info('[scheduler] automation scheduler stopped');
   }
 }

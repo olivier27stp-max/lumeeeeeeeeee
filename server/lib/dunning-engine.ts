@@ -27,6 +27,7 @@ import {
   sendDunningReminderEmail,
   sendAccessSuspendedEmail,
 } from './subscription-email';
+import { logger } from './logger';
 
 /** Jour de grâce auquel part la relance intermédiaire. */
 const JOUR_RELANCE = 3;
@@ -126,7 +127,7 @@ export async function runDunningScan(admin: SupabaseClient): Promise<ResultatDun
   }
 
   if (resultat.relances || resultat.suspendus) {
-    console.log('[dunning]', resultat);
+    logger.info('[dunning]', { ...resultat });
   }
   return resultat;
 }

@@ -5,6 +5,7 @@
 import { getServiceClient } from './supabase';
 import { emailFrom } from './config';
 import { sendEmail, isMailerConfigured } from './mailer';
+import { logger } from './logger';
 
 function fmtMoney(cents: number): string {
   return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format((cents || 0) / 100);
@@ -189,7 +190,7 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
     console.error(`[scheduled-reports] CRITICAL: last_sent_at not written for report ${reportId} (org ${report.org_id}) — the report will be re-sent on every run:`, stampErr.message);
   }
 
-  console.log(`[scheduled-reports] Sent ${report.frequency} report to ${report.recipient_email} for org ${report.org_id}`);
+  logger.info(`[scheduled-reports] Sent ${report.frequency} report`, { email: report.recipient_email, orgId: report.org_id });
 }
 
 export async function processScheduledReports(): Promise<number> {

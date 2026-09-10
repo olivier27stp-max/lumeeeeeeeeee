@@ -5,6 +5,7 @@ import { creerClientStripe } from '../lib/stripe-sdk';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail, companyOrgIds } from '../lib/supabase';
 import { getUserContext, hasPermission } from '../lib/rbac';
+import { logger } from '../lib/logger';
 
 const router = Router();
 
@@ -263,7 +264,7 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
       ? !!userMeta.billing_email_verified
       : !!userRes.data?.user?.email_confirmed_at; // legacy fallback
     if (!isEmailVerified) {
-      console.log(`[billing/subscribe] Blocked: user ${auth.user.id} email not verified`);
+      logger.info(`[billing/subscribe] Blocked: user ${auth.user.id} email not verified`);
       return res.status(403).json({
         error: 'Email verification required before subscribing to a paid plan.',
         code: 'EMAIL_NOT_VERIFIED',
@@ -1771,7 +1772,7 @@ router.post('/billing/create-checkout-session', async (req, res) => {
       const hasFlag = 'billing_email_verified' in meta;
       const isVerified = hasFlag ? !!meta.billing_email_verified : !!existingUser.email_confirmed_at;
       if (!isVerified) {
-        console.log(`[billing/create-checkout-session] Blocked: user ${email} email not verified`);
+        logger.info('[billing/create-checkout-session] Blocked: user email not verified', { email });
         return res.status(403).json({
           error: 'Please verify your email address before proceeding to payment.',
           code: 'EMAIL_NOT_VERIFIED',
