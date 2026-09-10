@@ -8,7 +8,9 @@
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUp, AudioLines, AlertTriangle, CheckCircle2, Loader2, MessageSquarePlus, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { motion } from 'motion/react';
+import { ArrowUp, AudioLines, AlertTriangle, CheckCircle2, History, Loader2, MessageSquarePlus, Sparkles, Trash2, XCircle } from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -48,6 +50,38 @@ function libelleOutil(name: string, fr: boolean): string {
   return name.replace(/_/g, ' ');
 }
 
+/**
+ * Rendu du texte de Lumi : gras (**x**), puces (- x) et titres (### x), sans
+ * bibliothèque ni HTML injecté. Le modèle écrit un peu de Markdown ; l'afficher
+ * brut (étoiles, dièses) faisait « brouillon ».
+ */
+function Gras({ texte }: { texte: string }) {
+  const morceaux = texte.split(/\*\*(.+?)\*\*/g);
+  return <>{morceaux.map((m, i) => (i % 2 === 1 ? <strong key={i} className="font-semibold">{m}</strong> : <React.Fragment key={i}>{m}</React.Fragment>))}</>;
+}
+
+function TexteLumi({ texte }: { texte: string }) {
+  const lignes = texte.replace(/\r/g, '').split('\n');
+  return (
+    <>
+      {lignes.map((l, i) => {
+        const puce = /^\s*[-*•]\s+(.*)$/.exec(l);
+        const titre = /^\s*#{1,4}\s+(.*)$/.exec(l);
+        if (puce) {
+          return (
+            <span key={i} className="flex gap-2 pl-1">
+              <span aria-hidden="true">•</span>
+              <span className="flex-1"><Gras texte={puce[1]} /></span>
+            </span>
+          );
+        }
+        if (titre) return <span key={i} className="block font-semibold mt-1"><Gras texte={titre[1]} /></span>;
+        return <span key={i} className="block min-h-[0.6em]"><Gras texte={l} /></span>;
+      })}
+    </>
+  );
+}
+
 function fmtDollars(cents: number): string {
   return `${(cents / 100).toFixed(2)} $`;
 }
@@ -67,6 +101,7 @@ export default function Lumi() {
   const [erreur, setErreur] = useState<{ code: string; message: string } | null>(null);
   const [budget, setBudget] = useState<BudgetLumi | null>(null);
   const [listening, setListening] = useState(false);
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
   const idRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
@@ -237,67 +272,90 @@ export default function Lumi() {
   const pctBudget = budget && budget.budget_cents > 0 ? Math.min(100, Math.round((budget.depense_cents / budget.budget_cents) * 100)) : 0;
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] max-w-[1180px] mx-auto px-4 gap-4">
-      {/* ── Conversations ── */}
-      <aside className="hidden md:flex w-[240px] shrink-0 flex-col py-6">
-        <button
-          type="button"
-          onClick={nouvelleConversation}
-          className="inline-flex items-center gap-2 rounded-xl border border-outline bg-surface px-3 py-2 text-[13px] font-medium text-text-primary hover:bg-surface-secondary transition-colors"
-        >
-          <MessageSquarePlus size={15} /> {fr ? 'Nouvelle conversation' : 'New conversation'}
-        </button>
-        <ul className="mt-3 flex-1 overflow-y-auto space-y-1" aria-label={fr ? 'Conversations' : 'Conversations'}>
-          {conversations.map((c) => (
-            <li key={c.id} className="group flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => ouvrirConversation(c.id)}
-                className={cn(
-                  'flex-1 min-w-0 text-left truncate rounded-lg px-3 py-2 text-[12.5px] transition-colors',
-                  c.id === conversationId ? 'bg-surface-secondary text-text-primary font-medium' : 'text-text-secondary hover:bg-surface-secondary',
-                )}
-              >
-                {c.title || (fr ? 'Sans titre' : 'Untitled')}
-              </button>
-              <button
-                type="button"
-                onClick={() => supprimer(c.id)}
-                aria-label={fr ? 'Supprimer la conversation' : 'Delete conversation'}
-                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 p-1.5 rounded-md text-text-tertiary hover:text-danger transition-opacity"
-              >
-                <Trash2 size={13} />
-              </button>
-            </li>
-          ))}
-        </ul>
+    <div className="flex flex-col h-[calc(100vh-8rem)]">
+      {/* ── En-tête, comme toute page du CRM ── */}
+      <PageHeader
+        title="Lumi"
+        subtitle={fr ? 'Votre assistant. Il connaît vos clients, vos jobs, vos devis et vos factures.' : 'Your assistant. It knows your clients, jobs, quotes and invoices.'}
+      >
         {budget && budget.includes_ai && (
-          <div className="mt-3 rounded-xl border border-outline bg-surface p-3">
-            <div className="flex items-center justify-between text-[11px] text-text-tertiary">
-              <span>{fr ? 'Budget IA du mois' : 'AI budget this month'}</span>
-              <span className="tabular-nums">{fmtDollars(budget.depense_cents)} / {fmtDollars(budget.budget_cents)}</span>
-            </div>
-            <div className="mt-1.5 h-1.5 rounded-full bg-surface-secondary overflow-hidden" role="progressbar" aria-valuenow={pctBudget} aria-valuemin={0} aria-valuemax={100} aria-label={fr ? 'Budget IA utilisé' : 'AI budget used'}>
-              <div className={cn('h-full transition-all', pctBudget >= 90 ? 'bg-danger' : 'bg-primary')} style={{ width: `${pctBudget}%` }} />
-            </div>
-          </div>
+          <span
+            className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] tabular-nums', pctBudget >= 90 ? 'border-danger/30 bg-danger/10 text-danger' : 'border-outline bg-surface text-text-secondary')}
+            title={fr ? 'Budget IA du mois' : 'AI budget this month'}
+          >
+            <Sparkles size={12} className={pctBudget >= 90 ? 'text-danger' : 'text-primary'} />
+            {fmtDollars(budget.depense_cents)} / {fmtDollars(budget.budget_cents)}
+          </span>
         )}
-      </aside>
-
-      {/* ── Chat ── */}
-      <div className="flex flex-col flex-1 min-w-0">
-        <div ref={scrollRef} className="flex-1 overflow-y-auto py-6 space-y-4">
-          {items.length === 0 && (
-            <div className="flex flex-col items-center justify-center text-center mt-[10vh] gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                <Sparkles size={22} className="text-primary" />
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setHistoriqueOuvert((v) => !v)}
+            aria-expanded={historiqueOuvert}
+            aria-haspopup="menu"
+            aria-label={fr ? 'Historique des conversations' : 'Conversation history'}
+            className="glass-button inline-flex items-center gap-1.5 text-[12px]"
+          >
+            <History size={13} /> <span className="hidden sm:inline">{fr ? 'Historique' : 'History'}</span>
+          </button>
+          {historiqueOuvert && (
+            <>
+              <div role="presentation" tabIndex={-1} className="fixed inset-0 z-20" onClick={() => setHistoriqueOuvert(false)} />
+              <div role="menu" className="absolute right-0 z-30 mt-2 w-[300px] section-card p-1.5">
+                {conversations.length === 0 && (
+                  <p className="px-3 py-2 text-[12px] text-text-tertiary">{fr ? 'Aucune conversation encore.' : 'No conversations yet.'}</p>
+                )}
+                {conversations.map((c) => (
+                  <div key={c.id} className="group flex items-center gap-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { setHistoriqueOuvert(false); void ouvrirConversation(c.id); }}
+                      className={cn('flex-1 min-w-0 truncate rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors', c.id === conversationId ? 'bg-surface-secondary text-text-primary font-medium' : 'text-text-secondary hover:bg-surface-secondary')}
+                    >
+                      {c.title || (fr ? 'Sans titre' : 'Untitled')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => supprimer(c.id)}
+                      aria-label={fr ? 'Supprimer la conversation' : 'Delete conversation'}
+                      className="p-1.5 rounded-md text-text-tertiary opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-danger transition-opacity"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
               </div>
+            </>
+          )}
+        </div>
+        <button type="button" onClick={nouvelleConversation} className="glass-button-primary inline-flex items-center gap-1.5 text-[12px]">
+          <MessageSquarePlus size={13} /> <span className="hidden sm:inline">{fr ? 'Nouvelle conversation' : 'New conversation'}</span><span className="sm:hidden">{fr ? 'Nouvelle' : 'New'}</span>
+        </button>
+      </PageHeader>
+
+      {/* ── La conversation, centrée comme avant ── */}
+      <div className="flex flex-col flex-1 min-h-0 max-w-[820px] w-full mx-auto">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto py-2 space-y-4">
+          {items.length === 0 && (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center justify-center text-center mt-[4vh] sm:mt-[10vh] gap-4">
+              <button
+                type="button"
+                onClick={toggleVoice}
+                disabled={!!bloque}
+                aria-label={fr ? 'Parler à Lumi' : 'Talk to Lumi'}
+                aria-pressed={listening}
+                title={fr ? 'Parler à Lumi' : 'Talk to Lumi'}
+                className={cn('w-12 h-12 rounded-2xl flex items-center justify-center transition-colors disabled:opacity-50', listening ? 'bg-primary text-white animate-pulse' : 'bg-primary/10 text-primary hover:bg-primary/20')}
+              >
+                <AudioLines size={22} strokeWidth={2.75} />
+              </button>
               <div>
                 <h2 className="text-[18px] font-semibold text-text-primary">Lumi</h2>
-                <p className="text-[13px] text-text-tertiary mt-1 max-w-[440px]">
+                <p className="text-[13px] text-text-tertiary mt-1 max-w-[420px]">
                   {fr
-                    ? 'Je connais vos clients, vos jobs, vos devis et vos factures. Posez une question, ou demandez-moi de préparer une action : rien ne part sans votre confirmation.'
-                    : 'I know your clients, jobs, quotes and invoices. Ask a question, or have me prepare an action: nothing goes out without your confirmation.'}
+                    ? 'Je connais tout ton espace de travail. Pose une question, ou demande-moi de préparer un devis, une facture, une job ou un message : tu confirmes avant chaque action.'
+                    : 'I know your whole workspace. Ask anything, or have me draft a quote, invoice, job or message: you confirm before every action.'}
                 </p>
               </div>
               {!bloque && (
@@ -309,41 +367,37 @@ export default function Lumi() {
                   ))}
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
 
           {items.map((m) => (
             <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
-              <div className={cn(
-                'max-w-[85%] rounded-2xl px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap',
-                m.role === 'user' ? 'rounded-br-md bg-primary text-white' : 'rounded-bl-md bg-surface-secondary text-text-primary',
-              )}>
-                {m.role === 'assistant' && (m.outilsActifs?.length ?? 0) > 0 && (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {m.outilsActifs!.map((n) => (
-                      <span key={n} className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[11px] text-text-tertiary">
+              <div className={m.role === 'user' ? 'max-w-[80%]' : 'max-w-[88%]'}>
+                {m.role === 'assistant' && ((m.outilsActifs?.length ?? 0) > 0 || (m.tools.length > 0 && !m.enCours)) && (
+                  <div className="mb-1.5 flex flex-wrap gap-1.5">
+                    {m.outilsActifs?.map((n) => (
+                      <span key={`a-${n}`} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5 text-[11px] text-text-tertiary">
                         <Loader2 size={10} className="animate-spin" /> {libelleOutil(n, fr)}…
                       </span>
                     ))}
-                  </div>
-                )}
-                {m.role === 'assistant' && m.tools.length > 0 && !m.enCours && (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {m.tools.map((n) => (
-                      <span key={n} className="inline-flex items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[11px] text-text-tertiary">
-                        <CheckCircle2 size={10} /> {libelleOutil(n, fr)}
+                    {!m.enCours && m.tools.map((n) => (
+                      <span key={`f-${n}`} className="inline-flex items-center gap-1 rounded-full border border-outline bg-surface px-2 py-0.5 text-[11px] text-text-tertiary">
+                        <CheckCircle2 size={10} className="text-emerald-600" /> {libelleOutil(n, fr)}
                       </span>
                     ))}
                   </div>
                 )}
-                {m.text || (m.enCours ? <Loader2 size={16} className="animate-spin text-text-tertiary" /> : null)}
+                {(m.text || m.enCours) && (
+                  <div className={m.role === 'user'
+                    ? 'rounded-2xl rounded-br-md bg-primary text-white px-4 py-2.5 text-[13.5px] whitespace-pre-wrap'
+                    : 'rounded-2xl rounded-bl-md bg-surface-secondary text-text-primary px-4 py-2.5 text-[13.5px] leading-relaxed'}>
+                    {m.text
+                      ? (m.role === 'assistant' ? <TexteLumi texte={m.text} /> : m.text)
+                      : <Loader2 size={16} className="animate-spin text-text-tertiary" />}
+                  </div>
+                )}
                 {m.proposal && (
-                  <PropositionCarte
-                    proposition={m.proposal}
-                    fr={fr}
-                    busy={enCours}
-                    onDecision={(d) => decider(m.proposal!, d)}
-                  />
+                  <PropositionCarte proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} />
                 )}
               </div>
             </div>
@@ -359,7 +413,7 @@ export default function Lumi() {
                 : erreur.code === 'plan_sans_lumi'
                   ? (fr ? 'Lumi est inclus dans les plans Scale et Autopilot.' : 'Lumi is included in the Scale and Autopilot plans.')
                   : erreur.code === 'lumi_not_configured'
-                    ? (fr ? "Lumi n'est pas encore activé sur ce serveur." : 'Lumi is not enabled on this server yet.')
+                    ? (fr ? 'Lumi n’est pas encore activé sur ce serveur.' : 'Lumi is not enabled on this server yet.')
                     : erreur.message}
             </span>
             {erreur.code === 'plan_sans_lumi' && (
@@ -368,12 +422,14 @@ export default function Lumi() {
           </div>
         )}
 
+        {/* ── Champ de saisie, comme avant ── */}
         <div className="pb-4">
           <div className="relative rounded-2xl border border-outline bg-surface shadow-sm focus-within:border-primary/50 transition-colors">
             <label htmlFor={`${uid}-lumi-input`} className="sr-only">{fr ? 'Message à Lumi' : 'Message to Lumi'}</label>
             <textarea
               id={`${uid}-lumi-input`}
-              rows={2}
+              rows={1}
+              style={{ maxHeight: 160 }}
               value={input}
               disabled={!!bloque}
               onChange={(e) => setInput(e.target.value)}
@@ -383,16 +439,18 @@ export default function Lumi() {
                 : (fr ? 'Pose-moi une question ou donne-moi une instruction…' : 'Ask a question or give an instruction…')}
               className="w-full resize-none bg-transparent px-4 pt-3.5 pb-12 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-0 leading-relaxed disabled:opacity-60"
             />
-            <button
-              type="button"
-              onClick={toggleVoice}
-              disabled={!!bloque}
-              aria-label={listening ? (fr ? 'Arrêter la dictée' : 'Stop dictation') : (fr ? 'Dicter' : 'Dictate')}
-              aria-pressed={listening}
-              className={cn('absolute bottom-2.5 right-12 w-8 h-8 rounded-full flex items-center justify-center transition-colors', listening ? 'bg-danger/10 text-danger' : 'text-text-tertiary hover:bg-surface-secondary')}
-            >
-              <AudioLines size={16} />
-            </button>
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={toggleVoice}
+                disabled={!!bloque}
+                aria-label={listening ? (fr ? 'Arrêter la dictée' : 'Stop dictation') : (fr ? 'Dicter' : 'Dictate')}
+                aria-pressed={listening}
+                className={cn('absolute bottom-2.5 right-12 w-8 h-8 rounded-full flex items-center justify-center transition-colors', listening ? 'bg-danger/10 text-danger' : 'text-text-tertiary hover:bg-surface-secondary')}
+              >
+                <AudioLines size={16} />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => envoyer(input)}
@@ -404,7 +462,7 @@ export default function Lumi() {
             </button>
           </div>
           <p className="text-[10.5px] text-text-tertiary text-center mt-2">
-            {fr ? 'Lumi peut se tromper. Vérifiez les montants avant d’agir. Rien n’est créé ni envoyé sans votre confirmation.' : 'Lumi can make mistakes. Check amounts before acting. Nothing is created or sent without your confirmation.'}
+            {fr ? 'Lumi ne crée et n’envoie rien sans ta confirmation. Vérifie les montants avant d’agir.' : 'Lumi never creates or sends anything without your confirmation. Check amounts before acting.'}
           </p>
         </div>
       </div>
@@ -420,7 +478,7 @@ function PropositionCarte({ proposition, fr, busy, onDecision }: { proposition: 
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const entrees = Object.entries(proposition.args).filter(([k, v]) => v !== null && v !== undefined && v !== '' && !/(^|_)id$/.test(k) && !(typeof v === 'string' && UUID.test(v)));
   return (
-    <div className="mt-3 rounded-xl border border-outline bg-surface p-3 text-[13px]">
+    <div className="mt-2 section-card p-3.5 text-[13px]">
       <p className="font-semibold text-text-primary">{titre}</p>
       {entrees.length > 0 && (
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
