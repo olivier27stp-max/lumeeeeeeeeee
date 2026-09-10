@@ -151,7 +151,8 @@ describe('orchestrateur', () => {
     const params = instantanes[0];
     // Cache d'une heure : la reprise d'une conversation après une pause ne
     // réécrit plus le contexte (2,6 ¢ sur les 6 ¢ d'un tour, mesuré en prod).
-    expect(params.tools[params.tools.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
+    const charges = params.tools.filter((t: any) => !t.defer_loading && !t.type);
+    expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(params.thinking).toEqual({ type: 'adaptive' });
     expect(params.output_config).toEqual({ effort: 'medium' });
   });
@@ -221,6 +222,30 @@ describe('orchestrateur', () => {
 });
 
 // ── Proposition en attente / rendu ──────────────────────────────
+describe('outils différés (tool search)', () => {
+  // La structure sur les 67 vrais outils est testée sans mock dans
+  // tests/lumi-outils-differes.test.ts.
+  it('le prompt dit au modèle de chercher les outils cachés avant de dire non', async () => {
+    const { promptSystemeLumi } = await import('../server/lib/lumi/orchestrateur');
+    const stable = promptSystemeLumi({ companyName: 'X', userName: null, language: 'fr', todayIso: '2026-09-10' })[0].text;
+    expect(stable).toContain('tool_search_tool_regex');
+    expect(stable).toMatch(/quote\|invoice/);
+  });
+
+  it('une réponse sans appel client (recherche seule) relance la boucle sans message vide', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'server_tool_use', id: 'srvtoolu_1', name: 'tool_search_tool_regex', input: { pattern: 'quote' } }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Voilà.' }], stop_reason: 'end_turn', usage });
+    const emis: any[] = [], journal: any[] = [];
+    const r = await tourLumi(baseTour(emis, journal));
+    expect(r.texte).toBe('Voilà.');
+    expect(instantanes).toHaveLength(2);
+    // Aucun message utilisateur vide intercalé : le 2e appel reçoit [historique, assistant].
+    const derniers = instantanes[1].messages.slice(-1);
+    expect(derniers[0].role).toBe('assistant');
+  });
+});
+
 describe('proposition en attente', () => {
   it('retrouvée quand le dernier tool_use d écriture n a pas de tool_result', async () => {
     const { propositionEnAttente } = await import('../server/routes/lumi');
