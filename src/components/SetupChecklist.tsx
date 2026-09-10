@@ -51,11 +51,11 @@ export default function SetupChecklist() {
   const { pathname } = useLocation();
 
   const [status, setStatus] = useState<Status | null>(null);
-  // Repliée par défaut sur mobile (juste l'en-tête, ~44px) pour ne pas couvrir
-  // le contenu / les save bars ; dépliée sur desktop où la place existe.
-  const [expanded, setExpanded] = useState(() => {
-    try { return window.matchMedia('(min-width: 1024px)').matches; } catch { return true; }
-  });
+  // Repliée par défaut PARTOUT (juste l'en-tête, ~44px). Dépliée, la carte
+  // (fixed bottom-right) recouvrait des éléments cliquables sur les pages denses
+  // (View financials et KPI sur /day, cases du calendrier, Add Note sur un
+  // devis — audit QA). L'utilisateur la déplie s'il le souhaite.
+  const [expanded, setExpanded] = useState(false);
   const [celebrated, setCelebrated] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
     try { return localStorage.getItem(DISMISS_KEY) === 'true'; } catch { return false; }
@@ -80,8 +80,18 @@ export default function SetupChecklist() {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 60_000);
-    return () => clearInterval(id);
+    // Rafraîchi plus souvent (la checklist restait à 3/8 pendant une minute
+    // après avoir créé un client ou un devis) + au retour de focus sur l'onglet
+    // et quand la page redevient visible, pour refléter une action récente.
+    const id = setInterval(load, 20_000);
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   }, [load]);
 
   const items = useMemo(() => {
