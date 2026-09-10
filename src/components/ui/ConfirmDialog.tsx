@@ -106,6 +106,8 @@ function ConfirmDialogView({ demande }: { demande: Demande }) {
   return (
     <div
       className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      role="presentation"
+      tabIndex={-1}
       onClick={annuler}
     >
       <div
@@ -113,6 +115,7 @@ function ConfirmDialogView({ demande }: { demande: Demande }) {
         aria-modal="true"
         aria-labelledby={`confirm-title-${id}`}
         aria-describedby={`confirm-message-${id}`}
+        tabIndex={-1}
         className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

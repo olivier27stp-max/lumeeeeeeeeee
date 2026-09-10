@@ -4,7 +4,7 @@
 // serveur re-vérifie de toute façon chaque requête. Hors navigation : on y
 // accède par URL directe. Périmètre limité aux projets de migration.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -168,6 +168,7 @@ function MigrationList({ onOpen }: { onOpen: (id: string) => void }) {
             value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }}
             placeholder="Entreprise, courriel, CRM, ID…"
+            aria-label="Rechercher une migration"
             className="h-9 w-[240px] pl-8 pr-3 text-[13px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8]"
           />
         </div>
@@ -250,29 +251,30 @@ const CATEGORY_OPTIONS = [
 ] as const;
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const id = useId();
   const [orgId, setOrgId] = useState('');
   const [email, setEmail] = useState('');
   const [categories, setCategories] = useState<string[]>(['clients', 'properties', 'services', 'quotes', 'jobs', 'visits', 'invoices']);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   return (
-    <div className="fixed inset-0 z-[120] bg-black/30 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-surface-card border border-outline rounded-xl shadow-xl w-full max-w-[480px] p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[120] bg-black/30 flex items-center justify-center p-4" role="presentation" tabIndex={-1} onClick={onClose}>
+      <div className="bg-surface-card border border-outline rounded-xl shadow-xl w-full max-w-[480px] p-6" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <h2 className="text-[17px] font-bold text-text-primary mb-4">Nouvelle migration</h2>
         <div className="space-y-3 text-[13px]">
           <div>
-            <label className="block text-text-secondary font-medium mb-1">ID du workspace (org_id) *</label>
-            <input value={orgId} onChange={(e) => setOrgId(e.target.value.trim())} placeholder="uuid du workspace" className="w-full h-9 px-3 bg-surface border border-outline rounded-md" />
+            <label htmlFor={`${id}-org`} className="block text-text-secondary font-medium mb-1">ID du workspace (org_id) *</label>
+            <input id={`${id}-org`} value={orgId} onChange={(e) => setOrgId(e.target.value.trim())} placeholder="uuid du workspace" className="w-full h-9 px-3 bg-surface border border-outline rounded-md" />
           </div>
           <div>
-            <label className="block text-text-secondary font-medium mb-1">Courriel du client invité</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="proprietaire@entreprise.com" className="w-full h-9 px-3 bg-surface border border-outline rounded-md" />
+            <label htmlFor={`${id}-email`} className="block text-text-secondary font-medium mb-1">Courriel du client invité</label>
+            <input id={`${id}-email`} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="proprietaire@entreprise.com" className="w-full h-9 px-3 bg-surface border border-outline rounded-md" />
           </div>
           {/* Choix de l'ancien CRM retiré volontairement : pas de lien direct
               pour l'instant — toute migration part en mode générique (fichiers).
               Réactivable plus tard via PATCH source_crm côté serveur. */}
           <div>
-            <label className="block text-text-secondary font-medium mb-1">Catégories à migrer</label>
+            <span className="block text-text-secondary font-medium mb-1">Catégories à migrer</span>
             <div className="flex flex-wrap gap-2">
               {CATEGORY_OPTIONS.map(([value, label]) => (
                 <label key={value} className="inline-flex items-center gap-1.5">
@@ -287,8 +289,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             </div>
           </div>
           <div>
-            <label className="block text-text-secondary font-medium mb-1">Notes internes</label>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-16 px-3 py-2 bg-surface border border-outline rounded-md" />
+            <label htmlFor={`${id}-notes`} className="block text-text-secondary font-medium mb-1">Notes internes</label>
+            <textarea id={`${id}-notes`} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full h-16 px-3 py-2 bg-surface border border-outline rounded-md" />
           </div>
         </div>
         <div className="flex justify-end gap-2 mt-5">
@@ -493,8 +495,8 @@ function StrongConfirmModal({ kind, orgName, summary, onClose, onConfirm }: {
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   return (
-    <div className="fixed inset-0 z-[120] bg-black/30 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-surface-card border border-outline rounded-xl shadow-xl w-full max-w-[440px] p-6" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[120] bg-black/30 flex items-center justify-center p-4" role="presentation" tabIndex={-1} onClick={onClose}>
+      <div className="bg-surface-card border border-outline rounded-xl shadow-xl w-full max-w-[440px] p-6" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <h2 className="text-[16px] font-bold text-text-primary mb-2">
           {kind === 'final' ? 'Confirmer l\'import final' : 'Confirmer le rollback'}
         </h2>
@@ -502,7 +504,7 @@ function StrongConfirmModal({ kind, orgName, summary, onClose, onConfirm }: {
         <p className="text-[12px] text-text-secondary mb-1.5">
           Saisissez le nom exact du workspace (<strong>{orgName}</strong>) pour confirmer :
         </p>
-        <input value={typed} onChange={(e) => setTyped(e.target.value)} className="w-full h-9 px-3 text-[13px] bg-surface border border-outline rounded-md mb-4" />
+        <input value={typed} onChange={(e) => setTyped(e.target.value)} aria-label="Nom exact du workspace" className="w-full h-9 px-3 text-[13px] bg-surface border border-outline rounded-md mb-4" />
         <div className="flex justify-end gap-2">
           <button type="button" onClick={onClose} className="h-9 px-4 border border-outline rounded-md text-[13px] text-text-secondary">Annuler</button>
           <button
@@ -555,6 +557,7 @@ function StaffCard({ migrationId }: { migrationId: string }) {
             <select
               value={(entry.source_key in draft ? draft[entry.source_key] : entry.user_id) ?? ''}
               onChange={(e) => setDraft((prev) => ({ ...prev, [entry.source_key]: e.target.value || null }))}
+              aria-label={`Membre associé à ${entry.label}`}
               className="h-8 px-2 bg-surface border border-outline rounded-md flex-1 max-w-[260px]"
             >
               <option value="">— Historique non assigné —</option>
@@ -612,6 +615,7 @@ function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
               <button
                 type="button"
                 onClick={() => { navigator.clipboard.writeText(inviteUrl); toast.success('Lien copié'); }}
+                aria-label="Copier le lien"
                 className="shrink-0 h-8 w-8 flex items-center justify-center rounded-md border border-amber-300 text-amber-800 hover:bg-amber-100"
               >
                 <Copy size={13} />
@@ -620,7 +624,7 @@ function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
           </div>
         )}
         <div className="flex items-center gap-2 flex-wrap text-[13px]">
-          <select value={ttl} onChange={(e) => setTtl(Number(e.target.value))} className="h-9 px-2 bg-surface border border-outline rounded-md">
+          <select value={ttl} onChange={(e) => setTtl(Number(e.target.value))} aria-label="Durée de validité du lien" className="h-9 px-2 bg-surface border border-outline rounded-md">
             <option value={24}>24 h</option>
             <option value={48}>48 h</option>
             <option value={96}>4 jours</option>
@@ -774,7 +778,7 @@ function TemplateControls({ migrationId, sourceCrm, onChanged }: { migrationId: 
   const [name, setName] = useState('');
   return (
     <div className="flex items-center gap-2 flex-wrap mb-4 text-[13px]">
-      <select value={selected} onChange={(e) => setSelected(e.target.value)} className="h-9 px-2 bg-surface border border-outline rounded-md">
+      <select value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Gabarit de correspondance" className="h-9 px-2 bg-surface border border-outline rounded-md">
         <option value="">{tplQ.isError ? 'Gabarits non provisionnés (SQL requis)' : 'Choisir un gabarit…'}</option>
         {(tplQ.data ?? []).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
       </select>
@@ -790,7 +794,7 @@ function TemplateControls({ migrationId, sourceCrm, onChanged }: { migrationId: 
         Appliquer
       </button>
       <span className="text-text-tertiary">·</span>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du gabarit (ex. Jobber v1)" className="h-9 px-3 bg-surface border border-outline rounded-md w-[200px]" />
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du gabarit (ex. Jobber v1)" aria-label="Nom du gabarit" className="h-9 px-3 bg-surface border border-outline rounded-md w-[200px]" />
       <button
         type="button"
         disabled={!name.trim()}
@@ -905,6 +909,7 @@ function IssuesTab({ d, onChanged }: { d: any; onChanged: () => void }) {
                 value={resolutions[issue.id] ?? ''}
                 onChange={(e) => setResolutions((r) => ({ ...r, [issue.id]: e.target.value }))}
                 placeholder="Résolution…"
+                aria-label="Résolution"
                 className="flex-1 h-8 px-3 text-[12px] bg-surface border border-outline rounded-md"
               />
               <button
@@ -1101,6 +1106,7 @@ function MessagesTab({ d, onChanged }: { d: any; onChanged: () => void }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Répondre au client…"
+          aria-label="Répondre au client"
           className="flex-1 h-9 px-3 text-[13px] bg-surface border border-outline rounded-md"
         />
         <button

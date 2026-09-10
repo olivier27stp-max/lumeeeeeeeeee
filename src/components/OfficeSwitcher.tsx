@@ -58,7 +58,7 @@ export function OfficeSwitcher() {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setOpen(false)} />
           <div className="absolute left-0 top-full mt-1 w-64 bg-surface-elevated border border-outline rounded-xl shadow-lg z-50 py-1 max-h-72 overflow-y-auto">
             <div className="px-3 py-2 text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {fr ? 'Changer de bureau' : 'Switch office'}
@@ -135,6 +135,7 @@ function CreateOfficeModal({
   onClose: () => void;
   onCreated: (orgId: string) => void;
 }) {
+  const id = React.useId();
   const [name, setName] = React.useState('');
   const [saving, setSaving] = React.useState(false);
 
@@ -162,24 +163,27 @@ function CreateOfficeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" role="presentation" tabIndex={-1} onClick={onClose}>
       <div
         className="w-full max-w-sm bg-surface-elevated border border-outline rounded-2xl shadow-xl p-5"
+        role="presentation"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-text-primary">
             {fr ? 'Créer un bureau' : 'Create office'}
           </h3>
-          <button onClick={onClose} className="text-text-tertiary hover:text-text-primary">
+          <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="text-text-tertiary hover:text-text-primary">
             <X size={18} />
           </button>
         </div>
 
-        <label className="text-xs font-medium text-text-tertiary">
+        <label htmlFor={`${id}-name`} className="text-xs font-medium text-text-tertiary">
           {fr ? 'Nom du bureau' : 'Office name'}
         </label>
         <input
+          id={`${id}-name`}
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}

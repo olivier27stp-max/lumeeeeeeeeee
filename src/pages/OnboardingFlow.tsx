@@ -13,7 +13,7 @@
  *   Step 8: Checkout (billing cycle, summary, card)
  *   → Dashboard
  */
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useId, useMemo, useCallback } from 'react';
 import { captureClientException } from '../lib/sentry';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { translatePlanFeature } from '../lib/planFeatures';
@@ -432,24 +432,26 @@ export default function OnboardingFlow() {
                   <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'Créez votre compte Lume' : 'Create your Lume account'}</p>
                   <div className="space-y-4">
                     <Field label={isFr ? 'Nom complet' : 'Full name'} required>
-                      <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="John Doe" className="onb-input" />
+                      {(id) => <input id={id} value={fullName} onChange={e => setFullName(e.target.value)} placeholder="John Doe" className="onb-input" />}
                     </Field>
                     <Field label={isFr ? 'Courriel' : 'Email'} required>
-                      <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" className="onb-input" />
+                      {(id) => <input id={id} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" className="onb-input" />}
                     </Field>
                     {!user && (
                       <Field label={isFr ? 'Mot de passe' : 'Password'} required>
+                        {(id) => (
                         <div className="relative">
-                          <input type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                          <input id={id} type={showPw ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                             placeholder={isFr ? '10+ caractères' : '10+ characters'} className="onb-input pr-10" />
-                          <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                          <button type="button" onClick={() => setShowPw(!showPw)} aria-label={showPw ? (isFr ? 'Masquer le mot de passe' : 'Hide password') : (isFr ? 'Afficher le mot de passe' : 'Show password')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                             {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
                         </div>
+                        )}
                       </Field>
                     )}
                     <Field label={isFr ? 'Téléphone' : 'Phone'}>
-                      <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" className="onb-input" />
+                      {(id) => <input id={id} value={phone} onChange={e => setPhone(e.target.value)} placeholder="(555) 123-4567" className="onb-input" />}
                     </Field>
                     {signupError && <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-lg">{signupError}</p>}
                   </div>
@@ -477,13 +479,13 @@ export default function OnboardingFlow() {
                   <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'Ces informations nous aident à personnaliser votre expérience.' : 'Understanding your business helps us tailor Lume to your needs.'}</p>
                   <div className="space-y-4">
                     <Field label={isFr ? "Nom de l'entreprise" : 'Company name'} required>
-                      <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="ABC Landscaping" className="onb-input" />
+                      {(id) => <input id={id} value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="ABC Landscaping" className="onb-input" />}
                     </Field>
                     <Field label={isFr ? 'Industrie' : 'Industry'}>
-                      <input value={industry} onChange={e => setIndustry(e.target.value)} placeholder={isFr ? 'Ex: Aménagement paysager' : 'e.g. Landscaping'} className="onb-input" />
+                      {(id) => <input id={id} value={industry} onChange={e => setIndustry(e.target.value)} placeholder={isFr ? 'Ex: Aménagement paysager' : 'e.g. Landscaping'} className="onb-input" />}
                     </Field>
                     <Field label={isFr ? 'Site web' : 'Website'}>
-                      <input value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://..." className="onb-input" />
+                      {(id) => <input id={id} value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://..." className="onb-input" />}
                     </Field>
                   </div>
                   <NavButtons onBack={goBack} onNext={goNext} disabled={!companyName.trim()} isFr={isFr} />
@@ -551,7 +553,7 @@ export default function OnboardingFlow() {
                   <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{isFr ? 'Comment avez-vous entendu parler de Lume?' : "We'd love to know..."}</h1>
                   <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'Merci de nous aider à nous améliorer.' : 'How did you find out about Lume?'}</p>
                   <Field label="">
-                    <input value={heardFrom} onChange={e => setHeardFrom(e.target.value)} placeholder={isFr ? 'Ex: Google, référence, réseaux sociaux...' : 'e.g. Google, referral, social media...'} className="onb-input" />
+                    <input value={heardFrom} onChange={e => setHeardFrom(e.target.value)} placeholder={isFr ? 'Ex: Google, référence, réseaux sociaux...' : 'e.g. Google, referral, social media...'} aria-label={isFr ? 'Comment avez-vous entendu parler de Lume?' : 'How did you find out about Lume?'} className="onb-input" />
                   </Field>
                   <NavButtons onBack={goBack} onNext={goNext} nextLabel={isFr ? 'Continuer' : 'Get Started'} isFr={isFr} />
                 </div>
@@ -577,7 +579,11 @@ export default function OnboardingFlow() {
                       return (
                         <div className={cn('p-5 rounded-xl border-2 transition-all cursor-pointer',
                           interval === 'yearly' ? 'border-[#3FAF97] bg-[#3FAF97]/5' : 'border-gray-200 hover:border-gray-300')}
-                          onClick={() => setInterval(interval === 'yearly' ? 'monthly' : 'yearly')}>
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={interval === 'yearly'}
+                          onClick={() => setInterval(interval === 'yearly' ? 'monthly' : 'yearly')}
+                          onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setInterval(interval === 'yearly' ? 'monthly' : 'yearly'); } }}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center',
@@ -615,7 +621,11 @@ export default function OnboardingFlow() {
                         <div key={p.slug}
                           className={cn('p-5 rounded-xl border-2 transition-all cursor-pointer',
                             isSelected ? 'border-[#1F5F4F] bg-[#1F5F4F]/5' : 'border-gray-200 hover:border-gray-300')}
-                          onClick={() => setSelectedSlug(isSelected ? (planParam || 'pro') : p.slug)}>
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={isSelected}
+                          onClick={() => setSelectedSlug(isSelected ? (planParam || 'pro') : p.slug)}
+                          onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setSelectedSlug(isSelected ? (planParam || 'pro') : p.slug); } }}>
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
                               <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center',
@@ -880,7 +890,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <p className="text-sm font-bold text-gray-900 mb-3">{isFr ? 'Code promotionnel' : 'Promo code'}</p>
             <div className="flex gap-2">
-              <input value={promoCode} onChange={e => setPromoCode(e.target.value)} placeholder={isFr ? 'Entrez votre code' : 'Enter your code'} className="onb-input flex-1" />
+              <input value={promoCode} onChange={e => setPromoCode(e.target.value)} placeholder={isFr ? 'Entrez votre code' : 'Enter your code'} aria-label={isFr ? 'Code promotionnel' : 'Promo code'} className="onb-input flex-1" />
               <button onClick={async () => {
                 const r = await validatePromoCode(promoCode);
                 if (r) { setPromoValid(r); toast.success(isFr ? 'Code appliqué!' : 'Code applied!'); }
@@ -1072,11 +1082,13 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
 
 // ─── Sub-components ───
 
-function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode | ((id: string) => React.ReactNode) }) {
+  // L'id relie l'étiquette au champ : le fils peut être une fonction qui le reçoit.
+  const id = useId();
   return (
     <div>
-      {label && <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">{label}{required && ' *'}</label>}
-      {children}
+      {label && <label htmlFor={id} className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">{label}{required && ' *'}</label>}
+      {typeof children === 'function' ? children(id) : children}
     </div>
   );
 }

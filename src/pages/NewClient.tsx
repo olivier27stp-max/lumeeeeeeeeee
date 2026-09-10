@@ -5,7 +5,7 @@
  * page, one big white box holding every field, gray typing bars. Unsaved input
  * is protected by the navigation guard (in-app) and beforeunload (browser).
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, Plus, Trash2, X } from 'lucide-react';
@@ -38,6 +38,7 @@ export default function NewClient() {
   const navigate = useNavigate();
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
 
   // ── Form state ──
   const [firstName, setFirstName] = useState('');
@@ -292,6 +293,7 @@ export default function NewClient() {
         <button
           type="button"
           onClick={() => navigate('/clients')}
+          aria-label={t.common.close}
           className="absolute right-6 top-6 p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors"
         >
           <X size={18} />
@@ -305,18 +307,19 @@ export default function NewClient() {
           <section className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Prénom' : 'First name'} <span className="text-danger">*</span></label>
-                <input autoFocus value={firstName} onChange={(e) => setFirstName(e.target.value)} className="glass-input w-full" />
+                <label htmlFor={`${id}-first-name`} className={fieldLabel}>{fr ? 'Prénom' : 'First name'} <span className="text-danger">*</span></label>
+                <input id={`${id}-first-name`} autoFocus value={firstName} onChange={(e) => setFirstName(e.target.value)} className="glass-input w-full" />
               </div>
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Nom de famille' : 'Last name'} <span className="text-danger">*</span></label>
-                <input value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full" />
+                <label htmlFor={`${id}-last-name`} className={fieldLabel}>{fr ? 'Nom de famille' : 'Last name'} <span className="text-danger">*</span></label>
+                <input id={`${id}-last-name`} value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full" />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Numéro de client' : 'Client number'}</label>
+                <label htmlFor={`${id}-client-number`} className={fieldLabel}>{fr ? 'Numéro de client' : 'Client number'}</label>
                 <input
+                  id={`${id}-client-number`}
                   value={clientNumber}
                   onChange={(e) => {
                     setClientNumber(e.target.value.replace(/\D/g, ''));
@@ -330,8 +333,8 @@ export default function NewClient() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Nom de la compagnie' : 'Company name'}</label>
-              <input value={company} onChange={(e) => setCompany(e.target.value)} className="glass-input w-full" />
+              <label htmlFor={`${id}-company`} className={fieldLabel}>{fr ? 'Nom de la compagnie' : 'Company name'}</label>
+              <input id={`${id}-company`} value={company} onChange={(e) => setCompany(e.target.value)} className="glass-input w-full" />
               <AnimatePresence initial={false}>
                 {company.trim() && (
                   <motion.div
@@ -363,7 +366,7 @@ export default function NewClient() {
               </AnimatePresence>
             </div>
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Numéro de téléphone' : 'Phone number'}</label>
+              <span className={fieldLabel}>{fr ? 'Numéro de téléphone' : 'Phone number'}</span>
               {/* Same bar as the email one below — the add/remove controls live
                   inside the bar so both bars stay pixel-identical in width. */}
               <div className="space-y-2">
@@ -373,15 +376,17 @@ export default function NewClient() {
                       type="tel"
                       value={row.number}
                       onChange={(e) => patchPhone(row.id, { number: e.target.value })}
-                      className="flex-1 min-w-0 bg-transparent border-none outline-none py-[0.5625rem] text-[13px]"
+                      className="flex-1 min-w-0 bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 py-[0.5625rem] text-[13px]"
                       placeholder={fr ? 'Numéro de téléphone' : 'Phone number'}
+                      aria-label={fr ? 'Numéro de téléphone' : 'Phone number'}
                     />
                     {row.number.trim() && (
                       <div className="relative flex items-center shrink-0 border-l border-border pl-2 my-1.5">
                         <select
                           value={row.label}
                           onChange={(e) => patchPhone(row.id, { label: e.target.value as ClientPhone['label'] })}
-                          className="appearance-none bg-transparent border-none outline-none pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
+                          aria-label={fr ? 'Type de numéro' : 'Phone type'}
+                          className="appearance-none bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
                         >
                           {PHONE_LABELS.map((label) => (
                             <option key={label} value={label}>{phoneLabelText(label)}</option>
@@ -405,14 +410,15 @@ export default function NewClient() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Courriel' : 'Email'}</label>
+              <label htmlFor={`${id}-email`} className={fieldLabel}>{fr ? 'Courriel' : 'Email'}</label>
               <div className={inlineBar} style={inlineBarStyle}>
                 <input
+                  id={`${id}-email`}
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   onBlur={() => void checkEmailDuplicates()}
-                  className="flex-1 min-w-0 bg-transparent border-none outline-none py-[0.5625rem] text-[13px]"
+                  className="flex-1 min-w-0 bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 py-[0.5625rem] text-[13px]"
                   placeholder={fr ? 'courriel@exemple.com' : 'email@example.com'}
                 />
                 {email.trim() && (
@@ -420,7 +426,8 @@ export default function NewClient() {
                     <select
                       value={emailLabel}
                       onChange={(e) => setEmailLabel(e.target.value as (typeof EMAIL_LABELS)[number])}
-                      className="appearance-none bg-transparent border-none outline-none pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
+                      aria-label={fr ? 'Type de courriel' : 'Email type'}
+                      className="appearance-none bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 pr-4 text-[12px] font-medium text-text-tertiary cursor-pointer"
                     >
                       {EMAIL_LABELS.map((label) => (
                         <option key={label} value={label}>{emailLabelText(label)}</option>
@@ -444,8 +451,9 @@ export default function NewClient() {
           <section className="space-y-4 border-t border-border pt-6">
             <h3 className={sectionTitle}>{fr ? 'Informations du lead' : 'Lead information'}</h3>
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Source du lead' : 'Lead source'}</label>
+              <label htmlFor={`${id}-lead-source`} className={fieldLabel}>{fr ? 'Source du lead' : 'Lead source'}</label>
               <select
+                id={`${id}-lead-source`}
                 value={leadSource}
                 onChange={(e) => {
                   if (e.target.value === CREATE_SOURCE_VALUE) { setCreatingSource(true); return; }
@@ -477,6 +485,7 @@ export default function NewClient() {
                         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleAddSource(); } }}
                         className="glass-input flex-1"
                         placeholder={fr ? 'Nom de la nouvelle source' : 'New source name'}
+                        aria-label={fr ? 'Nom de la nouvelle source' : 'New source name'}
                       />
                       <button type="button" onClick={() => void handleAddSource()} className="glass-button-primary">
                         {fr ? 'Ajouter' : 'Add'}
@@ -495,7 +504,7 @@ export default function NewClient() {
           <section className="space-y-4 border-t border-border pt-6">
             <h3 className={sectionTitle}>{fr ? 'Adresse de la propriété' : 'Property address'}</h3>
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Adresse' : 'Address'}</label>
+              <span className={fieldLabel}>{fr ? 'Adresse' : 'Address'}</span>
               <AddressAutocomplete
                 value={addressSearch}
                 onChange={(value) => { setAddressSearch(value); setStructured(null); }}
@@ -506,7 +515,7 @@ export default function NewClient() {
 
             {/* Taxes — org defaults pre-checked */}
             <div className="space-y-2">
-              <label className={fieldLabel}>Taxes</label>
+              <span className={fieldLabel}>Taxes</span>
               {taxesLoading ? (
                 <div className="h-5 w-40 bg-surface-tertiary rounded animate-pulse" />
               ) : taxes.length === 0 ? (
@@ -569,7 +578,7 @@ export default function NewClient() {
                   className="overflow-hidden"
                 >
                   <div className="space-y-2 pt-1">
-                    <label className={fieldLabel}>{fr ? 'Adresse de facturation' : 'Billing address'}</label>
+                    <span className={fieldLabel}>{fr ? 'Adresse de facturation' : 'Billing address'}</span>
                     <AddressAutocomplete
                       value={billingSearch}
                       onChange={setBillingSearch}

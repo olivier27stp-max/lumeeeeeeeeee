@@ -256,6 +256,8 @@ export default function PlanUpgradeModal({ open, onClose, flag, requiredPlan, cu
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+      role="presentation"
+      tabIndex={-1}
       onClick={onClose}
     >
       <motion.div

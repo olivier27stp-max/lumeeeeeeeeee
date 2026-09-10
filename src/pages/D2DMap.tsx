@@ -323,10 +323,15 @@ export default function D2DMap() {
       {leadChoicePin && (
         <div
           className="absolute inset-0 z-[70] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
+          role="presentation"
+          tabIndex={-1}
           onClick={() => setLeadChoicePin(null)}
         >
           <div
             className="w-[360px] max-w-[92vw] overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
+            role="dialog"
+            aria-modal="true"
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-slate-100 px-5 py-4">

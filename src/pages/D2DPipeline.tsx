@@ -127,10 +127,12 @@ function DealCard({ deal, onStatusChange, onSelect }: {
 
   return (
     <div ref={setNodeRef} style={style} {...attributes}
+      role="button" tabIndex={0}
       onClick={() => onSelect(deal)}
+      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onSelect(deal); } }}
       className="group rounded-xl border border-outline bg-surface-card p-3.5 transition-all hover:bg-surface-elevated hover:border-outline-strong cursor-pointer">
       <div className="flex items-start gap-2">
-        <button {...listeners} onClick={e => e.stopPropagation()} className="mt-0.5 cursor-grab text-text-muted hover:text-text-secondary active:cursor-grabbing">
+        <button {...listeners} onClick={e => e.stopPropagation()} aria-label={fr ? 'Déplacer la carte' : 'Move card'} className="mt-0.5 cursor-grab text-text-muted hover:text-text-secondary active:cursor-grabbing">
           <GripVertical size={14} />
         </button>
         <div className="flex-1 min-w-0">
@@ -262,7 +264,7 @@ function DealDetailPanel({ deal, reps, fr, onClose, onReassign }: {
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-outline">
         <h2 className="text-[14px] font-bold text-text-primary truncate">{deal.leadName}</h2>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface-tertiary text-text-muted hover:text-text-primary transition-colors">
+        <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1 rounded-lg hover:bg-surface-tertiary text-text-muted hover:text-text-primary transition-colors">
           <X size={16} />
         </button>
       </div>
@@ -332,7 +334,8 @@ function DealDetailPanel({ deal, reps, fr, onClose, onReassign }: {
             <select
               value={deal.repId || ''}
               onChange={(e) => { if (e.target.value) onReassign(deal.id, e.target.value); }}
-              className="w-full px-3 py-2 rounded-lg border border-outline bg-surface-tertiary text-[12px] text-text-primary font-medium outline-none cursor-pointer"
+              aria-label={fr ? 'Réassigner à' : 'Reassign to'}
+              className="w-full px-3 py-2 rounded-lg border border-outline bg-surface-tertiary text-[12px] text-text-primary font-medium outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer"
             >
               <option value="" disabled>{fr ? 'Choisir un rep...' : 'Select rep...'}</option>
               {reps.map(r => (

@@ -53,6 +53,8 @@ export default function JobPopup({ pin, onClose, onOpenJob, onOpenClient }: JobP
     >
       <div
         className="w-72 overflow-hidden"
+        role="presentation"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

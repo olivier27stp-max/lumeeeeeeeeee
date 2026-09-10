@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useId } from 'react';
 import {
   Users,
   Plus,
@@ -520,6 +520,7 @@ export default function ManageTeam() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t.manageTeam.searchMembers}
+            aria-label={t.manageTeam.searchMembers}
             className="glass-input w-full !pl-10"
           />
         </div>
@@ -745,10 +746,13 @@ export default function ManageTeam() {
         <div
           className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 backdrop-blur-md p-4"
           role="presentation"
+          tabIndex={-1}
           onClick={closeMfaPrompt}
         >
           <div
             className="w-full max-w-md glass rounded-2xl border border-border shadow-2xl p-6"
+            role="presentation"
+            tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3">
@@ -949,6 +953,7 @@ const MemberRow: React.FC<MemberRowProps> = ({
   stats,
 }) => {
   const { t } = useTranslation();
+  const id = useId();
   const isFr = language === 'fr';
   const [rateVal, setRateVal] = useState(rate > 0 ? String(rate / 100) : '');
   useEffect(() => { setRateVal(rate > 0 ? String(rate / 100) : ''); }, [rate]);
@@ -1029,8 +1034,8 @@ const MemberRow: React.FC<MemberRowProps> = ({
       {onSaveLeaderboardVisibility && member.role !== 'technician' && (() => {
         const visible = member.show_on_leaderboard !== false;
         return (
-          <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-            <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Classement' : 'Leaderboard'}</label>
+          <div className="shrink-0 flex items-center gap-1.5" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+            <span className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Classement' : 'Leaderboard'}</span>
             <button
               type="button"
               role="switch"
@@ -1056,9 +1061,11 @@ const MemberRow: React.FC<MemberRowProps> = ({
 
       {/* Sales-rep category (drives leaderboard: first-year vs experienced) */}
       {onSaveExperience && member.role === 'sales_rep' && (
-        <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Catégorie' : 'Category'}</label>
+        <div className="shrink-0 flex items-center gap-1.5" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+          <label htmlFor={`${id}-experience`} className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Catégorie' : 'Category'}</label>
           <select
+            id={`${id}-experience`}
+            aria-label={isFr ? 'Catégorie' : 'Category'}
             value={member.experience_level ?? ''}
             onChange={(e) => onSaveExperience((e.target.value || null) as 'rookie' | 'experienced' | null)}
             className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 text-[12px] font-medium text-text-primary focus:border-primary focus:outline-none"
@@ -1073,9 +1080,11 @@ const MemberRow: React.FC<MemberRowProps> = ({
       {/* Équipe d'attache — owner/admin/technicien; pas les sales_rep (les
           équipes sont un découpage terrain, les reps vendent) */}
       {onSaveTeam && teams && teams.length > 0 && member.role !== 'sales_rep' && (
-        <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <label className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Équipe' : 'Team'}</label>
+        <div className="shrink-0 flex items-center gap-1.5" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+          <label htmlFor={`${id}-team`} className="text-[11px] font-semibold text-text-tertiary hidden lg:block">{isFr ? 'Équipe' : 'Team'}</label>
           <select
+            id={`${id}-team`}
+            aria-label={isFr ? 'Équipe' : 'Team'}
             value={member.team_id ?? ''}
             onChange={(e) => onSaveTeam(e.target.value || null)}
             className="rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 text-[12px] font-medium text-text-primary focus:border-primary focus:outline-none max-w-[130px]"
@@ -1089,11 +1098,13 @@ const MemberRow: React.FC<MemberRowProps> = ({
       )}
 
       {/* Hourly rate (labour cost input for profitability) */}
-      <div className="shrink-0 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-        <label className="text-[11px] font-semibold text-text-tertiary hidden sm:block">{isFr ? 'Taux/h' : 'Rate/h'}</label>
+      <div className="shrink-0 flex items-center gap-1.5" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+        <label htmlFor={`${id}-rate`} className="text-[11px] font-semibold text-text-tertiary hidden sm:block">{isFr ? 'Taux/h' : 'Rate/h'}</label>
         <div className="flex items-center gap-0.5 rounded-lg border border-outline-subtle bg-surface-secondary/40 px-2 py-1.5 focus-within:border-primary transition-colors">
           <span className="text-[12px] text-text-tertiary">$</span>
           <input
+            id={`${id}-rate`}
+            aria-label={isFr ? 'Taux horaire' : 'Hourly rate'}
             value={rateVal}
             inputMode="decimal"
             placeholder="0"
@@ -1107,8 +1118,12 @@ const MemberRow: React.FC<MemberRowProps> = ({
 
       {/* Action menu (not for owner) */}
       {!isOwner && (
-        <div className="relative shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="relative shrink-0" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
           <button
+            type="button"
+            aria-label={isFr ? 'Actions du membre' : 'Member actions'}
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
             onClick={(e) => { e.stopPropagation(); setOpenMenuId(isMenuOpen ? null : member.user_id); }}
             className="p-2.5 rounded-xl border border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface-secondary hover:border-outline-subtle transition-all"
           >
@@ -1197,6 +1212,7 @@ function InviteForm({
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
+  const id = useId();
   const isFr = language === 'fr';
   const { companies, current } = useCompany();
   const [email, setEmail] = useState('');
@@ -1265,10 +1281,11 @@ function InviteForm({
       {/* Office picker — only when the user belongs to multiple offices */}
       {isMultiOffice && (
         <div>
-          <label className="text-xs font-medium text-text-tertiary">
+          <label htmlFor={`${id}-office`} className="text-xs font-medium text-text-tertiary">
             {isFr ? 'Assigner au bureau' : 'Assign to office'}
           </label>
           <select
+            id={`${id}-office`}
             value={officeId}
             onChange={(e) => setOfficeId(e.target.value)}
             className="glass-input w-full mt-1.5"
@@ -1283,10 +1300,11 @@ function InviteForm({
       )}
 
       <div>
-        <label className="text-xs font-medium text-text-tertiary">
+        <label htmlFor={`${id}-email`} className="text-xs font-medium text-text-tertiary">
           {t.companySettings.emailAddress}
         </label>
         <input
+          id={`${id}-email`}
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -1297,9 +1315,9 @@ function InviteForm({
       </div>
 
       <div>
-        <label className="text-xs font-medium text-text-tertiary">
+        <span className="text-xs font-medium text-text-tertiary">
           {t.manageTeam.role}
-        </label>
+        </span>
         <div className="space-y-2 mt-2">
           {(['admin', 'sales_rep', 'technician'] as MemberRole[]).map((r) => {
             const cfg = ROLE_CONFIG[r];
@@ -1330,9 +1348,9 @@ function InviteForm({
       {/* Scope picker — hidden for admins (always "company") */}
       {role !== 'admin' && (
         <div>
-          <label className="text-xs font-medium text-text-tertiary">
+          <span className="text-xs font-medium text-text-tertiary">
             {isFr ? 'Portée d\'accès' : 'Access scope'}
-          </label>
+          </span>
           <div className="space-y-2 mt-2">
             {SCOPE_OPTIONS.map((s) => (
               <button
@@ -1359,7 +1377,7 @@ function InviteForm({
       {/* Team picker — équipe d'attache, tous rôles confondus */}
       {showTeamPicker && (
         <div>
-          <label className="text-xs font-medium text-text-tertiary">
+          <label htmlFor={`${id}-team`} className="text-xs font-medium text-text-tertiary">
             {isFr ? 'Équipe à assigner (optionnel)' : 'Assign to team (optional)'}
           </label>
           {teams.length === 0 ? (
@@ -1368,6 +1386,7 @@ function InviteForm({
             </p>
           ) : (
             <select
+              id={`${id}-team`}
               value={teamId || ''}
               onChange={(e) => setTeamId(e.target.value || null)}
               className="glass-input w-full mt-1.5"

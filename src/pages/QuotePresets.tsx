@@ -9,7 +9,7 @@
    full section layout is persisted in custom_fields.sections.
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
@@ -114,6 +114,7 @@ const inputCls = 'glass-input w-full mt-1.5';
 export default function QuotePresets() {
   const navigate = useNavigate();
   const { language, t } = useTranslation();
+  const id = useId();
   const fr = language === 'fr';
 
   /* ── Section catalog (label + icon per type) ── */
@@ -484,8 +485,10 @@ export default function QuotePresets() {
             <TypeIcon size={15} className="text-text-tertiary mt-2.5 shrink-0" />
             <textarea value={item.name} onChange={e => updateLine(section.id, item.id, { name: e.target.value })}
               rows={2} placeholder={fr ? 'Texte libre (titre, note de section…)' : 'Free text (heading, section note…)'}
+              aria-label={fr ? 'Texte libre' : 'Free text'}
               className="glass-input flex-1 py-2 text-sm resize-none" />
             <button type="button" onClick={() => removeLine(section.id, item.id)} disabled={items.length === 1}
+              aria-label={fr ? 'Supprimer la ligne' : 'Remove line'}
               className="p-1 mt-2 text-text-tertiary hover:text-danger disabled:opacity-30"><Trash2 size={14} /></button>
           </div>
         ) : (
@@ -501,15 +504,17 @@ export default function QuotePresets() {
                 <Package size={13} className="text-text-tertiary shrink-0" />
               </button>
               <textarea value={item.description} onChange={e => updateLine(section.id, item.id, { description: e.target.value })}
+                aria-label="Description"
                 className={cn(inputCls, 'py-1.5 text-xs min-h-[72px] resize-none')} placeholder="Description" />
             </div>
             <div className="col-span-2">
-              <label className="text-xs font-medium text-text-tertiary">{fr ? 'Quantité' : 'Quantity'}</label>
-              <input value={item.qtyInput} onChange={e => updateLine(section.id, item.id, { qtyInput: e.target.value.replace(/[^\d]/g, '') || '1' })}
+              <label htmlFor={`${id}-qty-${item.id}`} className="text-xs font-medium text-text-tertiary">{fr ? 'Quantité' : 'Quantity'}</label>
+              <input id={`${id}-qty-${item.id}`} value={item.qtyInput} onChange={e => updateLine(section.id, item.id, { qtyInput: e.target.value.replace(/[^\d]/g, '') || '1' })}
                 className={cn(inputCls, 'py-2 text-center')} />
             </div>
             <div className="col-span-2 flex flex-col items-center gap-1 pt-5">
               <button type="button" onClick={() => removeLine(section.id, item.id)} disabled={items.length === 1}
+                aria-label={fr ? 'Supprimer la ligne' : 'Remove line'}
                 className="p-1 text-text-tertiary hover:text-danger disabled:opacity-30"><Trash2 size={14} /></button>
             </div>
             <div className="col-span-12">
@@ -561,14 +566,17 @@ export default function QuotePresets() {
           {section.depositEnabled ? (
             <div className="flex items-center gap-2">
               <select value={section.depositType} onChange={e => updateSection(section.id, { depositType: e.target.value as 'percent' | 'fixed' })}
+                aria-label={fr ? 'Type de dépôt' : 'Deposit type'}
                 className="glass-input py-2 text-sm w-28">
                 <option value="percent">%</option>
                 <option value="fixed">{fr ? 'Montant' : 'Amount'}</option>
               </select>
               <input value={section.depositValue} onChange={e => updateSection(section.id, { depositValue: e.target.value.replace(/[^\d.]/g, '') })}
                 placeholder={section.depositType === 'percent' ? '25' : '100.00'}
+                aria-label={fr ? 'Dépôt requis' : 'Required deposit'}
                 className="glass-input py-2 text-sm flex-1" />
               <button type="button" onClick={() => updateSection(section.id, { depositEnabled: false, depositValue: '' })}
+                aria-label={fr ? 'Retirer le dépôt requis' : 'Remove required deposit'}
                 className="p-2 text-text-tertiary hover:text-danger"><X size={15} /></button>
             </div>
           ) : (
@@ -589,14 +597,14 @@ export default function QuotePresets() {
         {images.map((url, idx) => (
           <div key={idx} className="flex items-center gap-1.5">
             <input value={url} onChange={e => { const next = [...images]; next[idx] = e.target.value; updateSection(section.id, { images: next }); }}
-              placeholder="https://..." className="glass-input flex-1 text-[13px]" />
+              placeholder="https://..." aria-label={fr ? `URL de l'image ${idx + 1}` : `Image ${idx + 1} URL`} className="glass-input flex-1 text-[13px]" />
             {url && (
               <div className="h-9 w-9 rounded-md overflow-hidden bg-surface-tertiary shrink-0">
                 <img src={url} alt="" className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
               </div>
             )}
             <button type="button" onClick={() => updateSection(section.id, { images: images.filter((_, i) => i !== idx) })}
-              className="p-1 text-text-tertiary hover:text-danger"><X size={13} /></button>
+              aria-label={fr ? "Retirer l'image" : 'Remove image'} className="p-1 text-text-tertiary hover:text-danger"><X size={13} /></button>
           </div>
         ))}
         <button type="button" onClick={() => updateSection(section.id, { images: [...images, ''] })}
@@ -614,11 +622,11 @@ export default function QuotePresets() {
         {atts.map((att, idx) => (
           <div key={idx} className="flex items-center gap-1.5">
             <input value={att.name} onChange={e => { const next = [...atts]; next[idx] = { ...att, name: e.target.value }; updateSection(section.id, { attachments: next }); }}
-              placeholder={fr ? 'Nom du fichier' : 'File name'} className="glass-input text-[13px] w-1/3" />
+              placeholder={fr ? 'Nom du fichier' : 'File name'} aria-label={fr ? 'Nom du fichier' : 'File name'} className="glass-input text-[13px] w-1/3" />
             <input value={att.url} onChange={e => { const next = [...atts]; next[idx] = { ...att, url: e.target.value }; updateSection(section.id, { attachments: next }); }}
-              placeholder="https://..." className="glass-input flex-1 text-[13px]" />
+              placeholder="https://..." aria-label={fr ? 'URL du fichier' : 'File URL'} className="glass-input flex-1 text-[13px]" />
             <button type="button" onClick={() => updateSection(section.id, { attachments: atts.filter((_, i) => i !== idx) })}
-              className="p-1 text-text-tertiary hover:text-danger"><X size={13} /></button>
+              aria-label={fr ? 'Retirer la pièce jointe' : 'Remove attachment'} className="p-1 text-text-tertiary hover:text-danger"><X size={13} /></button>
           </div>
         ))}
         <button type="button" onClick={() => updateSection(section.id, { attachments: [...atts, { name: '', url: '' }] })}
@@ -637,12 +645,12 @@ export default function QuotePresets() {
           <div key={idx} className="rounded-lg border border-outline p-3 space-y-2">
             <div className="flex items-center gap-2">
               <input value={rev.author} onChange={e => { const next = [...reviews]; next[idx] = { ...rev, author: e.target.value }; updateSection(section.id, { reviews: next }); }}
-                placeholder={fr ? 'Nom du client' : 'Client name'} className="glass-input flex-1 text-[13px]" />
+                placeholder={fr ? 'Nom du client' : 'Client name'} aria-label={fr ? 'Nom du client' : 'Client name'} className="glass-input flex-1 text-[13px]" />
               <button type="button" onClick={() => updateSection(section.id, { reviews: reviews.filter((_, i) => i !== idx) })}
-                className="p-1 text-text-tertiary hover:text-danger"><X size={13} /></button>
+                aria-label={fr ? "Retirer l'avis" : 'Remove review'} className="p-1 text-text-tertiary hover:text-danger"><X size={13} /></button>
             </div>
             <textarea value={rev.text} onChange={e => { const next = [...reviews]; next[idx] = { ...rev, text: e.target.value }; updateSection(section.id, { reviews: next }); }}
-              rows={2} placeholder={fr ? 'Témoignage…' : 'Testimonial…'} className="glass-input w-full text-[13px] resize-none" />
+              rows={2} placeholder={fr ? 'Témoignage…' : 'Testimonial…'} aria-label={fr ? 'Témoignage' : 'Testimonial'} className="glass-input w-full text-[13px] resize-none" />
           </div>
         ))}
         <button type="button" onClick={() => updateSection(section.id, { reviews: [...reviews, { author: '', text: '' }] })}
@@ -656,7 +664,7 @@ export default function QuotePresets() {
   function renderTextarea(section: Section, placeholder: string) {
     return (
       <textarea value={section.text || ''} onChange={e => updateSection(section.id, { text: e.target.value })}
-        rows={4} placeholder={placeholder} className="glass-input w-full resize-none" />
+        rows={4} placeholder={placeholder} aria-label={placeholder} className="glass-input w-full resize-none" />
     );
   }
 
@@ -680,12 +688,12 @@ export default function QuotePresets() {
         {/* Header */}
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <button onClick={() => setMode('list')}
+            <button onClick={() => setMode('list')} aria-label={fr ? 'Retour à la liste' : 'Back to list'}
               className="p-2 rounded-xl border border-outline hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors shrink-0">
               <ChevronLeft size={18} />
             </button>
             <input value={name} onChange={e => setName(e.target.value)}
-              placeholder={fr ? 'Nom du modèle' : 'Template name'}
+              placeholder={fr ? 'Nom du modèle' : 'Template name'} aria-label={fr ? 'Nom du modèle' : 'Template name'}
               className="text-[24px] font-bold text-text-primary bg-transparent border-0 border-b-2 border-transparent focus:border-primary focus:outline-none px-1 py-0.5 min-w-0 flex-1" />
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -733,11 +741,11 @@ export default function QuotePresets() {
                       <h3 className="text-[14px] font-bold tracking-tight text-text-primary truncate">{def.label}</h3>
                     </div>
                     <div className="flex items-center gap-0.5 shrink-0">
-                      <button type="button" onClick={() => moveSection(section.id, -1)} disabled={idx === 0}
+                      <button type="button" onClick={() => moveSection(section.id, -1)} disabled={idx === 0} aria-label={fr ? 'Monter la section' : 'Move section up'}
                         className="p-1.5 rounded-lg text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary disabled:opacity-25 transition-colors"><ChevronUp size={15} /></button>
-                      <button type="button" onClick={() => moveSection(section.id, 1)} disabled={idx === sections.length - 1}
+                      <button type="button" onClick={() => moveSection(section.id, 1)} disabled={idx === sections.length - 1} aria-label={fr ? 'Descendre la section' : 'Move section down'}
                         className="p-1.5 rounded-lg text-text-tertiary hover:bg-surface-tertiary hover:text-text-primary disabled:opacity-25 transition-colors"><ChevronDown size={15} /></button>
-                      <button type="button" onClick={() => removeSection(section.id)}
+                      <button type="button" onClick={() => removeSection(section.id)} aria-label={fr ? 'Supprimer la section' : 'Remove section'}
                         className="p-1.5 rounded-lg text-text-tertiary hover:bg-surface-tertiary hover:text-danger transition-colors"><Trash2 size={15} /></button>
                     </div>
                   </div>
@@ -897,11 +905,11 @@ export default function QuotePresets() {
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-medium text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-all">
                     <Edit2 size={11} /> {fr ? 'Modifier' : 'Edit'}
                   </button>
-                  <button onClick={() => handleDuplicate(preset)}
+                  <button onClick={() => handleDuplicate(preset)} aria-label={fr ? 'Dupliquer le modèle' : 'Duplicate template'}
                     className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] text-text-tertiary hover:bg-surface-secondary hover:text-text-primary transition-all">
                     <Copy size={11} />
                   </button>
-                  <button onClick={() => handleDelete(preset)}
+                  <button onClick={() => handleDelete(preset)} aria-label={fr ? 'Supprimer le modèle' : 'Delete template'}
                     className="flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] text-text-tertiary hover:bg-surface-secondary hover:text-danger transition-all">
                     <Trash2 size={11} />
                   </button>

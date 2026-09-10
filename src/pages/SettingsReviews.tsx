@@ -10,7 +10,7 @@
    textes des automatisations restent dans Réglages → Messagerie SMS.
    ═══════════════════════════════════════════════════════════════ */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Star,
@@ -79,6 +79,7 @@ function humanDelay(seconds: number, isFr: boolean): string {
 }
 
 export default function SettingsReviews() {
+  const id = useId();
   const { language } = useTranslation();
   const isFr = language === 'fr';
 
@@ -325,10 +326,11 @@ export default function SettingsReviews() {
         </h3>
 
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+          <label htmlFor={`${id}-google`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
             <Globe size={10} /> {isFr ? 'Fiche Google (Google Business Profile)' : 'Google Business Profile'}
           </label>
           <input
+            id={`${id}-google`}
             type="url"
             value={form.google_review_url}
             onChange={(e) => update('google_review_url', e.target.value)}
@@ -343,10 +345,11 @@ export default function SettingsReviews() {
         </div>
 
         <div>
-          <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+          <label htmlFor={`${id}-facebook`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
             <Facebook size={10} /> {isFr ? 'Page Facebook (onglet Avis)' : 'Facebook page (Reviews tab)'}
           </label>
           <input
+            id={`${id}-facebook`}
             type="url"
             value={form.facebook_review_url}
             onChange={(e) => update('facebook_review_url', e.target.value)}
@@ -379,6 +382,7 @@ export default function SettingsReviews() {
         <textarea
           value={form.review_invite_message}
           onChange={(e) => update('review_invite_message', e.target.value)}
+          aria-label={isFr ? 'Message d’invitation (4-5 étoiles)' : 'Invite message (4-5 stars)'}
           rows={3}
           maxLength={400}
           placeholder={inviteDefault}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,6 +19,7 @@ function ruleBaseLabel(rule: FsCommissionRule, isFr: boolean): string {
  * when an invoice is paid; no rule match falls back to the org default plan.
  */
 export default function MemberCommissionPlan({ userId, isFr }: { userId: string; isFr: boolean }) {
+  const id = useId();
   const [rules, setRules] = useState<FsCommissionRule[] | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -54,11 +55,12 @@ export default function MemberCommissionPlan({ userId, isFr }: { userId: string;
 
   return (
     <div className="max-w-xs space-y-1.5">
-      <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+      <label htmlFor={`${id}-plan`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
         {isFr ? 'Plan de commission' : 'Commission plan'}
       </label>
       <div className="flex items-center gap-2">
         <select
+          id={`${id}-plan`}
           value={currentRuleId}
           disabled={saving}
           onChange={(e) => handleChange(e.target.value)}

@@ -688,7 +688,7 @@ export default function ClientDetails() {
                 </button>
                 {showNewItemMenu && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowNewItemMenu(false)} />
+                    <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setShowNewItemMenu(false)} />
                     <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1">
                       <button
                         onClick={() => { setShowNewItemMenu(false); setIsQuoteCreateOpen(true); }}
@@ -724,12 +724,12 @@ export default function ClientDetails() {
 
               {/* More dropdown */}
               <div className="relative">
-                <button onClick={() => setShowActionMenu(!showActionMenu)} className="inline-flex items-center gap-1 h-9 px-2.5 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary transition-colors">
+                <button onClick={() => setShowActionMenu(!showActionMenu)} aria-label={t.common.moreOptions} className="inline-flex items-center gap-1 h-9 px-2.5 bg-surface border border-outline rounded-md text-text-secondary hover:bg-surface-secondary transition-colors">
                   <MoreHorizontal size={16} />
                 </button>
                 {showActionMenu && (
                   <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowActionMenu(false)} />
+                    <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setShowActionMenu(false)} />
                     <div className="absolute right-0 top-full mt-1 z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1">
                       <button
                         onClick={() => { navigate(`/clients/${client.id}/edit`); setShowActionMenu(false); }}
@@ -832,6 +832,7 @@ export default function ClientDetails() {
                   <span className="inline-flex items-center gap-1">
                     <input
                       type="text"
+                      aria-label={isFr ? 'Nouvelle étiquette' : 'New tag'}
                       value={newTag}
                       onChange={(e) => setNewTag(e.target.value)}
                       onKeyDown={(e) => {
@@ -906,7 +907,7 @@ export default function ClientDetails() {
               </button>
               {activeWorkMenuPos && client && (
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setActiveWorkMenuPos(null)} />
+                  <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setActiveWorkMenuPos(null)} />
                   <div
                     className="fixed z-50 w-44 bg-surface border border-outline rounded-md shadow-lg py-1"
                     style={{ top: activeWorkMenuPos.top, right: activeWorkMenuPos.right }}
@@ -1192,6 +1193,7 @@ export default function ClientDetails() {
                 onChange={(e) => { setNotes(e.target.value); setNotesEdited(true); }}
                 onBlur={handleSaveNotes}
                 placeholder={t.clientDetails.addNotesPlaceholder}
+                aria-label={t.common.notes}
                 className="w-full bg-transparent text-[13px] text-text-primary placeholder:text-text-tertiary resize-none min-h-[80px] focus:outline-none"
                 rows={4}
               />

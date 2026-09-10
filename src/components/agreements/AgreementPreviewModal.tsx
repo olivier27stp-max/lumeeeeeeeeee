@@ -95,9 +95,12 @@ export default function AgreementPreviewModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/40" role="presentation" tabIndex={-1} onClick={onClose}>
       <div
         className="bg-surface-card rounded-2xl border border-outline shadow-xl w-full max-w-[720px] max-h-[90vh] flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -110,7 +113,7 @@ export default function AgreementPreviewModal({
               {fr ? 'Prévisualisez et envoyez le contrat PDF.' : 'Preview and send the contract PDF.'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+          <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
             <X size={16} />
           </button>
         </div>

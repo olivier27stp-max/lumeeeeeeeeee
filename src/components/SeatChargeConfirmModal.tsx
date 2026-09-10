@@ -42,6 +42,8 @@ export default function SeatChargeConfirmModal({
   return (
     <div
       className="fixed inset-0 z-[65] bg-black/65 backdrop-blur-md flex items-center justify-center p-4"
+      role="presentation"
+      tabIndex={-1}
       onClick={busy ? undefined : onClose}
     >
       <motion.div

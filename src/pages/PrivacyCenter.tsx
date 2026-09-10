@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
 import {
@@ -18,6 +18,7 @@ import {
 export default function PrivacyCenter() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const [downloading, setDownloading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [justification, setJustification] = useState('');
@@ -124,10 +125,11 @@ export default function PrivacyCenter() {
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
           {t.legal.requestErasureDesc}
         </p>
-        <label className="mt-3 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label htmlFor={`${id}-justification`} className="mt-3 block text-sm font-medium text-gray-700 dark:text-gray-300">
           {t.legal.justificationLabel}
         </label>
         <textarea
+          id={`${id}-justification`}
           value={justification}
           onChange={(e) => setJustification(e.target.value.slice(0, 2000))}
           rows={3}

@@ -105,7 +105,10 @@ function TextCell({ column, recordId, value, onChange }: CellProps) {
   if (!editing) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setEditing(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
         className="group/cell text-[13px] text-text-primary cursor-text min-h-[28px] flex items-center truncate max-w-[200px] rounded-md px-1.5 -mx-1.5 hover:bg-surface-secondary/80 transition-colors"
         title={text}
       >
@@ -118,11 +121,12 @@ function TextCell({ column, recordId, value, onChange }: CellProps) {
     <input
       ref={inputRef}
       type="text"
+      aria-label={column.name}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setText(value ?? ''); setEditing(false); } }}
-      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
+      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
     />
   );
 }
@@ -144,7 +148,10 @@ function EmailCell({ column, recordId, value, onChange }: CellProps) {
   if (!editing) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setEditing(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
         className="group/cell flex items-center gap-1.5 text-[13px] min-h-[28px] cursor-text rounded-md px-1.5 -mx-1.5 hover:bg-surface-secondary/80 transition-colors"
       >
         {text ? (
@@ -161,11 +168,12 @@ function EmailCell({ column, recordId, value, onChange }: CellProps) {
     <input
       ref={inputRef}
       type="email"
+      aria-label={column.name}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setText(value ?? ''); setEditing(false); } }}
-      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
+      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
     />
   );
 }
@@ -187,7 +195,10 @@ function PhoneCell({ column, recordId, value, onChange }: CellProps) {
   if (!editing) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setEditing(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
         className="group/cell flex items-center gap-1.5 text-[13px] min-h-[28px] cursor-text rounded-md px-1.5 -mx-1.5 hover:bg-surface-secondary/80 transition-colors"
       >
         {text ? (
@@ -204,11 +215,12 @@ function PhoneCell({ column, recordId, value, onChange }: CellProps) {
     <input
       ref={inputRef}
       type="tel"
+      aria-label={column.name}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setText(value ?? ''); setEditing(false); } }}
-      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
+      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
     />
   );
 }
@@ -230,7 +242,10 @@ function UrlCell({ column, recordId, value, onChange }: CellProps) {
   if (!editing) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setEditing(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
         className="group/cell flex items-center gap-1.5 text-[13px] min-h-[28px] cursor-text rounded-md px-1.5 -mx-1.5 hover:bg-surface-secondary/80 transition-colors"
       >
         {text ? (
@@ -247,11 +262,12 @@ function UrlCell({ column, recordId, value, onChange }: CellProps) {
     <input
       ref={inputRef}
       type="url"
+      aria-label={column.name}
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setText(value ?? ''); setEditing(false); } }}
-      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
+      className="w-full text-[13px] bg-surface border border-primary/40 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
       placeholder="https://"
     />
   );
@@ -275,7 +291,10 @@ function NumberCell({ column, recordId, value, onChange }: CellProps) {
   if (!editing) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setEditing(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
         className="text-[13px] text-text-primary cursor-text min-h-[28px] flex items-center tabular-nums rounded-md px-1.5 -mx-1.5 hover:bg-surface-secondary/80 transition-colors"
       >
         {value != null ? (
@@ -290,11 +309,12 @@ function NumberCell({ column, recordId, value, onChange }: CellProps) {
       ref={inputRef}
       type="number"
       step="any"
+      aria-label={column.name}
       value={num}
       onChange={(e) => setNum(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setNum(value ?? ''); setEditing(false); } }}
-      className="w-24 text-[13px] bg-surface border border-primary/40 rounded-md outline-none px-1.5 py-1 text-text-primary tabular-nums shadow-sm ring-2 ring-primary/10"
+      className="w-24 text-[13px] bg-surface border border-primary/40 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1.5 py-1 text-text-primary tabular-nums shadow-sm ring-2 ring-primary/10"
     />
   );
 }
@@ -326,7 +346,10 @@ function CurrencyCell({ column, recordId, value, onChange }: CellProps) {
   if (!editing) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setEditing(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
         className="text-[13px] text-text-primary cursor-text min-h-[28px] flex items-center tabular-nums font-medium rounded-md px-1.5 -mx-1.5 hover:bg-surface-secondary/80 transition-colors"
       >
         {value != null ? format(Number(value)) : <Placeholder />}
@@ -339,11 +362,12 @@ function CurrencyCell({ column, recordId, value, onChange }: CellProps) {
       ref={inputRef}
       type="number"
       step="0.01"
+      aria-label={column.name}
       value={num}
       onChange={(e) => setNum(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setNum(value ?? ''); setEditing(false); } }}
-      className="w-28 text-[13px] bg-surface border border-primary/40 rounded-md outline-none px-1.5 py-1 text-text-primary tabular-nums shadow-sm ring-2 ring-primary/10"
+      className="w-28 text-[13px] bg-surface border border-primary/40 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1.5 py-1 text-text-primary tabular-nums shadow-sm ring-2 ring-primary/10"
     />
   );
 }
@@ -354,6 +378,9 @@ function CheckboxCell({ column, recordId, value, onChange }: CellProps) {
 
   return (
     <button
+      type="button"
+      aria-label={column.name}
+      aria-pressed={checked}
       onClick={() => saveValue(column, recordId, !checked, onChange)}
       className={cn(
         'flex h-[18px] w-[18px] items-center justify-center rounded-[4px] border-[1.5px] transition-all duration-150',
@@ -383,7 +410,10 @@ function DateCell({ column, recordId, value, onChange }: CellProps) {
   if (!editing) {
     return (
       <div
+        role="button"
+        tabIndex={0}
         onClick={() => setEditing(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true); } }}
         className="group/cell flex items-center gap-1.5 text-[13px] min-h-[28px] cursor-pointer rounded-md px-1.5 -mx-1.5 hover:bg-surface-secondary/80 transition-colors"
       >
         {value ? (
@@ -402,10 +432,11 @@ function DateCell({ column, recordId, value, onChange }: CellProps) {
     <input
       ref={inputRef}
       type="date"
+      aria-label={column.name}
       value={value || ''}
       onChange={handleChange}
       onBlur={() => setEditing(false)}
-      className="text-[13px] bg-surface border border-primary/40 rounded-md outline-none px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
+      className="text-[13px] bg-surface border border-primary/40 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 px-1.5 py-1 text-text-primary shadow-sm ring-2 ring-primary/10"
     />
   );
 }
@@ -657,6 +688,8 @@ function RatingCell({ column, recordId, value, onChange }: CellProps) {
             onMouseEnter={() => setHover(n)}
             onMouseLeave={() => setHover(null)}
             onClick={() => click(n)}
+            aria-label={`${column.name} ${n}/${max}`}
+            aria-pressed={n <= current}
             className="p-0 transition-all duration-100 hover:scale-110"
           >
             <Star

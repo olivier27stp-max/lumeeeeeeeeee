@@ -9,7 +9,7 @@
  * copies, sélection multiple); les autres rôles voient la grille en lecture
  * seule avec leurs propres plages mises en évidence.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, X, Check, Trash2, Clock, Users,
   AlertTriangle, RefreshCw, Copy, StickyNote, Loader2, Ban, CheckSquare, Pencil,
@@ -421,14 +421,14 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
             <Users size={14} className="text-text-tertiary" />
-            <select value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
+            <select aria-label={fr ? 'Filtrer par équipe' : 'Filter by team'} value={filterTeam} onChange={(e) => setFilterTeam(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
               <option value="all">{fr ? 'Toutes les équipes' : 'All teams'}</option>
               {teams.filter((t) => showArchived || t.is_active !== false).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
             <Clock size={14} className="text-text-tertiary" />
-            <select value={filterMember} onChange={(e) => setFilterMember(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
+            <select aria-label={fr ? 'Filtrer par membre' : 'Filter by member'} value={filterMember} onChange={(e) => setFilterMember(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
               <option value="all">{fr ? 'Tous les membres' : 'All members'}</option>
               {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </select>
@@ -462,12 +462,13 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
               </button>
             </>
           )}
-          <button onClick={() => setWeekStart(addDays(weekStart, -7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
+          <button aria-label={fr ? 'Semaine précédente' : 'Previous week'} onClick={() => setWeekStart(addDays(weekStart, -7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
           <span className="text-[13px] font-semibold text-text-primary min-w-[210px] text-center tabular-nums">{weekLabel}</span>
-          <button onClick={() => setWeekStart(addDays(weekStart, 7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
+          <button aria-label={fr ? 'Semaine suivante' : 'Next week'} onClick={() => setWeekStart(addDays(weekStart, 7))} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
           <button onClick={() => setWeekStart(startOfWeek(new Date()))} className={btnGhost}>{fr ? 'Cette semaine' : 'This week'}</button>
           <input
             type="date"
+            aria-label={fr ? 'Aller à la semaine du' : 'Go to week of'}
             value={dates[0]}
             onChange={(e) => { if (e.target.value) setWeekStart(startOfWeek(new Date(e.target.value + 'T00:00:00'))); }}
             className="h-9 px-2.5 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary"
@@ -594,6 +595,9 @@ export default function TeamScheduleGrid({ fr, teams, members, canManage, curren
                       <div
                         key={key}
                         onClick={selecting ? () => toggleCell(team.id, date) : undefined}
+                        role={selecting ? 'button' : undefined}
+                        tabIndex={selecting ? 0 : undefined}
+                        onKeyDown={selecting ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCell(team.id, date); } } : undefined}
                         className={cn(
                           'group border-b border-l border-border/40 p-1.5 min-h-[96px] flex flex-col gap-1 transition-colors',
                           date === todayStr && 'bg-surface-secondary/40',
@@ -833,6 +837,7 @@ function TeamEditModal({ fr, editing, onClose, onSaved }: {
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const id = useId();
   const [name, setName] = useState(editing?.name || '');
   const [color, setColor] = useState(editing?.color_hex || TEAM_COLORS[Math.floor(Math.random() * TEAM_COLORS.length)]);
   const [description, setDescription] = useState(editing?.description || '');
@@ -880,26 +885,26 @@ function TeamEditModal({ fr, editing, onClose, onSaved }: {
           <h3 className="text-[16px] font-bold text-text-primary">
             {editing ? (fr ? 'Modifier l’équipe' : 'Edit team') : (fr ? 'Nouvelle équipe' : 'New team')}
           </h3>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
+          <button aria-label={fr ? 'Fermer' : 'Close'} onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
         </div>
         <div className="space-y-4">
           <div>
-            <label className={labelCls}>{fr ? 'Nom' : 'Name'}</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="glass-input w-full mt-1.5"
+            <label htmlFor={`${id}-name`} className={labelCls}>{fr ? 'Nom' : 'Name'}</label>
+            <input id={`${id}-name`} value={name} onChange={(e) => setName(e.target.value)} className="glass-input w-full mt-1.5"
               placeholder={fr ? 'Ex. : Équipe Installation' : 'e.g. Installation Team'} autoFocus />
           </div>
           <div>
-            <label className={labelCls}>Description</label>
-            <input value={description} onChange={(e) => setDescription(e.target.value)} className="glass-input w-full mt-1.5"
+            <label htmlFor={`${id}-description`} className={labelCls}>Description</label>
+            <input id={`${id}-description`} value={description} onChange={(e) => setDescription(e.target.value)} className="glass-input w-full mt-1.5"
               placeholder={fr ? 'Optionnel...' : 'Optional...'} />
           </div>
           <div>
-            <label className={labelCls}>{fr ? 'Couleur' : 'Color'}</label>
+            <span className={labelCls}>{fr ? 'Couleur' : 'Color'}</span>
             <div className="mt-2"><TeamColorSwatches value={color} onChange={setColor} /></div>
           </div>
           {editing && (
             <div className="flex items-center gap-2">
-              <label className={labelCls}>{fr ? 'Statut' : 'Status'}</label>
+              <span className={labelCls}>{fr ? 'Statut' : 'Status'}</span>
               <button type="button" onClick={() => setIsActive((v) => !v)}
                 className={cn('text-[12px] px-2.5 py-1 rounded-full font-medium border transition-colors',
                   isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-surface-secondary text-text-tertiary border-outline')}>
@@ -948,6 +953,7 @@ function TeamHoursModal({ fr, state, teams, onClose, onSaved }: {
   onSaved: () => void;
 }) {
   const team = teams.find((t) => t.id === state.teamId);
+  const id = useId();
   const [start, setStart] = useState(state.hours.start);
   const [end, setEnd] = useState(state.hours.end);
   const [saving, setSaving] = useState(false);
@@ -980,17 +986,17 @@ function TeamHoursModal({ fr, state, teams, onClose, onSaved }: {
               · {fmtDay(state.date, fr)}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
+          <button aria-label={fr ? 'Fermer' : 'Close'} onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
         </div>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>{fr ? 'Début' : 'Start'}</label>
-              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} className="glass-input w-full mt-1.5" />
+              <label htmlFor={`${id}-start`} className={labelCls}>{fr ? 'Début' : 'Start'}</label>
+              <input id={`${id}-start`} type="time" value={start} onChange={(e) => setStart(e.target.value)} className="glass-input w-full mt-1.5" />
             </div>
             <div>
-              <label className={labelCls}>{fr ? 'Fin' : 'End'}</label>
-              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="glass-input w-full mt-1.5" />
+              <label htmlFor={`${id}-end`} className={labelCls}>{fr ? 'Fin' : 'End'}</label>
+              <input id={`${id}-end`} type="time" value={end} onChange={(e) => setEnd(e.target.value)} className="glass-input w-full mt-1.5" />
             </div>
           </div>
           <p className="text-[12px] text-text-tertiary">
@@ -1035,6 +1041,7 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
   const single = cells.length === 1;
   const first = cells[0];
   const team = teams.find((t) => t.id === first.teamId);
+  const id = useId();
   const [userId, setUserId] = useState('');
   const [note, setNote] = useState('');
   const [repeat, setRepeat] = useState(false);
@@ -1166,13 +1173,13 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
                 : (fr ? `${cells.length} cellules sélectionnées` : `${cells.length} selected cells`)}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
+          <button aria-label={fr ? 'Fermer' : 'Close'} onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className={labelCls}>{fr ? 'Membre' : 'Member'}</label>
-            <select value={userId} onChange={(e) => setUserId(e.target.value)} className="glass-input w-full mt-1.5">
+            <label htmlFor={`${id}-member`} className={labelCls}>{fr ? 'Membre' : 'Member'}</label>
+            <select id={`${id}-member`} value={userId} onChange={(e) => setUserId(e.target.value)} className="glass-input w-full mt-1.5">
               <option value="">{fr ? '— Choisir —' : '— Pick —'}</option>
               {members.filter((m) => !takenIds.has(m.user_id)).map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </select>
@@ -1194,8 +1201,8 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
             </p>
           </div>
           <div>
-            <label className={labelCls}>{fr ? 'Note (optionnel)' : 'Note (optional)'}</label>
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={fr ? 'Ex. : remplace Samuel' : 'E.g.: covering for Samuel'} className="glass-input w-full mt-1.5" />
+            <label htmlFor={`${id}-note`} className={labelCls}>{fr ? 'Note (optionnel)' : 'Note (optional)'}</label>
+            <input id={`${id}-note`} value={note} onChange={(e) => setNote(e.target.value)} placeholder={fr ? 'Ex. : remplace Samuel' : 'E.g.: covering for Samuel'} className="glass-input w-full mt-1.5" />
           </div>
 
           {single && (
@@ -1218,12 +1225,12 @@ function AddMemberModal({ fr, cells, teams, members, data, onClose, onSaved }: {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className={labelCls}>{fr ? 'À partir du' : 'Starting'}</label>
+                      <span className={labelCls}>{fr ? 'À partir du' : 'Starting'}</span>
                       <p className="text-[13px] text-text-primary mt-1.5 tabular-nums">{first.date}</p>
                     </div>
                     <div>
-                      <label className={labelCls}>{fr ? 'Fin (optionnel)' : 'End (optional)'}</label>
-                      <input type="date" value={repeatEnd} min={first.date} onChange={(e) => setRepeatEnd(e.target.value)} className="glass-input w-full mt-1.5" />
+                      <label htmlFor={`${id}-repeat-end`} className={labelCls}>{fr ? 'Fin (optionnel)' : 'End (optional)'}</label>
+                      <input id={`${id}-repeat-end`} type="date" value={repeatEnd} min={first.date} onChange={(e) => setRepeatEnd(e.target.value)} className="glass-input w-full mt-1.5" />
                     </div>
                   </div>
                 </>
@@ -1268,6 +1275,7 @@ function EditEntryModal({ fr, state, teams, memberName, data, onClose, onSaved, 
   const { entry, recurring } = state;
   const isRecurring = entry.source === 'recurring' && !!recurring;
   const isTimeOff = entry.status === 'time_off';
+  const id = useId();
   const [teamId, setTeamId] = useState(entry.team_id);
   const [note, setNote] = useState(entry.note || '');
   const [unavailable, setUnavailable] = useState(entry.status === 'unavailable');
@@ -1370,7 +1378,7 @@ function EditEntryModal({ fr, state, teams, memberName, data, onClose, onSaved, 
               {entry.source === 'recurring' && <span className="ml-1 inline-flex items-center gap-1"><RefreshCw size={10} /> {fr ? 'récurrent' : 'recurring'}</span>}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
+          <button aria-label={fr ? 'Fermer' : 'Close'} onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
         </div>
 
         {isTimeOff ? (
@@ -1413,8 +1421,8 @@ function EditEntryModal({ fr, state, teams, memberName, data, onClose, onSaved, 
             )}
 
             <div>
-              <label className={labelCls}>{fr ? 'Équipe' : 'Team'}</label>
-              <select value={teamId} onChange={(e) => setTeamId(e.target.value)} className="glass-input w-full mt-1.5">
+              <label htmlFor={`${id}-team`} className={labelCls}>{fr ? 'Équipe' : 'Team'}</label>
+              <select id={`${id}-team`} value={teamId} onChange={(e) => setTeamId(e.target.value)} className="glass-input w-full mt-1.5">
                 {teams.filter((t) => t.is_active !== false || t.id === entry.team_id).map((t) => (
                   <option key={t.id} value={t.id}>{t.name}{t.is_active === false ? (fr ? ' (archivée)' : ' (archived)') : ''}</option>
                 ))}
@@ -1431,8 +1439,8 @@ function EditEntryModal({ fr, state, teams, memberName, data, onClose, onSaved, 
             </div>
             {!(isRecurring && scope !== 'one') && (
               <div>
-                <label className={labelCls}>Note</label>
-                <input value={note} onChange={(e) => setNote(e.target.value)} className="glass-input w-full mt-1.5" />
+                <label htmlFor={`${id}-note`} className={labelCls}>Note</label>
+                <input id={`${id}-note`} value={note} onChange={(e) => setNote(e.target.value)} className="glass-input w-full mt-1.5" />
               </div>
             )}
             <label className="flex items-center gap-2 text-[13px] text-text-primary cursor-pointer select-none">
@@ -1475,6 +1483,7 @@ function TimeOffModal({ fr, initial, members, resolved, onClose, onSaved }: {
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const id = useId();
   const [userId, setUserId] = useState(initial.userId);
   const [startDate, setStartDate] = useState(initial.date);
   const [endDate, setEndDate] = useState(initial.date);
@@ -1532,29 +1541,29 @@ function TimeOffModal({ fr, initial, members, resolved, onClose, onSaved }: {
       <div className="p-6">
         <div className="flex items-start justify-between mb-5">
           <h3 className="text-[16px] font-bold text-text-primary">{fr ? 'Congé / indisponibilité' : 'Time off / unavailability'}</h3>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
+          <button aria-label={fr ? 'Fermer' : 'Close'} onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:bg-surface-secondary"><X size={15} /></button>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className={labelCls}>{fr ? 'Membre' : 'Member'}</label>
-            <select value={userId} onChange={(e) => setUserId(e.target.value)} className="glass-input w-full mt-1.5">
+            <label htmlFor={`${id}-member`} className={labelCls}>{fr ? 'Membre' : 'Member'}</label>
+            <select id={`${id}-member`} value={userId} onChange={(e) => setUserId(e.target.value)} className="glass-input w-full mt-1.5">
               <option value="">{fr ? '— Choisir —' : '— Pick —'}</option>
               {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>{fr ? 'Type' : 'Type'}</label>
-              <select value={kind} onChange={(e) => setKind(e.target.value as TimeOffKind)} className="glass-input w-full mt-1.5">
+              <label htmlFor={`${id}-kind`} className={labelCls}>{fr ? 'Type' : 'Type'}</label>
+              <select id={`${id}-kind`} value={kind} onChange={(e) => setKind(e.target.value as TimeOffKind)} className="glass-input w-full mt-1.5">
                 {(Object.keys(KIND_LABELS) as TimeOffKind[]).map((k) => (
                   <option key={k} value={k}>{KIND_LABELS[k][fr ? 'fr' : 'en']}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className={labelCls}>{fr ? 'Statut' : 'Status'}</label>
-              <select value={pending ? 'pending' : 'approved'} onChange={(e) => setPending(e.target.value === 'pending')} className="glass-input w-full mt-1.5">
+              <label htmlFor={`${id}-status`} className={labelCls}>{fr ? 'Statut' : 'Status'}</label>
+              <select id={`${id}-status`} value={pending ? 'pending' : 'approved'} onChange={(e) => setPending(e.target.value === 'pending')} className="glass-input w-full mt-1.5">
                 <option value="approved">{fr ? 'Approuvé' : 'Approved'}</option>
                 <option value="pending">{fr ? 'En attente' : 'Pending'}</option>
               </select>
@@ -1562,12 +1571,12 @@ function TimeOffModal({ fr, initial, members, resolved, onClose, onSaved }: {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>{fr ? 'Du' : 'From'}</label>
-              <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); if (endDate < e.target.value) setEndDate(e.target.value); }} className="glass-input w-full mt-1.5" />
+              <label htmlFor={`${id}-start-date`} className={labelCls}>{fr ? 'Du' : 'From'}</label>
+              <input id={`${id}-start-date`} type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); if (endDate < e.target.value) setEndDate(e.target.value); }} className="glass-input w-full mt-1.5" />
             </div>
             <div>
-              <label className={labelCls}>{fr ? 'Au' : 'To'}</label>
-              <input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className="glass-input w-full mt-1.5" />
+              <label htmlFor={`${id}-end-date`} className={labelCls}>{fr ? 'Au' : 'To'}</label>
+              <input id={`${id}-end-date`} type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)} className="glass-input w-full mt-1.5" />
             </div>
           </div>
           <label className="flex items-center gap-2 text-[13px] text-text-primary cursor-pointer select-none">
@@ -1577,18 +1586,18 @@ function TimeOffModal({ fr, initial, members, resolved, onClose, onSaved }: {
           {!allDay && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>{fr ? 'De' : 'From'}</label>
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="glass-input w-full mt-1.5" />
+                <label htmlFor={`${id}-start-time`} className={labelCls}>{fr ? 'De' : 'From'}</label>
+                <input id={`${id}-start-time`} type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="glass-input w-full mt-1.5" />
               </div>
               <div>
-                <label className={labelCls}>{fr ? 'À' : 'To'}</label>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="glass-input w-full mt-1.5" />
+                <label htmlFor={`${id}-end-time`} className={labelCls}>{fr ? 'À' : 'To'}</label>
+                <input id={`${id}-end-time`} type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="glass-input w-full mt-1.5" />
               </div>
             </div>
           )}
           <div>
-            <label className={labelCls}>{fr ? 'Raison / note (optionnel)' : 'Reason / note (optional)'}</label>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} className="glass-input w-full mt-1.5" />
+            <label htmlFor={`${id}-reason`} className={labelCls}>{fr ? 'Raison / note (optionnel)' : 'Reason / note (optional)'}</label>
+            <input id={`${id}-reason`} value={reason} onChange={(e) => setReason(e.target.value)} className="glass-input w-full mt-1.5" />
           </div>
 
           {impacted.length > 0 && !pending && (

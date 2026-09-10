@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   ArrowLeft, Plus, Save, Send, Trash2, Eye, X,
 } from 'lucide-react';
@@ -58,6 +58,7 @@ export default function InvoiceEdit() {
   const { t, language } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const id = useId();
   const params = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const invoiceId = params.id || '';
@@ -453,6 +454,7 @@ export default function InvoiceEdit() {
               value={clientSearch}
               onChange={(e) => setClientSearch(e.target.value)}
               placeholder={t.invoiceEdit.searchClients}
+              aria-label={t.invoiceEdit.searchClients}
               className="glass-input w-full"
               autoFocus
             />
@@ -493,7 +495,7 @@ export default function InvoiceEdit() {
       {/* Top bar */}
       <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate(draftId ? `/invoices/${draftId}` : '/invoices')} className="glass-button !p-2">
+          <button type="button" onClick={() => navigate(draftId ? `/invoices/${draftId}` : '/invoices')} aria-label={t.invoiceEdit.back} className="glass-button !p-2">
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -541,10 +543,11 @@ export default function InvoiceEdit() {
             {/* Subject & Due Date */}
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
               <div className="space-y-1.5 lg:col-span-2">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-subject`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {t.invoiceEdit.subject}
                 </label>
                 <input
+                  id={`${id}-subject`}
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder={t.invoiceEdit.invoiceSubject}
@@ -552,10 +555,11 @@ export default function InvoiceEdit() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-due-date`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {language === 'fr' ? 'Date d\'échéance' : 'Due Date'}
                 </label>
                 <input
+                  id={`${id}-due-date`}
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
@@ -597,11 +601,13 @@ export default function InvoiceEdit() {
                       onChange={() => updateLine(line.id, { included: !line.included })}
                       className="h-4 w-4 shrink-0 rounded cursor-pointer accent-primary"
                       title={line.included ? (language === 'fr' ? 'Exclure de la facture' : 'Exclude from invoice') : (language === 'fr' ? 'Inclure dans la facture' : 'Include in invoice')}
+                      aria-label={line.included ? (language === 'fr' ? 'Exclure de la facture' : 'Exclude from invoice') : (language === 'fr' ? 'Inclure dans la facture' : 'Include in invoice')}
                     />
                     <input
                       value={line.description}
                       onChange={(e) => updateLine(line.id, { description: e.target.value })}
                       placeholder={t.automations.description}
+                      aria-label={t.automations.description}
                       className={cn('glass-input w-full text-sm', !line.included && 'line-through')}
                     />
                   </div>
@@ -612,6 +618,7 @@ export default function InvoiceEdit() {
                     value={line.qty}
                     onChange={(e) => updateLine(line.id, { qty: Number(e.target.value) || 0 })}
                     placeholder={language === 'fr' ? 'Qté' : 'Qty'}
+                    aria-label={language === 'fr' ? 'Quantité' : 'Quantity'}
                     className="glass-input col-span-2 text-sm"
                   />
                   <input
@@ -621,6 +628,7 @@ export default function InvoiceEdit() {
                     value={line.unitPrice}
                     onChange={(e) => updateLine(line.id, { unitPrice: Number(e.target.value) || 0 })}
                     placeholder={language === 'fr' ? 'Prix' : 'Price'}
+                    aria-label={language === 'fr' ? 'Prix unitaire' : 'Unit price'}
                     className="glass-input col-span-2 text-sm"
                   />
                   <div className={cn('col-span-2 flex items-center justify-end text-sm font-medium', line.included ? 'text-text-primary' : 'text-text-tertiary line-through')}>
@@ -630,6 +638,7 @@ export default function InvoiceEdit() {
                     type="button"
                     onClick={() => removeLine(line.id)}
                     disabled={lines.length === 1}
+                    aria-label={language === 'fr' ? 'Supprimer la ligne' : 'Remove line'}
                     className="col-span-1 flex items-center justify-center text-text-tertiary hover:text-danger disabled:opacity-30"
                   >
                     <Trash2 size={14} />
@@ -642,10 +651,11 @@ export default function InvoiceEdit() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                  <label htmlFor={`${id}-discount`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                     {t.invoiceEdit.discount}
                   </label>
                   <input
+                    id={`${id}-discount`}
                     type="number"
                     min={0}
                     step={0.01}
@@ -655,10 +665,11 @@ export default function InvoiceEdit() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                  <label htmlFor={`${id}-tax`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                     {t.invoiceEdit.tax}
                   </label>
                   <input
+                    id={`${id}-tax`}
                     type="number"
                     min={0}
                     step={0.01}
@@ -693,10 +704,11 @@ export default function InvoiceEdit() {
             {/* Notes */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-notes`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {t.invoiceEdit.notesVisibleToClient}
                 </label>
                 <textarea
+                  id={`${id}-notes`}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
@@ -705,10 +717,11 @@ export default function InvoiceEdit() {
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-internal-notes`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {t.invoiceEdit.internalNotes}
                 </label>
                 <textarea
+                  id={`${id}-internal-notes`}
                   value={internalNotes}
                   onChange={(e) => setInternalNotes(e.target.value)}
                   rows={3}

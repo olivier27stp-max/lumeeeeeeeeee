@@ -256,6 +256,7 @@ export default function MrLumeChat() {
               }
             }}
             placeholder={placeholder}
+            aria-label={fr ? 'Message à Lume' : 'Message to Lume'}
             rows={1}
             className="w-full resize-none bg-transparent px-4 pt-3.5 pb-12 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none leading-relaxed"
             style={{ maxHeight: 160 }}

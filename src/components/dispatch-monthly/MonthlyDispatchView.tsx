@@ -227,7 +227,10 @@ export default function MonthlyDispatchView({
             return (
               <div
                 key={dayKey}
+                role="button"
+                tabIndex={0}
                 onClick={() => onDayClick(day)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onDayClick(day); } }}
                 className={cn(
                   'flex min-w-0 cursor-pointer flex-col overflow-hidden border-b border-l border-border/60 px-1 pb-0.5 pt-1 transition-colors hover:bg-surface-secondary/30',
                   i % 7 === 0 && 'border-l-0',
@@ -283,7 +286,7 @@ export default function MonthlyDispatchView({
         const label = format(day, isFr ? 'EEEE d MMMM' : 'EEEE, MMMM d', { locale });
         return (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setMorePop(null)} />
+            <div role="presentation" tabIndex={-1} className="fixed inset-0 z-30" onClick={() => setMorePop(null)} />
             <div
               className="fixed z-40 max-h-80 overflow-y-auto rounded-xl border border-border bg-surface p-2 shadow-xl"
               style={{ left: morePop.left, top: morePop.top, width: MORE_POP_W_PX }}

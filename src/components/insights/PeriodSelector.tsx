@@ -53,6 +53,8 @@ export default function PeriodSelector({
 
       {open && (
         <div
+          role="presentation"
+          tabIndex={-1}
           onClick={(e) => e.stopPropagation()}
           className={cn(
             'absolute top-[calc(100%+7px)] z-30 min-w-[220px] rounded-xl border border-border bg-surface-card p-1.5 shadow-xl',

@@ -151,7 +151,10 @@ export default function FileUpload({
   return (
     <div className="space-y-2">
       <div
+        role="button"
+        tabIndex={uploading ? -1 : 0}
         onClick={() => !uploading && inputRef.current?.click()}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!uploading) inputRef.current?.click(); } }}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -218,6 +221,7 @@ export default function FileUpload({
           ref={inputRef}
           type="file"
           accept={accept}
+          aria-label={fr ? 'Choisir un fichier' : 'Choose a file'}
           onChange={handleInputChange}
           className="hidden"
         />
@@ -240,6 +244,7 @@ export default function FileUpload({
               e.stopPropagation();
               reset();
             }}
+            aria-label={fr ? 'Retirer le fichier' : 'Remove file'}
             className="p-1 rounded-md hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors shrink-0"
           >
             <X size={12} />

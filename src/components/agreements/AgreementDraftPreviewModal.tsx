@@ -107,10 +107,15 @@ export default function AgreementDraftPreviewModal({
   return (
     <div
       className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-black/40"
+      role="presentation"
+      tabIndex={-1}
       onClick={(e) => { e.stopPropagation(); onClose(); }}
     >
       <div
         className="bg-surface-card rounded-2xl border border-outline shadow-xl w-full max-w-[720px] max-h-[90vh] flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -125,7 +130,7 @@ export default function AgreementDraftPreviewModal({
                 : 'Exactly what the client will see on the public contract page.'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+          <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
             <X size={16} />
           </button>
         </div>

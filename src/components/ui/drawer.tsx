@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { cn } from '../../lib/utils';
 import { X } from 'lucide-react';
+import { useTranslation } from '../../i18n';
 
 interface DrawerProps {
   open: boolean;
@@ -28,6 +29,7 @@ export function Drawer({
   footer,
   width = 'md',
 }: DrawerProps) {
+  const { t } = useTranslation();
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -52,6 +54,8 @@ export function Drawer({
     <div className="fixed inset-0 z-50 flex justify-end">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        role="presentation"
+        tabIndex={-1}
         onClick={onClose}
       />
       <div
@@ -72,6 +76,7 @@ export function Drawer({
             </div>
             <button
               onClick={onClose}
+              aria-label={t.common.close}
               className="flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-hover hover:text-text-secondary"
             >
               <X className="h-4 w-4" />

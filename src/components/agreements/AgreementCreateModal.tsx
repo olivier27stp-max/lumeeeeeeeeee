@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { Eye, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
@@ -32,6 +32,7 @@ interface AgreementCreateModalProps {
 export default function AgreementCreateModal({ open, onClose, jobId, clientId, onCreated, preview }: AgreementCreateModalProps) {
   const { language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const [requireSignature, setRequireSignature] = useState(true);
   const [terms, setTerms] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -84,9 +85,12 @@ export default function AgreementCreateModal({ open, onClose, jobId, clientId, o
   };
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/40" role="presentation" tabIndex={-1} onClick={onClose}>
       <div
         className="bg-surface-card rounded-2xl border border-outline shadow-xl w-full max-w-[560px] max-h-[90vh] flex flex-col overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -99,7 +103,7 @@ export default function AgreementCreateModal({ open, onClose, jobId, clientId, o
               {fr ? 'Contrat écrit lié à ce job' : 'Written contract attached to this job'}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+          <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
             <X size={16} />
           </button>
         </div>
@@ -172,10 +176,11 @@ export default function AgreementCreateModal({ open, onClose, jobId, clientId, o
           </div>
 
           <div>
-            <span className="text-xs font-medium text-text-tertiary block mb-1.5">
+            <label htmlFor={`${id}-terms`} className="text-xs font-medium text-text-tertiary block mb-1.5">
               {fr ? 'Termes et conditions' : 'Terms and conditions'}
-            </span>
+            </label>
             <textarea
+              id={`${id}-terms`}
               value={terms}
               onChange={(e) => setTerms(e.target.value)}
               rows={7}

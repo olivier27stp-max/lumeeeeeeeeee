@@ -33,7 +33,7 @@ export default function DrilldownModal({ isOpen, onClose, title, subtitle, colum
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" role="presentation" tabIndex={-1} onClick={onClose}>
           <motion.div
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -47,7 +47,7 @@ export default function DrilldownModal({ isOpen, onClose, title, subtitle, colum
                 <h3 className="text-[15px] font-bold text-text-primary">{title}</h3>
                 {subtitle && <p className="text-xs text-text-tertiary mt-0.5">{subtitle}</p>}
               </div>
-              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary transition-colors text-text-tertiary">
+              <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1.5 rounded-lg hover:bg-surface-secondary transition-colors text-text-tertiary">
                 <X size={16} />
               </button>
             </div>

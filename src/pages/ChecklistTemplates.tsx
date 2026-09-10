@@ -3,7 +3,7 @@
    Admins build reusable job checklists / forms per service type.
    Items support: checkbox, text, number, photo, signature.
    ═══════════════════════════════════════════════════════════════ */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Plus, Trash2, GripVertical, X, ArrowLeft, ClipboardList, Edit2 } from 'lucide-react';
@@ -68,6 +68,7 @@ function SortableItemRow({
       </button>
       <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-2">
         <select
+          aria-label={fr ? 'Type de l’élément' : 'Item type'}
           value={item.type}
           onChange={(e) => onChange({ ...item, type: e.target.value as ChecklistItemType })}
           className="glass-input md:col-span-3"
@@ -80,6 +81,7 @@ function SortableItemRow({
         </select>
         <input
           type="text"
+          aria-label={t.checklists.itemLabelPlaceholder}
           value={item.label}
           onChange={(e) => onChange({ ...item, label: e.target.value })}
           placeholder={t.checklists.itemLabelPlaceholder}
@@ -110,6 +112,7 @@ export default function ChecklistTemplates() {
   const navigate = useNavigate();
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
 
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -211,7 +214,7 @@ export default function ChecklistTemplates() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <button onClick={() => setMode('list')} className="glass-button !px-2">
+          <button onClick={() => setMode('list')} aria-label={fr ? 'Retour à la liste' : 'Back to list'} className="glass-button !px-2">
             <ArrowLeft size={16} />
           </button>
           <h1 className="text-[20px] font-semibold text-text-primary">
@@ -221,17 +224,17 @@ export default function ChecklistTemplates() {
 
         <div className="rounded-xl border border-outline bg-surface p-5 space-y-4">
           <div>
-            <label className="text-[12px] font-medium text-text-tertiary uppercase tracking-wider">{t.checklists.name}</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} className="glass-input w-full mt-1.5"
+            <label htmlFor={`${id}-name`} className="text-[12px] font-medium text-text-tertiary uppercase tracking-wider">{t.checklists.name}</label>
+            <input id={`${id}-name`} value={name} onChange={(e) => setName(e.target.value)} className="glass-input w-full mt-1.5"
               placeholder={t.checklists.namePlaceholder} />
           </div>
           <div>
-            <label className="text-[12px] font-medium text-text-tertiary uppercase tracking-wider">{t.checklists.description}</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="glass-input w-full mt-1.5" />
+            <label htmlFor={`${id}-description`} className="text-[12px] font-medium text-text-tertiary uppercase tracking-wider">{t.checklists.description}</label>
+            <textarea id={`${id}-description`} value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="glass-input w-full mt-1.5" />
           </div>
           <div>
-            <label className="text-[12px] font-medium text-text-tertiary uppercase tracking-wider">{t.checklists.jobType}</label>
-            <input value={jobType} onChange={(e) => setJobType(e.target.value)} className="glass-input w-full mt-1.5"
+            <label htmlFor={`${id}-job-type`} className="text-[12px] font-medium text-text-tertiary uppercase tracking-wider">{t.checklists.jobType}</label>
+            <input id={`${id}-job-type`} value={jobType} onChange={(e) => setJobType(e.target.value)} className="glass-input w-full mt-1.5"
               placeholder={t.checklists.jobTypePlaceholder} />
           </div>
         </div>
@@ -323,8 +326,8 @@ export default function ChecklistTemplates() {
                 <input type="checkbox" checked={tpl.is_active} onChange={() => toggleActive(tpl)} />
                 {t.checklists.active}
               </label>
-              <button onClick={() => openEdit(tpl)} className="glass-button !text-[12px]"><Edit2 size={13} /></button>
-              <button onClick={() => remove(tpl)} className="glass-button !text-[12px] !text-danger hover:bg-danger-light">
+              <button onClick={() => openEdit(tpl)} aria-label={t.checklists.editTemplate} className="glass-button !text-[12px]"><Edit2 size={13} /></button>
+              <button onClick={() => remove(tpl)} aria-label={t.checklists.delete} className="glass-button !text-[12px] !text-danger hover:bg-danger-light">
                 <Trash2 size={13} />
               </button>
             </div>

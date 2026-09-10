@@ -1133,6 +1133,8 @@ function AuthenticatedApp({
         {/* ─── Mobile sidebar overlay ─── */}
         {isSidebarOpen && (
           <div
+            role="presentation"
+            tabIndex={-1}
             className="fixed inset-0 bg-black/30 z-30 md:hidden"
             onClick={() => setIsSidebarOpen(false)}
           />
@@ -1439,6 +1441,8 @@ function AuthenticatedApp({
             {(!isSidebarOpen || true) && (
               <button
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                aria-label={language === 'fr' ? 'Ouvrir le menu' : 'Open menu'}
+                aria-expanded={isSidebarOpen}
                 className={cn(
                   "p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors",
                   isSidebarOpen && "hidden max-md:block"

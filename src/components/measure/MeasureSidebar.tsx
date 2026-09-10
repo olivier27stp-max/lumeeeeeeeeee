@@ -150,7 +150,13 @@ export default function MeasureSidebar({
               return (
                 <div
                   key={s.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onSelect(s.id)}
+                  onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(s.id); }
+                  }}
                   className={cn(
                     'px-4 py-3 cursor-pointer transition-colors',
                     sel ? 'bg-surface-secondary' : 'hover:bg-surface-secondary/40',
@@ -163,16 +169,19 @@ export default function MeasureSidebar({
                       value={s.label}
                       onChange={(e) => onRename(s.id, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
-                      className="text-[12px] font-semibold bg-transparent border-none outline-none flex-1 min-w-0 text-text-primary"
+                      aria-label={fr ? 'Nom de la mesure' : 'Measurement name'}
+                      className="text-[12px] font-semibold bg-transparent border-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 flex-1 min-w-0 text-text-primary"
                     />
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleVisibility(s.id); }}
+                      aria-label={s.visible ? (fr ? 'Masquer la mesure' : 'Hide measurement') : (fr ? 'Afficher la mesure' : 'Show measurement')}
                       className="p-0.5 text-text-muted hover:text-text-primary shrink-0"
                     >
                       {s.visible ? <Eye size={13} /> : <EyeOff size={13} />}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}
+                      aria-label={fr ? 'Supprimer la mesure' : 'Delete measurement'}
                       className="p-0.5 text-text-muted hover:text-danger shrink-0"
                     >
                       <X size={13} />
@@ -255,7 +264,7 @@ export default function MeasureSidebar({
                       (svc.pricing_unit === 'sq_ft' ? s.result.type === 'polygon' : true));
                     if (!attached.length && (!sel || !eligible.length)) return null;
                     return (
-                      <div className="mt-2 ml-[20px] space-y-1" onClick={(e) => e.stopPropagation()}>
+                      <div className="mt-2 ml-[20px] space-y-1" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
                         {attached.map(svc => (
                           <div key={svc.id} className="flex items-center gap-1.5 text-[10px]">
                             <span className="px-1.5 py-0.5 rounded-md bg-primary-lighter text-primary font-semibold truncate max-w-[130px]">{svc.name}</span>
@@ -266,6 +275,7 @@ export default function MeasureSidebar({
                             <span className="font-mono font-bold text-text-primary ml-auto">{fmtMoney(svcAmount(s, svc))}</span>
                             <button
                               onClick={() => onServicesChange(s.id, ids.filter(id => id !== svc.id))}
+                              aria-label={fr ? `Retirer le service ${svc.name}` : `Remove service ${svc.name}`}
                               className="p-0.5 text-text-muted hover:text-danger shrink-0">
                               <X size={11} />
                             </button>
@@ -275,6 +285,7 @@ export default function MeasureSidebar({
                           <select
                             value=""
                             onChange={(e) => { if (e.target.value) onServicesChange(s.id, [...ids, e.target.value]); }}
+                            aria-label={fr ? 'Ajouter un service' : 'Add a service'}
                             className="w-full text-[10px] rounded-md border border-outline/30 bg-surface-card px-1.5 py-1 text-text-secondary"
                           >
                             <option value="">{fr ? '+ Ajouter un service…' : '+ Add a service…'}</option>
@@ -297,6 +308,7 @@ export default function MeasureSidebar({
                       onChange={(e) => onNotesChange(s.id, e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                       placeholder={fr ? 'Notes...' : 'Notes...'}
+                      aria-label={fr ? 'Notes' : 'Notes'}
                       rows={2}
                       className="mt-2 w-full text-[11px] rounded-lg border border-outline/30 bg-surface-card px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-text-primary/30 text-text-secondary placeholder:text-text-muted/40"
                     />

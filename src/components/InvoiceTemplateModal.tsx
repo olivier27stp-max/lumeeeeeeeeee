@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -41,6 +41,7 @@ function emptyTax(): TaxForm {
 export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, template }: Props) {
   const { t } = useTranslation();
   const isEditMode = !!template;
+  const id = useId();
 
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
@@ -177,7 +178,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               <h2 className="text-lg font-bold text-text-primary">
                 {isEditMode ? 'Edit Template' : 'New Invoice Template'}
               </h2>
-              <button type="button" onClick={onClose} className="glass-button !p-2">
+              <button type="button" onClick={onClose} aria-label="Close" className="glass-button !p-2">
                 <X size={15} />
               </button>
             </div>
@@ -186,10 +187,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
             <div className="px-5 py-4 space-y-5">
               {/* Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-name`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   Template Name *
                 </label>
                 <input
+                  id={`${id}-name`}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Standard Cleaning Invoice"
@@ -199,10 +201,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
               {/* Title */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-title`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   Invoice Title
                 </label>
                 <input
+                  id={`${id}-title`}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Invoice"
@@ -212,10 +215,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
               {/* Description */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-description`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   Description
                 </label>
                 <textarea
+                  id={`${id}-description`}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Template description for internal reference"
@@ -227,9 +231,9 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Line Items */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                     Default Line Items
-                  </label>
+                  </span>
                   <button
                     type="button"
                     onClick={() => setLineItems((prev) => [...prev, emptyLineItem()])}
@@ -245,6 +249,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                     className="grid grid-cols-12 gap-2 rounded-xl border border-outline bg-surface/70 p-2"
                   >
                     <input
+                      aria-label="Line item description"
                       value={li.description}
                       onChange={(e) => updateLineItem(li.id, { description: e.target.value })}
                       placeholder="Description"
@@ -255,6 +260,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                       min={0}
                       step={1}
                       value={li.qty}
+                      aria-label="Quantity"
                       onChange={(e) => updateLineItem(li.id, { qty: Number(e.target.value) || 0 })}
                       placeholder="Qty"
                       className="glass-input col-span-2"
@@ -264,6 +270,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                       min={0}
                       step={0.01}
                       value={li.unit_price}
+                      aria-label="Unit price"
                       onChange={(e) => updateLineItem(li.id, { unit_price: Number(e.target.value) || 0 })}
                       placeholder="Price"
                       className="glass-input col-span-3"
@@ -272,6 +279,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                       type="button"
                       onClick={() => removeLineItem(li.id)}
                       disabled={lineItems.length === 1}
+                      aria-label="Remove line item"
                       className="glass-button col-span-1 !p-2"
                     >
                       <Trash2 size={13} />
@@ -283,9 +291,9 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
               {/* Taxes */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                  <span className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                     Taxes
-                  </label>
+                  </span>
                   <button
                     type="button"
                     onClick={() => setTaxes((prev) => [...prev, emptyTax()])}
@@ -301,6 +309,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                     className="grid grid-cols-12 gap-2 rounded-xl border border-outline bg-surface/70 p-2"
                   >
                     <input
+                      aria-label="Tax name"
                       value={tax.name}
                       onChange={(e) => updateTax(tax.id, { name: e.target.value })}
                       placeholder="Tax name (e.g. HST)"
@@ -311,6 +320,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                       min={0}
                       step={0.01}
                       value={tax.rate}
+                      aria-label="Tax rate (%)"
                       onChange={(e) => updateTax(tax.id, { rate: Number(e.target.value) || 0 })}
                       placeholder="Rate %"
                       className="glass-input col-span-5"
@@ -318,6 +328,7 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
                     <button
                       type="button"
                       onClick={() => removeTax(tax.id)}
+                      aria-label="Remove tax"
                       className="glass-button col-span-1 !p-2"
                     >
                       <Trash2 size={13} />
@@ -331,10 +342,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
               {/* Payment Terms */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-payment-terms`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   Payment Terms
                 </label>
                 <textarea
+                  id={`${id}-payment-terms`}
                   value={paymentTerms}
                   onChange={(e) => setPaymentTerms(e.target.value)}
                   placeholder="e.g. Net 30 - Payment due within 30 days"
@@ -345,10 +357,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
               {/* Client Note */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-client-note`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   Client Note
                 </label>
                 <textarea
+                  id={`${id}-client-note`}
                   value={clientNote}
                   onChange={(e) => setClientNote(e.target.value)}
                   placeholder="Note that appears on the invoice for the client"
@@ -359,10 +372,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
               {/* Email Subject */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-email-subject`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   Email Subject
                 </label>
                 <input
+                  id={`${id}-email-subject`}
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
                   placeholder="e.g. Invoice #{invoice_number} from {company_name}"
@@ -372,10 +386,11 @@ export default function InvoiceTemplateModal({ isOpen, onClose, onSaved, templat
 
               {/* Email Body */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                <label htmlFor={`${id}-email-body`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   Email Body
                 </label>
                 <textarea
+                  id={`${id}-email-body`}
                   value={emailBody}
                   onChange={(e) => setEmailBody(e.target.value)}
                   placeholder="Email body that accompanies the invoice"

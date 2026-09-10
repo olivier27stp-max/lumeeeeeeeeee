@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HEADER_AVATAR_QUERY_KEY } from '../../components/HeaderUserAvatar';
 import {
@@ -62,6 +62,7 @@ function KpiCard({ icon: Icon, label, value }: { icon: LucideIcon; label: string
 
 export default function ProfileSettings() {
   const { language, setLanguage } = useTranslation();
+  const id = useId();
   const isFr = language === 'fr';
   const navigate = useNavigate();
   const permsCtx = usePermissions();
@@ -99,7 +100,7 @@ export default function ProfileSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Banner — stored by convention at avatars/{orgId}/banners/{userId} (no DB
-  // column); the <img> falls back to the gradient when no banner was ever
+  // column); the banner image falls back to the gradient when no banner was ever
   // uploaded. Uploads go through the server relay: the avatars bucket has no
   // client INSERT policy, so direct uploads die on RLS.
   const [bannerBroken, setBannerBroken] = useState(false);
@@ -414,7 +415,7 @@ export default function ProfileSettings() {
           >
             {uploadingBanner ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
           </button>
-          <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" onChange={handleBannerChange} />
+          <input ref={bannerInputRef} type="file" accept="image/*" className="hidden" aria-label={isFr ? 'Changer la bannière' : 'Change banner'} onChange={handleBannerChange} />
         </div>
         <div className="px-6 pb-5">
           <div className="flex items-end justify-between -mt-10">
@@ -436,7 +437,7 @@ export default function ProfileSettings() {
               >
                 {uploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Camera size={13} />}
               </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" aria-label={isFr ? 'Changer la photo' : 'Change photo'} onChange={handleAvatarChange} />
             </div>
           </div>
           <div className="mt-3">
@@ -451,22 +452,22 @@ export default function ProfileSettings() {
         <p className="text-xs font-medium text-text-tertiary">{isFr ? 'Mes informations' : 'My information'}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Prénom' : 'First name'}</label>
-            <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="glass-input w-full mt-1.5" placeholder={isFr ? 'Olivier' : 'John'} />
+            <label htmlFor={`${id}-first-name`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Prénom' : 'First name'}</label>
+            <input id={`${id}-first-name`} type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="glass-input w-full mt-1.5" placeholder={isFr ? 'Olivier' : 'John'} />
           </div>
           <div>
-            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Nom' : 'Last name'}</label>
-            <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full mt-1.5" placeholder={isFr ? 'Tremblay' : 'Smith'} />
+            <label htmlFor={`${id}-last-name`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Nom' : 'Last name'}</label>
+            <input id={`${id}-last-name`} type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full mt-1.5" placeholder={isFr ? 'Tremblay' : 'Smith'} />
           </div>
           <div>
-            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Téléphone' : 'Phone'}</label>
+            <label htmlFor={`${id}-phone`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Téléphone' : 'Phone'}</label>
             <div className="relative mt-1.5">
               <Phone size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full !pl-9" placeholder="514 555 0123" />
+              <input id={`${id}-phone`} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full !pl-9" placeholder="514 555 0123" />
             </div>
           </div>
           <div>
-            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Ville' : 'City'}</label>
+            <span className="text-xs font-medium text-text-tertiary">{isFr ? 'Ville' : 'City'}</span>
             <AddressAutocomplete
               value={city}
               onChange={(v) => { setCity(v); setCityCoords(null); /* saisie libre : coords à re-confirmer */ }}
@@ -488,10 +489,11 @@ export default function ProfileSettings() {
           </div>
           {hasBirthCol && (
             <div>
-              <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Date de naissance' : 'Date of birth'}</label>
+              <label htmlFor={`${id}-birth-date`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Date de naissance' : 'Date of birth'}</label>
               <div className="relative mt-1.5">
                 <Cake size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                 <input
+                  id={`${id}-birth-date`}
                   type="date"
                   value={birthDate}
                   max={new Date().toISOString().slice(0, 10)}
@@ -502,10 +504,10 @@ export default function ProfileSettings() {
             </div>
           )}
           <div>
-            <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Rôle' : 'Role'}</label>
+            <label htmlFor={`${id}-role`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Rôle' : 'Role'}</label>
             <div className="relative mt-1.5">
               <Shield size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-              <input type="text" disabled value={roleLabel} className="glass-input w-full !pl-9 opacity-60" />
+              <input id={`${id}-role`} type="text" disabled value={roleLabel} className="glass-input w-full !pl-9 opacity-60" />
             </div>
             {(role === 'owner' || role === 'admin') && (
               <button
@@ -521,12 +523,12 @@ export default function ProfileSettings() {
 
         {/* Email + change flow */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary">{isFr ? 'Courriel' : 'Email'}</label>
+          <label htmlFor={`${id}-email`} className="text-xs font-medium text-text-tertiary">{isFr ? 'Courriel' : 'Email'}</label>
           {!changingEmail ? (
             <div className="flex items-center gap-3 mt-1.5">
               <div className="relative flex-1">
                 <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-                <input type="email" disabled value={email} className="glass-input w-full !pl-9 opacity-60" />
+                <input id={`${id}-email`} type="email" disabled value={email} className="glass-input w-full !pl-9 opacity-60" />
               </div>
               <button type="button" onClick={() => setChangingEmail(true)} className="glass-button-ghost text-[11px] font-medium whitespace-nowrap">
                 {isFr ? 'Changer' : 'Change'}
@@ -535,6 +537,7 @@ export default function ProfileSettings() {
           ) : (
             <div className="mt-1.5 space-y-2">
               <input
+                id={`${id}-email`}
                 type="email"
                 autoFocus
                 value={newEmail}
@@ -562,7 +565,7 @@ export default function ProfileSettings() {
 
         {/* Interface language — inline selector (replaces the old standalone Langue page) */}
         <div>
-          <label className="text-xs font-medium text-text-tertiary">{isFr ? "Langue de l'interface" : 'Interface language'}</label>
+          <span className="text-xs font-medium text-text-tertiary">{isFr ? "Langue de l'interface" : 'Interface language'}</span>
           <div className="flex items-center gap-2 mt-1.5">
             {([{ code: 'en', label: 'English', flag: '🇬🇧' }, { code: 'fr', label: 'Français', flag: '🇫🇷' }] as const).map((lang) => (
               <button

@@ -439,7 +439,11 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
           return (
             <div key={row.techId} className="border border-outline rounded-xl bg-surface-card shadow-card overflow-hidden min-w-[820px]">
               <div
+                role="button"
+                tabIndex={0}
+                aria-expanded={open}
                 onClick={() => toggle(row.techId)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(row.techId); } }}
                 className={cn('grid items-center px-4 py-2.5 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
                 style={gridStyle}
               >
@@ -481,7 +485,11 @@ export default function TechnicianTimesheetTable({ currentDate, view, timeFormat
         return (
           <div key={row.techId} className="border border-outline rounded-xl bg-surface-card shadow-card overflow-hidden">
             <div
+              role="button"
+              tabIndex={0}
+              aria-expanded={open}
               onClick={() => toggle(row.techId)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(row.techId); } }}
               className={cn('flex items-center justify-between px-4 py-2.5 cursor-pointer transition-colors', open ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30')}
             >
               <div className="flex items-center gap-2.5 min-w-0">
@@ -611,6 +619,7 @@ function DayExpanded({
                       value={e.job_id || ''}
                       onChange={(ev) => onAssignJob(e.id, ev.target.value || null)}
                       onClick={(ev) => ev.stopPropagation()}
+                      aria-label={tt.jobContract || (fr ? 'Contrat / Job' : 'Job / Contract')}
                       className="max-w-[220px] bg-surface-card border border-outline rounded-md px-2 py-1 text-[12.5px] text-text-primary focus:outline-none focus:border-primary cursor-pointer"
                     >
                       <option value="">{fr ? 'Aucun job' : 'No job'}</option>

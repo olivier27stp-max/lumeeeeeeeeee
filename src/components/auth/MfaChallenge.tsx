@@ -123,6 +123,7 @@ export default function MfaChallenge({ factorId, onSuccess, onCancel }: MfaChall
                 key={i}
                 ref={el => { inputRefs.current[i] = el; }}
                 type="text"
+                aria-label={fr ? `Chiffre ${i + 1} sur 6` : `Digit ${i + 1} of 6`}
                 inputMode="numeric"
                 maxLength={1}
                 value={digit}

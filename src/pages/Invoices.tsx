@@ -557,6 +557,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             placeholder={fr ? 'Rechercher factures...' : 'Search invoices...'}
+            aria-label={fr ? 'Rechercher factures' : 'Search invoices'}
             className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all"
             onBlur={() => {
               if (searchInput.trim() !== q) {
@@ -579,7 +580,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             <div className="grid min-w-[860px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
-                <input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
+                <input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('client')} className="inline-flex items-center gap-1">Client {IconSort}</button>
@@ -654,17 +655,18 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                 const isHovered = hoveredId === row.id;
                 const rowCls = `border-b border-outline/30 transition-colors duration-150 ${isSelected ? 'bg-[#f0f4ff]' : isHovered ? 'crm-row-hover' : ''}`;
                 const click = () => navigate(`/invoices/${row.id}`);
+                const keyClick = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } };
                 const hover = () => setHoveredId(row.id);
                 const isPastDue = uiStatus === 'past_due';
 
                 return (
                   <React.Fragment key={row.id}>
                     {/* Checkbox */}
-                    <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleOne(row.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
+                    <div className={`py-3 pl-4 flex items-center ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
+                      <input type="checkbox" checked={isSelected} onChange={() => toggleOne(row.id)} aria-label={`${fr ? 'Sélectionner la facture' : 'Select invoice'} ${row.invoice_number}`} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                     </div>
                     {/* Client */}
-                    <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} role="button" tabIndex={0} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <div className="flex items-center gap-3 min-w-0">
                         <UnifiedAvatar id={row.client_id || row.id} name={client?.name || row.client_name || '?'} />
                         <div className="min-w-0">
@@ -676,11 +678,11 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                       </div>
                     </div>
                     {/* Invoice # */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <span className="text-[14px] text-text-primary tabular-nums truncate">{row.invoice_number}</span>
                     </div>
                     {/* Due date */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <span className={cn(
                         'text-[14px] tabular-nums truncate',
                         isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
@@ -689,21 +691,21 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                       </span>
                     </div>
                     {/* Subject (default "Pour service rendu") */}
-                    <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <span className="text-[14px] text-text-primary truncate">
                         {row.subject || (fr ? DEFAULT_INVOICE_SUBJECT_FR : DEFAULT_INVOICE_SUBJECT_EN)}
                       </span>
                     </div>
                     {/* Status */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <InvoiceBadge status={uiStatus} fr={fr} />
                     </div>
                     {/* Total */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoneyFromCents(row.total_cents)}</span>
                     </div>
                     {/* Balance */}
-                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <span className={cn(
                         'text-[14px] font-bold tabular-nums',
                         row.balance_cents === 0 ? 'text-text-muted' : isPastDue ? 'text-[#dc2626]' : 'text-text-primary'
@@ -715,6 +717,8 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                     <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onMouseEnter={hover}>
                       <button
                         className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+                        aria-label={t.common.actions}
+                        aria-expanded={isMenuOpen}
                         onClick={e => { e.stopPropagation(); setActionMenuId(isMenuOpen ? null : row.id); }}
                       >
                         {IconDots}
@@ -725,6 +729,8 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                         <div
                           ref={actionMenuRef}
                           className="absolute right-0 top-full mt-1 z-50 w-48 bg-surface-card border border-outline rounded-md shadow-lg py-1"
+                          role="presentation"
+                          tabIndex={-1}
                           onClick={e => e.stopPropagation()}
                         >
                           <ActionMenuItem icon={<Eye size={14} />} label={fr ? 'Voir' : 'View'}
@@ -776,7 +782,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
       {/* ─── Delete Confirmation Modal (Jobs pattern) ─── */}
       <AnimatePresence>
         {invoiceToDelete && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !isDeletingInvoice && setInvoiceToDelete(null)}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" role="presentation" tabIndex={-1} onClick={() => !isDeletingInvoice && setInvoiceToDelete(null)}>
             <motion.div
               className="bg-surface-card rounded-2xl border border-outline/40 shadow-2xl max-w-sm w-full mx-4"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -902,7 +908,7 @@ function PeriodSelect({ value, onChange, fr }: {
   const selected = PERIOD_OPTIONS.find(o => o.value === value) || PERIOD_OPTIONS[2];
 
   return (
-    <div ref={ref} className="relative inline-block" onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+    <div ref={ref} className="relative inline-block" role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
       <button
         type="button"
         onClick={() => setOpen(!open)}

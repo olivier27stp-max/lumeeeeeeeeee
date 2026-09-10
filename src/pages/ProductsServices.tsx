@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Clock, Edit2, Loader2, Package, Plus, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatCurrency } from '../lib/utils';
@@ -17,6 +17,7 @@ import {
 export default function ProductsServices() {
   const { language } = useTranslation();
   const isFr = language === 'fr';
+  const id = useId();
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
   // Nombre de bureaux de la compagnie : > 1 ⇒ on dit clairement que le
@@ -214,6 +215,7 @@ export default function ProductsServices() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={isFr ? 'Rechercher un service…' : 'Search services...'}
+          aria-label={isFr ? 'Rechercher un service' : 'Search services'}
           className="w-full bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg pl-8 pr-3 py-2 text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
         />
       </div>
@@ -225,40 +227,40 @@ export default function ProductsServices() {
             <h3 className="text-[14px] font-semibold text-text-primary">
               {editingId ? (isFr ? 'Modifier le service' : 'Edit Service') : (isFr ? 'Nouveau service' : 'New Service')}
             </h3>
-            <button onClick={() => setShowForm(false)} className="p-1 rounded-md text-text-tertiary hover:text-text-primary">
+            <button onClick={() => setShowForm(false)} aria-label={isFr ? 'Fermer' : 'Close'} className="p-1 rounded-md text-text-tertiary hover:text-text-primary">
               <X size={14} />
             </button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="md:col-span-2">
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Nom *' : 'Name *'}</label>
-              <input ref={nameInputRef} value={formName} onChange={(e) => setFormName(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'ex. Lavage à pression' : 'e.g. Pressure washing'} />
+              <label htmlFor={`${id}-name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Nom *' : 'Name *'}</label>
+              <input id={`${id}-name`} ref={nameInputRef} value={formName} onChange={(e) => setFormName(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'ex. Lavage à pression' : 'e.g. Pressure washing'} />
             </div>
             <div className="md:col-span-2">
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Description</label>
-              <input value={formDesc} onChange={(e) => setFormDesc(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'Courte description…' : 'Short description...'} />
+              <label htmlFor={`${id}-desc`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">Description</label>
+              <input id={`${id}-desc`} value={formDesc} onChange={(e) => setFormDesc(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'Courte description…' : 'Short description...'} />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-price`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {formUnit === 'linear_ft'
                   ? (isFr ? 'Prix ($ / pi linéaire)' : 'Price ($ / linear ft)')
                   : formUnit === 'sq_ft'
                     ? (isFr ? 'Prix ($ / pi²)' : 'Price ($ / sq ft)')
                     : (isFr ? 'Prix par défaut ($)' : 'Default Price ($)')}
               </label>
-              <input value={formPrice} onChange={(e) => setFormPrice(e.target.value)} type="text" inputMode="decimal" className="glass-input w-full mt-1" placeholder="475,00" />
+              <input id={`${id}-price`} value={formPrice} onChange={(e) => setFormPrice(e.target.value)} type="text" inputMode="decimal" className="glass-input w-full mt-1" placeholder="475,00" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Catégorie' : 'Category'}</label>
-              <input value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'ex. Nettoyage' : 'e.g. Cleaning'} />
+              <label htmlFor={`${id}-category`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Catégorie' : 'Category'}</label>
+              <input id={`${id}-category`} value={formCategory} onChange={(e) => setFormCategory(e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? 'ex. Nettoyage' : 'e.g. Cleaning'} />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Durée (min)' : 'Duration (min)'}</label>
-              <input value={formDuration} onChange={(e) => setFormDuration(e.target.value)} type="number" className="glass-input w-full mt-1" placeholder="60" />
+              <label htmlFor={`${id}-duration`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Durée (min)' : 'Duration (min)'}</label>
+              <input id={`${id}-duration`} value={formDuration} onChange={(e) => setFormDuration(e.target.value)} type="number" className="glass-input w-full mt-1" placeholder="60" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Tarification' : 'Pricing'}</label>
-              <select value={formUnit} onChange={(e) => setFormUnit(e.target.value as ServicePricingUnit)} className="glass-input w-full mt-1">
+              <label htmlFor={`${id}-unit`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{isFr ? 'Tarification' : 'Pricing'}</label>
+              <select id={`${id}-unit`} value={formUnit} onChange={(e) => setFormUnit(e.target.value as ServicePricingUnit)} className="glass-input w-full mt-1">
                 <option value="flat">{isFr ? 'Forfait' : 'Flat rate'}</option>
                 <option value="linear_ft">{isFr ? '$ / pi linéaire' : '$ / linear ft'}</option>
                 <option value="sq_ft">{isFr ? '$ / pi²' : '$ / sq ft'}</option>
@@ -372,8 +374,8 @@ export default function ProductsServices() {
 
       {/* Archive confirmation */}
       {pendingArchive && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={() => !archiving && setPendingArchive(null)}>
-          <div className="w-full max-w-sm rounded-2xl bg-surface-card border border-outline p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" role="presentation" tabIndex={-1} onClick={() => !archiving && setPendingArchive(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-surface-card border border-outline p-5 shadow-2xl" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
             <h3 className="text-[15px] font-semibold text-text-primary">
               {isFr ? `Supprimer « ${pendingArchive.name} »?` : `Delete “${pendingArchive.name}”?`}
             </h3>

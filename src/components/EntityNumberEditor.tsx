@@ -111,6 +111,7 @@ export default function EntityNumberEditor({
             if (e.key === 'Escape') { e.preventDefault(); cancel(); }
           }}
           className="glass-input w-24 px-2 py-1 text-[14px] font-semibold"
+          aria-label={fr ? 'Numéro' : 'Number'}
           inputMode="numeric"
           disabled={saving}
         />

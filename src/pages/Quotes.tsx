@@ -316,6 +316,7 @@ export default function Quotes() {
         />
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder={fr ? 'Rechercher devis...' : 'Search quotes...'}
+          aria-label={fr ? 'Rechercher devis' : 'Search quotes'}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
         <QuoteFilterDropdown
           label={fr ? 'Montant' : 'Amount'}
@@ -338,7 +339,7 @@ export default function Quotes() {
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
         <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 110px 48px' }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
-          <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
+          <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? '# Devis' : 'Quote #'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Propriété' : 'Property'} {IconSort}</span></div>
@@ -373,13 +374,14 @@ export default function Quotes() {
             const isHovered = hoveredId === q.id;
             const rowCls = `border-b border-outline/30 transition-colors duration-150 ${sel.has(q.id) ? 'bg-primary-light' : isHovered ? 'crm-row-hover' : ''}`;
             const click = () => nav(`/quotes/${q.id}`);
+            const keyClick = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } };
             const hover = () => setHoveredId(q.id);
             return (
               <React.Fragment key={q.id}>
-                <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
-                  <input type="checkbox" checked={sel.has(q.id)} onChange={() => toggle(q.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
+                <div className={`py-3 pl-4 flex items-center ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
+                  <input type="checkbox" checked={sel.has(q.id)} onChange={() => toggle(q.id)} aria-label={`${fr ? 'Sélectionner le devis' : 'Select quote'} ${q.quote_number}`} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                 </div>
-                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} role="button" tabIndex={0} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                   <div className="flex items-center gap-3 min-w-0">
                     <UnifiedAvatar id={clientRecord(q)?.id || (q as any).client_id || q.id} name={name(q)} />
                     <div className="min-w-0">
@@ -390,13 +392,13 @@ export default function Quotes() {
                     </div>
                   </div>
                 </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{q.quote_number}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{propertyLabel(q)}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{formatDate(q.created_at)}</span></div>
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><Badge status={q.status} /></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{q.quote_number}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{propertyLabel(q)}</span></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{formatDate(q.created_at)}</span></div>
+                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><Badge status={q.status} /></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums truncate">{formatQuoteMoney(q.total_cents, q.currency)}</span></div>
                 {/* Ouverture : œil dès que le client a ouvert le devis (is_viewed, 1re vue), tiret sinon. */}
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                   {q.is_viewed ? (
                     <span
                       className="inline-flex items-center gap-1.5 text-entity-quote"
@@ -409,9 +411,11 @@ export default function Quotes() {
                     <span className="text-[14px] text-text-tertiary" title={fr ? 'Pas encore ouvert' : 'Not opened yet'}>—</span>
                   )}
                 </div>
-                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
+                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
+                    aria-label={t.common.actions}
+                    aria-expanded={menuOpen === q.id}
                     onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === q.id ? null : q.id); }}
                   >
                     {IconDots}

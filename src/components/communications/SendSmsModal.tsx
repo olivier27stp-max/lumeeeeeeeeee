@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { CheckCircle2, MessageSquare, Send, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
@@ -49,6 +49,7 @@ export default function SendSmsModal({
   onClose,
   onSent,
 }: SendSmsModalProps) {
+  const id = useId();
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [to, setTo] = useState(phone || '');
@@ -131,8 +132,9 @@ export default function SendSmsModal({
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         {/* To field */}
         <div>
-          <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'À' : 'To'}</label>
+          <label htmlFor={`${id}-to`} className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'À' : 'To'}</label>
           <input
+            id={`${id}-to`}
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder={fr ? 'Entrez un numéro de cellulaire' : 'Type a mobile number'}
@@ -149,8 +151,9 @@ export default function SendSmsModal({
         <div className="flex flex-col lg:flex-row gap-5">
           {/* Left: Message editor */}
           <div className="flex-1 min-w-0">
-            <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">Message</label>
+            <label htmlFor={`${id}-body`} className="text-[12px] font-semibold text-text-secondary mb-1.5 block">Message</label>
             <textarea
+              id={`${id}-body`}
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={7}
@@ -195,7 +198,7 @@ export default function SendSmsModal({
 
           {/* Right: Preview card */}
           <div className="flex-1 min-w-0">
-            <label className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'Aperçu' : 'Preview'}</label>
+            <span className="text-[12px] font-semibold text-text-secondary mb-1.5 block">{fr ? 'Aperçu' : 'Preview'}</span>
             <div className="rounded-lg border border-outline bg-primary-lighter p-4 space-y-2 min-h-[160px]">
               {previewLines.length > 0 ? (
                 <div className="text-[13px] text-text-primary leading-relaxed whitespace-pre-line">

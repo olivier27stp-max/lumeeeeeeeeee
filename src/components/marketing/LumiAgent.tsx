@@ -194,7 +194,8 @@ export default function LumiAgent() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Pose ta question à Lumi…"
-              className="flex-1 h-10 rounded-full border border-gray-200 bg-gray-50 px-4 text-[13px] outline-none focus:border-gray-400"
+              aria-label="Pose ta question à Lumi"
+              className="flex-1 h-10 rounded-full border border-gray-200 bg-gray-50 px-4 text-[13px] outline-none focus:border-gray-400 focus-visible:ring-2 focus-visible:ring-primary/40"
             />
             <button
               type="submit"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import {
   ArrowLeft,
   User,
@@ -103,6 +103,7 @@ export default function TeamMemberDetails() {
   const navigate = useNavigate();
   const { memberId } = useParams<{ memberId: string }>();
   const isFr = language === 'fr';
+  const id = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [loading, setLoading] = useState(true);
@@ -393,6 +394,10 @@ export default function TeamMemberDetails() {
             <div
               className="relative w-16 h-16 rounded-2xl flex items-center justify-center text-lg font-bold shrink-0 cursor-pointer group overflow-hidden border border-outline-subtle"
               onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              aria-label={isFr ? 'Changer la photo de profil' : 'Change profile photo'}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); } }}
             >
               {avatarPreview ? (
                 <img src={avatarPreview} alt={fullName} className="w-full h-full object-cover" />
@@ -402,7 +407,7 @@ export default function TeamMemberDetails() {
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <Camera size={18} className="text-white" />
               </div>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} aria-label={isFr ? 'Photo de profil' : 'Profile photo'} />
             </div>
             <div>
               <p className="text-[13px] font-bold text-text-primary">{fullName}</p>
@@ -424,28 +429,28 @@ export default function TeamMemberDetails() {
           {/* Name fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.teamMember.firstName}</label>
-              <input type="text" value={form.first_name} onChange={(e) => update('first_name', e.target.value)} className="glass-input w-full mt-1" />
+              <label htmlFor={`${id}-first_name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.teamMember.firstName}</label>
+              <input id={`${id}-first_name`} type="text" value={form.first_name} onChange={(e) => update('first_name', e.target.value)} className="glass-input w-full mt-1" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.teamMember.lastName}</label>
-              <input type="text" value={form.last_name} onChange={(e) => update('last_name', e.target.value)} className="glass-input w-full mt-1" />
+              <label htmlFor={`${id}-last_name`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.teamMember.lastName}</label>
+              <input id={`${id}-last_name`} type="text" value={form.last_name} onChange={(e) => update('last_name', e.target.value)} className="glass-input w-full mt-1" />
             </div>
           </div>
 
           {/* Contact */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+              <label htmlFor={`${id}-email`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
                 <Mail size={10} /> {t.companySettings.emailAddress}
               </label>
-              <input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className="glass-input w-full mt-1" />
+              <input id={`${id}-email`} type="email" value={form.email} onChange={(e) => update('email', e.target.value)} className="glass-input w-full mt-1" />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+              <label htmlFor={`${id}-phone`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
                 <Phone size={10} /> {t.teamMember.mobilePhone}
               </label>
-              <input type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} className="glass-input w-full mt-1" />
+              <input id={`${id}-phone`} type="tel" value={form.phone} onChange={(e) => update('phone', e.target.value)} className="glass-input w-full mt-1" />
             </div>
           </div>
 
@@ -455,31 +460,31 @@ export default function TeamMemberDetails() {
               <MapPin size={10} /> {t.billing.address}
             </h4>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street1}</label>
-              <input type="text" value={form.street1} onChange={(e) => update('street1', e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? '123 rue Principale' : '123 Main St'} />
+              <label htmlFor={`${id}-street1`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street1}</label>
+              <input id={`${id}-street1`} type="text" value={form.street1} onChange={(e) => update('street1', e.target.value)} className="glass-input w-full mt-1" placeholder={isFr ? '123 rue Principale' : '123 Main St'} />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street2}</label>
-              <input type="text" value={form.street2} onChange={(e) => update('street2', e.target.value)} className="glass-input w-full mt-1" placeholder={t.teamMember.aptSuite} />
+              <label htmlFor={`${id}-street2`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.street2}</label>
+              <input id={`${id}-street2`} type="text" value={form.street2} onChange={(e) => update('street2', e.target.value)} className="glass-input w-full mt-1" placeholder={t.teamMember.aptSuite} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.city}</label>
-                <input type="text" value={form.city} onChange={(e) => update('city', e.target.value)} className="glass-input w-full mt-1" />
+                <label htmlFor={`${id}-city`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.city}</label>
+                <input id={`${id}-city`} type="text" value={form.city} onChange={(e) => update('city', e.target.value)} className="glass-input w-full mt-1" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.provinceState}</label>
-                <input type="text" value={form.province} onChange={(e) => update('province', e.target.value)} className="glass-input w-full mt-1" />
+                <label htmlFor={`${id}-province`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.companySettings.provinceState}</label>
+                <input id={`${id}-province`} type="text" value={form.province} onChange={(e) => update('province', e.target.value)} className="glass-input w-full mt-1" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.postalCode}</label>
-                <input type="text" value={form.postal_code} onChange={(e) => update('postal_code', e.target.value)} className="glass-input w-full mt-1" />
+                <label htmlFor={`${id}-postal_code`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.postalCode}</label>
+                <input id={`${id}-postal_code`} type="text" value={form.postal_code} onChange={(e) => update('postal_code', e.target.value)} className="glass-input w-full mt-1" />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.country}</label>
-                <input type="text" value={form.country} onChange={(e) => update('country', e.target.value)} className="glass-input w-full mt-1" placeholder="Canada" />
+                <label htmlFor={`${id}-country`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">{t.billing.country}</label>
+                <input id={`${id}-country`} type="text" value={form.country} onChange={(e) => update('country', e.target.value)} className="glass-input w-full mt-1" placeholder="Canada" />
               </div>
             </div>
           </div>
@@ -503,9 +508,9 @@ export default function TeamMemberDetails() {
           {/* Pay mode — hidden until the compensation_mode migration is applied */}
           {hasCompMode && (
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">
+              <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">
                 {isFr ? 'Mode de rémunération' : 'Pay mode'}
-              </label>
+              </span>
               <div className="flex gap-2 flex-wrap">
                 {([
                   { value: 'hourly' as const, label: isFr ? 'Taux horaire' : 'Hourly' },
@@ -536,12 +541,13 @@ export default function TeamMemberDetails() {
 
           {(!hasCompMode || form.compensation_mode !== 'commission') && (
             <div className="max-w-xs">
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-labour_cost_hourly`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                 {isFr ? 'Taux horaire' : 'Hourly rate'}
               </label>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-[13px] font-semibold text-text-tertiary">$</span>
                 <input
+                  id={`${id}-labour_cost_hourly`}
                   type="number"
                   min="0"
                   step="0.01"
@@ -586,7 +592,7 @@ export default function TeamMemberDetails() {
             </p>
           ) : (
             <div>
-              <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">{t.manageTeam.role}</label>
+              <span className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-2 block">{t.manageTeam.role}</span>
               <div className="flex gap-2 flex-wrap">
                 {(['admin', 'sales_rep', 'technician'] as TeamRole[]).map((r) => {
                   const cfg = ROLE_CONFIG[r];

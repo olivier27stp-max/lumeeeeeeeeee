@@ -446,6 +446,7 @@ export default function Payments({
               <input
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
+                aria-label={fr ? 'Rechercher paiements' : 'Search payments'}
                 placeholder={fr ? 'Rechercher paiements...' : 'Search payments...'}
                 className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all"
               />
@@ -512,30 +513,31 @@ export default function Payments({
                   if (r.invoice_id) navigate(`/invoices/${r.invoice_id}`);
                   else if (r.client_id) navigate(`/clients/${r.client_id}`);
                 };
+                const keyNav = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } };
                 return (
                   <React.Fragment key={r.id}>
                     {/* Client */}
-                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} role="button" tabIndex={0} onKeyDown={keyNav}>
                       <span className="text-[14px] text-text-primary truncate">{r.client_name || '—'}</span>
                     </div>
                     {/* Date */}
-                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} role="presentation" tabIndex={-1}>
                       <span className="text-[13px] text-text-muted tabular-nums font-medium">{formatDate(r.payment_date)}</span>
                     </div>
                     {/* Method */}
-                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} role="presentation" tabIndex={-1}>
                       <span className="text-[13px] text-text-secondary">{methodLabel}</span>
                     </div>
                     {/* Status */}
-                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} role="presentation" tabIndex={-1}>
                       <PaymentBadge status={r.status} fr={fr} />
                     </div>
                     {/* Amount */}
-                    <div className={`py-3 px-4 flex items-center justify-end ${rowCls}`} onClick={click}>
+                    <div className={`py-3 px-4 flex items-center justify-end ${rowCls}`} onClick={click} role="presentation" tabIndex={-1}>
                       <span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoneyFromCents(r.amount_cents, r.currency)}</span>
                     </div>
                     {/* Payment detail icon */}
-                    <div className="py-3 flex items-center justify-center border-b border-outline/30" onClick={e => e.stopPropagation()}>
+                    <div className="py-3 flex items-center justify-center border-b border-outline/30" role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()}>
                       <button
                         type="button"
                         title={fr ? 'Voir le paiement' : 'View payment'}
@@ -684,16 +686,16 @@ export default function Payments({
                 const rowCls = 'border-b border-outline/30 transition-colors cursor-pointer';
                 return (
                   <React.Fragment key={i.id}>
-                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={() => setSelectedPayout(i)}>
+                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={() => setSelectedPayout(i)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPayout(i); } }}>
                       <span className="text-[13px] text-text-muted tabular-nums font-medium">{formatDate(i.date)}</span>
                     </div>
-                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={() => setSelectedPayout(i)}>
+                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={() => setSelectedPayout(i)} role="presentation" tabIndex={-1}>
                       <span className="text-[13px] text-text-secondary">{i.type}</span>
                     </div>
-                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={() => setSelectedPayout(i)}>
+                    <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={() => setSelectedPayout(i)} role="presentation" tabIndex={-1}>
                       <StatusBadge status={i.status} />
                     </div>
-                    <div className={`py-3 px-4 flex items-center justify-end ${rowCls}`} onClick={() => setSelectedPayout(i)}>
+                    <div className={`py-3 px-4 flex items-center justify-end ${rowCls}`} onClick={() => setSelectedPayout(i)} role="presentation" tabIndex={-1}>
                       <span className="text-[14px] font-semibold text-text-primary tabular-nums">{formatMoneyFromCents(i.net, i.currency)}</span>
                     </div>
                   </React.Fragment>
@@ -743,7 +745,7 @@ export default function Payments({
             >
               <div className="flex items-center justify-between mb-5">
                 <h3 className="text-xl font-bold text-text-primary">{t.payments.payoutDetails}</h3>
-                <button className="p-2 rounded-xl hover:bg-surface-secondary text-text-tertiary transition-colors" onClick={() => setSelectedPayout(null)}><X size={14} /></button>
+                <button className="p-2 rounded-xl hover:bg-surface-secondary text-text-tertiary transition-colors" aria-label={t.common.close} onClick={() => setSelectedPayout(null)}><X size={14} /></button>
               </div>
               {payoutDetail.isLoading && (
                 <div className="space-y-3 mt-4">

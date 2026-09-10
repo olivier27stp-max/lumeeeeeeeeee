@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '../components/d2d/input';
 import { Button } from '../components/d2d/button';
@@ -17,6 +17,7 @@ export default function D2DOnboarding() {
   const navigate = useNavigate();
 
   const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+  const id = useId();
 
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -187,6 +188,7 @@ export default function D2DOnboarding() {
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
+                  aria-label={isFr ? 'Ajouter une photo' : 'Add a photo'}
                   className="group relative"
                 >
                   <Avatar
@@ -199,14 +201,15 @@ export default function D2DOnboarding() {
                     <Camera className="h-5 w-5 text-white" />
                   </div>
                 </button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} />
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarSelect} aria-label={isFr ? 'Photo de profil' : 'Profile photo'} />
                 <p className="mt-2 text-[10px] text-text-muted">{isFr ? 'Cliquez pour ajouter une photo' : 'Click to add a photo'}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Prénom' : 'First Name'}</label>
+                  <label htmlFor={`${id}-firstName`} className="block text-sm font-medium text-text-secondary">{isFr ? 'Prénom' : 'First Name'}</label>
                   <Input
+                    id={`${id}-firstName`}
                     placeholder="Jean"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
@@ -214,8 +217,9 @@ export default function D2DOnboarding() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Nom' : 'Last Name'}</label>
+                  <label htmlFor={`${id}-lastName`} className="block text-sm font-medium text-text-secondary">{isFr ? 'Nom' : 'Last Name'}</label>
                   <Input
+                    id={`${id}-lastName`}
                     placeholder="Dupont"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
@@ -225,8 +229,9 @@ export default function D2DOnboarding() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Téléphone' : 'Phone'}</label>
+                <label htmlFor={`${id}-phone`} className="block text-sm font-medium text-text-secondary">{isFr ? 'Téléphone' : 'Phone'}</label>
                 <Input
+                  id={`${id}-phone`}
                   type="tel"
                   placeholder="819-555-0100"
                   value={phone}
@@ -241,8 +246,9 @@ export default function D2DOnboarding() {
           {step === 2 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">{isFr ? "Nom de l'entreprise" : 'Company Name'}</label>
+                <label htmlFor={`${id}-companyName`} className="block text-sm font-medium text-text-secondary">{isFr ? "Nom de l'entreprise" : 'Company Name'}</label>
                 <Input
+                  id={`${id}-companyName`}
                   placeholder="Clostra Inc."
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
@@ -251,7 +257,7 @@ export default function D2DOnboarding() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Rôle' : 'Role'}</label>
+                <span className="block text-sm font-medium text-text-secondary">{isFr ? 'Rôle' : 'Role'}</span>
                 <div className="grid grid-cols-2 gap-2">
                   {roles.map((r) => (
                     <button
@@ -281,8 +287,9 @@ export default function D2DOnboarding() {
           {step === 3 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-text-secondary">{isFr ? 'Bio' : 'Bio'}</label>
+                <label htmlFor={`${id}-bio`} className="block text-sm font-medium text-text-secondary">{isFr ? 'Bio' : 'Bio'}</label>
                 <textarea
+                  id={`${id}-bio`}
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   placeholder={isFr ? 'Parlez-nous de vous...' : 'Tell us about yourself...'}

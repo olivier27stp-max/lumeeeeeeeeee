@@ -43,6 +43,7 @@ export default function ImageGallery({ images, onDelete }: ImageGalleryProps) {
               <button
                 type="button"
                 onClick={() => setLightboxUrl(img.url)}
+                aria-label={`View ${img.name || `image ${idx + 1}`}`}
                 className="p-2 rounded-lg bg-black/50 text-white hover:bg-black/70 transition-colors"
               >
                 <ZoomIn size={16} />
@@ -51,6 +52,7 @@ export default function ImageGallery({ images, onDelete }: ImageGalleryProps) {
                 <button
                   type="button"
                   onClick={() => onDelete(img.url)}
+                  aria-label={`Delete ${img.name || `image ${idx + 1}`}`}
                   className="p-2 rounded-lg bg-black/50 text-white hover:bg-danger/80 transition-colors"
                 >
                   <Trash2 size={16} />
@@ -72,11 +74,14 @@ export default function ImageGallery({ images, onDelete }: ImageGalleryProps) {
       {lightboxUrl && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          role="presentation"
+          tabIndex={-1}
           onClick={() => setLightboxUrl(null)}
         >
           <button
             type="button"
             onClick={() => setLightboxUrl(null)}
+            aria-label="Close"
             className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors"
           >
             <X size={20} />

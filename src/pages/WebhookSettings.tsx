@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Plus, Trash2, Copy, Check, Loader2, Send, ListChecks, X, AlertTriangle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
@@ -233,6 +233,7 @@ function EndpointModal({
   onCreated: (r: { id: string; secret: string }) => void;
   onUpdated: () => void;
 }) {
+  const id = useId();
   const [name, setName] = useState(editing?.name || '');
   const [url, setUrl] = useState(editing?.url || '');
   const [selected, setSelected] = useState<Set<string>>(new Set(editing?.events || []));
@@ -281,23 +282,27 @@ function EndpointModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" role="presentation" tabIndex={-1} onClick={onClose}>
       <div
         className="bg-white dark:bg-zinc-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b dark:border-zinc-800 flex items-center justify-between">
           <h2 className="font-semibold">
             {editing ? (fr ? 'Modifier le webhook' : 'Edit webhook') : (fr ? 'Nouveau webhook' : 'New webhook')}
           </h2>
-          <button onClick={onClose} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded">
+          <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded">
             <X size={18} />
           </button>
         </div>
         <div className="p-5 space-y-4">
           <div>
-            <label className="text-sm font-medium">{fr ? 'Nom' : 'Name'}</label>
+            <label htmlFor={`${id}-name`} className="text-sm font-medium">{fr ? 'Nom' : 'Name'}</label>
             <input
+              id={`${id}-name`}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={fr ? 'Mon Zap' : 'My Zap'}
@@ -305,8 +310,9 @@ function EndpointModal({
             />
           </div>
           <div>
-            <label className="text-sm font-medium">URL</label>
+            <label htmlFor={`${id}-url`} className="text-sm font-medium">URL</label>
             <input
+              id={`${id}-url`}
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://hooks.zapier.com/..."
@@ -314,7 +320,7 @@ function EndpointModal({
             />
           </div>
           <div>
-            <label className="text-sm font-medium">{fr ? 'Événements' : 'Events'}</label>
+            <span className="text-sm font-medium">{fr ? 'Événements' : 'Events'}</span>
             <div className="mt-2 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">
               {knownEvents.map((e) => (
                 <label key={e} className="inline-flex items-center gap-2 text-sm cursor-pointer">
@@ -418,9 +424,12 @@ function DeliveriesDrawer({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex justify-end" role="presentation" tabIndex={-1} onClick={onClose}>
       <div
         className="bg-white dark:bg-zinc-900 w-full max-w-xl h-full overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-5 border-b dark:border-zinc-800 flex items-center justify-between">
@@ -428,7 +437,7 @@ function DeliveriesDrawer({
             <h2 className="font-semibold">{fr ? 'Livraisons récentes' : 'Recent deliveries'}</h2>
             <div className="text-xs text-zinc-500 truncate font-mono">{endpoint.name}</div>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded">
+          <button type="button" onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded">
             <X size={18} />
           </button>
         </div>

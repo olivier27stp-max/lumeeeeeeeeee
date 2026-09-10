@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { AnimatePresence } from 'motion/react';
 import {
@@ -133,6 +133,7 @@ interface ClientDetail {
 export default function QuoteNew() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const tq = t.quotes as any;
   const tm = t.modals as any;
   const navigate = useNavigate();
@@ -710,7 +711,7 @@ export default function QuoteNew() {
       {/* ── En-tête sticky ── */}
       <div className={cn('sticky top-0 z-20 bg-surface border-b px-8 py-4 flex items-center justify-between gap-4', OUTLINE)}>
         <div className="flex items-center gap-3.5 min-w-0">
-          <button type="button" onClick={() => navigate('/quotes')} className={cn(GHOST, 'w-[34px] px-0')}>
+          <button type="button" onClick={() => navigate('/quotes')} aria-label={fr ? 'Retour aux devis' : 'Back to quotes'} className={cn(GHOST, 'w-[34px] px-0')}>
             <ArrowLeft size={15} />
           </button>
           <div className="min-w-0">
@@ -760,22 +761,22 @@ export default function QuoteNew() {
             {contactMode === 'new' ? (
               <div className="space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div><label className={FIELD}>{tq.firstName} *</label>
-                    <input autoFocus value={leadFirstName} onChange={e => setLeadFirstName(e.target.value)} className={INPUT} placeholder="John" /></div>
-                  <div><label className={FIELD}>{tq.lastName} *</label>
-                    <input value={leadLastName} onChange={e => setLeadLastName(e.target.value)} className={INPUT} placeholder="Doe" /></div>
+                  <div><label htmlFor={`${id}-first-name`} className={FIELD}>{tq.firstName} *</label>
+                    <input id={`${id}-first-name`} autoFocus value={leadFirstName} onChange={e => setLeadFirstName(e.target.value)} className={INPUT} placeholder="John" /></div>
+                  <div><label htmlFor={`${id}-last-name`} className={FIELD}>{tq.lastName} *</label>
+                    <input id={`${id}-last-name`} value={leadLastName} onChange={e => setLeadLastName(e.target.value)} className={INPUT} placeholder="Doe" /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div><label className={FIELD}>{tq.emailLabel}</label>
-                    <input type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} className={INPUT} placeholder={tq.emailPlaceholder} /></div>
-                  <div><label className={FIELD}>{tq.phoneLabel}</label>
-                    <input type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} className={INPUT} placeholder={tq.phonePlaceholder} /></div>
+                  <div><label htmlFor={`${id}-email`} className={FIELD}>{tq.emailLabel}</label>
+                    <input id={`${id}-email`} type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} className={INPUT} placeholder={tq.emailPlaceholder} /></div>
+                  <div><label htmlFor={`${id}-phone`} className={FIELD}>{tq.phoneLabel}</label>
+                    <input id={`${id}-phone`} type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} className={INPUT} placeholder={tq.phonePlaceholder} /></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div><label className={FIELD}>{tq.company}</label>
-                    <input value={leadCompany} onChange={e => setLeadCompany(e.target.value)} className={INPUT} placeholder={tq.companyName} /></div>
-                  <div><label className={FIELD}>{tq.addressLabel}</label>
-                    <AddressAutocomplete
+                  <div><label htmlFor={`${id}-company`} className={FIELD}>{tq.company}</label>
+                    <input id={`${id}-company`} value={leadCompany} onChange={e => setLeadCompany(e.target.value)} className={INPUT} placeholder={tq.companyName} /></div>
+                  <div><label htmlFor={`${id}-address`} className={FIELD}>{tq.addressLabel}</label>
+                    <AddressAutocomplete id={`${id}-address`}
                       value={leadAddressSearch}
                       onChange={setLeadAddressSearch}
                       onSelect={(addr: StructuredAddress) => {
@@ -790,9 +791,9 @@ export default function QuoteNew() {
               </div>
             ) : (
               <div>
-                <label className={FIELD}>{tq.clientLabel}</label>
+                <label htmlFor={`${id}-client-search`} className={FIELD}>{tq.clientLabel}</label>
                 <div className="relative">
-                  <input
+                  <input id={`${id}-client-search`}
                     value={clientSearch || (clientId ? (clients.find(c => c.id === clientId)?.label || '') : '')}
                     onChange={e => { setClientSearch(e.target.value); setClientListOpen(true); if (!e.target.value) setClientId(''); }}
                     onFocus={() => setClientListOpen(true)}
@@ -825,7 +826,7 @@ export default function QuoteNew() {
                   )}
                 </div>
                 {clientListOpen && (
-                  <div className="fixed inset-0 z-40" onClick={() => { setClientListOpen(false); setClientSearch(''); }} />
+                  <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => { setClientListOpen(false); setClientSearch(''); }} />
                 )}
                 <p className={HINT}>
                   {fr ? 'Inclut les leads — un lead est un client avec le statut « lead ».' : 'Includes leads — a lead is a client with the "lead" status.'}
@@ -891,10 +892,11 @@ export default function QuoteNew() {
               onChange={e => setTitle(e.target.value)}
               className={cn(INPUT, 'h-[46px] rounded-xl text-[16px] font-bold')}
               placeholder={tq.titlePlaceholder}
+              aria-label={tq.titlePlaceholder}
             />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
               <div>
-                <label className={FIELD}>{tq.clientLabel}</label>
+                <span className={FIELD}>{tq.clientLabel}</span>
                 <div className={cn(INPUT, 'flex items-center truncate')}>
                   {contactMode === 'existing'
                     ? (clientBoxName || <span>{tq.selectClientShort}</span>)
@@ -902,25 +904,25 @@ export default function QuoteNew() {
                 </div>
               </div>
               {contactMode === 'existing' && clientId && properties.length > 0 && (
-                <div><label className={FIELD}>{tm.property}</label>
-                  <select value={propertyId} onChange={e => setPropertyId(e.target.value)} className={INPUT}>
+                <div><label htmlFor={`${id}-property`} className={FIELD}>{tm.property}</label>
+                  <select id={`${id}-property`} value={propertyId} onChange={e => setPropertyId(e.target.value)} className={INPUT}>
                     <option value="">{tm.selectProperty}</option>
                     {properties.map(p => (
                       <option key={p.id} value={p.id}>{p.name}{p.address ? ` — ${p.address}` : ''}</option>
                     ))}
                   </select></div>
               )}
-              <div><label className={FIELD}>{tq.quoteNumber}</label>
-                <input value={quoteNumber}
+              <div><label htmlFor={`${id}-quote-number`} className={FIELD}>{tq.quoteNumber}</label>
+                <input id={`${id}-quote-number`} value={quoteNumber}
                   onChange={e => { setQuoteNumber(e.target.value.replace(/\D/g, '')); setQuoteNumberTouched(true); }}
                   className={INPUT} placeholder={tq.auto} disabled={!nextQuoteNumber} /></div>
-              <div><label className={FIELD}>{tq.salesperson}</label>
-                <select value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className={INPUT}>
+              <div><label htmlFor={`${id}-salesperson`} className={FIELD}>{tq.salesperson}</label>
+                <select id={`${id}-salesperson`} value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className={INPUT}>
                   <option value="">{tq.assign}</option>
                   {salespeople.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select></div>
-              <div><label className={FIELD}>{tq.validForDays}</label>
-                <input type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={INPUT} /></div>
+              <div><label htmlFor={`${id}-valid-days`} className={FIELD}>{tq.validForDays}</label>
+                <input id={`${id}-valid-days`} type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={INPUT} /></div>
             </div>
 
           </div>
@@ -934,13 +936,13 @@ export default function QuoteNew() {
                 {fr ? 'Le calendrier est visible par le client sur la soumission.' : 'The schedule is visible to the client on the quote.'}
               </p>
               <div className="flex items-center gap-2.5 mb-3">
-                <button type="button" onClick={() => changeServiceYear(-1)} className={cn(GHOST, 'w-[30px] h-[30px] px-0')}>
+                <button type="button" onClick={() => changeServiceYear(-1)} aria-label={fr ? 'Année précédente' : 'Previous year'} className={cn(GHOST, 'w-[30px] h-[30px] px-0')}>
                   <ChevronLeft size={13} />
                 </button>
                 <span className="text-[15px] font-extrabold text-black dark:text-white tabular-nums min-w-[52px] text-center">
                   {serviceYear}
                 </span>
-                <button type="button" onClick={() => changeServiceYear(1)} className={cn(GHOST, 'w-[30px] h-[30px] px-0')}>
+                <button type="button" onClick={() => changeServiceYear(1)} aria-label={fr ? 'Année suivante' : 'Next year'} className={cn(GHOST, 'w-[30px] h-[30px] px-0')}>
                   <ChevronRight size={13} />
                 </button>
               </div>
@@ -981,6 +983,7 @@ export default function QuoteNew() {
                             min={`${serviceYear}-${mm}-01`}
                             max={`${serviceYear}-${mm}-${lastDay}`}
                             onChange={e => setServiceMonthDate(month, e.target.value)}
+                            aria-label={`${MONTHS[month - 1]} ${serviceYear}`}
                             className={INPUT}
                           />
                         </div>
@@ -1003,6 +1006,7 @@ export default function QuoteNew() {
               accept="image/*"
               multiple
               className="hidden"
+              aria-label={fr ? 'Ajouter des photos' : 'Add photos'}
               onChange={e => handlePhotoFiles(e.target.files)}
             />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -1012,6 +1016,7 @@ export default function QuoteNew() {
                   <button
                     type="button"
                     onClick={() => { setPhotos(p => p.filter(u => u !== url)); setDirty(true); }}
+                    aria-label={fr ? 'Retirer la photo' : 'Remove photo'}
                     className="absolute top-1.5 right-1.5 w-[22px] h-[22px] rounded-md bg-black text-white dark:bg-white dark:text-black flex items-center justify-center"
                   >
                     <X size={11} />
@@ -1065,6 +1070,7 @@ export default function QuoteNew() {
             <div className={CARD}>
               <div className={cn(CARD_LABEL, 'mb-3')}>{tq.introduction}</div>
               <textarea value={introContent} onChange={e => setIntroContent(e.target.value)}
+                aria-label={tq.introduction}
                 className={TEXTAREA} placeholder={tq.introPlaceholder} />
             </div>
           )}
@@ -1111,16 +1117,20 @@ export default function QuoteNew() {
                     onChange={e => updateLine(item.id, { description: e.target.value })}
                     className={cn(TEXTAREA, 'mt-1.5 min-h-[72px] py-1.5 text-[12px] resize-none')}
                     placeholder={tq.description}
+                    aria-label={tq.description}
                   />
                 </div>
                 <input value={item.qtyInput} onChange={e => updateLine(item.id, { qtyInput: sanitize(e.target.value) })}
+                  aria-label={fr ? 'Quantité' : 'Quantity'}
                   className={cn(INPUT, 'text-center')} />
                 <input value={item.unitPriceInput} onChange={e => updateLine(item.id, { unitPriceInput: sanitize(e.target.value) })}
+                  aria-label={fr ? 'Prix unitaire' : 'Unit price'}
                   className={cn(INPUT, 'text-right')} />
                 <p className="text-[13px] font-bold text-right text-black dark:text-white pt-2.5 tabular-nums">
                   {formatQuoteMoney(lineNetCents(item))}
                 </p>
                 <button type="button" onClick={() => removeLine(item.id)} disabled={lineItems.length === 1}
+                  aria-label={fr ? 'Retirer la ligne' : 'Remove line'}
                   className="w-[30px] h-[30px] mt-1 rounded-lg flex items-center justify-center text-black dark:text-white hover:bg-[#f5f5f5] dark:hover:bg-[#1c1c1f] disabled:opacity-30">
                   <Trash2 size={14} />
                 </button>
@@ -1135,6 +1145,7 @@ export default function QuoteNew() {
                     {fr ? 'Rabais' : 'Discount'}
                     <select value={item.discountType}
                       onChange={e => updateLine(item.id, { discountType: e.target.value as LineItemForm['discountType'] })}
+                      aria-label={fr ? 'Type de rabais' : 'Discount type'}
                       className={cn(INPUT, 'w-auto py-1 text-[11.5px]')}>
                       <option value="">{fr ? 'Aucun' : 'None'}</option>
                       <option value="percentage">%</option>
@@ -1143,6 +1154,7 @@ export default function QuoteNew() {
                     {item.discountType && (
                       <input value={item.discountValueInput}
                         onChange={e => updateLine(item.id, { discountValueInput: sanitize(e.target.value) })}
+                        aria-label={fr ? 'Valeur du rabais' : 'Discount value'}
                         className={cn(INPUT, 'w-[72px] py-1 text-right text-[11.5px]')}
                         placeholder={item.discountType === 'percentage' ? '10' : '25.00'} />
                     )}
@@ -1168,6 +1180,7 @@ export default function QuoteNew() {
                 </button>
               </div>
               <textarea value={contractDisclaimer} onChange={e => setContractDisclaimer(e.target.value)}
+                aria-label={fr ? 'Avis contractuel' : 'Contract disclaimer'}
                 className={TEXTAREA} placeholder={tq.descriptionPlaceholder} />
             </div>
           )}
@@ -1177,6 +1190,7 @@ export default function QuoteNew() {
             <div className={CARD}>
               <div className={cn(CARD_LABEL, 'mb-3')}>{tq.clientMessageHeading}</div>
               <textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)}
+                aria-label={tq.clientMessageHeading}
                 className={TEXTAREA} placeholder={tq.clientMessagePlaceholder} />
             </div>
           )}
@@ -1185,6 +1199,7 @@ export default function QuoteNew() {
           <div className={CARD}>
             <div className={cn(CARD_LABEL, 'mb-3')}>{tq.notes}</div>
             <textarea value={notes} onChange={e => setNotes(e.target.value)}
+              aria-label={tq.notes}
               className={TEXTAREA} placeholder={tq.notesPlaceholder} />
             <p className={HINT}>{tq.notesVisibleToClient}</p>
             <div className="mt-3">
@@ -1222,12 +1237,15 @@ export default function QuoteNew() {
                 {discountType ? (
                   <span className="flex items-center gap-1.5">
                     <select value={discountType} onChange={e => setDiscountType(e.target.value as any)}
+                      aria-label={fr ? 'Type de rabais' : 'Discount type'}
                       className={cn(INPUT, 'h-[30px] w-[52px] px-1.5 text-[11.5px]')}>
                       <option value="percentage">%</option><option value="fixed">$</option>
                     </select>
                     <input value={discountValue} onChange={e => setDiscountValue(sanitize(e.target.value))}
+                      aria-label={fr ? 'Valeur du rabais' : 'Discount value'}
                       className={cn(INPUT, 'h-[30px] w-[64px] text-right text-[11.5px]')} />
                     <button type="button" onClick={() => { setDiscountType(''); setDiscountValue(''); }}
+                      aria-label={fr ? 'Retirer le rabais' : 'Remove discount'}
                       className="text-black dark:text-white"><Trash2 size={12} /></button>
                   </span>
                 ) : (
@@ -1269,11 +1287,13 @@ export default function QuoteNew() {
                 <div>
                   <div className="flex gap-2">
                     <select value={depositType} onChange={e => setDepositType(e.target.value as any)}
+                      aria-label={fr ? "Type d'acompte" : 'Deposit type'}
                       className={cn(INPUT, 'h-[34px] w-[110px] text-[12.5px]')}>
                       <option value="percentage">{tq.percentagePct}</option>
                       <option value="fixed">{tq.fixedAmount}</option>
                     </select>
                     <input value={depositValue} onChange={e => setDepositValue(sanitize(e.target.value))}
+                      aria-label={fr ? "Montant de l'acompte" : 'Deposit amount'}
                       className={cn(INPUT, 'h-[34px] text-right text-[12.5px]')}
                       placeholder={depositType === 'percentage' ? '25' : '100'} />
                   </div>
@@ -1313,6 +1333,7 @@ export default function QuoteNew() {
               {fr ? 'Aperçu vue client' : 'Client view preview'}
             </p>
             <button type="button" onClick={() => setShowPreview(false)}
+              aria-label={fr ? "Fermer l'aperçu" : 'Close preview'}
               className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-black dark:text-white hover:bg-[#f5f5f5] dark:hover:bg-[#1c1c1f]">
               <X size={15} />
             </button>

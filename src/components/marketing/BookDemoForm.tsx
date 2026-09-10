@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, useId, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Check, ArrowRight } from 'lucide-react';
@@ -49,6 +49,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function BookDemoForm({ open, onClose, source }: BookDemoFormProps) {
   const { t } = useTranslation();
+  const id = useId();
   const bd = (t as any).bookDemo;
   const [form, setForm] = useState<FormState>(EMPTY);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle');
@@ -176,8 +177,10 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     label={bd?.fields?.fullName || 'Full name *'}
                     error={errors.full_name}
                     className="sm:col-span-2"
+                    htmlFor={`${id}-full-name`}
                   >
                     <input
+                      id={`${id}-full-name`}
                       type="text" required value={form.full_name}
                       onChange={(e) => setField('full_name', e.target.value)}
                       className={inputCls(!!errors.full_name)}
@@ -185,8 +188,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     />
                   </Field>
 
-                  <Field label={bd?.fields?.company || 'Company *'} error={errors.company_name}>
+                  <Field label={bd?.fields?.company || 'Company *'} error={errors.company_name} htmlFor={`${id}-company`}>
                     <input
+                      id={`${id}-company`}
                       type="text" required value={form.company_name}
                       onChange={(e) => setField('company_name', e.target.value)}
                       className={inputCls(!!errors.company_name)}
@@ -194,8 +198,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     />
                   </Field>
 
-                  <Field label={bd?.fields?.email || 'Email *'} error={errors.email}>
+                  <Field label={bd?.fields?.email || 'Email *'} error={errors.email} htmlFor={`${id}-email`}>
                     <input
+                      id={`${id}-email`}
                       type="email" required value={form.email}
                       onChange={(e) => setField('email', e.target.value)}
                       className={inputCls(!!errors.email)}
@@ -203,8 +208,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     />
                   </Field>
 
-                  <Field label={bd?.fields?.phone || 'Phone *'} error={errors.phone}>
+                  <Field label={bd?.fields?.phone || 'Phone *'} error={errors.phone} htmlFor={`${id}-phone`}>
                     <input
+                      id={`${id}-phone`}
                       type="tel" required value={form.phone}
                       onChange={(e) => setField('phone', e.target.value)}
                       className={inputCls(!!errors.phone)}
@@ -212,8 +218,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     />
                   </Field>
 
-                  <Field label={bd?.fields?.industry || 'Industry *'} error={errors.industry}>
+                  <Field label={bd?.fields?.industry || 'Industry *'} error={errors.industry} htmlFor={`${id}-industry`}>
                     <select
+                      id={`${id}-industry`}
                       required value={form.industry}
                       onChange={(e) => setField('industry', e.target.value as DemoIndustry | '')}
                       className={inputCls(!!errors.industry)}
@@ -227,8 +234,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     </select>
                   </Field>
 
-                  <Field label={bd?.fields?.employeeCount || 'Team size'}>
+                  <Field label={bd?.fields?.employeeCount || 'Team size'} htmlFor={`${id}-employee-count`}>
                     <select
+                      id={`${id}-employee-count`}
                       value={form.employee_count}
                       onChange={(e) => setField('employee_count', e.target.value)}
                       className={inputCls(false)}
@@ -240,8 +248,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     </select>
                   </Field>
 
-                  <Field label={bd?.fields?.heardFrom || 'How did you hear about Lume?'}>
+                  <Field label={bd?.fields?.heardFrom || 'How did you hear about Lume?'} htmlFor={`${id}-heard-from`}>
                     <select
+                      id={`${id}-heard-from`}
                       value={form.heard_from}
                       onChange={(e) => setField('heard_from', e.target.value)}
                       className={inputCls(false)}
@@ -255,8 +264,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     </select>
                   </Field>
 
-                  <Field label={bd?.fields?.availability || 'Best time to reach you'}>
+                  <Field label={bd?.fields?.availability || 'Best time to reach you'} htmlFor={`${id}-availability`}>
                     <select
+                      id={`${id}-availability`}
                       value={form.availability}
                       onChange={(e) => setField('availability', e.target.value)}
                       className={inputCls(false)}
@@ -274,8 +284,10 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                     label={bd?.fields?.message || 'Message (optional)'}
                     error={errors.message}
                     className="sm:col-span-2"
+                    htmlFor={`${id}-message`}
                   >
                     <textarea
+                      id={`${id}-message`}
                       rows={3} maxLength={2000} value={form.message}
                       onChange={(e) => setField('message', e.target.value)}
                       className={inputCls(!!errors.message) + ' resize-none'}
@@ -283,8 +295,9 @@ export default function BookDemoForm({ open, onClose, source }: BookDemoFormProp
                   </Field>
 
                   {referral ? (
-                    <Field label="Parrainage (referral)" className="sm:col-span-2">
+                    <Field label="Parrainage (referral)" className="sm:col-span-2" htmlFor={`${id}-referral`}>
                       <input
+                        id={`${id}-referral`}
                         type="text"
                         value={referral}
                         readOnly
@@ -358,9 +371,9 @@ function SuccessPanel({ onClose, name, email }: { onClose: () => void; name: str
   );
 }
 
-function Field({ label, error, children, className }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
+function Field({ label, error, children, className, htmlFor }: { label: string; error?: string; children: React.ReactNode; className?: string; htmlFor: string }) {
   return (
-    <label className={`flex flex-col gap-1.5 ${className || ''}`}>
+    <label htmlFor={htmlFor} className={`flex flex-col gap-1.5 ${className || ''}`}>
       <span className="text-xs font-semibold text-[#111] uppercase tracking-wide">{label}</span>
       {children}
       {error && <span className="text-xs text-red-600">{error}</span>}

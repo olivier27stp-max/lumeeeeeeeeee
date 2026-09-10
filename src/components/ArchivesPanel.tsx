@@ -164,6 +164,7 @@ export default function ArchivesPanel() {
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
         <input
           type="text"
+          aria-label={archiveStrings.searchArchives || 'Search archives...'}
           placeholder={archiveStrings.searchArchives || 'Search archives...'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -256,6 +257,7 @@ export default function ArchivesPanel() {
                           <button
                             onClick={() => void handleDelete(item)}
                             disabled={isActing}
+                            aria-label={archiveStrings.deletePermanently || 'Delete permanently'}
                             className="glass-button-danger inline-flex items-center gap-1 text-xs disabled:opacity-50"
                           >
                             <Trash2 size={12} />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useId } from 'react';
 import {
   Save,
   Loader2,
@@ -63,6 +63,7 @@ function FieldEditor({
   onRemove: () => void;
 }) {
   const { t } = useTranslation();
+  const id = useId();
   const needsOptions = field.type === 'dropdown' || field.type === 'multiselect';
   const isCheckbox = field.type === 'checkbox';
 
@@ -74,10 +75,11 @@ function FieldEditor({
         </div>
         <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+            <label htmlFor={`${id}-label`} className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
               {t.requestForm.label}
             </label>
             <input
+              id={`${id}-label`}
               type="text"
               value={field.label}
               onChange={(e) => onUpdate({ ...field, label: e.target.value })}
@@ -86,10 +88,11 @@ function FieldEditor({
             />
           </div>
           <div>
-            <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+            <label htmlFor={`${id}-type`} className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
               {t.customFields.type}
             </label>
             <select
+              id={`${id}-type`}
               value={field.type}
               onChange={(e) => onUpdate({ ...field, type: e.target.value as FormFieldType, options: [] })}
               className="glass-input w-full mt-1"
@@ -124,9 +127,9 @@ function FieldEditor({
 
       {(needsOptions || isCheckbox) && (
         <div className="ml-7 space-y-2">
-          <label className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
             {isCheckbox ? t.requestForm.checkboxOptions : t.requestForm.optionsOnePerLine}
-          </label>
+          </span>
           {isCheckbox && (
             <p className="text-[11px] text-text-tertiary">{t.requestForm.checkboxOptionsHint}</p>
           )}
@@ -134,9 +137,10 @@ function FieldEditor({
             <div className="space-y-1.5">
               {(field.options || []).map((opt, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  {isCheckbox && <input type="checkbox" disabled className="accent-primary shrink-0" />}
+                  {isCheckbox && <input type="checkbox" disabled aria-label={`${t.requestForm.option} ${i + 1}`} className="accent-primary shrink-0" />}
                   <input
                     type="text"
+                    aria-label={`${t.requestForm.option} ${i + 1}`}
                     value={opt}
                     onChange={(e) =>
                       onUpdate({
@@ -191,6 +195,7 @@ function FormPreview({
   isFr: boolean;
 }) {
   const { t } = useTranslation();
+  const id = useId();
   return (
     <div className="section-card p-6 space-y-5 max-w-lg mx-auto">
       <div className="text-center space-y-1">
@@ -211,13 +216,13 @@ function FormPreview({
           {t.requestForm.contactDetails}
         </h3>
         <div className="grid grid-cols-2 gap-3">
-          <input className="glass-input" placeholder={t.requestForm.firstName} disabled />
-          <input className="glass-input" placeholder={t.requestForm.lastName} disabled />
+          <input className="glass-input" placeholder={t.requestForm.firstName} aria-label={t.requestForm.firstName} disabled />
+          <input className="glass-input" placeholder={t.requestForm.lastName} aria-label={t.requestForm.lastName} disabled />
         </div>
-        <input className="glass-input w-full" placeholder={t.modals.company} disabled />
+        <input className="glass-input w-full" placeholder={t.modals.company} aria-label={t.modals.company} disabled />
         <div className="grid grid-cols-2 gap-3">
-          <input className="glass-input" placeholder={t.requestForm.email} disabled />
-          <input className="glass-input" placeholder={t.requestForm.phone} disabled />
+          <input className="glass-input" placeholder={t.requestForm.email} aria-label={t.requestForm.email} disabled />
+          <input className="glass-input" placeholder={t.requestForm.phone} aria-label={t.requestForm.phone} disabled />
         </div>
       </div>
 
@@ -226,15 +231,15 @@ function FormPreview({
         <h3 className="text-[11px] font-bold uppercase tracking-wider text-text-tertiary">
           {t.billing.address}
         </h3>
-        <input className="glass-input w-full" placeholder={t.requestForm.streetAddress} disabled />
+        <input className="glass-input w-full" placeholder={t.requestForm.streetAddress} aria-label={t.requestForm.streetAddress} disabled />
         <div className="grid grid-cols-2 gap-3">
-          <input className="glass-input" placeholder={t.requestForm.unitApt} disabled />
-          <input className="glass-input" placeholder={t.requestForm.city} disabled />
+          <input className="glass-input" placeholder={t.requestForm.unitApt} aria-label={t.requestForm.unitApt} disabled />
+          <input className="glass-input" placeholder={t.requestForm.city} aria-label={t.requestForm.city} disabled />
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <input className="glass-input" placeholder={t.requestForm.country} disabled />
-          <input className="glass-input" placeholder={t.requestForm.stateregion} disabled />
-          <input className="glass-input" placeholder={t.requestForm.zipPostal} disabled />
+          <input className="glass-input" placeholder={t.requestForm.country} aria-label={t.requestForm.country} disabled />
+          <input className="glass-input" placeholder={t.requestForm.stateregion} aria-label={t.requestForm.stateregion} disabled />
+          <input className="glass-input" placeholder={t.requestForm.zipPostal} aria-label={t.requestForm.zipPostal} disabled />
         </div>
       </div>
 
@@ -246,34 +251,34 @@ function FormPreview({
           </h3>
           {customFields.filter(f => f.section === 'service_details').map((f) => (
             <div key={f.id}>
-              <label className="text-[12px] font-medium text-text-secondary">
+              <label htmlFor={`${id}-cf-${f.id}`} className="text-[12px] font-medium text-text-secondary">
                 {f.label}{f.required ? ' *' : ''}
               </label>
               {f.type === 'paragraph' ? (
-                <textarea className="glass-input w-full mt-1 min-h-[60px]" disabled />
+                <textarea id={`${id}-cf-${f.id}`} className="glass-input w-full mt-1 min-h-[60px]" disabled />
               ) : f.type === 'checkbox' ? (
                 (f.options || []).filter(Boolean).length > 0 ? (
                   <div className="mt-1 space-y-1.5">
-                    {(f.options || []).filter(Boolean).map((o) => (
+                    {(f.options || []).filter(Boolean).map((o, i) => (
                       <div key={o} className="flex items-center gap-2">
-                        <input type="checkbox" disabled className="accent-primary" />
+                        <input type="checkbox" id={i === 0 ? `${id}-cf-${f.id}` : undefined} aria-label={o} disabled className="accent-primary" />
                         <span className="text-[12px] text-text-tertiary">{o}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 mt-1">
-                    <input type="checkbox" disabled className="accent-primary" />
+                    <input type="checkbox" id={`${id}-cf-${f.id}`} disabled className="accent-primary" />
                     <span className="text-[12px] text-text-tertiary">{f.label}</span>
                   </div>
                 )
               ) : f.type === 'dropdown' ? (
-                <select className="glass-input w-full mt-1" disabled>
+                <select id={`${id}-cf-${f.id}`} className="glass-input w-full mt-1" disabled>
                   <option>{t.billing.select}</option>
                   {(f.options || []).map((o) => <option key={o}>{o}</option>)}
                 </select>
               ) : (
-                <input className="glass-input w-full mt-1" disabled placeholder={f.label} />
+                <input id={`${id}-cf-${f.id}`} className="glass-input w-full mt-1" disabled placeholder={f.label} />
               )}
             </div>
           ))}
@@ -288,8 +293,8 @@ function FormPreview({
           </h3>
           {customFields.filter(f => f.section === 'final_notes').map((f) => (
             <div key={f.id}>
-              <label className="text-[12px] font-medium text-text-secondary">{f.label}</label>
-              <textarea className="glass-input w-full mt-1 min-h-[60px]" disabled />
+              <label htmlFor={`${id}-fn-${f.id}`} className="text-[12px] font-medium text-text-secondary">{f.label}</label>
+              <textarea id={`${id}-fn-${f.id}`} className="glass-input w-full mt-1 min-h-[60px]" disabled />
             </div>
           ))}
         </div>
@@ -297,10 +302,10 @@ function FormPreview({
 
       {/* Default notes field */}
       <div>
-        <label className="text-[12px] font-medium text-text-secondary">
+        <label htmlFor={`${id}-notes`} className="text-[12px] font-medium text-text-secondary">
           {t.requestForm.additionalNotes2}
         </label>
-        <textarea className="glass-input w-full mt-1 min-h-[60px]" disabled />
+        <textarea id={`${id}-notes`} className="glass-input w-full mt-1 min-h-[60px]" disabled />
       </div>
 
       {/* Photos (always available on the public form) */}
@@ -326,6 +331,7 @@ function FormPreview({
 
 export default function RequestFormSettings() {
   const { t, language } = useTranslation();
+  const id = useId();
   const isFr = language === 'fr';
 
   // State
@@ -626,10 +632,11 @@ export default function RequestFormSettings() {
                 {t.requestForm.formHeader}
               </h3>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                <label htmlFor={`${id}-title`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                   {t.requestForm.formTitle}
                 </label>
                 <input
+                  id={`${id}-title`}
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -638,10 +645,11 @@ export default function RequestFormSettings() {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                <label htmlFor={`${id}-description`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                   {t.quoteTemplates.descriptionOptional}
                 </label>
                 <textarea
+                  id={`${id}-description`}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="glass-input w-full mt-1 min-h-[60px]"
@@ -649,10 +657,11 @@ export default function RequestFormSettings() {
                 />
               </div>
               <div>
-                <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
+                <label htmlFor={`${id}-success-message`} className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider">
                   {t.requestForm.successMessage}
                 </label>
                 <textarea
+                  id={`${id}-success-message`}
                   value={successMessage}
                   onChange={(e) => setSuccessMessage(e.target.value)}
                   className="glass-input w-full mt-1 min-h-[60px]"

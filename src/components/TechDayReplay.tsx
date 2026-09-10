@@ -103,8 +103,10 @@ export default function TechDayReplay({ userId, userName, onClose }: Props) {
   const currentPoint = points[cursor];
 
   return (
-    <div className="fixed inset-0 z-[2000] bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[2000] bg-black/60 flex items-center justify-center p-4" role="presentation" tabIndex={-1} onClick={onClose}>
       <div
+        role="presentation"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="bg-surface rounded-2xl shadow-2xl w-full max-w-6xl h-[85vh] flex flex-col overflow-hidden"
       >
@@ -117,15 +119,16 @@ export default function TechDayReplay({ userId, userName, onClose }: Props) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setDate((d) => shiftDate(d, -1))} className="p-1.5 rounded-lg hover:bg-surface-secondary"><ChevronLeft size={16} /></button>
+            <button onClick={() => setDate((d) => shiftDate(d, -1))} aria-label="Jour précédent" className="p-1.5 rounded-lg hover:bg-surface-secondary"><ChevronLeft size={16} /></button>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              aria-label="Date"
               className="px-3 py-1.5 rounded-lg border border-outline bg-surface-secondary text-[13px] font-medium"
             />
-            <button onClick={() => setDate((d) => shiftDate(d, 1))} disabled={date >= todayIso()} className="p-1.5 rounded-lg hover:bg-surface-secondary disabled:opacity-30"><ChevronRight size={16} /></button>
-            <button onClick={onClose} className="ml-2 p-1.5 rounded-lg hover:bg-surface-secondary"><X size={16} /></button>
+            <button onClick={() => setDate((d) => shiftDate(d, 1))} disabled={date >= todayIso()} aria-label="Jour suivant" className="p-1.5 rounded-lg hover:bg-surface-secondary disabled:opacity-30"><ChevronRight size={16} /></button>
+            <button onClick={onClose} aria-label="Fermer" className="ml-2 p-1.5 rounded-lg hover:bg-surface-secondary"><X size={16} /></button>
           </div>
         </div>
 
@@ -180,6 +183,7 @@ export default function TechDayReplay({ userId, userName, onClose }: Props) {
             <button
               onClick={() => { if (cursor >= points.length - 1) setCursor(0); setPlaying((p) => !p); }}
               disabled={points.length < 2}
+              aria-label={playing ? 'Pause' : 'Lecture'}
               className="w-9 h-9 rounded-full bg-text-primary text-surface flex items-center justify-center disabled:opacity-30"
             >
               {playing ? <Pause size={14} /> : <Play size={14} />}
@@ -188,6 +192,7 @@ export default function TechDayReplay({ userId, userName, onClose }: Props) {
               type="range" min={0} max={Math.max(0, points.length - 1)} value={cursor}
               onChange={(e) => { setCursor(Number(e.target.value)); setPlaying(false); }}
               disabled={points.length < 2}
+              aria-label="Position dans la journée"
               className="flex-1"
             />
             <div className="text-[12px] tabular-nums text-text-secondary w-32 text-right">

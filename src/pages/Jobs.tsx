@@ -128,6 +128,7 @@ const JobCard: React.FC<JobCardProps> = ({ job, onClick, onDelete, formatMoney }
           </div>
           <button
             onClick={onDelete}
+            aria-label={fr ? 'Supprimer le job' : 'Delete job'}
             className="p-1 rounded-lg text-text-muted hover:text-danger hover:bg-danger/10 opacity-0 group-hover:opacity-100 transition-all"
           >
             <Trash2 size={12} />
@@ -212,10 +213,10 @@ function JobPreviewPanel({ job, onClose, onEdit, onDelete, formatMoney }: {
             <StatusBadge status={job.status} />
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={onEdit} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors focus:ring-1 focus:ring-primary/30 outline-none">
+            <button onClick={onEdit} aria-label={fr ? 'Modifier le job' : 'Edit job'} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors focus:ring-1 focus:ring-primary/30 outline-none">
               <Edit2 size={13} />
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors focus:ring-1 focus:ring-primary/30 outline-none">
+            <button onClick={onClose} aria-label={fr ? "Fermer l'aperçu" : 'Close preview'} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors focus:ring-1 focus:ring-primary/30 outline-none">
               <X size={14} />
             </button>
           </div>
@@ -639,6 +640,7 @@ export default function Jobs() {
           ]}
         />
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+          aria-label={fr ? 'Rechercher jobs' : 'Search jobs'}
           placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-outline rounded-md text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-[#94a3b8] focus:border-[#94a3b8] transition-all" />
       </div>
@@ -648,7 +650,7 @@ export default function Jobs() {
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
         <div className="grid" style={{ gridTemplateColumns: '40px 1.6fr 0.8fr 1.6fr 1fr 200px 0.8fr 48px' }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
-          <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
+          <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" aria-label={fr ? 'Sélectionner tous les jobs' : 'Select all jobs'} checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{t.jobs.client} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{t.jobs.jobNumber} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{t.jobs.property} {IconSort}</span></div>
@@ -681,13 +683,14 @@ export default function Jobs() {
             const isHovered = hoveredId === job.id;
             const rowCls = `border-b border-outline/30 transition-colors duration-150 ${selectedJobIds.has(job.id) ? 'bg-[#f0f4ff]' : isHovered ? 'crm-row-hover' : ''}`;
             const click = () => handleJobClick(job);
+            const clickKey = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } };
             const hover = () => setHoveredId(job.id);
             return (
               <React.Fragment key={job.id}>
-                <div className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
-                  <input type="checkbox" checked={selectedJobIds.has(job.id)} onChange={() => toggleOne(job.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
+                <div role="presentation" tabIndex={-1} className={`py-3 pl-4 flex items-center ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
+                  <input type="checkbox" aria-label={`${fr ? 'Sélectionner le job' : 'Select job'} #${job.job_number}`} checked={selectedJobIds.has(job.id)} onChange={() => toggleOne(job.id)} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
                 </div>
-                <div className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                <div role="button" tabIndex={0} aria-label={`${fr ? 'Ouvrir le job' : 'Open job'} #${job.job_number} — ${job.client_name || job.title}`} onKeyDown={clickKey} className={`py-3 px-4 flex items-center min-w-0 cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
                   <div className="flex items-center gap-3 min-w-0">
                     <UnifiedAvatar id={job.client_id || job.id} name={job.client_name || job.title} />
                     <div className="min-w-0">
@@ -698,13 +701,16 @@ export default function Jobs() {
                     </div>
                   </div>
                 </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">#{job.job_number}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{job.property_address || '—'}</span></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
-                <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><JobBadge status={job.status} /></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
-                <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
+                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">#{job.job_number}</span></div>
+                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary truncate">{job.property_address || '—'}</span></div>
+                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
+                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><JobBadge status={job.status} /></div>
+                <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
+                <div role="presentation" tabIndex={-1} className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
+                    aria-label={`${fr ? 'Actions du job' : 'Job actions'} #${job.job_number}`}
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen === job.id}
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"
                     onClick={e => { e.stopPropagation(); setMenuOpen(menuOpen === job.id ? null : job.id); }}
                   >
@@ -747,7 +753,7 @@ export default function Jobs() {
       {/* Delete confirmation modal */}
       <AnimatePresence>
         {jobToDelete && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !isDeletingJob && setJobToDelete(null)}>
+          <div role="presentation" tabIndex={-1} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => !isDeletingJob && setJobToDelete(null)}>
             <motion.div
               className="bg-surface-card rounded-2xl border border-outline/40 shadow-2xl max-w-sm w-full mx-4"
               initial={{ opacity: 0, scale: 0.95 }}

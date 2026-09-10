@@ -462,6 +462,7 @@ function RatesPanel() {
                           value={plan?.id ?? ''}
                           disabled={isSaving}
                           onChange={(e) => handleAssign(m.user_id, e.target.value)}
+                          aria-label={`${isFr ? 'Plan de commission de' : 'Commission plan for'} ${m.full_name || m.email}`}
                           style={{ colorScheme: 'dark light' }}
                           className="rounded-md border border-border-subtle px-2 py-1 text-sm text-text-primary disabled:opacity-60"
                         >

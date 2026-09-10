@@ -67,6 +67,7 @@ export default function PaymentDetailDrawer({
               </h3>
               <button
                 className="p-2 rounded-xl hover:bg-surface-secondary text-text-tertiary transition-colors"
+                aria-label={t.common.close}
                 onClick={onClose}
               >
                 <X size={14} />

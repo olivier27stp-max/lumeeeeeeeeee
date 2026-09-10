@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Plus, Trash2, X, Package, ChevronDown, User, Mail, Phone, MapPin, Download, Eye, EyeOff } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -74,6 +74,7 @@ const labelCls = 'text-xs font-medium text-text-tertiary block';
 export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, createLeadInline, preset, initialClientId, initialTitle, initialItems, fullscreenHost }: QuoteCreateModalProps) {
   const { t, language } = useTranslation();
   const tq = t.quotes as any;
+  const id = useId();
   // ── Contact mode ──
   const [contactMode, setContactMode] = useState<'new' | 'existing'>('new');
   const [selectedLeadId, setSelectedLeadId] = useState('');
@@ -630,7 +631,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                 {showPreview ? <EyeOff size={13} /> : <Eye size={13} />}
                 {tq.preview || (language === 'fr' ? 'Aperçu' : 'Preview')}
               </button>
-              <button onClick={onClose} className="p-2 rounded-xl border border-outline hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
+              <button onClick={onClose} aria-label={t.common.close} className="p-2 rounded-xl border border-outline hover:bg-surface-tertiary text-text-tertiary hover:text-text-primary transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -664,20 +665,20 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                 {contactMode === 'new' ? (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div><label className={labelCls}>{tq.firstName} *</label>
-                        <input autoFocus value={leadFirstName} onChange={e => setLeadFirstName(e.target.value)} className={inputCls} placeholder={language === 'fr' ? 'Jean' : 'John'} /></div>
-                      <div><label className={labelCls}>{tq.lastName} *</label>
-                        <input value={leadLastName} onChange={e => setLeadLastName(e.target.value)} className={inputCls} placeholder={language === 'fr' ? 'Tremblay' : 'Doe'} /></div>
+                      <div><label htmlFor={`${id}-firstName`} className={labelCls}>{tq.firstName} *</label>
+                        <input id={`${id}-firstName`} autoFocus value={leadFirstName} onChange={e => setLeadFirstName(e.target.value)} className={inputCls} placeholder={language === 'fr' ? 'Jean' : 'John'} /></div>
+                      <div><label htmlFor={`${id}-lastName`} className={labelCls}>{tq.lastName} *</label>
+                        <input id={`${id}-lastName`} value={leadLastName} onChange={e => setLeadLastName(e.target.value)} className={inputCls} placeholder={language === 'fr' ? 'Tremblay' : 'Doe'} /></div>
                     </div>
-                    <div><label className={labelCls}>{tq.company}</label>
-                      <input value={leadCompany} onChange={e => setLeadCompany(e.target.value)} className={inputCls} placeholder={tq.companyName} /></div>
+                    <div><label htmlFor={`${id}-company`} className={labelCls}>{tq.company}</label>
+                      <input id={`${id}-company`} value={leadCompany} onChange={e => setLeadCompany(e.target.value)} className={inputCls} placeholder={tq.companyName} /></div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div><label className={cn(labelCls, 'flex items-center gap-1')}><Mail size={11} className="text-text-tertiary" /> {tq.emailLabel}</label>
-                        <input type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} className={inputCls} placeholder={tq.emailPlaceholder} /></div>
-                      <div><label className={cn(labelCls, 'flex items-center gap-1')}><Phone size={11} className="text-text-tertiary" /> {tq.phoneLabel}</label>
-                        <input type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} className={inputCls} placeholder={tq.phonePlaceholder} /></div>
+                      <div><label htmlFor={`${id}-email`} className={cn(labelCls, 'flex items-center gap-1')}><Mail size={11} className="text-text-tertiary" /> {tq.emailLabel}</label>
+                        <input id={`${id}-email`} type="email" value={leadEmail} onChange={e => setLeadEmail(e.target.value)} className={inputCls} placeholder={tq.emailPlaceholder} /></div>
+                      <div><label htmlFor={`${id}-phone`} className={cn(labelCls, 'flex items-center gap-1')}><Phone size={11} className="text-text-tertiary" /> {tq.phoneLabel}</label>
+                        <input id={`${id}-phone`} type="tel" value={leadPhone} onChange={e => setLeadPhone(e.target.value)} className={inputCls} placeholder={tq.phonePlaceholder} /></div>
                     </div>
-                    <div><label className={cn(labelCls, 'flex items-center gap-1')}><MapPin size={11} className="text-text-tertiary" /> {tq.addressLabel}</label>
+                    <div><span className={cn(labelCls, 'flex items-center gap-1')}><MapPin size={11} className="text-text-tertiary" /> {tq.addressLabel}</span>
                       <AddressAutocomplete
                         value={leadAddressSearch}
                         onChange={setLeadAddressSearch}
@@ -696,16 +697,16 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                   </>
                 ) : (
                   <div className="space-y-4">
-                    <div><label className={labelCls}>{tq.selectLead}</label>
-                      <select value={selectedLeadId} onChange={e => { setSelectedLeadId(e.target.value); setClientId(''); }} className={inputCls}>
+                    <div><label htmlFor={`${id}-lead`} className={labelCls}>{tq.selectLead}</label>
+                      <select id={`${id}-lead`} value={selectedLeadId} onChange={e => { setSelectedLeadId(e.target.value); setClientId(''); }} className={inputCls}>
                         <option value="">{tq.selectLeadOpt}</option>
                         {existingLeads.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
                       </select></div>
                     <div className="flex items-center gap-2 text-text-tertiary text-xs">
                       <div className="flex-1 border-t border-outline" /><span>{tq.or}</span><div className="flex-1 border-t border-outline" />
                     </div>
-                    <div><label className={labelCls}>{tq.selectClient}</label>
-                      <select value={clientId} onChange={e => { setClientId(e.target.value); setSelectedLeadId(''); }} className={inputCls}>
+                    <div><label htmlFor={`${id}-existingClient`} className={labelCls}>{tq.selectClient}</label>
+                      <select id={`${id}-existingClient`} value={clientId} onChange={e => { setClientId(e.target.value); setSelectedLeadId(''); }} className={inputCls}>
                         <option value="">{tq.selectClientOpt}</option>
                         {clients.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                       </select></div>
@@ -716,42 +717,42 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
 
             {/* ── Title + Meta ── */}
             <div className="space-y-4">
-              <input autoFocus={!createLeadInline} value={title} onChange={e => setTitle(e.target.value)}
+              <input autoFocus={!createLeadInline} value={title} onChange={e => setTitle(e.target.value)} aria-label={tq.titlePlaceholder}
                 className={cn(inputCls, 'text-lg font-medium py-3 rounded-xl')} placeholder={tq.titlePlaceholder} />
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
-                  <label className={labelCls}>{tq.clientLabel}</label>
+                  <label htmlFor={`${id}-client`} className={labelCls}>{tq.clientLabel}</label>
                   {createLeadInline && !lead ? (
-                    <div className={cn(inputCls, 'bg-surface-secondary')}>
+                    <div id={`${id}-client`} className={cn(inputCls, 'bg-surface-secondary')}>
                       {resolvedContactName || <span className="text-text-tertiary">{tq.fromContactAbove}</span>}
                     </div>
                   ) : (
-                    <select value={clientId} onChange={e => setClientId(e.target.value)} className={inputCls}>
+                    <select id={`${id}-client`} value={clientId} onChange={e => setClientId(e.target.value)} className={inputCls}>
                       <option value="">{tq.selectClientShort}</option>
                       {clients.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                     </select>
                   )}
                 </div>
                 {clientId && properties.length > 0 && (
-                  <div><label className={labelCls}>{t.modals.property}</label>
-                    <select value={propertyId} onChange={e => setPropertyId(e.target.value)} className={inputCls}>
+                  <div><label htmlFor={`${id}-property`} className={labelCls}>{t.modals.property}</label>
+                    <select id={`${id}-property`} value={propertyId} onChange={e => setPropertyId(e.target.value)} className={inputCls}>
                       <option value="">{t.modals.selectProperty}</option>
                       {properties.map(p => (
                         <option key={p.id} value={p.id}>{p.name}{p.address ? ` — ${p.address}` : ''}</option>
                       ))}
                     </select></div>
                 )}
-                <div><label className={labelCls}>{tq.quoteNumber}</label>
-                  <input value={quoteNumber}
+                <div><label htmlFor={`${id}-quoteNumber`} className={labelCls}>{tq.quoteNumber}</label>
+                  <input id={`${id}-quoteNumber`} value={quoteNumber}
                     onChange={e => { setQuoteNumber(e.target.value.replace(/\D/g, '')); setQuoteNumberTouched(true); }}
                     className={inputCls} placeholder={tq.auto} disabled={!nextQuoteNumber} /></div>
-                <div><label className={labelCls}>{tq.salesperson}</label>
-                  <select value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className={inputCls}>
+                <div><label htmlFor={`${id}-salesperson`} className={labelCls}>{tq.salesperson}</label>
+                  <select id={`${id}-salesperson`} value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className={inputCls}>
                     <option value="">{tq.assign}</option>
                     {salespeople.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
                   </select></div>
-                <div><label className={labelCls}>{tq.validForDays}</label>
-                  <input type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={inputCls} /></div>
+                <div><label htmlFor={`${id}-validDays`} className={labelCls}>{tq.validForDays}</label>
+                  <input id={`${id}-validDays`} type="number" min={1} value={validDays} onChange={e => setValidDays(Number(e.target.value) || 30)} className={inputCls} /></div>
               </div>
             </div>
 
@@ -774,7 +775,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             {introEnabled && (
               <div className="section-card p-4 space-y-2">
                 <h4 className="text-[14px] font-bold tracking-tight text-text-primary">{tq.introduction}</h4>
-                <textarea value={introContent} onChange={e => setIntroContent(e.target.value)}
+                <textarea value={introContent} onChange={e => setIntroContent(e.target.value)} aria-label={tq.introduction}
                   className={cn(inputCls, 'min-h-[80px]')} placeholder={tq.introPlaceholder} />
               </div>
             )}
@@ -808,27 +809,27 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                       <span className="truncate">{item.name.trim() || t.servicePicker.choosePlaceholder}</span>
                       <Package size={13} className="text-text-tertiary shrink-0" />
                     </button>
-                    <textarea value={item.description} onChange={e => updateLine(item.id, { description: e.target.value })}
+                    <textarea value={item.description} onChange={e => updateLine(item.id, { description: e.target.value })} aria-label={tq.description}
                       className={cn(inputCls, 'py-1.5 text-xs min-h-[72px] resize-none')} placeholder={tq.description} />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs font-medium text-text-tertiary">{tq.quantity}</label>
-                    <input value={item.qtyInput} onChange={e => updateLine(item.id, { qtyInput: sanitize(e.target.value) })}
+                    <label htmlFor={`${id}-qty-${item.id}`} className="text-xs font-medium text-text-tertiary">{tq.quantity}</label>
+                    <input id={`${id}-qty-${item.id}`} value={item.qtyInput} onChange={e => updateLine(item.id, { qtyInput: sanitize(e.target.value) })}
                       className={cn(inputCls, 'py-2 text-center')} />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs font-medium text-text-tertiary">{tq.unitPrice}</label>
-                    <input value={item.unitPriceInput} onChange={e => updateLine(item.id, { unitPriceInput: sanitize(e.target.value) })}
+                    <label htmlFor={`${id}-unitPrice-${item.id}`} className="text-xs font-medium text-text-tertiary">{tq.unitPrice}</label>
+                    <input id={`${id}-unitPrice-${item.id}`} value={item.unitPriceInput} onChange={e => updateLine(item.id, { unitPriceInput: sanitize(e.target.value) })}
                       className={cn(inputCls, 'py-2 text-right')} />
                   </div>
                   <div className="col-span-2">
-                    <label className="text-xs font-medium text-text-tertiary">{tq.total}</label>
+                    <span className="text-xs font-medium text-text-tertiary">{tq.total}</span>
                     <p className="px-2.5 py-2 text-sm font-medium text-right text-text-primary">
                       {formatQuoteMoney(Math.round((parseFloat(item.qtyInput) || 0) * (parseFloat(item.unitPriceInput) || 0) * 100))}
                     </p>
                   </div>
                   <div className="col-span-1 flex flex-col items-center gap-1 pt-5">
-                    <button type="button" onClick={() => removeLine(item.id)} disabled={lineItems.length === 1}
+                    <button type="button" onClick={() => removeLine(item.id)} disabled={lineItems.length === 1} aria-label={language === 'fr' ? 'Supprimer la ligne' : 'Remove line'}
                       className="p-1 text-text-tertiary hover:text-danger disabled:opacity-30"><Trash2 size={14} /></button>
                   </div>
                   <div className="col-span-12">
@@ -859,13 +860,13 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
                 <span className="text-text-secondary">{tq.discount}</span>
                 {discountType ? (
                   <div className="flex items-center gap-2">
-                    <select value={discountType} onChange={e => setDiscountType(e.target.value as any)}
+                    <select value={discountType} onChange={e => setDiscountType(e.target.value as any)} aria-label={tq.discount}
                       className="text-xs border border-outline rounded px-2 py-1 bg-surface text-text-primary">
                       <option value="percentage">%</option><option value="fixed">$</option>
                     </select>
-                    <input value={discountValue} onChange={e => setDiscountValue(sanitize(e.target.value))}
+                    <input value={discountValue} onChange={e => setDiscountValue(sanitize(e.target.value))} aria-label={tq.discount}
                       className="w-20 text-right text-xs border border-outline rounded px-2 py-1 bg-surface text-text-primary" />
-                    <button type="button" onClick={() => { setDiscountType(''); setDiscountValue(''); }}
+                    <button type="button" onClick={() => { setDiscountType(''); setDiscountValue(''); }} aria-label={language === 'fr' ? 'Retirer le rabais' : 'Remove discount'}
                       className="text-text-tertiary hover:text-danger"><Trash2 size={12} /></button>
                   </div>
                 ) : (
@@ -904,12 +905,12 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
               {depositRequired && (
                 <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
                   <div className="flex items-center gap-3">
-                    <select value={depositType} onChange={e => setDepositType(e.target.value as any)}
+                    <select value={depositType} onChange={e => setDepositType(e.target.value as any)} aria-label={tq.requireDeposit}
                       className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
                       <option value="percentage">{tq.percentagePct}</option>
                       <option value="fixed">{tq.fixedAmount}</option>
                     </select>
-                    <input value={depositValue} onChange={e => setDepositValue(sanitize(e.target.value))}
+                    <input value={depositValue} onChange={e => setDepositValue(sanitize(e.target.value))} aria-label={tq.requireDeposit}
                       className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
                       placeholder={depositType === 'percentage' ? '25' : '100'} />
                     <span className="text-xs text-text-tertiary">
@@ -943,9 +944,9 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
               <div className="section-card p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-[14px] font-bold tracking-tight text-text-primary">{tq.contractDisclaimer}</h4>
-                  <button type="button" onClick={() => setDisclaimerEnabled(false)} className="text-text-tertiary hover:text-danger"><Trash2 size={14} /></button>
+                  <button type="button" onClick={() => setDisclaimerEnabled(false)} aria-label={language === 'fr' ? 'Retirer la clause' : 'Remove disclaimer'} className="text-text-tertiary hover:text-danger"><Trash2 size={14} /></button>
                 </div>
-                <textarea value={contractDisclaimer} onChange={e => setContractDisclaimer(e.target.value)}
+                <textarea value={contractDisclaimer} onChange={e => setContractDisclaimer(e.target.value)} aria-label={tq.contractDisclaimer}
                   className={cn(inputCls, 'min-h-[80px]')} placeholder={tq.descriptionPlaceholder} />
               </div>
             )}
@@ -953,8 +954,8 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             {/* ── Notes ── */}
             <div className="section-card border-dashed p-5">
               <h4 className="text-[14px] font-bold tracking-tight text-text-primary mb-2">{tq.notes}</h4>
-              <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border-0 text-sm min-h-[80px] resize-none outline-none bg-transparent text-text-primary placeholder:text-text-tertiary"
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} aria-label={tq.notes}
+                className="w-full px-3 py-2 border-0 text-sm min-h-[80px] resize-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 bg-transparent text-text-primary placeholder:text-text-tertiary"
                 placeholder={tq.notesPlaceholder} />
               <p className="text-[10px] text-text-muted mt-1">{tq.notesVisibleToClient}</p>
             </div>
@@ -966,7 +967,7 @@ export default function QuoteCreateModal({ isOpen, onClose, lead, onCreated, cre
             {clientMessageEnabled && (
               <div className="section-card p-4 space-y-2">
                 <h4 className="text-[14px] font-bold tracking-tight text-text-primary">{tq.clientMessageHeading}</h4>
-                <textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)}
+                <textarea value={clientMessage} onChange={e => setClientMessage(e.target.value)} aria-label={tq.clientMessageHeading}
                   className={cn(inputCls, 'min-h-[60px]')} placeholder={tq.clientMessagePlaceholder} />
               </div>
             )}

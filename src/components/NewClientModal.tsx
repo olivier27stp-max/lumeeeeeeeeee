@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import { useTranslation } from '../i18n';
@@ -17,6 +17,7 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
 }) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [company, setCompany] = useState('');
@@ -61,26 +62,26 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl border border-outline/30 bg-surface-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" role="presentation" tabIndex={-1} onClick={onClose}>
+      <div className="w-full max-w-lg rounded-xl border border-outline/30 bg-surface-card p-5 shadow-xl" role="dialog" aria-modal="true" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-[15px] font-semibold text-text-primary">{fr ? 'Nouveau client' : 'New client'}</h2>
-          <button type="button" onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors"><X size={16} /></button>
+          <button type="button" onClick={onClose} aria-label={t.common.close} className="text-text-tertiary hover:text-text-primary transition-colors"><X size={16} /></button>
         </div>
         <div className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.firstName}</label>
-              <input autoFocus value={firstName} onChange={(e) => setFirstName(e.target.value)} className="glass-input w-full mt-1.5" placeholder="John" />
+              <label htmlFor={`${id}-firstName`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.firstName}</label>
+              <input id={`${id}-firstName`} autoFocus value={firstName} onChange={(e) => setFirstName(e.target.value)} className="glass-input w-full mt-1.5" placeholder="John" />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.lastName}</label>
-              <input value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full mt-1.5" placeholder="Doe" />
+              <label htmlFor={`${id}-lastName`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.lastName}</label>
+              <input id={`${id}-lastName`} value={lastName} onChange={(e) => setLastName(e.target.value)} className="glass-input w-full mt-1.5" placeholder="Doe" />
             </div>
           </div>
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.company}</label>
-            <input value={company} onChange={(e) => setCompany(e.target.value)} className="glass-input w-full mt-1.5" placeholder="Acme Inc." />
+            <label htmlFor={`${id}-company`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.company}</label>
+            <input id={`${id}-company`} value={company} onChange={(e) => setCompany(e.target.value)} className="glass-input w-full mt-1.5" placeholder="Acme Inc." />
             <label className={`mt-2 flex items-center gap-2 text-[13px] text-text-secondary select-none ${company.trim() ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
               <input
                 type="checkbox"
@@ -94,16 +95,16 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.email}</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass-input w-full mt-1.5" placeholder="john@example.com" />
+              <label htmlFor={`${id}-email`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.email}</label>
+              <input id={`${id}-email`} type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="glass-input w-full mt-1.5" placeholder="john@example.com" />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.phone}</label>
-              <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
+              <label htmlFor={`${id}-phone`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.phone}</label>
+              <input id={`${id}-phone`} type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
             </div>
           </div>
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Adresse' : 'Address'}</label>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{fr ? 'Adresse' : 'Address'}</span>
             <div className="mt-1.5">
               <AddressAutocomplete
                 value={addressSearch}

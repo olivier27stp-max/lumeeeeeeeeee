@@ -16,6 +16,7 @@ export default function ChatTopbar({ onToggleSidebar }: ChatTopbarProps) {
         {/* Sidebar toggle */}
         <button
           onClick={onToggleSidebar}
+          aria-label={fr ? 'Afficher ou masquer le panneau latéral' : 'Toggle sidebar'}
           className="p-1.5 rounded-lg hover:bg-gray-200/60 transition-colors"
         >
           <PanelLeft size={18} className="text-[#6B7280]" />
@@ -30,6 +31,7 @@ export default function ChatTopbar({ onToggleSidebar }: ChatTopbarProps) {
           <input
             type="text"
             placeholder={fr ? 'Rechercher...' : 'Search...'}
+            aria-label={fr ? 'Rechercher' : 'Search'}
             className="h-[34px] w-[240px] pl-9 pr-14 rounded-full bg-surface-secondary border-0 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:ring-1 focus:ring-border"
           />
           {/* ⌘ K badge */}
@@ -52,19 +54,19 @@ export default function ChatTopbar({ onToggleSidebar }: ChatTopbarProps) {
         </button>
 
         {/* Notification bell */}
-        <button className="relative p-2 rounded-lg hover:bg-gray-200/60 transition-colors">
+        <button aria-label={fr ? 'Notifications' : 'Notifications'} className="relative p-2 rounded-lg hover:bg-gray-200/60 transition-colors">
           <Bell size={18} className="text-[#6B7280]" />
           {/* Red notification dot */}
           <div className="absolute top-1.5 right-1.5 w-[7px] h-[7px] rounded-full bg-red-500" />
         </button>
 
         {/* Theme toggle (moon) */}
-        <button className="p-2 rounded-lg hover:bg-gray-200/60 transition-colors">
+        <button aria-label={fr ? 'Changer de thème' : 'Toggle theme'} className="p-2 rounded-lg hover:bg-gray-200/60 transition-colors">
           <Moon size={18} className="text-[#6B7280]" />
         </button>
 
         {/* Settings */}
-        <button className="p-2 rounded-lg hover:bg-gray-200/60 transition-colors">
+        <button aria-label={fr ? 'Paramètres' : 'Settings'} className="p-2 rounded-lg hover:bg-gray-200/60 transition-colors">
           <Settings size={18} className="text-[#6B7280]" />
         </button>
 

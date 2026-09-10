@@ -72,7 +72,7 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
 
   if (estCourriel) {
     return (
-      <div className="mt-3 pt-3 border-t border-outline/40" onClick={(e) => e.stopPropagation()}>
+      <div className="mt-3 pt-3 border-t border-outline/40" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-1.5">
             <Mail size={11} className="text-text-tertiary" />
@@ -123,7 +123,7 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
 
   // ── SMS ──
   return (
-    <div className="mt-3 pt-3 border-t border-outline/40" onClick={(e) => e.stopPropagation()}>
+    <div className="mt-3 pt-3 border-t border-outline/40" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-1.5 mb-2">
         <MessageSquare size={11} className="text-text-tertiary" />
         <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
@@ -134,6 +134,7 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
       <textarea
         value={texte}
         onChange={(e) => setTexte(e.target.value)}
+        aria-label={fr ? 'SMS envoyé au client' : 'SMS sent to client'}
         rows={3}
         className="w-full px-2.5 py-2 text-[12px] rounded-md bg-surface border border-outline/60 text-text-primary leading-relaxed focus:outline-none focus:border-primary/60 resize-y"
       />

@@ -47,7 +47,7 @@ function CardHead({ title, right }: { title: string; right?: ReactNode }) {
 }
 function LinkCard({ to, children }: { to: string; children: ReactNode }) {
   const navigate = useNavigate();
-  return <div onClick={() => navigate(to)} className="cursor-pointer rounded-xl transition-colors hover:bg-surface-secondary/40">{children}</div>;
+  return <div role="button" tabIndex={0} onClick={() => navigate(to)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to); } }} className="cursor-pointer rounded-xl transition-colors hover:bg-surface-secondary/40">{children}</div>;
 }
 
 /* ── leaderboard (teams / clients) ── */

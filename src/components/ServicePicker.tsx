@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Search, X, Plus, Package, Check, Loader2, Minus } from 'lucide-react';
 import { cn, formatCurrency } from '../lib/utils';
@@ -18,8 +18,9 @@ interface ServicePickerProps {
 }
 
 export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, addedIds = new Set(), singleSelect = false }: ServicePickerProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const tp = t.servicePicker;
+  const id = useId();
   const [services, setServices] = useState<PredefinedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -125,7 +126,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/40 backdrop-blur-sm" role="presentation" tabIndex={-1} onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, y: 12, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -142,7 +143,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               </div>
               <h2 className="text-[16px] font-bold text-text-primary">{tp.title}</h2>
             </div>
-            <button onClick={onClose} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
+            <button onClick={onClose} aria-label={t.common.close} className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary transition-colors">
               <X size={16} />
             </button>
           </div>
@@ -154,11 +155,12 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={tp.search}
+              aria-label={tp.search}
               className="w-full bg-surface-secondary/60 border border-outline-subtle/60 rounded-lg pl-9 pr-3 py-2.5 text-[14px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-primary/40 transition-colors"
               autoFocus
             />
             {search && (
-              <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary">
+              <button onClick={() => setSearch('')} aria-label={language === 'fr' ? 'Effacer la recherche' : 'Clear search'} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary">
                 <X size={12} />
               </button>
             )}
@@ -192,7 +194,7 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
 
                 {/* Type — deux options fixes, une seule active à la fois */}
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-medium text-text-tertiary">{tp.typeLabel}</label>
+                  <span className="block text-[11px] font-medium text-text-tertiary">{tp.typeLabel}</span>
                   <div className="grid grid-cols-2 gap-1 p-1 rounded-lg bg-surface border border-outline-subtle">
                     {([
                       { key: 'product' as const, label: tp.typeProduct },
@@ -216,8 +218,9 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] font-medium text-text-tertiary">{tp.nameLabel} <span className="text-danger">*</span></label>
+                  <label htmlFor={`${id}-name`} className="text-[11px] font-medium text-text-tertiary">{tp.nameLabel} <span className="text-danger">*</span></label>
                   <input
+                    id={`${id}-name`}
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     placeholder={newType === 'product' ? tp.typeProduct : tp.typeService}
@@ -227,8 +230,9 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
 
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-medium text-text-tertiary">{tp.priceLabel} <span className="text-danger">*</span></label>
+                    <label htmlFor={`${id}-price`} className="text-[11px] font-medium text-text-tertiary">{tp.priceLabel} <span className="text-danger">*</span></label>
                     <input
+                      id={`${id}-price`}
                       value={newPrice}
                       onChange={(e) => setNewPrice(e.target.value)}
                       placeholder="0.00"
@@ -238,8 +242,9 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-medium text-text-tertiary">{tp.costLabel} <span className="normal-case text-text-tertiary/70">({tp.optionalTag})</span></label>
+                    <label htmlFor={`${id}-cost`} className="text-[11px] font-medium text-text-tertiary">{tp.costLabel} <span className="normal-case text-text-tertiary/70">({tp.optionalTag})</span></label>
                     <input
+                      id={`${id}-cost`}
                       value={newCost}
                       onChange={(e) => setNewCost(e.target.value)}
                       placeholder="0.00"
@@ -252,8 +257,9 @@ export default function ServicePicker({ isOpen, onClose, onSelect, onRemove, add
 
                 <div className="grid grid-cols-2 gap-2.5 items-end">
                   <div className="space-y-1.5">
-                    <label className="text-[11px] font-medium text-text-tertiary">{tp.categoryLabel} <span className="normal-case text-text-tertiary/70">({tp.optionalTag})</span></label>
+                    <label htmlFor={`${id}-category`} className="text-[11px] font-medium text-text-tertiary">{tp.categoryLabel} <span className="normal-case text-text-tertiary/70">({tp.optionalTag})</span></label>
                     <input
+                      id={`${id}-category`}
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
                       placeholder={tp.categoryPlaceholder}

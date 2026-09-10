@@ -43,7 +43,7 @@ export default function DevRoleSwitcher({ expanded }: { expanded: boolean }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-50" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-50" role="presentation" tabIndex={-1} onClick={() => setOpen(false)} />
           <div className="absolute top-full left-0 mt-1 w-52 bg-surface border border-outline rounded-xl shadow-xl z-50 py-1 overflow-hidden">
             <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
               Dev Role Switcher

@@ -465,6 +465,7 @@ function FilesSection({ fr, token, session, files, onChanged }: {
             type="file"
             multiple
             accept=".csv,.pdf"
+            aria-label={fr ? 'Choisir des fichiers CSV ou PDF' : 'Choose CSV or PDF files'}
             className="hidden"
             disabled={uploading}
             onChange={(e) => { if (e.target.files) void handleFiles(e.target.files); e.target.value = ''; }}
@@ -630,6 +631,7 @@ function MappingRow({ fr, col, mapping, canEdit, catalog, onCorrect }: {
       <div className={cell}>
         {canEdit && mapping ? (
           <select
+            aria-label={`${fr ? 'Champ cible pour' : 'Target field for'} ${col.header}`}
             className="w-full h-8 px-2 text-[12px] bg-white border border-[#e6e2d8] rounded-md"
             value={mapping.target_entity && mapping.target_field ? `${mapping.target_entity}:${mapping.target_field}` : ''}
             onChange={(e) => {
@@ -691,6 +693,7 @@ function QuestionsSection({ fr, token }: { fr: boolean; token: string }) {
                   value={answers[issue.id] ?? ''}
                   onChange={(e) => setAnswers((a) => ({ ...a, [issue.id]: e.target.value }))}
                   placeholder={fr ? 'Votre réponse…' : 'Your answer…'}
+                  aria-label={fr ? 'Votre réponse' : 'Your answer'}
                   className="flex-1 h-9 px-3 text-[13px] bg-white border border-[#e6e2d8] rounded-md"
                 />
                 <button
@@ -785,6 +788,7 @@ function PreviewSection({ fr, token, session, onDecided }: { fr: boolean; token:
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder={fr ? 'Expliquez ce qui doit être corrigé…' : 'Explain what needs fixing…'}
+              aria-label={fr ? 'Commentaire' : 'Comment'}
               className="w-full h-20 px-3 py-2 text-[13px] bg-white border border-[#e6e2d8] rounded-md"
             />
           )}
@@ -798,6 +802,7 @@ function PreviewSection({ fr, token, session, onDecided }: { fr: boolean; token:
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder={fr ? 'Recopiez la phrase ici' : 'Type the sentence here'}
+                aria-label={fr ? 'Phrase de confirmation' : 'Confirmation sentence'}
                 className="w-full h-9 px-3 text-[13px] bg-white border border-[#e6e2d8] rounded-md"
               />
             </div>
@@ -1010,6 +1015,7 @@ function MessagesSection({ fr, token }: { fr: boolean; token: string }) {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={fr ? 'Écrire un message…' : 'Write a message…'}
+          aria-label={fr ? 'Écrire un message' : 'Write a message'}
           className="flex-1 h-9 px-3 text-[13px] bg-white border border-[#e6e2d8] rounded-md"
           onKeyDown={(e) => { if (e.key === 'Enter') (e.currentTarget.nextElementSibling as HTMLButtonElement)?.click(); }}
         />
@@ -1026,6 +1032,7 @@ function MessagesSection({ fr, token }: { fr: boolean; token: string }) {
               toast.error(err?.message ?? 'Erreur');
             }
           }}
+          aria-label={fr ? 'Envoyer le message' : 'Send message'}
           className="h-9 w-9 flex items-center justify-center bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md"
         >
           <Send size={14} />

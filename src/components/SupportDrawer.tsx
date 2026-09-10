@@ -300,6 +300,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                       value={query}
                       onChange={(e) => { setQuery(e.target.value); setExpanded(null); }}
                       placeholder={ts.searchPlaceholder}
+                      aria-label={ts.searchPlaceholder}
                       className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-secondary border border-outline-subtle text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
                     />
                   </div>

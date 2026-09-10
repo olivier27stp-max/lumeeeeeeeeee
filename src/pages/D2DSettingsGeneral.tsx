@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/d2d/card';
 import { Button } from '../components/d2d/button';
 import { Input } from '../components/d2d/input';
@@ -10,6 +10,7 @@ import BackToSettings from '../components/ui/BackToSettings';
 export default function D2DSettingsGeneral() {
   const { language } = useTranslation();
   const isFr = language === 'fr';
+  const id = useId();
   const [companyName, setCompanyName] = useState('Clostra Solar');
   const [timezone, setTimezone] = useState('America/New_York');
   const [locale, setLocale] = useState('en');
@@ -45,19 +46,20 @@ export default function D2DSettingsGeneral() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-text-secondary">
+            <label htmlFor={`${id}-company-name`} className="block text-sm font-medium text-text-secondary">
               {isFr ? "Nom de l'entreprise" : 'Company Name'}
             </label>
             <Input
+              id={`${id}-company-name`}
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
             />
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-text-secondary">
+            <span className="block text-sm font-medium text-text-secondary">
               {isFr ? "Logo de l'entreprise" : 'Company Logo'}
-            </label>
+            </span>
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-dashed border-border-subtle bg-surface-elevated">
                 <Building2 className="h-6 w-6 text-text-muted" />
@@ -89,10 +91,11 @@ export default function D2DSettingsGeneral() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-text-secondary">
+            <label htmlFor={`${id}-timezone`} className="block text-sm font-medium text-text-secondary">
               {isFr ? 'Fuseau horaire' : 'Timezone'}
             </label>
             <select
+              id={`${id}-timezone`}
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               className="w-full rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm text-text-primary outline-none transition-colors hover:border-border focus:border-outline-strong focus:ring-2 focus:ring-outline/30"
@@ -107,10 +110,11 @@ export default function D2DSettingsGeneral() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-text-secondary">
+            <label htmlFor={`${id}-locale`} className="block text-sm font-medium text-text-secondary">
               {isFr ? 'Langue par défaut' : 'Default Locale'}
             </label>
             <select
+              id={`${id}-locale`}
               value={locale}
               onChange={(e) => setLocale(e.target.value)}
               className="w-full rounded-lg border border-border-subtle bg-white px-3 py-2 text-sm text-text-primary outline-none transition-colors hover:border-border focus:border-outline-strong focus:ring-2 focus:ring-outline/30"
@@ -135,11 +139,12 @@ export default function D2DSettingsGeneral() {
         </CardHeader>
         <CardContent>
           <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-text-secondary">
+            <label htmlFor={`${id}-primary-color`} className="block text-sm font-medium text-text-secondary">
               {isFr ? 'Couleur principale' : 'Primary Color'}
             </label>
             <div className="flex items-center gap-3">
               <input
+                id={`${id}-primary-color`}
                 type="color"
                 value={primaryColor}
                 onChange={(e) => setPrimaryColor(e.target.value)}
@@ -148,6 +153,7 @@ export default function D2DSettingsGeneral() {
               <Input
                 value={primaryColor}
                 onChange={(e) => setPrimaryColor(e.target.value)}
+                aria-label={isFr ? 'Code de la couleur principale' : 'Primary color code'}
                 className="max-w-[10rem]"
               />
             </div>

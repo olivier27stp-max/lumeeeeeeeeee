@@ -30,6 +30,8 @@ interface AddressAutocompleteProps {
   primaryTypes?: string[];
   /** Hide the missing-key / load-error hints (public-facing forms). */
   hideStatusHint?: boolean;
+  /** Id du champ (pour relier une étiquette via htmlFor); sans id, le placeholder sert de nom accessible. */
+  id?: string;
 }
 
 // ── Error boundary (function wrapper) ──
@@ -124,7 +126,7 @@ async function resolvePlace(
 
 // ── Main component ──
 function AddressAutocompleteInner({
-  value, onChange, onSelect, duplicateWarning, className, placeholder, restrictCountries, primaryTypes, hideStatusHint,
+  value, onChange, onSelect, duplicateWarning, className, placeholder, restrictCountries, primaryTypes, hideStatusHint, id,
 }: AddressAutocompleteProps) {
   const { t, language } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -237,6 +239,8 @@ function AddressAutocompleteInner({
           onKeyDown={onKeyDown}
           className={cn('glass-input w-full pl-9', className)}
           placeholder={placeholder || t.address.placeholder}
+          id={id}
+          aria-label={id ? undefined : (placeholder || t.address.placeholder)}
           autoComplete="off"
           name={fieldNameRef.current}
           role="combobox"
@@ -307,6 +311,8 @@ export default function AddressAutocomplete(props: AddressAutocompleteProps) {
         onChange={(e) => props.onChange(e.target.value)}
         className={cn('glass-input w-full', props.className)}
         placeholder={props.placeholder || t.address.placeholder}
+        id={props.id}
+        aria-label={props.id ? undefined : (props.placeholder || t.address.placeholder)}
       />
       {!props.hideStatusHint && (
         <p className="mt-1 flex items-center gap-1 text-[11px] text-danger">

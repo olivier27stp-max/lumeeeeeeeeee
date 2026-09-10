@@ -12,7 +12,8 @@ export function SignedImg(
 ) {
   const { url, ...rest } = props;
   const src = useStorageUrl(url);
-  return <img {...rest} src={src || undefined} />;
+  // alt="" par défaut (décoratif) ; un alt fourni par l'appelant l'emporte via {...rest}.
+  return <img alt="" {...rest} src={src || undefined} />;
 }
 
 export function SignedVideo(

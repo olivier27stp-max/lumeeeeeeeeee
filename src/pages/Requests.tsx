@@ -178,7 +178,10 @@ export default function Requests() {
             return (
               <div
                 key={s.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => navigate(`/requests/${s.id}`)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/requests/${s.id}`); } }}
                 className="group cursor-pointer overflow-hidden rounded-xl border border-border-subtle dark:border-[#d8d0c2] bg-surface transition-colors hover:border-primary/40 dark:hover:border-[#d8d0c2] hover:bg-surface-elevated"
               >
                 {/* Headbar — name · photo count · date */}

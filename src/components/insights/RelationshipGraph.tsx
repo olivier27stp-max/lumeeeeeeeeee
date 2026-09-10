@@ -185,8 +185,8 @@ export default function RelationshipGraph() {
           <p className="text-[11px] text-text-tertiary">{simNodes.length} {fr ? 'entités' : 'entities'} · {simEdges.length} {fr ? 'relations' : 'relationships'}</p>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => setZoom((z) => Math.min(3, z + 0.2))} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><ZoomIn size={16} /></button>
-          <button onClick={() => setZoom((z) => Math.max(0.2, z - 0.2))} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><ZoomOut size={16} /></button>
+          <button onClick={() => setZoom((z) => Math.min(3, z + 0.2))} aria-label={fr ? 'Zoom avant' : 'Zoom in'} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><ZoomIn size={16} /></button>
+          <button onClick={() => setZoom((z) => Math.max(0.2, z - 0.2))} aria-label={fr ? 'Zoom arrière' : 'Zoom out'} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><ZoomOut size={16} /></button>
           <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="px-2 py-1 rounded-lg hover:bg-surface-secondary text-[11px] text-text-tertiary font-medium">{fr ? 'Réinitialiser' : 'Reset'}</button>
           <button onClick={() => setFullscreen(!fullscreen)} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary">
             {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}

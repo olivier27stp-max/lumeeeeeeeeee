@@ -518,6 +518,7 @@ export default function Automations() {
           <input
             type="text"
             placeholder={t.automations.search}
+            aria-label={t.common.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="glass-input w-full pl-9 text-[13px]"
@@ -526,6 +527,7 @@ export default function Automations() {
         <select
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
+          aria-label={t.automations.category}
           className="glass-input text-[13px] py-2"
         >
           <option value="all">{t.automations.allCategories}</option>
@@ -538,6 +540,7 @@ export default function Automations() {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value as any)}
+          aria-label={t.automations.status}
           className="glass-input text-[13px] py-2"
         >
           <option value="all">{fr ? 'Toutes' : 'All'}</option>
@@ -638,7 +641,11 @@ export default function Automations() {
                                 !rule.is_active && 'opacity-50',
                                 isExpanded ? 'bg-surface-secondary/50' : 'hover:bg-surface-secondary/30',
                               )}
+                              role="button"
+                              tabIndex={0}
+                              aria-expanded={isExpanded}
                               onClick={() => setExpandedId(isExpanded ? null : rule.id)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(isExpanded ? null : rule.id); } }}
                             >
                               {/* Name */}
                               <td className="px-4 py-3">
@@ -714,10 +721,12 @@ export default function Automations() {
                               </td>
 
                               {/* Toggle */}
-                              <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <td className="px-4 py-3 text-right" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
                                 <button
                                   onClick={() => handleToggle(rule)}
                                   disabled={togglingId === rule.id}
+                                  aria-label={rule.is_active ? (fr ? 'Désactiver' : 'Deactivate') : (fr ? 'Activer' : 'Activate')}
+                                  aria-pressed={rule.is_active}
                                   className="p-1 rounded-md hover:bg-surface-tertiary transition-colors inline-flex"
                                 >
                                   {togglingId === rule.id ? (

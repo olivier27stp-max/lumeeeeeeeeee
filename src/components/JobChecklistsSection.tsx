@@ -2,7 +2,7 @@
    Job Checklists Section — embedded in JobDetails
    Technicians fill out attached checklists on-site.
    ═══════════════════════════════════════════════════════════════ */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ClipboardList, Plus, Trash2, Check, X, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -159,6 +159,7 @@ function PhotoResponse({
           <SignedImg url={value} alt="" className="max-h-40 rounded-lg border border-outline" />
           {!disabled && (
             <button type="button" onClick={() => onChange(null)}
+              aria-label={language === 'fr' ? 'Retirer la photo' : 'Remove photo'}
               className="absolute -top-2 -right-2 bg-surface border border-outline rounded-full p-1">
               <X size={12} />
             </button>
@@ -174,7 +175,7 @@ function PhotoResponse({
           <Camera size={13} /> {uploading ? t.checklists.uploading : t.checklists.uploadPhoto}
         </button>
       )}
-      <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={pickFile} />
+      <input ref={inputRef} type="file" accept="image/*" capture="environment" className="hidden" aria-label={t.checklists.uploadPhoto} onChange={pickFile} />
     </div>
   );
 }
@@ -193,6 +194,7 @@ function ChecklistInstance({
 }) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const [responses, setResponses] = useState<Record<string, any>>(instance.responses || {});
   const [saving, setSaving] = useState(false);
   const completed = !!instance.completed_at;
@@ -275,7 +277,7 @@ function ChecklistInstance({
               {t.checklists.reopen}
             </button>
           )}
-          <button onClick={remove} className="glass-button !text-[12px] !text-danger hover:bg-danger-light !p-1.5">
+          <button onClick={remove} aria-label={fr ? 'Supprimer la liste' : 'Delete checklist'} className="glass-button !text-[12px] !text-danger hover:bg-danger-light !p-1.5">
             <Trash2 size={12} />
           </button>
         </div>
@@ -285,21 +287,21 @@ function ChecklistInstance({
           const value = responses[item.id];
           return (
             <div key={item.id} className="space-y-1">
-              <label className="text-[12.5px] font-medium text-text-secondary block">
+              <label htmlFor={`${id}-${item.id}`} className="text-[12.5px] font-medium text-text-secondary block">
                 {item.label}
                 {item.required && <span className="text-danger ml-1">*</span>}
               </label>
               {item.type === 'checkbox' && (
-                <input type="checkbox" checked={!!value} disabled={completed}
+                <input id={`${id}-${item.id}`} type="checkbox" checked={!!value} disabled={completed}
                   onChange={(e) => setItemValue(item.id, e.target.checked)} />
               )}
               {item.type === 'text' && (
-                <input type="text" value={value ?? ''} disabled={completed}
+                <input id={`${id}-${item.id}`} type="text" value={value ?? ''} disabled={completed}
                   onChange={(e) => setItemValue(item.id, e.target.value)}
                   className="glass-input w-full" />
               )}
               {item.type === 'number' && (
-                <input type="number" value={value ?? ''} disabled={completed}
+                <input id={`${id}-${item.id}`} type="number" value={value ?? ''} disabled={completed}
                   onChange={(e) => setItemValue(item.id, e.target.value === '' ? null : Number(e.target.value))}
                   className="glass-input w-full max-w-xs" />
               )}

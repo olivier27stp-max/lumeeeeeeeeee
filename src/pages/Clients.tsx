@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, X } from 'lucide-react';
 import StatusBadge from '../components/ui/status-badge';
@@ -595,6 +595,7 @@ export default function Clients() {
         />
 
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+          aria-label={fr ? 'Rechercher clients' : 'Search clients'}
           placeholder={fr ? 'Rechercher clients...' : 'Search clients...'}
           className="h-9 w-[200px] px-3 text-[14px] bg-surface-card border border-[var(--color-outline)] rounded-md text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] outline-none focus:ring-1 focus:ring-[var(--color-text-tertiary)] focus:border-[var(--color-text-tertiary)] transition-all" />
 
@@ -632,9 +633,10 @@ export default function Clients() {
             const rowCls = `border-b border-[var(--color-surface-tertiary)] transition-colors duration-150 cursor-pointer ${isHovered ? 'crm-row-hover' : ''}`;
             const click = () => navigate(`/clients/${item.id}`);
             const hover = () => setHoveredId(item.id);
+            const keyNav = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); click(); } };
             return (
               <React.Fragment key={item.id}>
-                <div className={`py-3 px-4 flex items-center min-w-0 ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                <div className={`py-3 px-4 flex items-center min-w-0 ${rowCls}`} onClick={click} onMouseEnter={hover} role="button" tabIndex={0} onKeyDown={keyNav}>
                   <div className="flex items-center gap-3 min-w-0">
                     <UnifiedAvatar id={item.id} name={clientDisplayName(item)} />
                     <div className="min-w-0">
@@ -650,7 +652,7 @@ export default function Clients() {
                     </div>
                   </div>
                 </div>
-                <div className={`py-3 px-4 flex flex-col justify-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                <div className={`py-3 px-4 flex flex-col justify-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
                   {(() => {
                     const line1 = [item.street_number, item.street_name].filter(Boolean).join(' ').trim() || item.address || '';
                     const line2 = [item.city, item.province, item.postal_code].filter(Boolean).join(', ').trim();
@@ -663,7 +665,7 @@ export default function Clients() {
                     );
                   })()}
                 </div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
                   {item.tags && item.tags.length > 0 ? (
                     <div className="flex items-center gap-1 overflow-hidden">
                       {item.tags.slice(0, 2).map((tag: string) => (
@@ -673,8 +675,8 @@ export default function Clients() {
                     </div>
                   ) : <span className="text-[14px] text-[var(--color-text-tertiary)]">—</span>}
                 </div>
-                <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} onMouseEnter={hover}><Badge status={item.status} /></div>
-                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
+                <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><Badge status={item.status} /></div>
+                <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
               </React.Fragment>
             );
           })}
@@ -730,7 +732,7 @@ export default function Clients() {
                     </p>
                   </div>
                 </div>
-                <button onClick={() => navigate('/clients')} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors">
+                <button onClick={() => navigate('/clients')} aria-label={t.common.close} className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors">
                   <X size={16} />
                 </button>
               </div>
@@ -847,23 +849,24 @@ function ClientForm({
 }) {
   // Addresses are managed as the client's Properties (see ClientDetails),
   // not on the client record itself.
+  const id = useId();
   const patch = <K extends keyof ClientFormState>(key: K, value: ClientFormState[K]) => setForm((prev) => ({ ...prev, [key]: value }));
   return (
     <div className="space-y-4">
       {/* Essential fields — always shown */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.firstName}</label>
-          <input value={form.first_name} onChange={(e) => patch('first_name', e.target.value)} className="glass-input w-full mt-1.5" placeholder="John" />
+          <label htmlFor={`${id}-first_name`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.firstName}</label>
+          <input id={`${id}-first_name`} value={form.first_name} onChange={(e) => patch('first_name', e.target.value)} className="glass-input w-full mt-1.5" placeholder="John" />
         </div>
         <div>
-          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.lastName}</label>
-          <input value={form.last_name} onChange={(e) => patch('last_name', e.target.value)} className="glass-input w-full mt-1.5" placeholder="Doe" />
+          <label htmlFor={`${id}-last_name`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.lastName}</label>
+          <input id={`${id}-last_name`} value={form.last_name} onChange={(e) => patch('last_name', e.target.value)} className="glass-input w-full mt-1.5" placeholder="Doe" />
         </div>
       </div>
       <div>
-        <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.company}</label>
-        <input value={form.company} onChange={(e) => patch('company', e.target.value)} className="glass-input w-full mt-1.5" placeholder="Acme Inc." />
+        <label htmlFor={`${id}-company`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.company}</label>
+        <input id={`${id}-company`} value={form.company} onChange={(e) => patch('company', e.target.value)} className="glass-input w-full mt-1.5" placeholder="Acme Inc." />
         <label className={`mt-2 flex items-center gap-2 text-[13px] text-text-secondary select-none ${form.company.trim() ? 'cursor-pointer' : 'opacity-50 cursor-not-allowed'}`}>
           <input
             type="checkbox"
@@ -877,20 +880,20 @@ function ClientForm({
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.email}</label>
-          <input type="email" value={form.email} onChange={(e) => patch('email', e.target.value)} className="glass-input w-full mt-1.5" placeholder="john@example.com" />
+          <label htmlFor={`${id}-email`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.email}</label>
+          <input id={`${id}-email`} type="email" value={form.email} onChange={(e) => patch('email', e.target.value)} className="glass-input w-full mt-1.5" placeholder="john@example.com" />
         </div>
         <div>
-          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.phone}</label>
-          <input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => patch('phone', e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
+          <label htmlFor={`${id}-phone`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.phone}</label>
+          <input id={`${id}-phone`} type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => patch('phone', e.target.value)} className="glass-input w-full mt-1.5" placeholder="(555) 123-4567" />
         </div>
       </div>
 
       {/* Status — only show on edit, defaults to "active" on create */}
       {isEdit && (
         <div>
-          <label className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.status}</label>
-          <select value={form.status} onChange={(e) => patch('status', e.target.value)} className="glass-input w-full mt-1.5">
+          <label htmlFor={`${id}-status`} className="text-[10px] font-bold uppercase tracking-widest text-text-muted">{t.common.status}</label>
+          <select id={`${id}-status`} value={form.status} onChange={(e) => patch('status', e.target.value)} className="glass-input w-full mt-1.5">
             <option value="active">{t.clients.statusActive}</option>
             <option value="lead">{t.clients.statusLead}</option>
             <option value="inactive">{t.clients.statusInactive}</option>

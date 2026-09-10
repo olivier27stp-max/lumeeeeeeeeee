@@ -149,6 +149,7 @@ function AgendaView({ events, overlaps, tcMap, teams, selectedTeamIds, onEventCl
               <div className="h-px flex-1 bg-border" />
               {today && <span className="rounded-md bg-primary px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">{t.schedule.today}</span>}
               <button onClick={() => { const sl = new Date(dk + 'T09:00:00'); onSlotClick(sl, addHours(sl, 2)); }}
+                aria-label={isFr ? `Planifier ce jour — ${format(d, 'd MMMM', _LOC)}` : `Schedule on this day — ${format(d, 'd MMMM', _LOC)}`}
                 className="rounded-md p-1 text-text-tertiary hover:bg-surface-tertiary hover:text-text-secondary opacity-0 transition-opacity [div:hover>&]:opacity-100">
                 <Plus size={14} />
               </button>
@@ -245,8 +246,8 @@ function MiniCal({ date, onSelect }: { date: Date; onSelect: (d: Date) => void }
       <div className="mb-1.5 flex items-center justify-between px-1">
         <span className="text-[13px] font-semibold text-text-primary">{format(anchor, 'MMMM yyyy', _LOC)}</span>
         <div className="flex gap-0.5">
-          <button onClick={() => setAnchor(addMonths(anchor, -1))} className="rounded p-0.5 hover:bg-surface-tertiary text-text-secondary"><ChevronLeft size={14} /></button>
-          <button onClick={() => setAnchor(addMonths(anchor, 1))} className="rounded p-0.5 hover:bg-surface-tertiary text-text-secondary"><ChevronRight size={14} /></button>
+          <button onClick={() => setAnchor(addMonths(anchor, -1))} aria-label={_isFr() ? 'Mois précédent' : 'Previous month'} className="rounded p-0.5 hover:bg-surface-tertiary text-text-secondary"><ChevronLeft size={14} /></button>
+          <button onClick={() => setAnchor(addMonths(anchor, 1))} aria-label={_isFr() ? 'Mois suivant' : 'Next month'} className="rounded p-0.5 hover:bg-surface-tertiary text-text-secondary"><ChevronRight size={14} /></button>
         </div>
       </div>
       <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
@@ -579,8 +580,8 @@ function ScheduleContent() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* TOOLBAR */}
       <header className="relative z-50 flex items-center gap-2 border-b border-border bg-surface px-4 py-2.5 lg:px-6">
-        <button onClick={goPrev} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronLeft size={18} /></button>
-        <button onClick={goNext} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronRight size={18} /></button>
+        <button onClick={goPrev} aria-label={language === 'fr' ? 'Période précédente' : 'Previous period'} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronLeft size={18} /></button>
+        <button onClick={goNext} aria-label={language === 'fr' ? 'Période suivante' : 'Next period'} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-secondary transition-colors"><ChevronRight size={18} /></button>
         {(() => {
           // « Aujourd'hui » — visible dès que la période affichée (jour,
           // semaine ou mois) ne contient pas la date du jour.
@@ -601,7 +602,7 @@ function ScheduleContent() {
             <h1 className="text-[17px] font-bold text-text-primary">{label}</h1>
             <ChevronDown size={14} className="text-text-tertiary" />
           </button>
-          {calPop && (<><div className="fixed inset-0 z-30" onClick={() => setCalPop(false)} /><div className="absolute left-0 top-full z-40 mt-1 rounded-xl border border-border bg-surface p-3 shadow-xl"><MiniCal date={selectedDate} onSelect={(d) => { setDate(d); setCalPop(false); }} /></div></>)}
+          {calPop && (<><div role="presentation" tabIndex={-1} className="fixed inset-0 z-30" onClick={() => setCalPop(false)} /><div className="absolute left-0 top-full z-40 mt-1 rounded-xl border border-border bg-surface p-3 shadow-xl"><MiniCal date={selectedDate} onSelect={(d) => { setDate(d); setCalPop(false); }} /></div></>)}
         </div>
         <div className="flex-1" />
 
@@ -612,7 +613,7 @@ function ScheduleContent() {
             {selectedTeamIds.length > 0 && selectedTeamIds.length < teams.length && <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-bold text-primary">{selectedTeamIds.length}</span>}
           </button>
           {teamPop && (<>
-            <div className="fixed inset-0 z-30" onClick={() => setTeamPop(false)} />
+            <div role="presentation" tabIndex={-1} className="fixed inset-0 z-30" onClick={() => setTeamPop(false)} />
             <div className="absolute right-0 top-full z-40 mt-1 w-72 rounded-xl border border-border bg-surface p-2 shadow-xl">
               {/* Header: All / Clear actions */}
               <div className="mb-1.5 flex items-center justify-between px-2">
@@ -680,7 +681,7 @@ function ScheduleContent() {
           <button onClick={() => setViewDrop(!viewDrop)} className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-[5px] text-[13px] font-medium text-text-primary hover:bg-surface-secondary transition-colors">
             {viewOpts.find((v) => v.id === view)?.icon}{viewOpts.find((v) => v.id === view)?.label}<ChevronDown size={13} className="text-text-tertiary" />
           </button>
-          {viewDrop && (<><div className="fixed inset-0 z-30" onClick={() => setViewDrop(false)} /><div className="absolute right-0 top-full z-40 mt-1 w-44 rounded-xl border border-border bg-surface py-1 shadow-xl">{viewOpts.map((v) => (<button key={v.id} onClick={() => { setView(v.id); setViewDrop(false); }} className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-[13px] transition-colors', view === v.id ? 'bg-primary/5 font-semibold text-primary' : 'text-text-primary hover:bg-surface-secondary')}>{v.icon}{v.label}</button>))}</div></>)}
+          {viewDrop && (<><div role="presentation" tabIndex={-1} className="fixed inset-0 z-30" onClick={() => setViewDrop(false)} /><div className="absolute right-0 top-full z-40 mt-1 w-44 rounded-xl border border-border bg-surface py-1 shadow-xl">{viewOpts.map((v) => (<button key={v.id} onClick={() => { setView(v.id); setViewDrop(false); }} className={cn('flex w-full items-center gap-2.5 px-3 py-2 text-[13px] transition-colors', view === v.id ? 'bg-primary/5 font-semibold text-primary' : 'text-text-primary hover:bg-surface-secondary')}>{v.icon}{v.label}</button>))}</div></>)}
         </div>
 
         {/* Drawer toggle */}
@@ -765,7 +766,7 @@ function ScheduleContent() {
           </button>
           {createMenuOpen && (
             <>
-              <div className="fixed inset-0 z-30" onClick={() => setCreateMenuOpen(false)} />
+              <div role="presentation" tabIndex={-1} className="fixed inset-0 z-30" onClick={() => setCreateMenuOpen(false)} />
               <div className="absolute right-0 top-full z-40 mt-1 w-52 rounded-xl border border-border bg-surface py-1 shadow-xl">
                 <button
                   onClick={() => { setCreateMenuOpen(false); openCreate(selectedDate); }}
@@ -892,7 +893,7 @@ function ScheduleContent() {
       {teamPickerDrop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
           <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-[15px] font-bold text-text-primary">{t.schedule.assignToTeamTitle}</h2><p className="mt-0.5 text-xs text-text-secondary">{t.schedule.assignToTeamDesc}</p></div><button onClick={() => { setTeamPickerDrop(null); }} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><XIcon size={16} /></button></div>
+            <div className="mb-4 flex items-center justify-between"><div><h2 className="text-[15px] font-bold text-text-primary">{t.schedule.assignToTeamTitle}</h2><p className="mt-0.5 text-xs text-text-secondary">{t.schedule.assignToTeamDesc}</p></div><button onClick={() => { setTeamPickerDrop(null); }} aria-label={language === 'fr' ? 'Fermer' : 'Close'} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><XIcon size={16} /></button></div>
             <div className="space-y-1.5">
               {teams.map((tm) => { const c = isHexColor(tm.color_hex) ? tm.color_hex : FALLBACK_TEAM_COLOR; const slots = teamSlots.get(tm.id) || []; return (
                 <button key={tm.id} onClick={() => pickTeam(tm.id)} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-surface-secondary transition-colors">
@@ -967,7 +968,7 @@ function AssignModal({ job, teams, events, tcMap, onAssign, onClose, loading, t 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between"><h2 className="text-[15px] font-bold text-text-primary">{t.schedule.assignToTeamTitle}</h2><button onClick={onClose} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><XIcon size={16} /></button></div>
+        <div className="mb-3 flex items-center justify-between"><h2 className="text-[15px] font-bold text-text-primary">{t.schedule.assignToTeamTitle}</h2><button onClick={onClose} aria-label={language === 'fr' ? 'Fermer' : 'Close'} className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary"><XIcon size={16} /></button></div>
         <div className="mb-4 rounded-xl bg-surface-secondary p-3"><p className="text-[13px] font-semibold text-text-primary">{title}</p>{client && <p className="mt-0.5 text-[11px] text-text-secondary">{client}</p>}{addr && <p className="mt-0.5 flex items-center gap-1 text-[11px] text-text-tertiary"><MapPin size={9} />{addr}</p>}</div>
         <div className="space-y-1.5">{teams.map((tm) => { const c = tcMap.get(tm.id) || FALLBACK_TEAM_COLOR; const w = wl.get(tm.id) || 0; return (
           <button key={tm.id} onClick={() => onAssign(tm.id)} disabled={loading} className="flex w-full items-center gap-3 rounded-xl border border-border p-3 text-left hover:bg-surface-secondary transition-colors disabled:opacity-50">

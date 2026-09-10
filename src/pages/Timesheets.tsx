@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import React, { useId, useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Timer, ChevronLeft, ChevronRight, Clock, Coffee, Download,
   Calendar, User, Loader2, Check, Pencil, StickyNote, Power, AlertTriangle,
@@ -252,6 +252,7 @@ function ModalShell({ open, onClose, width, children }: { open: boolean; onClose
 export default function Timesheets() {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const id = useId();
   const months = fr ? MONTH_FR : MONTH_EN;
   const days = fr ? DAY_FR : DAY_EN;
   const qc = useQueryClient();
@@ -691,14 +692,14 @@ export default function Timesheets() {
           <div className="flex items-center gap-2.5">
             <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
               <Users size={14} className="text-text-tertiary" />
-              <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
+              <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} aria-label={fr ? 'Équipe' : 'Team'} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
                 <option value="all">{fr ? 'Toutes les équipes' : 'All teams'}</option>
                 {(teamsQuery.data ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
             <div className="inline-flex items-center gap-1.5 rounded-md border border-outline bg-surface px-3 py-[7px]">
               <User size={14} className="text-text-tertiary" />
-              <select value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
+              <select value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)} aria-label={fr ? 'Employé' : 'Employee'} className="bg-transparent text-[13px] font-medium text-text-primary focus:outline-none cursor-pointer">
                 <option value="all">{fr ? 'Tous les employés' : 'All employees'}</option>
                 {employeesInTeam.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
               </select>
@@ -710,9 +711,9 @@ export default function Timesheets() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => nav(-1)} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
+            <button onClick={() => nav(-1)} aria-label={fr ? 'Période précédente' : 'Previous period'} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronLeft size={16} /></button>
             <span className="text-[14px] font-semibold text-text-primary min-w-[220px] text-center tabular-nums">{dateLabel}</span>
-            <button onClick={() => nav(1)} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
+            <button onClick={() => nav(1)} aria-label={fr ? 'Période suivante' : 'Next period'} className="h-9 w-9 flex items-center justify-center bg-surface-card border border-outline rounded-md hover:bg-surface-secondary transition-colors"><ChevronRight size={16} /></button>
             <button onClick={() => setCurrentDate(new Date())} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] text-text-primary font-medium hover:bg-surface-secondary transition-colors">{fr ? "Aujourd'hui" : 'Today'}</button>
           </div>
         </div>
@@ -818,7 +819,7 @@ export default function Timesheets() {
                   <div className="p-5 border-b border-outline">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3"><UnifiedAvatar id={selectedRep.user_id} name={selectedRep.user_name || (fr ? 'Inconnu' : 'Unknown')} size={36} /><div><h3 className="text-[14px] font-bold text-text-primary">{selectedRep.user_name || (fr ? 'Inconnu' : 'Unknown')}</h3><p className="text-[11px] text-text-tertiary">{selectedRep.team_name || ''}</p></div></div>
-                      <button onClick={() => setSelectedRep(null)} className="p-1.5 rounded-md hover:bg-surface-secondary text-text-tertiary"><X size={14} /></button>
+                      <button onClick={() => setSelectedRep(null)} aria-label={t.common.close} className="p-1.5 rounded-md hover:bg-surface-secondary text-text-tertiary"><X size={14} /></button>
                     </div>
                   </div>
                   <div className="p-5 space-y-4 flex-1">
@@ -864,8 +865,8 @@ export default function Timesheets() {
             <div className="p-6">
               <h3 className="text-[16px] font-bold text-text-primary mb-5">{fr ? 'Modifier les heures' : 'Edit hours'}</h3>
               <div className="space-y-4">
-                <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Arrivée' : 'Clock-in'}</label><input type="time" value={editPunchIn} onChange={e => setEditPunchIn(e.target.value)} className="glass-input w-full mt-1.5" /></div>
-                <div><label className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Départ' : 'Clock-out'}</label><input type="time" value={editPunchOut} onChange={e => setEditPunchOut(e.target.value)} className="glass-input w-full mt-1.5" /></div>
+                <div><label htmlFor={`${id}-punch-in`} className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Arrivée' : 'Clock-in'}</label><input id={`${id}-punch-in`} type="time" value={editPunchIn} onChange={e => setEditPunchIn(e.target.value)} className="glass-input w-full mt-1.5" /></div>
+                <div><label htmlFor={`${id}-punch-out`} className="text-[12px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Départ' : 'Clock-out'}</label><input id={`${id}-punch-out`} type="time" value={editPunchOut} onChange={e => setEditPunchOut(e.target.value)} className="glass-input w-full mt-1.5" /></div>
               </div>
               <div className="flex justify-end gap-2 mt-6">
                 <button onClick={() => setEditingId(null)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
@@ -882,7 +883,7 @@ export default function Timesheets() {
           <ModalShell open={!!noteId} onClose={() => setNoteId(null)}>
             <div className="p-6">
               <h3 className="text-[16px] font-bold text-text-primary mb-4">Note</h3>
-              <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={4} placeholder={fr ? 'Ajouter une note...' : 'Add a note...'} className="glass-input w-full resize-none" />
+              <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={4} placeholder={fr ? 'Ajouter une note...' : 'Add a note...'} aria-label="Note" className="glass-input w-full resize-none" />
               <div className="flex justify-end gap-2 mt-4">
                 <button onClick={() => setNoteId(null)} className="h-9 px-4 bg-surface-card border border-outline rounded-md text-[13px] font-medium text-text-primary hover:bg-surface-secondary">{fr ? 'Annuler' : 'Cancel'}</button>
                 <button onClick={saveNote} className="h-9 px-4 bg-text-primary text-white rounded-md text-[13px] font-medium hover:opacity-90">{fr ? 'Sauvegarder' : 'Save'}</button>

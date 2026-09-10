@@ -296,6 +296,7 @@ export default function InvoiceDetails() {
               <button
                 type="button"
                 onClick={() => setActionsOpen(!actionsOpen)}
+                aria-label={t.common.moreOptions}
                 className="glass-button !p-2"
               >
                 <MoreHorizontal size={14} />
@@ -303,7 +304,7 @@ export default function InvoiceDetails() {
               <AnimatePresence>
                 {actionsOpen && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setActionsOpen(false)} />
+                    <div className="fixed inset-0 z-10" role="presentation" tabIndex={-1} onClick={() => setActionsOpen(false)} />
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -489,6 +490,7 @@ export default function InvoiceDetails() {
                       setRecurringLoading(false);
                     }
                   }}
+                  aria-label={language === 'fr' ? 'Fréquence de récurrence' : 'Recurrence interval'}
                   className="glass-input !py-1 text-xs"
                 >
                   <option value="weekly">{t.invoiceDetails.weekly}</option>

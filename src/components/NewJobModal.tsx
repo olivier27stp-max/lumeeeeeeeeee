@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertTriangle, Calendar, ChevronDown, Clock3, Eye, EyeOff, MapPin, MoreVertical, Package, Plus, Trash2, X } from 'lucide-react';
@@ -334,6 +334,7 @@ export default function NewJobModal({
   isDeleting = false,
 }: NewJobModalProps) {
   const { t, language } = useTranslation();
+  const id = useId();
   const location = useLocation();
   const navigate = useNavigate();
   const isEditMode = Boolean(initialValues?.id);
@@ -2211,7 +2212,7 @@ export default function NewJobModal({
           </button>
           {lineMenuId === item.id && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setLineMenuId(null)} />
+              <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setLineMenuId(null)} />
               <div className="absolute right-0 top-full mt-1 z-50 w-60 rounded-lg border border-outline bg-surface shadow-lg py-1">
                 <button
                   type="button"
@@ -2251,6 +2252,7 @@ export default function NewJobModal({
         value={item.description || ''}
         onChange={(event) => handlers.update({ description: event.target.value })}
         placeholder="Description"
+        aria-label="Description"
         rows={3}
         className={cn('glass-input w-full !py-1.5 !px-2.5 min-h-[72px] text-xs resize-none', !item.included && 'line-through')}
       />
@@ -2274,7 +2276,7 @@ export default function NewJobModal({
               <h2 className="text-[30px] font-extrabold tracking-tight text-text-primary leading-tight">
                 {isEditMode ? t.modals.editJobHeading : t.modals.newJobHeading}
               </h2>
-              <button onClick={() => handleClose()} className="p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors">
+              <button onClick={() => handleClose()} aria-label={t.common.close} className="p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors">
                 <X size={18} />
               </button>
             </div>
@@ -2297,8 +2299,9 @@ export default function NewJobModal({
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
+                    <label htmlFor={`${id}-job-number`} className="text-xs font-medium text-text-tertiary">{t.jobs.jobNumber}</label>
                     <input
+                      id={`${id}-job-number`}
                       value={jobNumber}
                       onChange={(event) => { setJobNumber(event.target.value); setJobNumberTouched(true); }}
                       className="glass-input w-full"
@@ -2306,8 +2309,9 @@ export default function NewJobModal({
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">{t.modals.salesperson}</label>
+                    <label htmlFor={`${id}-salesperson`} className="text-xs font-medium text-text-tertiary">{t.modals.salesperson}</label>
                     <select
+                      id={`${id}-salesperson`}
                       value={salespersonId}
                       onChange={(event) => setSalespersonId(event.target.value)}
                       className="glass-input w-full"
@@ -2323,8 +2327,9 @@ export default function NewJobModal({
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Date de création' : 'Date of creation'}</label>
+                    <label htmlFor={`${id}-sale-date`} className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Date de création' : 'Date of creation'}</label>
                     <input
+                      id={`${id}-sale-date`}
                       type="date"
                       value={saleDate}
                       onChange={(event) => setSaleDate(event.target.value)}
@@ -2337,7 +2342,7 @@ export default function NewJobModal({
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Classement' : 'Leaderboard'}</label>
+                    <span className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Classement' : 'Leaderboard'}</span>
                     <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-outline px-3 py-2.5">
                       <input
                         type="checkbox"
@@ -2369,7 +2374,7 @@ export default function NewJobModal({
                 {isCreatingNewClient ? (
                   <div className="lg:col-span-4 space-y-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.createNewClient}</label>
+                      <span className="text-xs font-medium text-text-tertiary">{t.modals.createNewClient}</span>
                       <button
                         type="button"
                         onClick={() => { setIsCreatingNewClient(false); setNewClientFirst(''); setNewClientLast(''); setNewClientEmail(''); setNewClientPhone(''); setNewClientCompany(''); setAddressLine1(''); setAddressLine2(''); setAddressCity(''); setAddressProvince(''); setAddressPostalCode(''); setAddressPlaceId(null); setAddressSearch(''); }}
@@ -2380,28 +2385,28 @@ export default function NewJobModal({
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientFirstName} <span className="text-danger">*</span></label>
-                        <input value={newClientFirst} onChange={(e) => setNewClientFirst(e.target.value)} className="glass-input w-full" autoFocus />
+                        <label htmlFor={`${id}-new-client-first`} className="text-xs font-medium text-text-tertiary">{t.modals.newClientFirstName} <span className="text-danger">*</span></label>
+                        <input id={`${id}-new-client-first`} value={newClientFirst} onChange={(e) => setNewClientFirst(e.target.value)} className="glass-input w-full" autoFocus />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientLastName} <span className="text-danger">*</span></label>
-                        <input value={newClientLast} onChange={(e) => setNewClientLast(e.target.value)} className="glass-input w-full" />
+                        <label htmlFor={`${id}-new-client-last`} className="text-xs font-medium text-text-tertiary">{t.modals.newClientLastName} <span className="text-danger">*</span></label>
+                        <input id={`${id}-new-client-last`} value={newClientLast} onChange={(e) => setNewClientLast(e.target.value)} className="glass-input w-full" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientPhone}</label>
-                        <input type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} className="glass-input w-full" />
+                        <label htmlFor={`${id}-new-client-phone`} className="text-xs font-medium text-text-tertiary">{t.modals.newClientPhone}</label>
+                        <input id={`${id}-new-client-phone`} type="tel" value={newClientPhone} onChange={(e) => setNewClientPhone(e.target.value)} className="glass-input w-full" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-text-tertiary">{t.modals.newClientEmail}</label>
-                        <input type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} className="glass-input w-full" />
+                        <label htmlFor={`${id}-new-client-email`} className="text-xs font-medium text-text-tertiary">{t.modals.newClientEmail}</label>
+                        <input id={`${id}-new-client-email`} type="email" value={newClientEmail} onChange={(e) => setNewClientEmail(e.target.value)} className="glass-input w-full" />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Entreprise' : 'Company'}</label>
-                        <input value={newClientCompany} onChange={(e) => setNewClientCompany(e.target.value)} className="glass-input w-full" />
+                        <label htmlFor={`${id}-new-client-company`} className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Entreprise' : 'Company'}</label>
+                        <input id={`${id}-new-client-company`} value={newClientCompany} onChange={(e) => setNewClientCompany(e.target.value)} className="glass-input w-full" />
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Adresse' : 'Address'} <span className="text-danger">*</span></label>
+                      <span className="text-xs font-medium text-text-tertiary">{language === 'fr' ? 'Adresse' : 'Address'} <span className="text-danger">*</span></span>
                       <AddressAutocomplete
                         value={addressSearch}
                         onChange={setAddressSearch}
@@ -2429,6 +2434,7 @@ export default function NewJobModal({
                       onFocus={() => setClientDropdownOpen(true)}
                       className="glass-input w-full"
                       placeholder={t.modals.selectClient}
+                      aria-label={t.modals.selectClient}
                       autoComplete="off"
                     />
                     {clientDropdownOpen && (
@@ -2469,7 +2475,7 @@ export default function NewJobModal({
                     )}
                     </div>
                     {clientDropdownOpen && (
-                      <div className="fixed inset-0 z-40" onClick={() => setClientDropdownOpen(false)} />
+                      <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setClientDropdownOpen(false)} />
                     )}
                   </div>
                 )}
@@ -2502,6 +2508,7 @@ export default function NewJobModal({
                           })() : (
                           <input
                             type="text"
+                            aria-label={t.modals.property}
                             value={propertySearch || (propertyId ? properties.find((p) => p.id === propertyId)?.name || '' : '')}
                             onChange={(e) => {
                               setPropertySearch(e.target.value);
@@ -2566,7 +2573,7 @@ export default function NewJobModal({
                           )}
                         </div>
                         {propertyDropdownOpen && (
-                          <div className="fixed inset-0 z-40" onClick={() => setPropertyDropdownOpen(false)} />
+                          <div className="fixed inset-0 z-40" role="presentation" tabIndex={-1} onClick={() => setPropertyDropdownOpen(false)} />
                         )}
                       </div>
                     ) : (
@@ -2578,6 +2585,7 @@ export default function NewJobModal({
                         onChange={(e) => setNewPropertyName(e.target.value)}
                         className="glass-input w-full"
                         placeholder={t.modals.propertyNamePlaceholder}
+                        aria-label={t.modals.propertyNamePlaceholder}
                       />
                     )}
                     {/* New property needs an address; when creating a new client
@@ -2641,7 +2649,7 @@ export default function NewJobModal({
 
                     {/* Date de début — défaut aujourd'hui */}
                     <div className="space-y-1">
-                      <label className="text-xs font-medium text-text-tertiary">{t.modals.startDate}</label>
+                      <span className="text-xs font-medium text-text-tertiary">{t.modals.startDate}</span>
                       <DatePickerInput
                         value={ruleStartDate}
                         language={language === 'fr' ? 'fr' : 'en'}
@@ -2653,10 +2661,11 @@ export default function NewJobModal({
                     {!ruleAnytime && (
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
+                          <label htmlFor={`${id}-rule-start-time`} className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
                           <div className="relative">
                             <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                             <input
+                              id={`${id}-rule-start-time`}
                               type="time"
                               value={startTime}
                               onChange={(event) => setStartTime(event.target.value)}
@@ -2665,10 +2674,11 @@ export default function NewJobModal({
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                          <label htmlFor={`${id}-rule-end-time`} className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
                           <div className="relative">
                             <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                             <input
+                              id={`${id}-rule-end-time`}
                               type="time"
                               value={endTime}
                               onChange={(event) => setEndTime(event.target.value)}
@@ -2692,10 +2702,11 @@ export default function NewJobModal({
 
                     {/* Répétition — les libellés suivent la date de début */}
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-text-tertiary">
+                      <label htmlFor={`${id}-repeat-mode`} className="text-xs font-medium text-text-tertiary">
                         {language === 'fr' ? 'Se répète' : 'Repeats on'}
                       </label>
                       <select
+                        id={`${id}-repeat-mode`}
                         value={repeatMode}
                         onChange={(event) => { setDirty(true); setRepeatMode(event.target.value as typeof repeatMode); }}
                         className="glass-input w-full"
@@ -2711,11 +2722,12 @@ export default function NewJobModal({
                     {/* Fin de la récurrence */}
                     {repeatMode !== 'custom' && (
                       <div className="space-y-1">
-                        <label className="text-xs font-medium text-text-tertiary">
+                        <label htmlFor={`${id}-ends-after`} className="text-xs font-medium text-text-tertiary">
                           {language === 'fr' ? 'Se termine après' : 'Ends after'}
                         </label>
                         <div className="flex items-center gap-2">
                           <input
+                            id={`${id}-ends-after`}
                             type="number"
                             min={1}
                             value={endsAfterCount}
@@ -2726,6 +2738,7 @@ export default function NewJobModal({
                           <select
                             value={endsAfterUnit}
                             onChange={(event) => { setDirty(true); setEndsAfterUnit(event.target.value as typeof endsAfterUnit); }}
+                            aria-label={language === 'fr' ? 'Unité' : 'Unit'}
                             className="glass-input"
                           >
                             <option value="days">{language === 'fr' ? 'jours' : 'days'}</option>
@@ -2811,7 +2824,7 @@ export default function NewJobModal({
                             hours (Rule's hours by default, editable per visit). */}
                         {yearMonths.length > 0 && (
                           <div className="space-y-2">
-                            <label className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanDates}</label>
+                            <span className="text-xs font-medium text-text-tertiary">{t.modals.servicePlanDates}</span>
                             <div className="space-y-2">
                               {yearMonths.map((month) => {
                                 const visits = monthVisitsOf(year, month);
@@ -2949,12 +2962,13 @@ export default function NewJobModal({
                         >
                           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                             <div className="md:col-span-5 space-y-1">
-                              <label className="text-xs font-medium text-text-tertiary">
+                              <label htmlFor={`${id}-visit-${visit.key}-date`} className="text-xs font-medium text-text-tertiary">
                                 {(language === 'fr' ? 'Visite' : 'Visit')} {idx + 1} — {t.modals.startDate}
                               </label>
                               <div className="relative">
                                 <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                                 <input
+                                  id={`${id}-visit-${visit.key}-date`}
                                   type="date"
                                   value={visit.date}
                                   onChange={(event) => updateVisitDraft(visit.key, { date: event.target.value })}
@@ -2965,10 +2979,11 @@ export default function NewJobModal({
                             {!visit.anytime && (
                               <>
                                 <div className="md:col-span-3 space-y-1">
-                                  <label className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
+                                  <label htmlFor={`${id}-visit-${visit.key}-start`} className="text-xs font-medium text-text-tertiary">{t.modals.startTime}</label>
                                   <div className="relative">
                                     <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                                     <input
+                                      id={`${id}-visit-${visit.key}-start`}
                                       type="time"
                                       value={visit.startTime}
                                       onChange={(event) => updateVisitDraft(visit.key, { startTime: event.target.value })}
@@ -2977,10 +2992,11 @@ export default function NewJobModal({
                                   </div>
                                 </div>
                                 <div className="md:col-span-3 space-y-1">
-                                  <label className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
+                                  <label htmlFor={`${id}-visit-${visit.key}-end`} className="text-xs font-medium text-text-tertiary">{t.modals.endTime}</label>
                                   <div className="relative">
                                     <Clock3 size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
                                     <input
+                                      id={`${id}-visit-${visit.key}-end`}
                                       type="time"
                                       value={visit.endTime}
                                       onChange={(event) => updateVisitDraft(visit.key, { endTime: event.target.value })}
@@ -3038,7 +3054,7 @@ export default function NewJobModal({
                 {/* Les visites sont assignées à une ÉQUIPE seulement — les
                     personnes viennent de l'horaire du jour (onglet Horaire). */}
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</label>
+                  <span className="text-xs font-medium text-text-tertiary">{t.modals.assignTeam}</span>
                   <TeamSelectDropdown
                     teams={teams}
                     value={teamSelection}
@@ -3120,11 +3136,13 @@ export default function NewJobModal({
                   <div className="ml-7 space-y-3 border-l-2 border-outline pl-4">
                     <div className="flex items-center gap-3">
                       <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
+                        aria-label={t.modals.requireDeposit}
                         className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
                         <option value="percentage">{t.modals.percentageOption}</option>
                         <option value="fixed">{t.modals.fixedAmountOption}</option>
                       </select>
                       <input value={jobDepositValue} onChange={e => setJobDepositValue(e.target.value.replace(/[^\d.]/g, ''))}
+                        aria-label={jobDepositType === 'percentage' ? t.modals.percentageOption : t.modals.fixedAmountOption}
                         className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
                         placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
                       {jobDepositType === 'percentage' && (
@@ -3183,6 +3201,7 @@ export default function NewJobModal({
                     <select
                       value={selectedItemsVisit?.key ?? 'all'}
                       onChange={(event) => selectItemsScope(event.target.value)}
+                      aria-label={t.modals.servicePlanAppliesToLabel}
                       className="glass-input !w-auto capitalize"
                     >
                       <option value="all">{t.modals.servicePlanAllVisitsOption}</option>
@@ -3385,10 +3404,11 @@ export default function NewJobModal({
                     <div className="rounded-lg border border-outline-subtle/40 bg-surface-secondary/20 p-3 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">
+                          <label htmlFor={`${id}-installments-count`} className="text-xs font-medium text-text-tertiary">
                             {language === 'fr' ? 'Nombre de paiements' : 'Number of payments'}
                           </label>
                           <input
+                            id={`${id}-installments-count`}
                             type="number"
                             min={1}
                             value={installmentsCount}
@@ -3398,12 +3418,13 @@ export default function NewJobModal({
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-xs font-medium text-text-tertiary">
+                          <label htmlFor={`${id}-installment-amount`} className="text-xs font-medium text-text-tertiary">
                             {language === 'fr' ? 'Montant par paiement' : 'Amount per payment'}
                           </label>
                           <div className="relative">
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">$</span>
                             <input
+                              id={`${id}-installment-amount`}
                               inputMode="decimal"
                               value={installmentAmount}
                               onChange={(event) => { setDirty(true); setInstallmentAmount(event.target.value.replace(/[^\d.]/g, '')); }}
@@ -3506,11 +3527,13 @@ export default function NewJobModal({
                       <div className="ml-7 space-y-2">
                         <div className="flex items-center gap-3">
                           <select value={jobDepositType} onChange={e => setJobDepositType(e.target.value as any)}
+                            aria-label={t.modals.requireDeposit}
                             className="text-xs border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary">
                             <option value="percentage">{t.modals.percentageOption}</option>
                             <option value="fixed">{t.modals.fixedAmountOption}</option>
                           </select>
                           <input value={jobDepositValue} onChange={e => { setDirty(true); setJobDepositValue(e.target.value.replace(/[^\d.]/g, '')); }}
+                            aria-label={jobDepositType === 'percentage' ? t.modals.percentageOption : t.modals.fixedAmountOption}
                             className="w-24 text-right text-sm border border-outline rounded-lg px-3 py-2 bg-surface text-text-primary"
                             placeholder={jobDepositType === 'percentage' ? '25' : '100'} />
                           {jobDepositType === 'percentage' && (
@@ -3627,6 +3650,7 @@ export default function NewJobModal({
                         <textarea
                           value={agreementTerms}
                           onChange={(e) => setAgreementTerms(e.target.value)}
+                          aria-label={language === 'fr' ? 'Termes et conditions' : 'Terms and conditions'}
                           rows={7}
                           className="glass-input w-full !h-auto text-[12.5px] leading-relaxed resize-y"
                         />

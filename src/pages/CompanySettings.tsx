@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   Building,
   Check,
@@ -80,6 +80,7 @@ const EMPTY_COMPANY: CompanyDetails = {
 
 export default function CompanySettings() {
   const { t, language } = useTranslation();
+  const id = useId();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CompanyDetails>(EMPTY_COMPANY);
   const [loading, setLoading] = useState(true);
@@ -406,6 +407,7 @@ export default function CompanySettings() {
               value={form.brand_color}
               onChange={(e) => update('brand_color', e.target.value)}
               placeholder={DEFAULT_BRAND}
+              aria-label={language === 'fr' ? 'Code hexadécimal de la couleur' : 'Colour hex code'}
               spellCheck={false}
               className="glass-input w-32 font-mono text-[13px] uppercase"
             />
@@ -445,10 +447,10 @@ export default function CompanySettings() {
           </h3>
 
           <div>
-            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            <label htmlFor={`${id}-company-name`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {language === 'fr' ? 'Nom de l\'entreprise' : 'Company Name'}
             </label>
-            <input
+            <input id={`${id}-company-name`}
               type="text"
               value={form.company_name}
               onChange={(e) => update('company_name', e.target.value)}
@@ -459,10 +461,10 @@ export default function CompanySettings() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+              <label htmlFor={`${id}-phone`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
                 <Phone size={10} /> {t.companySettings.phoneNumber}
               </label>
-              <input
+              <input id={`${id}-phone`}
                 type="tel"
                 value={form.phone}
                 onChange={(e) => update('phone', e.target.value)}
@@ -471,10 +473,10 @@ export default function CompanySettings() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+              <label htmlFor={`${id}-website`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
                 <Globe size={10} /> {t.companySettings.websiteUrl}
               </label>
-              <input
+              <input id={`${id}-website`}
                 type="url"
                 value={form.website}
                 onChange={(e) => update('website', e.target.value)}
@@ -485,10 +487,10 @@ export default function CompanySettings() {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+            <label htmlFor={`${id}-email`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
               <Mail size={10} /> {t.companySettings.emailAddress}
             </label>
-            <input
+            <input id={`${id}-email`}
               type="email"
               value={form.email}
               onChange={(e) => update('email', e.target.value)}
@@ -505,10 +507,10 @@ export default function CompanySettings() {
           </h3>
 
           <div>
-            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            <label htmlFor={`${id}-street1`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {t.companySettings.street1}
             </label>
-            <AddressAutocomplete
+            <AddressAutocomplete id={`${id}-street1`}
               value={form.street1}
               onChange={(v) => update('street1', v)}
               onSelect={(addr: StructuredAddress) => {
@@ -528,10 +530,10 @@ export default function CompanySettings() {
           </div>
 
           <div>
-            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            <label htmlFor={`${id}-street2`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {t.companySettings.street2}
             </label>
-            <input
+            <input id={`${id}-street2`}
               type="text"
               value={form.street2}
               onChange={(e) => update('street2', e.target.value)}
@@ -542,10 +544,10 @@ export default function CompanySettings() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-city`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.city}
               </label>
-              <AddressAutocomplete
+              <AddressAutocomplete id={`${id}-city`}
                 value={form.city}
                 onChange={(v) => setForm((prev) => ({ ...prev, city: v, weather_lat: null, weather_lng: null }))}
                 onSelect={(addr: StructuredAddress) => {
@@ -571,10 +573,10 @@ export default function CompanySettings() {
               </p>
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-province`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.companySettings.provinceState}
               </label>
-              <input
+              <input id={`${id}-province`}
                 type="text"
                 value={form.province}
                 onChange={(e) => update('province', e.target.value)}
@@ -585,10 +587,10 @@ export default function CompanySettings() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-postal-code`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.postalCode}
               </label>
-              <input
+              <input id={`${id}-postal-code`}
                 type="text"
                 value={form.postal_code}
                 onChange={(e) => update('postal_code', e.target.value)}
@@ -596,10 +598,10 @@ export default function CompanySettings() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-country`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {t.billing.country}
               </label>
-              <input
+              <input id={`${id}-country`}
                 type="text"
                 value={form.country}
                 onChange={(e) => update('country', e.target.value)}
@@ -617,10 +619,10 @@ export default function CompanySettings() {
           </h3>
 
           <div>
-            <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            <label htmlFor={`${id}-revenue-goal`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
               {language === 'fr' ? 'Objectif de revenus ($)' : 'Revenue Goal ($)'}
             </label>
-            <input
+            <input id={`${id}-revenue-goal`}
               type="number"
               min={0}
               step={100}
@@ -665,10 +667,10 @@ export default function CompanySettings() {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+              <label htmlFor={`${id}-currency`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
                 {language === 'fr' ? 'Devise' : 'Currency'}
               </label>
-              <select
+              <select id={`${id}-currency`}
                 value={form.currency}
                 onChange={(e) => update('currency', e.target.value)}
                 className="glass-input w-full mt-1"

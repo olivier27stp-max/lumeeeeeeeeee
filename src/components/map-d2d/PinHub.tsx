@@ -313,8 +313,11 @@ export function PinHub({ pin, fr, onClose, onChangeStatus, onEdit, onOpenClient,
       role="dialog"
       aria-modal="true"
       aria-label={name}
+      tabIndex={-1}
     >
       <div
+        role="presentation"
+        tabIndex={-1}
         className="flex max-h-[calc(100%-0.75rem)] w-full flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white text-slate-800 shadow-xl sm:max-h-[calc(100%-2rem)] sm:w-[440px] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useId } from 'react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Check, X, Gift } from 'lucide-react';
@@ -9,6 +9,7 @@ import { trackReferral, validateReferralCode } from '../lib/referralsApi';
 
 export default function Register() {
   const { t, language } = useTranslation();
+  const id = useId();
   const navigate = useNavigate();
   const [params] = useSearchParams();
 
@@ -254,10 +255,11 @@ export default function Register() {
           <form onSubmit={handleSignUp} className="space-y-4">
             {/* Full Name */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.register.fullName}</label>
+              <label htmlFor={`${id}-full-name`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.register.fullName}</label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-full-name`}
                   type="text"
                   required
                   value={fullName}
@@ -270,10 +272,11 @@ export default function Register() {
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.emailLabel}</label>
+              <label htmlFor={`${id}-email`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.emailLabel}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-email`}
                   type="email"
                   required
                   value={email}
@@ -286,10 +289,11 @@ export default function Register() {
 
             {/* Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.passwordLabel}</label>
+              <label htmlFor={`${id}-password`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.auth.passwordLabel}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-password`}
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
@@ -331,10 +335,11 @@ export default function Register() {
 
             {/* Confirm Password */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.register.confirmPassword}</label>
+              <label htmlFor={`${id}-confirm-password`} className="text-xs font-medium text-gray-500 uppercase tracking-wider ml-1">{t.register.confirmPassword}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input
+                  id={`${id}-confirm-password`}
                   type={showConfirm ? 'text' : 'password'}
                   required
                   value={confirmPassword}

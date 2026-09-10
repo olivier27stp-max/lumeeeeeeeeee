@@ -6,7 +6,7 @@
    d'entité (retirés le 2026-09-06 — trop confus, jamais utilisés).
    ═══════════════════════════════════════════════════════════════ */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import Modal from '../ui/Modal';
 import { useTranslation } from '../../i18n';
 import type {
@@ -49,6 +49,7 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
   const { language } = useTranslation();
   const fr = language === 'fr';
   const isEdit = !!task;
+  const id = useId();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -157,8 +158,9 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
 
         {/* Titre */}
         <div>
-          <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Titre *' : 'Title *'}</label>
+          <label htmlFor={`${id}-title`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Titre *' : 'Title *'}</label>
           <input
+            id={`${id}-title`}
             value={title}
             onChange={e => setTitle(e.target.value)}
             placeholder={fr ? 'Ex. : Appeler Jean jeudi' : 'e.g. Call Jean on Thursday'}
@@ -170,8 +172,9 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
 
         {/* Description */}
         <div>
-          <label className="text-[12px] font-medium text-text-primary mb-1 block">Description</label>
+          <label htmlFor={`${id}-description`} className="text-[12px] font-medium text-text-primary mb-1 block">Description</label>
           <textarea
+            id={`${id}-description`}
             value={description}
             onChange={e => setDescription(e.target.value)}
             placeholder={fr ? 'Ajoute des détails...' : 'Add details...'}
@@ -183,16 +186,16 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
         {/* Priorité + Statut */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Priorité' : 'Priority'}</label>
-            <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="input-field w-full">
+            <label htmlFor={`${id}-priority`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Priorité' : 'Priority'}</label>
+            <select id={`${id}-priority`} value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className="input-field w-full">
               <option value="low">{fr ? 'Faible' : 'Low'}</option>
               <option value="medium">{fr ? 'Moyenne' : 'Medium'}</option>
               <option value="high">{fr ? 'Élevée' : 'High'}</option>
             </select>
           </div>
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Statut' : 'Status'}</label>
-            <select value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className="input-field w-full">
+            <label htmlFor={`${id}-status`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Statut' : 'Status'}</label>
+            <select id={`${id}-status`} value={status} onChange={e => setStatus(e.target.value as TaskStatus)} className="input-field w-full">
               <option value="open">{fr ? 'Ouverte' : 'Open'}</option>
               <option value="done">{fr ? 'Terminée' : 'Done'}</option>
             </select>
@@ -202,12 +205,13 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
         {/* Date d'échéance + Assigné à */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Date d’échéance' : 'Due date'}</label>
-            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field w-full" />
+            <label htmlFor={`${id}-due-date`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Date d’échéance' : 'Due date'}</label>
+            <input id={`${id}-due-date`} type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field w-full" />
           </div>
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Assigné à' : 'Assigned to'}</label>
+            <label htmlFor={`${id}-assign-mode`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Assigné à' : 'Assigned to'}</label>
             <select
+              id={`${id}-assign-mode`}
               value={assignMode}
               onChange={e => { const m = e.target.value as AssignMode; setAssignMode(m); if (m !== 'person') setAssigneeUserId(''); if (m !== 'team') setTeamId(''); }}
               className="input-field w-full"
@@ -222,8 +226,8 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
         {/* Sélecteur de personne / d'équipe selon le mode */}
         {assignMode === 'person' && (
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Membre' : 'Member'}</label>
-            <select value={assigneeUserId} onChange={e => setAssigneeUserId(e.target.value)} className="input-field w-full">
+            <label htmlFor={`${id}-assignee`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Membre' : 'Member'}</label>
+            <select id={`${id}-assignee`} value={assigneeUserId} onChange={e => setAssigneeUserId(e.target.value)} className="input-field w-full">
               <option value="">{fr ? 'Choisir un membre...' : 'Choose a member...'}</option>
               {members.map(m => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </select>
@@ -231,8 +235,8 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
         )}
         {assignMode === 'team' && (
           <div>
-            <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Équipe' : 'Team'}</label>
-            <select value={teamId} onChange={e => setTeamId(e.target.value)} className="input-field w-full">
+            <label htmlFor={`${id}-team`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Équipe' : 'Team'}</label>
+            <select id={`${id}-team`} value={teamId} onChange={e => setTeamId(e.target.value)} className="input-field w-full">
               <option value="">{fr ? 'Choisir une équipe...' : 'Choose a team...'}</option>
               {teams.map(tm => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
             </select>
@@ -258,16 +262,16 @@ export default function TaskModal({ open, onClose, task, onSubmit, defaults, mem
           {timed && (
             <div className="grid grid-cols-3 gap-3 mt-3">
               <div>
-                <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Date' : 'Date'}</label>
-                <input type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)} className="input-field w-full" />
+                <label htmlFor={`${id}-sched-date`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Date' : 'Date'}</label>
+                <input id={`${id}-sched-date`} type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)} className="input-field w-full" />
               </div>
               <div>
-                <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Heure' : 'Time'}</label>
-                <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)} className="input-field w-full" />
+                <label htmlFor={`${id}-sched-time`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Heure' : 'Time'}</label>
+                <input id={`${id}-sched-time`} type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)} className="input-field w-full" />
               </div>
               <div>
-                <label className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Durée (min)' : 'Duration (min)'}</label>
-                <input type="number" min={1} max={1440} step={15} value={durationMin} onChange={e => setDurationMin(e.target.value)} className="input-field w-full" />
+                <label htmlFor={`${id}-duration`} className="text-[12px] font-medium text-text-primary mb-1 block">{fr ? 'Durée (min)' : 'Duration (min)'}</label>
+                <input id={`${id}-duration`} type="number" min={1} max={1440} step={15} value={durationMin} onChange={e => setDurationMin(e.target.value)} className="input-field w-full" />
               </div>
             </div>
           )}

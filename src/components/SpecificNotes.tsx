@@ -451,6 +451,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
             <textarea
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
+              aria-label={fr ? 'Modifier la note' : 'Edit note'}
               className="glass-input w-full min-h-[60px] text-[13px] resize-none"
               autoFocus
             />
@@ -530,6 +531,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
               <textarea
                 value={formText}
                 onChange={(e) => setFormText(e.target.value)}
+                aria-label={fr ? 'Nouvelle note' : 'New note'}
                 placeholder={fr ? 'Écrivez une note...' : 'Write a note...'}
                 className="glass-input w-full min-h-[70px] text-[13px] resize-none"
                 autoFocus
@@ -547,6 +549,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
                       <span className="text-[10px] text-text-tertiary shrink-0">{formatFileSize(f.size)}</span>
                       <button
                         onClick={() => handleRemoveFormFile(f.path)}
+                        aria-label={fr ? `Retirer ${f.name}` : `Remove ${f.name}`}
                         className="p-0.5 rounded hover:bg-surface-tertiary text-text-tertiary hover:text-danger"
                       >
                         <X size={12} />
@@ -634,6 +637,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
         type="file"
         multiple
         accept={ACCEPTED_TYPES}
+        aria-label={fr ? 'Joindre des fichiers' : 'Attach files'}
         className="hidden"
         onChange={(e) => {
           if (e.target.files) handleFiles(e.target.files);
@@ -645,6 +649,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
         type="file"
         multiple
         accept={ACCEPTED_TYPES}
+        aria-label={fr ? 'Ajouter des fichiers à la note' : 'Add files to note'}
         className="hidden"
         onChange={(e) => {
           if (e.target.files && editNoteIdRef.current) {
@@ -666,6 +671,7 @@ export default function SpecificNotes({ entityType, entityId, mode = 'full', cla
           >
             <button
               onClick={() => setLightboxUrl(null)}
+              aria-label={fr ? 'Fermer' : 'Close'}
               className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20"
             >
               <X size={20} />

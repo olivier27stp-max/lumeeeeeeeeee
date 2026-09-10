@@ -5,7 +5,7 @@
  * Each message is personalized per client before sending.
  */
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Send, MessageSquare, Mail, Users } from 'lucide-react';
 import { toast } from 'sonner';
@@ -50,6 +50,7 @@ function personalizeMessage(template: string, client: Client): string {
 
 export default function BatchMessageModal({ isOpen, onClose, clients, language }: BatchMessageModalProps) {
   const fr = language === 'fr';
+  const id = useId();
   const [mode, setMode] = useState<'sms' | 'email'>('email');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState(fr
@@ -113,7 +114,7 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
   };
 
   return (
-    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={{ zIndex: Z.modal }} className="fixed inset-0 flex items-center justify-center bg-black/50" role="presentation" tabIndex={-1} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <motion.div initial={{ scale: 0.97, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
         className="bg-surface border border-outline rounded-2xl shadow-2xl w-[560px] max-h-[85vh] overflow-hidden flex flex-col">
 
@@ -125,7 +126,7 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
               {fr ? 'Message groupé' : 'Batch Message'} — {eligibleClients.length} {fr ? 'destinataires' : 'recipients'}
             </h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={15} /></button>
+          <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="p-1.5 rounded-lg hover:bg-surface-secondary text-text-tertiary"><X size={15} /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
@@ -146,16 +147,16 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
           {/* Subject (email only) */}
           {mode === 'email' && (
             <div>
-              <label className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider block mb-1">{fr ? 'Objet' : 'Subject'}</label>
-              <input value={subject} onChange={(e) => setSubject(e.target.value)}
+              <label htmlFor={`${id}-subject`} className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider block mb-1">{fr ? 'Objet' : 'Subject'}</label>
+              <input id={`${id}-subject`} value={subject} onChange={(e) => setSubject(e.target.value)}
                 placeholder={fr ? 'Objet du courriel...' : 'Email subject...'}
-                className="w-full px-3 py-2 text-[12px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus:border-text-tertiary" />
+                className="w-full px-3 py-2 text-[12px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus:border-text-tertiary" />
             </div>
           )}
 
           {/* Template variables */}
           <div>
-            <label className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider block mb-1.5">{fr ? 'Variables' : 'Template Variables'}</label>
+            <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider block mb-1.5">{fr ? 'Variables' : 'Template Variables'}</span>
             <div className="flex flex-wrap gap-1">
               {TEMPLATE_VARS.map((v) => (
                 <button key={v.key} onClick={() => setBody(prev => prev + v.key)}
@@ -169,15 +170,15 @@ export default function BatchMessageModal({ isOpen, onClose, clients, language }
 
           {/* Message body */}
           <div>
-            <label className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider block mb-1">Message</label>
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6}
-              className="w-full px-3 py-2 text-[12px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary resize-none outline-none focus:border-text-tertiary font-mono" />
+            <label htmlFor={`${id}-body`} className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider block mb-1">Message</label>
+            <textarea id={`${id}-body`} value={body} onChange={(e) => setBody(e.target.value)} rows={6}
+              className="w-full px-3 py-2 text-[12px] bg-surface-secondary border border-outline rounded-lg text-text-primary placeholder:text-text-tertiary resize-none outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus:border-text-tertiary font-mono" />
           </div>
 
           {/* Preview */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Aperçu' : 'Preview'}</label>
+              <span className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">{fr ? 'Aperçu' : 'Preview'}</span>
               {clients.length > 1 && (
                 <div className="flex items-center gap-1">
                   <button onClick={() => setPreviewIdx(Math.max(0, previewIdx - 1))} disabled={previewIdx === 0}
