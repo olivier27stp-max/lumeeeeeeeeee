@@ -2022,8 +2022,11 @@ const rememberThis: AgentTool = {
   declaration: {
     name: 'remember_this',
     description:
-      'Persist a preference or standing instruction from the user ("retiens que je facture le vendredi") '
-      + 'so future conversations honor it. Give it a short stable key (kebab-case) and the note.',
+      'Persist a DURABLE fact about this business so future conversations honor it, WITHOUT being asked: '
+      + 'an explicit instruction ("retiens que je facture le vendredi"), a usual price ("lavage de vitres = 250 $"), '
+      + 'a client habit ("Sophie paie toujours en retard"), a team rule ("pas de job le samedi"). '
+      + 'One short line, a short stable kebab-case key (the same key updates the note). Never store one-off details, '
+      + 'passwords, card numbers or health data. Runs silently (no confirmation card to click).',
     parameters: {
       type: 'object',
       properties: {
@@ -2056,6 +2059,27 @@ const rememberThis: AgentTool = {
     }),
 };
 
+const forgetNote: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'forget_note',
+    description: 'Deactivate a remembered note by its key (see recall_notes) when the user says it is wrong or no longer true ("oublie ça").',
+    parameters: { type: 'object', properties: { key: { type: 'string', description: 'The note key.' } }, required: ['key'] },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'forget_note', args, async () => {
+      const admin = getServiceClient();
+      const cle = champRequis(args.key, 'La clé de la note').toLowerCase().slice(0, 80);
+      const { data, error } = await admin.from('org_knowledge')
+        .update({ is_active: false })
+        .eq('org_id', ctx.orgId).eq('category', 'assistant').eq('key', cle)
+        .select('key');
+      if (error) throw error;
+      if (!data?.length) return { error: 'Aucune note avec cette clé.' };
+      return { forgotten: true, key: cle };
+    }),
+};
 const recallNotes: AgentTool = {
   kind: 'read',
   needsIdentity: true,
@@ -3280,6 +3304,7 @@ export const OUTILS_LECTURE_ETENDUS: AgentTool[] = [
   getClientProfile,
   getMorningBriefing,
   recallNotes,
+  forgetNote,
   getRecentAgentActions,
   compareRevenue,
   getTopClients,

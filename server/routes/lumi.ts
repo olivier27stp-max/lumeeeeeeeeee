@@ -168,7 +168,13 @@ async function contexteTour(req: Request, res: Response) {
   } catch { /* non-fatal : le prompt tient sans */ }
   const userName = (auth.user.user_metadata as any)?.full_name || (auth.user.user_metadata as any)?.name || auth.user.email || null;
   const language: 'fr' | 'en' = req.body?.language === 'en' ? 'en' : 'fr';
-  const systeme = promptSystemeLumi({ companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10) });
+  // Ce que Lumi a retenu (org_knowledge « assistant ») entre dans son prompt : il n'a plus à le rechercher.
+  let souvenirs: Array<{ key: string; value: string }> = [];
+  try {
+    const { data } = await admin.from('org_knowledge').select('key, value').eq('org_id', auth.orgId).eq('category', 'assistant').eq('is_active', true).order('updated_at', { ascending: false }).limit(30);
+    souvenirs = (data ?? []).map((n: any) => ({ key: String(n.key), value: String(n.value ?? '') }));
+  } catch { /* non-fatal : Lumi peut encore les relire avec recall_notes */ }
+  const systeme = promptSystemeLumi({ companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs });
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
   return { auth, admin, budget, systeme, language, accessToken };
 }
