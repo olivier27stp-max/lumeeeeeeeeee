@@ -130,6 +130,8 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     // Les mêmes consignes « collègue » que le MCP : jamais d'identifiant, de
     // nom d'outil, de champ ou de vocabulaire base de données dans une réponse.
     + `\n\n# Finding the right tool\nOnly the everyday tools are loaded. Lume has ~55 more, hidden until you look them up with tool_search_tool_regex (a case-insensitive pattern on tool names and descriptions). Families and useful patterns: quotes, invoices & payments (\`quote|invoice|payment|paid|reminder\`), jobs, scheduling & routes (\`job|schedule|route|visit|free_slot\`), clients & leads (\`client|lead|note|remember\`), messaging (\`sms|email|conversation\`), reports & finances (\`report|revenue|financial|profit|churn|top_\`), team & field (\`team|timesheet|payroll|location|d2d|course\`), automations (\`automation|request_submission\`). Search BEFORE saying you can't do something; one search with an alternation pattern usually finds it.`
+    + `\n\n# Longueur des réponses
+Une à trois phrases par défaut, comme un collègue qui répond à l'oral. Le chiffre ou le fait d'abord, une précision si elle change quelque chose, et c'est tout. Pas de liste pour moins de trois éléments, pas de récapitulatif de ce qu'on vient de faire, pas de « veux-tu que je… » à chaque fois (une seule suite proposée, seulement si elle est évidente). Tu développes uniquement quand on te le demande (« détaille », « explique », « fais-moi un rapport »).`
     + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : la carte EST le « oui » explicite. Quand tu as tout ce qu'il faut, propose directement (appelle l'outil) — ne demande pas « je le fais ? » en texte avant, ça ferait confirmer deux fois. Décris l'action en mots courants et ne prétends jamais qu'elle est faite avant la confirmation. Si l'outil d'écriture n'est pas chargé, cherche-le avec tool_search_tool_regex puis appelle-le.
 - Chaque mot que tu écris est dans la langue de l'utilisateur — y compris la courte phrase avant de consulter quelque chose (« je regarde ça », jamais « I'll check »).
 - Rapports : « un rapport », « un PDF », « un document pour mon comptable », « sors-moi mon mois » → build_report (type financier, retards, jobs ou client ; période = du 1er du mois à aujourd'hui si rien n'est précisé, sinon demande-la). La carte du rapport s'affiche SOUS ton message (dis « ci-dessous », jamais « ci-dessus ») avec le bouton de téléchargement ; toi, tu résumes les deux ou trois faits saillants en phrases — sans recopier les tableaux.`;
@@ -170,8 +172,11 @@ export async function tourLumi(opts: {
   historique: Anthropic.Messages.MessageParam[];
   emettre: (e: EvenementLumi) => void;
   journaliser: (u: UsageTokens, model: string, cost_cents: number) => Promise<void>;
+  /** Réglages imposés par le palier de budget (mode économe : Haiku, effort bas). */
+  reglages?: { model: string; effort: 'low' | 'medium' };
 }): Promise<ResultatTour> {
-  const model = modeleLumi();
+  const model = opts.reglages?.model ?? modeleLumi();
+  const effort = opts.reglages?.effort ?? 'medium';
   const outils = outilsClaude();
   const messages: Anthropic.Messages.MessageParam[] = [...opts.historique];
   const nouveaux: Anthropic.Messages.MessageParam[] = [];
@@ -187,7 +192,7 @@ export async function tourLumi(opts: {
       tools: outils,
       messages: avecCacheConversation(messages),
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium' },
+      output_config: { effort },
     });
     stream.on('text', (delta) => { texteTotal += delta; opts.emettre({ type: 'text', delta }); });
     const reponse = await stream.finalMessage();

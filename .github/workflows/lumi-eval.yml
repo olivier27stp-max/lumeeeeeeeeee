@@ -1,0 +1,105 @@
+# Évaluation continue de Lumi — la batterie de scripts/qa/evaluer-lumi.mjs
+# (demandes réelles en français, vérité tirée de la base staging, correcteur
+# déterministe) tourne chaque semaine et à la demande. Chaque passe coûte de
+# l'inférence (≈ 0,60 $ sur Sonnet 5) : hebdomadaire, pas à chaque push.
+#
+# Elle ÉCHOUE si le taux d'erreur dépasse SEUIL_ERREUR_PCT : c'est le filet
+# qui dit si une consigne, un outil ou un modèle a dégradé Lumi. Le rapport
+# JSON complet est joint à l'exécution (artefact).
+#
+# Secrets requis (staging uniquement, jamais la prod) :
+#   LUMI_EVAL_SUPABASE_URL, LUMI_EVAL_SUPABASE_ANON_KEY, LUMI_EVAL_SERVICE_ROLE_KEY,
+#   LUMI_EVAL_PROJECT_REF, ANTHROPIC_API_KEY
+name: Lumi — évaluation
+
+on:
+  schedule:
+    - cron: '0 10 * * 1'   # lundi 10:00 UTC (6 h à Montréal)
+  workflow_dispatch:
+    inputs:
+      seuil:
+        description: 'Taux d’erreur maximal toléré (%)'
+        default: '15'
+        required: false
+
+concurrency:
+  group: lumi-eval
+  cancel-in-progress: false
+
+jobs:
+  evaluer:
+    name: Batterie Lumi sur staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SEUIL_ERREUR_PCT: ${{ github.event.inputs.seuil || '15' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Secrets présents ?
+        id: secrets
+        env:
+          URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::warning::Secrets LUMI_EVAL_* / ANTHROPIC_API_KEY absents — évaluation sautée."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Démarrer l'API (staging)
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          NODE_ENV: test
+          PORT: 3012
+          API_PORT: 3012
+          VITE_SUPABASE_URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.LUMI_EVAL_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LUMI_EVAL_SERVICE_ROLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ secrets.LUMI_EVAL_PROJECT_REF }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUBSCRIPTION_GUARD: log
+        run: |
+          nohup npx tsx server/index.ts > api.log 2>&1 &
+          for i in $(seq 1 60); do
+            sleep 1
+            if curl -s -o /dev/null http://localhost:3012/api/lumi/quota; then echo "API prête après ${i}s"; break; fi
+          done
+          tail -n 5 api.log
+
+      - name: Évaluer
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          QA_API_URL: http://localhost:3012
+          VITE_SUPABASE_URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.LUMI_EVAL_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LUMI_EVAL_SERVICE_ROLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ secrets.LUMI_EVAL_PROJECT_REF }}
+        run: |
+          set +e
+          node scripts/qa/evaluer-lumi.mjs --sortie qa-lumi-evaluation.json
+          set -e
+          node -e '
+            const r = require("./qa-lumi-evaluation.json");
+            const seuil = Number(process.env.SEUIL_ERREUR_PCT || 15);
+            console.log(`Taux d’erreur : ${r.taux_erreur_pct} % (seuil ${seuil} %) · ${r.ok}/${r.total} · coût ${(r.cout_cents/100).toFixed(2)} $`);
+            for (const [cat, v] of Object.entries(r.par_categorie || {})) console.log(`  ${cat}: ${JSON.stringify(v)}`);
+            if (r.taux_erreur_pct > seuil) { console.error(`::error::Lumi dégradé : ${r.taux_erreur_pct} % d’erreurs > ${seuil} %`); process.exit(1); }
+          '
+
+      - name: Rapport
+        if: always() && steps.secrets.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lumi-evaluation-${{ github.run_id }}
+          path: |
+            qa-lumi-evaluation.json
+            api.log
+          retention-days: 90

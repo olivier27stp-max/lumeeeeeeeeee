@@ -32,7 +32,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 
 // ── Pre-configured rate limiters ──
 
-type LimiterPreset = 'strict' | 'standard' | 'relaxed' | 'webhook' | 'public' | 'auth';
+type LimiterPreset = 'strict' | 'standard' | 'relaxed' | 'webhook' | 'public' | 'auth' | 'lumi';
 
 const PRESETS: Record<LimiterPreset, { requests: number; window: `${number} s` | `${number} m` | `${number} h` }> = {
   auth:     { requests: 10,  window: '60 s' },    // Login/signup: 10/min
@@ -41,6 +41,7 @@ const PRESETS: Record<LimiterPreset, { requests: number; window: `${number} s` |
   relaxed:  { requests: 100, window: '60 s' },    // Read endpoints: 100/min
   webhook:  { requests: 200, window: '60 s' },    // Webhooks: 200/min
   public:   { requests: 15,  window: '60 s' },    // Public pages: 15/min
+  lumi:     { requests: 60,  window: '60 m' },    // Lumi : 60 tours par personne et par heure (anti-script, jamais un humain)
 };
 
 function createLimiter(preset: LimiterPreset): Ratelimit {

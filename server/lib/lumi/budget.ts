@@ -19,6 +19,43 @@ export interface EtatBudget {
   depense_cents: number;
   reste_cents: number;
   epuise: boolean;
+  /**
+   * Palier de consommation du mois, invisible pour le client :
+   * - normal   : sous 60 % du plafond ;
+   * - econome  : 60 % et plus → modèle moins cher, réflexion réduite (coût par tour divisé par ~2) ;
+   * - ralenti  : plafond atteint → Lumi répond encore, mais une fois par minute, jusqu'au 1er.
+   * Le client n'est jamais « à sec » ; le plafond en dollars reste un garde-fou interne.
+   */
+  palier: 'normal' | 'econome' | 'ralenti';
+}
+
+/** Part du plafond à partir de laquelle on passe en mode économe. */
+export const SEUIL_ECONOME = 0.6;
+/** En mode ralenti : un tour par org toutes les N secondes. */
+export const INTERVALLE_RALENTI_S = 60;
+
+export function palierBudget(budget_cents: number, depense_cents: number): EtatBudget['palier'] {
+  if (budget_cents <= 0) return 'normal';
+  if (depense_cents >= budget_cents) return 'ralenti';
+  if (depense_cents >= budget_cents * SEUIL_ECONOME) return 'econome';
+  return 'normal';
+}
+
+/** Modèle et effort de réflexion selon le palier : la pente économe joue avant tout refus. */
+export function reglagesPourPalier(palier: EtatBudget['palier'], modeleNormal: string): { model: string; effort: 'low' | 'medium' } {
+  return palier === 'normal' ? { model: modeleNormal, effort: 'medium' } : { model: 'claude-haiku-4-5', effort: 'low' };
+}
+
+/**
+ * En mode ralenti : secondes à attendre avant le prochain tour (0 = on peut
+ * répondre). Lu sur le dernier appel journalisé de l'org.
+ */
+export async function attenteRalenti(admin: SupabaseClient, orgId: string): Promise<number> {
+  const orgIds = await companyOrgIds(admin, orgId);
+  const { data } = await admin.from('ai_usage').select('created_at').in('org_id', orgIds).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (!data?.created_at) return 0;
+  const ecoule = (Date.now() - new Date(data.created_at).getTime()) / 1000;
+  return Math.max(0, Math.ceil(INTERVALLE_RALENTI_S - ecoule));
 }
 
 export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<EtatBudget> {
@@ -54,7 +91,36 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
     depense_cents: Math.round(depense * 100) / 100,
     reste_cents: Math.round(reste * 100) / 100,
     epuise: includes && depense >= budget,
+    palier: includes ? palierBudget(budget, depense) : 'normal',
   };
+}
+
+/**
+ * Alerte à l'exploitant quand une org passe en mode économe (60 % du plafond) :
+ * c'est là qu'on regarde s'il s'agit d'un usage réel ou d'un abus. Une seule
+ * fois par org et par mois, tracée dans security_events (event_type
+ * lumi_budget_econome) ; courriel à LUMI_ALERT_EMAIL, sinon SECURITY_ALERT_EMAIL.
+ */
+export async function alerterSiSeuilFranchi(admin: SupabaseClient, orgId: string, budget: EtatBudget, envoyer: (sujet: string, texte: string) => Promise<void>): Promise<void> {
+  if (budget.palier === 'normal') return;
+  const mois = new Date().toISOString().slice(0, 7);
+  const { data: deja } = await admin.from('security_events')
+    .select('id').eq('org_id', orgId).eq('event_type', 'lumi_budget_econome')
+    .contains('details', { mois }).limit(1).maybeSingle();
+  if (deja) return;
+  const { error } = await admin.from('security_events').insert({
+    org_id: orgId, event_type: 'lumi_budget_econome', severity: 'info', source: 'system',
+    details: { mois, depense_cents: budget.depense_cents, budget_cents: budget.budget_cents, plan: budget.plan_slug, palier: budget.palier },
+  });
+  if (error) { console.error('[lumi] alerte budget non tracée :', error.message); return; }
+  const { data: org } = await admin.from('orgs').select('name').eq('id', orgId).maybeSingle();
+  const dollars = (c: number) => `${(c / 100).toFixed(2)} $`;
+  await envoyer(
+    `Lumi · ${org?.name ?? orgId} a dépensé ${dollars(budget.depense_cents)} ce mois-ci (${budget.plan_slug ?? 'plan ?'})`,
+    `L'entreprise ${org?.name ?? orgId} a atteint ${dollars(budget.depense_cents)} d'inférence Lumi sur un plafond de ${dollars(budget.budget_cents)} (${budget.plan_slug ?? '?'}).\n`
+    + `Elle passe en mode économe (modèle moins cher). À ${dollars(budget.budget_cents)}, Lumi répondra une fois par minute jusqu'au 1er.\n`
+    + `Regarde si c'est un usage réel (proposer Autopilot / un supplément) ou un abus (script, boucle).`,
+  ).catch((e: any) => console.error('[lumi] alerte budget non envoyée :', e?.message || e));
 }
 
 export async function journaliserUsage(admin: SupabaseClient, ligne: {
