@@ -16,22 +16,6 @@ import { cn } from '../../lib/utils';
 import { getCompanySettings } from '../../lib/invoicesApi';
 import type { ApercuDocumentLumi, ApercuLumi, FicheLumi, PropositionLumi } from '../../lib/lumiApi';
 
-/* ── « Toujours confirmer » : préférence locale, par type d'action ──────── */
-const CLE_AUTO = 'lumi.confirmations_auto';
-
-export function actionsAutoConfirmees(): Set<string> {
-  try {
-    const brut = localStorage.getItem(CLE_AUTO);
-    const liste = brut ? JSON.parse(brut) : [];
-    return new Set(Array.isArray(liste) ? liste.filter((x) => typeof x === 'string') : []);
-  } catch { return new Set(); }
-}
-export function definirAutoConfirmation(tool: string, actif: boolean): void {
-  const s = actionsAutoConfirmees();
-  if (actif) s.add(tool); else s.delete(tool);
-  try { localStorage.setItem(CLE_AUTO, JSON.stringify([...s])); } catch { /* stockage indisponible : la préférence ne survit pas, sans conséquence */ }
-}
-
 /* ── Libellés : ce que Lumi veut faire, en mots courants ─────────────────── */
 type Verbe = { fr: string; en: string; type: string; typeEn: string; icone: React.ComponentType<{ size?: number; className?: string }> };
 const VERBES: Record<string, Verbe> = {
@@ -221,13 +205,17 @@ function ChampsApercu({ args }: { args: Record<string, unknown> }) {
 }
 
 /* ── La carte ──────────────────────────────────────────────────────────── */
-export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite }: {
+export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, autorise, onAutoriser }: {
   proposition: PropositionLumi;
   fr: boolean;
   busy: boolean;
   onDecision: (d: 'confirm' | 'cancel', toujours?: boolean) => void;
   /** Enchaîner en langage courant après le reçu (« Envoie la soumission Q-0043 à Marie »). */
   onSuite?: (texte: string) => void;
+  /** Cet outil est déjà en « toujours confirmer » (préférence serveur, par utilisateur). */
+  autorise: boolean;
+  /** Activer / retirer « toujours confirmer » pour cet outil. */
+  onAutoriser: (tool: string, actif: boolean) => void;
 }) {
   const p = proposition;
   const v = verbe(p, fr);
@@ -237,7 +225,6 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite }
   const message = a && (a.genre === 'sms' || a.genre === 'email') ? a : null;
   const attente = p.statut === 'en_attente';
   const ok = p.statut === 'confirmee';
-  const [auto, setAuto] = useState(() => actionsAutoConfirmees().has(p.tool));
   const titre = attente
     ? `${fr ? 'Lumi veut' : 'Lumi wants to'} ${fr ? v.fr : v.en}`
     : ok
@@ -279,7 +266,7 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite }
             <button type="button" disabled={busy} onClick={() => onDecision('confirm')} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {fr ? 'Confirmer' : 'Confirm'}
             </button>
-            <button type="button" disabled={busy} onClick={() => { definirAutoConfirmation(p.tool, true); setAuto(true); onDecision('confirm', true); }} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
+            <button type="button" disabled={busy} onClick={() => { onAutoriser(p.tool, true); onDecision('confirm', true); }} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
               {fr ? `Toujours confirmer ${v.type}` : `Always confirm ${v.typeEn}`}
             </button>
             <button type="button" disabled={busy} onClick={() => onDecision('cancel')} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:text-danger disabled:opacity-50">
@@ -298,8 +285,8 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite }
                 {fr ? `Envoyer à ${document.client.name.split(' ')[0]}` : `Send to ${document.client.name.split(' ')[0]}`}
               </button>
             )}
-            {auto && (
-              <button type="button" onClick={() => { definirAutoConfirmation(p.tool, false); setAuto(false); }} className="ml-auto text-[11.5px] text-text-tertiary underline hover:text-text-secondary">
+            {autorise && (
+              <button type="button" onClick={() => onAutoriser(p.tool, false)} className="ml-auto text-[11.5px] text-text-tertiary underline hover:text-text-secondary">
                 {fr ? 'Redemander à chaque fois' : 'Ask every time again'}
               </button>
             )}

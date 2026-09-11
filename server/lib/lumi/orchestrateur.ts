@@ -37,6 +37,7 @@ import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
+import { executerEcriture, type ReçuExecution } from './execution';
 
 const MAX_ETAPES = 8;
 const MAX_TOKENS = 4096;
@@ -147,7 +148,9 @@ Une à trois phrases par défaut, comme un collègue qui répond à l'oral. Le c
 export type EvenementLumi =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
-  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; apercu: Apercu | null }
+  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; apercu: Apercu | null; auto?: boolean }
+  /** Reçu d'une écriture exécutée (par le bouton Confirmer, ou d'office si l'outil est autorisé). */
+  | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: Fiche | null; auto?: boolean }
   /** Fiches (client, job, devis, facture…) touchées par un outil de lecture : l'interface en fait des liens. */
   | { type: 'fiches'; fiches: Fiche[] }
   | { type: 'report'; tool_use_id: string; rapport: Rapport }
@@ -174,6 +177,8 @@ export async function tourLumi(opts: {
   journaliser: (u: UsageTokens, model: string, cost_cents: number) => Promise<void>;
   /** Réglages imposés par le palier de budget (mode économe : Haiku, effort bas). */
   reglages?: { model: string; effort: 'low' | 'medium' };
+  /** Outils d'écriture que l'utilisateur a choisi de ne plus confirmer (« toujours confirmer »). */
+  autorisations?: ReadonlySet<string>;
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
   const effort = opts.reglages?.effort ?? 'medium';
@@ -230,6 +235,17 @@ export async function tourLumi(opts: {
 
       if (!outil) {
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: `Unknown tool: ${appel.name}` }), is_error: true });
+        continue;
+      }
+      if (outil.kind === 'write' && opts.autorisations?.has(appel.name)) {
+        // « Toujours confirmer » : la carte s'affiche déjà confirmée et
+        // l'écriture part sur-le-champ, avec la même garde et le même reçu
+        // que le bouton Confirmer. Le tour continue (le modèle en rend compte).
+        const apercu = await apercuProposition(appel.name, args, { client: opts.client, orgId: opts.orgId, userId: opts.userId });
+        opts.emettre({ type: 'proposal', tool_use_id: appel.id, tool: appel.name, args, capacite: PERMISSION_PAR_OUTIL[appel.name]?.capacite ?? null, apercu, auto: true });
+        const { contenu, recu } = await executerEcriture({ tool: appel.name, toolUseId: appel.id, args, userId: opts.userId, orgId: opts.orgId, client: opts.client, accessToken: opts.accessToken, auto: true });
+        opts.emettre({ type: 'executed', ...recu });
+        resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: contenu, ...(recu.ok ? {} : { is_error: true }) });
         continue;
       }
       if (outil.kind === 'write') {

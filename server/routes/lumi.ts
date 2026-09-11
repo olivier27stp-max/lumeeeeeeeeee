@@ -25,9 +25,10 @@ import { modeleLumi } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
-import { ficheCreee, type Fiche } from '../lib/lumi/fiches';
+import { type Fiche } from '../lib/lumi/fiches';
+import { executerEcriture, autorisationsDe, definirAutorisation, type ReçuExecution } from '../lib/lumi/execution';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, type EvenementLumi } from '../lib/lumi/orchestrateur';
-import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
+import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import type { Rapport } from '../lib/agent/tools-rapports';
 import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
@@ -176,7 +177,7 @@ async function executerTourSse(opts: {
   req: Request; res: Response; ctx: NonNullable<Awaited<ReturnType<typeof contexteTour>>>;
   conversationId: string; historique: Msg[]; nouveauxAvant: Msg[];
   /** Reçu d'une écriture qui vient d'être exécutée (ou refusée) : émis avant que le modèle reprenne. */
-  execute?: { tool_use_id: string; ok: boolean; fiche: Fiche | null };
+  execute?: ReçuExecution;
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -195,6 +196,7 @@ async function executerTourSse(opts: {
       accessToken: ctx.accessToken,
       systeme: ctx.systeme,
       reglages: reglagesPourPalier(ctx.budget.palier, modeleLumi()),
+      autorisations: await autorisationsDe(ctx.admin, ctx.auth.orgId, ctx.auth.user.id),
       historique: [...opts.historique, ...opts.nouveauxAvant],
       emettre: (e) => { if (!ferme) emettre(e); },
       journaliser: (usage, model, cost_cents) => journaliserUsage(ctx.admin, {
@@ -274,39 +276,16 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     }
 
     let contenu: string;
-    let execute: { tool_use_id: string; ok: boolean; fiche: Fiche | null } = { tool_use_id, ok: false, fiche: null };
+    let execute: ReçuExecution = { tool_use_id, ok: false, fiche: null };
     if (decision === 'cancel') {
       contenu = JSON.stringify({ cancelled: true, note: "L'utilisateur a annulé cette action ; elle n'a pas été exécutée." });
     } else {
-      // Exécution RÉELLE, à l'identité de l'utilisateur, avec les gardes du MCP.
+      // Exécution RÉELLE, à l'identité de l'utilisateur, avec les gardes du MCP
+      // — même chemin que l'exécution d'office d'un outil autorisé.
       const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, enAttente.args);
-      try {
-        const r = await executerOutilGarde({ name: enAttente.tool, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
-        const echec = !('refus' in r) && r.result && typeof r.result === 'object' && typeof (r.result as any).error === 'string' ? String((r.result as any).error) : null;
-        if ('refus' in r) {
-          contenu = JSON.stringify({ error: r.refus });
-        } else if (echec) {
-          // L'outil a répondu par une erreur métier (devis pas encore accepté…) :
-          // c'est un échec, pas un reçu — la carte l'affiche comme tel et le
-          // modèle ne dit pas « c'est fait ».
-          contenu = JSON.stringify({ error: echec });
-        } else {
-          // La fiche créée (« Devis Q-0043 ») est gardée avec le résultat :
-          // c'est ce qui permet au reçu de réapparaître quand on rouvre la
-          // conversation (rendreMessages), sans deuxième table.
-          const fiche = await ficheCreee(enAttente.tool, args, r.result, { client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id });
-          execute = { tool_use_id, ok: true, fiche };
-          // La note guide la phrase qui suit : sans elle, le modèle redisait
-          // « tu peux le confirmer ci-dessous » alors que c'était déjà fait.
-          contenu = JSON.stringify({
-            executed: true, result: r.result ?? null, fiche,
-            note: 'DONE: this action has been executed and is complete. Tell the user in one short sentence that it is done (never ask for confirmation again), then offer the natural next step if any (e.g. send it to the client).',
-          }).slice(0, 60_000);
-        }
-      } catch (err: any) {
-        logger.error('[lumi/execute] écriture échouée', { tool: enAttente.tool, error: err?.message || String(err), orgId: ctx.auth.orgId });
-        contenu = JSON.stringify({ error: 'Tool execution failed.' });
-      }
+      const r = await executerEcriture({ tool: enAttente.tool, toolUseId: tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
+      contenu = r.contenu;
+      execute = r.recu;
     }
     const resultat: Msg = { role: 'user', content: [{ type: 'tool_result', tool_use_id, content: contenu }] };
 
@@ -315,6 +294,34 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');
+  }
+});
+
+// ── Autorisations « toujours confirmer » ────────────────────────
+router.get('/lumi/autorisations', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const outils = await autorisationsDe(getServiceClient(), auth.orgId, auth.user.id);
+    return res.json({ tools: [...outils].sort() });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to load Lumi authorizations.', '[lumi/autorisations]');
+  }
+});
+
+const autorisationSchema = z.object({ tool: z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/), actif: z.boolean() });
+router.put('/lumi/autorisations', validate(autorisationSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { tool, actif } = req.body as z.infer<typeof autorisationSchema>;
+    // Seul un outil d'ÉCRITURE connu peut être autorisé d'office.
+    if (TOOLS_BY_NAME[tool]?.kind !== 'write') return res.status(400).json({ error: 'Unknown write tool.', code: 'outil_inconnu' });
+    await definirAutorisation(getServiceClient(), auth.orgId, auth.user.id, tool, actif);
+    const outils = await autorisationsDe(getServiceClient(), auth.orgId, auth.user.id);
+    return res.json({ tools: [...outils].sort() });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to update Lumi authorizations.', '[lumi/autorisations]');
   }
 });
 
@@ -347,9 +354,10 @@ router.get('/lumi/conversations', async (req, res) => {
 });
 
 /** Rend les blocs stockés en éléments d'interface : texte, appels d'outils, propositions et leur sort. */
-export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null }; report?: Rapport }> {
+export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null; auto?: boolean }; report?: Rapport }> {
   const sorts = new Map<string, 'confirmee' | 'annulee' | 'echouee'>();
   const fiches = new Map<string, Fiche>();
+  const autos = new Set<string>();
   const rapports = new Map<string, Rapport>();
   for (const m of msgs) {
     if (m.role === 'user' && Array.isArray(m.content)) {
@@ -357,8 +365,12 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
         if (b.type !== 'tool_result') continue;
         const txt = typeof b.content === 'string' ? b.content : JSON.stringify(b.content);
         sorts.set(b.tool_use_id, /"cancelled":true/.test(txt) ? 'annulee' : /"executed":true/.test(txt) ? 'confirmee' : 'echouee');
-        if (/"executed":true/.test(txt) && txt.includes('"fiche":{')) {
-          try { const f = JSON.parse(txt)?.fiche; if (f?.href && f?.label) fiches.set(b.tool_use_id, f); } catch { /* résultat tronqué : pas de lien */ }
+        if (/"executed":true/.test(txt)) {
+          try {
+            const j = JSON.parse(txt);
+            if (j?.fiche?.href && j?.fiche?.label) fiches.set(b.tool_use_id, j.fiche);
+            if (j?.auto === true) autos.add(b.tool_use_id);
+          } catch { /* résultat tronqué : pas de lien */ }
         }
         if (txt.startsWith('{"rapport":')) {
           try { const r = JSON.parse(txt)?.rapport; if (r?.sections) rapports.set(b.tool_use_id, r); } catch { /* résultat tronqué : pas de carte */ }
@@ -382,7 +394,7 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
       if (rapports.has(b.id)) report = rapports.get(b.id);
       const outil = TOOLS_BY_NAME[b.name];
       if (outil?.kind === 'write') {
-        proposal = { tool_use_id: b.id, tool: b.name, args: b.input ?? {}, capacite: PERMISSION_PAR_OUTIL[b.name]?.capacite ?? null, statut: sorts.get(b.id) ?? 'en_attente', fiche: fiches.get(b.id) ?? null };
+        proposal = { tool_use_id: b.id, tool: b.name, args: b.input ?? {}, capacite: PERMISSION_PAR_OUTIL[b.name]?.capacite ?? null, statut: sorts.get(b.id) ?? 'en_attente', fiche: fiches.get(b.id) ?? null, ...(autos.has(b.id) ? { auto: true } : {}) };
       } else tools.push(b.name);
     }
     if (texte || proposal || tools.length) out.push({ role: 'assistant', text: texte, tools, ...(proposal ? { proposal } : {}), ...(report ? { report } : {}) });
