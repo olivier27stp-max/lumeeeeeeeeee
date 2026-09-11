@@ -284,10 +284,18 @@ export default function Lumi() {
   /** Applique un flux SSE sur le dernier élément assistant (créé si besoin). */
   function appliquerEvenement(e: EvenementFlux) {
     if (e.type === 'executed') {
-      // Le reçu vise la carte dont l'action vient d'être exécutée, pas forcément la dernière.
-      setItems((prev) => prev.map((m) => (m.proposal?.tool_use_id === e.tool_use_id
-        ? { ...m, proposal: { ...m.proposal, statut: e.ok ? 'confirmee' : 'echouee', fiche: e.fiche, ...(e.auto ? { auto: true } : {}) } }
-        : m)));
+      // Le reçu vise la carte (ou la ligne d'un groupe) dont l'action vient d'être exécutée.
+      setItems((prev) => prev.map((m) => {
+        const p = m.proposal;
+        if (!p) return m;
+        if (p.groupe?.some((g) => g.tool_use_id === e.tool_use_id)) {
+          const groupe = p.groupe.map((g) => (g.tool_use_id === e.tool_use_id ? { ...g, statut: e.ok ? 'confirmee' as const : 'echouee' as const, fiche: e.fiche, ...(e.auto ? { auto: true } : {}) } : g));
+          const statut = groupe.some((g) => g.statut === 'en_attente') ? 'en_attente' : groupe.some((g) => g.statut === 'echouee') ? 'echouee' : 'confirmee';
+          return { ...m, proposal: { ...p, groupe, statut, fiche: groupe[0].fiche ?? p.fiche } };
+        }
+        if (p.tool_use_id === e.tool_use_id) return { ...m, proposal: { ...p, statut: e.ok ? 'confirmee' : 'echouee', fiche: e.fiche, ...(e.auto ? { auto: true } : {}) } };
+        return m;
+      }));
       return;
     }
     setItems((prev) => {
@@ -317,7 +325,11 @@ export default function Lumi() {
           break;
         }
         case 'proposal':
-          dernier.proposal = { tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: e.auto ? 'confirmee' : 'en_attente', apercu: e.apercu ?? null, ...(e.auto ? { auto: true } : {}) };
+          dernier.proposal = {
+            tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: e.auto ? 'confirmee' : 'en_attente', apercu: e.apercu ?? null,
+            ...(e.auto ? { auto: true } : {}),
+            ...(e.groupe && e.groupe.length > 1 ? { groupe: e.groupe.map((g) => ({ tool_use_id: g.tool_use_id, tool: g.tool, args: g.args, capacite: g.capacite, statut: 'en_attente' as const, apercu: g.apercu ?? null })) } : {}),
+          };
           // Le modèle propose parfois l'action sans un mot : on l'annonce.
           if (!dernier.text.trim()) dernier.text = fr ? 'Voici ce que je propose. Confirme ci-dessous et je le fais.' : 'Here is what I propose. Confirm below and I will do it.';
           break;

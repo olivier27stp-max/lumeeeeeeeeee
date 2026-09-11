@@ -242,6 +242,38 @@ function ChampsApercu({ args }: { args: Record<string, unknown> }) {
   );
 }
 
+/* ── Une ligne d'un groupe d'actions ───────────────────────────────────── */
+function LigneGroupe({ p, fr, index }: { p: PropositionLumi; fr: boolean; index: number }) {
+  const v = verbe(p, fr);
+  const Icone = v.icone;
+  const a = p.apercu ?? null;
+  const document = a && (a.genre === 'quote' || a.genre === 'invoice') ? a : null;
+  const message = a && (a.genre === 'sms' || a.genre === 'email') ? a : null;
+  const fusion = a && a.genre === 'fusion' ? a : null;
+  const sousTitre = resume(p, fr);
+  const ok = p.statut === 'confirmee';
+  return (
+    <details className="group border-t border-outline first:border-t-0">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-3.5 py-2.5 [&::-webkit-details-marker]:hidden">
+        <span className="w-4 text-[11px] font-semibold tabular-nums text-text-tertiary">{index + 1}</span>
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#3FAF97]/12 text-[#3FAF97]"><Icone size={13} /></span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13px] font-medium text-text-primary leading-tight">{ok && p.fiche?.label ? p.fiche.label : (fr ? v.fr : v.en)}</span>
+          {sousTitre && sousTitre !== (ok ? p.fiche?.label : undefined) && <span className="block truncate text-[12px] text-text-tertiary">{sousTitre}</span>}
+        </span>
+        {p.statut !== 'en_attente' && (
+          <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', ok ? 'bg-success-light text-success' : p.statut === 'echouee' ? 'bg-danger-light text-danger' : 'bg-surface-secondary text-text-tertiary')}>
+            {ok ? (fr ? 'Fait' : 'Done') : p.statut === 'echouee' ? (fr ? 'Échouée' : 'Failed') : (fr ? 'Annulée' : 'Cancelled')}
+          </span>
+        )}
+        {ok && p.fiche && p.fiche.type !== 'task' && <Link to={p.fiche.href} onClick={(ev) => ev.stopPropagation()} className="shrink-0 text-[12px] text-text-secondary underline hover:text-text-primary">{fr ? 'Ouvrir' : 'Open'}</Link>}
+        <ChevronDown size={14} className="shrink-0 text-text-tertiary transition-transform group-open:rotate-180" />
+      </summary>
+      {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
+    </details>
+  );
+}
+
 /* ── La carte ──────────────────────────────────────────────────────────── */
 export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, autorise, onAutoriser }: {
   proposition: PropositionLumi;
@@ -264,14 +296,22 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
   const fusion = a && a.genre === 'fusion' ? a : null;
   const attente = p.statut === 'en_attente';
   const ok = p.statut === 'confirmee';
-  const titre = attente
+  const groupe = p.groupe && p.groupe.length > 1 ? p.groupe : null;
+  const nFaites = groupe ? groupe.filter((g) => g.statut === 'confirmee').length : 0;
+  const titre = groupe
+    ? (attente
+      ? (fr ? `Lumi veut faire ${groupe.length} choses` : `Lumi wants to do ${groupe.length} things`)
+      : ok ? (fr ? `${groupe.length} actions faites` : `${groupe.length} actions done`)
+        : p.statut === 'echouee' ? (fr ? `${nFaites} sur ${groupe.length} faites, une a échoué` : `${nFaites} of ${groupe.length} done, one failed`)
+          : (fr ? 'Actions refusées' : 'Actions declined'))
+    : attente
     ? `${fr ? 'Lumi veut' : 'Lumi wants to'} ${fr ? v.fr : v.en}`
     : ok
       ? (p.tool === 'remember_this' ? (fr ? 'Noté pour la prochaine fois' : 'Noted for next time')
         : p.tool === 'forget_note' ? (fr ? 'Note oubliée' : 'Note forgotten')
         : p.fiche?.label ? `${p.fiche.label} ${fr ? (p.fiche.type === 'invoice' || p.fiche.type === 'task' ? 'créée' : 'créé') : 'created'}` : (fr ? 'Action exécutée' : 'Action executed'))
       : p.statut === 'echouee' ? (fr ? 'Action échouée' : 'Action failed') : (fr ? 'Action refusée' : 'Action declined');
-  const sousTitre = resume(p, fr);
+  const sousTitre = groupe ? groupe.map((g) => (fr ? verbe(g, fr).fr : verbe(g, fr).en)).join(' · ') : resume(p, fr);
   const detailLabel = document
     ? (document.genre === 'quote' ? (fr ? 'Voir la soumission' : 'View the quote') : (fr ? 'Voir la facture' : 'View the invoice'))
     : message ? (message.genre === 'sms' ? (fr ? 'Voir le texto' : 'View the text') : (fr ? 'Voir le courriel' : 'View the email'))
@@ -292,7 +332,12 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
         </span>
       </div>
 
-      {(document || message || fusion || Object.keys(p.args).length > 0) && (
+      {groupe && (
+        <div className="border-t border-outline">
+          {groupe.map((g, i) => <LigneGroupe key={g.tool_use_id} p={g} fr={fr} index={i} />)}
+        </div>
+      )}
+      {!groupe && (document || message || fusion || Object.keys(p.args).length > 0) && (
         <details className="group border-t border-outline" open={(!!document || !!fusion) && attente}>
           <summary className="flex cursor-pointer list-none items-center gap-2 bg-surface px-3.5 py-2 text-[12.5px] text-text-secondary [&::-webkit-details-marker]:hidden">
             {detailLabel}
@@ -308,21 +353,23 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
             <button type="button" disabled={busy} onClick={() => onDecision('confirm')} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {fr ? 'Confirmer' : 'Confirm'}
             </button>
-            <button type="button" disabled={busy} onClick={() => { onAutoriser(p.tool, true); onDecision('confirm', true); }} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
-              {fr ? `Toujours confirmer ${v.type}` : `Always confirm ${v.typeEn}`}
-            </button>
+            {!groupe && (
+              <button type="button" disabled={busy} onClick={() => { onAutoriser(p.tool, true); onDecision('confirm', true); }} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
+                {fr ? `Toujours confirmer ${v.type}` : `Always confirm ${v.typeEn}`}
+              </button>
+            )}
             <button type="button" disabled={busy} onClick={() => onDecision('cancel')} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:text-danger disabled:opacity-50">
               {fr ? 'Refuser' : 'Decline'}
             </button>
-            <span className="ml-auto text-[11.5px] text-text-tertiary">{fr ? 'Rien n’est fait avant que tu confirmes' : 'Nothing happens until you confirm'}</span>
+            <span className="ml-auto text-[11.5px] text-text-tertiary">{groupe ? (fr ? `Les ${groupe.length} actions partent ensemble, dans l’ordre` : `All ${groupe.length} actions run together, in order`) : (fr ? 'Rien n’est fait avant que tu confirmes' : 'Nothing happens until you confirm')}</span>
           </>
         ) : ok ? (
           <>
             <span className="inline-flex items-center gap-2 text-[12.5px] text-text-secondary"><span className="h-2 w-2 rounded-full bg-[#3FAF97]" aria-hidden="true" />{fr ? 'Fait' : 'Done'}</span>
-            {p.fiche && p.fiche.type !== 'task' && (
+            {!groupe && p.fiche && p.fiche.type !== 'task' && (
               <Link to={p.fiche.href} className="rounded-lg border border-outline-strong bg-surface-card px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary">{fr ? 'Ouvrir' : 'Open'}</Link>
             )}
-            {p.fiche && (p.fiche.type === 'quote' || p.fiche.type === 'invoice') && onSuite && document?.client?.name && (
+            {!groupe && p.fiche && (p.fiche.type === 'quote' || p.fiche.type === 'invoice') && onSuite && document?.client?.name && (
               <button type="button" disabled={busy} onClick={() => onSuite(fr ? `Envoie ${p.fiche!.label.toLowerCase().startsWith('devis') ? 'la soumission' : 'la facture'} ${p.fiche!.label.split(' ').slice(1).join(' ')} à ${document.client!.name}` : `Send ${p.fiche!.label} to ${document.client!.name}`)} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
                 {fr ? `Envoyer à ${document.client.name.split(' ')[0]}` : `Send to ${document.client.name.split(' ')[0]}`}
               </button>

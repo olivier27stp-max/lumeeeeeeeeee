@@ -360,6 +360,62 @@ describe('« toujours confirmer » : l écriture autorisée part d office', () =
   });
 });
 
+describe('plusieurs écritures dans une réponse = une carte', () => {
+  it('le tour émet UNE proposition avec le groupe, et laisse toutes les écritures en attente', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [
+      { type: 'tool_use', id: 'w1', name: 'create_job', input: { title: 'Vitres' } },
+      { type: 'tool_use', id: 'w2', name: 'create_job', input: { title: 'Gouttières' } },
+    ], stop_reason: 'tool_use', usage });
+    const emis: any[] = [];
+    const r = await tourLumi(baseTour(emis, []));
+    const props = emis.filter((e) => e.type === 'proposal');
+    expect(props).toHaveLength(1);
+    expect(props[0].groupe).toHaveLength(2);
+    expect(props[0].groupe.map((g: any) => g.tool_use_id)).toEqual(['w1', 'w2']);
+    expect(r.proposition?.groupe?.length).toBe(2);
+    expect(outilsExecutes).toHaveLength(0);
+    // Aucun tool_result d'erreur « une seule action à la fois » n'est plus renvoyé.
+    expect(instantanes).toHaveLength(1);
+  });
+
+  it('propositionsEnAttente renvoie toutes les écritures sans réponse du dernier message', async () => {
+    const { propositionsEnAttente, propositionEnAttente } = await import('../server/routes/lumi');
+    const msgs: any[] = [
+      { role: 'user', content: 'Fais tout' },
+      { role: 'assistant', content: [
+        { type: 'tool_use', id: 'r1', name: 'list_invoices', input: {} },
+        { type: 'tool_use', id: 'w1', name: 'create_job', input: { title: 'A' } },
+        { type: 'tool_use', id: 'w2', name: 'create_job', input: { title: 'B' } },
+      ] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'r1', content: '{}' }] },
+    ];
+    expect(propositionsEnAttente(msgs).map((a) => a.tool_use_id)).toEqual(['w1', 'w2']);
+    expect(propositionEnAttente(msgs)?.tool_use_id).toBe('w1');
+    // Une fois résolues, plus rien en attente.
+    msgs.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'w1', content: '{}' }, { type: 'tool_result', tool_use_id: 'w2', content: '{}' }] });
+    expect(propositionsEnAttente(msgs)).toEqual([]);
+  });
+
+  it('rendreMessages regroupe les écritures d un même message et suit le pire état', async () => {
+    const { rendreMessages } = await import('../server/routes/lumi');
+    const msgs: any[] = [
+      { role: 'user', content: 'Fais tout' },
+      { role: 'assistant', content: [
+        { type: 'tool_use', id: 'w1', name: 'create_job', input: { title: 'A' } },
+        { type: 'tool_use', id: 'w2', name: 'create_job', input: { title: 'B' } },
+      ] },
+      { role: 'user', content: [
+        { type: 'tool_result', tool_use_id: 'w1', content: JSON.stringify({ executed: true, result: {} }) },
+        { type: 'tool_result', tool_use_id: 'w2', content: JSON.stringify({ error: 'refusé' }) },
+      ] },
+    ];
+    const carte = rendreMessages(msgs).find((m) => m.proposal)!.proposal!;
+    expect(carte.groupe?.map((g) => g.statut)).toEqual(['confirmee', 'echouee']);
+    expect(carte.statut).toBe('echouee');
+  });
+});
+
 describe('proposition en attente', () => {
   it('retrouvée quand le dernier tool_use d écriture n a pas de tool_result', async () => {
     const { propositionEnAttente } = await import('../server/routes/lumi');
