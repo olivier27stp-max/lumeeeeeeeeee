@@ -63,7 +63,9 @@ export interface ApercuMessageLumi {
   subject: string | null;
   body: string;
 }
-export type ApercuLumi = ApercuDocumentLumi | ApercuMessageLumi;
+export interface FicheClientApercuLumi { id: string; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; since: string | null; jobs: number; quotes: number; invoices: number }
+export interface ApercuFusionLumi { genre: 'fusion'; garder: FicheClientApercuLumi | null; absorber: FicheClientApercuLumi | null }
+export type ApercuLumi = ApercuDocumentLumi | ApercuMessageLumi | ApercuFusionLumi;
 
 export interface PropositionLumi {
   tool_use_id: string;

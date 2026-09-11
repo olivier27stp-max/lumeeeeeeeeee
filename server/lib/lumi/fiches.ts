@@ -122,7 +122,9 @@ export interface ApercuMessage {
   subject: string | null;
   body: string;
 }
-export type Apercu = ApercuDocument | ApercuMessage;
+export interface FicheClientApercu { id: string; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; since: string | null; jobs: number; quotes: number; invoices: number }
+export interface ApercuFusion { genre: 'fusion'; garder: FicheClientApercu | null; absorber: FicheClientApercu | null }
+export type Apercu = ApercuDocument | ApercuMessage | ApercuFusion;
 
 interface CtxApercu { client: SupabaseClient; orgId: string; userId: string }
 
@@ -132,6 +134,7 @@ export async function apercuProposition(tool: string, args: Record<string, any>,
     if (tool === 'send_sms') return { genre: 'sms', to: texte(args.client_name) || texte(args.phone_number) || null, subject: null, body: texte(args.message ?? args.body) };
     if (tool === 'send_email') return { genre: 'email', to: texte(args.to) || texte(args.client_name) || null, subject: texte(args.subject) || null, body: texte(args.body ?? args.message) };
     if (tool === 'send_quote' || tool === 'send_invoice') return await apercuEnvoiDocument(tool === 'send_quote' ? 'quote' : 'invoice', args, ctx);
+    if (tool === 'merge_clients') return { genre: 'fusion', garder: await ficheClientApercu(args.keep_client_id, ctx), absorber: await ficheClientApercu(args.absorb_client_id, ctx) };
   } catch (err: any) {
     // Un aperçu qui rate ne bloque pas la proposition : la carte retombe sur la liste des champs.
     console.error('[lumi/apercu]', err?.message || err);
@@ -171,6 +174,26 @@ async function apercuDocument(genre: 'quote' | 'invoice', args: Record<string, a
     genre, client, title: texte(args.title), lignes, subtotal_cents: subtotal, taxes, total_cents: total,
     valid_days: genre === 'quote' ? Math.max(1, Number(args.valid_days) || 30) : null,
     notes: texte(args.notes) || null,
+  };
+}
+
+/** Une fiche client résumée pour la carte de fusion : coordonnées et volume d'historique. */
+async function ficheClientApercu(id: unknown, ctx: CtxApercu): Promise<FicheClientApercu | null> {
+  if (!estUuid(id)) return null;
+  const { data: c } = await ctx.client.from('clients').select('id, first_name, last_name, company, display_as_company, email, phone, address, city, created_at').eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
+  if (!c) return null;
+  // Trois requêtes explicites (pas de nom de table dynamique : le vérificateur
+  // de schéma et le lecteur voient chaque colonne citée).
+  const nb = (r: { count: number | null }) => r.count ?? 0;
+  const jobs = nb(await ctx.client.from('jobs').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', id).is('deleted_at', null));
+  const quotes = nb(await ctx.client.from('quotes').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', id).is('deleted_at', null));
+  const invoices = nb(await ctx.client.from('invoices').select('id', { count: 'exact', head: true }).eq('org_id', ctx.orgId).eq('client_id', id).is('deleted_at', null));
+  const nom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim();
+  return {
+    id, name: (c.display_as_company && c.company) ? c.company : (nom || c.company || ''), company: c.company || null,
+    email: c.email || null, phone: c.phone || null, address: [c.address, c.city].filter(Boolean).join(', ') || null,
+    since: c.created_at ? String(c.created_at).slice(0, 10) : null,
+    jobs, quotes, invoices,
   };
 }
 
@@ -229,6 +252,7 @@ export async function ficheCreee(tool: string, args: Record<string, any>, result
     if (tool === 'convert_quote_to_job' && estUuid(result.job?.id)) return fiche('job', result.job.id, libelleJob(result.job));
     if ((tool === 'send_quote' || tool === 'convert_quote_to_job') && estUuid(args.quote_id)) return fiche('quote', args.quote_id, 'Devis');
     if (tool === 'send_invoice' && estUuid(args.invoice_id)) return fiche('invoice', args.invoice_id, 'Facture');
+    if (tool === 'merge_clients' && estUuid(result.kept_client_id)) return fiche('client', result.kept_client_id, 'Fiche gardée');
   } catch (err: any) {
     console.error('[lumi/fiche-creee]', err?.message || err);
   }

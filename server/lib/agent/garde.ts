@@ -17,6 +17,7 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   get_client_profile:        { cle: 'clients.read',       capacite: 'la consultation des clients' },
   create_client:             { cle: 'clients.create',     capacite: 'la création de clients' },
   update_client:             { cle: 'clients.update',     capacite: 'la modification des clients' },
+  merge_clients:             { cle: 'clients.delete',     capacite: 'la fusion de fiches clients' },
   search_leads:              { cle: 'leads.read',         capacite: 'la consultation des prospects' },
   list_request_submissions:  { cle: 'leads.read',         capacite: 'la consultation des demandes entrantes' },
   list_jobs:                 { cle: 'jobs.read',          capacite: 'la consultation des jobs' },

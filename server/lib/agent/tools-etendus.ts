@@ -2495,6 +2495,41 @@ const cancelVisitTool: AgentTool = {
     }),
 };
 
+/* ── Fusion de deux fiches clients en double ────────────────────── */
+const mergeClientsTool: AgentTool = {
+  kind: 'write',
+  needsIdentity: true,
+  declaration: {
+    name: 'merge_clients',
+    description:
+      'Merge two DUPLICATE client records into one: everything attached to the absorbed record (jobs, quotes, '
+      + 'invoices, payments, messages, properties…) is moved to the kept record, its empty fields are filled from '
+      + 'the absorbed one, and the absorbed record is archived. Use it when a search returns two records that are '
+      + 'clearly the same person/company (same phone or email). Keep the OLDER record (or the one with the most '
+      + 'history) unless the user says otherwise. Not reversible: always show both records and get a clear OK.',
+    parameters: {
+      type: 'object',
+      properties: {
+        keep_client_id: { type: 'string', description: 'Client id to KEEP.' },
+        absorb_client_id: { type: 'string', description: 'Duplicate client id to merge into the kept one (will be archived).' },
+      },
+      required: ['keep_client_id', 'absorb_client_id'],
+    },
+  },
+  handler: async (args, ctx) =>
+    executerIdempotent(ctx, 'merge_clients', args, async () => {
+      const garder = String(args.keep_client_id || '');
+      const absorber = String(args.absorb_client_id || '');
+      if (!garder || !absorber) throw new Error('keep_client_id et absorb_client_id sont requis.');
+      if (garder === absorber) throw new Error('Les deux identifiants désignent la même fiche.');
+      // Fonction SQL transactionnelle (fusionner_clients) : réassigne toute clé
+      // étrangère, complète les champs vides, efface l'absorbée en douceur.
+      const { data, error } = await ctx.client.rpc('fusionner_clients', { p_org: ctx.orgId, p_garder: garder, p_absorber: absorber });
+      if (error) throw error;
+      return { ...(data as Record<string, any>), note: 'Fiches fusionnées : tout l\u2019historique est maintenant sur la fiche gardée.' };
+    }),
+};
+
 const updateClientTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -3328,6 +3363,7 @@ export const OUTILS_ECRITURE_ETENDUS: AgentTool[] = [
   sendPaymentReminders,
   rescheduleJobTool,
   updateClientTool,
+  mergeClientsTool,
   updateTaskStatusTool,
   addNoteTool,
   archiveJobTool,
