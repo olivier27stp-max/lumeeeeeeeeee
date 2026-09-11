@@ -237,7 +237,10 @@ async function executerTourSse(opts: {
  * Limite par PERSONNE et par heure : bloque un script ou une boucle sans
  * jamais gêner un humain qui travaille (60 tours/h, c'est un par minute).
  */
-const limiteHoraireLumi = redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}` });
+const limiteHoraireLumi = process.env.LUMI_TOURS_PAR_HEURE === '0'
+  // Batterie d'évaluation (80 demandes d'un coup, même compte) : la limite est levée par LUMI_TOURS_PAR_HEURE=0, jamais en prod.
+  ? ((_req: Request, _res: Response, next: () => void) => next())
+  : redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}` });
 
 router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, res) => {
   try {
