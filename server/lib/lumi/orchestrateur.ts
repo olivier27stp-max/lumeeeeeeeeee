@@ -36,6 +36,7 @@ import { buildSystemPrompt } from '../agent/systemPrompt';
 import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
+import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 
 const MAX_ETAPES = 8;
 const MAX_TOKENS = 4096;
@@ -144,7 +145,9 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
 export type EvenementLumi =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
-  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null }
+  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; apercu: Apercu | null }
+  /** Fiches (client, job, devis, facture…) touchées par un outil de lecture : l'interface en fait des liens. */
+  | { type: 'fiches'; fiches: Fiche[] }
   | { type: 'report'; tool_use_id: string; rapport: Rapport }
   | { type: 'usage'; model: string; usage: UsageTokens; cost_cents: number }
   | { type: 'error'; message: string };
@@ -241,6 +244,9 @@ export async function tourLumi(opts: {
           opts.emettre({ type: 'tool', name: appel.name, statut: 'fin' });
           // Un rapport part tel quel à l'interface (carte + bouton PDF) ; le modèle reçoit la même structure.
           if (appel.name === 'build_report' && r.result?.rapport) opts.emettre({ type: 'report', tool_use_id: appel.id, rapport: r.result.rapport });
+          // Fiches touchées, lues AVANT le masquage : l'interface seule les reçoit.
+          const fiches = fichesDuResultat(appel.name, args, r.result);
+          if (fiches.length) opts.emettre({ type: 'fiches', fiches });
           const masque = masquerIds(espaceRefs, r.result);
           resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify(masque ?? null).slice(0, 60_000) });
         }
@@ -260,7 +266,8 @@ export async function tourLumi(opts: {
         const u: Anthropic.Messages.MessageParam = { role: 'user', content: resultats };
         messages.push(u); nouveaux.push(u);
       }
-      opts.emettre({ type: 'proposal', tool_use_id: proposition.tool_use_id, tool: proposition.tool, args: proposition.args, capacite: PERMISSION_PAR_OUTIL[proposition.tool]?.capacite ?? null });
+      const apercu = await apercuProposition(proposition.tool, proposition.args, { client: opts.client, orgId: opts.orgId, userId: opts.userId });
+      opts.emettre({ type: 'proposal', tool_use_id: proposition.tool_use_id, tool: proposition.tool, args: proposition.args, capacite: PERMISSION_PAR_OUTIL[proposition.tool]?.capacite ?? null, apercu });
       return { nouveauxMessages: nouveaux, proposition, texte: texteTotal, cost_cents: coutTotal };
     }
 

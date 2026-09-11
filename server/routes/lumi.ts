@@ -21,6 +21,7 @@ import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { etatBudget, journaliserUsage } from '../lib/lumi/budget';
+import { ficheCreee, type Fiche } from '../lib/lumi/fiches';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, type EvenementLumi } from '../lib/lumi/orchestrateur';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
@@ -149,6 +150,8 @@ async function contexteTour(req: Request, res: Response) {
 async function executerTourSse(opts: {
   req: Request; res: Response; ctx: NonNullable<Awaited<ReturnType<typeof contexteTour>>>;
   conversationId: string; historique: Msg[]; nouveauxAvant: Msg[];
+  /** Reçu d'une écriture qui vient d'être exécutée (ou refusée) : émis avant que le modèle reprenne. */
+  execute?: { tool_use_id: string; ok: boolean; fiche: Fiche | null };
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -157,6 +160,7 @@ async function executerTourSse(opts: {
   opts.req.on('close', () => { ferme = true; });
 
   try {
+    if (opts.execute && !ferme) emettreSse('executed', opts.execute);
     if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant);
     const resultat = await tourLumi({
       client: ctx.auth.client,
@@ -237,6 +241,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     }
 
     let contenu: string;
+    let execute: { tool_use_id: string; ok: boolean; fiche: Fiche | null } = { tool_use_id, ok: false, fiche: null };
     if (decision === 'cancel') {
       contenu = JSON.stringify({ cancelled: true, note: "L'utilisateur a annulé cette action ; elle n'a pas été exécutée." });
     } else {
@@ -244,7 +249,21 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
       const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, enAttente.args);
       try {
         const r = await executerOutilGarde({ name: enAttente.tool, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
-        contenu = 'refus' in r ? JSON.stringify({ error: r.refus }) : JSON.stringify({ executed: true, result: r.result ?? null }).slice(0, 60_000);
+        if ('refus' in r) {
+          contenu = JSON.stringify({ error: r.refus });
+        } else {
+          // La fiche créée (« Devis Q-0043 ») est gardée avec le résultat :
+          // c'est ce qui permet au reçu de réapparaître quand on rouvre la
+          // conversation (rendreMessages), sans deuxième table.
+          const fiche = await ficheCreee(enAttente.tool, args, r.result, { client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id });
+          execute = { tool_use_id, ok: true, fiche };
+          // La note guide la phrase qui suit : sans elle, le modèle redisait
+          // « tu peux le confirmer ci-dessous » alors que c'était déjà fait.
+          contenu = JSON.stringify({
+            executed: true, result: r.result ?? null, fiche,
+            note: 'DONE: this action has been executed and is complete. Tell the user in one short sentence that it is done (never ask for confirmation again), then offer the natural next step if any (e.g. send it to the client).',
+          }).slice(0, 60_000);
+        }
       } catch (err: any) {
         logger.error('[lumi/execute] écriture échouée', { tool: enAttente.tool, error: err?.message || String(err), orgId: ctx.auth.orgId });
         contenu = JSON.stringify({ error: 'Tool execution failed.' });
@@ -253,7 +272,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const resultat: Msg = { role: 'user', content: [{ type: 'tool_result', tool_use_id, content: contenu }] };
 
     // Le modèle reprend la main pour confirmer en mots ce qui s'est passé.
-    await executerTourSse({ req, res, ctx, conversationId: conversation_id, historique, nouveauxAvant: [resultat] });
+    await executerTourSse({ req, res, ctx, conversationId: conversation_id, historique, nouveauxAvant: [resultat], execute });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');
@@ -289,8 +308,9 @@ router.get('/lumi/conversations', async (req, res) => {
 });
 
 /** Rend les blocs stockés en éléments d'interface : texte, appels d'outils, propositions et leur sort. */
-export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee' }; report?: Rapport }> {
+export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null }; report?: Rapport }> {
   const sorts = new Map<string, 'confirmee' | 'annulee' | 'echouee'>();
+  const fiches = new Map<string, Fiche>();
   const rapports = new Map<string, Rapport>();
   for (const m of msgs) {
     if (m.role === 'user' && Array.isArray(m.content)) {
@@ -298,6 +318,9 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
         if (b.type !== 'tool_result') continue;
         const txt = typeof b.content === 'string' ? b.content : JSON.stringify(b.content);
         sorts.set(b.tool_use_id, /"cancelled":true/.test(txt) ? 'annulee' : /"executed":true/.test(txt) ? 'confirmee' : 'echouee');
+        if (/"executed":true/.test(txt) && txt.includes('"fiche":{')) {
+          try { const f = JSON.parse(txt)?.fiche; if (f?.href && f?.label) fiches.set(b.tool_use_id, f); } catch { /* résultat tronqué : pas de lien */ }
+        }
         if (txt.startsWith('{"rapport":')) {
           try { const r = JSON.parse(txt)?.rapport; if (r?.sections) rapports.set(b.tool_use_id, r); } catch { /* résultat tronqué : pas de carte */ }
         }
@@ -320,7 +343,7 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
       if (rapports.has(b.id)) report = rapports.get(b.id);
       const outil = TOOLS_BY_NAME[b.name];
       if (outil?.kind === 'write') {
-        proposal = { tool_use_id: b.id, tool: b.name, args: b.input ?? {}, capacite: PERMISSION_PAR_OUTIL[b.name]?.capacite ?? null, statut: sorts.get(b.id) ?? 'en_attente' };
+        proposal = { tool_use_id: b.id, tool: b.name, args: b.input ?? {}, capacite: PERMISSION_PAR_OUTIL[b.name]?.capacite ?? null, statut: sorts.get(b.id) ?? 'en_attente', fiche: fiches.get(b.id) ?? null };
       } else tools.push(b.name);
     }
     if (texte || proposal || tools.length) out.push({ role: 'assistant', text: texte, tools, ...(proposal ? { proposal } : {}), ...(report ? { report } : {}) });
