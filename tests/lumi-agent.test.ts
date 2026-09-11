@@ -96,7 +96,8 @@ describe('paliers de budget (le client n est jamais à sec)', () => {
     const journal: any[] = [];
     await tourLumi({ ...baseTour([], journal), reglages: { model: 'claude-haiku-4-5', effort: 'low' } });
     expect(instantanes[0].model).toBe('claude-haiku-4-5');
-    expect(instantanes[0].output_config).toEqual({ effort: 'low' });
+    // Haiku n'accepte pas l'effort : il n'est pas envoyé (voir parametresReflexion).
+    expect(instantanes[0].output_config).toBeUndefined();
     expect(journal[0].model).toBe('claude-haiku-4-5');
   });
 });
@@ -326,6 +327,24 @@ describe('cache glissant de la conversation', () => {
       const points = p.messages.flatMap((m: any) => (Array.isArray(m.content) ? m.content : [])).filter((b: any) => b.cache_control).length;
       expect(points).toBe(1);
     }
+  });
+});
+
+describe('paramètres de réflexion selon le modèle', () => {
+  it('Sonnet/Opus : adaptatif + effort ; Haiku : rien (sinon 400 de l API)', async () => {
+    const { parametresReflexion } = await import('../server/lib/lumi/orchestrateur');
+    expect(parametresReflexion('claude-sonnet-5', 'medium')).toEqual({ thinking: { type: 'adaptive' }, output_config: { effort: 'medium' } });
+    expect(parametresReflexion('claude-opus-5', 'low')).toEqual({ thinking: { type: 'adaptive' }, output_config: { effort: 'low' } });
+    expect(parametresReflexion('claude-haiku-4-5', 'low')).toEqual({});
+  });
+
+  it('le tour en mode économe (Haiku) part sans thinking ni output_config', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'text', text: 'Ok.' }], stop_reason: 'end_turn', usage });
+    await tourLumi({ ...baseTour([], []), reglages: { model: 'claude-haiku-4-5', effort: 'low' } });
+    expect(instantanes[0].model).toBe('claude-haiku-4-5');
+    expect(instantanes[0].thinking).toBeUndefined();
+    expect(instantanes[0].output_config).toBeUndefined();
   });
 });
 

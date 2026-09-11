@@ -41,6 +41,12 @@ import { executerEcriture, type ReçuExecution } from './execution';
 
 const MAX_ETAPES = 8;
 const MAX_TOKENS = 4096;
+/** Réflexion et effort selon le modèle : Sonnet/Opus 5 = adaptatif + effort ; Haiku 4.5 = rien (non supporté). */
+export function parametresReflexion(model: string, effort: 'low' | 'medium'): Pick<Anthropic.Messages.MessageStreamParams, 'thinking' | 'output_config'> {
+  if (/haiku/i.test(model)) return {};
+  return { thinking: { type: 'adaptive' }, output_config: { effort } };
+}
+
 /** Point de cache d'une heure (voir l'en-tête). Même objet partout : un seul endroit à changer. */
 const CACHE_1H: Anthropic.Messages.CacheControlEphemeral = { type: 'ephemeral', ttl: '1h' };
 /** Point de cache 5 min pour la CONVERSATION (les appels d'un tour sont à quelques secondes, les tours à quelques minutes). */
@@ -227,8 +233,11 @@ export async function tourLumi(opts: {
       system: opts.systeme,
       tools: outils,
       messages: avecCacheConversation(messages),
-      thinking: { type: 'adaptive' },
-      output_config: { effort },
+      // Haiku 4.5 n'accepte ni la réflexion adaptative ni l'effort (400
+      // « adaptive thinking is not supported on this model ») : sans ce
+      // garde, la pente économe à 60 % du plafond répondait « Lumi failed
+      // to respond » (vu à l'évaluation Haiku du 2026-09-11).
+      ...parametresReflexion(model, effort),
     });
     stream.on('text', (delta) => { texteTotal += delta; opts.emettre({ type: 'text', delta }); });
     const reponse = await stream.finalMessage();
