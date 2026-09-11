@@ -1444,7 +1444,10 @@ export const handlerUpdateJobStatus = async (args: Record<string, any>, ctx: Too
       .select('id, job_number, title, status')
       .single();
     if (error) throw error;
-    return { updated: true, job: data };
+    // Job terminée : les automatisations « job.completed » (sondage d'avis,
+    // facture, remerciement) partent par la même route que l'interface.
+    const avert = statut === 'completed' ? await signalerEvenement(ctx, '/automations/events/job-completed', { jobId: String(args.job_id) }) : null;
+    return { updated: true, job: data, ...(avert ? { warning: avert } : {}) };
   });
 
 export const handlerAssignJob = async (args: Record<string, any>, ctx: ToolContext) =>
@@ -1746,6 +1749,26 @@ const assignJobTool: AgentTool = {
 /* ════════════════════════════════════════════════════════════════
    ASSISTANT — ce qui sépare « répond aux questions » de « assiste »
    ════════════════════════════════════════════════════════════════ */
+
+/**
+ * Signale à l'app qu'un événement métier vient d'arriver (job terminée,
+ * facture payée, visite créée/déplacée/annulée) — la même route que
+ * l'interface appelle après une écriture (src/lib/automationEventsApi.ts).
+ * Sans cet appel, les automatisations (sondage d'avis, facture auto,
+ * rappels…) ne partent PAS quand c'est Lumi ou le MCP qui a fait l'écriture :
+ * vu en prod le 2026-09-11, job terminée par Lumi, aucun texto d'avis.
+ * L'écriture est déjà faite : un raté ici devient un avertissement, jamais
+ * une erreur (sinon retentative = doublon).
+ */
+async function signalerEvenement(ctx: ToolContext, chemin: string, corps: Record<string, any>): Promise<string | null> {
+  try {
+    const { ok, status, json } = await appelInterne(ctx, chemin, corps);
+    if (!ok) return `automatisations non déclenchées (${json?.error || status}) — l'écriture est faite, mais les règles (avis, factures, rappels) n'ont pas tourné.`;
+    return null;
+  } catch (err: any) {
+    return `automatisations non déclenchées (${err?.message || 'session absente'}) — l'écriture est faite, mais les règles (avis, factures, rappels) n'ont pas tourné.`;
+  }
+}
 
 /**
  * Rappelle une ROUTE de l'application au nom de l'utilisateur, avec sa
@@ -2434,8 +2457,10 @@ const rescheduleJobTool: AgentTool = {
       });
       if (rpcErr) throw rpcErr;
       const chevauchements = Number((res as any)?.overlaps ?? 0);
+      const avertEvt = await signalerEvenement(ctx, '/automations/events/appointment-rescheduled', { eventId: cible.id, jobId: String(args.job_id), startTime: debut.toISOString() });
       return {
         rescheduled: true,
+        ...(avertEvt ? { warning: avertEvt } : {}),
         new_start: debut.toISOString(),
         new_end: fin.toISOString(),
         overlaps: chevauchements,
@@ -2484,8 +2509,10 @@ const cancelVisitTool: AgentTool = {
       });
       if (rpcErr) throw rpcErr;
       const restantes = visites.length - 1;
+      const avertEvt = await signalerEvenement(ctx, '/automations/events/appointment-cancelled', { eventId: cible.id, jobId });
       return {
         cancelled: true,
+        ...(avertEvt ? { warning: avertEvt } : {}),
         visite_annulee: { start_at: cible.start_at },
         visites_restantes: restantes,
         note: restantes > 0
@@ -2806,8 +2833,10 @@ const markInvoicePaidTool: AgentTool = {
       const { data: apres } = await admin
         .from('invoices').select('invoice_number, balance_cents, status')
         .eq('id', invoiceId).maybeSingle();
+      const avertEvt = await signalerEvenement(ctx, '/automations/events/invoice-paid', { invoiceId, clientId: inv.client_id || undefined });
       return {
         paid: true,
+        ...(avertEvt ? { warning: avertEvt } : {}),
         invoice: {
           invoice_number: apres?.invoice_number || inv.invoice_number,
           statut: traduireStatut(apres?.status, STATUT_FACTURE),
@@ -3242,7 +3271,8 @@ const addVisitTool: AgentTool = {
       });
       if (error) throw error;
       const ev: any = (data as any)?.event || data || {};
-      return { added: true, visit: { start_at: ev.start_at || debut.toISOString(), end_at: ev.end_at || fin.toISOString() } };
+      const avertEvt = ev.id ? await signalerEvenement(ctx, '/automations/events/appointment-created', { eventId: ev.id, jobId: String(args.job_id), startTime: ev.start_at || debut.toISOString() }) : null;
+      return { added: true, visit: { start_at: ev.start_at || debut.toISOString(), end_at: ev.end_at || fin.toISOString() }, ...(avertEvt ? { warning: avertEvt } : {}) };
     }),
 };
 

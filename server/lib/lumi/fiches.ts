@@ -242,9 +242,10 @@ export async function ficheCreee(tool: string, args: Record<string, any>, result
       const { data: i } = await ctx.client.from('invoices').select('id, invoice_number, total_cents').eq('id', result.invoice_id).maybeSingle();
       return fiche('invoice', result.invoice_id, `Facture ${texte(i?.invoice_number) || ''}`.trim(), cents(i?.total_cents));
     }
-    if (tool === 'create_job' && estUuid(result.job_id)) {
-      const { data: j } = await ctx.client.from('jobs').select('id, job_number, title').eq('id', result.job_id).maybeSingle();
-      return fiche('job', result.job_id, libelleJob(j));
+    const jobCree = result.job_id ?? result.job?.id;
+    if (tool === 'create_job' && estUuid(jobCree)) {
+      const { data: j } = await ctx.client.from('jobs').select('id, job_number, title').eq('id', jobCree).maybeSingle();
+      return fiche('job', jobCree, libelleJob(j));
     }
     if (tool === 'create_task' && estUuid(result.task?.id)) return fiche('task', result.task.id, texte(result.task.title) || texte(args.title) || 'Tâche');
     if (tool === 'create_client' && estUuid(result.client?.id)) return fiche('client', result.client.id, texte(result.client.name) || texte(args.company));
