@@ -511,7 +511,9 @@ async function testsExecution(H, v, resultats) {
   } else noter('exec-memoire', 'Retiens que…', p4, [`pas de remember_this (${p4.proposition?.tool || p4.outils.join(', ') || 'rien'})`]);
 }
 
-/* ── Quota : budget du mois atteint → Lumi s'arrête poliment (429, quota_epuise) ── */
+/* ── Quota : plafond du mois atteint → Lumi RALENTIT (429 ralenti, un tour par
+   minute) au lieu de s'arrêter ; la jauge dit « épuisé » ; aucun appel au
+   modèle n'est facturé pour la demande refusée. ── */
 async function testQuota(H, v, resultats) {
   const budget = await fetch(`${API}/api/lumi/quota`, { headers: H }).then((r) => r.json());
   const { data: ligne, error } = await admin.from('ai_usage').insert({ org_id: v.orgId, user_id: v.userId, model: 'qa-evaluation', cost_cents: Math.max(1, budget.budget_cents - budget.depense_cents + 1) }).select('id').single();
@@ -522,7 +524,8 @@ async function testQuota(H, v, resultats) {
       const r = await demander(H, 'Combien de clients ai-je ?');
       const q2 = await fetch(`${API}/api/lumi/quota`, { headers: H }).then((x) => x.json());
       l.reponse = JSON.stringify(r.erreur || r.texte).slice(0, 200); l.cout_cents = r.cout;
-      if (r.statut !== 429 || r.erreur?.code !== 'quota_epuise') l.fautes.push(`attendu 429 quota_epuise, reçu ${r.statut} ${JSON.stringify(r.erreur)?.slice(0, 80) || ''}`);
+      // La ligne ai_usage insérée à l'instant compte comme « dernier appel » : le ralenti refuse pendant 60 s.
+      if (r.statut !== 429 || !['ralenti', 'quota_epuise'].includes(r.erreur?.code)) l.fautes.push(`attendu 429 ralenti, reçu ${r.statut} ${JSON.stringify(r.erreur)?.slice(0, 80) || ''}`);
       if (!q2.epuise) l.fautes.push('la jauge ne dit pas « épuisé »');
       if (r.cout > 0) l.fautes.push('un appel au modèle a quand même été facturé');
     }
