@@ -221,6 +221,9 @@ router.post('/survey/:token/feedback', async (req, res) => {
 
     const feedback = String(req.body?.feedback || '').trim().slice(0, 4000);
     if (!feedback) return res.status(400).json({ error: 'Feedback is required.' });
+    // Note haute : le client a écrit un commentaire qu'il va coller sur Google/Facebook.
+    // On le garde chez nous (même colonne), journalisé à part — pas un problème à suivre.
+    const publicComment = req.body?.public === true;
 
     const supabase = getServiceClient();
     const { data: survey, error: fetchError } = await supabase
@@ -258,8 +261,8 @@ router.post('/survey/:token/feedback', async (req, res) => {
       entity_id: survey.job_id || survey.client_id || survey.id,
       related_entity_type: survey.client_id ? 'client' : null,
       related_entity_id: survey.client_id || null,
-      event_type: 'feedback_received',
-      metadata: { rating: survey.rating, feedback, survey_id: survey.id, followup_task_id: survey.followup_task_id },
+      event_type: publicComment ? 'public_review_written' : 'feedback_received',
+      metadata: { rating: survey.rating, feedback, survey_id: survey.id, followup_task_id: survey.followup_task_id, public: publicComment },
     });
     if (logError) console.error('[surveys] feedback activity_log insert failed:', { surveyId: survey.id, error: logError.message });
 

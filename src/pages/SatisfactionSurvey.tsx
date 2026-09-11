@@ -10,7 +10,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Star, Globe, Facebook, Check } from 'lucide-react';
+import { Star, Globe, Facebook, Check, Copy } from 'lucide-react';
 
 // ── Langue (page publique, pas de contexte d'auth) ──
 const isFr = ((typeof navigator !== 'undefined' && navigator.language) || 'fr').toLowerCase().startsWith('fr');
@@ -57,6 +57,12 @@ const T = {
   alreadyDone: isFr ? 'Vos commentaires ont déjà été enregistrés.' : 'Your feedback has already been recorded.',
   thanks: isFr ? 'Merci !' : 'Thank you!',
   publicToo: isFr ? 'Vous pouvez aussi laisser un avis public :' : 'You can also leave a public review:',
+  commentTitle: isFr ? 'Un mot sur votre expérience ? (facultatif)' : 'A word about your experience? (optional)',
+  commentPh: isFr ? 'Écrivez votre commentaire dans vos mots…' : 'Write your comment in your own words…',
+  copyPublish: (p: string) => isFr ? `Copier et publier sur ${p}` : `Copy and publish on ${p}`,
+  copied: (p: string) => isFr
+    ? `Commentaire copié. Dans la fenêtre ${p}, collez-le (appui long ou Ctrl+V), puis Publier.`
+    : `Comment copied. In the ${p} window, paste it (long press or Ctrl+V), then Publish.`,
   googleLnk: isFr ? 'sur Google' : 'on Google',
   facebookLnk: isFr ? 'sur Facebook' : 'on Facebook',
   ratingLabels: isFr
@@ -98,6 +104,9 @@ export default function SatisfactionSurvey() {
   const [inviteMessage, setInviteMessage] = useState('');
   const [autoRedirectUrl, setAutoRedirectUrl] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(AUTO_REDIRECT_SECONDS);
+  /** Commentaire public (note haute) : copié dans le presse-papiers puis collé par le client sur Google. */
+  const [commentaire, setCommentaire] = useState('');
+  const [copieSur, setCopieSur] = useState<string | null>(null);
   const redirectTimer = useRef<number | null>(null);
 
   // ── Chargement + reprise d'un sondage déjà commencé ──
@@ -142,6 +151,38 @@ export default function SatisfactionSurvey() {
     }, 1000);
     return () => { if (redirectTimer.current) window.clearInterval(redirectTimer.current); };
   }, [autoRedirectUrl]);
+
+  function arreterRedirection() {
+    if (redirectTimer.current) window.clearInterval(redirectTimer.current);
+    redirectTimer.current = null;
+    setAutoRedirectUrl(null);
+  }
+
+  /**
+   * Google n'a pas d'API pour publier un avis au nom du client : l'avis doit
+   * être tapé par lui, connecté à son compte, sur la page Google. Le mieux
+   * possible (ce que font Podium/Birdeye) : copier SES mots dans le
+   * presse-papiers et ouvrir la fenêtre d'avis, où il colle et publie. On
+   * n'écrit jamais le texte à sa place (politique Google : contenu authentique).
+   * Copie + ouverture se font dans le geste du clic (sinon bloqués), la
+   * sauvegarde chez nous suit sans bloquer.
+   */
+  function copierEtPublier(d: Destination) {
+    const texte = commentaire.trim();
+    const nom = d.platform === 'google' ? 'Google' : 'Facebook';
+    if (texte) {
+      try { void navigator.clipboard?.writeText(texte); } catch { /* presse-papiers refusé : le client retape */ }
+      setCopieSur(nom);
+      if (token) {
+        fetch(`/api/survey/${token}/feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedback: texte, public: true }),
+        }).catch((err) => console.error('[survey] public comment save failed:', err));
+      }
+    }
+    window.open(d.url, '_blank', 'noopener,noreferrer');
+  }
 
   async function submitRating() {
     if (!token || rating === 0 || submitting) return;
@@ -226,23 +267,37 @@ export default function SatisfactionSurvey() {
             <p className="text-sm text-gray-500">{T.noLink}</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {destinations.map((d) => (
-                <a
-                  key={d.platform}
-                  href={d.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={
-                    d.platform === 'google'
-                      ? 'inline-flex items-center justify-center gap-2 px-6 py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors'
-                      : 'inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] text-white font-semibold rounded-xl hover:bg-[#166FE5] transition-colors'
-                  }
-                >
-                  {d.platform === 'google' ? <Globe size={18} /> : <Facebook size={18} />}
-                  {d.platform === 'google' ? T.googleBtn : T.facebookBtn}
-                </a>
-              ))}
-              {autoRedirectUrl && countdown > 0 && (
+              <label htmlFor="commentaire-public" className="text-left text-sm font-medium text-gray-700">{T.commentTitle}</label>
+              <textarea
+                id="commentaire-public"
+                value={commentaire}
+                onFocus={arreterRedirection}
+                onChange={(e) => { arreterRedirection(); setCommentaire(e.target.value); }}
+                placeholder={T.commentPh}
+                maxLength={4000}
+                rows={4}
+                className="w-full rounded-xl border border-gray-200 p-3 text-sm text-gray-900 placeholder-gray-400 focus:border-neutral-400 focus:ring-1 focus:ring-neutral-400 resize-none"
+              />
+              {destinations.map((d) => {
+                const nom = d.platform === 'google' ? 'Google' : 'Facebook';
+                const classes = d.platform === 'google'
+                  ? 'inline-flex items-center justify-center gap-2 px-6 py-3 bg-neutral-900 text-white font-semibold rounded-xl hover:bg-neutral-800 transition-colors'
+                  : 'inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#1877F2] text-white font-semibold rounded-xl hover:bg-[#166FE5] transition-colors';
+                return commentaire.trim() ? (
+                  <button key={d.platform} type="button" onClick={() => copierEtPublier(d)} className={classes}>
+                    <Copy size={18} /> {T.copyPublish(nom)}
+                  </button>
+                ) : (
+                  <a key={d.platform} href={d.url} target="_blank" rel="noopener noreferrer" className={classes}>
+                    {d.platform === 'google' ? <Globe size={18} /> : <Facebook size={18} />}
+                    {d.platform === 'google' ? T.googleBtn : T.facebookBtn}
+                  </a>
+                );
+              })}
+              {copieSur && (
+                <p className="text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">{T.copied(copieSur)}</p>
+              )}
+              {autoRedirectUrl && countdown > 0 && !commentaire && (
                 <p className="text-xs text-gray-400 mt-1">{T.redirecting(countdown)}</p>
               )}
             </div>
