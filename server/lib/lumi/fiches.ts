@@ -178,20 +178,24 @@ async function apercuDocument(genre: 'quote' | 'invoice', args: Record<string, a
 async function apercuEnvoiDocument(genre: 'quote' | 'invoice', args: Record<string, any>, ctx: CtxApercu): Promise<ApercuMessage | null> {
   const id = genre === 'quote' ? args.quote_id : args.invoice_id;
   if (!estUuid(id)) return null;
-  const table = genre === 'quote' ? 'quotes' : 'invoices';
-  const numero = genre === 'quote' ? 'quote_number' : 'invoice_number';
-  const { data: d } = await ctx.client.from(table).select(`${numero}, total_cents, client_id, title`).eq('org_id', ctx.orgId).eq('id', id).maybeSingle();
+  // Deux requêtes explicites : `invoices` n'a pas de colonne title, et avec
+  // PostgREST une colonne inexistante fait échouer toute la requête.
+  const d: { numero: string; total_cents: unknown; client_id: unknown } | null = genre === 'quote'
+    ? await ctx.client.from('quotes').select('quote_number, total_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.quote_number), total_cents: data.total_cents, client_id: data.client_id } : null))
+    : await ctx.client.from('invoices').select('invoice_number, total_cents, client_id').eq('org_id', ctx.orgId).eq('id', id).maybeSingle()
+        .then(({ data }) => (data ? { numero: texte(data.invoice_number), total_cents: data.total_cents, client_id: data.client_id } : null));
   if (!d) return null;
   let to: string | null = null;
-  if (estUuid((d as any).client_id)) {
-    const { data: c } = await ctx.client.from('clients').select('first_name, last_name, company, email').eq('org_id', ctx.orgId).eq('id', (d as any).client_id).maybeSingle();
+  if (estUuid(d.client_id)) {
+    const { data: c } = await ctx.client.from('clients').select('first_name, last_name, company, email').eq('org_id', ctx.orgId).eq('id', d.client_id).maybeSingle();
     if (c) {
       const nom = [c.first_name, c.last_name].filter(Boolean).join(' ').trim() || c.company || '';
       to = c.email ? `${nom} <${c.email}>` : nom || null;
     }
   }
-  const num = texte((d as any)[numero]);
-  const montant = cents((d as any).total_cents);
+  const num = d.numero;
+  const montant = cents(d.total_cents);
   const libelle = genre === 'quote' ? `Soumission ${num}` : `Facture ${num}`;
   return {
     genre: 'email',
@@ -221,6 +225,8 @@ export async function ficheCreee(tool: string, args: Record<string, any>, result
     }
     if (tool === 'create_task' && estUuid(result.task?.id)) return fiche('task', result.task.id, texte(result.task.title) || texte(args.title) || 'Tâche');
     if (tool === 'create_client' && estUuid(result.client?.id)) return fiche('client', result.client.id, texte(result.client.name) || texte(args.company));
+    // Conversion : le reçu mène au JOB créé (c'est lui qu'on veut ouvrir), pas au devis.
+    if (tool === 'convert_quote_to_job' && estUuid(result.job?.id)) return fiche('job', result.job.id, libelleJob(result.job));
     if ((tool === 'send_quote' || tool === 'convert_quote_to_job') && estUuid(args.quote_id)) return fiche('quote', args.quote_id, 'Devis');
     if (tool === 'send_invoice' && estUuid(args.invoice_id)) return fiche('invoice', args.invoice_id, 'Facture');
   } catch (err: any) {
