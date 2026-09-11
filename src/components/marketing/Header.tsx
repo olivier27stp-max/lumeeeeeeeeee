@@ -22,7 +22,7 @@ export default function Header() {
     { icon: FileText, label: m.featureItems.requestForms.label, desc: m.featureItems.requestForms.desc, href: '/features#request-form' },
     { icon: Map, label: m.featureItems.d2dMap.label, desc: m.featureItems.d2dMap.desc, href: '/features#d2d-map' },
     { icon: Trophy, label: m.featureItems.leaderboard.label, desc: m.featureItems.leaderboard.desc, href: '/features#leaderboard' },
-    { icon: Mic, label: m.featureItems.aiVoice.label, desc: m.featureItems.aiVoice.desc, href: '/features#ai-voice' },
+    { icon: Mic, label: m.featureItems.aiVoice.label, desc: m.featureItems.aiVoice.desc, href: '/fonctions/lumi' },
     { icon: BellRing, label: m.featureItems.notifications.label, desc: m.featureItems.notifications.desc, href: '/features#notifications' },
     { icon: Star, label: m.featureItems.reviews.label, desc: m.featureItems.reviews.desc, href: '/features#reviews' },
     { icon: Calendar, label: m.featureItems.scheduling.label, desc: m.featureItems.scheduling.desc, href: '/features#scheduling' },
