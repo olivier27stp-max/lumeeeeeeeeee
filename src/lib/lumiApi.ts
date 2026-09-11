@@ -114,9 +114,9 @@ export interface ConversationLumi {
 export type EvenementFlux =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
-  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null; apercu?: ApercuLumi | null }
+  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null; apercu?: ApercuLumi | null; auto?: boolean }
   | { type: 'fiches'; fiches: FicheLumi[] }
-  | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: FicheLumi | null }
+  | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: FicheLumi | null; auto?: boolean }
   | { type: 'report'; tool_use_id: string; rapport: RapportLumi }
   | { type: 'usage'; model: string; cost_cents: number }
   | { type: 'done'; conversation_id: string; cost_cents: number; budget: BudgetLumi; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }
@@ -191,6 +191,18 @@ export async function deciderPropositionLumi(
     signal,
   });
   await lireFlux(res, onEvent, signal);
+}
+
+/** Outils d'écriture que l'utilisateur a choisi de ne plus confirmer (« toujours confirmer »), côté serveur. */
+export async function listerAutorisationsLumi(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/api/lumi/autorisations`, { headers: await authHeaders() });
+  if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'Unable to load authorizations');
+  return ((await res.json()) as { tools: string[] }).tools;
+}
+export async function definirAutorisationLumi(tool: string, actif: boolean): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/api/lumi/autorisations`, { method: 'PUT', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ tool, actif }) });
+  if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'Unable to update authorizations');
+  return ((await res.json()) as { tools: string[] }).tools;
 }
 
 export async function quotaLumi(): Promise<BudgetLumi> {

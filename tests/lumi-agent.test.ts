@@ -329,6 +329,37 @@ describe('cache glissant de la conversation', () => {
   });
 });
 
+describe('« toujours confirmer » : l écriture autorisée part d office', () => {
+  it('carte déjà confirmée, reçu émis, tool_result executed, et le tour continue', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'tu-w', name: 'create_job', input: { title: 'Vitres' } }], stop_reason: 'tool_use', usage });
+    reponses.push({ content: [{ type: 'text', text: 'Job créé.' }], stop_reason: 'end_turn', usage });
+    const emis: any[] = [];
+    const r = await tourLumi({ ...baseTour(emis, []), autorisations: new Set(['create_job']) });
+    expect(r.proposition).toBeNull();               // rien en attente : c'est fait
+    expect(r.texte).toBe('Job créé.');
+    const prop = emis.find((e) => e.type === 'proposal');
+    expect(prop).toMatchObject({ tool: 'create_job', auto: true });
+    const recu = emis.find((e) => e.type === 'executed');
+    expect(recu).toMatchObject({ tool_use_id: 'tu-w', ok: true, auto: true });
+    expect(outilsExecutes.map((o) => o.name)).toContain('create_job');
+    // Le modèle reçoit le résultat exécuté (avec la note « DONE »), puis conclut.
+    const resultat = instantanes[1].messages.at(-1).content[0];
+    expect(resultat.type).toBe('tool_result');
+    expect(JSON.parse(resultat.content)).toMatchObject({ executed: true, auto: true });
+  });
+
+  it('sans autorisation, la même écriture reste une proposition', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'tool_use', id: 'tu-w2', name: 'create_job', input: { title: 'Vitres' } }], stop_reason: 'tool_use', usage });
+    const emis: any[] = [];
+    const r = await tourLumi({ ...baseTour(emis, []), autorisations: new Set(['send_sms']) });
+    expect(r.proposition?.tool).toBe('create_job');
+    expect(emis.find((e) => e.type === 'executed')).toBeUndefined();
+    expect(outilsExecutes.map((o) => o.name)).not.toContain('create_job');
+  });
+});
+
 describe('proposition en attente', () => {
   it('retrouvée quand le dernier tool_use d écriture n a pas de tool_result', async () => {
     const { propositionEnAttente } = await import('../server/routes/lumi');

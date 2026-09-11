@@ -20,9 +20,10 @@ import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
+  listerAutorisationsLumi, definirAutorisationLumi,
   ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
 } from '../lib/lumiApi';
-import { CarteAutorisation, FichesLiees, avecLiensFiches, actionsAutoConfirmees } from '../components/lumi/CarteAutorisation';
+import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
 
 /** Fiches du message en cours de rendu : les noms qui y correspondent deviennent des liens dans le texte. */
 const FichesCtx = React.createContext<FicheLumi[]>([]);
@@ -203,6 +204,8 @@ export default function Lumi() {
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState('');
   const [enCours, setEnCours] = useState(false);
+  /** Outils en « toujours confirmer » (préférence serveur : le serveur exécute d'office). */
+  const [autorisations, setAutorisations] = useState<Set<string>>(new Set());
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;
   const enCoursRef = useRef(false);
@@ -235,7 +238,15 @@ export default function Lumi() {
       // Plafond atteint : Lumi ralentit (un tour par minute), il n'est pas indisponible — rien à annoncer d'avance.
     }).catch(() => setBudget(null));
     listerConversationsLumi().then(setConversations).catch(() => setConversations([]));
+    listerAutorisationsLumi().then((t) => setAutorisations(new Set(t))).catch(() => {});
   }, []);
+
+  async function autoriser(tool: string, actif: boolean) {
+    // Optimiste : la carte réagit tout de suite ; le serveur fait foi ensuite.
+    setAutorisations((prev) => { const s = new Set(prev); if (actif) s.add(tool); else s.delete(tool); return s; });
+    try { setAutorisations(new Set(await definirAutorisationLumi(tool, actif))); }
+    catch { toast.error(fr ? 'Préférence non enregistrée.' : 'Preference not saved.'); }
+  }
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -275,7 +286,7 @@ export default function Lumi() {
     if (e.type === 'executed') {
       // Le reçu vise la carte dont l'action vient d'être exécutée, pas forcément la dernière.
       setItems((prev) => prev.map((m) => (m.proposal?.tool_use_id === e.tool_use_id
-        ? { ...m, proposal: { ...m.proposal, statut: e.ok ? 'confirmee' : 'echouee', fiche: e.fiche } }
+        ? { ...m, proposal: { ...m.proposal, statut: e.ok ? 'confirmee' : 'echouee', fiche: e.fiche, ...(e.auto ? { auto: true } : {}) } }
         : m)));
       return;
     }
@@ -306,7 +317,7 @@ export default function Lumi() {
           break;
         }
         case 'proposal':
-          dernier.proposal = { tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: 'en_attente', apercu: e.apercu ?? null };
+          dernier.proposal = { tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: e.auto ? 'confirmee' : 'en_attente', apercu: e.apercu ?? null, ...(e.auto ? { auto: true } : {}) };
           // Le modèle propose parfois l'action sans un mot : on l'annonce.
           if (!dernier.text.trim()) dernier.text = fr ? 'Voici ce que je propose. Confirme ci-dessous et je le fais.' : 'Here is what I propose. Confirm below and I will do it.';
           break;
@@ -382,19 +393,6 @@ export default function Lumi() {
       { id: nextId(), role: 'user', text: t, tools: [] },
     ]);
     await lancer((onEvent, signal) => envoyerMessageLumi({ conversation_id: conversationId, message: t, language: lang }, onEvent, signal));
-    await confirmerAutomatiquement();
-  }
-
-  /**
-   * « Toujours confirmer ce type d'action » : la proposition qui vient
-   * d'arriver est confirmée sans clic. Décision locale à ce navigateur
-   * (localStorage), réversible depuis le reçu de la carte.
-   */
-  async function confirmerAutomatiquement() {
-    const auto = actionsAutoConfirmees();
-    if (auto.size === 0) return;
-    const enAttente = itemsRef.current.find((m) => m.proposal?.statut === 'en_attente' && auto.has(m.proposal.tool))?.proposal;
-    if (enAttente) await decider(enAttente, 'confirm', true);
   }
 
   async function decider(p: PropositionLumi, decision: 'confirm' | 'cancel', auto = false) {
@@ -404,7 +402,6 @@ export default function Lumi() {
       ? { ...m, proposal: { ...m.proposal, statut: decision === 'confirm' ? 'confirmee' : 'annulee', auto } }
       : m)));
     await lancer((onEvent, signal) => deciderPropositionLumi({ conversation_id: conv, tool_use_id: p.tool_use_id, decision, language: lang }, onEvent, signal));
-    if (decision === 'confirm') await confirmerAutomatiquement();
   }
 
   /* Micro : enregistre (MediaRecorder, tous navigateurs), le serveur transcrit,
@@ -605,7 +602,7 @@ export default function Lumi() {
                   )}
                   {m.report && <RapportCarte rapport={m.report} fr={fr} />}
                   {m.proposal && (
-                    <CarteAutorisation proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} onSuite={(texte) => envoyer(texte)} />
+                    <CarteAutorisation proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} onSuite={(texte) => envoyer(texte)} autorise={autorisations.has(m.proposal.tool)} onAutoriser={autoriser} />
                   )}
                   {!m.enCours && (m.fiches?.length ?? 0) > 0 && <FichesLiees fiches={m.fiches!} fr={fr} />}
                   {!m.enCours && !(m.fiches?.length) && sources.length > 0 && (
