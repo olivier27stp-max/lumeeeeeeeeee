@@ -374,6 +374,7 @@ async function fetchScheduleEvents(
         start_at: e.start_at,
         end_at: e.end_at,
         statut: ETIQUETTES_DERIVED[e.status] || e.status,
+        job_id: j.id,
         job_title: j.title,
         client_name: j.client_name,
         address: j.property_address,

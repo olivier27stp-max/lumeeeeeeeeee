@@ -73,6 +73,9 @@ export function fichesDuResultat(tool: string, args: Record<string, any>, result
     case 'list_jobs':
       for (const j of result.jobs ?? []) push(fiche('job', j.id, libelleJob(j), cents(j.total_cents)));
       break;
+    case 'query_schedule':
+      for (const e of result.events ?? []) push(fiche('job', e.job_id, [texte(e.client_name), texte(e.job_title)].filter(Boolean).join(' · ') || 'Job', cents(e.total_cents)));
+      break;
     case 'get_job':
       push(fiche('job', result.id, libelleJob(result), cents(result.total_cents)));
       if (result.client_id) push(fiche('client', result.client_id, texte(result.client_name)));

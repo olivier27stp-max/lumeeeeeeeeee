@@ -78,6 +78,41 @@ export function avecCacheConversation(messages: Anthropic.Messages.MessageParam[
   return [...messages.slice(0, -1), { role: dernier.role, content: blocs }];
 }
 
+/**
+ * Purge des vieux résultats d'outils — le contexte ne grossit plus sans fin.
+ * Une liste de 20 jobs lue au 2e tour était relue (et repayée, même au
+ * dixième du prix) à CHAQUE tour suivant ; mesuré en prod : 12 000 tokens
+ * relus par appel, un quart du coût. Au-delà d'un seuil, les résultats
+ * d'outils sauf les N derniers sont remplacés par une note courte : le
+ * modèle sait qu'il peut rappeler l'outil. Les tool_use restent intacts
+ * (l'API exige leur tool_result) ; la base n'est jamais modifiée.
+ * Déterministe : le même historique purge de la même façon, donc le
+ * préfixe déjà purgé reste en cache.
+ */
+export const SEUIL_PURGE_CARACTERES = 40_000; // ≈ 10 000 tokens
+export const RESULTATS_CONSERVES = 3;
+export const NOTE_PURGE = JSON.stringify({ purged: true, note: 'Old tool result removed from context to save tokens. Call the tool again if you need this data.' });
+export function purgerVieuxResultats<M extends { role: string; content: any }>(msgs: M[], seuil = SEUIL_PURGE_CARACTERES, conserves = RESULTATS_CONSERVES): M[] {
+  const taille = msgs.reduce((s, m) => s + (typeof m.content === 'string' ? m.content.length : JSON.stringify(m.content ?? '').length), 0);
+  if (taille <= seuil) return msgs;
+  const positions: Array<[number, number]> = [];
+  msgs.forEach((m, i) => {
+    if (m.role !== 'user' || !Array.isArray(m.content)) return;
+    m.content.forEach((b: any, j: number) => {
+      if (b?.type === 'tool_result' && typeof b.content === 'string' && b.content.length > NOTE_PURGE.length) positions.push([i, j]);
+    });
+  });
+  const aPurger = positions.slice(0, Math.max(0, positions.length - conserves));
+  if (!aPurger.length) return msgs;
+  const out = msgs.map((m) => m);
+  for (const [i, j] of aPurger) {
+    const blocs = [...(out[i].content as any[])];
+    blocs[j] = { ...blocs[j], content: NOTE_PURGE };
+    out[i] = { ...out[i], content: blocs };
+  }
+  return out;
+}
+
 let clientAnthropic: Anthropic | null = null;
 export function isLumiConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return !!env.ANTHROPIC_API_KEY;
