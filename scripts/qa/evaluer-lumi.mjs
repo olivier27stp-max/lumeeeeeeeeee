@@ -593,6 +593,19 @@ const quota = await fetch(`${API}/api/lumi/quota`, { headers: H }).then((r) => r
 if (!quota.includes_ai || quota.configured === false) throw new Error(`Lumi indisponible : ${JSON.stringify(quota)}`);
 console.log(`Org ${orgId} · plan ${quota.plan_slug} · budget ${(quota.depense_cents / 100).toFixed(2)} / ${(quota.budget_cents / 100).toFixed(2)} $ · semaine ${lundi} → ${dimanche}`);
 
+// La batterie teste la MÉCANIQUE de confirmation (proposition → confirmer/annuler) :
+// elle tourne en mode « demander », quel que soit le mode choisi par le compte
+// (défaut « argent » depuis la PR #365 : une tâche passerait sans carte). Restauré à la fin.
+const { data: membreAvant } = await admin.from('memberships').select('lumi_mode').eq('user_id', session.user.id).eq('org_id', orgId).maybeSingle();
+const modeAvant = membreAvant?.lumi_mode || 'argent';
+await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', session.user.id).eq('org_id', orgId);
+// Les passages précédents laissent des souvenirs (« jamais le samedi », « 275 $ ») : Lumi dirait « déjà noté »
+// au lieu de retenir, ou poserait une question au lieu de proposer. L'org QA est de fausses données : on repart à zéro.
+{
+  const { data: vieux } = await admin.from('org_knowledge').select('id').eq('org_id', orgId).eq('category', 'assistant');
+  if (vieux?.length) await admin.from('org_knowledge').delete().in('id', vieux.map((x) => x.id));
+}
+
 const moi = createClient(url, process.env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${session.session.access_token}` } } });
 const v = await verite(orgId, moi, session.user.id);
 const resultats = [];
@@ -622,4 +635,5 @@ for (const [cat, c] of Object.entries(parCat)) console.log(`${cat.padEnd(13)} ${
 console.log(`${'TOTAL'.padEnd(13)} ${String(ok).padStart(2)} / ${total}   (${Math.round((ok / total) * 100)} %) · taux d'erreur ${Math.round(((total - ok) / total) * 100)} % · coût ${(cout / 100).toFixed(2)} $ · ${sautes.length} sautés`);
 writeFileSync(SORTIE, JSON.stringify({ date: new Date().toISOString(), api: API, org: orgId, total, ok, taux_erreur_pct: Math.round(((total - ok) / total) * 100), cout_cents: cout, par_categorie: parCat, sautes, resultats }, null, 1));
 console.log(`Détail : ${SORTIE}`);
+await admin.from('memberships').update({ lumi_mode: modeAvant }).eq('user_id', session.user.id).eq('org_id', orgId);
 process.exit(ok === total ? 0 : 1);
