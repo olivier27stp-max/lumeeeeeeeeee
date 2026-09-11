@@ -20,8 +20,12 @@ import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
-  ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type MessageLumi, type PropositionLumi, type RapportLumi,
+  ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
 } from '../lib/lumiApi';
+import { CarteAutorisation, FichesLiees, avecLiensFiches, actionsAutoConfirmees } from '../components/lumi/CarteAutorisation';
+
+/** Fiches du message en cours de rendu : les noms qui y correspondent deviennent des liens dans le texte. */
+const FichesCtx = React.createContext<FicheLumi[]>([]);
 
 interface Item extends MessageLumi {
   id: number;
@@ -103,8 +107,9 @@ function libelleOutil(name: string, fr: boolean): string {
  * faisait « brouillon » — un tableau de forfaits ressortait en bouillie de |.
  */
 function Gras({ texte }: { texte: string }) {
+  const fiches = React.useContext(FichesCtx);
   const morceaux = texte.split(/\*\*(.+?)\*\*/g);
-  return <>{morceaux.map((m, i) => (i % 2 === 1 ? <strong key={i} className="font-semibold">{m}</strong> : <React.Fragment key={i}>{m}</React.Fragment>))}</>;
+  return <>{morceaux.map((m, i) => (i % 2 === 1 ? <strong key={i} className="font-semibold">{avecLiensFiches(m, fiches)}</strong> : <React.Fragment key={i}>{avecLiensFiches(m, fiches)}</React.Fragment>))}</>;
 }
 
 /** Découpe une ligne de tableau Markdown en cellules, sans les | de bord. */
@@ -179,6 +184,9 @@ function TexteLumi({ texte }: { texte: string }) {
   return <>{blocs}</>;
 }
 
+/** Un message du micro (« je n'ai rien entendu ») s'efface après ce délai. */
+const DUREE_ERREUR_VOIX_MS = 6000;
+
 function fmtDollars(cents: number): string {
   return `${(cents / 100).toFixed(2)} $`;
 }
@@ -195,7 +203,15 @@ export default function Lumi() {
   const [items, setItems] = useState<Item[]>([]);
   const [input, setInput] = useState('');
   const [enCours, setEnCours] = useState(false);
+  const itemsRef = useRef<Item[]>([]);
+  itemsRef.current = items;
+  const enCoursRef = useRef(false);
+  enCoursRef.current = enCours;
+  const conversationIdRef = useRef<string | null>(null);
+  conversationIdRef.current = conversationId;
   const [erreur, setErreur] = useState<{ code: string; message: string } | null>(null);
+  const voixTimerRef = useRef<number | null>(null);
+  useEffect(() => () => { if (voixTimerRef.current) window.clearTimeout(voixTimerRef.current); }, []);
   const [budget, setBudget] = useState<BudgetLumi | null>(null);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
   const idRef = useRef(1);
@@ -256,6 +272,13 @@ export default function Lumi() {
 
   /** Applique un flux SSE sur le dernier élément assistant (créé si besoin). */
   function appliquerEvenement(e: EvenementFlux) {
+    if (e.type === 'executed') {
+      // Le reçu vise la carte dont l'action vient d'être exécutée, pas forcément la dernière.
+      setItems((prev) => prev.map((m) => (m.proposal?.tool_use_id === e.tool_use_id
+        ? { ...m, proposal: { ...m.proposal, statut: e.ok ? 'confirmee' : 'echouee', fiche: e.fiche } }
+        : m)));
+      return;
+    }
     setItems((prev) => {
       const next = [...prev];
       let dernier = next[next.length - 1];
@@ -277,10 +300,15 @@ export default function Lumi() {
             if (e.statut === 'fin' && !dernier.tools.includes(e.name)) dernier.tools = [...dernier.tools, e.name];
           }
           break;
+        case 'fiches': {
+          const vues = new Set((dernier.fiches ?? []).map((f) => f.href));
+          dernier.fiches = [...(dernier.fiches ?? []), ...e.fiches.filter((f) => !vues.has(f.href))].slice(0, 8);
+          break;
+        }
         case 'proposal':
-          dernier.proposal = { tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: 'en_attente' };
+          dernier.proposal = { tool_use_id: e.tool_use_id, tool: e.tool, args: e.args, capacite: e.capacite, statut: 'en_attente', apercu: e.apercu ?? null };
           // Le modèle propose parfois l'action sans un mot : on l'annonce.
-          if (!dernier.text.trim()) dernier.text = fr ? "J'ai préparé l'action ci-dessous. Confirmez pour l'exécuter." : 'I prepared the action below. Confirm to run it.';
+          if (!dernier.text.trim()) dernier.text = fr ? 'Voici ce que je propose. Confirme ci-dessous et je le fais.' : 'Here is what I propose. Confirm below and I will do it.';
           break;
         case 'report':
           dernier.report = e.rapport;
@@ -350,14 +378,29 @@ export default function Lumi() {
       { id: nextId(), role: 'user', text: t, tools: [] },
     ]);
     await lancer((onEvent, signal) => envoyerMessageLumi({ conversation_id: conversationId, message: t, language: lang }, onEvent, signal));
+    await confirmerAutomatiquement();
   }
 
-  async function decider(p: PropositionLumi, decision: 'confirm' | 'cancel') {
-    if (!conversationId || enCours) return;
+  /**
+   * « Toujours confirmer ce type d'action » : la proposition qui vient
+   * d'arriver est confirmée sans clic. Décision locale à ce navigateur
+   * (localStorage), réversible depuis le reçu de la carte.
+   */
+  async function confirmerAutomatiquement() {
+    const auto = actionsAutoConfirmees();
+    if (auto.size === 0) return;
+    const enAttente = itemsRef.current.find((m) => m.proposal?.statut === 'en_attente' && auto.has(m.proposal.tool))?.proposal;
+    if (enAttente) await decider(enAttente, 'confirm', true);
+  }
+
+  async function decider(p: PropositionLumi, decision: 'confirm' | 'cancel', auto = false) {
+    const conv = conversationIdRef.current;
+    if (!conv || enCoursRef.current) return;
     setItems((prev) => prev.map((m) => (m.proposal?.tool_use_id === p.tool_use_id
-      ? { ...m, proposal: { ...m.proposal, statut: decision === 'confirm' ? 'confirmee' : 'annulee' } }
+      ? { ...m, proposal: { ...m.proposal, statut: decision === 'confirm' ? 'confirmee' : 'annulee', auto } }
       : m)));
-    await lancer((onEvent, signal) => deciderPropositionLumi({ conversation_id: conversationId, tool_use_id: p.tool_use_id, decision, language: lang }, onEvent, signal));
+    await lancer((onEvent, signal) => deciderPropositionLumi({ conversation_id: conv, tool_use_id: p.tool_use_id, decision, language: lang }, onEvent, signal));
+    if (decision === 'confirm') await confirmerAutomatiquement();
   }
 
   /* Micro : enregistre (MediaRecorder, tous navigateurs), le serveur transcrit,
@@ -373,7 +416,13 @@ export default function Lumi() {
       pendingSpokenRef.current = true;
       requestAnimationFrame(() => { const el = document.getElementById(`${uid}-lumi-input`) as HTMLTextAreaElement | null; el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); });
     },
-    onError: (message) => setErreur({ code: 'voix', message }),
+    // Un raté du micro n'est pas une erreur durable : le message s'efface
+    // tout seul (il restait affiché jusqu'au prochain envoi).
+    onError: (message) => {
+      setErreur({ code: 'voix', message });
+      if (voixTimerRef.current) window.clearTimeout(voixTimerRef.current);
+      voixTimerRef.current = window.setTimeout(() => setErreur((e) => (e?.code === 'voix' ? null : e)), DUREE_ERREUR_VOIX_MS);
+    },
   });
   const listening = voice.state === 'recording';
   const transcribing = voice.state === 'transcribing';
@@ -546,13 +595,16 @@ export default function Lumi() {
                     </details>
                   )}
                   {m.text && (
-                    <div className="text-[14.5px] leading-relaxed text-text-primary"><TexteLumi texte={m.text} /></div>
+                    <FichesCtx.Provider value={m.fiches ?? []}>
+                      <div className="text-[14.5px] leading-relaxed text-text-primary"><TexteLumi texte={m.text} /></div>
+                    </FichesCtx.Provider>
                   )}
                   {m.report && <RapportCarte rapport={m.report} fr={fr} />}
                   {m.proposal && (
-                    <PropositionCarte proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} />
+                    <CarteAutorisation proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} onSuite={(texte) => envoyer(texte)} />
                   )}
-                  {!m.enCours && sources.length > 0 && (
+                  {!m.enCours && (m.fiches?.length ?? 0) > 0 && <FichesLiees fiches={m.fiches!} fr={fr} />}
+                  {!m.enCours && !(m.fiches?.length) && sources.length > 0 && (
                     <p className="mt-2 text-[12.5px] text-text-tertiary">
                       <span className="mr-2">{fr ? 'Sources' : 'Sources'}</span>
                       {sources.map(([href, lfr, len], i) => (
@@ -711,39 +763,3 @@ function RapportCarte({ rapport, fr }: { rapport: RapportLumi; fr: boolean }) {
   );
 }
 
-function PropositionCarte({ proposition, fr, busy, onDecision }: { proposition: PropositionLumi; fr: boolean; busy: boolean; onDecision: (d: 'confirm' | 'cancel') => void }) {
-  const titre = proposition.capacite || proposition.tool.replace(/_/g, ' ');
-  // Les identifiants techniques (UUID, réfs opaques) ne disent rien à l'utilisateur.
-  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const entrees = Object.entries(proposition.args).filter(([k, v]) => v !== null && v !== undefined && v !== '' && !/(^|_)id$/.test(k) && !(typeof v === 'string' && UUID.test(v)));
-  return (
-    <div className="mt-3 rounded-2xl border border-outline bg-surface px-4 py-3.5 text-[13.5px]">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{titre}</p>
-      {entrees.length > 0 && (
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
-          {entrees.map(([k, v]) => (
-            <React.Fragment key={k}>
-              <dt className="text-text-tertiary">{k.replace(/_/g, ' ')}</dt>
-              <dd className="text-text-primary break-words">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</dd>
-            </React.Fragment>
-          ))}
-        </dl>
-      )}
-      {proposition.statut === 'en_attente' ? (
-        <div className="mt-3.5 flex gap-2">
-          <button type="button" disabled={busy} onClick={() => onDecision('confirm')} className="rounded-lg bg-primary px-3 py-1.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-50">
-            {fr ? 'Confirmer' : 'Confirm'}
-          </button>
-          <button type="button" disabled={busy} onClick={() => onDecision('cancel')} className="rounded-lg border border-outline bg-surface px-3 py-1.5 text-[12.5px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-50">
-            {fr ? 'Annuler' : 'Cancel'}
-          </button>
-        </div>
-      ) : (
-        <p className={cn('mt-2.5 inline-flex items-center gap-2 text-[12px]', proposition.statut === 'confirmee' ? 'text-text-secondary' : proposition.statut === 'echouee' ? 'text-danger' : 'text-text-tertiary')}>
-          {proposition.statut === 'confirmee' ? <span className="h-2 w-2 rounded-full bg-[#3FAF97]" aria-hidden="true" /> : <XCircle size={12} />}
-          {proposition.statut === 'confirmee' ? (fr ? 'Exécutée' : 'Executed') : proposition.statut === 'echouee' ? (fr ? 'Échouée' : 'Failed') : (fr ? 'Annulée' : 'Cancelled')}
-        </p>
-      )}
-    </div>
-  );
-}

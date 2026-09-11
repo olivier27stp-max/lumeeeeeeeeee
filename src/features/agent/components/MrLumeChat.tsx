@@ -3,6 +3,9 @@
    (quote/invoice/job/SMS) are proposed and require confirmation. */
 
 import React, { useEffect, useRef, useState } from 'react';
+
+/** Un message du micro (« je n'ai rien entendu ») s'efface après ce délai. */
+const DUREE_ERREUR_VOIX_MS = 6000;
 import { motion } from 'motion/react';
 import { ArrowUp, Loader2, AudioLines, AlertTriangle, CheckCircle2, Mic, Square, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from '../../../i18n';
@@ -35,6 +38,8 @@ export default function MrLumeChat() {
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const idRef = useRef(1);
+  const voixTimerRef = useRef<number | null>(null);
+  useEffect(() => () => { if (voixTimerRef.current) window.clearTimeout(voixTimerRef.current); }, []);
   const scrollRef = useRef<HTMLDivElement>(null);
   /* Vrai si la dernière question a été dite au micro : la réponse est alors lue. */
   const spokenRef = useRef(false);
@@ -106,7 +111,12 @@ export default function MrLumeChat() {
       pendingSpokenRef.current = true;
       requestAnimationFrame(() => { const el = inputRef.current; el?.focus(); el?.setSelectionRange(el.value.length, el.value.length); });
     },
-    onError: (message) => setError(message),
+    // Un raté du micro s'efface tout seul (il restait affiché sans fin).
+    onError: (message) => {
+      setError(message);
+      if (voixTimerRef.current) window.clearTimeout(voixTimerRef.current);
+      voixTimerRef.current = window.setTimeout(() => setError((e) => (e === message ? null : e)), DUREE_ERREUR_VOIX_MS);
+    },
   });
   const listening = voice.state === 'recording';
   const transcribing = voice.state === 'transcribing';

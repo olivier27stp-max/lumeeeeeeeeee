@@ -35,12 +35,47 @@ export interface BudgetLumi {
 
 export type StatutProposition = 'en_attente' | 'confirmee' | 'annulee' | 'echouee';
 
+/** Une fiche du CRM touchée par Lumi (client, job, devis…) : l'interface en fait un lien vers la page exacte. */
+export type TypeFiche = 'client' | 'lead' | 'job' | 'quote' | 'invoice' | 'task';
+export interface FicheLumi {
+  type: TypeFiche;
+  id: string;
+  label: string;
+  href: string;
+  montant_cents?: number;
+}
+
+/** Aperçu d'une écriture proposée, composé par le serveur (taxes de l'org incluses). */
+export interface ApercuDocumentLumi {
+  genre: 'quote' | 'invoice';
+  client: { name: string; company: string | null; email: string | null; phone: string | null; address: string | null } | null;
+  title: string;
+  lignes: Array<{ name: string; description: string | null; quantity: number; unit_price_cents: number; total_cents: number }>;
+  subtotal_cents: number;
+  taxes: Array<{ label: string; rate: number; amount_cents: number }>;
+  total_cents: number;
+  valid_days: number | null;
+  notes: string | null;
+}
+export interface ApercuMessageLumi {
+  genre: 'sms' | 'email';
+  to: string | null;
+  subject: string | null;
+  body: string;
+}
+export type ApercuLumi = ApercuDocumentLumi | ApercuMessageLumi;
+
 export interface PropositionLumi {
   tool_use_id: string;
   tool: string;
   args: Record<string, unknown>;
   capacite: string | null;
   statut: StatutProposition;
+  apercu?: ApercuLumi | null;
+  /** Ce que l'action a créé (reçu) : « Devis Q-0043 », avec son lien. */
+  fiche?: FicheLumi | null;
+  /** Confirmée sans clic, parce que l'utilisateur a choisi « toujours confirmer » ce type d'action. */
+  auto?: boolean;
 }
 
 /** Rapport composé par le serveur (build_report) : déjà formaté, rendu en carte et en PDF côté client. */
@@ -66,6 +101,7 @@ export interface MessageLumi {
   tools: string[];
   proposal?: PropositionLumi;
   report?: RapportLumi;
+  fiches?: FicheLumi[];
 }
 
 export interface ConversationLumi {
@@ -78,7 +114,9 @@ export interface ConversationLumi {
 export type EvenementFlux =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
-  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null }
+  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null; apercu?: ApercuLumi | null }
+  | { type: 'fiches'; fiches: FicheLumi[] }
+  | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: FicheLumi | null }
   | { type: 'report'; tool_use_id: string; rapport: RapportLumi }
   | { type: 'usage'; model: string; cost_cents: number }
   | { type: 'done'; conversation_id: string; cost_cents: number; budget: BudgetLumi; proposal: { tool_use_id: string; tool: string; args: Record<string, unknown> } | null }

@@ -383,7 +383,7 @@ export function traduireStatut(v: any, dico: Record<string, string>): string | n
  * montants passe ensuite par calculerFinancesJob (copie du calculateur de
  * l'app (module pur importé tel quel) : mêmes arrondis au cent.
  */
-async function taxesParDefaut(ctx: ToolContext): Promise<TaxLine[]> {
+export async function taxesParDefaut(ctx: ToolContext): Promise<TaxLine[]> {
   const { data } = await ctx.client
     .from('tax_configs')
     .select('id, name, rate, is_active, sort_order')
