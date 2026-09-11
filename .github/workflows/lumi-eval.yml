@@ -67,12 +67,15 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUBSCRIPTION_GUARD: log
         run: |
+          # Secret de signature des jetons agent : obligatoire au démarrage,
+          # éphémère ici (aucun jeton n'a besoin de survivre à l'exécution).
+          export AGENT_JWT_SECRET="$(openssl rand -base64 48)"
           nohup npx tsx server/index.ts > api.log 2>&1 &
           for i in $(seq 1 60); do
             sleep 1
             if curl -s -o /dev/null http://localhost:3012/api/lumi/quota; then echo "API prête après ${i}s"; break; fi
           done
-          tail -n 5 api.log
+          if ! curl -s -o /dev/null http://localhost:3012/api/lumi/quota; then echo "::error::L'API n'a pas démarré"; grep -v 'npm warn' api.log | tail -n 40; exit 1; fi
 
       - name: Évaluer
         if: steps.secrets.outputs.ok == 'true'
