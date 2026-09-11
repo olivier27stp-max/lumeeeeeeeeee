@@ -21,6 +21,10 @@ on:
         description: 'Taux d’erreur maximal toléré (%)'
         default: '15'
         required: false
+      modele:
+        description: 'Modèle à évaluer (vide = défaut du code, claude-haiku-4-5, claude-opus-5…)'
+        default: ''
+        required: false
 
 concurrency:
   group: lumi-eval
@@ -65,8 +69,10 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LUMI_EVAL_SERVICE_ROLE_KEY }}
           SUPABASE_PROJECT_REF: ${{ secrets.LUMI_EVAL_PROJECT_REF }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LUMI_MODEL: ${{ github.event.inputs.modele || '' }}
           SUBSCRIPTION_GUARD: log
         run: |
+          echo "Modèle évalué : ${LUMI_MODEL:-défaut du code}"
           # Secret de signature des jetons agent : obligatoire au démarrage,
           # éphémère ici (aucun jeton n'a besoin de survivre à l'exécution).
           export AGENT_JWT_SECRET="$(openssl rand -base64 48)"

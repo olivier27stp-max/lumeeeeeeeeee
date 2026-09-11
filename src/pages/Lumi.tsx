@@ -9,7 +9,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowUp, AudioLines, AlertTriangle, ChevronDown, Copy, Download, FileText, History, Loader2, MessageSquarePlus, Mic, RotateCcw, Sparkles, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
+import { ArrowUp, AudioLines, AlertTriangle, ChevronDown, Copy, Download, FileText, History, Loader2, MessageSquarePlus, Mic, RotateCcw, Shield, Sparkles, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useVoiceInput, MAX_SECONDS } from '../features/agent/hooks/useVoiceInput';
 import { useSpeakReplies } from '../features/agent/hooks/useSpeakReplies';
@@ -20,7 +20,7 @@ import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
-  listerAutorisationsLumi, definirAutorisationLumi,
+  listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, type ModeLumi,
   ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
 } from '../lib/lumiApi';
 import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
@@ -207,6 +207,18 @@ export default function Lumi() {
   const [enCours, setEnCours] = useState(false);
   /** Outils en « toujours confirmer » (préférence serveur : le serveur exécute d'office). */
   const [autorisations, setAutorisations] = useState<Set<string>>(new Set());
+  /** Mode de confirmation, comme les modes de permission de Claude Code. */
+  const [mode, setMode] = useState<ModeLumi>('argent');
+  const [modeOuvert, setModeOuvert] = useState(false);
+  const MODES: Array<{ id: ModeLumi; fr: string; en: string; dfr: string; den: string }> = [
+    { id: 'demander', fr: 'Demander à chaque fois', en: 'Ask every time', dfr: 'Chaque action attend ton clic.', den: 'Every action waits for your click.' },
+    { id: 'argent', fr: 'Confirmer l’argent et les envois', en: 'Confirm money and sends', dfr: 'Jobs, tâches, statuts et notes passent seuls. Devis, factures, paiements, textos et courriels demandent.', den: 'Jobs, tasks, statuses and notes go through. Quotes, invoices, payments, texts and emails still ask.' },
+    { id: 'tout', fr: 'Tout faire sans demander', en: 'Do everything without asking', dfr: 'Rien ne demande. Un texto peut partir sans que tu le voies.', den: 'Nothing asks. A text can go out without you seeing it.' },
+  ];
+  async function changerMode(m: ModeLumi) {
+    setMode(m); setModeOuvert(false);
+    try { setMode(await definirModeLumi(m)); } catch { toast.error(fr ? 'Mode non enregistré.' : 'Mode not saved.'); }
+  }
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;
   const enCoursRef = useRef(false);
@@ -240,6 +252,7 @@ export default function Lumi() {
     }).catch(() => setBudget(null));
     listerConversationsLumi().then(setConversations).catch(() => setConversations([]));
     listerAutorisationsLumi().then((t) => setAutorisations(new Set(t))).catch(() => {});
+    modeLumi().then(setMode).catch(() => {});
     // /lumi?c=<id> : la notification du briefing du matin ouvre sa conversation.
     const c = params.get('c');
     if (c && /^[0-9a-f-]{36}$/i.test(c)) { void ouvrirConversation(c); setParams({}, { replace: true }); }
@@ -484,6 +497,33 @@ export default function Lumi() {
             {fmtDollars(budget.depense_cents)} / {fmtDollars(budget.budget_cents)}
           </span>
         )}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setModeOuvert((v) => !v)}
+            aria-expanded={modeOuvert}
+            aria-haspopup="menu"
+            aria-label={fr ? 'Mode de confirmation' : 'Confirmation mode'}
+            title={fr ? 'Ce que Lumi fait sans te demander' : 'What Lumi does without asking'}
+            className="glass-button inline-flex items-center gap-1.5 text-[12px]"
+          >
+            <Shield size={13} /> <span className="hidden sm:inline">{MODES.find((m) => m.id === mode)?.[fr ? 'fr' : 'en']}</span>
+          </button>
+          {modeOuvert && (
+            <>
+              <div role="presentation" tabIndex={-1} className="fixed inset-0 z-20" onClick={() => setModeOuvert(false)} />
+              <div role="menu" className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-outline bg-surface-card p-1.5 shadow-lg">
+                {MODES.map((m) => (
+                  <button key={m.id} type="button" role="menuitemradio" aria-checked={mode === m.id} onClick={() => changerMode(m.id)}
+                    className={cn('block w-full rounded-lg px-3 py-2 text-left hover:bg-surface-secondary', mode === m.id && 'bg-surface-secondary')}>
+                    <span className="block text-[13px] font-medium text-text-primary">{fr ? m.fr : m.en}</span>
+                    <span className="block text-[11.5px] text-text-tertiary">{fr ? m.dfr : m.den}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <div className="relative">
           <button
             type="button"

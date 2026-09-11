@@ -60,12 +60,54 @@ export async function executerEcriture(opts: {
   }
 }
 
-/* ── Autorisations « toujours confirmer » ─────────────────────────── */
+/* ── Mode de confirmation + autorisations « toujours confirmer » ──── */
 
-export async function autorisationsDe(admin: SupabaseClient, orgId: string, userId: string): Promise<Set<string>> {
+export type ModeLumi = 'demander' | 'argent' | 'tout';
+export const MODES_LUMI: readonly ModeLumi[] = ['demander', 'argent', 'tout'];
+
+/**
+ * Écritures SENSIBLES : de l'argent, un envoi au client, ou un geste
+ * irréversible. En mode « argent » (défaut), elles demandent encore ; tout
+ * le reste (jobs, tâches, statuts, notes, planification) part d'office.
+ */
+export const ECRITURES_SENSIBLES: ReadonlySet<string> = new Set([
+  'create_quote', 'send_quote', 'cancel_quote', 'convert_quote_to_job',
+  'create_invoice', 'create_invoice_from_job', 'send_invoice', 'mark_invoice_paid', 'send_payment_reminders',
+  'send_sms', 'send_email',
+  'merge_clients', 'archive_job',
+]);
+
+/** Le mode d'une personne pour cette org (défaut : argent). */
+export async function modeDe(admin: SupabaseClient, orgId: string, userId: string): Promise<ModeLumi> {
+  const { data, error } = await admin.from('memberships').select('lumi_mode').eq('org_id', orgId).eq('user_id', userId).maybeSingle();
+  if (error) { logger.error('[lumi] mode illisible', { error: error.message, orgId }); return 'argent'; }
+  const m = (data as any)?.lumi_mode;
+  return (MODES_LUMI as readonly string[]).includes(m) ? m as ModeLumi : 'argent';
+}
+
+export async function definirMode(admin: SupabaseClient, orgId: string, userId: string, mode: ModeLumi): Promise<void> {
+  const { error } = await admin.from('memberships').update({ lumi_mode: mode }).eq('org_id', orgId).eq('user_id', userId);
+  if (error) throw new Error(error.message);
+}
+
+/** Outils qu'un mode autorise d'office, parmi les outils d'écriture connus. */
+export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  if (mode === 'demander') return out;
+  for (const t of outilsEcriture) if (mode === 'tout' || !ECRITURES_SENSIBLES.has(t)) out.add(t);
+  return out;
+}
+
+/**
+ * Tout ce qui part sans clic pour cette personne : le mode, PLUS les
+ * outils cochés « toujours confirmer » un à un.
+ */
+export async function autorisationsDe(admin: SupabaseClient, orgId: string, userId: string, outilsEcriture?: Iterable<string>): Promise<Set<string>> {
   const { data, error } = await admin.from('lumi_autorisations').select('tool').eq('org_id', orgId).eq('user_id', userId);
   if (error) { logger.error('[lumi] autorisations illisibles', { error: error.message, orgId }); return new Set(); }
-  return new Set((data ?? []).map((r: any) => String(r.tool)));
+  const out = new Set((data ?? []).map((r: any) => String(r.tool)));
+  if (outilsEcriture) for (const t of outilsAutorisesParMode(await modeDe(admin, orgId, userId), outilsEcriture)) out.add(t);
+  return out;
 }
 
 export async function definirAutorisation(admin: SupabaseClient, orgId: string, userId: string, tool: string, actif: boolean): Promise<void> {

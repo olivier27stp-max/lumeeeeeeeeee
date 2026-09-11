@@ -26,7 +26,7 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
-import { executerEcriture, autorisationsDe, definirAutorisation, type ReçuExecution } from '../lib/lumi/execution';
+import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, type EvenementLumi } from '../lib/lumi/orchestrateur';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
@@ -211,7 +211,7 @@ async function executerTourSse(opts: {
       accessToken: ctx.accessToken,
       systeme: ctx.systeme,
       reglages: reglagesPourPalier(ctx.budget.palier, modeleLumi()),
-      autorisations: await autorisationsDe(ctx.admin, ctx.auth.orgId, ctx.auth.user.id),
+      autorisations: await autorisationsDe(ctx.admin, ctx.auth.orgId, ctx.auth.user.id, Object.keys(TOOLS_BY_NAME).filter((n) => TOOLS_BY_NAME[n]?.kind === 'write')),
       historique: [...opts.historique, ...opts.nouveauxAvant],
       emettre: (e) => { if (!ferme) emettre(e); },
       journaliser: (usage, model, cost_cents) => journaliserUsage(ctx.admin, {
@@ -313,6 +313,31 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');
+  }
+});
+
+// ── Mode de confirmation (demander | argent | tout) ─────────────
+router.get('/lumi/mode', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    return res.json({ mode: await modeDe(getServiceClient(), auth.orgId, auth.user.id) });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to load Lumi mode.', '[lumi/mode]');
+  }
+});
+
+const modeSchema = z.object({ mode: z.enum(['demander', 'argent', 'tout']) });
+router.put('/lumi/mode', validate(modeSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { mode } = req.body as { mode: ModeLumi };
+    if (!MODES_LUMI.includes(mode)) return res.status(400).json({ error: 'Unknown mode.' });
+    await definirMode(getServiceClient(), auth.orgId, auth.user.id, mode);
+    return res.json({ mode });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Unable to update Lumi mode.', '[lumi/mode]');
   }
 });
 
