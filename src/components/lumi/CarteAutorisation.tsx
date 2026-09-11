@@ -11,7 +11,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, FileText, Mail, MessageSquare, Briefcase, CheckSquare, UserPlus, Send, Pencil, XCircle } from 'lucide-react';
+import { ChevronDown, FileText, Mail, MessageSquare, Briefcase, CheckSquare, UserPlus, Send, Pencil, XCircle, Merge } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { getCompanySettings } from '../../lib/invoicesApi';
 import type { ApercuDocumentLumi, ApercuLumi, FicheLumi, PropositionLumi } from '../../lib/lumiApi';
@@ -36,6 +36,7 @@ const VERBES: Record<string, Verbe> = {
   update_client: { fr: 'modifier un client', en: 'update a client', type: 'les modifications de clients', typeEn: 'client updates', icone: UserPlus },
   mark_invoice_paid: { fr: 'marquer une facture payée', en: 'mark an invoice paid', type: 'les paiements', typeEn: 'payments', icone: FileText },
   remember_this: { fr: 'retenir quelque chose', en: 'remember something', type: 'les notes', typeEn: 'notes', icone: Pencil },
+  merge_clients: { fr: 'fusionner deux fiches clients', en: 'merge two client records', type: 'les fusions de fiches', typeEn: 'client merges', icone: Merge },
   forget_note: { fr: 'oublier une note', en: 'forget a note', type: 'les notes', typeEn: 'notes', icone: Pencil },
 };
 
@@ -61,6 +62,9 @@ function resume(p: PropositionLumi, fr: boolean): string {
   }
   if (a && (a.genre === 'sms' || a.genre === 'email')) {
     return [a.to ? `${fr ? 'À' : 'To'} ${a.to}` : null, a.subject].filter(Boolean).join(' · ');
+  }
+  if (a && a.genre === 'fusion') {
+    return `${a.garder?.name ?? '?'} ${fr ? '← absorbe' : '← absorbs'} ${a.absorber?.name ?? '?'}`;
   }
   const args = p.args as Record<string, unknown>;
   if (p.tool === 'remember_this' && typeof args.note === 'string') return args.note;
@@ -191,6 +195,36 @@ function MessageApercu({ a, fr }: { a: Extract<ApercuLumi, { genre: 'sms' | 'ema
   );
 }
 
+function FicheFusion({ f, titre, teinte }: { f: { name: string; company: string | null; email: string | null; phone: string | null; address: string | null; since: string | null; jobs: number; quotes: number; invoices: number } | null; titre: string; teinte: string }) {
+  return (
+    <div className={cn('rounded-xl border px-3.5 py-3 text-[12.5px]', teinte)}>
+      <p className="text-[10.5px] font-semibold uppercase tracking-[0.1em] text-text-tertiary mb-1.5">{titre}</p>
+      {f ? (
+        <>
+          <p className="font-semibold text-text-primary">{f.name}</p>
+          {f.company && f.company !== f.name && <p className="text-text-secondary">{f.company}</p>}
+          {f.email && <p className="text-text-secondary">{f.email}</p>}
+          {f.phone && <p className="text-text-secondary">{f.phone}</p>}
+          {f.address && <p className="text-text-tertiary">{f.address}</p>}
+          <p className="mt-1.5 text-text-tertiary">{f.jobs} jobs · {f.quotes} devis · {f.invoices} factures{f.since ? ` · depuis ${f.since}` : ''}</p>
+        </>
+      ) : <p className="text-text-tertiary">--</p>}
+    </div>
+  );
+}
+
+function FusionApercu({ a, fr }: { a: Extract<ApercuLumi, { genre: 'fusion' }>; fr: boolean }) {
+  return (
+    <div className="px-4 py-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <FicheFusion f={a.garder} titre={fr ? 'On garde' : 'Kept'} teinte="border-[#3FAF97]/50 bg-[#3FAF97]/5" />
+        <FicheFusion f={a.absorber} titre={fr ? 'On fusionne dedans (archivée)' : 'Merged in (archived)'} teinte="border-outline bg-surface" />
+      </div>
+      <p className="mt-3 text-[12px] text-text-tertiary">{fr ? 'Tout l’historique de la seconde (jobs, devis, factures, messages…) passe sur la première. Ses champs vides sont complétés. Ce n’est pas réversible.' : 'Everything attached to the second record moves to the first. Its empty fields get filled. This cannot be undone.'}</p>
+    </div>
+  );
+}
+
 /** Liste des champs, quand il n'y a pas d'aperçu composé (jobs, tâches, clients…). */
 function ChampsApercu({ args }: { args: Record<string, unknown> }) {
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -227,6 +261,7 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
   const a = p.apercu ?? null;
   const document = a && (a.genre === 'quote' || a.genre === 'invoice') ? a : null;
   const message = a && (a.genre === 'sms' || a.genre === 'email') ? a : null;
+  const fusion = a && a.genre === 'fusion' ? a : null;
   const attente = p.statut === 'en_attente';
   const ok = p.statut === 'confirmee';
   const titre = attente
@@ -240,7 +275,8 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
   const detailLabel = document
     ? (document.genre === 'quote' ? (fr ? 'Voir la soumission' : 'View the quote') : (fr ? 'Voir la facture' : 'View the invoice'))
     : message ? (message.genre === 'sms' ? (fr ? 'Voir le texto' : 'View the text') : (fr ? 'Voir le courriel' : 'View the email'))
-      : (fr ? 'Voir les détails' : 'View details');
+      : fusion ? (fr ? 'Voir les deux fiches' : 'View both records')
+        : (fr ? 'Voir les détails' : 'View details');
 
   return (
     <div className="mt-3 rounded-2xl border border-outline-strong bg-surface-card overflow-hidden text-[13.5px]">
@@ -256,13 +292,13 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
         </span>
       </div>
 
-      {(document || message || Object.keys(p.args).length > 0) && (
-        <details className="group border-t border-outline" open={!!document && attente}>
+      {(document || message || fusion || Object.keys(p.args).length > 0) && (
+        <details className="group border-t border-outline" open={(!!document || !!fusion) && attente}>
           <summary className="flex cursor-pointer list-none items-center gap-2 bg-surface px-3.5 py-2 text-[12.5px] text-text-secondary [&::-webkit-details-marker]:hidden">
             {detailLabel}
             <ChevronDown size={14} className="ml-auto text-text-tertiary transition-transform group-open:rotate-180" />
           </summary>
-          {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
+          {document ? <DocumentApercu doc={document} fr={fr} /> : message ? <MessageApercu a={message} fr={fr} /> : fusion ? <FusionApercu a={fusion} fr={fr} /> : <ChampsApercu args={p.args as Record<string, unknown>} />}
         </details>
       )}
 

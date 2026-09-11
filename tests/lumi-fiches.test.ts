@@ -94,6 +94,23 @@ describe('apercuProposition', () => {
     expect(a).toMatchObject({ genre: 'email', to: 'Marie Tremblay <marie@x.ca>', subject: 'Soumission Q-0043 · 494,39 $' });
   });
 
+  it('fusion de doublons : les deux fiches côte à côte, avec leur volume d historique', async () => {
+    const { apercuProposition } = await import('../server/lib/lumi/fiches');
+    const client = {
+      from: (table: string) => {
+        const q: any = {};
+        q.select = (_c: string, o?: any) => { q._head = !!o?.head; return q; };
+        q.eq = () => q; q.is = () => q;
+        q.maybeSingle = async () => ({ data: table === 'clients' ? { id: C1, first_name: 'Gaston', last_name: 'Doublon', company: null, display_as_company: false, email: 'g@x.ca', phone: '514', address: null, city: null, created_at: '2026-09-11T00:00:00Z' } : null });
+        q.then = (res: any) => Promise.resolve({ count: table === 'jobs' ? 2 : 1 }).then(res);
+        return q;
+      },
+    } as any;
+    const a: any = await apercuProposition('merge_clients', { keep_client_id: C1, absorb_client_id: Q1 }, { client, orgId: 'org', userId: 'u' });
+    expect(a.genre).toBe('fusion');
+    expect(a.garder).toMatchObject({ name: 'Gaston Doublon', email: 'g@x.ca', jobs: 2, quotes: 1, invoices: 1, since: '2026-09-11' });
+  });
+
   it('un outil sans aperçu → null (la carte retombe sur la liste des champs)', async () => {
     const { apercuProposition } = await import('../server/lib/lumi/fiches');
     expect(await apercuProposition('create_task', { title: 'Rappeler' }, ctx())).toBeNull();
