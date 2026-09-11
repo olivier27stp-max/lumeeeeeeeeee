@@ -63,6 +63,9 @@ export default function MrLumeChat() {
   async function send(text: string, opts: { spoken?: boolean } = {}) {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
+    // Envoi pendant que le micro écoute ou transcrit : le résultat final est
+    // jeté, sinon il revenait remplir la boîte après l'envoi.
+    if (voice.state !== 'idle') voice.cancel();
     setError(null);
     spokenRef.current = !!opts.spoken || pendingSpokenRef.current;
     pendingSpokenRef.current = false;
