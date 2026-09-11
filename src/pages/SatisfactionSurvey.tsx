@@ -56,6 +56,9 @@ const T = {
   followUp: isFr ? 'Un membre de l’équipe vous contactera rapidement.' : 'A team member will reach out to you shortly.',
   alreadyDone: isFr ? 'Vos commentaires ont déjà été enregistrés.' : 'Your feedback has already been recorded.',
   thanks: isFr ? 'Merci !' : 'Thank you!',
+  publicToo: isFr ? 'Vous pouvez aussi laisser un avis public :' : 'You can also leave a public review:',
+  googleLnk: isFr ? 'sur Google' : 'on Google',
+  facebookLnk: isFr ? 'sur Facebook' : 'on Facebook',
   ratingLabels: isFr
     ? ['', 'Très insatisfait', 'Insatisfait', 'Correct', 'Satisfait', 'Excellent !']
     : ['', 'Very unhappy', 'Unhappy', 'Okay', 'Satisfied', 'Excellent!'],
@@ -250,7 +253,21 @@ export default function SatisfactionSurvey() {
     );
   }
 
-  // ── 2b. Note basse : commentaires internes ──
+  // Le lien public reste offert même après une note basse (politique Google :
+  // on ne filtre pas qui peut laisser un avis). Discret, sans compte à rebours.
+  const liensPublics = destinations.length > 0 ? (
+    <p className="mt-5 text-xs text-gray-400 text-center">
+      {T.publicToo}{' '}
+      {destinations.map((d, i) => (
+        <span key={d.platform}>
+          {i > 0 && ' · '}
+          <a href={d.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">{d.platform === 'google' ? T.googleLnk : T.facebookLnk}</a>
+        </span>
+      ))}
+    </p>
+  ) : null;
+
+  // ── 2b. Note basse : commentaires internes d'abord, lien public ensuite ──
   if (step === 'feedback') {
     return (
       <Card>
@@ -277,6 +294,7 @@ export default function SatisfactionSurvey() {
         >
           {submitting ? T.sending : T.sendFeedback}
         </button>
+        {liensPublics}
         {company && <p className="text-xs text-gray-400 mt-6 text-center">{company}</p>}
       </Card>
     );
@@ -292,6 +310,7 @@ export default function SatisfactionSurvey() {
           </div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">{T.thanksFeedback}</h1>
           <p className="text-gray-600">{survey?.feedback_submitted ? T.alreadyDone : T.followUp}</p>
+          {liensPublics}
         </div>
       </Card>
     );
