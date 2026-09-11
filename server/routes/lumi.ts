@@ -27,7 +27,8 @@ import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
-import { isLumiConfigured, promptSystemeLumi, tourLumi, type EvenementLumi } from '../lib/lumi/orchestrateur';
+import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
+import { detecterRaccourci, repondreRaccourci } from '../lib/lumi/raccourcis';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import type { Rapport } from '../lib/agent/tools-rapports';
@@ -88,7 +89,8 @@ async function chargerHistorique(conversationId: string, cleRefs?: string): Prom
     while (i < msgs.length && !(msgs[i].role === 'user' && typeof msgs[i].content === 'string')) i++;
     msgs = msgs.slice(i);
   }
-  return msgs;
+  // Les vieux résultats d'outils sont allégés en mémoire seulement (voir purgerVieuxResultats).
+  return purgerVieuxResultats(msgs);
 }
 
 async function sauverMessages(conversationId: string, orgId: string, msgs: Msg[], cleRefs?: string): Promise<void> {
@@ -171,9 +173,11 @@ async function contexteTour(req: Request, res: Response) {
     await sendEmail({ to, subject, html: `<pre style="font:14px/1.5 system-ui;white-space:pre-wrap">${text.replace(/</g, '&lt;')}</pre>` });
   });
   let companyName: string | null = null;
+  let fuseau = 'America/Toronto';
   try {
-    const { data } = await admin.from('company_settings').select('company_name').eq('org_id', auth.orgId).maybeSingle();
+    const { data } = await admin.from('company_settings').select('company_name, timezone').eq('org_id', auth.orgId).maybeSingle();
     companyName = data?.company_name || null;
+    if ((data as any)?.timezone) fuseau = String((data as any).timezone);
   } catch { /* non-fatal : le prompt tient sans */ }
   const userName = (auth.user.user_metadata as any)?.full_name || (auth.user.user_metadata as any)?.name || auth.user.email || null;
   const language: 'fr' | 'en' = req.body?.language === 'en' ? 'en' : 'fr';
@@ -185,7 +189,7 @@ async function contexteTour(req: Request, res: Response) {
   } catch { /* non-fatal : Lumi peut encore les relire avec recall_notes */ }
   const systeme = promptSystemeLumi({ companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs });
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
-  return { auth, admin, budget, systeme, language, accessToken };
+  return { auth, admin, budget, systeme, language, accessToken, fuseau, userName };
 }
 
 async function executerTourSse(opts: {
@@ -270,6 +274,27 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       nouveaux.push({ role: 'user', content: enAttente.map((a) => ({ type: 'tool_result' as const, tool_use_id: a.tool_use_id, content: JSON.stringify({ cancelled: true, note: "L'utilisateur n'a pas confirmé cette action ; elle n'a pas été exécutée." }) })) });
     }
     nouveaux.push({ role: 'user', content: message });
+
+    // Raccourci déterministe : la question la plus courante a une réponse
+    // sans modèle (0 ¢, voir raccourcis.ts). Jamais quand une proposition
+    // vient d'être annulée : le modèle doit en rendre compte.
+    const raccourci = enAttente.length ? null : detecterRaccourci(message);
+    if (raccourci) {
+      const reponse = await repondreRaccourci(raccourci, {
+        client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
+        language: ctx.language, fuseau: ctx.fuseau, // Jamais un courriel en guise de prénom (« Bonjour will@… »).
+        prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
+      });
+      if (reponse) {
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('text', { type: 'text', delta: reponse.texte });
+        if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
+        return res.end();
+      }
+    }
 
     await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux });
   } catch (error: any) {
