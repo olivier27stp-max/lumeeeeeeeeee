@@ -289,6 +289,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
         const emettreSse = ouvrirSse(res);
+        emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'debut' });
+        emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
         emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
