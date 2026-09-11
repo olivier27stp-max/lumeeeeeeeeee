@@ -165,8 +165,8 @@ export const FONCTIONS: FonctionPage[] = [
     job: { fr: 'Bras droit', en: 'Right hand' },
     title: { fr: "Lumi, l'assistant", en: 'Lumi, the assistant' },
     lead: { fr: "Un employé de plus, qui ne dort pas. Lumi lit tes jobs, tes clients et tes factures. Il propose, tu confirmes, et tout ce qu'il fait est journalisé.", en: 'One more employee, who never sleeps. Lumi reads your jobs, clients and invoices. It proposes, you confirm, and everything it does is logged.' },
-    shot: '/landing/apercu-accueil.webp',
-    shotAlt: { fr: "Tableau de bord avec le brief du matin", en: 'Dashboard with the morning brief' },
+    shot: '/landing/apercu-lumi.webp',
+    shotAlt: { fr: 'Lumi propose les relances des factures en retard, à confirmer en un clic', en: 'Lumi proposes reminders for overdue invoices, confirmed in one click' },
     points: [
       { t: { fr: 'Il répond aux clients', en: 'It answers clients' }, d: { fr: 'Un texto à 21 h reçoit un prix, un créneau, une soumission. Tu vois tout le lendemain matin.', en: 'A 9 PM text gets a price, a time slot, a quote. You see it all the next morning.' } },
       { t: { fr: 'Il replanifie', en: 'It reschedules' }, d: { fr: 'Pluie annoncée : la job glisse au lendemain, le client et l’équipe sont avertis.', en: 'Rain in the forecast: the job slides to the next day, client and crew are notified.' } },

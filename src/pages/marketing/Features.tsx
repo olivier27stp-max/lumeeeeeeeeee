@@ -6,6 +6,10 @@
  * les images (vraies captures de l'app dans /landing) ont changé.
  */
 import { Link } from 'react-router-dom';
+import { FONCTIONS } from './fonctionsData';
+
+/** Chaque carte mène à la page « En savoir plus » de sa fonction quand elle existe, sinon au contact. */
+const PAGE_PAR_CARTE: Record<string, string> = Object.fromEntries(FONCTIONS.map((x) => [x.featureAnchor, `/fonctions/${x.slug}`]));
 import { motion } from 'motion/react';
 import { ArrowRight, BellRing, Calendar, CreditCard, FileText, Kanban, Map, Mic, Star, Trophy, Zap } from 'lucide-react';
 import { useTranslation } from '../../i18n';
@@ -29,7 +33,7 @@ interface Feature {
 const FEATURES: Feature[] = [
   {
     id: 'ai-voice',
-    shot: '/landing/apercu-accueil.webp',
+    shot: '/landing/apercu-lumi.webp',
     icon: Mic,
     title: { en: 'AI Voice Assistant', fr: 'Assistant vocal IA' },
     subtitle: { en: 'Speak. Lume acts.', fr: 'Parlez. Lume s\'exécute.' },
@@ -208,7 +212,7 @@ export default function Features() {
             <ul>
               {feature.bullets[language].map(b => <li key={b}><Check label={included} /><span>{b}</span></li>)}
             </ul>
-            <Link to="/contact" className="ft-lnk">{learnMore}</Link>
+            <Link to={PAGE_PAR_CARTE[feature.id] ?? '/contact'} className="ft-lnk">{learnMore}</Link>
             <div className="ft-shot"><img src={feature.shot} alt="" width={1800} height={1125} loading="lazy" decoding="async" /></div>
           </motion.article>
         ))}
