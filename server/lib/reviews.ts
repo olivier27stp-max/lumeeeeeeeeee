@@ -76,11 +76,18 @@ export function reviewInviteMessage(settings: ReviewSettingsLike | null | undefi
  *    plateforme est configurée (`auto_redirect_url`).
  *  - `feedback_form` : commentaires internes.
  */
+/**
+ * Prochaine étape après la note. Règle de conformité (politique Google sur le
+ * « review gating ») : le lien public est offert à TOUS, quelle que soit la
+ * note. Une note basse change l'ordre, pas l'accès : le formulaire privé
+ * d'abord, le lien public ensuite, discret, sans redirection automatique.
+ * Une note haute : invitation et boutons, redirection si une seule plateforme.
+ */
 export function surveyNextStep(rating: number, settings: ReviewSettingsLike | null | undefined) {
-  if (!isPositiveRating(rating)) {
-    return { step: 'feedback_form' as const, destinations: [] as ReviewDestination[], auto_redirect_url: null as string | null };
-  }
   const destinations = reviewDestinations(settings);
+  if (!isPositiveRating(rating)) {
+    return { step: 'feedback_form' as const, destinations, auto_redirect_url: null as string | null };
+  }
   return {
     step: 'public_review' as const,
     destinations,

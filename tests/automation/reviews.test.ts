@@ -3,6 +3,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   DEFAULT_REVIEW_INVITE_MESSAGE_FR,
   isPositiveRating,
@@ -62,11 +64,21 @@ describe('Avis clients — prochaine étape du sondage', () => {
     facebook_review_url: 'https://www.facebook.com/lume/reviews',
   };
 
-  it('note basse → formulaire de commentaires, aucune redirection', () => {
+  it('note basse → formulaire de commentaires d abord, liens publics quand même, aucune redirection', () => {
+    // Politique Google (« review gating ») : on ne filtre jamais qui peut
+    // laisser un avis. La note basse change l'ORDRE (formulaire privé d'abord),
+    // pas l'accès au lien public.
     const next = surveyNextStep(2, both);
     expect(next.step).toBe('feedback_form');
-    expect(next.destinations).toEqual([]);
+    expect(next.destinations).toHaveLength(2);
     expect(next.auto_redirect_url).toBeNull();
+  });
+
+  it('la page publique montre le lien public sous le formulaire et sur l écran de fin', () => {
+    const src = readFileSync(resolve(__dirname, '../../src/pages/SatisfactionSurvey.tsx'), 'utf8');
+    expect(src).toContain('const liensPublics');
+    // Une fois dans le formulaire (note basse), une fois sur « Terminé ».
+    expect(src.split('{liensPublics}').length - 1).toBe(2);
   });
 
   it('note haute + une seule plateforme → redirection automatique', () => {
