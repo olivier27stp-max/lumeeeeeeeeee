@@ -197,6 +197,19 @@ export async function deciderPropositionLumi(
   await lireFlux(res, onEvent, signal);
 }
 
+/** Mode de confirmation, par personne : demander (chaque fois) | argent (seulement argent, envois, fusions) | tout (jamais). */
+export type ModeLumi = 'demander' | 'argent' | 'tout';
+export async function modeLumi(): Promise<ModeLumi> {
+  const res = await fetch(`${API_BASE}/api/lumi/mode`, { headers: await authHeaders() });
+  if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'Unable to load mode');
+  return ((await res.json()) as { mode: ModeLumi }).mode;
+}
+export async function definirModeLumi(mode: ModeLumi): Promise<ModeLumi> {
+  const res = await fetch(`${API_BASE}/api/lumi/mode`, { method: 'PUT', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+  if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'Unable to update mode');
+  return ((await res.json()) as { mode: ModeLumi }).mode;
+}
+
 /** Outils d'écriture que l'utilisateur a choisi de ne plus confirmer (« toujours confirmer »), côté serveur. */
 export async function listerAutorisationsLumi(): Promise<string[]> {
   const res = await fetch(`${API_BASE}/api/lumi/autorisations`, { headers: await authHeaders() });

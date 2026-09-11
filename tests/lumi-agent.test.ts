@@ -329,6 +329,18 @@ describe('cache glissant de la conversation', () => {
   });
 });
 
+describe('mode de confirmation', () => {
+  it('demander = rien ; argent = tout sauf argent, envois et gestes irréversibles ; tout = tout', async () => {
+    const { outilsAutorisesParMode, ECRITURES_SENSIBLES } = await import('../server/lib/lumi/execution');
+    const ecritures = ['create_job', 'create_task', 'update_job_status', 'remember_this', 'create_quote', 'send_sms', 'mark_invoice_paid', 'merge_clients', 'archive_job'];
+    expect(outilsAutorisesParMode('demander', ecritures).size).toBe(0);
+    const argent = outilsAutorisesParMode('argent', ecritures);
+    expect([...argent].sort()).toEqual(['create_job', 'create_task', 'remember_this', 'update_job_status']);
+    expect(outilsAutorisesParMode('tout', ecritures).size).toBe(ecritures.length);
+    for (const s of ['create_quote', 'send_sms', 'send_email', 'mark_invoice_paid', 'send_payment_reminders', 'merge_clients']) expect(ECRITURES_SENSIBLES.has(s), s).toBe(true);
+  });
+});
+
 describe('« toujours confirmer » : l écriture autorisée part d office', () => {
   it('carte déjà confirmée, reçu émis, tool_result executed, et le tour continue', async () => {
     const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
