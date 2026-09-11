@@ -35,6 +35,8 @@ const VERBES: Record<string, Verbe> = {
   create_client: { fr: 'créer un client', en: 'create a client', type: 'les nouveaux clients', typeEn: 'new clients', icone: UserPlus },
   update_client: { fr: 'modifier un client', en: 'update a client', type: 'les modifications de clients', typeEn: 'client updates', icone: UserPlus },
   mark_invoice_paid: { fr: 'marquer une facture payée', en: 'mark an invoice paid', type: 'les paiements', typeEn: 'payments', icone: FileText },
+  remember_this: { fr: 'retenir quelque chose', en: 'remember something', type: 'les notes', typeEn: 'notes', icone: Pencil },
+  forget_note: { fr: 'oublier une note', en: 'forget a note', type: 'les notes', typeEn: 'notes', icone: Pencil },
 };
 
 function verbe(p: PropositionLumi, fr: boolean): Verbe {
@@ -61,6 +63,8 @@ function resume(p: PropositionLumi, fr: boolean): string {
     return [a.to ? `${fr ? 'À' : 'To'} ${a.to}` : null, a.subject].filter(Boolean).join(' · ');
   }
   const args = p.args as Record<string, unknown>;
+  if (p.tool === 'remember_this' && typeof args.note === 'string') return args.note;
+  if (p.tool === 'forget_note' && typeof args.key === 'string') return args.key;
   const t = [args.client_name, args.title, args.name].find((x) => typeof x === 'string' && x.trim()) as string | undefined;
   return t ?? '';
 }
@@ -228,7 +232,9 @@ export function CarteAutorisation({ proposition, fr, busy, onDecision, onSuite, 
   const titre = attente
     ? `${fr ? 'Lumi veut' : 'Lumi wants to'} ${fr ? v.fr : v.en}`
     : ok
-      ? (p.fiche?.label ? `${p.fiche.label} ${fr ? (p.fiche.type === 'invoice' || p.fiche.type === 'task' ? 'créée' : 'créé') : 'created'}` : (fr ? 'Action exécutée' : 'Action executed'))
+      ? (p.tool === 'remember_this' ? (fr ? 'Noté pour la prochaine fois' : 'Noted for next time')
+        : p.tool === 'forget_note' ? (fr ? 'Note oubliée' : 'Note forgotten')
+        : p.fiche?.label ? `${p.fiche.label} ${fr ? (p.fiche.type === 'invoice' || p.fiche.type === 'task' ? 'créée' : 'créé') : 'created'}` : (fr ? 'Action exécutée' : 'Action executed'))
       : p.statut === 'echouee' ? (fr ? 'Action échouée' : 'Action failed') : (fr ? 'Action refusée' : 'Action declined');
   const sousTitre = resume(p, fr);
   const detailLabel = document

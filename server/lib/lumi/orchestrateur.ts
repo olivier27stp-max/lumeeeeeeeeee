@@ -119,7 +119,18 @@ export function outilsClaude(): Anthropic.Messages.ToolUnion[] {
 }
 
 /** Prompt système Lumi : le prompt de l'agent, au nom de Lumi, partie stable en cache. */
-export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string }): Anthropic.Messages.TextBlockParam[] {
+/** Une note retenue sur l'entreprise (org_knowledge, catégorie « assistant »). */
+export interface Souvenir { key: string; value: string }
+
+/**
+ * Écritures anodines : exécutées sans carte à cliquer, même sans autorisation
+ * « toujours confirmer ». Retenir ou oublier une note ne touche ni client,
+ * ni argent, ni envoi — et demander une confirmation pour chaque fait appris
+ * empêcherait Lumi d'apprendre.
+ */
+export const ECRITURES_ANODINES: ReadonlySet<string> = new Set(['remember_this', 'forget_note']);
+
+export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[] }): Anthropic.Messages.TextBlockParam[] {
   // Partie STABLE (sans date ni nom) → cache. La partie variable suit.
   const stable = buildSystemPrompt({ companyName: ctx.companyName, userName: null, language: ctx.language, todayIso: 'DATE' })
     .replace('**Lume Agent**', '**Lumi**')
@@ -131,14 +142,22 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     // Les mêmes consignes « collègue » que le MCP : jamais d'identifiant, de
     // nom d'outil, de champ ou de vocabulaire base de données dans une réponse.
     + `\n\n# Finding the right tool\nOnly the everyday tools are loaded. Lume has ~55 more, hidden until you look them up with tool_search_tool_regex (a case-insensitive pattern on tool names and descriptions). Families and useful patterns: quotes, invoices & payments (\`quote|invoice|payment|paid|reminder\`), jobs, scheduling & routes (\`job|schedule|route|visit|free_slot\`), clients & leads (\`client|lead|note|remember\`), messaging (\`sms|email|conversation\`), reports & finances (\`report|revenue|financial|profit|churn|top_\`), team & field (\`team|timesheet|payroll|location|d2d|course\`), automations (\`automation|request_submission\`). Search BEFORE saying you can't do something; one search with an alternation pattern usually finds it.`
+    + `\n\n# Ce que tu apprends
+Tu retiens seul, avec remember_this et sans demander, tout fait DURABLE utile la prochaine fois : un prix habituel, une habitude d'un client, une règle de l'équipe, une consigne qu'on te donne (« à partir de maintenant… »). Une ligne, une clé stable. Tu ne retiens jamais un détail ponctuel, ni un mot de passe, une carte ou une donnée de santé. Si l'utilisateur te corrige ou dit « oublie ça » → forget_note. Ce que tu sais déjà est listé plus bas : appuie-toi dessus sans le répéter.`
     + `\n\n# Longueur des réponses
 Une à trois phrases par défaut, comme un collègue qui répond à l'oral. Le chiffre ou le fait d'abord, une précision si elle change quelque chose, et c'est tout. Pas de liste pour moins de trois éléments, pas de récapitulatif de ce qu'on vient de faire, pas de « veux-tu que je… » à chaque fois (une seule suite proposée, seulement si elle est évidente). Tu développes uniquement quand on te le demande (« détaille », « explique », « fais-moi un rapport »).`
     + `\n\n# Comment tu parles à l'utilisateur (s'applique aussi en anglais)\n${CONSIGNES_COLLEGUE}\n- Dans Lumi, une action d'écriture s'affiche comme une carte à confirmer : la carte EST le « oui » explicite. Quand tu as tout ce qu'il faut, propose directement (appelle l'outil) — ne demande pas « je le fais ? » en texte avant, ça ferait confirmer deux fois. Décris l'action en mots courants et ne prétends jamais qu'elle est faite avant la confirmation. Si l'outil d'écriture n'est pas chargé, cherche-le avec tool_search_tool_regex puis appelle-le.
 - Chaque mot que tu écris est dans la langue de l'utilisateur — y compris la courte phrase avant de consulter quelque chose (« je regarde ça », jamais « I'll check »).
 - Rapports : « un rapport », « un PDF », « un document pour mon comptable », « sors-moi mon mois » → build_report (type financier, retards, jobs ou client ; période = du 1er du mois à aujourd'hui si rien n'est précisé, sinon demande-la). La carte du rapport s'affiche SOUS ton message (dis « ci-dessous », jamais « ci-dessus ») avec le bouton de téléchargement ; toi, tu résumes les deux ou trois faits saillants en phrases — sans recopier les tableaux.`;
-  const variable = ctx.language === 'fr'
+  // Les souvenirs vont dans la partie VARIABLE (hors cache) : ils changent
+  // quand Lumi apprend, et ils pèsent peu (plafonnés à 30 lignes courtes).
+  const souvenirs = (ctx.souvenirs ?? []).slice(0, 30).map((s) => `- ${s.key} : ${s.value.replace(/\s+/g, ' ').slice(0, 240)}`);
+  const memoire = souvenirs.length
+    ? (ctx.language === 'fr' ? `\n\n# Ce que tu sais déjà de cette entreprise\n${souvenirs.join('\n')}` : `\n\n# What you already know about this business\n${souvenirs.join('\n')}`)
+    : '';
+  const variable = (ctx.language === 'fr'
     ? `Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
-    : `Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`;
+    : `Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`) + memoire;
   return [
     { type: 'text', text: stable, cache_control: CACHE_1H },
     { type: 'text', text: variable },
@@ -237,7 +256,7 @@ export async function tourLumi(opts: {
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: `Unknown tool: ${appel.name}` }), is_error: true });
         continue;
       }
-      if (outil.kind === 'write' && opts.autorisations?.has(appel.name)) {
+      if (outil.kind === 'write' && (ECRITURES_ANODINES.has(appel.name) || opts.autorisations?.has(appel.name))) {
         // « Toujours confirmer » : la carte s'affiche déjà confirmée et
         // l'écriture part sur-le-champ, avec la même garde et le même reçu
         // que le bouton Confirmer. Le tour continue (le modèle en rend compte).
