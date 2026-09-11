@@ -34,6 +34,13 @@ export interface UsageTokens {
   output_tokens: number;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
+  /**
+   * Détail des écritures en cache renvoyé par l'API : 5 min (125 % du tarif
+   * d'entrée) ou 1 h (200 %). Le prompt et les outils sont en 1 h, la
+   * conversation en 5 min : sans ce détail, on se comptait la conversation
+   * 60 % trop cher.
+   */
+  cache_creation?: { ephemeral_1h_input_tokens: number; ephemeral_5m_input_tokens: number } | null;
 }
 
 /** Tarif le plus cher : un modèle inconnu est facturé à ce prix, jamais 0 (on ne sous-compte pas). */
@@ -42,11 +49,15 @@ const TARIF_PLANCHER = TARIFS['claude-opus-5'];
 /** Coût d'un appel en cents (décimaux). Modèle inconnu → tarif Opus 5, jamais 0. */
 export function coutEnCents(model: string, u: UsageTokens): number {
   const t = TARIFS[model] ?? TARIF_PLANCHER;
+  // Sans détail (vieux journal, test), tout est compté au tarif 1 h : jamais sous-compté.
+  const ecrit1h = u.cache_creation ? u.cache_creation.ephemeral_1h_input_tokens : (u.cache_creation_input_tokens ?? 0);
+  const ecrit5m = u.cache_creation ? u.cache_creation.ephemeral_5m_input_tokens : 0;
   const dollars =
     (u.input_tokens * t.input
       + u.output_tokens * t.output
       + (u.cache_read_input_tokens ?? 0) * t.cacheRead
-      + (u.cache_creation_input_tokens ?? 0) * t.cacheWrite) / 1_000_000;
+      + ecrit1h * t.cacheWrite
+      + ecrit5m * t.input * 1.25) / 1_000_000;
   return Math.round(dollars * 100 * 10_000) / 10_000;
 }
 
