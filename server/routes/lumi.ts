@@ -20,7 +20,11 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { etatBudget, journaliserUsage } from '../lib/lumi/budget';
+import { etatBudget, journaliserUsage, reglagesPourPalier, attenteRalenti, alerterSiSeuilFranchi } from '../lib/lumi/budget';
+import { modeleLumi } from '../lib/lumi/tarifs';
+import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { redisRateLimit } from '../lib/rate-limiter';
+import { userKey } from '../lib/security';
 import { ficheCreee, type Fiche } from '../lib/lumi/fiches';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, type EvenementLumi } from '../lib/lumi/orchestrateur';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
@@ -140,10 +144,22 @@ async function contexteTour(req: Request, res: Response) {
     res.status(403).json({ error: 'Lumi is not included in this plan.', code: 'plan_sans_lumi', budget });
     return null;
   }
-  if (budget.epuise) {
-    res.status(429).json({ error: 'Monthly AI budget reached.', code: 'quota_epuise', budget });
-    return null;
+  // Plafond atteint : Lumi ralentit au lieu de mourir — un tour par minute
+  // (sur Haiku, effort bas) jusqu'au 1er. Le client n'est jamais à sec.
+  if (budget.palier === 'ralenti') {
+    const attente = await attenteRalenti(admin, auth.orgId);
+    if (attente > 0) {
+      res.setHeader('Retry-After', String(attente));
+      res.status(429).json({ error: 'Lumi is slowed down this month.', code: 'ralenti', retry_after_s: attente, budget });
+      return null;
+    }
   }
+  // Alerte à l'exploitant au passage à 60 % (une fois par org et par mois).
+  void alerterSiSeuilFranchi(admin, auth.orgId, budget, async (subject, text) => {
+    const to = process.env.LUMI_ALERT_EMAIL || process.env.SECURITY_ALERT_EMAIL;
+    if (!to || !isMailerConfigured()) return;
+    await sendEmail({ to, subject, html: `<pre style="font:14px/1.5 system-ui;white-space:pre-wrap">${text.replace(/</g, '&lt;')}</pre>` });
+  });
   let companyName: string | null = null;
   try {
     const { data } = await admin.from('company_settings').select('company_name').eq('org_id', auth.orgId).maybeSingle();
@@ -178,6 +194,7 @@ async function executerTourSse(opts: {
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
       systeme: ctx.systeme,
+      reglages: reglagesPourPalier(ctx.budget.palier, modeleLumi()),
       historique: [...opts.historique, ...opts.nouveauxAvant],
       emettre: (e) => { if (!ferme) emettre(e); },
       journaliser: (usage, model, cost_cents) => journaliserUsage(ctx.admin, {
@@ -199,7 +216,13 @@ async function executerTourSse(opts: {
 }
 
 // ── POST /lumi/chat ─────────────────────────────────────────────
-router.post('/lumi/chat', validate(chatSchema), async (req, res) => {
+/**
+ * Limite par PERSONNE et par heure : bloque un script ou une boucle sans
+ * jamais gêner un humain qui travaille (60 tours/h, c'est un par minute).
+ */
+const limiteHoraireLumi = redisRateLimit({ preset: 'lumi', keyFn: (req) => `lumi:${userKey(req)}` });
+
+router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, res) => {
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;

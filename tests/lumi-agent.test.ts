@@ -67,6 +67,40 @@ vi.mock('../server/lib/supabase', () => ({
   getServiceClient: () => ({ rpc: async () => ({ data: false }) }),
 }));
 
+describe('paliers de budget (le client n est jamais à sec)', () => {
+  it('normal sous 60 %, économe à partir de 60 %, ralenti à 100 %', async () => {
+    const { palierBudget, reglagesPourPalier } = await import('../server/lib/lumi/budget');
+    expect(palierBudget(4000, 0)).toBe('normal');
+    expect(palierBudget(4000, 2399)).toBe('normal');
+    expect(palierBudget(4000, 2400)).toBe('econome');
+    expect(palierBudget(4000, 3999)).toBe('econome');
+    expect(palierBudget(4000, 4000)).toBe('ralenti');
+    expect(palierBudget(0, 500)).toBe('normal'); // pas de plafond → pas de pente
+    // La pente joue AVANT tout refus : modèle moins cher, réflexion réduite.
+    expect(reglagesPourPalier('normal', 'claude-sonnet-5')).toEqual({ model: 'claude-sonnet-5', effort: 'medium' });
+    expect(reglagesPourPalier('econome', 'claude-sonnet-5')).toEqual({ model: 'claude-haiku-4-5', effort: 'low' });
+    expect(reglagesPourPalier('ralenti', 'claude-sonnet-5')).toEqual({ model: 'claude-haiku-4-5', effort: 'low' });
+  });
+
+  it('etatBudget expose le palier ; à plafond atteint, epuise reste vrai (garde-fou interne)', async () => {
+    const { etatBudget } = await import('../server/lib/lumi/budget');
+    const eco = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 2500 }) as any, 'org-1');
+    expect(eco.palier).toBe('econome');
+    const plein = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 4000 }) as any, 'org-1');
+    expect(plein).toMatchObject({ palier: 'ralenti', epuise: true });
+  });
+
+  it('le tour utilise le modèle et l effort du palier', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'text', text: 'Ok.' }], stop_reason: 'end_turn', usage });
+    const journal: any[] = [];
+    await tourLumi({ ...baseTour([], journal), reglages: { model: 'claude-haiku-4-5', effort: 'low' } });
+    expect(instantanes[0].model).toBe('claude-haiku-4-5');
+    expect(instantanes[0].output_config).toEqual({ effort: 'low' });
+    expect(journal[0].model).toBe('claude-haiku-4-5');
+  });
+});
+
 describe('budget mensuel', () => {
   it('Autopilot : 150 $, dépense lue en base, reste calculé', async () => {
     const { etatBudget } = await import('../server/lib/lumi/budget');

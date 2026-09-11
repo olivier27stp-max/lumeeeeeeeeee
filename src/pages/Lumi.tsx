@@ -232,7 +232,7 @@ export default function Lumi() {
       // Dire tout de suite POURQUOI Lumi est indisponible, sans attendre un envoi.
       if (b.configured === false) setErreur({ code: 'lumi_not_configured', message: '' });
       else if (!b.includes_ai) setErreur({ code: 'plan_sans_lumi', message: '' });
-      else if (b.epuise) setErreur({ code: 'quota_epuise', message: '' });
+      // Plafond atteint : Lumi ralentit (un tour par minute), il n'est pas indisponible — rien à annoncer d'avance.
     }).catch(() => setBudget(null));
     listerConversationsLumi().then(setConversations).catch(() => setConversations([]));
   }, []);
@@ -635,7 +635,11 @@ export default function Lumi() {
           <div className="mb-2 flex items-start gap-2 px-3 py-2 rounded-lg bg-danger/10 border border-danger/30 text-danger text-[12px]" role="alert">
             <AlertTriangle size={14} className="shrink-0 mt-0.5" />
             <span>
-              {erreur.code === 'quota_epuise'
+              {erreur.code === 'ralenti'
+                ? (fr ? 'Gros mois pour Lumi : il répond une fois par minute jusqu’au 1er. Réessaie dans un instant.' : 'Busy month for Lumi: one reply per minute until the 1st. Try again in a moment.')
+                : erreur.code === 'http_429'
+                  ? (fr ? 'Lumi souffle deux minutes : beaucoup de demandes d’un coup. Réessaie tout à l’heure.' : 'Lumi is catching its breath: a lot of requests at once. Try again shortly.')
+                  : erreur.code === 'quota_epuise'
                 ? (fr ? 'Le budget IA du mois est atteint. Lumi reprend le 1er du mois prochain.' : 'This month’s AI budget is reached. Lumi resumes on the 1st of next month.')
                 : erreur.code === 'plan_sans_lumi'
                   ? (fr ? 'Lumi est inclus dans les plans Scale et Autopilot.' : 'Lumi is included in the Scale and Autopilot plans.')
