@@ -109,7 +109,10 @@ async function sauverMessages(conversationId: string, orgId: string, msgs: Msg[]
 }
 
 /** Écriture proposée mais ni confirmée ni annulée : le dernier tool_use d'écriture sans tool_result. */
-export function propositionEnAttente(msgs: Msg[]): { tool_use_id: string; tool: string; args: Record<string, any> } | null {
+export interface EcritureEnAttente { tool_use_id: string; tool: string; args: Record<string, any> }
+
+/** Toutes les écritures encore sans réponse du DERNIER message assistant (une carte = un groupe). */
+export function propositionsEnAttente(msgs: Msg[]): EcritureEnAttente[] {
   const resolus = new Set<string>();
   for (const m of msgs) {
     if (m.role === 'user' && Array.isArray(m.content)) {
@@ -119,16 +122,22 @@ export function propositionEnAttente(msgs: Msg[]): { tool_use_id: string; tool: 
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i];
     if (m.role !== 'assistant' || !Array.isArray(m.content)) continue;
+    const out: EcritureEnAttente[] = [];
     for (const b of m.content) {
       const tu = b as any;
       if (tu.type === 'tool_use' && !resolus.has(tu.id) && TOOLS_BY_NAME[tu.name]?.kind === 'write') {
-        return { tool_use_id: tu.id, tool: tu.name, args: (tu.input ?? {}) as Record<string, any> };
+        out.push({ tool_use_id: tu.id, tool: tu.name, args: (tu.input ?? {}) as Record<string, any> });
       }
     }
     // Le premier message assistant rencontré en remontant décide.
-    return null;
+    return out;
   }
-  return null;
+  return [];
+}
+
+/** Compatibilité : la première écriture en attente. */
+export function propositionEnAttente(msgs: Msg[]): EcritureEnAttente | null {
+  return propositionsEnAttente(msgs)[0] ?? null;
 }
 
 // ── Contexte d'un tour ──────────────────────────────────────────
@@ -182,8 +191,8 @@ async function contexteTour(req: Request, res: Response) {
 async function executerTourSse(opts: {
   req: Request; res: Response; ctx: NonNullable<Awaited<ReturnType<typeof contexteTour>>>;
   conversationId: string; historique: Msg[]; nouveauxAvant: Msg[];
-  /** Reçu d'une écriture qui vient d'être exécutée (ou refusée) : émis avant que le modèle reprenne. */
-  execute?: ReçuExecution;
+  /** Reçus des écritures qui viennent d'être exécutées (ou refusées) : émis avant que le modèle reprenne. */
+  execute?: ReçuExecution[];
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -192,7 +201,7 @@ async function executerTourSse(opts: {
   opts.req.on('close', () => { ferme = true; });
 
   try {
-    if (opts.execute && !ferme) emettreSse('executed', opts.execute);
+    for (const recu of opts.execute ?? []) if (!ferme) emettreSse('executed', recu);
     const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
     if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant, cleRefs);
     const resultat = await tourLumi({
@@ -253,9 +262,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     const nouveaux: Msg[] = [];
     // Une proposition laissée sans réponse est annulée par le nouveau message :
     // l'API exige un tool_result pour chaque tool_use avant de continuer.
-    const enAttente = propositionEnAttente(historique);
-    if (enAttente) {
-      nouveaux.push({ role: 'user', content: [{ type: 'tool_result', tool_use_id: enAttente.tool_use_id, content: JSON.stringify({ cancelled: true, note: "L'utilisateur n'a pas confirmé cette action ; elle n'a pas été exécutée." }) }] });
+    const enAttente = propositionsEnAttente(historique);
+    if (enAttente.length) {
+      nouveaux.push({ role: 'user', content: enAttente.map((a) => ({ type: 'tool_result' as const, tool_use_id: a.tool_use_id, content: JSON.stringify({ cancelled: true, note: "L'utilisateur n'a pas confirmé cette action ; elle n'a pas été exécutée." }) })) });
     }
     nouveaux.push({ role: 'user', content: message });
 
@@ -276,24 +285,28 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversation_id).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
     const historique = await chargerHistorique(conversation_id, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
-    const enAttente = propositionEnAttente(historique);
-    if (!enAttente || enAttente.tool_use_id !== tool_use_id) {
+    // La décision porte sur le GROUPE : toutes les écritures en attente du
+    // dernier message (une carte), identifiées par la première.
+    const enAttente = propositionsEnAttente(historique);
+    if (!enAttente.length || !enAttente.some((a) => a.tool_use_id === tool_use_id)) {
       return res.status(409).json({ error: 'No such pending action.', code: 'aucune_proposition' });
     }
 
-    let contenu: string;
-    let execute: ReçuExecution = { tool_use_id, ok: false, fiche: null };
-    if (decision === 'cancel') {
-      contenu = JSON.stringify({ cancelled: true, note: "L'utilisateur a annulé cette action ; elle n'a pas été exécutée." });
-    } else {
-      // Exécution RÉELLE, à l'identité de l'utilisateur, avec les gardes du MCP
-      // — même chemin que l'exécution d'office d'un outil autorisé.
-      const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, enAttente.args);
-      const r = await executerEcriture({ tool: enAttente.tool, toolUseId: tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
-      contenu = r.contenu;
-      execute = r.recu;
+    const blocs: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
+    const execute: ReçuExecution[] = [];
+    for (const a of enAttente) {
+      if (decision === 'cancel') {
+        blocs.push({ type: 'tool_result', tool_use_id: a.tool_use_id, content: JSON.stringify({ cancelled: true, note: "L'utilisateur a annulé cette action ; elle n'a pas été exécutée." }) });
+        continue;
+      }
+      // Exécution RÉELLE, dans l'ordre, à l'identité de l'utilisateur, avec les
+      // gardes du MCP — même chemin que l'exécution d'office d'un outil autorisé.
+      const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, a.args);
+      const r = await executerEcriture({ tool: a.tool, toolUseId: a.tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
+      blocs.push({ type: 'tool_result', tool_use_id: a.tool_use_id, content: r.contenu });
+      execute.push(r.recu);
     }
-    const resultat: Msg = { role: 'user', content: [{ type: 'tool_result', tool_use_id, content: contenu }] };
+    const resultat: Msg = { role: 'user', content: blocs };
 
     // Le modèle reprend la main pour confirmer en mots ce qui s'est passé.
     await executerTourSse({ req, res, ctx, conversationId: conversation_id, historique, nouveauxAvant: [resultat], execute });
@@ -360,7 +373,8 @@ router.get('/lumi/conversations', async (req, res) => {
 });
 
 /** Rend les blocs stockés en éléments d'interface : texte, appels d'outils, propositions et leur sort. */
-export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null; auto?: boolean }; report?: Rapport }> {
+type PropositionRendue = { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null; auto?: boolean; groupe?: PropositionRendue[] };
+export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: PropositionRendue; report?: Rapport }> {
   const sorts = new Map<string, 'confirmee' | 'annulee' | 'echouee'>();
   const fiches = new Map<string, Fiche>();
   const autos = new Set<string>();
@@ -393,15 +407,22 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
     const blocs = Array.isArray(m.content) ? (m.content as any[]) : [{ type: 'text', text: String(m.content) }];
     const texte = blocs.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
     const tools: string[] = [];
-    let proposal: ReturnType<typeof rendreMessages>[number]['proposal'];
+    let proposal: PropositionRendue | undefined;
+    const ecritures: PropositionRendue[] = [];
     let report: Rapport | undefined;
     for (const b of blocs) {
       if (b.type !== 'tool_use') continue;
       if (rapports.has(b.id)) report = rapports.get(b.id);
       const outil = TOOLS_BY_NAME[b.name];
       if (outil?.kind === 'write') {
-        proposal = { tool_use_id: b.id, tool: b.name, args: b.input ?? {}, capacite: PERMISSION_PAR_OUTIL[b.name]?.capacite ?? null, statut: sorts.get(b.id) ?? 'en_attente', fiche: fiches.get(b.id) ?? null, ...(autos.has(b.id) ? { auto: true } : {}) };
+        ecritures.push({ tool_use_id: b.id, tool: b.name, args: b.input ?? {}, capacite: PERMISSION_PAR_OUTIL[b.name]?.capacite ?? null, statut: sorts.get(b.id) ?? 'en_attente', fiche: fiches.get(b.id) ?? null, ...(autos.has(b.id) ? { auto: true } : {}) });
       } else tools.push(b.name);
+    }
+    if (ecritures.length === 1) proposal = ecritures[0];
+    else if (ecritures.length > 1) {
+      // Plusieurs écritures du même message = une carte ; l'état de la carte suit le pire de ses lignes.
+      const statut = ecritures.some((e) => e.statut === 'en_attente') ? 'en_attente' : ecritures.some((e) => e.statut === 'echouee') ? 'echouee' : ecritures.every((e) => e.statut === 'annulee') ? 'annulee' : 'confirmee';
+      proposal = { ...ecritures[0], statut, groupe: ecritures };
     }
     if (texte || proposal || tools.length) out.push({ role: 'assistant', text: texte, tools, ...(proposal ? { proposal } : {}), ...(report ? { report } : {}) });
   }

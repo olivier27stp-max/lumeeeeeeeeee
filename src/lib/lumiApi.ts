@@ -78,6 +78,8 @@ export interface PropositionLumi {
   fiche?: FicheLumi | null;
   /** Confirmée sans clic, parce que l'utilisateur a choisi « toujours confirmer » ce type d'action. */
   auto?: boolean;
+  /** Plusieurs écritures proposées d'un coup : une carte, une confirmation ; chaque ligne a son état et son reçu. */
+  groupe?: PropositionLumi[];
 }
 
 /** Rapport composé par le serveur (build_report) : déjà formaté, rendu en carte et en PDF côté client. */
@@ -116,7 +118,7 @@ export interface ConversationLumi {
 export type EvenementFlux =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
-  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null; apercu?: ApercuLumi | null; auto?: boolean }
+  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null; apercu?: ApercuLumi | null; auto?: boolean; groupe?: Array<{ tool_use_id: string; tool: string; args: Record<string, unknown>; capacite: string | null; apercu?: ApercuLumi | null }> }
   | { type: 'fiches'; fiches: FicheLumi[] }
   | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: FicheLumi | null; auto?: boolean }
   | { type: 'report'; tool_use_id: string; rapport: RapportLumi }

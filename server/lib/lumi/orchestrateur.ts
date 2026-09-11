@@ -142,6 +142,8 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
     // Les mêmes consignes « collègue » que le MCP : jamais d'identifiant, de
     // nom d'outil, de champ ou de vocabulaire base de données dans une réponse.
     + `\n\n# Finding the right tool\nOnly the everyday tools are loaded. Lume has ~55 more, hidden until you look them up with tool_search_tool_regex (a case-insensitive pattern on tool names and descriptions). Families and useful patterns: quotes, invoices & payments (\`quote|invoice|payment|paid|reminder\`), jobs, scheduling & routes (\`job|schedule|route|visit|free_slot\`), clients & leads (\`client|lead|note|remember\`), messaging (\`sms|email|conversation\`), reports & finances (\`report|revenue|financial|profit|churn|top_\`), team & field (\`team|timesheet|payroll|location|d2d|course\`), automations (\`automation|request_submission\`). Search BEFORE saying you can't do something; one search with an alternation pattern usually finds it. Never answer « je n'ai pas d'outil pour ça » in a turn where you have not run tool_search_tool_regex at least once — team positions, timesheets, payroll, automations, courses, churn, routes: they all exist.`
+    + `\n\n# Plusieurs actions d'un coup
+Quand l'utilisateur demande plusieurs actions INDÉPENDANTES dans la même phrase (« crée le job, assigne-le à Marc et texte le client »), appelle tous les outils d'écriture dans la MÊME réponse : ils s'affichent dans une seule carte, une seule confirmation, exécutés dans l'ordre. Ne les étale pas sur plusieurs tours. Une action qui a besoin du résultat d'une autre (un id que tu n'as pas encore) attend le tour suivant — mais préfère les outils qui font tout d'un coup (create_job avec la date, convert_quote_to_job avec scheduled_at).`
     + `\n\n# Doublons
 Quand une recherche renvoie deux fiches qui sont visiblement la même personne ou la même entreprise (même téléphone ou même courriel), dis-le en une phrase et propose de les fusionner avec merge_clients (garde la plus ancienne ou celle qui a le plus d'historique) — sans le faire tant que l'utilisateur n'a pas dit oui, et sans t'en servir pour bloquer la demande en cours : fais d'abord ce qu'on te demande sur la fiche la plus plausible.`
     + `\n\n# Ce que tu apprends
@@ -172,7 +174,9 @@ Une à trois phrases par défaut, comme un collègue qui répond à l'oral. Le c
 export type EvenementLumi =
   | { type: 'text'; delta: string }
   | { type: 'tool'; name: string; statut: 'debut' | 'fin' | 'refus' }
-  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; apercu: Apercu | null; auto?: boolean }
+  | { type: 'proposal'; tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; apercu: Apercu | null; auto?: boolean;
+      /** Plusieurs écritures proposées dans le même souffle : une seule carte, une seule confirmation. */
+      groupe?: Array<{ tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; apercu: Apercu | null }> }
   /** Reçu d'une écriture exécutée (par le bouton Confirmer, ou d'office si l'outil est autorisé). */
   | { type: 'executed'; tool_use_id: string; ok: boolean; fiche: Fiche | null; auto?: boolean }
   /** Fiches (client, job, devis, facture…) touchées par un outil de lecture : l'interface en fait des liens. */
@@ -185,7 +189,8 @@ export interface ResultatTour {
   /** Messages à AJOUTER à la conversation (assistant + résultats d'outils), dans l'ordre. */
   nouveauxMessages: Anthropic.Messages.MessageParam[];
   /** Proposition en attente (écriture), s'il y en a une. */
-  proposition: { tool_use_id: string; tool: string; args: Record<string, any> } | null;
+  /** La première écriture en attente (compatibilité) ; `groupe` liste toutes celles du même tour. */
+  proposition: { tool_use_id: string; tool: string; args: Record<string, any>; groupe?: Array<{ tool_use_id: string; tool: string; args: Record<string, any> }> } | null;
   texte: string;
   cost_cents: number;
 }
@@ -251,7 +256,8 @@ export async function tourLumi(opts: {
     // un message utilisateur vide serait refusé par l'API.
     if (appels.length === 0) continue;
     const resultats: Anthropic.Messages.ToolResultBlockParam[] = [];
-    let proposition: ResultatTour['proposition'] = null;
+    // Toutes les écritures proposées dans cette réponse : une carte, une confirmation.
+    const enAttente: Array<{ tool_use_id: string; tool: string; args: Record<string, any> }> = [];
 
     for (const appel of appels) {
       const outil = TOOLS_BY_NAME[appel.name];
@@ -273,9 +279,9 @@ export async function tourLumi(opts: {
         continue;
       }
       if (outil.kind === 'write') {
-        // Une seule proposition à la fois : la première écriture arrête le tour.
-        if (!proposition) proposition = { tool_use_id: appel.id, tool: appel.name, args };
-        else resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: 'Une seule action à la fois : propose celle-ci après la confirmation de la précédente.' }), is_error: true });
+        // Plusieurs écritures dans la même réponse (créer le job, l'assigner,
+        // texter le client) = une seule carte à confirmer, exécutées dans l'ordre.
+        enAttente.push({ tool_use_id: appel.id, tool: appel.name, args });
         continue;
       }
 
@@ -303,16 +309,20 @@ export async function tourLumi(opts: {
       }
     }
 
-    if (proposition) {
-      // Les lectures déjà faites sont conservées ; l'écriture attend la
-      // confirmation. Le tool_use en suspens sera résolu par /lumi/execute
-      // (confirmé ou annulé) avant tout nouveau message.
+    if (enAttente.length) {
+      // Les lectures déjà faites sont conservées ; les écritures attendent la
+      // confirmation. Les tool_use en suspens seront résolus par /lumi/execute
+      // (confirmés ou annulés, tous ensemble) avant tout nouveau message.
       if (resultats.length) {
         const u: Anthropic.Messages.MessageParam = { role: 'user', content: resultats };
         messages.push(u); nouveaux.push(u);
       }
-      const apercu = await apercuProposition(proposition.tool, proposition.args, { client: opts.client, orgId: opts.orgId, userId: opts.userId });
-      opts.emettre({ type: 'proposal', tool_use_id: proposition.tool_use_id, tool: proposition.tool, args: proposition.args, capacite: PERMISSION_PAR_OUTIL[proposition.tool]?.capacite ?? null, apercu });
+      const ctxApercu = { client: opts.client, orgId: opts.orgId, userId: opts.userId };
+      const groupe = [];
+      for (const a of enAttente) groupe.push({ ...a, capacite: PERMISSION_PAR_OUTIL[a.tool]?.capacite ?? null, apercu: await apercuProposition(a.tool, a.args, ctxApercu) });
+      const premiere = groupe[0];
+      opts.emettre({ type: 'proposal', tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, capacite: premiere.capacite, apercu: premiere.apercu, ...(groupe.length > 1 ? { groupe } : {}) });
+      const proposition: ResultatTour['proposition'] = { tool_use_id: premiere.tool_use_id, tool: premiere.tool, args: premiere.args, ...(enAttente.length > 1 ? { groupe: enAttente } : {}) };
       return { nouveauxMessages: nouveaux, proposition, texte: texteTotal, cost_cents: coutTotal };
     }
 
