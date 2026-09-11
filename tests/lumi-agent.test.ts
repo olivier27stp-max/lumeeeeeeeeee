@@ -25,6 +25,15 @@ describe('coût d un appel', () => {
     // = 0,005 + 0,0125 + 0,006 = 0,0235 $ = 2,35 ¢
     expect(coutEnCents('claude-opus-5', { input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 12000, cache_creation_input_tokens: 0 })).toBe(2.35);
   });
+  it('écriture en cache 5 min à 125 %, 1 h à 200 % ; sans détail, tout à 200 %', async () => {
+    const { coutEnCents } = await import('../server/lib/lumi/tarifs');
+    const base = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 };
+    // Sonnet 5 : entrée 2 $/M → 5 min = 2,5 $/M, 1 h = 4 $/M.
+    expect(coutEnCents('claude-sonnet-5', { ...base, cache_creation_input_tokens: 1_000_000, cache_creation: { ephemeral_5m_input_tokens: 1_000_000, ephemeral_1h_input_tokens: 0 } })).toBe(250);
+    expect(coutEnCents('claude-sonnet-5', { ...base, cache_creation_input_tokens: 1_000_000, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1_000_000 } })).toBe(400);
+    expect(coutEnCents('claude-sonnet-5', { ...base, cache_creation_input_tokens: 1_000_000 })).toBe(400);
+  });
+
   it('un modèle inconnu est facturé au tarif Opus 5 — jamais 0', async () => {
     const { coutEnCents } = await import('../server/lib/lumi/tarifs');
     expect(coutEnCents('modele-mystere', { input_tokens: 1_000_000, output_tokens: 0 })).toBe(500);
