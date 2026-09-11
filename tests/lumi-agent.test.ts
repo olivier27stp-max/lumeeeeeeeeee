@@ -96,7 +96,8 @@ describe('paliers de budget (le client n est jamais à sec)', () => {
     const journal: any[] = [];
     await tourLumi({ ...baseTour([], journal), reglages: { model: 'claude-haiku-4-5', effort: 'low' } });
     expect(instantanes[0].model).toBe('claude-haiku-4-5');
-    expect(instantanes[0].output_config).toEqual({ effort: 'low' });
+    // Haiku n'accepte pas l'effort : il n'est pas envoyé (voir parametresReflexion).
+    expect(instantanes[0].output_config).toBeUndefined();
     expect(journal[0].model).toBe('claude-haiku-4-5');
   });
 });
