@@ -26,7 +26,7 @@ import { isLumiConfigured, promptSystemeLumi, tourLumi, type EvenementLumi } fro
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import type { Rapport } from '../lib/agent/tools-rapports';
-import { demasquerIds } from '../lib/agent/refs';
+import { demasquerIds, instantaneRefs, restaurerRefs } from '../lib/agent/refs';
 import { logger } from '../lib/logger';
 
 const router = Router();
@@ -65,13 +65,16 @@ function ouvrirSse(res: Response) {
 }
 
 // ── Historique ──────────────────────────────────────────────────
-async function chargerHistorique(conversationId: string): Promise<Msg[]> {
+async function chargerHistorique(conversationId: string, cleRefs?: string): Promise<Msg[]> {
   const { data, error } = await getServiceClient()
     .from('lumi_messages')
-    .select('role, content, created_at')
+    .select('role, content, refs, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
+  // Les réfs courtes (ref3 → UUID) sont rejouées depuis la base : un
+  // redémarrage du serveur n'efface plus ce que l'assistant sait désigner.
+  if (cleRefs) for (const m of data ?? []) if ((m as any).refs) restaurerRefs(cleRefs, (m as any).refs);
   let msgs = (data ?? []).map((m: any) => ({ role: m.role, content: m.content }) as Msg);
   if (msgs.length > MAX_MESSAGES_HISTORIQUE) {
     // On coupe à une frontière de message utilisateur TEXTE (jamais entre un
@@ -83,12 +86,18 @@ async function chargerHistorique(conversationId: string): Promise<Msg[]> {
   return msgs;
 }
 
-async function sauverMessages(conversationId: string, orgId: string, msgs: Msg[]): Promise<void> {
+async function sauverMessages(conversationId: string, orgId: string, msgs: Msg[], cleRefs?: string): Promise<void> {
   if (!msgs.length) return;
   const admin = getServiceClient();
+  // L'instantané des réfs part avec le dernier message : c'est lui qui
+  // sera rejoué au prochain chargement (voir chargerHistorique).
+  const refs = cleRefs ? instantaneRefs(cleRefs) : {};
+  const avecRefs = Object.keys(refs).length > 0;
   // Insérés un par un pour garder l'ordre (created_at croissant strict).
-  for (const m of msgs) {
-    const { error } = await admin.from('lumi_messages').insert({ conversation_id: conversationId, org_id: orgId, role: m.role, content: m.content as any });
+  for (const [i, m] of msgs.entries()) {
+    const ligne: Record<string, any> = { conversation_id: conversationId, org_id: orgId, role: m.role, content: m.content as any };
+    if (avecRefs && i === msgs.length - 1) ligne.refs = refs;
+    const { error } = await admin.from('lumi_messages').insert(ligne);
     if (error) throw new Error(error.message);
   }
   await admin.from('lumi_conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
@@ -161,7 +170,8 @@ async function executerTourSse(opts: {
 
   try {
     if (opts.execute && !ferme) emettreSse('executed', opts.execute);
-    if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant);
+    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant, cleRefs);
     const resultat = await tourLumi({
       client: ctx.auth.client,
       orgId: ctx.auth.orgId,
@@ -177,7 +187,7 @@ async function executerTourSse(opts: {
         cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
       }),
     });
-    await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages);
+    await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition });
   } catch (err: any) {
@@ -200,7 +210,7 @@ router.post('/lumi/chat', validate(chatSchema), async (req, res) => {
     if (conversationId) {
       const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversationId).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
       if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-      historique = await chargerHistorique(conversationId);
+      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
     } else {
       const { data: conv, error } = await ctx.admin.from('lumi_conversations')
         .insert({ org_id: ctx.auth.orgId, user_id: ctx.auth.user.id, title: message.slice(0, 80) })
@@ -234,7 +244,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
 
     const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversation_id).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-    const historique = await chargerHistorique(conversation_id);
+    const historique = await chargerHistorique(conversation_id, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
     const enAttente = propositionEnAttente(historique);
     if (!enAttente || enAttente.tool_use_id !== tool_use_id) {
       return res.status(409).json({ error: 'No such pending action.', code: 'aucune_proposition' });
@@ -249,8 +259,14 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
       const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, enAttente.args);
       try {
         const r = await executerOutilGarde({ name: enAttente.tool, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
+        const echec = !('refus' in r) && r.result && typeof r.result === 'object' && typeof (r.result as any).error === 'string' ? String((r.result as any).error) : null;
         if ('refus' in r) {
           contenu = JSON.stringify({ error: r.refus });
+        } else if (echec) {
+          // L'outil a répondu par une erreur métier (devis pas encore accepté…) :
+          // c'est un échec, pas un reçu — la carte l'affiche comme tel et le
+          // modèle ne dit pas « c'est fait ».
+          contenu = JSON.stringify({ error: echec });
         } else {
           // La fiche créée (« Devis Q-0043 ») est gardée avec le résultat :
           // c'est ce qui permet au reçu de réapparaître quand on rouvre la

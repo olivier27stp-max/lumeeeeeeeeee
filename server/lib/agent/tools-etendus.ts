@@ -2376,7 +2376,19 @@ const rescheduleJobTool: AgentTool = {
         .is('deleted_at', null)
         .order('start_at', { ascending: true });
       if (error) throw error;
-      if (!visites?.length) throw new Error('Ce job n\u2019a aucune visite au calendrier — crée le job ou planifiez-le dans Lume d\u2019abord.');
+      if (!visites?.length) {
+        // Aucune visite : « déplacer » veut dire « planifier ». Refuser ici
+        // forçait une deuxième proposition (add_visit) pour le même résultat.
+        const debut0 = new Date(String(args.start_at));
+        if (Number.isNaN(debut0.getTime())) throw new Error('start_at invalide (ISO attendu).');
+        const fin0 = args.end_at ? new Date(String(args.end_at)) : new Date(debut0.getTime() + 60 * 60_000);
+        const { data: ajout, error: ajoutErr } = await ctx.client.rpc('rpc_add_visit', {
+          p_job_id: String(args.job_id), p_start_at: debut0.toISOString(), p_end_at: fin0.toISOString(), p_team_id: null, p_timezone: 'America/Montreal', p_notes: null,
+        });
+        if (ajoutErr) throw ajoutErr;
+        const ev: any = (ajout as any)?.event || ajout || {};
+        return { added: true, visit: { start_at: ev.start_at || debut0.toISOString(), end_at: ev.end_at || fin0.toISOString() }, note: 'Ce job n' + '\u2019' + 'avait aucune visite : elle vient d' + '\u2019' + 'être créée à cette date.' };
+      }
       const maintenant = Date.now();
       const cible = visites.find((v: any) => new Date(v.start_at).getTime() >= maintenant) || visites[visites.length - 1];
 
@@ -3050,24 +3062,59 @@ const convertQuoteToJobTool: AgentTool = {
     name: 'convert_quote_to_job',
     description:
       "The client accepted a quote → turn it into a job, through the app's own conversion route "
-      + '(line items carried, quote marked converted). Get the quote id from the quotes list.',
+      + '(line items carried, quote marked converted). Get the quote id from the quotes list. '
+      + 'Pass scheduled_at (and optionally end_at) to put the first visit on the calendar IN THE SAME STEP — '
+      + 'always do that when the date is known instead of converting first and scheduling after (one confirmation, not two).',
     parameters: {
       type: 'object',
-      properties: { quote_id: { type: 'string', description: 'Quote id.' } },
+      properties: {
+        quote_id: { type: 'string', description: 'Quote id.' },
+        scheduled_at: { type: 'string', description: 'Optional ISO start of the first visit (e.g. 2026-10-27T13:00:00-04:00).' },
+        end_at: { type: 'string', description: 'Optional ISO end of that visit (default: start + 1 h).' },
+      },
       required: ['quote_id'],
     },
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'convert_quote_to_job', args, async () => {
       // La route de l'app fait foi : items, statut du devis, création du job.
+      // Elle répond { ok, jobId, quoteId } — pas d'objet job (l'ancien code
+      // lisait json.job et renvoyait toujours null : l'assistant devait ensuite
+      // rechercher le job pour le planifier, une confirmation de plus).
       const { ok, status, json } = await appelInterne(ctx, '/quotes/convert-to-job', {
         quoteId: String(args.quote_id),
       });
       if (!ok) throw new Error(json?.error || `Conversion refusée (${status}).`);
+      const jobId = String(json?.jobId || json?.job?.id || '');
+      let job: { id: string; job_number: any; title: any } | null = null;
+      if (jobId) {
+        const { data: j } = await ctx.client.from('jobs').select('id, job_number, title').eq('org_id', ctx.orgId).eq('id', jobId).maybeSingle();
+        job = { id: jobId, job_number: j?.job_number ?? null, title: j?.title ?? null };
+      }
+      // Première visite dans le même geste : même RPC que le calendrier de l'app.
+      let visit: { start_at: string; end_at: string } | null = null;
+      const avertissements: string[] = [];
+      if (jobId && args.scheduled_at) {
+        const debut = new Date(String(args.scheduled_at));
+        if (Number.isNaN(debut.getTime())) avertissements.push('scheduled_at invalide (ISO attendu) : job créé sans visite.');
+        else {
+          const fin = args.end_at ? new Date(String(args.end_at)) : new Date(debut.getTime() + 60 * 60_000);
+          const { data, error } = await ctx.client.rpc('rpc_add_visit', {
+            p_job_id: jobId, p_start_at: debut.toISOString(), p_end_at: fin.toISOString(), p_team_id: null, p_timezone: 'America/Montreal', p_notes: null,
+          });
+          // Le job existe déjà : une visite qui rate ne doit pas faire échouer la conversion (sinon retentative = 2e job).
+          if (error) avertissements.push(`visite non planifiée (${error.message}) : planifie-la dans un second temps.`);
+          else { const ev: any = (data as any)?.event || data || {}; visit = { start_at: ev.start_at || debut.toISOString(), end_at: ev.end_at || fin.toISOString() }; }
+        }
+      }
       return {
         converted: true,
-        job: json?.job ? { id: json.job.id, job_number: json.job.job_number, title: json.job.title } : null,
-        note: 'Devis converti en job par le flux de l\u2019application. Sans visite planifiée, le job est en brouillon — propose de le planifier.',
+        job,
+        visit,
+        ...(avertissements.length ? { warnings: avertissements } : {}),
+        note: visit
+          ? 'Devis converti en job et première visite au calendrier.'
+          : 'Devis converti en job par le flux de l\u2019application. Sans visite planifiée, le job est en brouillon — propose de le planifier.',
       };
     }),
 };

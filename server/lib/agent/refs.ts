@@ -87,6 +87,32 @@ export function masquerIds(cleEspace: string, valeur: any): any {
 }
 
 /**
+ * Instantané du mapping d'un espace (réf → UUID), pour le PERSISTER avec la
+ * conversation. Le mapping vit en mémoire : un redéploiement (Railway) ou un
+ * second serveur l'efface, et un « ref3 » émis avant devient « introuvable »
+ * — vu en prod le 2026-09-10 : « Quote not found » sur une conversion de devis.
+ */
+export function instantaneRefs(cleEspace: string): Record<string, string> {
+  const e = espaces.get(cleEspace);
+  if (!e) return {};
+  return Object.fromEntries(e.uuidParRef);
+}
+
+/** Restaure (fusionne) un instantané dans l'espace : les réfs redeviennent traduisibles après un redémarrage. */
+export function restaurerRefs(cleEspace: string, refs: Record<string, string> | null | undefined): void {
+  if (!refs || typeof refs !== 'object') return;
+  const e = espacePour(cleEspace);
+  for (const [ref, uuid] of Object.entries(refs)) {
+    if (!REF_RE.test(ref) || typeof uuid !== 'string' || !UUID_RE.test(uuid)) continue;
+    if (e.uuidParRef.has(ref) && e.uuidParRef.get(ref) !== uuid) continue; // jamais réécrire une réf vivante
+    e.uuidParRef.set(ref, uuid);
+    if (!e.refParUuid.has(uuid)) e.refParUuid.set(uuid, ref);
+    const n = Number(ref.slice(3));
+    if (n > e.compteur) e.compteur = n; // le compteur reprend après la plus haute réf connue
+  }
+}
+
+/**
  * Avant d'exécuter un outil : retraduit toute réf courte des arguments en UUID
  * réel. Un vrai UUID est laissé tel quel (compat + robustesse). Une réf inconnue
  * (jamais émise, ou expirée) est laissée telle quelle : le handler la rejettera
