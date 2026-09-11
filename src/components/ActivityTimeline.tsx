@@ -53,6 +53,7 @@ const EVENT_COLORS: Record<string, string> = {
   client_archived: 'bg-gray-100 text-gray-600',
   client_deleted: 'bg-red-100 text-red-600',
   feedback_received: 'bg-amber-100 text-amber-600',
+  public_review_written: 'bg-emerald-100 text-emerald-600',
   review_requested: 'bg-yellow-100 text-yellow-600',
   follow_up_sent: 'bg-indigo-100 text-indigo-600',
 };
@@ -74,7 +75,7 @@ function getEventDetail(entry: ActivityLogEntry, lang: 'en' | 'fr'): string {
   if (entry.event_type === 'invoice_reminded') {
     return meta.days_overdue ? `J+${meta.days_overdue}` : '';
   }
-  if (entry.event_type === 'feedback_received') {
+  if (entry.event_type === 'feedback_received' || entry.event_type === 'public_review_written') {
     return meta.rating ? `${meta.rating}/5` : '';
   }
   return '';
