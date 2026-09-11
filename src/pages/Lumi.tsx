@@ -7,7 +7,7 @@
  * consultés, et les PROPOSITIONS d'écriture à confirmer ou annuler.
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowUp, AudioLines, AlertTriangle, ChevronDown, Copy, Download, FileText, History, Loader2, MessageSquarePlus, Mic, RotateCcw, Sparkles, Square, Trash2, Volume2, VolumeX, XCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -197,6 +197,7 @@ export default function Lumi() {
   const fr = language === 'fr';
   const lang: 'fr' | 'en' = fr ? 'fr' : 'en';
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
   const uid = useId();
 
   const [conversations, setConversations] = useState<ConversationLumi[]>([]);
@@ -239,6 +240,10 @@ export default function Lumi() {
     }).catch(() => setBudget(null));
     listerConversationsLumi().then(setConversations).catch(() => setConversations([]));
     listerAutorisationsLumi().then((t) => setAutorisations(new Set(t))).catch(() => {});
+    // /lumi?c=<id> : la notification du briefing du matin ouvre sa conversation.
+    const c = params.get('c');
+    if (c && /^[0-9a-f-]{36}$/i.test(c)) { void ouvrirConversation(c); setParams({}, { replace: true }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function autoriser(tool: string, actif: boolean) {

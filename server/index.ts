@@ -1349,6 +1349,20 @@ app.listen(port, '0.0.0.0', () => {
       logger.info('[scheduled-reports] Cron started (hourly, lock-guarded)');
     }).catch((e: any) => captureCronFailure('scheduled-reports-import', e));
 
+    // Briefing du matin de Lumi — chaque heure, pour les orgs dont l'heure
+    // locale est celle du briefing ; idempotent (lumi_briefings). Un passage
+    // 30 s après le démarrage couvre un déploiement pendant la fenêtre.
+    Promise.all([import('./lib/lumi/briefing'), import('./lib/supabase')]).then(([{ genererBriefingsDuMatin }, { getServiceClient }]) => {
+      const runBriefing = () =>
+        withAdvisoryLock('lumi-briefing', () => withCronCheckIn('lumi-briefing', async () => {
+          const n = await genererBriefingsDuMatin(getServiceClient());
+          if (n > 0) logger.info(`[lumi-briefing] ${n} briefing(s) créé(s)`);
+        })).catch((e: any) => captureCronFailure('lumi-briefing', e));
+      setInterval(runBriefing, 60 * 60 * 1000);
+      setTimeout(runBriefing, 30_000);
+      logger.info('[lumi-briefing] Cron started (hourly, lock-guarded)');
+    }).catch((e: any) => captureCronFailure('lumi-briefing-import', e));
+
     // Security maintenance — every 15 minutes
     setInterval(() => {
       withAdvisoryLock('security-maintenance', () => withCronCheckIn('security-maintenance', () => runSecurityMaintenance()))

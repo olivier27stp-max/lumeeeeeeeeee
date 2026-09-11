@@ -497,7 +497,8 @@ async function testsExecution(H, v, resultats) {
   const p4 = await demander(H, `Retiens que je ne travaille jamais le dimanche (${marque}).`);
   const tu4 = p4.proposition?.tool === 'remember_this' ? p4.proposition.tool_use_id : null;
   if (tu4 || p4.outils.includes('remember_this')) {
-    const c4 = tu4 ? await decider(H, p4.conversation_id, tu4, 'confirm') : p4;
+    // Retenir une note est une écriture « anodine » : exécutée d'office (proposition auto), rien à confirmer.
+    const c4 = tu4 && !p4.proposition?.auto ? await decider(H, p4.conversation_id, tu4, 'confirm') : p4;
     const { data: k } = await admin.from('org_knowledge').select('id, key, value').eq('org_id', v.orgId).eq('category', 'assistant').ilike('value', '%dimanche%');
     const f = [];
     if (!k?.length) f.push('rien de mémorisé en base (org_knowledge)');
