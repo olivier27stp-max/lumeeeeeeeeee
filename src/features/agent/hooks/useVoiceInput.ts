@@ -220,6 +220,9 @@ export function useVoiceInput(opts: {
     try {
       const blob = encoderWav(chunks.map((c) => reechantillonner(c, rate, SAMPLE_RATE)), SAMPLE_RATE);
       const text = await transcribeAudio(blob, language);
+      // Annulé PENDANT la transcription (l'utilisateur a déjà envoyé l'aperçu
+      // en direct) : le texte final ne doit pas revenir remplir la boîte.
+      if (cancelledRef.current) return;
       if (text.trim()) onTranscript(text.trim());
       else onError(fr ? "Je n'ai rien compris. Réessaie en parlant un peu plus fort." : "I couldn't make it out. Try again a little louder.");
     } catch (err) {
@@ -230,6 +233,7 @@ export function useVoiceInput(opts: {
   }, [fr, language, onTranscript, onError]);
 
   const stop = useCallback(() => { if (state === 'recording') void finir(); }, [state, finir]);
+  /** Abandonne l'enregistrement en cours ET le résultat d'une transcription encore en vol. */
   const cancel = useCallback(() => { cancelledRef.current = true; if (state === 'recording') void finir(); }, [state, finir]);
 
   const start = useCallback(async () => {

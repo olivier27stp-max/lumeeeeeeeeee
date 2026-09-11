@@ -369,6 +369,10 @@ export default function Lumi() {
   async function envoyer(texte: string, opts: { spoken?: boolean } = {}) {
     const t = texte.trim();
     if (!t || enCours) return;
+    // Envoi pendant que le micro écoute ou transcrit encore : ce qui est à
+    // l'écran part, et le résultat final (qui arriverait après) est jeté —
+    // sinon il revenait remplir la boîte une fois le message envoyé.
+    if (voice.state !== 'idle') voice.cancel();
     setInput('');
     spokenRef.current = !!opts.spoken || pendingSpokenRef.current;
     pendingSpokenRef.current = false;
