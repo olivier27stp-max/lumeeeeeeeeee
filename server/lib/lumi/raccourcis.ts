@@ -27,7 +27,9 @@ import { executerOutilGarde } from '../agent/garde';
 import { composerBriefing, type DonneesBriefing } from './briefing';
 import { fichesDuResultat, type Fiche } from './fiches';
 
-export type IdRaccourci = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing';
+export type IdRaccourci = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients';
+export const IDS_RACCOURCIS: readonly IdRaccourci[] = ['clients-total', 'agenda', 'revenu-mois', 'retards', 'briefing', 'top-clients'];
+export const PERIODES_AGENDA = ['aujourdhui', 'demain', 'semaine'] as const;
 export interface Raccourci { id: IdRaccourci; tool: string; args: Record<string, any>; periode?: 'aujourdhui' | 'demain' | 'semaine' }
 export interface ReponseRaccourci { texte: string; fiches: Fiche[] }
 
@@ -54,7 +56,7 @@ export function normaliser(s: string): string[] {
 const MOTS_VIDES = new Set(('je j ai jai on a as nous avons vous mes mon ma le la les l de d du des un une en au aux ce cet cette ci y il elle est c s ' +
   'stp svp pls please tu peux me dire donne donnes moi montre montres voir vois quoi que qu quest kes kess ke qui est ce et pis pi ' +
   'combien cb cmb nombre nb tout tous total en tout total ok ouais bah fak faque la ya yatu tu y as ' +
-  'hui hey lumi salut bonjour allo yo hi hello ' +
+  'hui hey lumi salut bonjour allo yo hi hello quel quelle quels quelles sont ' +
   'the my i do have has what whats s is are how many much show list tell there any of for in this all so far got we our me ' +
   'ai avons a on').split(/\s+/));
 
@@ -105,6 +107,12 @@ const DEFINITIONS: Definition[] = [
     interdits: ['job', 'jobs', 'tache', 'taches', 'task', 'tasks', 'devis', 'quote', 'quotes', 'soumission', 'soumissions', 'relance', 'relancer', 'remind', 'reminder', 'envoie', 'envoyer', 'send', 'texte', 'texto', 'sms', 'email', 'courriel'],
   },
   {
+    id: 'top-clients',
+    groupes: [['meilleurs', 'meilleur', 'top', 'best', 'biggest', 'gros'], ['client', 'clients', 'customer', 'customers']],
+    extras: ['plus', 'importants', 'rapportent', 'rapporte', 'payent', 'valeur', 'who', 'are', 'most', 'valuable', 'cinq', 'dix', '5', '10'],
+    interdits: ['lead', 'leads', 'prospect', 'prospects', 'mois', 'month', 'semaine', 'week', 'annee', 'year', 'ville', 'city', 'a', 'in'],
+  },
+  {
     id: 'briefing',
     groupes: [['briefing', 'brief', 'survol', 'resume', 'journee', 'matin', 'neuf', 'point', 'situation', 'update', 'morning', 'overview', 'summary', 'recap']],
     extras: ['jour', 'day', 'ma', 'mon', 'quoi', 'de', 'nouveau', 'new', 'fais', 'fait', 'faire', 'un', 'le', 'du', 'today', 'aujourd', 'aujourdhui', 'ajd', 'what', 'up', 'whats'],
@@ -130,10 +138,37 @@ export function detecterRaccourci(message: string): Raccourci | null {
       case 'revenu-mois': return { id: def.id, tool: 'get_revenue_summary', args: { period: 'this_month' } };
       case 'retards': return { id: def.id, tool: 'get_overdue_payments', args: { limit: 50 } };
       case 'briefing': return { id: def.id, tool: 'get_morning_briefing', args: {} };
+      case 'top-clients': return { id: def.id, tool: 'get_top_clients', args: { limit: 5 } };
       default: return null;
     }
   }
   return null;
+}
+
+/**
+ * Étage 0 (item 5) : une action d'interface (suggestion cliquée, lien) arrive
+ * avec son nom et ses paramètres — aucun texte à interpréter. Seuls les
+ * raccourcis connus sont acceptés ; un paramètre hors liste = null (jamais
+ * d'action devinée).
+ */
+export function raccourciDepuisAction(action: string, params: Record<string, unknown> = {}): Raccourci | null {
+  switch (action) {
+    case 'clients-total': return { id: action, tool: 'search_clients', args: { limit: 1 } };
+    case 'agenda': {
+      const p = params.periode === undefined ? 'aujourdhui' : params.periode;
+      if (!(PERIODES_AGENDA as readonly unknown[]).includes(p)) return null;
+      return { id: action, tool: 'query_schedule', args: {}, periode: p as Raccourci['periode'] };
+    }
+    case 'revenu-mois': return { id: action, tool: 'get_revenue_summary', args: { period: 'this_month' } };
+    case 'retards': return { id: action, tool: 'get_overdue_payments', args: { limit: 50 } };
+    case 'briefing': return { id: action, tool: 'get_morning_briefing', args: {} };
+    case 'top-clients': {
+      const n = Number(params.limit ?? 5);
+      if (!Number.isInteger(n) || n < 1 || n > 25) return null;
+      return { id: action, tool: 'get_top_clients', args: { limit: n } };
+    }
+    default: return null;
+  }
 }
 
 // ── Dates dans le fuseau de l'entreprise ────────────────────────
@@ -171,7 +206,7 @@ export function bornesPeriode(periode: NonNullable<Raccourci['periode']>, fuseau
 
 // ── Gabarits ─────────────────────────────────────────────────────
 
-const fmtDollars = (cents: number, fr: boolean) => (fr
+export const fmtDollars = (cents: number, fr: boolean) => (fr
   ? `${(cents / 100).toLocaleString('fr-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`
   : `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).replace(/[  ]/g, ' ');
 
@@ -254,6 +289,15 @@ export function rendreRaccourci(r: Raccourci, resultat: any, opts: { fr: boolean
       const offre = fr ? '\nDis « relance-les » et je prépare les textos.' : '\nSay “chase them” and I’ll draft the texts.';
       return `${entete}\n${lignes.join('\n')}${suite}${offre}`;
     }
+    case 'top-clients': {
+      const rows: any[] = Array.isArray(resultat?.clients) ? resultat.clients : [];
+      if (rows.length === 0) return fr ? 'Aucun client avec des revenus pour l’instant.' : 'No client with revenue yet.';
+      const lignes = rows.slice(0, 10).map((c, i) => {
+        const jobs = Number(c.nombre_de_jobs || 0);
+        return `${i + 1}. ${c.nom || '—'} · ${fmtDollars(Number(c.total_cents || 0), fr)} · ${jobs} job${jobs > 1 ? 's' : ''}`;
+      });
+      return `${fr ? `Tes ${lignes.length} meilleurs clients :` : `Your top ${lignes.length} clients:`}\n${lignes.join('\n')}`;
+    }
     case 'briefing': {
       const texte = composerBriefing(resultat as DonneesBriefing, { prenom: opts.prenom, fr, fuseau, maintenant: opts.maintenant });
       return texte ?? (fr
@@ -286,7 +330,9 @@ export async function repondreRaccourci(r: Raccourci, ctx: ContexteRaccourci): P
     const texte = rendreRaccourci(r, resultat, { fr, fuseau: ctx.fuseau, prenom: ctx.prenom, maintenant });
     if (!texte) return null;
     // Le compte des clients ne lie personne (une fiche pour « tu as 19 clients » n'aurait pas de sens).
-    const fiches = r.id === 'clients-total' ? [] : fichesDuResultat(r.tool, args, resultat);
+    const fiches = r.id === 'clients-total' ? [] : r.id === 'top-clients'
+      ? fichesDuResultat('search_clients', args, { clients: (resultat.clients ?? []).map((c: any) => ({ id: c.id ?? c.client_id, name: c.nom })) })
+      : fichesDuResultat(r.tool, args, resultat);
     return { texte, fiches };
   } catch (err: any) {
     console.error(`[lumi:raccourci:${r.id}]`, err?.message || err);

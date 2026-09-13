@@ -19,6 +19,7 @@ import { validate } from '../lib/validation';
 import { generateContent, isGeminiConfigured, geminiModel, type GeminiContent } from '../lib/agent/gemini';
 import { getServiceClient } from '../lib/supabase';
 import { journaliserTrace, normaliserEnonce, usageGemini } from '../lib/lumi/traces';
+import { reponseFixePour } from '../lib/agent/reponsesFixes';
 
 const router = Router();
 
@@ -103,6 +104,16 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
     }
 
     const debut = Date.now();
+    // Étage 0 : une suggestion cliquée a une réponse fixe (mêmes faits que le prompt) — 0 appel Gemini.
+    const dernier = contents[contents.length - 1]?.parts?.[0]?.text ?? '';
+    const fixe = reponseFixePour(dernier);
+    if (fixe) {
+      void journaliserTrace(getServiceClient(), {
+        orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
+        enonce: dernier, etage: 0, action: fixe.id, resultat: 'ok', model: null, costCents: 0, dureeMs: Date.now() - debut,
+      });
+      return res.json({ reply: fixe.reponse, fixe: fixe.id });
+    }
     const result = await generateContent({
       systemInstruction: SYSTEM_PROMPT,
       contents,

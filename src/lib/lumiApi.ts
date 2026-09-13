@@ -186,6 +186,27 @@ export async function envoyerMessageLumi(
   await lireFlux(res, onEvent, signal);
 }
 
+/** Action d'interface (étage 0) : une suggestion cliquée part avec son nom et ses paramètres, jamais en texte à interpréter. */
+export type ActionLumi = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients';
+export interface SuggestionLumi { label: string; action: ActionLumi; params?: Record<string, string | number | boolean> }
+
+/** Renvoie 'indisponible' (422 : rôle sans accès, outil en échec) pour que la page envoie le texte au modèle à la place. */
+export async function executerActionLumi(
+  params: { conversation_id: string | null; action: ActionLumi; params?: Record<string, string | number | boolean>; label: string; language: 'fr' | 'en'; origine?: 'suggestion' | 'lien' },
+  onEvent: (e: EvenementFlux) => void,
+  signal?: AbortSignal,
+): Promise<'ok' | 'indisponible'> {
+  const res = await fetch(`${API_BASE}/api/lumi/action`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params),
+    signal,
+  });
+  if (res.status === 422) return 'indisponible';
+  await lireFlux(res, onEvent, signal);
+  return 'ok';
+}
+
 export async function deciderPropositionLumi(
   params: { conversation_id: string; tool_use_id: string; decision: 'confirm' | 'cancel'; language: 'fr' | 'en' },
   onEvent: (e: EvenementFlux) => void,

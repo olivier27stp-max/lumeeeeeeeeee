@@ -118,8 +118,7 @@ export async function ecrituresSensiblesPour(admin: SupabaseClient, orgId: strin
     const { data, error } = await admin
       .from('automation_rules')
       .select('actions')
-      .eq('org_id', orgId).eq('trigger_event', 'job.completed').eq('is_active', true)
-      .is('deleted_at', null);
+      .eq('org_id', orgId).eq('trigger_event', 'job.completed').eq('is_active', true);
     if (error) throw error;
     const versLeClient = (data ?? []).some((r: any) => Array.isArray(r.actions) && r.actions.some((a: any) => ACTIONS_VERS_LE_CLIENT.has(String(a?.type))));
     if (versLeClient) out.add('update_job_status');

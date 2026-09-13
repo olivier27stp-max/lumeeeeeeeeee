@@ -20,7 +20,7 @@ import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
-  listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, type ModeLumi, type OrigineMessageLumi,
+  listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, executerActionLumi, type ModeLumi, type OrigineMessageLumi, type SuggestionLumi,
   ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
 } from '../lib/lumiApi';
 import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
@@ -434,6 +434,34 @@ export default function Lumi() {
     await lancer((onEvent, signal) => envoyerMessageLumi({ conversation_id: conversationId, message: t, language: lang, origine }, onEvent, signal));
   }
 
+  /**
+   * Étage 0 : une suggestion cliquée part comme une ACTION nommée avec ses
+   * paramètres, pas comme un texte à interpréter — 0 appel au modèle. Si le
+   * serveur ne peut pas (rôle sans accès, outil en échec), le texte part au
+   * modèle comme avant : jamais d'action devinée, jamais de page bloquée.
+   */
+  async function lancerAction(s: SuggestionLumi) {
+    if (enCours) return;
+    if (voice.state !== 'idle') voice.cancel();
+    setInput('');
+    spokenRef.current = false;
+    pendingSpokenRef.current = false;
+    speech.stopSpeaking();
+    setItems((prev) => [
+      ...prev.map((m) => (m.proposal?.statut === 'en_attente' ? { ...m, proposal: { ...m.proposal, statut: 'annulee' as const } } : m)),
+      { id: nextId(), role: 'user', text: s.label, tools: [] },
+    ]);
+    const issue = { valeur: 'ok' as 'ok' | 'indisponible' };
+    await lancer(async (onEvent, signal) => {
+      issue.valeur = await executerActionLumi({ conversation_id: conversationId, action: s.action, params: s.params, label: s.label, language: lang, origine: 'suggestion' }, onEvent, signal);
+    });
+    if (issue.valeur === 'indisponible') {
+      // Le message utilisateur est déjà affiché : on renvoie seulement le texte au modèle.
+      setItems((prev) => prev.slice(0, -1));
+      await envoyer(s.label, { origine: 'suggestion' });
+    }
+  }
+
   async function decider(p: PropositionLumi, decision: 'confirm' | 'cancel', auto = false) {
     const conv = conversationIdRef.current;
     if (!conv || enCoursRef.current) return;
@@ -482,9 +510,20 @@ export default function Lumi() {
     if (question?.text) void envoyer(question.text, { origine: 'repli' });
   }
 
-  const suggestions = fr
-    ? ['Quel est mon chiffre du mois ?', 'Quelles factures sont en retard ?', 'Prépare ma journée de demain', 'Qui sont mes meilleurs clients ?']
-    : ['What is my revenue this month?', 'Which invoices are overdue?', 'Prepare my day tomorrow', 'Who are my best clients?'];
+  // Chaque suggestion est une action nommée (étage 0) : le libellé est pour l'humain, l'action pour le serveur.
+  const suggestions: SuggestionLumi[] = fr
+    ? [
+      { label: 'Quel est mon chiffre du mois ?', action: 'revenu-mois' },
+      { label: 'Quelles factures sont en retard ?', action: 'retards' },
+      { label: 'Prépare ma journée de demain', action: 'agenda', params: { periode: 'demain' } },
+      { label: 'Qui sont mes meilleurs clients ?', action: 'top-clients', params: { limit: 5 } },
+    ]
+    : [
+      { label: 'What is my revenue this month?', action: 'revenu-mois' },
+      { label: 'Which invoices are overdue?', action: 'retards' },
+      { label: 'Prepare my day tomorrow', action: 'agenda', params: { periode: 'demain' } },
+      { label: 'Who are my best clients?', action: 'top-clients', params: { limit: 5 } },
+    ];
 
   const bloque = budget && (!budget.includes_ai || budget.epuise || budget.configured === false);
   const pctBudget = budget && budget.budget_cents > 0 ? Math.min(100, Math.round((budget.depense_cents / budget.budget_cents) * 100)) : 0;
@@ -612,8 +651,8 @@ export default function Lumi() {
               {!bloque && (
                 <div className="flex flex-wrap justify-center gap-2 mt-2">
                   {suggestions.map((s) => (
-                    <button key={s} type="button" onClick={() => envoyer(s, { origine: 'suggestion' })} className="px-3.5 py-2 rounded-full border border-outline bg-surface text-[12.5px] text-text-secondary hover:bg-surface-secondary transition-colors">
-                      {s}
+                    <button key={s.label} type="button" onClick={() => lancerAction(s)} className="px-3.5 py-2 rounded-full border border-outline bg-surface text-[12.5px] text-text-secondary hover:bg-surface-secondary transition-colors">
+                      {s.label}
                     </button>
                   ))}
                 </div>

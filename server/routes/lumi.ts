@@ -29,7 +29,8 @@ import { type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
 import { getUserContext } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
-import { detecterRaccourci, repondreRaccourci } from '../lib/lumi/raccourcis';
+import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
+import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
@@ -55,6 +56,17 @@ const executeSchema = z.object({
   // dry_run : même garde, mêmes validations, aucune écriture — renvoie ce qui serait fait (R12).
   decision: z.enum(['confirm', 'cancel', 'dry_run']),
   language: z.enum(['fr', 'en']).optional(),
+});
+
+/** Étage 0 : une action d'interface, nommée, avec ses paramètres — pas de texte à interpréter. */
+const actionSchema = z.object({
+  conversation_id: z.string().regex(UUID).optional().nullable(),
+  action: z.enum(IDS_RACCOURCIS as [IdRaccourci, ...IdRaccourci[]]),
+  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  /** Ce que l'utilisateur a cliqué : stocké comme son message, pour que la conversation se lise. */
+  label: z.string().trim().min(1).max(200),
+  language: z.enum(['fr', 'en']).optional(),
+  origine: z.enum(['suggestion', 'lien']).optional(),
 });
 
 // Au-delà, on résume plutôt que de renvoyer 200 messages au modèle.
@@ -338,6 +350,64 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
   }
 });
 
+// ── POST /lumi/action — étage 0 : action d'interface, sans texte ni modèle ──
+router.post('/lumi/action', validate(actionSchema), async (req, res) => {
+  try {
+    const ctx = await contexteTour(req, res);
+    if (!ctx) return;
+    const { conversation_id, action, params = {}, label, origine = 'suggestion' } = req.body as z.infer<typeof actionSchema>;
+    const raccourci = raccourciDepuisAction(action, params);
+    if (!raccourci) return res.status(422).json({ error: 'Unknown action or parameters.', code: 'action_indisponible' });
+
+    let conversationId = conversation_id ?? null;
+    let historique: Msg[] = [];
+    if (conversationId) {
+      const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversationId).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
+      if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
+      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+    } else {
+      const { data: conv, error } = await ctx.admin.from('lumi_conversations')
+        .insert({ org_id: ctx.auth.orgId, user_id: ctx.auth.user.id, title: label.slice(0, 80) })
+        .select('id').single();
+      if (error || !conv) throw new Error(error?.message || 'conversation');
+      conversationId = conv.id;
+    }
+    // Une proposition laissée en attente est annulée par le clic (même règle que /lumi/chat).
+    const nouveaux: Msg[] = [];
+    const enAttente = propositionsEnAttente(historique);
+    if (enAttente.length) {
+      nouveaux.push({ role: 'user', content: enAttente.map((a) => ({ type: 'tool_result' as const, tool_use_id: a.tool_use_id, content: JSON.stringify({ cancelled: true, note: "L'utilisateur n'a pas confirmé cette action ; elle n'a pas été exécutée." }) })) });
+    }
+    nouveaux.push({ role: 'user', content: label });
+
+    const debut = Date.now();
+    const reponse = await repondreRaccourci(raccourci, {
+      client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
+      language: ctx.language, fuseau: ctx.fuseau,
+      prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
+    });
+    // Refus de rôle ou outil en échec : on ne devine rien, le client renvoie le texte au modèle s'il le veut.
+    if (!reponse) return res.status(422).json({ error: 'Action unavailable for this user.', code: 'action_indisponible' });
+
+    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
+    const emettreSse = ouvrirSse(res);
+    emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'debut' });
+    emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
+    emettreSse('text', { type: 'text', delta: reponse.texte });
+    if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
+    emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
+    void journaliserTrace(ctx.admin, {
+      orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+      enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+    });
+    return res.end();
+  } catch (error: any) {
+    if (res.headersSent) return res.end();
+    return sendSafeError(res, error, 'Lumi failed to run the action.', '[lumi/action]');
+  }
+});
+
 // ── POST /lumi/execute — confirmer ou annuler une écriture proposée ──
 router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
   try {
@@ -393,8 +463,31 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     }
     const resultat: Msg = { role: 'user', content: blocs };
 
-    // Le modèle reprend la main pour confirmer en mots ce qui s'est passé.
-    await executerTourSse({ req, res, ctx, conversationId: conversation_id, historique, nouveauxAvant: [resultat], execute, origine: 'carte', enonce: null });
+    // Reçu SANS modèle (item 5, étage 0) : la phrase « c'est fait » est un
+    // gabarit à partir du reçu. Avant, un appel complet au modèle partait
+    // pour cette seule phrase. Le modèle relira ce texte comme le sien si
+    // l'utilisateur écrit ensuite.
+    const debut = Date.now();
+    const lignes: LigneRecu[] = enAttente.map((a, i) => {
+      const bloc = blocs[i];
+      let erreur: string | null = null;
+      try { const j = JSON.parse(bloc.content); if (typeof j?.error === 'string') erreur = j.error; } catch { /* contenu non JSON : pas d'erreur métier lisible */ }
+      return { recu: execute[i] ?? { tool_use_id: a.tool_use_id, ok: false, fiche: null }, erreur, outil: a.tool };
+    });
+    const texte = texteRecus(lignes, decision, ctx.language === 'fr');
+    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    await sauverMessages(conversation_id, ctx.auth.orgId, [resultat, { role: 'assistant', content: [{ type: 'text', text: texte }] }], cleRefs);
+    const emettreSse = ouvrirSse(res);
+    for (const recu of execute) emettreSse('executed', recu);
+    emettreSse('text', { type: 'text', delta: texte });
+    const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
+    emettreSse('done', { conversation_id, cost_cents: 0, budget, proposal: null, recu: true });
+    void journaliserTrace(ctx.admin, {
+      orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, canal: 'lumi', origine: 'carte',
+      enonce: null, etage: ETAGE.interface, action: decision, outils: enAttente.map((a) => a.tool),
+      resultat: decision === 'cancel' ? 'ok' : (execute.every((e) => e.ok) ? 'ok' : 'erreur'), model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+    });
+    return res.end();
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');

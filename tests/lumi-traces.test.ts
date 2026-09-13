@@ -107,7 +107,7 @@ describe('contrat avec le reste du code', () => {
     const page = readFileSync(path.join(__dirname, '../src/pages/Lumi.tsx'), 'utf8');
     for (const o of page.matchAll(/origine: '([a-z]+)'/g)) expect(ORIGINES_TRACE).toContain(o[1]);
     // Les suggestions et le bouton Réessayer sont marqués : c'est ce qui rend l'étage 0 mesurable.
-    expect(page).toContain("envoyer(s, { origine: 'suggestion' })");
+    expect(page).toContain("origine: 'suggestion'"); // suggestions = actions d'étage 0 depuis l'item 5
     expect(page).toContain("{ origine: 'repli' }");
   });
 
