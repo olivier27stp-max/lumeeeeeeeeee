@@ -23,7 +23,7 @@
 
 import crypto from 'crypto';
 import { getServiceClient, companyOrgIds } from '../supabase';
-import { invaliderOrg } from '../lumi/cache-reponses';
+import { invaliderOrg } from '../lumi/version-org';
 import { logSecurityEvent } from '../security';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../config';
 import { normalizeE164, findOrCreateConversation } from '../helpers';

@@ -41,14 +41,8 @@ export function cleReponse(p: { orgId: string; userId: string; enonce: string; v
   return `lumi:rep:${p.orgId}:${p.userId}:${h}`;
 }
 
-export async function versionOrg(orgId: string): Promise<number> {
-  return Number((await magasin().get<number>(`lumi:ver:${orgId}`)) ?? 0) || 0;
-}
-
-/** À appeler après toute écriture d'agent : tout ce qui est en cache pour l'org devient obsolète. */
-export async function invaliderOrg(orgId: string): Promise<void> {
-  await magasin().incr(`lumi:ver:${orgId}`);
-}
+export { versionOrg, invaliderOrg } from './version-org';
+import { versionOrg } from './version-org';
 
 /** Un tour est-il cachable ? Lecture seule, texte, pas de proposition, premier message. */
 export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string }): boolean {
