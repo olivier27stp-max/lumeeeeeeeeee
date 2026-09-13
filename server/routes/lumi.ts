@@ -31,6 +31,9 @@ import { getUserContext } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
+import { VERSION_PROMPT } from '../lib/lumi/version';
+import { escalader, motifDansResultat } from '../lib/lumi/escalade';
+import { classifier, modeRouteur } from '../lib/lumi/routeur';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
@@ -240,18 +243,36 @@ async function executerTourSse(opts: {
   const outils: string[] = [];
   let usage: UsageAgrege = usageVide();
   let model: string | null = null;
+  let erreurModele: string | null = null;
   const emettre = (e: EvenementLumi) => {
     if (e.type === 'tool' && e.statut === 'fin' && !outils.includes(e.name)) outils.push(e.name);
     if (e.type === 'usage') { usage = ajouterUsage(usage, e.usage); model = e.model; }
+    if (e.type === 'error') erreurModele = e.message;
     emettreSse(e.type, e);
   };
   let ferme = false;
   opts.req.on('close', () => { ferme = true; });
-  const tracer = (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => void journaliserTrace(ctx.admin, {
-    orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
-    enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null, params: opts.params ?? null, outils, resultat,
-    model, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
-  });
+  // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
+  // entre dans la trace pour être comparé à ce que le modèle a fait.
+  const observation = modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null;
+  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => {
+    const routeur = observation ? await observation : null;
+    void journaliserTrace(ctx.admin, {
+      orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
+      enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
+      params: { ...(opts.params ?? {}), ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}) },
+      outils, resultat, model, promptVersion: VERSION_PROMPT, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
+    });
+    // Escalade humaine : le modèle a refusé ou n'a pas pu finir.
+    if (erreurModele === 'refusal' || erreurModele === 'trop_d_etapes') {
+      void escalader(ctx.admin, {
+        orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, motif: erreurModele === 'refusal' ? 'refus_modele' : 'trop_d_etapes', fr: ctx.language === 'fr',
+        detail: erreurModele === 'refusal'
+          ? (ctx.language === 'fr' ? 'Lumi a refusé de répondre à une demande dans cette conversation.' : 'Lumi declined a request in this conversation.')
+          : (ctx.language === 'fr' ? 'Lumi a atteint sa limite d’étapes sans pouvoir conclure.' : 'Lumi hit its step limit without concluding.'),
+      });
+    }
+  };
 
   try {
     for (const recu of opts.execute ?? []) if (!ferme) emettreSse('executed', recu);
@@ -278,11 +299,11 @@ async function executerTourSse(opts: {
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition });
-    tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
+    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
   } catch (err: any) {
     logger.error('[lumi] tour échoué', { error: err?.message || String(err), orgId: ctx.auth.orgId });
     if (!ferme) emettreSse('error', { message: 'Lumi failed to respond.' });
-    tracer('erreur', 0);
+    void tracer('erreur', 0);
   } finally {
     res.end();
   }
@@ -448,6 +469,8 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     // affichée, l'utilisateur ouvre une nouvelle conversation pour continuer).
     const faites = compterEcritures(historique);
     if (decision === 'confirm' && faites + enAttente.length > PLAFOND_ECRITURES_PAR_CONVERSATION) {
+      void escalader(ctx.admin, { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, motif: 'plafond_ecritures', fr: ctx.language === 'fr',
+        detail: ctx.language === 'fr' ? `Une conversation Lumi a atteint ${PLAFOND_ECRITURES_PAR_CONVERSATION} actions.` : `A Lumi conversation reached ${PLAFOND_ECRITURES_PAR_CONVERSATION} actions.` });
       return res.status(409).json({
         error: ctx.language === 'fr'
           ? `Cette conversation a déjà fait ${faites} actions : c'est le maximum (${PLAFOND_ECRITURES_PAR_CONVERSATION}). Ouvre une nouvelle conversation pour continuer.`
@@ -480,6 +503,12 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
       const r = await executerEcriture({ tool: a.tool, toolUseId: a.tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
       blocs.push({ type: 'tool_result', tool_use_id: a.tool_use_id, content: r.contenu });
       execute.push(r.recu);
+      // Effet partiel (job créé sans ses articles, envoi « peut-être parti ») : un humain doit vérifier.
+      const motif = motifDansResultat(r.contenu);
+      if (motif) {
+        void escalader(ctx.admin, { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, motif, fr: ctx.language === 'fr',
+          detail: ctx.language === 'fr' ? `Une action de Lumi (${a.tool.replace(/_/g, ' ')}) s’est arrêtée à mi-chemin : à vérifier dans la conversation.` : `A Lumi action (${a.tool.replace(/_/g, ' ')}) stopped halfway: check the conversation.` });
+      }
     }
     const resultat: Msg = { role: 'user', content: blocs };
 

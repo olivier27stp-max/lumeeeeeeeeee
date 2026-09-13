@@ -12,7 +12,7 @@
  * variante (« ça coûte combien ? ») descend à Gemini : on ne devine pas.
  * Plafond : quelques entrées, jamais un arbre de décision.
  */
-import { normaliser } from '../lumi/raccourcis';
+import { normaliser } from '../lumi/normaliser';
 
 export interface ReponseFixe {
   id: string;

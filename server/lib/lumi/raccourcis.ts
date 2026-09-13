@@ -94,11 +94,8 @@ const INDEX_EXACT = new Map(ENONCES_EXACTS.map(([e, a]) => [e, a]));
 /** « Montre-moi le job numéro 33 », « job 33 », « ouvre la job #33 » — et rien d'autre dans la phrase. */
 const MOTIF_JOB_NUMERO = /^(?:(?:montre moi|montres moi|montre|voir|ouvre|affiche|details? (?:du|de la)|c est quoi (?:le|la)|show me|show|open|what is|whats) )?(?:le |la |the |mon |ma |my )?job (?:numero |number |no |num |n )?(\d{1,7})(?: stp| svp| please)?$/;
 
-/** Minuscules, sans accents, sans ponctuation : « Qu'est-ce que j'ai demain ? » → « qu est ce que j ai demain ». */
-export function normaliser(s: string): string[] {
-  return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
-}
+export { normaliser } from './normaliser';
+import { normaliser } from './normaliser';
 
 /** Mots qui ne portent aucun sens pour la détection (fr + en + oral québécois). */
 const MOTS_VIDES = new Set(('je j ai jai on a as nous avons vous mes mon ma le la les l de d du des un une en au aux ce cet cette ci y il elle est c s ' +

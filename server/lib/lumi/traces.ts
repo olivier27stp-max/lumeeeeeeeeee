@@ -21,7 +21,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../logger';
-import { normaliser } from './raccourcis';
+import { normaliser } from './normaliser';
 import type { UsageTokens } from './tarifs';
 
 export type CanalTrace = 'lumi' | 'public' | 'agent' | 'transcription' | 'migration';
