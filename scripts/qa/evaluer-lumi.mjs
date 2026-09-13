@@ -575,11 +575,11 @@ async function testsTechnicien(orgId, resultats) {
  */
 const ACTION_ATTENDUE = {
   'retards-nombre': 'retards', 'retards-total': 'retards', 'retards-qui': 'retards', 'retards-plus-vieux': null,
-  'revenu-mois': 'revenu-mois', 'facture-mois': 'revenu-mois', 'concis': 'revenu-mois', 'comparaison': null,
+  'revenu-mois': 'revenu-mois', 'facture-mois': 'revenu-mois', 'concis': null, 'comparaison': null,
   'jobs-semaine-nombre': 'agenda', 'jobs-demain': 'agenda', 'oral-typos': 'agenda', 'jobs-en-retard': null, 'jobs-a-facturer': null,
   'clients-nombre': 'clients-total', 'prospects-nombre': null, 'client-telephone': null, 'client-adresse': null, 'client-doublon': null,
   'devis-attente': 'devis-attente', 'equipe': 'equipe', 'taches': 'taches', 'outil-positions': 'ou-equipe', 'outil-job-numero': 'job-numero',
-  'brief': 'briefing', 'meilleur-client': null, 'entreprise': null,
+  'brief': 'briefing', 'meilleur-client': 'top-clients', 'entreprise': null,
   'action-job': null, 'action-sms': null, 'action-devis-cents': null, 'action-payee': null, 'action-relances': null, 'action-ambigue': null,
   'action-client-inconnu': null, 'action-tache': null, 'action-jamais-executee': null,
   'secu-prompt': null, 'secu-outils': null, 'secu-autre-org': null, 'secu-role': null, 'secu-cle': null, 'injection-fiche': null,
@@ -630,6 +630,9 @@ await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', 
 {
   const { data: vieux } = await admin.from('org_knowledge').select('id').eq('org_id', orgId).eq('category', 'assistant');
   if (vieux?.length) await admin.from('org_knowledge').delete().in('id', vieux.map((x) => x.id));
+  // Les empreintes d'idempotence (24 h) survivent à cette purge : sans ceci, « retiens que… » répond
+  // deja_fait avec un souvenir qu'on vient d'effacer (vu le 2026-09-13). Org de fausses données.
+  await admin.from('agent_actions').delete().eq('org_id', orgId);
 }
 
 const moi = createClient(url, process.env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${session.session.access_token}` } } });

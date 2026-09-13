@@ -49,9 +49,12 @@ export function texteRecus(lignes: LigneRecu[], decision: 'confirm' | 'cancel', 
   if (decision === 'cancel') return fr ? 'Annulé, rien n’a été fait.' : 'Cancelled, nothing was done.';
   const phrases = lignes.map(({ recu, erreur, outil }) => {
     if (recu.ok) {
-      const quoi = recu.fiche?.label ? `${recu.fiche.label}` : nomAction(outil, fr);
+      // « Devis Q-0043 » se suffit ; un titre nu (« Rappeler Marie ») est précédé du nom de l'action : « la tâche « Rappeler Marie » ».
+      const label = recu.fiche?.label ?? '';
+      const nomme = /^(devis|facture|job|tâche|fiche|quote|invoice|task)\b/i.test(label);
+      const quoi = label ? (nomme ? label : `${nomAction(outil, fr)} « ${label} »`) : nomAction(outil, fr);
       const montant = recu.fiche?.montant_cents !== undefined ? ` (${fmtDollars(recu.fiche.montant_cents, fr)})` : '';
-      return fr ? `C’est fait : ${quoi}${montant}.` : `Done: ${quoi}${montant}.`;
+      return fr ? `C'est fait : ${quoi}${montant}.` : `Done: ${quoi}${montant}.`;
     }
     const raison = erreur ? ` ${erreur.replace(/\s+$/, '')}` : '';
     return fr ? `${cap(nomAction(outil, fr))} n’a pas fonctionné.${raison}` : `${cap(nomAction(outil, fr))} did not go through.${raison}`;

@@ -50,7 +50,9 @@ describe('reçu sans modèle après Confirmer / Annuler', () => {
       { recu: { tool_use_id: 'b', ok: true, fiche: null }, erreur: null, outil: 'assign_job' },
       { recu: { tool_use_id: 'c', ok: false, fiche: null }, erreur: 'Le devis n’est pas accepté.', outil: 'convert_quote_to_job' },
     ];
-    expect(texteRecus(lignes, 'confirm', true)).toBe('C’est fait : Devis Q-0043 (1 626,90 $).\nC’est fait : l’assignation.\nLa conversion du devis en job n’a pas fonctionné. Le devis n’est pas accepté.');
+    expect(texteRecus(lignes, 'confirm', true)).toBe("C'est fait : Devis Q-0043 (1 626,90 $).\nC'est fait : l’assignation.\nLa conversion du devis en job n’a pas fonctionné. Le devis n’est pas accepté.");
+    // Un titre nu est nommé par son action : c'est ce que la batterie appelle « confirmer en mots simples ».
+    expect(texteRecus([{ recu: { tool_use_id: 't', ok: true, fiche: { type: 'task', id: 't', label: 'Rappeler Marie', href: '/tasks' } }, erreur: null, outil: 'create_task' }], 'confirm', true)).toBe("C'est fait : la tâche « Rappeler Marie ».");
     expect(texteRecus(lignes, 'cancel', true)).toBe('Annulé, rien n’a été fait.');
     expect(texteRecus([lignes[1]], 'confirm', false)).toBe('Done: the assignment.');
     expect(texteRecus(lignes, 'confirm', true)).not.toMatch(/create_quote|assign_job|tool_use/);

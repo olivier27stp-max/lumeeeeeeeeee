@@ -285,8 +285,19 @@ export function minuitLocal(jour: string, fuseau: string): string {
 }
 
 /** Bornes [début, fin] d'une période, en ISO UTC, calées sur le fuseau de l'org. */
+/** Jour de la semaine (1 = lundi … 7 = dimanche) d'un « YYYY-MM-DD » dans le fuseau. */
+function jourDeLaSemaine(jour: string, fuseau: string): number {
+  const nom = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: fuseau }).format(new Date(minuitLocal(jour, fuseau)));
+  return { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }[nom as 'Mon'] ?? 1;
+}
+
 export function bornesPeriode(periode: NonNullable<Raccourci['periode']>, fuseau: string, maintenant: Date): { start_date: string; end_date: string; jours: string[] } {
-  const debut = periode === 'demain' ? jourLocal(fuseau, maintenant, 1) : jourLocal(fuseau, maintenant, 0);
+  // « Cette semaine » = du lundi au dimanche de la semaine en cours, passé inclus
+  // (la définition du prompt de Lumi et de l'écran Calendrier), pas « les 7 prochains jours ».
+  const aujourdhui = jourLocal(fuseau, maintenant, 0);
+  const debut = periode === 'demain' ? jourLocal(fuseau, maintenant, 1)
+    : periode === 'semaine' ? jourLocal(fuseau, maintenant, -(jourDeLaSemaine(aujourdhui, fuseau) - 1))
+    : aujourdhui;
   const nbJours = periode === 'semaine' ? 7 : 1;
   const jours = Array.from({ length: nbJours }, (_, i) => jourLocal(fuseau, new Date(minuitLocal(debut, fuseau)), i));
   const finExclusive = jourLocal(fuseau, new Date(minuitLocal(debut, fuseau)), nbJours);
