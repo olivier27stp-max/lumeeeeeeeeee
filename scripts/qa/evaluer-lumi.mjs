@@ -79,7 +79,7 @@ async function lireReponse(res) {
     else if (t === 'tool' && j.statut === 'debut') r.outils.push(j.name);
     else if (t === 'proposal') r.proposition = j;
     else if (t === 'report') r.rapport = j.rapport;
-    else if (t === 'done') { r.cout = j.cost_cents; r.conversation_id = j.conversation_id; r.raccourci = j.raccourci ?? null; r.etage = j.raccourci ? 2 : (j.recu ? 0 : 6); }
+    else if (t === 'done') { r.cout = j.cost_cents; r.conversation_id = j.conversation_id; r.raccourci = j.raccourci ?? null; r.etage = j.etage ?? (j.raccourci ? 2 : (j.recu ? 0 : 6)); }
     else if (t === 'error') r.erreur = j.message;
   }
   return r;
@@ -512,6 +512,27 @@ async function testsExecution(H, v, resultats) {
   } else noter('exec-memoire', 'Retiens que…', p4, [`pas de remember_this (${p4.proposition?.tool || p4.outils.join(', ') || 'rien'})`]);
 }
 
+/* ── Caches (étages 3 et 4) : la même question de lecture, deux fois, dans deux
+   conversations neuves → la seconde est servie sans modèle (étage 3) ; une
+   reformulation → étage 4. Une écriture entre les deux invalide tout. ── */
+async function testsCache(H, resultats) {
+  const noter = (id, q, r, fautes) => { const l = { id, cat: 'cache', question: q, ok: fautes.length === 0, fautes, outils: r.outils, proposition: null, rapport: null, cout_cents: r.cout, reponse: r.texte, etage: r.etage }; resultats.push(l); console.log(`${l.ok ? 'OK   ' : 'ECHEC'} [cache] ${id}${fautes.length ? ' — ' + fautes.join(' ; ') : ''}  (étage ${r.etage}, ${r.cout.toFixed(1)}¢)`); };
+  const q = 'Est-ce que j\'ai des jobs en retard ?';
+  const a = await demander(H, q);
+  const b = await demander(H, q);
+  const f1 = [];
+  if (a.etage === 3 || a.etage === 4) f1.push('déjà en cache avant le premier appel (cache non purgé entre deux runs ?)');
+  if (b.etage !== 3) f1.push(`attendu étage 3 au second appel, reçu ${b.etage}`);
+  if (b.texte !== a.texte) f1.push('la réponse en cache diffère de l\'originale');
+  if (b.cout !== 0) f1.push(`coût ${b.cout} au lieu de 0`);
+  noter('cache-exact', q, b, f1);
+  const c = await demander(H, 'ai-je des jobs en retard');
+  const f2 = [];
+  if (c.etage !== 4) f2.push(`attendu étage 4 (reformulation), reçu ${c.etage}`);
+  if (c.texte !== a.texte) f2.push('la réponse sémantique diffère de l\'originale');
+  noter('cache-semantique', 'ai-je des jobs en retard', c, f2);
+}
+
 /* ── Quota : plafond du mois atteint → Lumi RALENTIT (429 ralenti, un tour par
    minute) au lieu de s'arrêter ; la jauge dit « épuisé » ; aucun appel au
    modèle n'est facturé pour la demande refusée. ── */
@@ -648,6 +669,7 @@ for (const c of CAS) {
 }
 if (!SEULEMENT && (!CATEGORIE || CATEGORIE === 'conversation')) await testsConversation(H, v, resultats);
 if (!SEULEMENT && (!CATEGORIE || CATEGORIE === 'execution')) await testsExecution(H, v, resultats);
+if (!SEULEMENT && (!CATEGORIE || CATEGORIE === 'cache')) await testsCache(H, resultats);
 if (!SEULEMENT && (!CATEGORIE || CATEGORIE === 'quota')) await testQuota(H, v, resultats);
 if (!SEULEMENT && (!CATEGORIE || CATEGORIE === 'roles')) await testsTechnicien(orgId, resultats);
 if (v.clientInjection) await admin.from('clients').update({ deleted_at: new Date().toISOString() }).eq('id', v.clientInjection).eq('org_id', orgId);

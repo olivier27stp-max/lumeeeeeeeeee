@@ -34,6 +34,8 @@ import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
 import { classifier, modeRouteur } from '../lib/lumi/routeur';
+import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg } from '../lib/lumi/cache-reponses';
+import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
@@ -234,6 +236,8 @@ async function executerTourSse(opts: {
   /** Repli : action 'repli' + l'énoncé précédent comme candidat à retirer des énoncés exacts. */
   action?: string | null;
   params?: Record<string, unknown> | null;
+  /** Étages 3-4 : mémoriser la réponse si le tour est cachable (premier message, lecture seule). */
+  cache?: { historiqueVide: boolean; vecteur: Promise<number[] | null> | null };
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -244,10 +248,12 @@ async function executerTourSse(opts: {
   let usage: UsageAgrege = usageVide();
   let model: string | null = null;
   let erreurModele: string | null = null;
+  const fiches: Fiche[] = [];
   const emettre = (e: EvenementLumi) => {
     if (e.type === 'tool' && e.statut === 'fin' && !outils.includes(e.name)) outils.push(e.name);
     if (e.type === 'usage') { usage = ajouterUsage(usage, e.usage); model = e.model; }
     if (e.type === 'error') erreurModele = e.message;
+    if (e.type === 'fiches') for (const f of e.fiches) if (!fiches.some((x) => x.href === f.href)) fiches.push(f);
     emettreSse(e.type, e);
   };
   let ferme = false;
@@ -298,8 +304,17 @@ async function executerTourSse(opts: {
     });
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
-    if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition });
+    if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition, etage: ETAGE.agent });
     void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
+    // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
+    if (opts.cache && opts.enonce && !erreurModele && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok' })) {
+      const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };
+      void ecrireReponse(p, { texte: resultat.texte, fiches, outils });
+      void (async () => {
+        const vec = opts.cache?.vecteur ? await opts.cache.vecteur : null;
+        if (vec) await memoriserSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches, outils, version: await versionOrg(p.orgId) });
+      })();
+    }
   } catch (err: any) {
     logger.error('[lumi] tour échoué', { error: err?.message || String(err), orgId: ctx.auth.orgId });
     if (!ferme) emettreSse('error', { message: 'Lumi failed to respond.' });
@@ -373,7 +388,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
-        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id, etage: raccourci.etage ?? ETAGE.raccourci });
         // Étage 2 : répondu sans modèle. C'est cette ligne qui mesure la part de trafic absorbée.
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
@@ -384,7 +399,43 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       }
     }
 
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}) });
+    // Repli : la réponse précédente n'était pas la bonne → on l'oublie dans les deux caches.
+    if (repli && enoncePrecedent) {
+      void retirerReponse({ orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: enoncePrecedent });
+      void oublierSemantique({ genre: 'tenant', orgId: ctx.auth.orgId, userId: ctx.auth.user.id }, enoncePrecedent);
+    }
+    // Étages 3 (exact) et 4 (sémantique) : premier message d'une conversation seulement,
+    // jamais après un repli ni avec une proposition en attente.
+    const premierMessage = historique.length === 0 && !enAttente.length && !repli;
+    const vecteur = premierMessage ? embed(message) : null;
+    if (premierMessage) {
+      const debut = Date.now();
+      const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
+      let hit: { texte: string; fiches: Fiche[]; outils: string[] } | null = await lireReponse(p);
+      let etage: number = ETAGE.cacheReponse;
+      if (!hit) {
+        const vec = await vecteur;
+        const s = vec ? await chercherSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, vec, await versionOrg(p.orgId)) : null;
+        if (s) { hit = s.entree; etage = ETAGE.cacheSemantique; }
+      }
+      if (hit) {
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: hit.texte }] }], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        for (const o of hit.outils) { emettreSse('tool', { type: 'tool', name: o, statut: 'debut' }); emettreSse('tool', { type: 'tool', name: o, statut: 'fin' }); }
+        emettreSse('text', { type: 'text', delta: hit.texte });
+        if (hit.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: hit.fiches });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, etage });
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: message, etage, action: etage === ETAGE.cacheReponse ? 'cache-exact' : 'cache-semantique', outils: hit.outils, resultat: 'ok',
+          model: null, promptVersion: VERSION_PROMPT, usage: usageVide(), costCents: etage === ETAGE.cacheReponse ? 0 : null, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
@@ -437,7 +488,7 @@ router.post('/lumi/action', validate(actionSchema), async (req, res) => {
     emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
     emettreSse('text', { type: 'text', delta: reponse.texte });
     if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
-    emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
+    emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id, etage: ETAGE.interface });
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
       enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
@@ -530,7 +581,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     for (const recu of execute) emettreSse('executed', recu);
     emettreSse('text', { type: 'text', delta: texte });
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
-    emettreSse('done', { conversation_id, cost_cents: 0, budget, proposal: null, recu: true });
+    emettreSse('done', { conversation_id, cost_cents: 0, budget, proposal: null, recu: true, etage: ETAGE.interface });
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, canal: 'lumi', origine: 'carte',
       enonce: null, etage: ETAGE.interface, action: decision, outils: enAttente.map((a) => a.tool),

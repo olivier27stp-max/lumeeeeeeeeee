@@ -23,6 +23,7 @@
 
 import crypto from 'crypto';
 import { getServiceClient, companyOrgIds } from '../supabase';
+import { invaliderOrg } from '../lumi/cache-reponses';
 import { logSecurityEvent } from '../security';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../config';
 import { normalizeE164, findOrCreateConversation } from '../helpers';
@@ -293,6 +294,8 @@ async function executerIdempotent(
   try {
     const resultat = await action();
     await admin.from('agent_actions').update({ resultat }).eq('id', posee!.id);
+    // Les caches de réponse (étages 3-4) de cette org sont périmés : version +1.
+    void invaliderOrg(ctx.orgId);
     logSecurityEvent({
       org_id: ctx.orgId, user_id: ctx.userId,
       event_type: 'agent_write_executed', severity: 'info', source: 'api',
@@ -301,6 +304,7 @@ async function executerIdempotent(
     return resultat;
   } catch (e: any) {
     if (e instanceof EffetPartiel) {
+      void invaliderOrg(ctx.orgId);
       // Point de non-retour franchi : on NE libère PAS l'empreinte (sinon
       // doublon à la retentative). On mémorise ce qui a été fait pour que
       // `deja_fait` le rejoue.

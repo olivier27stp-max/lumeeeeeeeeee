@@ -1,0 +1,73 @@
+/**
+ * Étage 3 — cache exact de réponse (item 13, AGENTFORCE_GAP.md B3).
+ * ─────────────────────────────────────────────────────────────
+ * Le même énoncé, de la même personne, dans la même entreprise, tant que ses
+ * données n'ont pas bougé → la réponse déjà produite par le modèle, sans
+ * appel. Clé = sha256(énoncé normalisé + org + personne + version des
+ * données) ; jamais partagée entre entreprises ni entre personnes (les
+ * montants masqués d'un rôle ne doivent pas ressortir chez un autre).
+ *
+ * Fraîcheur, deux mécanismes :
+ * - version d'org (`lumi:ver:<org>`) incrémentée à chaque écriture d'agent
+ *   (executerIdempotent) : une action de Lumi ou du MCP invalide tout ;
+ * - TTL court (60 s) : les écritures faites dans l'APPLICATION ne passent
+ *   pas par l'agent, on ne les voit pas — 60 s est le maximum de retard
+ *   qu'on accepte sur un chiffre.
+ *
+ * On ne met en cache que : le PREMIER message d'une conversation (sans
+ * historique, l'énoncé se suffit), une réponse sans écriture ni proposition,
+ * avec des outils de lecture seulement, non vide. Repli (« pas ça ») →
+ * l'entrée est retirée.
+ */
+import crypto from 'node:crypto';
+import { magasin } from './magasin';
+import { normaliserEnonce } from './traces';
+import type { Fiche } from './fiches';
+import { TOOLS_BY_NAME } from '../agent/tools';
+
+export const TTL_REPONSE_S = 60;
+
+export interface ReponseEnCache {
+  texte: string;
+  fiches: Fiche[];
+  outils: string[];
+  /** Énoncé normalisé d'origine (repli, diagnostic). */
+  enonce: string;
+}
+
+export function cleReponse(p: { orgId: string; userId: string; enonce: string; version: number }): string {
+  const e = normaliserEnonce(p.enonce) ?? '';
+  const h = crypto.createHash('sha256').update(`${p.orgId}\n${p.userId}\n${p.version}\n${e}`, 'utf8').digest('hex').slice(0, 32);
+  return `lumi:rep:${p.orgId}:${p.userId}:${h}`;
+}
+
+export async function versionOrg(orgId: string): Promise<number> {
+  return Number((await magasin().get<number>(`lumi:ver:${orgId}`)) ?? 0) || 0;
+}
+
+/** À appeler après toute écriture d'agent : tout ce qui est en cache pour l'org devient obsolète. */
+export async function invaliderOrg(orgId: string): Promise<void> {
+  await magasin().incr(`lumi:ver:${orgId}`);
+}
+
+/** Un tour est-il cachable ? Lecture seule, texte, pas de proposition, premier message. */
+export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string }): boolean {
+  if (!t.historiqueVide || t.proposition || t.resultat !== 'ok') return false;
+  if (!t.texte.trim()) return false;
+  return t.outils.every((o) => TOOLS_BY_NAME[o]?.kind === 'read');
+}
+
+export async function lireReponse(p: { orgId: string; userId: string; enonce: string }): Promise<ReponseEnCache | null> {
+  const version = await versionOrg(p.orgId);
+  return magasin().get<ReponseEnCache>(cleReponse({ ...p, version }));
+}
+
+export async function ecrireReponse(p: { orgId: string; userId: string; enonce: string }, r: Omit<ReponseEnCache, 'enonce'>): Promise<void> {
+  const version = await versionOrg(p.orgId);
+  await magasin().set(cleReponse({ ...p, version }), { ...r, enonce: normaliserEnonce(p.enonce) ?? '' } satisfies ReponseEnCache, TTL_REPONSE_S);
+}
+
+export async function retirerReponse(p: { orgId: string; userId: string; enonce: string }): Promise<void> {
+  const version = await versionOrg(p.orgId);
+  await magasin().del(cleReponse({ ...p, version }));
+}

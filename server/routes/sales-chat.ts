@@ -21,6 +21,7 @@ import { getServiceClient } from '../lib/supabase';
 import { journaliserTrace, normaliserEnonce, usageGemini } from '../lib/lumi/traces';
 import { reponseFixePour } from '../lib/agent/reponsesFixes';
 import { VERSION_PROMPT } from '../lib/lumi/version';
+import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cache-semantique';
 
 const router = Router();
 
@@ -76,6 +77,19 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
       });
       return res.json({ reply: fixe.reponse, fixe: fixe.id });
     }
+    // Étage 4 public : une question déjà répondue, reformulée, sans Gemini. Index PARTAGÉ
+    // (aucune donnée client ici) ; seulement quand la question est le premier message.
+    const vecteur = contents.length === 1 ? await embed(dernier) : null;
+    if (vecteur) {
+      const s = await chercherSemantique({ genre: 'public' }, vecteur, null);
+      if (s) {
+        void journaliserTrace(getServiceClient(), {
+          orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
+          enonce: dernier, etage: 4, action: 'cache-semantique', resultat: 'ok', model: null, promptVersion: VERSION_PROMPT, costCents: null, dureeMs: Date.now() - debut,
+        });
+        return res.json({ reply: s.entree.texte, cache: 'semantique' });
+      }
+    }
     const result = await generateContent({
       systemInstruction: SYSTEM_PROMPT,
       contents,
@@ -92,6 +106,7 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
       etage: 6, resultat: 'ok', model: geminiModel, promptVersion: VERSION_PROMPT, usage: usageGemini(result.usage), costCents: null, dureeMs: Date.now() - debut,
     });
     const reply = (result.text || '').trim();
+    if (vecteur && reply) void memoriserSemantique({ genre: 'public' }, { enonce: dernier, vec: vecteur, texte: reply, fiches: [], outils: [], version: 0 });
     if (!reply) {
       return res.json({
         reply: "Bonne question ! Le plus simple, c'est une courte démo — tu veux que je t'aide à en réserver une ?",
