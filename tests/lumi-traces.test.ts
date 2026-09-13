@@ -46,7 +46,7 @@ describe('journaliserTrace : jamais bloquante, toujours le contexte serveur', ()
     });
     const { client: c2, insert: i2 } = adminSimule({ error: null });
     await journaliserTrace(c2, { orgId: null, userId: null, canal: 'public', origine: 'texte', resultat: 'ok', costCents: null });
-    expect(i2.mock.calls[0]?.[0]).toMatchObject({ org_id: null, user_id: null, cost_cents: null, input_tokens: 0, outils: [], etage: null });
+    expect((i2.mock.calls as unknown as any[][])[0][0]).toMatchObject({ org_id: null, user_id: null, cost_cents: null, input_tokens: 0, outils: [], etage: null });
   });
 
   it('table absente (migration non appliquée) : un seul avertissement, aucune exception', async () => {
