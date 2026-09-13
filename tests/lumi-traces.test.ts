@@ -113,7 +113,7 @@ describe('contrat avec le reste du code', () => {
 
   it('chaque chemin de tour écrit une trace : raccourci (étage 2), agent (étage 6), carte, transcription, agent public', () => {
     const route = readFileSync(path.join(__dirname, '../server/routes/lumi.ts'), 'utf8');
-    expect(route).toContain('etage: ETAGE.raccourci');
+    expect(route).toContain('ETAGE.raccourci');
     expect(route).toContain('etage: ETAGE.agent');
     expect(route).toContain("origine: 'carte'");
     expect(readFileSync(path.join(__dirname, '../server/routes/agent.ts'), 'utf8')).toContain("canal: 'transcription'");

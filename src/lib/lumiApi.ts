@@ -187,7 +187,7 @@ export async function envoyerMessageLumi(
 }
 
 /** Action d'interface (étage 0) : une suggestion cliquée part avec son nom et ses paramètres, jamais en texte à interpréter. */
-export type ActionLumi = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients';
+export type ActionLumi = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients' | 'taches' | 'equipe' | 'devis-attente' | 'ou-equipe' | 'job-numero';
 export interface SuggestionLumi { label: string; action: ActionLumi; params?: Record<string, string | number | boolean> }
 
 /** Renvoie 'indisponible' (422 : rôle sans accès, outil en échec) pour que la page envoie le texte au modèle à la place. */

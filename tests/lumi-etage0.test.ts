@@ -22,7 +22,7 @@ describe('raccourciDepuisAction : nommé, validé, jamais deviné', () => {
     expect(raccourciDepuisAction('agenda', { periode: 'demain' })).toMatchObject({ id: 'agenda', periode: 'demain' });
     expect(raccourciDepuisAction('agenda')).toMatchObject({ periode: 'aujourdhui' });
     expect(raccourciDepuisAction('top-clients', { limit: 5 })).toMatchObject({ tool: 'get_top_clients', args: { limit: 5 } });
-    for (const id of IDS_RACCOURCIS) expect(raccourciDepuisAction(id)).not.toBeNull();
+    for (const id of IDS_RACCOURCIS) expect(raccourciDepuisAction(id, id === 'job-numero' ? { numero: '7' } : {}), id).not.toBeNull();
   });
   it('refuse une action ou un paramètre hors liste (null, pas une approximation)', () => {
     expect(raccourciDepuisAction('envoyer-sms')).toBeNull();

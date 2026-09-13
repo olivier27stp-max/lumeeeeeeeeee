@@ -69,6 +69,17 @@ const actionSchema = z.object({
   origine: z.enum(['suggestion', 'lien']).optional(),
 });
 
+/** « non », « pas ça », « c'est pas ça »… : l'utilisateur rejette la réponse précédente. Liste courte, exacte. */
+const REPLIS: ReadonlySet<string> = new Set(['non', 'no', 'nope', 'pas ca', 'non pas ca', 'c est pas ca', 'ce n est pas ca', 'pas du tout', 'not that', 'wrong', 'mauvaise reponse', 'c est pas la bonne reponse']);
+function estUnRepli(message: string): boolean {
+  return REPLIS.has(normaliserEnonce(message) ?? '');
+}
+/** Dernier message texte de l'utilisateur dans l'historique (pour tracer le candidat à retirer). */
+function dernierEnonceUtilisateur(msgs: Msg[]): string | null {
+  for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'user' && typeof msgs[i].content === 'string') return msgs[i].content as string;
+  return null;
+}
+
 // Au-delà, on résume plutôt que de renvoyer 200 messages au modèle.
 const MAX_MESSAGES_HISTORIQUE = 60;
 
@@ -217,6 +228,9 @@ async function executerTourSse(opts: {
   /** Pour la trace : d'où vient le message et ce que l'utilisateur a écrit (null pour une décision de carte). */
   origine: OrigineTrace;
   enonce?: string | null;
+  /** Repli : action 'repli' + l'énoncé précédent comme candidat à retirer des énoncés exacts. */
+  action?: string | null;
+  params?: Record<string, unknown> | null;
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -235,7 +249,7 @@ async function executerTourSse(opts: {
   opts.req.on('close', () => { ferme = true; });
   const tracer = (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => void journaliserTrace(ctx.admin, {
     orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
-    enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: action ?? null, outils, resultat,
+    enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null, params: opts.params ?? null, outils, resultat,
     model, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
   });
 
@@ -316,7 +330,13 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // Raccourci déterministe : la question la plus courante a une réponse
     // sans modèle (0 ¢, voir raccourcis.ts). Jamais quand une proposition
     // vient d'être annulée : le modèle doit en rendre compte.
-    const raccourci = enAttente.length ? null : detecterRaccourci(message);
+    // Repli (item 6) : « non », « pas ça », ou le bouton Réessayer = la réponse
+    // précédente n'était pas la bonne. On n'insiste jamais avec un étage sans
+    // modèle : le modèle reprend, avec l'énoncé précédent tracé comme candidat
+    // à retirer des énoncés exacts.
+    const repli = origine === 'repli' || estUnRepli(message);
+    const enoncePrecedent = repli ? dernierEnonceUtilisateur(historique) : null;
+    const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);
     if (raccourci) {
       const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, {
@@ -336,14 +356,14 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         // Étage 2 : répondu sans modèle. C'est cette ligne qui mesure la part de trafic absorbée.
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
-          enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : null,
+          enonce: normaliserEnonce(message), etage: raccourci.etage ?? ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : raccourci.numero ? { numero: raccourci.numero } : null,
           outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
       }
     }
 
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine, enonce: message });
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}) });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');

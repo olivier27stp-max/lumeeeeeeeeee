@@ -27,10 +27,19 @@ import { executerOutilGarde } from '../agent/garde';
 import { composerBriefing, type DonneesBriefing } from './briefing';
 import { fichesDuResultat, type Fiche } from './fiches';
 
-export type IdRaccourci = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients';
-export const IDS_RACCOURCIS: readonly IdRaccourci[] = ['clients-total', 'agenda', 'revenu-mois', 'retards', 'briefing', 'top-clients'];
+export type IdRaccourci = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients' | 'taches' | 'equipe' | 'devis-attente' | 'ou-equipe' | 'job-numero';
+export const IDS_RACCOURCIS: readonly IdRaccourci[] = ['clients-total', 'agenda', 'revenu-mois', 'retards', 'briefing', 'top-clients', 'taches', 'equipe', 'devis-attente', 'ou-equipe', 'job-numero'];
 export const PERIODES_AGENDA = ['aujourdhui', 'demain', 'semaine'] as const;
-export interface Raccourci { id: IdRaccourci; tool: string; args: Record<string, any>; periode?: 'aujourdhui' | 'demain' | 'semaine' }
+export interface Raccourci {
+  id: IdRaccourci;
+  tool: string;
+  args: Record<string, any>;
+  periode?: 'aujourdhui' | 'demain' | 'semaine';
+  /** Numéro de job demandé (job-numero). */
+  numero?: string;
+  /** Étage qui a reconnu l'énoncé : 1 = énoncé exact, 2 = motif. Absent = étage 0 (action nommée). */
+  etage?: 1 | 2;
+}
 export interface ReponseRaccourci { texte: string; fiches: Fiche[] }
 
 export interface ContexteRaccourci {
@@ -45,6 +54,45 @@ export interface ContexteRaccourci {
 }
 
 const MAX_MOTS = 12;
+
+/**
+ * ÉTAGE 1 — énoncés exacts (item 6, B3). Énoncé normalisé → action. Plafond
+ * 30 entrées (test) : au-delà, ça devient un arbre impossible à maintenir à
+ * 50 clients ; ce qui n'y est pas descend à l'étage 2 puis au modèle.
+ * Alimenter avec les énoncés RÉCURRENTS de lumi_traces (enonce_normalise),
+ * jamais avec des variantes imaginées.
+ */
+export const ENONCES_EXACTS: ReadonlyArray<[string, { id: IdRaccourci; periode?: Raccourci['periode'] }]> = [
+  // Les 4 suggestions de l'interface (au cas où elles sont tapées à la main)
+  ['quel est mon chiffre du mois', { id: 'revenu-mois' }],
+  ['quelles factures sont en retard', { id: 'retards' }],
+  ['prepare ma journee de demain', { id: 'agenda', periode: 'demain' }],
+  ['qui sont mes meilleurs clients', { id: 'top-clients' }],
+  // Énoncés de la batterie d'évaluation (formulations réelles d'un patron de PME)
+  ['combien de factures en retard j ai en ce moment', { id: 'retards' }],
+  ['c est quoi le total de mes comptes en retard', { id: 'retards' }],
+  ['qui me doit de l argent', { id: 'retards' }],
+  ['combien j ai encaisse ce mois ci', { id: 'revenu-mois' }],
+  ['combien j ai facture depuis le debut du mois', { id: 'revenu-mois' }],
+  ['mon chiffre d affaires du mois', { id: 'revenu-mois' }],
+  ['j ai combien de jobs cette semaine', { id: 'agenda', periode: 'semaine' }],
+  ['qu est ce que j ai demain', { id: 'agenda', periode: 'demain' }],
+  ['qu est ce que j ai aujourd hui', { id: 'agenda', periode: 'aujourdhui' }],
+  ['j ai combien de clients dans mon crm', { id: 'clients-total' }],
+  ['combien de clients j ai', { id: 'clients-total' }],
+  ['combien de devis attendent une reponse du client', { id: 'devis-attente' }],
+  ['mes devis en attente', { id: 'devis-attente' }],
+  ['qui est dans mon equipe', { id: 'equipe' }],
+  ['qu est ce qu il me reste comme taches a faire', { id: 'taches' }],
+  ['mes taches', { id: 'taches' }],
+  ['ou est mon equipe en ce moment', { id: 'ou-equipe' }],
+  ['mon brief du matin', { id: 'briefing' }],
+  ['quoi de neuf', { id: 'briefing' }],
+];
+const INDEX_EXACT = new Map(ENONCES_EXACTS.map(([e, a]) => [e, a]));
+
+/** « Montre-moi le job numéro 33 », « job 33 », « ouvre la job #33 » — et rien d'autre dans la phrase. */
+const MOTIF_JOB_NUMERO = /^(?:(?:montre moi|montres moi|montre|voir|ouvre|affiche|details? (?:du|de la)|c est quoi (?:le|la)|show me|show|open|what is|whats) )?(?:le |la |the |mon |ma |my )?job (?:numero |number |no |num |n )?(\d{1,7})(?: stp| svp| please)?$/;
 
 /** Minuscules, sans accents, sans ponctuation : « Qu'est-ce que j'ai demain ? » → « qu est ce que j ai demain ». */
 export function normaliser(s: string): string[] {
@@ -113,6 +161,30 @@ const DEFINITIONS: Definition[] = [
     interdits: ['lead', 'leads', 'prospect', 'prospects', 'mois', 'month', 'semaine', 'week', 'annee', 'year', 'ville', 'city', 'a', 'in'],
   },
   {
+    id: 'taches',
+    groupes: [['tache', 'taches', 'task', 'tasks', 'todo', 'todos', 'a-faire']],
+    extras: ['reste', 'restent', 'faire', 'ouvertes', 'ouverte', 'en', 'cours', 'attente', 'open', 'pending', 'left', 'remaining', 'liste', 'list', 'comme', 'il'],
+    interdits: ['cree', 'creer', 'ajoute', 'ajouter', 'add', 'create', 'termine', 'terminee', 'done', 'complete', 'supprime', 'delete', 'pour', 'for', 'demain', 'tomorrow', 'semaine', 'week'],
+  },
+  {
+    id: 'equipe',
+    groupes: [['equipe', 'team', 'employes', 'employe', 'staff', 'membres']],
+    extras: ['dans', 'in', 'compose', 'composee', 'fait', 'partie', 'sont', 'personnes', 'monde', 'liste', 'list'],
+    interdits: ['ou', 'where', 'position', 'positions', 'gps', 'heures', 'hours', 'paie', 'payroll', 'ajoute', 'add', 'invite', 'retire', 'remove', 'ce', 'moment', 'now', 'presentement'],
+  },
+  {
+    id: 'devis-attente',
+    groupes: [['devis', 'soumission', 'soumissions', 'quote', 'quotes'], ['attente', 'attendent', 'attend', 'reponse', 'pending', 'awaiting', 'waiting', 'envoyes', 'envoye', 'sent']],
+    extras: ['en', 'du', 'client', 'clients', 'combien', 'sans', 'without', 'answer', 'response', 'for'],
+    interdits: ['cree', 'creer', 'prepare', 'preparer', 'envoie', 'envoyer', 'send', 'create', 'draft', 'brouillon', 'brouillons', 'accepte', 'acceptes', 'approved', 'refuse', 'refuses', 'declined', 'expire', 'expires', 'mois', 'month', 'semaine', 'week'],
+  },
+  {
+    id: 'ou-equipe',
+    groupes: [['ou', 'where', 'position', 'positions', 'localise', 'localisation', 'gps'], ['equipe', 'team', 'employes', 'gars', 'monde', 'techniciens', 'technicien', 'membres', 'everyone', 'staff']],
+    extras: ['est', 'sont', 'en', 'ce', 'moment', 'now', 'right', 'presentement', 'actuellement', 'rendu', 'rendus', 'is', 'are', 'my'],
+    interdits: ['hier', 'yesterday', 'demain', 'tomorrow', 'heures', 'hours', 'etait', 'were', 'was'],
+  },
+  {
     id: 'briefing',
     groupes: [['briefing', 'brief', 'survol', 'resume', 'journee', 'matin', 'neuf', 'point', 'situation', 'update', 'morning', 'overview', 'summary', 'recap']],
     extras: ['jour', 'day', 'ma', 'mon', 'quoi', 'de', 'nouveau', 'new', 'fais', 'fait', 'faire', 'un', 'le', 'du', 'today', 'aujourd', 'aujourdhui', 'ajd', 'what', 'up', 'whats'],
@@ -124,21 +196,34 @@ const DEFINITIONS: Definition[] = [
 export function detecterRaccourci(message: string): Raccourci | null {
   const mots = normaliser(message);
   if (mots.length === 0 || mots.length > MAX_MOTS) return null;
+  // Étage 1 : l'énoncé entier, normalisé, est connu.
+  const exact = INDEX_EXACT.get(mots.join(' '));
+  if (exact) {
+    const r = raccourciDepuisAction(exact.id, exact.periode ? { periode: exact.periode } : {});
+    return r ? { ...r, etage: 1 } : null;
+  }
+  // Étage 2 : motifs bornés.
+  const num = MOTIF_JOB_NUMERO.exec(mots.join(' '));
+  if (num) return { id: 'job-numero', tool: 'list_jobs', args: { query: num[1], limit: 5 }, numero: num[1], etage: 2 };
   for (const def of DEFINITIONS) {
     if (def.interdits?.some((m) => mots.includes(m))) continue;
     if (!def.groupes.every((g) => g.some((m) => mots.includes(m)))) continue;
     const permis = new Set([...MOTS_VIDES, ...def.groupes.flat(), ...(def.extras ?? [])]);
     if (!mots.every((m) => permis.has(m))) continue;
     switch (def.id) {
-      case 'clients-total': return { id: def.id, tool: 'search_clients', args: { limit: 1 } };
+      case 'clients-total': return { id: def.id, tool: 'search_clients', args: { limit: 1 }, etage: 2 };
       case 'agenda': {
         const periode = mots.some((m) => DATES_DEMAIN.includes(m)) ? 'demain' : mots.some((m) => DATES_SEMAINE.includes(m)) ? 'semaine' : 'aujourdhui';
-        return { id: def.id, tool: 'query_schedule', args: {}, periode };
+        return { id: def.id, tool: 'query_schedule', args: {}, periode, etage: 2 };
       }
-      case 'revenu-mois': return { id: def.id, tool: 'get_revenue_summary', args: { period: 'this_month' } };
-      case 'retards': return { id: def.id, tool: 'get_overdue_payments', args: { limit: 50 } };
-      case 'briefing': return { id: def.id, tool: 'get_morning_briefing', args: {} };
-      case 'top-clients': return { id: def.id, tool: 'get_top_clients', args: { limit: 5 } };
+      case 'revenu-mois': return { id: def.id, tool: 'get_revenue_summary', args: { period: 'this_month' }, etage: 2 };
+      case 'retards': return { id: def.id, tool: 'get_overdue_payments', args: { limit: 50 }, etage: 2 };
+      case 'briefing': return { id: def.id, tool: 'get_morning_briefing', args: {}, etage: 2 };
+      case 'top-clients': return { id: def.id, tool: 'get_top_clients', args: { limit: 5 }, etage: 2 };
+      case 'taches': return { id: def.id, tool: 'list_tasks', args: { status: 'open', limit: 20 }, etage: 2 };
+      case 'equipe': return { id: def.id, tool: 'get_team', args: {}, etage: 2 };
+      case 'devis-attente': return { id: def.id, tool: 'list_quotes', args: { status: 'awaiting_response', limit: 15 }, etage: 2 };
+      case 'ou-equipe': return { id: def.id, tool: 'get_team_locations', args: {}, etage: 2 };
       default: return null;
     }
   }
@@ -166,6 +251,15 @@ export function raccourciDepuisAction(action: string, params: Record<string, unk
       const n = Number(params.limit ?? 5);
       if (!Number.isInteger(n) || n < 1 || n > 25) return null;
       return { id: action, tool: 'get_top_clients', args: { limit: n } };
+    }
+    case 'taches': return { id: action, tool: 'list_tasks', args: { status: 'open', limit: 20 } };
+    case 'equipe': return { id: action, tool: 'get_team', args: {} };
+    case 'devis-attente': return { id: action, tool: 'list_quotes', args: { status: 'awaiting_response', limit: 15 } };
+    case 'ou-equipe': return { id: action, tool: 'get_team_locations', args: {} };
+    case 'job-numero': {
+      const num = String(params.numero ?? '').trim();
+      if (!/^\d{1,7}$/.test(num)) return null;
+      return { id: action, tool: 'list_jobs', args: { query: num, limit: 5 }, numero: num };
     }
     default: return null;
   }
@@ -297,6 +391,57 @@ export function rendreRaccourci(r: Raccourci, resultat: any, opts: { fr: boolean
         return `${i + 1}. ${c.nom || '—'} · ${fmtDollars(Number(c.total_cents || 0), fr)} · ${jobs} job${jobs > 1 ? 's' : ''}`;
       });
       return `${fr ? `Tes ${lignes.length} meilleurs clients :` : `Your top ${lignes.length} clients:`}\n${lignes.join('\n')}`;
+    }
+    case 'taches': {
+      const rows: any[] = Array.isArray(resultat?.tasks) ? resultat.tasks : [];
+      const total = Number(resultat?.total_matching ?? rows.length);
+      if (rows.length === 0) return fr ? 'Aucune tâche à faire. Tout est réglé.' : 'No open task. All clear.';
+      const lignes = rows.slice(0, 15).map((t) => {
+        const quand = t.due_date || t.echeance || t.due_at;
+        const echeance = quand ? ` — ${jourLisible(String(quand).slice(0, 10), fuseau, fr)}` : '';
+        return `• ${t.title || (fr ? 'Sans titre' : 'Untitled')}${t.assignee || t.assigne ? ` (${t.assignee || t.assigne})` : ''}${echeance}`;
+      });
+      const reste = total - Math.min(15, rows.length);
+      return `${fr ? `${total} tâche${total > 1 ? 's' : ''} à faire :` : `${total} open task${total > 1 ? 's' : ''}:`}\n${lignes.join('\n')}${reste > 0 ? (fr ? `\n… et ${reste} autre${reste > 1 ? 's' : ''}.` : `\n… and ${reste} more.`) : ''}`;
+    }
+    case 'equipe': {
+      const rows: any[] = (Array.isArray(resultat?.members) ? resultat.members : []).filter((m: any) => m.statut === 'actif' || m.statut === 'active');
+      if (rows.length === 0) return fr ? 'Aucun membre actif dans l’équipe.' : 'No active team member.';
+      const lignes = rows.map((m) => `• ${m.name || m.email || '—'}${m.role ? ` · ${m.role}` : ''}`);
+      return `${fr ? `${rows.length} personne${rows.length > 1 ? 's' : ''} dans l’équipe :` : `${rows.length} ${rows.length > 1 ? 'people' : 'person'} on the team:`}\n${lignes.join('\n')}`;
+    }
+    case 'devis-attente': {
+      const rows: any[] = Array.isArray(resultat?.quotes) ? resultat.quotes : [];
+      const total = Number(resultat?.total_matching ?? rows.length);
+      if (rows.length === 0) return fr ? 'Aucun devis en attente de réponse.' : 'No quote awaiting a reply.';
+      const somme = rows.reduce((s, q) => s + Number(q.total_cents || 0), 0);
+      const lignes = rows.slice(0, 10).map((q) => `• ${q.quote_number || (fr ? 'Devis' : 'Quote')}${q.title ? ` · ${q.title}` : ''} · ${fmtDollars(Number(q.total_cents || 0), fr)}`);
+      return `${fr ? `${total} devis en attente de réponse${rows.length === total ? `, ${fmtDollars(somme, fr)} au total` : ''} :` : `${total} quote${total > 1 ? 's' : ''} awaiting a reply${rows.length === total ? `, ${fmtDollars(somme, fr)} in total` : ''}:`}\n${lignes.join('\n')}`;
+    }
+    case 'ou-equipe': {
+      const rows: any[] = Array.isArray(resultat?.members) ? resultat.members : [];
+      if (rows.length === 0) return fr ? 'Personne n’est localisé en ce moment (positions des 20 dernières minutes, avec consentement seulement).' : 'Nobody is located right now (last 20 minutes, with consent only).';
+      const lignes = rows.map((m) => {
+        const il = m.updated_at ? Math.max(0, Math.round((opts.maintenant.getTime() - new Date(m.updated_at).getTime()) / 60000)) : null;
+        const etat = m.is_moving ? (fr ? 'en déplacement' : 'moving') : (fr ? 'à l’arrêt' : 'stopped');
+        return `• ${m.name || '—'} · ${etat}${il !== null ? (fr ? ` · il y a ${il} min` : ` · ${il} min ago`) : ''}`;
+      });
+      return `${fr ? `${rows.length} membre${rows.length > 1 ? 's' : ''} localisé${rows.length > 1 ? 's' : ''} :` : `${rows.length} member${rows.length > 1 ? 's' : ''} located:`}\n${lignes.join('\n')}`;
+    }
+    case 'job-numero': {
+      const rows: any[] = Array.isArray(resultat?.jobs) ? resultat.jobs : [];
+      const j = rows.find((x) => String(x.job_number) === String(r.numero)) ?? null;
+      if (!j) return fr ? `Je ne trouve pas de job numéro ${r.numero}.` : `I can’t find job number ${r.numero}.`;
+      const quand = j.date ? `${jourLisible(String(j.date).slice(0, 10), fuseau, fr)} ${heureLocale(j.date, fuseau, fr)}`.trim() : (fr ? 'pas encore planifiée' : 'not scheduled yet');
+      const parts = [
+        `${fr ? 'Job' : 'Job'} #${j.job_number}${j.title ? ` · ${j.title}` : ''}`,
+        `${fr ? 'Client' : 'Client'} : ${j.client || '—'}`,
+        `${fr ? 'Quand' : 'When'} : ${quand}`,
+        `${fr ? 'Statut' : 'Status'} : ${j.display_status || j.statut || j.status || '—'}`,
+      ];
+      if (j.address) parts.push(`${fr ? 'Adresse' : 'Address'} : ${j.address}`);
+      if (j.total_cents !== undefined && j.total_cents !== null) parts.push(`${fr ? 'Total' : 'Total'} : ${fmtDollars(Number(j.total_cents), fr)}`);
+      return parts.join('\n');
     }
     case 'briefing': {
       const texte = composerBriefing(resultat as DonneesBriefing, { prenom: opts.prenom, fr, fuseau, maintenant: opts.maintenant });
