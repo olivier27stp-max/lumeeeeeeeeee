@@ -66,3 +66,14 @@ describe('la remise en service reste simple', () => {
     expect(app).toMatch(/Conserves volontairement[\s\S]{0,200}Lume Agent en service/);
   });
 });
+
+describe('la route de l ancien agent Gemini est fermée (item 2)', () => {
+  it('POST /api/agent/chat répond 410 sans appeler Gemini ni les outils ; la transcription reste', () => {
+    const route = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'agent.ts'), 'utf8');
+    expect(route).toContain("res.status(410)");
+    expect(route).toContain("code: 'agent_retire'");
+    expect(route).not.toContain('runAgent(');
+    expect(route).not.toContain('buildSystemPrompt(');
+    expect(route).toContain("router.post('/agent/transcribe'");
+  });
+});

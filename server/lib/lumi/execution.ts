@@ -10,6 +10,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { executerOutilGarde } from '../agent/garde';
+import { ECRITURES_SENSIBLES } from '../agent/registre';
 import { ficheCreee, type Fiche } from './fiches';
 import { logger } from '../logger';
 
@@ -31,10 +32,16 @@ export async function executerEcriture(opts: {
   client: SupabaseClient;
   accessToken?: string;
   auto?: boolean;
+  /** Mode à blanc (R12) : renvoie ce qui serait fait, n'écrit rien, ne produit pas de reçu. */
+  dryRun?: boolean;
 }): Promise<{ contenu: string; recu: ReçuExecution }> {
   const recu: ReçuExecution = { tool_use_id: opts.toolUseId, ok: false, fiche: null, ...(opts.auto ? { auto: true } : {}) };
   try {
-    const r = await executerOutilGarde({ name: opts.tool, args: opts.args, userId: opts.userId, orgId: opts.orgId, client: opts.client, accessToken: opts.accessToken });
+    const r = await executerOutilGarde({ name: opts.tool, args: opts.args, userId: opts.userId, orgId: opts.orgId, client: opts.client, accessToken: opts.accessToken, dryRun: opts.dryRun });
+    if (opts.dryRun) {
+      if ('refus' in r) return { contenu: JSON.stringify({ dry_run: true, refus: r.refus }), recu };
+      return { contenu: JSON.stringify({ dry_run: true, ...(r.result ?? {}) }), recu };
+    }
     if ('refus' in r) return { contenu: JSON.stringify({ error: r.refus }), recu };
     const echec = r.result && typeof r.result === 'object' && typeof (r.result as any).error === 'string' ? String((r.result as any).error) : null;
     // Une erreur métier (devis pas accepté…) est un échec, pas un reçu : la
@@ -70,12 +77,58 @@ export const MODES_LUMI: readonly ModeLumi[] = ['demander', 'argent', 'tout'];
  * irréversible. En mode « argent » (défaut), elles demandent encore ; tout
  * le reste (jobs, tâches, statuts, notes, planification) part d'office.
  */
-export const ECRITURES_SENSIBLES: ReadonlySet<string> = new Set([
-  'create_quote', 'send_quote', 'cancel_quote', 'convert_quote_to_job',
-  'create_invoice', 'create_invoice_from_job', 'send_invoice', 'mark_invoice_paid', 'send_payment_reminders',
-  'send_sms', 'send_email',
-  'merge_clients', 'archive_job',
-]);
+export { ECRITURES_SENSIBLES } from '../agent/registre';
+
+/**
+ * Plafond d'écritures par CONVERSATION (item 3, B6). En mode « tout » ou
+ * avec des outils « toujours confirmer », une boucle de 8 étapes peut
+ * enchaîner 8 écritures par tour, 60 tours par heure : sans plafond, un
+ * modèle qui s'emballe peut créer des dizaines de jobs avant qu'on le voie.
+ * Au-delà, chaque écriture repasse par la carte (mode « demander ») et le
+ * bouton Confirmer refuse (code plafond_ecritures). Nouvelle conversation =
+ * nouveau compteur : ce n'est pas un quota, c'est un cran d'arrêt.
+ */
+export const PLAFOND_ECRITURES_PAR_CONVERSATION = 20;
+
+/** Nombre d'écritures déjà exécutées dans cette conversation (reçus `executed` des tool_result). */
+export function compterEcritures(msgs: Array<{ role: string; content: unknown }>): number {
+  let n = 0;
+  for (const m of msgs) {
+    if (m.role !== 'user' || !Array.isArray(m.content)) continue;
+    for (const b of m.content as any[]) {
+      if (b?.type === 'tool_result' && typeof b.content === 'string' && b.content.includes('"executed":true')) n += 1;
+    }
+  }
+  return n;
+}
+
+/** Types d'action d'automatisation qui atteignent le CLIENT (texto, courriel, sondage d'avis). */
+const ACTIONS_VERS_LE_CLIENT: ReadonlySet<string> = new Set(['send_sms', 'send_email', 'request_review']);
+
+/**
+ * Écritures sensibles POUR CETTE ORG : la liste fixe, plus `update_job_status`
+ * quand une automatisation active sur « job terminée » envoie quelque chose au
+ * client (sondage d'avis, facture, remerciement). Terminer une job déclenche
+ * alors un texto : ce n'est plus un simple changement de statut (R11), la
+ * carte doit s'afficher même en mode « argent ».
+ */
+export async function ecrituresSensiblesPour(admin: SupabaseClient, orgId: string): Promise<ReadonlySet<string>> {
+  const out = new Set(ECRITURES_SENSIBLES);
+  try {
+    const { data, error } = await admin
+      .from('automation_rules')
+      .select('actions')
+      .eq('org_id', orgId).eq('trigger_event', 'job.completed').eq('is_active', true);
+    if (error) throw error;
+    const versLeClient = (data ?? []).some((r: any) => Array.isArray(r.actions) && r.actions.some((a: any) => ACTIONS_VERS_LE_CLIENT.has(String(a?.type))));
+    if (versLeClient) out.add('update_job_status');
+  } catch (err: any) {
+    // En doute, on demande : la carte de trop coûte un clic, l'inverse coûte un texto.
+    logger.error('[lumi] automatisations illisibles, update_job_status traité comme sensible', { error: err?.message || String(err), orgId });
+    out.add('update_job_status');
+  }
+  return out;
+}
 
 /** Le mode d'une personne pour cette org (défaut : argent). */
 export async function modeDe(admin: SupabaseClient, orgId: string, userId: string): Promise<ModeLumi> {
@@ -91,10 +144,10 @@ export async function definirMode(admin: SupabaseClient, orgId: string, userId: 
 }
 
 /** Outils qu'un mode autorise d'office, parmi les outils d'écriture connus. */
-export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<string>): Set<string> {
+export function outilsAutorisesParMode(mode: ModeLumi, outilsEcriture: Iterable<string>, sensibles: ReadonlySet<string> = ECRITURES_SENSIBLES): Set<string> {
   const out = new Set<string>();
   if (mode === 'demander') return out;
-  for (const t of outilsEcriture) if (mode === 'tout' || !ECRITURES_SENSIBLES.has(t)) out.add(t);
+  for (const t of outilsEcriture) if (mode === 'tout' || !sensibles.has(t)) out.add(t);
   return out;
 }
 
@@ -106,7 +159,10 @@ export async function autorisationsDe(admin: SupabaseClient, orgId: string, user
   const { data, error } = await admin.from('lumi_autorisations').select('tool').eq('org_id', orgId).eq('user_id', userId);
   if (error) { logger.error('[lumi] autorisations illisibles', { error: error.message, orgId }); return new Set(); }
   const out = new Set((data ?? []).map((r: any) => String(r.tool)));
-  if (outilsEcriture) for (const t of outilsAutorisesParMode(await modeDe(admin, orgId, userId), outilsEcriture)) out.add(t);
+  if (outilsEcriture) {
+    const [mode, sensibles] = await Promise.all([modeDe(admin, orgId, userId), ecrituresSensiblesPour(admin, orgId)]);
+    for (const t of outilsAutorisesParMode(mode, outilsEcriture, sensibles)) out.add(t);
+  }
   return out;
 }
 

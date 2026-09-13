@@ -70,7 +70,7 @@ async function decider(H, conversation_id, tool_use_id, decision, language = 'fr
 
 async function lireReponse(res) {
   const brut = await res.text();
-  const r = { statut: res.status, texte: '', outils: [], proposition: null, rapport: null, cout: 0, erreur: null, conversation_id: null };
+  const r = { statut: res.status, texte: '', outils: [], proposition: null, rapport: null, cout: 0, erreur: null, conversation_id: null, raccourci: null, etage: null };
   if (!res.ok) { try { r.erreur = JSON.parse(brut); } catch { r.erreur = brut; } return r; }
   for (const ev of brut.split('\n\n')) {
     const t = /event: (\w+)/.exec(ev)?.[1]; const d = /data: (.*)/.exec(ev)?.[1]; if (!t || !d) continue;
@@ -79,7 +79,7 @@ async function lireReponse(res) {
     else if (t === 'tool' && j.statut === 'debut') r.outils.push(j.name);
     else if (t === 'proposal') r.proposition = j;
     else if (t === 'report') r.rapport = j.rapport;
-    else if (t === 'done') { r.cout = j.cost_cents; r.conversation_id = j.conversation_id; }
+    else if (t === 'done') { r.cout = j.cost_cents; r.conversation_id = j.conversation_id; r.raccourci = j.raccourci ?? null; r.etage = j.raccourci ? 2 : (j.recu ? 0 : 6); }
     else if (t === 'error') r.erreur = j.message;
   }
   return r;
@@ -565,6 +565,28 @@ async function testsTechnicien(orgId, resultats) {
 }
 
 /* ── Exécution ───────────────────────────────────────────────── */
+/*
+ * Routage attendu (item 7, B8) : pour chaque énoncé, l'action de la couche
+ * zéro-appel qui DOIT répondre (étages 1-2, sans modèle), ou null quand le
+ * modèle DOIT répondre (écriture, ambiguïté, sécurité, hors scope). Un énoncé
+ * absent de cette table n'est pas noté sur le routage. C'est la mesure qui
+ * rend sûr tout ajout d'énoncé exact ou de motif : un motif trop large se
+ * voit ici avant la prod.
+ */
+const ACTION_ATTENDUE = {
+  'retards-nombre': 'retards', 'retards-total': 'retards', 'retards-qui': 'retards', 'retards-plus-vieux': null,
+  'revenu-mois': 'revenu-mois', 'facture-mois': 'revenu-mois', 'concis': null, 'comparaison': null,
+  'jobs-semaine-nombre': 'agenda', 'jobs-demain': 'agenda', 'oral-typos': 'agenda', 'jobs-en-retard': null, 'jobs-a-facturer': null,
+  'clients-nombre': 'clients-total', 'prospects-nombre': null, 'client-telephone': null, 'client-adresse': null, 'client-doublon': null,
+  'devis-attente': 'devis-attente', 'equipe': 'equipe', 'taches': 'taches', 'outil-positions': 'ou-equipe', 'outil-job-numero': 'job-numero',
+  'brief': 'briefing', 'meilleur-client': 'top-clients', 'entreprise': null,
+  'action-job': null, 'action-sms': null, 'action-devis-cents': null, 'action-payee': null, 'action-relances': null, 'action-ambigue': null,
+  'action-client-inconnu': null, 'action-tache': null, 'action-jamais-executee': null,
+  'secu-prompt': null, 'secu-outils': null, 'secu-autre-org': null, 'secu-role': null, 'secu-cle': null, 'injection-fiche': null,
+  'rapport-financier': null, 'rapport-retards': null, 'rapport-jobs': null, 'hors-sujet': null, 'memoire': null, 'pave': null,
+  'outil-tournee': null, 'outil-creneau': null, 'outil-ville': null, 'outil-textos': null, 'outil-heures': null, 'outil-churn': null,
+};
+
 async function jouer(c, H, v, resultats) {
   const q = typeof c.q === 'function' ? c.q(v) : c.q;
   const r = await demander(H, q, c.language || 'fr');
@@ -575,7 +597,11 @@ async function jouer(c, H, v, resultats) {
     if (c.cat !== 'securite' && !c.sansPresentation) fautes.push(...fautesPresentation(r, c.language || 'fr'));
     if (r.erreur) fautes.push(`erreur de flux : ${r.erreur}`);
   }
-  const ligne = { id: c.id, cat: c.cat, question: q, ok: fautes.length === 0, fautes, outils: r.outils, proposition: r.proposition?.tool || null, rapport: r.rapport?.type || null, cout_cents: r.cout, reponse: r.texte };
+  // Routage : noté à part (routage_ok), il compte dans le bilan de routage, pas dans le taux d'erreur de réponse.
+  const attendu = Object.prototype.hasOwnProperty.call(ACTION_ATTENDUE, c.id) ? ACTION_ATTENDUE[c.id] : undefined;
+  const routage_ok = attendu === undefined ? null : (r.raccourci ?? null) === attendu;
+  if (routage_ok === false) console.log(`   routage : attendu ${attendu ?? 'modèle'}, reçu ${r.raccourci ?? 'modèle'}`);
+  const ligne = { id: c.id, cat: c.cat, question: q, ok: fautes.length === 0, fautes, outils: r.outils, proposition: r.proposition?.tool || null, rapport: r.rapport?.type || null, cout_cents: r.cout, reponse: r.texte, etage: r.etage, raccourci: r.raccourci, action_attendue: attendu ?? null, routage_ok };
   resultats.push(ligne);
   console.log(`${ligne.ok ? 'OK   ' : 'ECHEC'} [${c.cat}] ${c.id}${fautes.length ? ' — ' + fautes.join(' ; ') : ''}  (${r.cout.toFixed(1)}¢)`);
   return ligne;
@@ -604,6 +630,9 @@ await admin.from('memberships').update({ lumi_mode: 'demander' }).eq('user_id', 
 {
   const { data: vieux } = await admin.from('org_knowledge').select('id').eq('org_id', orgId).eq('category', 'assistant');
   if (vieux?.length) await admin.from('org_knowledge').delete().in('id', vieux.map((x) => x.id));
+  // Les empreintes d'idempotence (24 h) survivent à cette purge : sans ceci, « retiens que… » répond
+  // deja_fait avec un souvenir qu'on vient d'effacer (vu le 2026-09-13). Org de fausses données.
+  await admin.from('agent_actions').delete().eq('org_id', orgId);
 }
 
 const moi = createClient(url, process.env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${session.session.access_token}` } } });
@@ -633,7 +662,14 @@ const cout = resultats.reduce((s, r) => s + (r.cout_cents || 0), 0);
 console.log('\n── Bilan ──');
 for (const [cat, c] of Object.entries(parCat)) console.log(`${cat.padEnd(13)} ${String(c.ok).padStart(2)} / ${c.n}   (${Math.round((c.ok / c.n) * 100)} %)`);
 console.log(`${'TOTAL'.padEnd(13)} ${String(ok).padStart(2)} / ${total}   (${Math.round((ok / total) * 100)} %) · taux d'erreur ${Math.round(((total - ok) / total) * 100)} % · coût ${(cout / 100).toFixed(2)} $ · ${sautes.length} sautés`);
-writeFileSync(SORTIE, JSON.stringify({ date: new Date().toISOString(), api: API, org: orgId, total, ok, taux_erreur_pct: Math.round(((total - ok) / total) * 100), cout_cents: cout, par_categorie: parCat, sautes, resultats }, null, 1));
+// Routage et coût par étage : ce qui dit si la couche zéro-appel absorbe sans se tromper.
+const notes = resultats.filter((r) => r.routage_ok !== null && r.routage_ok !== undefined);
+const routage_pct = notes.length ? Math.round((notes.filter((r) => r.routage_ok).length / notes.length) * 100) : null;
+const parEtage = {};
+for (const r of resultats) { if (r.etage === null || r.etage === undefined) continue; const s = (parEtage[r.etage] ||= { n: 0, cout_cents: 0 }); s.n += 1; s.cout_cents += r.cout_cents || 0; }
+const cout_moyen_cents = total ? cout / total : 0;
+console.log(`routage       ${notes.filter((r) => r.routage_ok).length} / ${notes.length}   (${routage_pct ?? '—'} %) · par étage : ${Object.entries(parEtage).map(([e, s]) => `${e}→${s.n} (${(s.cout_cents / s.n).toFixed(2)} ¢)`).join(', ')} · coût moyen ${cout_moyen_cents.toFixed(2)} ¢ / requête`);
+writeFileSync(SORTIE, JSON.stringify({ date: new Date().toISOString(), api: API, org: orgId, total, ok, taux_erreur_pct: Math.round(((total - ok) / total) * 100), cout_cents: cout, cout_moyen_cents, routage_pct, par_etage: parEtage, par_categorie: parCat, sautes, resultats }, null, 1));
 console.log(`Détail : ${SORTIE}`);
 await admin.from('memberships').update({ lumi_mode: modeAvant }).eq('user_id', session.user.id).eq('org_id', orgId);
 process.exit(ok === total ? 0 : 1);

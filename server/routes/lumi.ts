@@ -26,9 +26,15 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
-import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
+import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
+import { getUserContext } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
-import { detecterRaccourci, repondreRaccourci } from '../lib/lumi/raccourcis';
+import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
+import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
+import { VERSION_PROMPT } from '../lib/lumi/version';
+import { escalader, motifDansResultat } from '../lib/lumi/escalade';
+import { classifier, modeRouteur } from '../lib/lumi/routeur';
+import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import type { Rapport } from '../lib/agent/tools-rapports';
@@ -44,13 +50,38 @@ const chatSchema = z.object({
   conversation_id: z.string().regex(UUID).optional().nullable(),
   message: z.string().trim().min(1).max(8000),
   language: z.enum(['fr', 'en']).optional(),
+  // D'où vient le message (mesure pour lumi_traces) : jamais une autorisation, jamais un identifiant.
+  origine: z.enum(ORIGINES_TRACE as [OrigineTrace, ...OrigineTrace[]]).optional(),
 });
 const executeSchema = z.object({
   conversation_id: z.string().regex(UUID),
   tool_use_id: z.string().min(1).max(200),
-  decision: z.enum(['confirm', 'cancel']),
+  // dry_run : même garde, mêmes validations, aucune écriture — renvoie ce qui serait fait (R12).
+  decision: z.enum(['confirm', 'cancel', 'dry_run']),
   language: z.enum(['fr', 'en']).optional(),
 });
+
+/** Étage 0 : une action d'interface, nommée, avec ses paramètres — pas de texte à interpréter. */
+const actionSchema = z.object({
+  conversation_id: z.string().regex(UUID).optional().nullable(),
+  action: z.enum(IDS_RACCOURCIS as [IdRaccourci, ...IdRaccourci[]]),
+  params: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  /** Ce que l'utilisateur a cliqué : stocké comme son message, pour que la conversation se lise. */
+  label: z.string().trim().min(1).max(200),
+  language: z.enum(['fr', 'en']).optional(),
+  origine: z.enum(['suggestion', 'lien']).optional(),
+});
+
+/** « non », « pas ça », « c'est pas ça »… : l'utilisateur rejette la réponse précédente. Liste courte, exacte. */
+const REPLIS: ReadonlySet<string> = new Set(['non', 'no', 'nope', 'pas ca', 'non pas ca', 'c est pas ca', 'ce n est pas ca', 'pas du tout', 'not that', 'wrong', 'mauvaise reponse', 'c est pas la bonne reponse']);
+function estUnRepli(message: string): boolean {
+  return REPLIS.has(normaliserEnonce(message) ?? '');
+}
+/** Dernier message texte de l'utilisateur dans l'historique (pour tracer le candidat à retirer). */
+function dernierEnonceUtilisateur(msgs: Msg[]): string | null {
+  for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'user' && typeof msgs[i].content === 'string') return msgs[i].content as string;
+  return null;
+}
 
 // Au-delà, on résume plutôt que de renvoyer 200 messages au modèle.
 const MAX_MESSAGES_HISTORIQUE = 60;
@@ -197,12 +228,51 @@ async function executerTourSse(opts: {
   conversationId: string; historique: Msg[]; nouveauxAvant: Msg[];
   /** Reçus des écritures qui viennent d'être exécutées (ou refusées) : émis avant que le modèle reprenne. */
   execute?: ReçuExecution[];
+  /** Pour la trace : d'où vient le message et ce que l'utilisateur a écrit (null pour une décision de carte). */
+  origine: OrigineTrace;
+  enonce?: string | null;
+  /** Repli : action 'repli' + l'énoncé précédent comme candidat à retirer des énoncés exacts. */
+  action?: string | null;
+  params?: Record<string, unknown> | null;
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
-  const emettre = (e: EvenementLumi) => emettreSse(e.type, e);
+  // La trace du tour se construit au fil des événements : outils qui ont
+  // tourné, usage de chaque appel au modèle. Elle part à la fin, sans bloquer.
+  const debut = Date.now();
+  const outils: string[] = [];
+  let usage: UsageAgrege = usageVide();
+  let model: string | null = null;
+  let erreurModele: string | null = null;
+  const emettre = (e: EvenementLumi) => {
+    if (e.type === 'tool' && e.statut === 'fin' && !outils.includes(e.name)) outils.push(e.name);
+    if (e.type === 'usage') { usage = ajouterUsage(usage, e.usage); model = e.model; }
+    if (e.type === 'error') erreurModele = e.message;
+    emettreSse(e.type, e);
+  };
   let ferme = false;
   opts.req.on('close', () => { ferme = true; });
+  // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
+  // entre dans la trace pour être comparé à ce que le modèle a fait.
+  const observation = modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null;
+  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => {
+    const routeur = observation ? await observation : null;
+    void journaliserTrace(ctx.admin, {
+      orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
+      enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
+      params: { ...(opts.params ?? {}), ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}) },
+      outils, resultat, model, promptVersion: VERSION_PROMPT, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
+    });
+    // Escalade humaine : le modèle a refusé ou n'a pas pu finir.
+    if (erreurModele === 'refusal' || erreurModele === 'trop_d_etapes') {
+      void escalader(ctx.admin, {
+        orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, motif: erreurModele === 'refusal' ? 'refus_modele' : 'trop_d_etapes', fr: ctx.language === 'fr',
+        detail: erreurModele === 'refusal'
+          ? (ctx.language === 'fr' ? 'Lumi a refusé de répondre à une demande dans cette conversation.' : 'Lumi declined a request in this conversation.')
+          : (ctx.language === 'fr' ? 'Lumi a atteint sa limite d’étapes sans pouvoir conclure.' : 'Lumi hit its step limit without concluding.'),
+      });
+    }
+  };
 
   try {
     for (const recu of opts.execute ?? []) if (!ferme) emettreSse('executed', recu);
@@ -216,6 +286,7 @@ async function executerTourSse(opts: {
       systeme: ctx.systeme,
       reglages: reglagesPourPalier(ctx.budget.palier, modeleLumi()),
       autorisations: await autorisationsDe(ctx.admin, ctx.auth.orgId, ctx.auth.user.id, Object.keys(TOOLS_BY_NAME).filter((n) => TOOLS_BY_NAME[n]?.kind === 'write')),
+      ecrituresRestantes: Math.max(0, PLAFOND_ECRITURES_PAR_CONVERSATION - compterEcritures([...opts.historique, ...opts.nouveauxAvant])),
       historique: [...opts.historique, ...opts.nouveauxAvant],
       emettre: (e) => { if (!ferme) emettre(e); },
       journaliser: (usage, model, cost_cents) => journaliserUsage(ctx.admin, {
@@ -228,9 +299,11 @@ async function executerTourSse(opts: {
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition });
+    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
   } catch (err: any) {
     logger.error('[lumi] tour échoué', { error: err?.message || String(err), orgId: ctx.auth.orgId });
     if (!ferme) emettreSse('error', { message: 'Lumi failed to respond.' });
+    void tracer('erreur', 0);
   } finally {
     res.end();
   }
@@ -250,7 +323,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
-    const { conversation_id, message } = req.body as z.infer<typeof chatSchema>;
+    const { conversation_id, message, origine = 'texte' } = req.body as z.infer<typeof chatSchema>;
 
     let conversationId = conversation_id ?? null;
     let historique: Msg[] = [];
@@ -278,8 +351,15 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // Raccourci déterministe : la question la plus courante a une réponse
     // sans modèle (0 ¢, voir raccourcis.ts). Jamais quand une proposition
     // vient d'être annulée : le modèle doit en rendre compte.
-    const raccourci = enAttente.length ? null : detecterRaccourci(message);
+    // Repli (item 6) : « non », « pas ça », ou le bouton Réessayer = la réponse
+    // précédente n'était pas la bonne. On n'insiste jamais avec un étage sans
+    // modèle : le modèle reprend, avec l'énoncé précédent tracé comme candidat
+    // à retirer des énoncés exacts.
+    const repli = origine === 'repli' || estUnRepli(message);
+    const enoncePrecedent = repli ? dernierEnonceUtilisateur(historique) : null;
+    const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);
     if (raccourci) {
+      const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, {
         client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
         language: ctx.language, fuseau: ctx.fuseau, // Jamais un courriel en guise de prénom (« Bonjour will@… »).
@@ -294,14 +374,78 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
         emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
+        // Étage 2 : répondu sans modèle. C'est cette ligne qui mesure la part de trafic absorbée.
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: raccourci.etage ?? ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : raccourci.numero ? { numero: raccourci.numero } : null,
+          outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+        });
         return res.end();
       }
     }
 
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux });
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}) });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
+  }
+});
+
+// ── POST /lumi/action — étage 0 : action d'interface, sans texte ni modèle ──
+router.post('/lumi/action', validate(actionSchema), async (req, res) => {
+  try {
+    const ctx = await contexteTour(req, res);
+    if (!ctx) return;
+    const { conversation_id, action, params = {}, label, origine = 'suggestion' } = req.body as z.infer<typeof actionSchema>;
+    const raccourci = raccourciDepuisAction(action, params);
+    if (!raccourci) return res.status(422).json({ error: 'Unknown action or parameters.', code: 'action_indisponible' });
+
+    let conversationId = conversation_id ?? null;
+    let historique: Msg[] = [];
+    if (conversationId) {
+      const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversationId).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
+      if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
+      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+    } else {
+      const { data: conv, error } = await ctx.admin.from('lumi_conversations')
+        .insert({ org_id: ctx.auth.orgId, user_id: ctx.auth.user.id, title: label.slice(0, 80) })
+        .select('id').single();
+      if (error || !conv) throw new Error(error?.message || 'conversation');
+      conversationId = conv.id;
+    }
+    // Une proposition laissée en attente est annulée par le clic (même règle que /lumi/chat).
+    const nouveaux: Msg[] = [];
+    const enAttente = propositionsEnAttente(historique);
+    if (enAttente.length) {
+      nouveaux.push({ role: 'user', content: enAttente.map((a) => ({ type: 'tool_result' as const, tool_use_id: a.tool_use_id, content: JSON.stringify({ cancelled: true, note: "L'utilisateur n'a pas confirmé cette action ; elle n'a pas été exécutée." }) })) });
+    }
+    nouveaux.push({ role: 'user', content: label });
+
+    const debut = Date.now();
+    const reponse = await repondreRaccourci(raccourci, {
+      client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
+      language: ctx.language, fuseau: ctx.fuseau,
+      prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
+    });
+    // Refus de rôle ou outil en échec : on ne devine rien, le client renvoie le texte au modèle s'il le veut.
+    if (!reponse) return res.status(422).json({ error: 'Action unavailable for this user.', code: 'action_indisponible' });
+
+    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
+    const emettreSse = ouvrirSse(res);
+    emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'debut' });
+    emettreSse('tool', { type: 'tool', name: raccourci.tool, statut: 'fin' });
+    emettreSse('text', { type: 'text', delta: reponse.texte });
+    if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
+    emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
+    void journaliserTrace(ctx.admin, {
+      orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+      enonce: label, etage: ETAGE.interface, action, params, outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+    });
+    return res.end();
+  } catch (error: any) {
+    if (res.headersSent) return res.end();
+    return sendSafeError(res, error, 'Lumi failed to run the action.', '[lumi/action]');
   }
 });
 
@@ -321,6 +465,30 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     if (!enAttente.length || !enAttente.some((a) => a.tool_use_id === tool_use_id)) {
       return res.status(409).json({ error: 'No such pending action.', code: 'aucune_proposition' });
     }
+    // Cran d'arrêt : au-delà du plafond, Confirmer refuse (la proposition reste
+    // affichée, l'utilisateur ouvre une nouvelle conversation pour continuer).
+    const faites = compterEcritures(historique);
+    if (decision === 'confirm' && faites + enAttente.length > PLAFOND_ECRITURES_PAR_CONVERSATION) {
+      void escalader(ctx.admin, { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, motif: 'plafond_ecritures', fr: ctx.language === 'fr',
+        detail: ctx.language === 'fr' ? `Une conversation Lumi a atteint ${PLAFOND_ECRITURES_PAR_CONVERSATION} actions.` : `A Lumi conversation reached ${PLAFOND_ECRITURES_PAR_CONVERSATION} actions.` });
+      return res.status(409).json({
+        error: ctx.language === 'fr'
+          ? `Cette conversation a déjà fait ${faites} actions : c'est le maximum (${PLAFOND_ECRITURES_PAR_CONVERSATION}). Ouvre une nouvelle conversation pour continuer.`
+          : `This conversation already made ${faites} actions: that is the maximum (${PLAFOND_ECRITURES_PAR_CONVERSATION}). Start a new conversation to continue.`,
+        code: 'plafond_ecritures', plafond: PLAFOND_ECRITURES_PAR_CONVERSATION, faites,
+      });
+    }
+
+    if (decision === 'dry_run') {
+      const simulations = [];
+      for (const a of enAttente) {
+        const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, a.args);
+        const r = await executerEcriture({ tool: a.tool, toolUseId: a.tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken, dryRun: true });
+        simulations.push({ tool_use_id: a.tool_use_id, tool: a.tool, ...JSON.parse(r.contenu) });
+      }
+      // Rien n'est sauvé ni exécuté : la proposition reste en attente telle quelle.
+      return res.json({ dry_run: true, simulations });
+    }
 
     const blocs: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
     const execute: ReçuExecution[] = [];
@@ -335,11 +503,40 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
       const r = await executerEcriture({ tool: a.tool, toolUseId: a.tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken });
       blocs.push({ type: 'tool_result', tool_use_id: a.tool_use_id, content: r.contenu });
       execute.push(r.recu);
+      // Effet partiel (job créé sans ses articles, envoi « peut-être parti ») : un humain doit vérifier.
+      const motif = motifDansResultat(r.contenu);
+      if (motif) {
+        void escalader(ctx.admin, { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, motif, fr: ctx.language === 'fr',
+          detail: ctx.language === 'fr' ? `Une action de Lumi (${a.tool.replace(/_/g, ' ')}) s’est arrêtée à mi-chemin : à vérifier dans la conversation.` : `A Lumi action (${a.tool.replace(/_/g, ' ')}) stopped halfway: check the conversation.` });
+      }
     }
     const resultat: Msg = { role: 'user', content: blocs };
 
-    // Le modèle reprend la main pour confirmer en mots ce qui s'est passé.
-    await executerTourSse({ req, res, ctx, conversationId: conversation_id, historique, nouveauxAvant: [resultat], execute });
+    // Reçu SANS modèle (item 5, étage 0) : la phrase « c'est fait » est un
+    // gabarit à partir du reçu. Avant, un appel complet au modèle partait
+    // pour cette seule phrase. Le modèle relira ce texte comme le sien si
+    // l'utilisateur écrit ensuite.
+    const debut = Date.now();
+    const lignes: LigneRecu[] = enAttente.map((a, i) => {
+      const bloc = blocs[i];
+      let erreur: string | null = null;
+      try { const j = JSON.parse(bloc.content); if (typeof j?.error === 'string') erreur = j.error; } catch { /* contenu non JSON : pas d'erreur métier lisible */ }
+      return { recu: execute[i] ?? { tool_use_id: a.tool_use_id, ok: false, fiche: null }, erreur, outil: a.tool };
+    });
+    const texte = texteRecus(lignes, decision, ctx.language === 'fr');
+    const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+    await sauverMessages(conversation_id, ctx.auth.orgId, [resultat, { role: 'assistant', content: [{ type: 'text', text: texte }] }], cleRefs);
+    const emettreSse = ouvrirSse(res);
+    for (const recu of execute) emettreSse('executed', recu);
+    emettreSse('text', { type: 'text', delta: texte });
+    const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
+    emettreSse('done', { conversation_id, cost_cents: 0, budget, proposal: null, recu: true });
+    void journaliserTrace(ctx.admin, {
+      orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId: conversation_id, canal: 'lumi', origine: 'carte',
+      enonce: null, etage: ETAGE.interface, action: decision, outils: enAttente.map((a) => a.tool),
+      resultat: decision === 'cancel' ? 'ok' : (execute.every((e) => e.ok) ? 'ok' : 'erreur'), model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+    });
+    return res.end();
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');
@@ -364,6 +561,14 @@ router.put('/lumi/mode', validate(modeSchema), async (req, res) => {
     if (!auth) return;
     const { mode } = req.body as { mode: ModeLumi };
     if (!MODES_LUMI.includes(mode)) return res.status(400).json({ error: 'Unknown mode.' });
+    // « Tout faire sans demander » = un texto peut partir sans être vu (R11) :
+    // réservé au propriétaire de l'entreprise, jamais à un employé.
+    if (mode === 'tout') {
+      const ctxRole = await getUserContext(getServiceClient(), auth.user.id, auth.orgId);
+      if (ctxRole?.role !== 'owner') {
+        return res.status(403).json({ error: 'Only the owner can let Lumi act without asking.', code: 'mode_reserve_proprietaire' });
+      }
+    }
     await definirMode(getServiceClient(), auth.orgId, auth.user.id, mode);
     return res.json({ mode });
   } catch (error: any) {

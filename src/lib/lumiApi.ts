@@ -169,8 +169,11 @@ async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, sign
   }
 }
 
+/** D'où vient un message (mesure côté serveur, table lumi_traces) : jamais une autorisation. */
+export type OrigineMessageLumi = 'texte' | 'suggestion' | 'voix' | 'repli' | 'lien';
+
 export async function envoyerMessageLumi(
-  params: { conversation_id: string | null; message: string; language: 'fr' | 'en' },
+  params: { conversation_id: string | null; message: string; language: 'fr' | 'en'; origine?: OrigineMessageLumi },
   onEvent: (e: EvenementFlux) => void,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -181,6 +184,27 @@ export async function envoyerMessageLumi(
     signal,
   });
   await lireFlux(res, onEvent, signal);
+}
+
+/** Action d'interface (étage 0) : une suggestion cliquée part avec son nom et ses paramètres, jamais en texte à interpréter. */
+export type ActionLumi = 'clients-total' | 'agenda' | 'revenu-mois' | 'retards' | 'briefing' | 'top-clients' | 'taches' | 'equipe' | 'devis-attente' | 'ou-equipe' | 'job-numero';
+export interface SuggestionLumi { label: string; action: ActionLumi; params?: Record<string, string | number | boolean> }
+
+/** Renvoie 'indisponible' (422 : rôle sans accès, outil en échec) pour que la page envoie le texte au modèle à la place. */
+export async function executerActionLumi(
+  params: { conversation_id: string | null; action: ActionLumi; params?: Record<string, string | number | boolean>; label: string; language: 'fr' | 'en'; origine?: 'suggestion' | 'lien' },
+  onEvent: (e: EvenementFlux) => void,
+  signal?: AbortSignal,
+): Promise<'ok' | 'indisponible'> {
+  const res = await fetch(`${API_BASE}/api/lumi/action`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify(params),
+    signal,
+  });
+  if (res.status === 422) return 'indisponible';
+  await lireFlux(res, onEvent, signal);
+  return 'ok';
 }
 
 export async function deciderPropositionLumi(
@@ -206,7 +230,11 @@ export async function modeLumi(): Promise<ModeLumi> {
 }
 export async function definirModeLumi(mode: ModeLumi): Promise<ModeLumi> {
   const res = await fetch(`${API_BASE}/api/lumi/mode`, { method: 'PUT', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
-  if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'Unable to update mode');
+  if (!res.ok) {
+    // Le serveur nomme le refus (ex. mode_reserve_proprietaire) : l'interface s'en sert pour le message.
+    const body = await res.json().catch(() => ({}));
+    throw new ErreurLumi(body?.code || `http_${res.status}`, body?.error || 'Unable to update mode');
+  }
   return ((await res.json()) as { mode: ModeLumi }).mode;
 }
 

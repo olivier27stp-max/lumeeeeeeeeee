@@ -55,10 +55,14 @@ describe('dates dans le fuseau de l’entreprise', () => {
     expect(b.end_date).toBe('2026-09-13T03:59:59.999Z');
     expect(b.jours).toEqual(['2026-09-12']);
   });
-  it('la semaine couvre 7 jours', () => {
+  it('« cette semaine » = du lundi au dimanche de la semaine en cours, passé inclus (vendredi 11 → lundi 7)', () => {
     const b = bornesPeriode('semaine', MTL, opts.maintenant);
     expect(b.jours).toHaveLength(7);
-    expect(b.jours[0]).toBe('2026-09-11');
+    expect(b.jours[0]).toBe('2026-09-07');
+    expect(b.jours[6]).toBe('2026-09-13');
+    // Un dimanche reste dans sa semaine (lundi précédent), un lundi la commence.
+    expect(bornesPeriode('semaine', MTL, new Date('2026-09-13T20:00:00Z')).jours[0]).toBe('2026-09-07');
+    expect(bornesPeriode('semaine', MTL, new Date('2026-09-14T12:00:00Z')).jours[0]).toBe('2026-09-14');
   });
 });
 

@@ -17,6 +17,7 @@ import {
   STATUT_DEVIS, STATUT_FACTURE, STATUT_LEAD, STATUT_CLIENT, traduireStatut,
 } from './tools-etendus';
 import { OUTILS_RAPPORTS } from './tools-rapports';
+import { searchHelp } from './tools-aide';
 
 export interface ToolContext {
   client: SupabaseClient;
@@ -29,6 +30,12 @@ export interface ToolContext {
    * de facture) au lieu de dupliquer leur logique.
    */
   accessToken?: string;
+  /**
+   * Mode à blanc (R12) : même chemin, mêmes gardes, mêmes validations, mais
+   * aucune écriture — executerIdempotent renvoie ce qui AURAIT été fait sans
+   * poser d'empreinte ni appeler l'action. Les lectures restent réelles.
+   */
+  dryRun?: boolean;
 }
 
 export type ToolKind = 'read' | 'write';
@@ -110,11 +117,11 @@ const searchClients: AgentTool = {
   declaration: {
     name: 'search_clients',
     description:
-      'Search the CRM clients by name, company, email, phone, or city. Returns total_matching (the EXACT number of matching clients, even when fewer rows are returned — use it to answer "how many"), plus matching clients with their id (needed to create quotes/invoices/jobs or send SMS), contact info and city.',
+      'Search clients by name, company, email, phone or city. Returns total_matching (exact count) and the matching clients with id, contact info and city.',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search text (name, company, email, phone, or city). Omit it to get ALL clients — required for a total count: any text, even one letter, filters and shrinks total_matching.' },
+        query: { type: 'string', description: 'Search text. Omit it to count ALL clients (any text filters).' },
         limit: { type: 'integer', description: 'Max results (default 10, max 25).' },
       },
     },
@@ -166,11 +173,11 @@ const searchLeads: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_leads',
-    description: 'Search CRM leads (prospects) by name, company, email or phone. Returns total_matching (exact count, even when fewer rows are returned) and matching leads with their id and status.',
+    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status.',
     parameters: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search text (name, company, email, phone). Omit it to get ALL leads — required for a total count: any text filters and shrinks total_matching.' },
+        query: { type: 'string', description: 'Search text. Omit it to count ALL leads (any text filters).' },
         limit: { type: 'integer', description: 'Max results (default 10, max 25).' },
       },
     },
@@ -238,10 +245,7 @@ const listJobs: AgentTool = {
   declaration: {
     name: 'list_jobs',
     description:
-      'List jobs (work orders) in the CRM, optionally filtered by status or a search term. '
-      + 'Returns job number, title, client, address, schedule, total, and a "statut" already in '
-      + 'plain French (à venir, en retard, action requise, à facturer, terminé…). Use it as-is when '
-      + 'answering — it is what the user sees on their screen.',
+      'List jobs, optionally filtered by status or a search term. Returns number, title, client, address, schedule, total and the on-screen "statut" (use it as-is).',
     parameters: {
       type: 'object',
       properties: {
@@ -251,7 +255,7 @@ const listJobs: AgentTool = {
             "Optional filter. Accepts what the user sees ('late', 'upcoming', 'action_required', "
             + "'requires_invoicing', 'archived') or a raw status ('scheduled', 'completed', 'draft', 'in_progress').",
         },
-        query: { type: 'string', description: 'Optional search text (job number, title, address, client). Omit it to count ALL jobs: any text filters and shrinks total_matching.' },
+        query: { type: 'string', description: 'Search text (number, title, address, client). Omit it to count ALL jobs.' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
@@ -408,7 +412,7 @@ const querySchedule: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'query_schedule',
-    description: 'List scheduled calendar events between two dates (jobs with date, client, address and status). Use for "what is scheduled this week?" type questions.',
+    description: 'Scheduled visits between two dates: job, client, address, status.',
     parameters: {
       type: 'object',
       properties: {
@@ -428,12 +432,12 @@ const listQuotes: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_quotes',
-    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count, even when fewer rows are returned), then quote number, title, status and total.',
+    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count), then number, title, status and total.',
     parameters: {
       type: 'object',
       properties: {
         status: { type: 'string', description: "Optional status filter. One of: 'draft', 'awaiting_response', 'changes_requested', 'approved', 'declined', 'expired', 'converted', 'archived'." },
-        query: { type: 'string', description: 'Optional search (quote number or title). Omit it to count ALL quotes: any text filters and shrinks total_matching.' },
+        query: { type: 'string', description: 'Search text (number or title). Omit it to count ALL quotes.' },
         limit: { type: 'integer', description: 'Max results (default 15, max 30).' },
       },
     },
@@ -546,7 +550,7 @@ const getOverduePayments: AgentTool = {
   declaration: {
     name: 'get_overdue_payments',
     description:
-      'List overdue (past due) invoices with the client name, phone number, balance owing and days overdue. Use this to prepare payment reminders — then propose to text the chosen clients.',
+      'Overdue invoices with client, phone, balance owing and days overdue. Basis for payment reminders (propose texts, send only after a clear yes).',
     parameters: {
       type: 'object',
       properties: { limit: { type: 'integer', description: 'Max results (default 50, max 100).' } },
@@ -870,6 +874,7 @@ sendSms.handler = handlerSendSms;
 sendSms.needsIdentity = true;
 
 export const AGENT_TOOLS: AgentTool[] = [
+  searchHelp,
   searchClients,
   searchLeads,
   listJobs,
