@@ -1,4 +1,6 @@
-import { AlertTriangle, LogOut, Mail, RefreshCw, CreditCard } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { AlertTriangle, Building2, LogOut, Mail, RefreshCw, CreditCard } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { endTrackingAndSignOut } from '../hooks/useLiveLocationTracking';
 import { useTranslation } from '../i18n';
 
@@ -92,6 +94,37 @@ export default function AccessBlocked({ reason, userEmail, detail }: AccessBlock
     window.location.href = '/checkout';
   };
 
+  // Issue de secours : un propriétaire qui vient de créer un 2e workspace
+  // (sans abonnement encore) ne doit pas rester coincé ici — s'il a un autre
+  // workspace, on lui permet d'y revenir sans se déconnecter.
+  const [otherOrgId, setOtherOrgId] = useState<string | null>(null);
+  useEffect(() => {
+    if (reason !== 'no_subscription') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        let active = '';
+        try { active = localStorage.getItem('lume-active-org') || ''; } catch { /* ignore */ }
+        const { data } = await supabase
+          .from('memberships')
+          .select('org_id')
+          .eq('user_id', user.id)
+          .eq('status', 'active');
+        const other = (data || []).map((m: any) => String(m.org_id)).find((id) => id !== active);
+        if (!cancelled) setOtherOrgId(other || null);
+      } catch { /* non-fatal */ }
+    })();
+    return () => { cancelled = true; };
+  }, [reason]);
+
+  const handleSwitchWorkspace = () => {
+    if (!otherOrgId) return;
+    try { localStorage.setItem('lume-active-org', otherOrgId); } catch { /* ignore */ }
+    window.location.href = '/';
+  };
+
   return (
     <div className="min-h-screen w-full flex items-center justify-center px-6 bg-surface">
       <div className="max-w-lg w-full rounded-2xl border border-outline bg-surface-secondary p-8 shadow-xl">
@@ -128,6 +161,15 @@ export default function AccessBlocked({ reason, userEmail, detail }: AccessBlock
                 >
                   <CreditCard size={16} />
                   {fr ? 'Compléter mon abonnement' : 'Complete my subscription'}
+                </button>
+              )}
+              {reason === 'no_subscription' && otherOrgId && (
+                <button
+                  onClick={handleSwitchWorkspace}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border border-outline bg-surface hover:bg-surface-hover text-text-primary transition-colors"
+                >
+                  <Building2 size={16} />
+                  {fr ? 'Revenir à mon autre workspace' : 'Back to my other workspace'}
                 </button>
               )}
               <button

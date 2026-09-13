@@ -3,19 +3,14 @@
    team invites. Idempotent — safe to retry. */
 
 import { Router } from 'express';
-import crypto from 'crypto';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { listIndustries } from '../lib/industryPresets';
 import { seedOrgComplete } from '../lib/seedOrgDefaults';
-import { getBaseUrl } from '../lib/config';
+import { processInvites } from '../lib/onboarding-invites';
 
 const router = Router();
-
-function hashToken(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
 
 const onboardingSchema = z.object({
   full_name: z.string().trim().min(1).max(120),
@@ -90,55 +85,8 @@ router.post('/onboarding/complete', validate(onboardingSchema), async (req, res)
     //    webhook Stripe et le /checkout — un seul point de vérité.
     await seedOrgComplete(admin, orgId, { industry: body.industry, taxRegion: 'QC' });
 
-    // 5. Process team invites — insert pending invitation rows + send Supabase magic-link.
-    //    The full invitations flow lives in /api/invitations/send; we duplicate the
-    //    core insert here to avoid an internal HTTP roundtrip during signup.
-    const sentInvites: Array<{ email: string; role: string }> = [];
-    for (const invite of body.invites) {
-      try {
-        const email = invite.email.toLowerCase();
-        // Skip if a pending invite already exists
-        const { data: existing } = await admin
-          .from('invitations')
-          .select('id')
-          .eq('org_id', orgId)
-          .eq('email', email)
-          .eq('status', 'pending')
-          .maybeSingle();
-        if (existing) continue;
-
-        const token = crypto.randomBytes(32).toString('hex');
-        const token_hash = hashToken(token);
-        const { error: insErr } = await admin.from('invitations').insert({
-          org_id: orgId,
-          email,
-          role: invite.role,
-          token: null,
-          token_hash,
-          invited_by: userId,
-          status: 'pending',
-          expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
-        });
-        if (insErr) {
-          console.warn('[onboarding/complete] invitation insert failed:', insErr.message);
-          continue;
-        }
-
-        // Best-effort: fire Supabase invite email so the recipient can claim the account.
-        try {
-          const redirectTo = `${getBaseUrl()}/invite/${token}`;
-          await (admin.auth.admin as any).inviteUserByEmail(email, {
-            data: { invited_to_org: orgId, role: invite.role },
-            redirectTo,
-          });
-        } catch (mailErr: any) {
-          console.warn('[onboarding/complete] inviteUserByEmail failed:', mailErr?.message);
-        }
-        sentInvites.push({ email, role: invite.role });
-      } catch (err: any) {
-        console.warn('[onboarding/complete] invite loop error:', err?.message);
-      }
-    }
+    // 5. Invitations d'équipe — cœur partagé avec /workspaces/create.
+    const sentInvites = await processInvites(admin, orgId, userId, body.invites, '[onboarding/complete]');
 
     // 6. Mark onboarding done
     {

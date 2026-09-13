@@ -191,6 +191,30 @@ export default function OfficesSettings() {
           ? 'Pour modifier le nom, l\'adresse ou le logo d\'un bureau : ouvrez-le puis allez dans Réglages → Entreprise.'
           : 'To edit an office\'s name, address or logo: open it, then go to Settings → Business.'}
       </p>
+
+      {/* Nouveau workspace = compagnie séparée (données, bureaux, abonnement). */}
+      {isOwner && (
+        <div className="rounded-2xl p-4 border border-dashed border-outline flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-text-primary">
+              {fr ? 'Une autre compagnie ?' : 'Another company?'}
+            </p>
+            <p className="text-[12px] text-text-secondary mt-0.5">
+              {fr
+                ? 'Un nouveau workspace est une compagnie séparée : ses propres bureaux, données et abonnement.'
+                : 'A new workspace is a separate company: its own offices, data and subscription.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/workspaces/new')}
+            className="glass-button inline-flex items-center gap-2 shrink-0"
+          >
+            <Plus size={14} />
+            {fr ? 'Nouveau workspace' : 'New workspace'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -53,6 +53,11 @@ const PLAN_NAMES: Record<string, string> = {
 };
 
 // ─── Step definitions ───
+/** Workspace actif (même convention que billingApi/officesApi) — vide si aucun. */
+function activeOrgHeader(): string {
+  try { return localStorage.getItem('lume-active-org') || ''; } catch { return ''; }
+}
+
 type StepId = 'basic' | 'company' | 'profile' | 'revenue' | 'goals' | 'attribution' | 'optimize' | 'checkout';
 const STEPS: StepId[] = ['basic', 'company', 'profile', 'revenue', 'goals', 'attribution', 'optimize', 'checkout'];
 
@@ -335,7 +340,9 @@ export default function OnboardingFlow() {
       if (!token) { toast.error(isFr ? 'Créez un compte d\'abord' : 'Create an account first'); setProcessing(false); return; }
     } catch { toast.error(isFr ? 'Erreur de session' : 'Session error'); setProcessing(false); return; }
 
-    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    // x-org-id : un propriétaire qui vient de créer un 2e workspace paie POUR
+    // ce workspace (lume-active-org), pas pour sa première membership.
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'x-org-id': activeOrgHeader() };
 
     // 1. Provision org
     try { await provisionOrg(); } catch (e) { captureClientException(e, { contexte: 'OnboardingFlow: provisionOrg (handleCheckout)' }); }
@@ -352,10 +359,15 @@ export default function OnboardingFlow() {
       });
     } catch (e) { captureClientException(e, { contexte: 'OnboardingFlow: seed-defaults org baseline' }); }
 
-    // 2. Save onboarding
+    // 2. Save onboarding — seulement si le nom d'entreprise a été saisi ici.
+    //    Un propriétaire qui paie un 2e workspace créé via /workspaces/new
+    //    arrive directement à cette étape : ses infos sont déjà en base et le
+    //    serveur refuse (400) un company_name vide — on n'écrase rien.
     try {
-      const res = await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (companyName.trim()) {
+        const res = await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      }
     } catch (err) {
       // Ne bloque pas le paiement, mais les infos saisies (nom, compagnie,
       // téléphone) seraient perdues sans trace — c'est déjà arrivé en silence.
@@ -791,7 +803,7 @@ function CheckoutStep({ plan, planName, interval, setInterval, currency, price, 
 
       const res = await fetch('/api/billing/create-checkout-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, 'x-org-id': activeOrgHeader() },
         body: JSON.stringify({ plan_slug: plan.slug, interval, currency, promo_code: promoCode || undefined, referral_code: referralCode || undefined }),
       });
       const data = await res.json();
