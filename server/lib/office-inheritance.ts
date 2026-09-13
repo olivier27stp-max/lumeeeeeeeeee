@@ -189,13 +189,11 @@ export async function copyOfficeSettings(
           .update(patch)
           .eq('org_id', targetOrgId);
         if (upErr) throw new Error(upErr.message);
-        // Miroir sur orgs pour le logo et la devise (lus par certains écrans).
-        const orgPatch: Row = {};
-        if (patch.logo_url) orgPatch.logo_url = patch.logo_url;
-        if (patch.currency) orgPatch.currency = patch.currency;
-        if (patch.industry) orgPatch.industry = patch.industry;
-        if (Object.keys(orgPatch).length > 0) {
-          await admin.from('orgs').update(orgPatch).eq('id', targetOrgId);
+        // Miroir du logo sur orgs (seule colonne d'identité que `orgs` porte
+        // en prod : name / employee_count / logo_url / company_group_id).
+        if (patch.logo_url) {
+          const { error: oErr } = await admin.from('orgs').update({ logo_url: patch.logo_url }).eq('id', targetOrgId);
+          if (oErr) report.warnings.push(`branding(orgs.logo_url): ${oErr.message}`);
         }
         report.branding = true;
       }

@@ -27,7 +27,7 @@ describe('buildOrgInsert / buildCompanySettingsInsert — champs facultatifs', (
     expect(cs).toEqual({ org_id: 'org-1', created_by: CREATOR, company_name: 'Bureau de Laval' });
   });
 
-  it('reporte l\'adresse structurée sur les deux tables (orgs.address = une ligne)', () => {
+  it('les coordonnées vont dans company_settings, JAMAIS dans orgs (schéma prod)', () => {
     const input = {
       name: 'Laval',
       phone: '450-555-0100',
@@ -35,13 +35,14 @@ describe('buildOrgInsert / buildCompanySettingsInsert — champs facultatifs', (
       website: 'https://example.com',
       address: { street1: '10 rue A', street2: '', city: 'Laval', province: 'QC', postal_code: 'H7A 1A1', country: 'CA' },
     };
+    // orgs en prod = name / created_by / employee_count / logo_url / company_group_id.
+    // Toute autre colonne ferait échouer l'insert entier.
     const org = buildOrgInsert(input, CREATOR, 'group-1');
-    expect(org.company_group_id).toBe('group-1');
-    expect(org.address).toBe('10 rue A, Laval, QC, H7A 1A1');
-    expect(org.region).toBe('QC');
-    expect(org.email).toBe('laval@example.com');
+    expect(org).toEqual({ name: 'Laval', created_by: CREATOR, company_group_id: 'group-1' });
     const cs = buildCompanySettingsInsert(input, 'org-1', CREATOR);
     expect(cs.street1).toBe('10 rue A');
+    expect(cs.province).toBe('QC');
+    expect(cs.email).toBe('laval@example.com');
     expect(cs).not.toHaveProperty('street2'); // vide → non écrit (colonne DEFAULT '')
     expect(cs.website).toBe('https://example.com');
   });

@@ -28,21 +28,15 @@ export function formatAddressLine(a: OfficeAddress | null | undefined): string {
   return parts.join(', ');
 }
 
-/** Ligne orgs : le nom est obligatoire, le reste n'est écrit que si fourni. */
+/**
+ * Ligne orgs. En prod, `orgs` ne porte QUE name / created_by / employee_count /
+ * logo_url / company_group_id (baseline 01_schema.sql) — les coordonnées
+ * vivent dans company_settings. Écrire phone/adresse ici ferait échouer
+ * l'insert entier (colonnes inexistantes), comme billing/onboarding l'a subi.
+ */
 export function buildOrgInsert(input: CreateOfficeInput, createdBy: string, companyGroupId?: string | null) {
   const row: Record<string, any> = { name: clean(input.name), created_by: createdBy };
   if (companyGroupId) row.company_group_id = companyGroupId;
-  if (clean(input.phone)) row.phone = clean(input.phone);
-  if (clean(input.email)) row.email = clean(input.email).toLowerCase();
-  const a = input.address;
-  if (a) {
-    const line = formatAddressLine(a);
-    if (line) row.address = line;
-    if (clean(a.city)) row.city = clean(a.city);
-    if (clean(a.province)) row.region = clean(a.province);
-    if (clean(a.postal_code)) row.postal_code = clean(a.postal_code);
-    if (clean(a.country)) row.country = clean(a.country);
-  }
   return row;
 }
 
