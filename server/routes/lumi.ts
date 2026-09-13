@@ -26,7 +26,8 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
-import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
+import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
+import { getUserContext } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci } from '../lib/lumi/raccourcis';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
@@ -237,6 +238,7 @@ async function executerTourSse(opts: {
       systeme: ctx.systeme,
       reglages: reglagesPourPalier(ctx.budget.palier, modeleLumi()),
       autorisations: await autorisationsDe(ctx.admin, ctx.auth.orgId, ctx.auth.user.id, Object.keys(TOOLS_BY_NAME).filter((n) => TOOLS_BY_NAME[n]?.kind === 'write')),
+      ecrituresRestantes: Math.max(0, PLAFOND_ECRITURES_PAR_CONVERSATION - compterEcritures([...opts.historique, ...opts.nouveauxAvant])),
       historique: [...opts.historique, ...opts.nouveauxAvant],
       emettre: (e) => { if (!ferme) emettre(e); },
       journaliser: (usage, model, cost_cents) => journaliserUsage(ctx.admin, {
@@ -351,6 +353,17 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     if (!enAttente.length || !enAttente.some((a) => a.tool_use_id === tool_use_id)) {
       return res.status(409).json({ error: 'No such pending action.', code: 'aucune_proposition' });
     }
+    // Cran d'arrêt : au-delà du plafond, Confirmer refuse (la proposition reste
+    // affichée, l'utilisateur ouvre une nouvelle conversation pour continuer).
+    const faites = compterEcritures(historique);
+    if (decision === 'confirm' && faites + enAttente.length > PLAFOND_ECRITURES_PAR_CONVERSATION) {
+      return res.status(409).json({
+        error: ctx.language === 'fr'
+          ? `Cette conversation a déjà fait ${faites} actions : c'est le maximum (${PLAFOND_ECRITURES_PAR_CONVERSATION}). Ouvre une nouvelle conversation pour continuer.`
+          : `This conversation already made ${faites} actions: that is the maximum (${PLAFOND_ECRITURES_PAR_CONVERSATION}). Start a new conversation to continue.`,
+        code: 'plafond_ecritures', plafond: PLAFOND_ECRITURES_PAR_CONVERSATION, faites,
+      });
+    }
 
     const blocs: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
     const execute: ReçuExecution[] = [];
@@ -394,6 +407,14 @@ router.put('/lumi/mode', validate(modeSchema), async (req, res) => {
     if (!auth) return;
     const { mode } = req.body as { mode: ModeLumi };
     if (!MODES_LUMI.includes(mode)) return res.status(400).json({ error: 'Unknown mode.' });
+    // « Tout faire sans demander » = un texto peut partir sans être vu (R11) :
+    // réservé au propriétaire de l'entreprise, jamais à un employé.
+    if (mode === 'tout') {
+      const ctxRole = await getUserContext(getServiceClient(), auth.user.id, auth.orgId);
+      if (ctxRole?.role !== 'owner') {
+        return res.status(403).json({ error: 'Only the owner can let Lumi act without asking.', code: 'mode_reserve_proprietaire' });
+      }
+    }
     await definirMode(getServiceClient(), auth.orgId, auth.user.id, mode);
     return res.json({ mode });
   } catch (error: any) {

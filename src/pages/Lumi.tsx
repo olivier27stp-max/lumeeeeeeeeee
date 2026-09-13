@@ -217,7 +217,14 @@ export default function Lumi() {
   ];
   async function changerMode(m: ModeLumi) {
     setMode(m); setModeOuvert(false);
-    try { setMode(await definirModeLumi(m)); } catch { toast.error(fr ? 'Mode non enregistré.' : 'Mode not saved.'); }
+    try { setMode(await definirModeLumi(m)); } catch (err: any) {
+      // Le mode « tout » est réservé au propriétaire (serveur, code mode_reserve_proprietaire).
+      const reserve = /mode_reserve_proprietaire|owner/i.test(String(err?.code || err?.message || ''));
+      toast.error(reserve
+        ? (fr ? 'Seul le propriétaire peut laisser Lumi agir sans demander.' : 'Only the owner can let Lumi act without asking.')
+        : (fr ? 'Mode non enregistré.' : 'Mode not saved.'));
+      modeLumi().then(setMode).catch(() => {});
+    }
   }
   const itemsRef = useRef<Item[]>([]);
   itemsRef.current = items;

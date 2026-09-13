@@ -86,6 +86,12 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   optimize_route:            { cle: 'jobs.read',          capacite: "l'optimisation de tournée" },
   // Courriel libre : envoi au nom de l'entreprise (la route exige owner/admin).
   send_email:                { cle: 'messages.send',      capacite: "l'envoi de courriels" },
+  // Item 3 (B6) : retenir ou oublier modifie le prompt de TOUTE l'org (org_knowledge « assistant »),
+  // c'est un réglage d'entreprise, pas une note personnelle. Le journal des actions dit qui a fait
+  // faire quoi : une lecture de rapport.
+  remember_this:             { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
+  forget_note:               { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
+  get_recent_agent_actions:  { cle: 'reports.read',       capacite: 'le journal des actions de Lumi' },
 };
 
 export const OUTILS_FINANCIERS = new Set([

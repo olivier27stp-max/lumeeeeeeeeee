@@ -209,7 +209,11 @@ export async function modeLumi(): Promise<ModeLumi> {
 }
 export async function definirModeLumi(mode: ModeLumi): Promise<ModeLumi> {
   const res = await fetch(`${API_BASE}/api/lumi/mode`, { method: 'PUT', headers: { ...(await authHeaders()), 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
-  if (!res.ok) throw new ErreurLumi(`http_${res.status}`, 'Unable to update mode');
+  if (!res.ok) {
+    // Le serveur nomme le refus (ex. mode_reserve_proprietaire) : l'interface s'en sert pour le message.
+    const body = await res.json().catch(() => ({}));
+    throw new ErreurLumi(body?.code || `http_${res.status}`, body?.error || 'Unable to update mode');
+  }
   return ((await res.json()) as { mode: ModeLumi }).mode;
 }
 

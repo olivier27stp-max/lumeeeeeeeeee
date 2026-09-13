@@ -270,6 +270,8 @@ export async function tourLumi(opts: {
   reglages?: { model: string; effort: 'low' | 'medium' };
   /** Outils d'écriture que l'utilisateur a choisi de ne plus confirmer (« toujours confirmer »). */
   autorisations?: ReadonlySet<string>;
+  /** Écritures encore permises d'office dans cette conversation (plafond, voir execution.ts). Absent = pas de plafond. */
+  ecrituresRestantes?: number;
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
   const effort = opts.reglages?.effort ?? 'medium';
@@ -332,7 +334,11 @@ export async function tourLumi(opts: {
         resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify({ error: `Unknown tool: ${appel.name}` }), is_error: true });
         continue;
       }
-      if (outil.kind === 'write' && (ECRITURES_ANODINES.has(appel.name) || opts.autorisations?.has(appel.name))) {
+      // Plafond d'écritures atteint : plus rien ne part d'office, tout repasse par la carte.
+      const dOffice = ECRITURES_ANODINES.has(appel.name) || opts.autorisations?.has(appel.name);
+      const sousLePlafond = opts.ecrituresRestantes === undefined || opts.ecrituresRestantes > 0;
+      if (outil.kind === 'write' && dOffice && sousLePlafond) {
+        if (opts.ecrituresRestantes !== undefined) opts.ecrituresRestantes -= 1;
         // « Toujours confirmer » : la carte s'affiche déjà confirmée et
         // l'écriture part sur-le-champ, avec la même garde et le même reçu
         // que le bouton Confirmer. Le tour continue (le modèle en rend compte).
