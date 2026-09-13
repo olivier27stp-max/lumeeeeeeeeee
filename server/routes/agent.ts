@@ -8,11 +8,12 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { Router } from 'express';
-import { requireAuthedClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { journaliserTrace, usageGemini } from '../lib/lumi/traces';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, agentChatSchema, agentTranscribeSchema } from '../lib/validation';
 import { isGeminiConfigured } from '../lib/agent/gemini';
-import { transcribeAudio, type TranscribeMimeType } from '../lib/agent/transcribe';
+import { transcribeAudioAvecUsage, type TranscribeMimeType } from '../lib/agent/transcribe';
 import { buildSystemPrompt } from '../lib/agent/systemPrompt';
 import { runAgent } from '../lib/agent/orchestrator';
 import type { GeminiContent } from '../lib/agent/gemini';
@@ -31,8 +32,15 @@ router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, re
     const authed = await requireAuthedClient(req, res);
     if (!authed) return;
     const { audio, mimeType, language } = req.body as { audio: string; mimeType: TranscribeMimeType; language?: 'fr' | 'en' };
-    const text = await transcribeAudio({ base64: audio, mimeType, language: language ?? 'fr' });
-    res.json({ text });
+    const debut = Date.now();
+    const r = await transcribeAudioAvecUsage({ base64: audio, mimeType, language: language ?? 'fr' });
+    // Trace (lumi_traces) : la dictée coûte un appel Gemini avant le tour Lumi.
+    // org/user = contexte serveur ; le texte transcrit n'est pas stocké ici.
+    void journaliserTrace(getServiceClient(), {
+      orgId: authed.orgId, userId: authed.user.id, canal: 'transcription', origine: 'voix',
+      resultat: 'ok', model: r.model, usage: usageGemini(r.usage), costCents: null, dureeMs: Date.now() - debut,
+    });
+    res.json({ text: r.text });
   } catch (err) {
     sendSafeError(res, err, 'Transcription failed.');
   }

@@ -29,6 +29,7 @@ import { type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci } from '../lib/lumi/raccourcis';
+import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
 import { TOOLS_BY_NAME } from '../lib/agent/tools';
 import type { Rapport } from '../lib/agent/tools-rapports';
@@ -44,6 +45,8 @@ const chatSchema = z.object({
   conversation_id: z.string().regex(UUID).optional().nullable(),
   message: z.string().trim().min(1).max(8000),
   language: z.enum(['fr', 'en']).optional(),
+  // D'où vient le message (mesure pour lumi_traces) : jamais une autorisation, jamais un identifiant.
+  origine: z.enum(ORIGINES_TRACE as [OrigineTrace, ...OrigineTrace[]]).optional(),
 });
 const executeSchema = z.object({
   conversation_id: z.string().regex(UUID),
@@ -197,12 +200,30 @@ async function executerTourSse(opts: {
   conversationId: string; historique: Msg[]; nouveauxAvant: Msg[];
   /** Reçus des écritures qui viennent d'être exécutées (ou refusées) : émis avant que le modèle reprenne. */
   execute?: ReçuExecution[];
+  /** Pour la trace : d'où vient le message et ce que l'utilisateur a écrit (null pour une décision de carte). */
+  origine: OrigineTrace;
+  enonce?: string | null;
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
-  const emettre = (e: EvenementLumi) => emettreSse(e.type, e);
+  // La trace du tour se construit au fil des événements : outils qui ont
+  // tourné, usage de chaque appel au modèle. Elle part à la fin, sans bloquer.
+  const debut = Date.now();
+  const outils: string[] = [];
+  let usage: UsageAgrege = usageVide();
+  let model: string | null = null;
+  const emettre = (e: EvenementLumi) => {
+    if (e.type === 'tool' && e.statut === 'fin' && !outils.includes(e.name)) outils.push(e.name);
+    if (e.type === 'usage') { usage = ajouterUsage(usage, e.usage); model = e.model; }
+    emettreSse(e.type, e);
+  };
   let ferme = false;
   opts.req.on('close', () => { ferme = true; });
+  const tracer = (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => void journaliserTrace(ctx.admin, {
+    orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
+    enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: action ?? null, outils, resultat,
+    model, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
+  });
 
   try {
     for (const recu of opts.execute ?? []) if (!ferme) emettreSse('executed', recu);
@@ -228,9 +249,11 @@ async function executerTourSse(opts: {
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition });
+    tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
   } catch (err: any) {
     logger.error('[lumi] tour échoué', { error: err?.message || String(err), orgId: ctx.auth.orgId });
     if (!ferme) emettreSse('error', { message: 'Lumi failed to respond.' });
+    tracer('erreur', 0);
   } finally {
     res.end();
   }
@@ -250,7 +273,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
   try {
     const ctx = await contexteTour(req, res);
     if (!ctx) return;
-    const { conversation_id, message } = req.body as z.infer<typeof chatSchema>;
+    const { conversation_id, message, origine = 'texte' } = req.body as z.infer<typeof chatSchema>;
 
     let conversationId = conversation_id ?? null;
     let historique: Msg[] = [];
@@ -280,6 +303,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // vient d'être annulée : le modèle doit en rendre compte.
     const raccourci = enAttente.length ? null : detecterRaccourci(message);
     if (raccourci) {
+      const debut = Date.now();
       const reponse = await repondreRaccourci(raccourci, {
         client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
         language: ctx.language, fuseau: ctx.fuseau, // Jamais un courriel en guise de prénom (« Bonjour will@… »).
@@ -294,11 +318,17 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
         emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: raccourci.id });
+        // Étage 2 : répondu sans modèle. C'est cette ligne qui mesure la part de trafic absorbée.
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : null,
+          outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+        });
         return res.end();
       }
     }
 
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux });
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine, enonce: message });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
@@ -339,7 +369,7 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const resultat: Msg = { role: 'user', content: blocs };
 
     // Le modèle reprend la main pour confirmer en mots ce qui s'est passé.
-    await executerTourSse({ req, res, ctx, conversationId: conversation_id, historique, nouveauxAvant: [resultat], execute });
+    await executerTourSse({ req, res, ctx, conversationId: conversation_id, historique, nouveauxAvant: [resultat], execute, origine: 'carte', enonce: null });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to execute the action.', '[lumi/execute]');

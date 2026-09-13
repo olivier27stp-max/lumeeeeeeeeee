@@ -43,11 +43,35 @@ export interface GeminiContent {
   parts: GeminiPart[];
 }
 
+/** `usageMetadata` de Gemini, tel quel. Absent = réponse sans compteur (ne pas inventer). */
+export interface GeminiUsage {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  cachedContentTokenCount?: number;
+  thoughtsTokenCount?: number;
+  totalTokenCount?: number;
+}
+
 export interface GenerateResult {
   parts: GeminiPart[];
   text: string;
   functionCalls: GeminiFunctionCall[];
   finishReason: string | null;
+  usage: GeminiUsage | null;
+}
+
+/** Extrait les compteurs d'une réponse Gemini brute (generateContent). Pur, testable. */
+export function usageDeReponseGemini(json: any): GeminiUsage | null {
+  const u = json?.usageMetadata;
+  if (!u || typeof u !== 'object') return null;
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  return {
+    promptTokenCount: n(u.promptTokenCount),
+    candidatesTokenCount: n(u.candidatesTokenCount),
+    cachedContentTokenCount: n(u.cachedContentTokenCount),
+    thoughtsTokenCount: n(u.thoughtsTokenCount),
+    totalTokenCount: n(u.totalTokenCount),
+  };
 }
 
 export function isGeminiConfigured(): boolean {
@@ -141,6 +165,7 @@ export async function generateContent(opts: {
     text,
     functionCalls,
     finishReason: candidate?.finishReason || null,
+    usage: usageDeReponseGemini(json),
   };
 }
 

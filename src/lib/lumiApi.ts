@@ -169,8 +169,11 @@ async function lireFlux(res: Response, onEvent: (e: EvenementFlux) => void, sign
   }
 }
 
+/** D'où vient un message (mesure côté serveur, table lumi_traces) : jamais une autorisation. */
+export type OrigineMessageLumi = 'texte' | 'suggestion' | 'voix' | 'repli' | 'lien';
+
 export async function envoyerMessageLumi(
-  params: { conversation_id: string | null; message: string; language: 'fr' | 'en' },
+  params: { conversation_id: string | null; message: string; language: 'fr' | 'en'; origine?: OrigineMessageLumi },
   onEvent: (e: EvenementFlux) => void,
   signal?: AbortSignal,
 ): Promise<void> {

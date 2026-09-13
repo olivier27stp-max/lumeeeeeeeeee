@@ -20,7 +20,7 @@ import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
-  listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, type ModeLumi,
+  listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, type ModeLumi, type OrigineMessageLumi,
   ErreurLumi, type BudgetLumi, type ConversationLumi, type EvenementFlux, type FicheLumi, type MessageLumi, type PropositionLumi, type RapportLumi,
 } from '../lib/lumiApi';
 import { CarteAutorisation, FichesLiees, avecLiensFiches } from '../components/lumi/CarteAutorisation';
@@ -407,7 +407,7 @@ export default function Lumi() {
     }
   }
 
-  async function envoyer(texte: string, opts: { spoken?: boolean } = {}) {
+  async function envoyer(texte: string, opts: { spoken?: boolean; origine?: OrigineMessageLumi } = {}) {
     const t = texte.trim();
     if (!t || enCours) return;
     // Envoi pendant que le micro écoute ou transcrit encore : ce qui est à
@@ -422,7 +422,9 @@ export default function Lumi() {
       ...prev.map((m) => (m.proposal?.statut === 'en_attente' ? { ...m, proposal: { ...m.proposal, statut: 'annulee' as const } } : m)),
       { id: nextId(), role: 'user', text: t, tools: [] },
     ]);
-    await lancer((onEvent, signal) => envoyerMessageLumi({ conversation_id: conversationId, message: t, language: lang }, onEvent, signal));
+    // L'origine sert la mesure (quelle entrée coûte quoi) — le serveur ne s'en sert pour rien d'autre.
+    const origine: OrigineMessageLumi = opts.origine ?? (opts.spoken || pendingSpokenRef.current ? 'voix' : 'texte');
+    await lancer((onEvent, signal) => envoyerMessageLumi({ conversation_id: conversationId, message: t, language: lang, origine }, onEvent, signal));
   }
 
   async function decider(p: PropositionLumi, decision: 'confirm' | 'cancel', auto = false) {
@@ -470,7 +472,7 @@ export default function Lumi() {
   function reessayer(itemId: number) {
     const idx = items.findIndex((m) => m.id === itemId);
     const question = [...items.slice(0, idx)].reverse().find((m) => m.role === 'user');
-    if (question?.text) void envoyer(question.text);
+    if (question?.text) void envoyer(question.text, { origine: 'repli' });
   }
 
   const suggestions = fr
@@ -603,7 +605,7 @@ export default function Lumi() {
               {!bloque && (
                 <div className="flex flex-wrap justify-center gap-2 mt-2">
                   {suggestions.map((s) => (
-                    <button key={s} type="button" onClick={() => envoyer(s)} className="px-3.5 py-2 rounded-full border border-outline bg-surface text-[12.5px] text-text-secondary hover:bg-surface-secondary transition-colors">
+                    <button key={s} type="button" onClick={() => envoyer(s, { origine: 'suggestion' })} className="px-3.5 py-2 rounded-full border border-outline bg-surface text-[12.5px] text-text-secondary hover:bg-surface-secondary transition-colors">
                       {s}
                     </button>
                   ))}
@@ -659,7 +661,7 @@ export default function Lumi() {
                   )}
                   {m.report && <RapportCarte rapport={m.report} fr={fr} />}
                   {m.proposal && (
-                    <CarteAutorisation proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} onSuite={(texte) => envoyer(texte)} autorise={autorisations.has(m.proposal.tool)} onAutoriser={autoriser} />
+                    <CarteAutorisation proposition={m.proposal} fr={fr} busy={enCours} onDecision={(d) => decider(m.proposal!, d)} onSuite={(texte) => envoyer(texte, { origine: 'suggestion' })} autorise={autorisations.has(m.proposal.tool)} onAutoriser={autoriser} />
                   )}
                   {!m.enCours && (m.fiches?.length ?? 0) > 0 && <FichesLiees fiches={m.fiches!} fr={fr} />}
                   {!m.enCours && !(m.fiches?.length) && sources.length > 0 && (

@@ -16,7 +16,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
-import { generateContent, isGeminiConfigured, type GeminiContent } from '../lib/agent/gemini';
+import { generateContent, isGeminiConfigured, geminiModel, type GeminiContent } from '../lib/agent/gemini';
+import { getServiceClient } from '../lib/supabase';
+import { journaliserTrace, normaliserEnonce, usageGemini } from '../lib/lumi/traces';
 
 const router = Router();
 
@@ -30,6 +32,8 @@ const salesChatSchema = z.object({
     )
     .min(1)
     .max(20),
+  // D'où vient le dernier message : suggestion cliquée ou texte libre (mesure, jamais une autorisation).
+  origine: z.enum(['texte', 'suggestion']).optional(),
 });
 
 // System prompt VERROUILLÉ — vendeur/support produit, aucun outil, non détournable.
@@ -98,6 +102,7 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
       return res.status(400).json({ error: 'A user message is required.' });
     }
 
+    const debut = Date.now();
     const result = await generateContent({
       systemInstruction: SYSTEM_PROMPT,
       contents,
@@ -107,6 +112,12 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
                              // et la réponse est coupée (bug MAX_TOKENS constaté).
     });
 
+    // Trace sans tenant (page publique) : tokens Gemini, aucun coût inventé (pas de grille Gemini dans tarifs.ts).
+    void journaliserTrace(getServiceClient(), {
+      orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
+      enonce: normaliserEnonce(contents[contents.length - 1]?.parts?.[0]?.text ?? null),
+      etage: 6, resultat: 'ok', model: geminiModel, usage: usageGemini(result.usage), costCents: null, dureeMs: Date.now() - debut,
+    });
     const reply = (result.text || '').trim();
     if (!reply) {
       return res.json({

@@ -63,7 +63,7 @@ export default function LumiAgent() {
     bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
 
-  async function envoyer(texte: string) {
+  async function envoyer(texte: string, origine: 'texte' | 'suggestion' = 'texte') {
     const q = texte.trim();
     if (!q || loading) return;
     setInput('');
@@ -77,6 +77,7 @@ export default function LumiAgent() {
         // On n'envoie que l'historique du chat — jamais de token de session.
         body: JSON.stringify({
           messages: suite.slice(-10).map((m) => ({ role: m.role, content: m.content })),
+          origine,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -184,7 +185,7 @@ export default function LumiAgent() {
                 <button
                   key={s}
                   type="button"
-                  onClick={() => envoyer(s)}
+                  onClick={() => envoyer(s, 'suggestion')}
                   className="block w-full text-left text-[13px] text-gray-700 hover:text-gray-900 py-2 border-b border-gray-100 last:border-0"
                 >
                   {s}

@@ -14,6 +14,8 @@ import { geminiApiKey } from '../config';
    (mesuré sur un échantillon québécois : « Côté », « Tremblay », « 8 h 30 »).
    Il prend ~5 s au lieu de ~2 s ; le texte est relu avant l'envoi, la
    justesse compte plus que la vitesse. Surcharge possible par variable d'env. */
+import { usageDeReponseGemini, type GeminiUsage } from './gemini';
+
 const TRANSCRIBE_MODEL = process.env.GEMINI_TRANSCRIBE_MODEL || 'gemini-2.5-pro';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -36,6 +38,15 @@ export async function transcribeAudio(opts: {
   mimeType: TranscribeMimeType;
   language: 'fr' | 'en';
 }): Promise<string> {
+  return (await transcribeAudioAvecUsage(opts)).text;
+}
+
+/** Même transcription, avec les compteurs de tokens Gemini pour la trace (lumi_traces). */
+export async function transcribeAudioAvecUsage(opts: {
+  base64: string;
+  mimeType: TranscribeMimeType;
+  language: 'fr' | 'en';
+}): Promise<{ text: string; usage: GeminiUsage | null; model: string }> {
   if (!geminiApiKey) {
     throw new Error('GEMINI_API_KEY is not configured.');
   }
@@ -71,11 +82,11 @@ export async function transcribeAudio(opts: {
     err.status = res.status;
     throw err;
   }
-  const json = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+  const json = (await res.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>; usageMetadata?: unknown };
   const text = (json.candidates?.[0]?.content?.parts ?? [])
     .filter((p) => !(p as { thought?: boolean }).thought)
     .map((p) => p.text ?? '')
     .join('')
     .trim();
-  return text;
+  return { text, usage: usageDeReponseGemini(json), model: TRANSCRIBE_MODEL };
 }
