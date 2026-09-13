@@ -29,6 +29,12 @@ export interface ToolContext {
    * de facture) au lieu de dupliquer leur logique.
    */
   accessToken?: string;
+  /**
+   * Mode à blanc (R12) : même chemin, mêmes gardes, mêmes validations, mais
+   * aucune écriture — executerIdempotent renvoie ce qui AURAIT été fait sans
+   * poser d'empreinte ni appeler l'action. Les lectures restent réelles.
+   */
+  dryRun?: boolean;
 }
 
 export type ToolKind = 'read' | 'write';

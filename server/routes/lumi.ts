@@ -52,7 +52,8 @@ const chatSchema = z.object({
 const executeSchema = z.object({
   conversation_id: z.string().regex(UUID),
   tool_use_id: z.string().min(1).max(200),
-  decision: z.enum(['confirm', 'cancel']),
+  // dry_run : même garde, mêmes validations, aucune écriture — renvoie ce qui serait fait (R12).
+  decision: z.enum(['confirm', 'cancel', 'dry_run']),
   language: z.enum(['fr', 'en']).optional(),
 });
 
@@ -363,6 +364,17 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
           : `This conversation already made ${faites} actions: that is the maximum (${PLAFOND_ECRITURES_PAR_CONVERSATION}). Start a new conversation to continue.`,
         code: 'plafond_ecritures', plafond: PLAFOND_ECRITURES_PAR_CONVERSATION, faites,
       });
+    }
+
+    if (decision === 'dry_run') {
+      const simulations = [];
+      for (const a of enAttente) {
+        const args = demasquerIds(`${ctx.auth.orgId}:${ctx.auth.user.id}`, a.args);
+        const r = await executerEcriture({ tool: a.tool, toolUseId: a.tool_use_id, args, userId: ctx.auth.user.id, orgId: ctx.auth.orgId, client: ctx.auth.client, accessToken: ctx.accessToken, dryRun: true });
+        simulations.push({ tool_use_id: a.tool_use_id, tool: a.tool, ...JSON.parse(r.contenu) });
+      }
+      // Rien n'est sauvé ni exécuté : la proposition reste en attente telle quelle.
+      return res.json({ dry_run: true, simulations });
     }
 
     const blocs: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];

@@ -260,6 +260,10 @@ async function executerIdempotent(
   args: Record<string, any>,
   action: () => Promise<Record<string, any>>,
 ): Promise<Record<string, any>> {
+  // À blanc : rien n'est écrit, pas même l'empreinte. On dit ce qui partirait.
+  if (ctx.dryRun) {
+    return { dry_run: true, outil, args, note: 'Simulation : aucune écriture faite. Voici ce qui aurait été exécuté.' };
+  }
   const admin = getServiceClient();
   const argsHash = crypto.createHash('sha256').update(stableStringify(args)).digest('hex');
 

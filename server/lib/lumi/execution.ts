@@ -10,6 +10,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { executerOutilGarde } from '../agent/garde';
+import { ECRITURES_SENSIBLES } from '../agent/registre';
 import { ficheCreee, type Fiche } from './fiches';
 import { logger } from '../logger';
 
@@ -31,10 +32,16 @@ export async function executerEcriture(opts: {
   client: SupabaseClient;
   accessToken?: string;
   auto?: boolean;
+  /** Mode à blanc (R12) : renvoie ce qui serait fait, n'écrit rien, ne produit pas de reçu. */
+  dryRun?: boolean;
 }): Promise<{ contenu: string; recu: ReçuExecution }> {
   const recu: ReçuExecution = { tool_use_id: opts.toolUseId, ok: false, fiche: null, ...(opts.auto ? { auto: true } : {}) };
   try {
-    const r = await executerOutilGarde({ name: opts.tool, args: opts.args, userId: opts.userId, orgId: opts.orgId, client: opts.client, accessToken: opts.accessToken });
+    const r = await executerOutilGarde({ name: opts.tool, args: opts.args, userId: opts.userId, orgId: opts.orgId, client: opts.client, accessToken: opts.accessToken, dryRun: opts.dryRun });
+    if (opts.dryRun) {
+      if ('refus' in r) return { contenu: JSON.stringify({ dry_run: true, refus: r.refus }), recu };
+      return { contenu: JSON.stringify({ dry_run: true, ...(r.result ?? {}) }), recu };
+    }
     if ('refus' in r) return { contenu: JSON.stringify({ error: r.refus }), recu };
     const echec = r.result && typeof r.result === 'object' && typeof (r.result as any).error === 'string' ? String((r.result as any).error) : null;
     // Une erreur métier (devis pas accepté…) est un échec, pas un reçu : la
@@ -70,12 +77,7 @@ export const MODES_LUMI: readonly ModeLumi[] = ['demander', 'argent', 'tout'];
  * irréversible. En mode « argent » (défaut), elles demandent encore ; tout
  * le reste (jobs, tâches, statuts, notes, planification) part d'office.
  */
-export const ECRITURES_SENSIBLES: ReadonlySet<string> = new Set([
-  'create_quote', 'send_quote', 'cancel_quote', 'convert_quote_to_job',
-  'create_invoice', 'create_invoice_from_job', 'send_invoice', 'mark_invoice_paid', 'send_payment_reminders',
-  'send_sms', 'send_email',
-  'merge_clients', 'archive_job',
-]);
+export { ECRITURES_SENSIBLES } from '../agent/registre';
 
 /**
  * Plafond d'écritures par CONVERSATION (item 3, B6). En mode « tout » ou

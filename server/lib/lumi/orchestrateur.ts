@@ -37,6 +37,7 @@ import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { executerEcriture, type ReçuExecution } from './execution';
+import { ECRITURES_ANODINES } from '../agent/registre';
 
 const MAX_ETAPES = 8;
 const MAX_TOKENS = 4096;
@@ -170,7 +171,7 @@ export interface Souvenir { key: string; value: string }
  * ni argent, ni envoi — et demander une confirmation pour chaque fait appris
  * empêcherait Lumi d'apprendre.
  */
-export const ECRITURES_ANODINES: ReadonlySet<string> = new Set(['remember_this', 'forget_note']);
+export { ECRITURES_ANODINES } from '../agent/registre';
 
 export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[] }): Anthropic.Messages.TextBlockParam[] {
   // Partie STABLE (sans date ni nom) → cache. La partie variable suit.

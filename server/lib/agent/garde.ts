@@ -9,6 +9,7 @@
 import type { PermissionKey } from '../../../src/lib/permissions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
+import { validerArgs } from './validation-args';
 import { getUserContext, hasPermission } from '../rbac';
 import { TOOLS_BY_NAME, type ToolContext } from './tools';
 
@@ -160,6 +161,8 @@ export async function executerOutilGarde(opts: {
   orgId: string;
   client: SupabaseClient;
   accessToken?: string;
+  /** Mode à blanc (R12) : validations et gardes réelles, aucune écriture. */
+  dryRun?: boolean;
 }): Promise<{ result: any } | RefusOutil> {
   const tool = TOOLS_BY_NAME[opts.name];
   if (!tool || typeof tool.handler !== 'function') return { refus: `Outil inconnu : ${opts.name}` };
@@ -181,8 +184,15 @@ export async function executerOutilGarde(opts: {
     return { refus: 'Cette personne ne voit pas les montants dans Lume (réglage de son rôle) : cet outil financier ne lui est pas accessible. Dis-le-lui simplement.' };
   }
 
-  const ctx: ToolContext = { client: opts.client, orgId: opts.orgId, userId: opts.userId, accessToken: opts.accessToken };
-  const result = await tool.handler(opts.args, ctx);
+  // R2/R7 : les arguments sont validés contre la déclaration de l'outil AVANT
+  // le handler — types, champs requis, choix permis ; les champs inconnus sont
+  // retirés. Une entrée invalide est une erreur métier lisible, pas un crash.
+  const validation = validerArgs(tool.declaration.parameters, opts.args);
+  if (!validation.ok) return { result: { error: `Paramètres invalides — ${validation.erreur}. Corrige et réessaie.` } };
+  if (validation.ignores.length) console.warn(`[agent-garde:${opts.name}] champs inconnus ignorés : ${validation.ignores.join(', ')}`);
+
+  const ctx: ToolContext = { client: opts.client, orgId: opts.orgId, userId: opts.userId, accessToken: opts.accessToken, ...(opts.dryRun ? { dryRun: true } : {}) };
+  const result = await tool.handler(validation.args, ctx);
   return {
     result: voitLesMontants
       ? result
