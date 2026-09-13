@@ -1,23 +1,24 @@
 import React from 'react';
-import { Building2, Check, Plus, Loader2, X, ChevronDown } from 'lucide-react';
-import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
+import { Building2, Check, Plus, ChevronDown } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useCompany } from '../contexts/CompanyContext';
 import { useTranslation } from '../i18n';
-import { createOffice } from '../lib/officesApi';
 
 /**
- * Office switcher pour le header de Messages.
+ * Office switcher pour le header.
  * - owner/admin avec plusieurs offices → dropdown pour basculer.
- * - rôles mono-office (sales_rep/technician) → pill statique (nom de l'office).
- * Le propriétaire peut créer un nouvel office depuis le pied du dropdown.
+ * - rôles mono-office (sales_rep/technician) → rien (épinglés à leur office).
+ * Le propriétaire peut créer un nouvel office depuis le pied du dropdown :
+ * la création se fait sur la page pleine /offices/new (coordonnées, héritage
+ * des réglages, accès) — l'ancienne modale « nom seulement » a été retirée.
  */
 export function OfficeSwitcher() {
+  const navigate = useNavigate();
   const { companies, current, currentRole, switchCompany } = useCompany();
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [open, setOpen] = React.useState(false);
-  const [showCreate, setShowCreate] = React.useState(false);
 
   if (!current) return null;
 
@@ -90,7 +91,7 @@ export function OfficeSwitcher() {
                 <button
                   onClick={() => {
                     setOpen(false);
-                    setShowCreate(true);
+                    navigate('/offices/new');
                   }}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-primary/5 transition-colors"
                 >
@@ -106,107 +107,6 @@ export function OfficeSwitcher() {
           </div>
         </>
       )}
-
-      {showCreate && (
-        <CreateOfficeModal
-          fr={fr}
-          onClose={() => setShowCreate(false)}
-          onCreated={(orgId) => {
-            setShowCreate(false);
-            // Le créateur devient owner du nouvel office. On l'active puis on
-            // recharge pour atterrir dessus avec des données fraîches.
-            try { localStorage.setItem('lume-active-org', orgId); } catch {}
-            window.location.assign('/');
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Modal de création d'office ──────────────────────────────────────
-
-function CreateOfficeModal({
-  fr,
-  onClose,
-  onCreated,
-}: {
-  fr: boolean;
-  onClose: () => void;
-  onCreated: (orgId: string) => void;
-}) {
-  const id = React.useId();
-  const [name, setName] = React.useState('');
-  const [saving, setSaving] = React.useState(false);
-
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      toast.error(fr ? 'Le nom du bureau est requis.' : 'Office name is required.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const { office } = await createOffice(name.trim());
-      toast.success(fr ? 'Bureau créé' : 'Office created');
-      onCreated(office.id);
-    } catch (err: any) {
-      if (err?.code === 'office_limit_reached') {
-        toast.error(fr
-          ? `Limite de bureaux atteinte — votre plan en inclut ${err.capacity}. Ajoutez un bureau supplémentaire dans Réglages → Forfait et facturation.`
-          : err.message);
-      } else {
-        toast.error(err.message || (fr ? 'Échec de la création.' : 'Failed to create office.'));
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4" role="presentation" tabIndex={-1} onClick={onClose}>
-      <div
-        className="w-full max-w-sm bg-surface-elevated border border-outline rounded-2xl shadow-xl p-5"
-        role="presentation"
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-text-primary">
-            {fr ? 'Créer un bureau' : 'Create office'}
-          </h3>
-          <button onClick={onClose} aria-label={fr ? 'Fermer' : 'Close'} className="text-text-tertiary hover:text-text-primary">
-            <X size={18} />
-          </button>
-        </div>
-
-        <label htmlFor={`${id}-name`} className="text-xs font-medium text-text-tertiary">
-          {fr ? 'Nom du bureau' : 'Office name'}
-        </label>
-        <input
-          id={`${id}-name`}
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          className="glass-input w-full mt-1.5"
-          placeholder={fr ? 'Bureau de Montréal' : 'Montreal Office'}
-          autoFocus
-        />
-
-        <div className="flex items-center justify-end gap-2.5 pt-4 mt-4 border-t border-border">
-          <button className="glass-button-ghost" onClick={onClose}>
-            {fr ? 'Annuler' : 'Cancel'}
-          </button>
-          <button
-            className="glass-button-primary inline-flex items-center gap-2"
-            onClick={handleCreate}
-            disabled={saving}
-          >
-            {saving ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-            {saving ? (fr ? 'Création…' : 'Creating…') : (fr ? 'Créer' : 'Create')}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

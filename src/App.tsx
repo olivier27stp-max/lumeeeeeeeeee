@@ -67,6 +67,8 @@ const SettingsIndex = React.lazy(() => import('./pages/settings/SettingsLayout')
 const ProfileSettings = React.lazy(() => import('./pages/settings/ProfileSettings'));
 const BillingSettings = React.lazy(() => import('./pages/settings/BillingSettings'));
 const LocationSettings = React.lazy(() => import('./pages/settings/LocationSettings'));
+const OfficesSettings = React.lazy(() => import('./pages/settings/OfficesSettings'));
+const OfficeNew = React.lazy(() => import('./pages/OfficeNew'));
 const ArchivesPanel = React.lazy(() => import('./components/ArchivesPanel'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
 const PayrollPage = React.lazy(() => import('./pages/settings/PayrollPage'));
@@ -1521,6 +1523,8 @@ function AuthenticatedApp({
                     <Route path="/leads" element={<Navigate to="/quotes" replace />} />
                     <Route path="/clients" element={<Gated permission="clients.read"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
+                    {/* Nouveau bureau — page pleine hors du layout Réglages (owner seulement, gate serveur) */}
+                    <Route path="/offices/new" element={<Gated permission="settings.update"><OfficeNew /></Gated>} />
                     {/* Edit reuses the Clients list page, which opens its edit drawer from the :id route param */}
                     <Route path="/clients/:id/edit" element={<Gated permission="clients.update"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><TenantGuardRoute table="clients" redirectTo="/clients"><div className="px-8 py-6"><ClientDetails /></div></TenantGuardRoute></Gated>} />
@@ -1556,6 +1560,8 @@ function AuthenticatedApp({
                       {/* Language moved into the profile page */}
                       <Route path="language" element={<Navigate to="/settings/profile" replace />} />
                       <Route path="company" element={<Gated permission="settings.update"><CompanySettings /></Gated>} />
+                      {/* Bureaux de la compagnie (liste résolue côté serveur, owner/admin) */}
+                      <Route path="offices" element={<Gated permission="settings.read"><OfficesSettings /></Gated>} />
                       <Route path="billing" element={<Gated permission="settings.read"><BillingSettings /></Gated>} />
                       <Route path="products" element={<Gated permission="settings.update"><ProductsServices /></Gated>} />
                       <Route path="taxes" element={<Gated permission="settings.update"><TaxSettings /></Gated>} />

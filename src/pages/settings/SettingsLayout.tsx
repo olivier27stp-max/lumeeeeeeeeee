@@ -5,6 +5,7 @@ import {
   Settings as SettingsIcon,
   Zap,
   Building,
+  Building2,
   Users,
   Package,
   MapPin,
@@ -58,6 +59,7 @@ export function useSettingsNav(): NavGroup[] {
       heading: isFr ? 'Entreprise' : 'Business',
       items: [
         { path: '/settings/company', label: t.settings.companySettings, icon: Building },
+        { path: '/settings/offices', label: isFr ? 'Bureaux' : 'Offices', icon: Building2 },
         { path: '/settings/billing', label: isFr ? 'Forfait & facturation' : 'Plan & billing', icon: CreditCard },
       ],
     },
