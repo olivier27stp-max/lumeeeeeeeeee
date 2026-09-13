@@ -46,7 +46,7 @@ describe('journaliserTrace : jamais bloquante, toujours le contexte serveur', ()
     });
     const { client: c2, insert: i2 } = adminSimule({ error: null });
     await journaliserTrace(c2, { orgId: null, userId: null, canal: 'public', origine: 'texte', resultat: 'ok', costCents: null });
-    expect(i2.mock.calls[0][0]).toMatchObject({ org_id: null, user_id: null, cost_cents: null, input_tokens: 0, outils: [], etage: null });
+    expect(i2.mock.calls[0]?.[0]).toMatchObject({ org_id: null, user_id: null, cost_cents: null, input_tokens: 0, outils: [], etage: null });
   });
 
   it('table absente (migration non appliquée) : un seul avertissement, aucune exception', async () => {
@@ -54,7 +54,7 @@ describe('journaliserTrace : jamais bloquante, toujours le contexte serveur', ()
     await expect(journaliserTrace(client, { orgId: 'o', userId: 'u', canal: 'lumi', origine: 'texte', resultat: 'ok' })).resolves.toBeUndefined();
     await journaliserTrace(client, { orgId: 'o', userId: 'u', canal: 'lumi', origine: 'texte', resultat: 'ok' });
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(String((logger.warn as any).mock.calls[0][0])).toContain('20260913000000_lumi_traces.sql');
+    expect(String(vi.mocked(logger.warn).mock.calls[0]?.[0])).toContain('20260913000000_lumi_traces.sql');
     expect(logger.error).not.toHaveBeenCalled();
   });
 
