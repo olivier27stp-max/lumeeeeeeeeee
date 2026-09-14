@@ -154,6 +154,27 @@ export async function requireAuthedClient(req: express.Request, res: express.Res
     return null;
   }
 
+  // Adhésion ACTIVE exigée. `has_org_membership` (corrigé par la migration
+  // 20260914120700) et `current_org_id()` ne regardaient pas
+  // `memberships.status` : un membre retiré ou suspendu gardait l'accès à
+  // toutes les routes tant que sa ligne existait (audit automatisations, T8.4).
+  // Une seule lecture par clé primaire, sous service_role.
+  const { data: adhesion, error: adhesionError } = await getServiceClient()
+    .from('memberships')
+    .select('status')
+    .eq('org_id', orgId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (adhesionError) {
+    console.error(`[auth] lecture de l'adhésion impossible (user ${user.id}, org ${orgId}):`, adhesionError.message);
+    res.status(503).json({ error: 'Membership check unavailable.' });
+    return null;
+  }
+  if (!adhesion || (adhesion.status && adhesion.status !== 'active')) {
+    res.status(403).json({ error: 'Membership is not active for this organization.' });
+    return null;
+  }
+
   // Toute erreur levée plus loin dans cette requête portera l'org — sinon
   // l'alerte Sentry ne dit pas chez quel client ça a planté. No-op sans DSN.
   setSentryRequestOrg(orgId, user.id);

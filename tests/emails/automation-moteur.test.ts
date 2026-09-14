@@ -41,9 +41,10 @@ describe('conditions d’arrêt — une erreur ne conclut rien', () => {
   });
 
   it('une lecture illisible conserve la tâche', () => {
-    // `false` = ne pas annuler. Le tick suivant réessaiera.
+    // `null` = ne pas annuler (la fonction rend le MOTIF d'arrêt, ou null —
+    // audit 2026-09-13, F25). Le tick suivant réessaiera.
     expect(fn).toContain('const illisible =');
-    expect(fn).toContain('return false; // ne PAS annuler');
+    expect(fn).toContain('return null; // ne PAS annuler');
     expect(fn).toContain("condition d'arrêt indéterminable");
   });
 

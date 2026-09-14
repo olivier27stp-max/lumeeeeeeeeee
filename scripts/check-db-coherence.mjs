@@ -79,6 +79,11 @@ const EXCEPTIONS = new Map([
   // maintenant en base (20260910140000) et EST le chemin principal ; le
   // « chemin principal » admin.signOut(userId) ne fonctionnait pas (il attend un JWT).
   ['ensure_payment_settings_row', "server/lib/payments.ts:101 documente un repli explicite pour les environnements où la fonction est absente."],
+  // automation_bump_counter : VOLONTAIREMENT réservée à service_role (migration
+  // 20260914120400) — un membre ne doit pas pouvoir gonfler le compteur d'envois.
+  // Le moteur (server/lib/automationEngine.ts, verifierPlafondQuotidien) l'appelle
+  // sous service_role et, si la RPC échoue, journalise et AUTORISE l'envoi.
+  ['automation_bump_counter', "réservée à service_role par conception ; server/lib/automationEngine.ts (verifierPlafondQuotidien) journalise et autorise l'envoi si la RPC est indisponible."],
 ]);
 
 // ── Extraction depuis le code ──────────────────────────────────────────────

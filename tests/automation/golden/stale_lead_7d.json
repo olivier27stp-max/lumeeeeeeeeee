@@ -1,0 +1,42 @@
+{
+  "preset_key": "stale_lead_7d",
+  "trigger_event": "lead.created",
+  "delay_seconds": 604800,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-stale_lead_7d:aaaaaaaa-0000-4000-8000-000000000001:0"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-stale_lead_7d:aaaaaaaa-0000-4000-8000-000000000001:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-stale_lead_7d:aaaaaaaa-0000-4000-8000-000000000001:2"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, on ne vous oublie pas! Toujours intéressé par nos services? — Plomberie Tremblay inc.",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Prospect inactif — 7 jours\nAucune activité sur le dossier de Marie Tremblay depuis 7 jours.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "stale_lead_alert",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

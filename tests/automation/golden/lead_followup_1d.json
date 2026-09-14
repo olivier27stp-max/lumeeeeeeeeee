@@ -1,0 +1,32 @@
+{
+  "preset_key": "lead_followup_1d",
+  "trigger_event": "lead.created",
+  "delay_seconds": 86400,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-14T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_1d:aaaaaaaa-0000-4000-8000-000000000001:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-14T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_1d:aaaaaaaa-0000-4000-8000-000000000001:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, avez-vous toujours besoin de nos services? Répondez à ce message et on s'occupe de vous. — Plomberie Tremblay inc.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "lead_followup",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

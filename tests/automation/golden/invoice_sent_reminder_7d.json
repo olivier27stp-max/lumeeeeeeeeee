@@ -1,0 +1,54 @@
+{
+  "preset_key": "invoice_sent_reminder_7d",
+  "trigger_event": "invoice.sent",
+  "delay_seconds": 604800,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_7d:aaaaaaaa-0000-4000-8000-000000000005:0"
+    },
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_7d:aaaaaaaa-0000-4000-8000-000000000005:1"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_7d:aaaaaaaa-0000-4000-8000-000000000005:2"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_7d:aaaaaaaa-0000-4000-8000-000000000005:3"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Facture INV-000042 en attente depuis 7 jours",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>La facture <strong>INV-000042</strong> de <strong>1 626,90 $</strong> est en attente depuis une semaine.</p><p>Merci de la régler dès que possible, ou répondez à ce courriel si quelque chose ne va pas.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, votre facture de Plomberie Tremblay inc. est toujours en attente. Merci de la régler quand vous pouvez!",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Facture INV-000042 — 7 jours impayée\nMarie Tremblay n'a pas encore payé cette facture.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "invoice_reminded",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

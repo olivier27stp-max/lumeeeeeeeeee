@@ -1,0 +1,33 @@
+{
+  "preset_key": "lead_followup_3d",
+  "trigger_event": "lead.created",
+  "delay_seconds": 259200,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-09-16T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_3d:aaaaaaaa-0000-4000-8000-000000000001:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-16T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_3d:aaaaaaaa-0000-4000-8000-000000000001:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — On pense à vous",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Vous nous avez contactés récemment et on veut s'assurer de ne pas vous laisser sans réponse.</p><p>Répondez à ce courriel et on s'occupe de vous rapidement.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "lead_followup",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

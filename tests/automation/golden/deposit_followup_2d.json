@@ -1,0 +1,42 @@
+{
+  "preset_key": "deposit_followup_2d",
+  "trigger_event": "quote.approved",
+  "delay_seconds": 172800,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-15T15:00:00.000Z",
+      "execution_key": "regle-deposit_followup_2d:aaaaaaaa-0000-4000-8000-000000000004:0"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-09-15T15:00:00.000Z",
+      "execution_key": "regle-deposit_followup_2d:aaaaaaaa-0000-4000-8000-000000000004:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-15T15:00:00.000Z",
+      "execution_key": "regle-deposit_followup_2d:aaaaaaaa-0000-4000-8000-000000000004:2"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Rappel : votre dépôt pour Plomberie Tremblay inc. est en attente. Répondez à ce message si vous avez besoin d'aide.",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Dépôt en attente — Marie Tremblay\nLa soumission est acceptée depuis 2 jours, mais le dépôt n'a pas été reçu.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "deposit_followup_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

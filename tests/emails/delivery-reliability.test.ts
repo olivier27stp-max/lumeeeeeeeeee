@@ -954,7 +954,9 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
   it('le report ne consomme pas de tentative', () => {
     // Sinon une nuit suffirait à épuiser le quota de reprises.
     const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
-    const push = bloc.indexOf('execute_at: nextSendTime()');
+    // La prochaine fenêtre est calculée une fois (`prochaine`) : elle sert aussi à
+    // annuler un rappel « avant » qu'elle pousserait après le rendez-vous (T9.5).
+    const push = bloc.indexOf('execute_at: prochaine.toISOString()');
     const attempts = bloc.indexOf('attempts:');
     expect(push).toBeGreaterThan(-1);
     expect(attempts === -1 || attempts > push).toBe(true);
