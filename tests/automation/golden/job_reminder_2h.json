@@ -1,0 +1,32 @@
+{
+  "preset_key": "job_reminder_2h",
+  "trigger_event": "appointment.created",
+  "delay_seconds": -7200,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-25T11:00:00.000Z",
+      "execution_key": "regle-job_reminder_2h:aaaaaaaa-0000-4000-8000-000000000003:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-25T11:00:00.000Z",
+      "execution_key": "regle-job_reminder_2h:aaaaaaaa-0000-4000-8000-000000000003:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "C'est aujourd'hui! Votre rendez-vous avec Plomberie Tremblay inc. est à 09 h 00. On s'en vient!",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "reminder_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

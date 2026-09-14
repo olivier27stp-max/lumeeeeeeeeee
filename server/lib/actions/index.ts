@@ -100,6 +100,18 @@ export interface ActionResult {
   success: boolean;
   data?: any;
   error?: string;
+  /**
+   * true = échec DÉFINITIF : le réessayer donnerait le même refus (pas de
+   * destinataire, désabonné, plafond, pas de consentement). Le moteur ne
+   * reprend pas la tâche. Préféré à la liste de motifs anglais du moteur (F26).
+   */
+  permanent?: boolean;
+}
+
+/** Montant en dollars canadiens, format du Québec : « 1 626,90 $ » (T3.11). */
+export function formaterMontant(cents: number | null | undefined, currency?: string | null): string {
+  const devise = (currency || 'CAD').toUpperCase();
+  return new Intl.NumberFormat('fr-CA', { style: 'currency', currency: devise }).format((Number(cents) || 0) / 100);
 }
 
 export type ActionType =
@@ -138,6 +150,7 @@ export function resolveTemplate(
  */
 async function resolveContractVars(
   supabase: SupabaseClient,
+  orgId: string,
   jobId: string,
 ): Promise<{ contract_link: string; contract_line: string; contract_html: string }> {
   const vide = { contract_link: '', contract_line: '', contract_html: '' };
@@ -154,6 +167,7 @@ async function resolveContractVars(
     .from('job_agreements')
     .select('view_token, status, require_signature')
     .eq('job_id', jobId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -181,6 +195,7 @@ async function resolveContractVars(
  */
 async function resolveSignedContractVars(
   supabase: SupabaseClient,
+  orgId: string,
   jobId: string,
 ): Promise<{ signed_contract_link: string; deposit_amount: string; deposit_line: string }> {
   const vide = { signed_contract_link: '', deposit_amount: '', deposit_line: '' };
@@ -197,6 +212,7 @@ async function resolveSignedContractVars(
     .from('job_agreements')
     .select('view_token, status, snapshot')
     .eq('job_id', jobId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -209,6 +225,7 @@ async function resolveSignedContractVars(
     .from('jobs')
     .select('deposit_status, currency')
     .eq('id', jobId)
+    .eq('org_id', orgId)
     .maybeSingle();
 
   const terms = (acc.snapshot as { payment_terms?: { deposit_required?: boolean; deposit_cents?: number } } | null)?.payment_terms;
@@ -239,9 +256,18 @@ export async function resolveEntityVariables(
   // Fetch company settings
   const { data: company } = await supabase
     .from('company_settings')
-    .select('company_name, phone, google_review_url, facebook_review_url')
+    .select('company_name, phone, google_review_url, facebook_review_url, timezone')
     .eq('org_id', orgId)
     .maybeSingle();
+
+  // Fuseau de l'ENTREPRISE (F2). Les dates et heures écrites au client se
+  // formataient dans le fuseau du SERVEUR : Railway tourne en UTC, et « votre
+  // rendez-vous à 13:00 » partait pour un rendez-vous à 9 h à Montréal —
+  // 12 SMS sur 12 vérifiés en prod. `company_settings.timezone` a pour défaut
+  // America/Toronto ; on ne dépend plus jamais de TZ.
+  const fuseau = (company?.timezone as string) || 'America/Toronto';
+  const formaterDate = (d: Date) => new Intl.DateTimeFormat('fr-CA', { timeZone: fuseau, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  const formaterHeure = (d: Date) => new Intl.DateTimeFormat('fr-CA', { timeZone: fuseau, hour: '2-digit', minute: '2-digit' }).format(d);
 
   if (company) {
     vars.company_name = company.company_name || '';
@@ -264,12 +290,14 @@ export async function resolveEntityVariables(
    * seulement par le destinataire.
    */
   const setClientVars = (c: {
+    id?: string | null;
     first_name?: string | null;
     last_name?: string | null;
     email?: string | null;
     phone?: string | null;
     company?: string | null;
   }) => {
+    if (c.id) vars.client_id = c.id; // pour la lecture du consentement (F7)
     const complet = `${c.first_name || ''} ${c.last_name || ''}`.trim();
     const entreprise = (c.company || '').trim();
     vars.client_first_name = c.first_name || entreprise || complet || '';
@@ -282,8 +310,9 @@ export async function resolveEntityVariables(
   if (entityType === 'lead') {
     const { data: lead } = await supabase
       .from('clients')
-      .select('first_name, last_name, email, phone, company, title, client_id:id')
+      .select('id, first_name, last_name, email, phone, company, title')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (lead) {
       setClientVars(lead);
@@ -293,8 +322,9 @@ export async function resolveEntityVariables(
   if (entityType === 'client') {
     const { data: client } = await supabase
       .from('clients')
-      .select('first_name, last_name, email, phone, company')
+      .select('id, first_name, last_name, email, phone, company')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (client) {
       setClientVars(client);
@@ -322,10 +352,7 @@ export async function resolveEntityVariables(
       .maybeSingle();
     if (quote) {
       vars.quote_number = quote.quote_number || '';
-      vars.quote_total = quote.total_cents
-        ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' })
-            .format(Number(quote.total_cents) / 100)
-        : '$0.00';
+      vars.quote_total = formaterMontant(quote.total_cents, quote.currency);
       vars.quote_valid_until = quote.valid_until || '';
 
       // `quotes` porte DEUX liens vers `clients` : `client_id` (client
@@ -335,15 +362,16 @@ export async function resolveEntityVariables(
       if (contactId) {
         const { data: c } = await supabase
           .from('clients')
-          .select('first_name, last_name, email, phone, company')
+          .select('id, first_name, last_name, email, phone, company')
           .eq('id', contactId)
+          .eq('org_id', orgId)
           .maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
       if (quote.job_id) {
-        const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).maybeSingle();
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).eq('org_id', orgId).maybeSingle();
         if (j) vars.job_name = j.title || '';
       }
     }
@@ -354,38 +382,43 @@ export async function resolveEntityVariables(
       .from('jobs')
       .select('title, client_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (job) {
       vars.job_name = job.title || '';
       if (job.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).maybeSingle();
+        vars.client_id = job.client_id;
+        const { data: c } = await supabase.from('clients').select('id, first_name, last_name, email, phone, company').eq('id', job.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
-      Object.assign(vars, await resolveContractVars(supabase, entityId));
-      Object.assign(vars, await resolveSignedContractVars(supabase, entityId));
+      Object.assign(vars, await resolveContractVars(supabase, orgId, entityId));
+      Object.assign(vars, await resolveSignedContractVars(supabase, orgId, entityId));
     }
   }
 
   if (entityType === 'invoice') {
     const { data: inv } = await supabase
       .from('invoices')
-      .select('invoice_number, due_date, total_cents, client_id, job_id')
+      .select('invoice_number, due_date, total_cents, currency, client_id, job_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (inv) {
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
-      vars.invoice_total = inv.total_cents ? `$${(inv.total_cents / 100).toFixed(2)}` : '$0.00';
+      // « 1 626,90 $ », jamais « $1626.90 » : le client est au Québec (T3.11).
+      vars.invoice_total = formaterMontant(inv.total_cents, inv.currency);
       if (inv.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).maybeSingle();
+        vars.client_id = inv.client_id;
+        const { data: c } = await supabase.from('clients').select('id, first_name, last_name, email, phone, company').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
       if (inv.job_id) {
-        const { data: j } = await supabase.from('jobs').select('title').eq('id', inv.job_id).maybeSingle();
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', inv.job_id).eq('org_id', orgId).maybeSingle();
         if (j) vars.job_name = j.title || '';
       }
     }
@@ -399,18 +432,20 @@ export async function resolveEntityVariables(
         id, job_id, start_at, start_time, end_at, end_time, notes, status,
         job:jobs!schedule_events_job_id_fkey(
           id, title, property_address, client_id, client_name,
-          clients:clients!jobs_client_id_fkey(first_name, last_name, email, phone, company)
+          clients:clients!jobs_client_id_fkey(id, first_name, last_name, email, phone, company)
         )
       `)
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle() as any;
     if (evt) {
       const startField = evt.start_at || evt.start_time;
       if (startField) {
         const d = new Date(startField);
-        vars.appointment_date = d.toLocaleDateString('fr-CA');
-        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+        vars.appointment_date = formaterDate(d);
+        vars.appointment_time = formaterHeure(d);
       }
+      if (evt.job?.client_id) vars.client_id = evt.job.client_id;
       vars.appointment_title = evt.job?.title || '';
       // `jobs.property_address` a pour DEFAULT '-' : sans ce filtre, le client
       // recevait littéralement « Adresse : - ».
@@ -424,7 +459,7 @@ export async function resolveEntityVariables(
         vars.client_name = evt.job.client_name;
         vars.client_first_name = evt.job.client_name.split(' ')[0] || '';
       }
-      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, evt.job_id));
+      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, orgId, evt.job_id));
     }
   }
 
@@ -438,15 +473,22 @@ export async function executeSendEmail(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const to = config.to ? resolveTemplate(config.to, vars) : vars.client_email;
-  if (!to) return { success: false, error: 'No recipient email' };
+  // Le destinataire est TOUJOURS le client de l'entité (F18). `config.to`
+  // était templatable et honoré : n'importe quel membre pouvant écrire une
+  // règle (RLS ouverte, F4) pouvait détourner les confirmations de tout
+  // l'historique client vers une adresse externe. Ignoré, et journalisé.
+  if (config.to) {
+    console.warn(`[actions/send_email] config.to ignoré (org ${ctx.orgId}) : le destinataire est le client de l'entité`);
+  }
+  const to = vars.client_email;
+  if (!to) return { success: false, error: 'No recipient email', permanent: true };
 
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
   const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
 
   try {
     const { sendEmail, isMailerConfigured } = await import('../mailer');
-    if (!isMailerConfigured()) return { success: false, error: 'SMTP not configured' };
+    if (!isMailerConfigured()) return { success: false, error: 'SMTP not configured', permanent: true };
 
     // Identité de l'ORG, pas de Lume.
     //
@@ -467,12 +509,12 @@ export async function executeSendEmail(
     // le respect de ceux qui s'en sont déjà servis.
     const { isEmailUnsubscribed, getUnsubscribeUrl } = await import('../notificationHelpers');
     if (await isEmailUnsubscribed(ctx.supabase, ctx.orgId, to)) {
-      return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
+      return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails`, permanent: true };
     }
 
     // Plafond anti-spam, tous canaux confondus par destinataire.
     if (await depassePlafondFrequence(ctx, 'email', to)) {
-      return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
+      return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming`, permanent: true };
     }
 
     const { getCompanySettings, buildEmailLayout, senderFor } = await import('../../routes/emails');
@@ -533,10 +575,14 @@ export async function executeSendSms(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  if (!ctx.twilio) return { success: false, error: 'Twilio not configured' };
+  if (!ctx.twilio) return { success: false, error: 'Twilio not configured', permanent: true };
 
-  const to = config.to ? resolveTemplate(config.to, vars) : vars.client_phone;
-  if (!to) return { success: false, error: 'No recipient phone' };
+  // Même règle que pour le courriel (F18) : jamais de destinataire venu de la règle.
+  if (config.to) {
+    console.warn(`[actions/send_sms] config.to ignoré (org ${ctx.orgId}) : le destinataire est le client de l'entité`);
+  }
+  const to = vars.client_phone;
+  if (!to) return { success: false, error: 'No recipient phone', permanent: true };
 
   // CASL compliance — manual sends already blocked opted-out recipients, but
   // automations bypassed the list entirely and kept texting after a STOP.
@@ -548,12 +594,12 @@ export async function executeSendSms(
     .eq('phone', optOutPhone)
     .maybeSingle();
   if (optOut) {
-    return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
+    return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)`, permanent: true };
   }
 
   // Plafond anti-spam : pas plus de N messages commerciaux / client / 24h.
   if (await depassePlafondFrequence(ctx, 'sms', to)) {
-    return { success: false, error: `Frequency cap reached for ${optOutPhone} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
+    return { success: false, error: `Frequency cap reached for ${optOutPhone} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming`, permanent: true };
   }
 
   const body = resolveTemplate(champLocalise(config, 'body', ctx.langue), vars);
@@ -569,6 +615,7 @@ export async function executeSendSms(
   } catch (err: any) {
     return {
       success: false,
+      permanent: true,
       error:
         err?.code === 'plan_excludes_sms'
           ? 'Plan does not include SMS'
@@ -611,7 +658,7 @@ export async function executeSendSms(
       console.error(`[actions/send_sms] conversation logging failed (org ${ctx.orgId}):`, logErr?.message);
     }
 
-    return { success: true, data: { to, body } };
+    return { success: true, data: { to, sid: sent?.sid || null } };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
@@ -658,7 +705,7 @@ export async function executeCreateTask(
     .eq('role', 'owner')
     .limit(1)
     .maybeSingle();
-  if (!owner?.user_id) return { success: false, error: 'No org owner found to own the task' };
+  if (!owner?.user_id) return { success: false, error: 'No org owner found to own the task', permanent: true };
 
   // `tasks.linked_entity_type` porte un CHECK qui n'admet que cinq valeurs :
   // client, lead, quote, invoice, job. Or le moteur émet aussi
@@ -681,6 +728,7 @@ export async function executeCreateTask(
         .from('schedule_events')
         .select('job_id')
         .eq('id', ctx.entityId)
+        .eq('org_id', ctx.orgId)
         .maybeSingle();
       if (evt?.job_id) {
         lienType = 'job';
@@ -774,10 +822,10 @@ export async function executeRequestReview(
     .limit(1)
     .maybeSingle();
   if (cs && cs.review_enabled === false) {
-    return { success: false, error: 'Review requests are disabled in Settings → Customer reviews.' };
+    return { success: false, error: 'Review requests are disabled in Settings → Customer reviews.', permanent: true };
   }
   if (reviewDestinations(cs).length === 0) {
-    return { success: false, error: 'No Google or Facebook review link configured. Set one in Settings → Customer reviews.' };
+    return { success: false, error: 'No Google or Facebook review link configured. Set one in Settings → Customer reviews.', permanent: true };
   }
 
   // 2. Determine client_id and job_id from entity
@@ -790,6 +838,7 @@ export async function executeRequestReview(
       .from('jobs')
       .select('client_id')
       .eq('id', ctx.entityId)
+      .eq('org_id', ctx.orgId)
       .maybeSingle();
     clientId = job?.client_id || null;
   } else if (ctx.entityType === 'invoice') {
@@ -797,6 +846,7 @@ export async function executeRequestReview(
       .from('invoices')
       .select('client_id, job_id')
       .eq('id', ctx.entityId)
+      .eq('org_id', ctx.orgId)
       .maybeSingle();
     clientId = inv?.client_id || null;
     jobId = inv?.job_id || null;
@@ -804,7 +854,7 @@ export async function executeRequestReview(
 
   // 3. Il faut au moins un canal
   if (!vars.client_email && !vars.client_phone) {
-    return { success: false, error: 'Client has no email address or phone number.' };
+    return { success: false, error: 'Client has no email address or phone number.', permanent: true };
   }
 
   // 4. Resolve client name: first_name > full name > "Bonjour"
@@ -826,7 +876,7 @@ export async function executeRequestReview(
       .maybeSingle();
 
     if (recentReview) {
-      return { success: false, error: 'A review request was already sent to this client in the last 7 days.' };
+      return { success: false, error: 'A review request was already sent to this client in the last 7 days.', permanent: true };
     }
   }
 
@@ -920,6 +970,18 @@ export async function executeRequestReview(
   });
   if (trackError) {
     console.error(`[actions/request_review] review_requests insert failed (org ${ctx.orgId}, client ${clientId || 'n/a'}):`, trackError.message);
+  }
+  // Demi-état (R6, T10.5) : le sondage existe et le message est parti, mais le
+  // suivi n'est pas écrit — l'anti-doublon de 7 jours ne verra jamais cet
+  // envoi. On ne rapporte PAS un succès ; on ne reprend pas non plus (le
+  // client a reçu le message) : échec DÉFINITIF, l'entrepreneur est prévenu.
+  if (trackError && sent) {
+    return {
+      success: false,
+      permanent: true,
+      error: `Review request sent but tracking failed: ${trackError.message}`,
+      data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
+    };
   }
 
   // 11. Log activity

@@ -163,6 +163,36 @@ export function remplacerVariables(s: string): string {
 }
 
 /**
+ * TOUTES les variables que le serveur sait remplir (`resolveEntityVariables`
+ * et `executeRequestReview`, server/lib/actions/index.ts). Le test
+ * `tests/automation/erreurs-dictionnaire-parite.test.ts` vérifie que cette
+ * liste couvre chaque `vars.xxx =` du serveur.
+ *
+ * Sert à SIGNALER une variable inconnue dans l'éditeur : le serveur remplace
+ * toute variable qu'il ne connaît pas par du vide (`resolveTemplate`), et le
+ * client lisait « Bonjour , » sans que l'entrepreneur puisse s'en douter.
+ */
+export const VARIABLES_CONNUES: ReadonlySet<string> = new Set([
+  'company_name', 'company_phone', 'google_review_url', 'facebook_review_url', 'review_page_url',
+  'client_id', 'client_first_name', 'client_last_name', 'client_name', 'client_email', 'client_phone',
+  'quote_number', 'quote_total', 'quote_valid_until', 'job_name',
+  'invoice_number', 'invoice_due_date', 'invoice_total',
+  'appointment_date', 'appointment_time', 'appointment_title', 'appointment_address',
+  'contract_link', 'contract_line', 'contract_html',
+  'signed_contract_link', 'deposit_amount', 'deposit_line',
+  'survey_url', 'review_link',
+]);
+
+/** Variables « [xxx] » d'un texte que le serveur ne remplira pas (dédoublonnées). */
+export function variablesInconnues(s: string): string[] {
+  const vues = new Set<string>();
+  for (const m of s.matchAll(/\[(\w+)\]/g)) {
+    if (!VARIABLES_CONNUES.has(m[1])) vues.add(m[1]);
+  }
+  return [...vues];
+}
+
+/**
  * Variables proposées à l'utilisateur, sous leur nom clair.
  *
  * Déclarées ici et non dans chaque éditeur : dupliquée, la liste finissait par

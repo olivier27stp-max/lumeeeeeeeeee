@@ -13,6 +13,7 @@ import {
   resolveEntityVariables,
 } from './actions';
 import { logger } from './logger';
+import { traduireErreurAutomatisation } from './automationErreurs';
 
 interface AutomationRule {
   id: string;
@@ -23,6 +24,7 @@ interface AutomationRule {
   delay_seconds: number;
   actions: Array<{ type: ActionType; config: Record<string, any> }>;
   is_active: boolean;
+  created_at?: string;
 }
 
 interface EngineConfig {
@@ -162,46 +164,412 @@ export function nextSendTime(from: Date = new Date()): Date {
   return from;
 }
 
-// ── Execute actions for a rule ──────────────────────────────
+// ── Interrupteurs ───────────────────────────────────────────
 
 /**
- * Langue des communications automatiques de l'org (company_settings.
- * default_language). Défaut 'fr' si absent/erreur — jamais bloquant.
+ * Interrupteur GLOBAL (F6). `AUTOMATIONS_ENABLED=false` arrête tout — les
+ * événements comme le tick — sans toucher à la base : c'est précisément quand
+ * la base est en cause qu'on en a besoin. Lu à chaque appel, jamais figé au
+ * chargement, pour être modifiable à chaud (variable Railway).
  */
-async function langueOrg(supabase: SupabaseClient, orgId: string): Promise<'fr' | 'en'> {
+export function automationsActivees(): boolean {
+  return (process.env.AUTOMATIONS_ENABLED ?? 'true').trim().toLowerCase() !== 'false';
+}
+
+/** Réglages d'une org utiles au moteur, lus une fois par événement ou par tick (F24). */
+interface ReglagesOrg {
+  langue: 'fr' | 'en';
+  /** Fuseau de l'entreprise (company_settings.timezone, défaut America/Toronto). */
+  fuseau: string;
+  /** Pause par org (M2) : rien ne part, les tâches attendent. */
+  enPause: boolean;
+  /** Simulation par org (M2) : on journalise « aurait envoyé », sans fournisseur. */
+  essaiABlanc: boolean;
+}
+
+/** Cache par org, le temps d'un événement ou d'un tick — jamais entre deux. */
+type CacheReglages = Map<string, Promise<ReglagesOrg>>;
+
+async function lireReglagesOrg(supabase: SupabaseClient, orgId: string): Promise<ReglagesOrg> {
+  const defaut: ReglagesOrg = { langue: 'fr', fuseau: QUIET_TZ, enPause: false, essaiABlanc: false };
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('company_settings')
-      .select('default_language')
+      .select('default_language, timezone, automations_paused_at, automations_dry_run')
       .eq('org_id', orgId)
       .maybeSingle();
-    return data?.default_language === 'en' ? 'en' : 'fr';
+    if (error) {
+      // Les deux colonnes d'interrupteur arrivent par migration (M2). Tant
+      // qu'elle n'est pas appliquée, PostgREST refuse TOUTE la requête : on
+      // relit alors langue et fuseau plutôt que de tout perdre.
+      const { data: repli } = await supabase
+        .from('company_settings')
+        .select('default_language, timezone')
+        .eq('org_id', orgId)
+        .maybeSingle();
+      return { ...defaut, langue: repli?.default_language === 'en' ? 'en' : 'fr', fuseau: repli?.timezone || QUIET_TZ };
+    }
+    return {
+      langue: data?.default_language === 'en' ? 'en' : 'fr',
+      fuseau: data?.timezone || QUIET_TZ,
+      enPause: !!data?.automations_paused_at,
+      essaiABlanc: data?.automations_dry_run === true,
+    };
   } catch {
-    return 'fr';
+    return defaut;
   }
+}
+
+function reglagesDe(cache: CacheReglages, supabase: SupabaseClient, orgId: string): Promise<ReglagesOrg> {
+  let p = cache.get(orgId);
+  if (!p) {
+    p = lireReglagesOrg(supabase, orgId);
+    cache.set(orgId, p);
+  }
+  return p;
+}
+
+// ── Consentement commercial (F7) ────────────────────────────
+
+/**
+ * Déclencheurs dont les actions DIFFÉRÉES sont des communications commerciales
+ * au sens de la LCAP (relance de vente, réengagement, saisonnier, anniversaire),
+ * par opposition aux suivis d'une demande du client (devis, facture, rendez-vous)
+ * qui relèvent de la relation d'affaires en cours.
+ */
+const DECLENCHEURS_COMMERCIAUX = new Set(['job.completed', 'lead.status_changed', 'pipeline_deal.stage_changed']);
+
+function estCommerciale(triggerEvent: string | undefined, delaySeconds: number): boolean {
+  return delaySeconds > 0 && !!triggerEvent && DECLENCHEURS_COMMERCIAUX.has(triggerEvent);
+}
+
+/**
+ * Consentement commercial du client (`clients.marketing_consent`, migration M5) :
+ * 'express' | 'implied' | 'none'. Lecture séparée et tolérante : tant que la
+ * colonne n'existe pas, ou si la lecture échoue, on considère la relation
+ * d'affaires implicite (le comportement d'avant) — mais on le journalise.
+ */
+async function lireConsentement(supabase: SupabaseClient, orgId: string, clientId: string | null): Promise<'express' | 'implied' | 'none'> {
+  if (!clientId) return 'implied';
+  const { data, error } = await supabase
+    .from('clients')
+    .select('marketing_consent')
+    .eq('id', clientId)
+    .eq('org_id', orgId)
+    .maybeSingle();
+  if (error) {
+    console.error(`[automationEngine] consentement illisible (client ${clientId}, org ${orgId}) — relation implicite supposée:`, error.message);
+    return 'implied';
+  }
+  const v = data?.marketing_consent;
+  return v === 'none' || v === 'express' ? v : 'implied';
+}
+
+// ── Plafond quotidien par org (F11/F13, M4) ─────────────────
+
+interface PlafondsOrg { sms: number; email: number }
+const CACHE_PLAFONDS_MS = 60_000;
+const cachePlafonds = new Map<string, { valeur: PlafondsOrg; expire: number }>();
+
+/**
+ * Plafonds quotidiens du forfait (`plans.automation_daily_sms_cap` /
+ * `_email_cap`, migration M4). 0 = pas de plafond. Sans abonnement lisible : pas
+ * de plafond non plus — on ne bloque jamais sur une panne de lecture.
+ */
+async function plafondsDe(supabase: SupabaseClient, orgId: string): Promise<PlafondsOrg> {
+  const maintenant = Date.now();
+  const enCache = cachePlafonds.get(orgId);
+  if (enCache && enCache.expire > maintenant) return enCache.valeur;
+  let valeur: PlafondsOrg = { sms: 0, email: 0 };
+  try {
+    // `subscriptions.plan_id` n'a pas de clé étrangère vers `plans` : deux
+    // lectures, comme dans twilioProvisioning.orgPlanIncludesSms.
+    const { data: subs } = await supabase
+      .from('subscriptions')
+      .select('plan_id')
+      .eq('org_id', orgId)
+      .in('status', ['active', 'trialing']);
+    const ids = (subs || []).map((s: any) => s.plan_id).filter(Boolean);
+    if (ids.length) {
+      const { data: plans } = await supabase
+        .from('plans')
+        .select('id, automation_daily_sms_cap, automation_daily_email_cap')
+        .in('id', ids);
+      for (const p of (plans || []) as any[]) {
+        valeur = { sms: Math.max(valeur.sms, Number(p.automation_daily_sms_cap) || 0), email: Math.max(valeur.email, Number(p.automation_daily_email_cap) || 0) };
+      }
+    }
+  } catch (e: any) {
+    console.error(`[automationEngine] plafonds du forfait illisibles (org ${orgId}) — aucun plafond appliqué:`, e?.message || e);
+  }
+  cachePlafonds.set(orgId, { valeur, expire: maintenant + CACHE_PLAFONDS_MS });
+  return valeur;
+}
+
+/** Pour les tests : oublie les plafonds mis en cache. */
+export function viderCachePlafonds(): void {
+  cachePlafonds.clear();
+}
+
+/** 8 h demain, heure de Montréal (approximation DST-safe via nextSendTime depuis minuit UTC+1j). */
+function demainMatin(): Date {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 1);
+  d.setUTCHours(11, 0, 0, 0); // 11 h UTC = 7 h EDT / 6 h EST → nextSendTime ramène dans la fenêtre 8 h-20 h
+  return isQuietHours(d) ? nextSendTime(d) : d;
+}
+
+type VerdictPlafond = { ok: true } | { ok: false; raison: string };
+
+/**
+ * Compte l'envoi du jour (RPC `automation_bump_counter`, atomique) et le compare
+ * au plafond du forfait. Au-delà : refus (l'appelant reporte à demain, jamais
+ * de perte). À 80 % : une alerte à l'entrepreneur, une seule fois par jour
+ * (au passage exact du seuil).
+ */
+async function verifierPlafondQuotidien(
+  supabase: SupabaseClient,
+  orgId: string,
+  canal: 'sms' | 'email',
+): Promise<VerdictPlafond> {
+  const plafonds = await plafondsDe(supabase, orgId);
+  const plafond = plafonds[canal];
+  if (!plafond || plafond <= 0) return { ok: true };
+
+  const { data, error } = await supabase.rpc('automation_bump_counter', { p_org: orgId, p_canal: canal });
+  if (error) {
+    console.error(`[automationEngine] compteur quotidien indisponible (org ${orgId}, ${canal}) — envoi autorisé:`, error.message);
+    return { ok: true };
+  }
+  const total = Number(data) || 0;
+  const seuilAlerte = Math.ceil(plafond * 0.8);
+  if (total === seuilAlerte && seuilAlerte < plafond) {
+    await notifierAdmins(supabase, orgId, {
+      type: 'automation_cap_warning',
+      title: canal === 'sms' ? 'Plafond de SMS bientôt atteint' : 'Plafond de courriels bientôt atteint',
+      body: `${total} ${canal === 'sms' ? 'SMS' : 'courriels'} d’automatisation envoyés aujourd’hui sur un plafond de ${plafond}. Au-delà, les envois seront reportés à demain.`,
+    });
+  }
+  if (total > plafond) {
+    return { ok: false, raison: `Daily cap reached (${plafond} ${canal}/day for this plan) — deferred to tomorrow` };
+  }
+  return { ok: true };
+}
+
+// ── Notification à l'entrepreneur ───────────────────────────
+
+/**
+ * Prévient les owners/admins de l'org (une notification par personne ; à
+ * défaut de membres lisibles, une notification d'org sans destinataire).
+ * Best-effort : jamais bloquant.
+ */
+async function notifierAdmins(
+  supabase: SupabaseClient,
+  orgId: string,
+  notif: { type: string; title: string; body: string; entity_type?: string | null; entity_id?: string | null },
+): Promise<void> {
+  try {
+    const { data: admins } = await supabase
+      .from('memberships')
+      .select('user_id')
+      .eq('org_id', orgId)
+      .eq('status', 'active')
+      .in('role', ['owner', 'admin']);
+    const cibles = (Array.isArray(admins) ? admins : admins ? [admins] : []).map((m: any) => m.user_id).filter(Boolean);
+    const lignes = (cibles.length ? cibles : [null]).map((userId) => ({
+      org_id: orgId,
+      user_id: userId,
+      type: notif.type,
+      title: notif.title,
+      body: notif.body,
+      entity_type: notif.entity_type ?? null,
+      entity_id: notif.entity_id ?? null,
+      link: '/automations',
+      is_read: false,
+    }));
+    const { error } = await supabase.from('notifications').insert(lignes);
+    if (error) console.error(`[automationEngine] notification impossible (org ${orgId}):`, error.message);
+  } catch (e: any) {
+    console.error(`[automationEngine] notification impossible (org ${orgId}):`, e?.message || e);
+  }
+}
+
+// ── Trace d'exécution (F8, M3) ──────────────────────────────
+
+interface LigneLog {
+  org_id: string;
+  automation_rule_id: string | null;
+  scheduled_task_id?: string | null;
+  trigger_event: string;
+  entity_type: string;
+  entity_id: string;
+  action_type: string;
+  action_config: Record<string, unknown>;
+  result_success: boolean;
+  result_data: unknown;
+  result_error: string | null;
+  duration_ms: number;
+  // Colonnes de trace (M3) — retirées au repli si la migration n'est pas passée.
+  recipient?: string | null;
+  actor_id?: string | null;
+  rule_snapshot?: Record<string, unknown> | null;
+  dry_run?: boolean;
+}
+
+/**
+ * Journalise une exécution. Les colonnes de trace (M3) manquent tant que la
+ * migration n'est pas appliquée ; PostgREST refuserait alors TOUTE la ligne —
+ * on réécrit sans elles plutôt que de perdre le journal.
+ */
+async function ecrireLog(supabase: SupabaseClient, ligne: LigneLog): Promise<void> {
+  const { error } = await supabase.from('automation_execution_logs').insert(ligne);
+  if (!error) return;
+  const colonneAbsente = error.code === 'PGRST204' || /column/i.test(error.message || '');
+  if (!colonneAbsente) {
+    console.error(`[automationEngine] failed to write execution log (rule ${ligne.automation_rule_id}, org ${ligne.org_id}):`, error.message);
+    return;
+  }
+  const { recipient: _r, actor_id: _a, rule_snapshot: _s, dry_run: _d, ...sansTrace } = ligne;
+  const { error: erreurRepli } = await supabase.from('automation_execution_logs').insert(sansTrace);
+  if (erreurRepli) {
+    console.error(`[automationEngine] failed to write execution log (rule ${ligne.automation_rule_id}, org ${ligne.org_id}):`, erreurRepli.message);
+  }
+}
+
+/** Destinataire d'une action, pour la trace — jamais le corps du message. */
+function destinataireDe(actionType: string, vars: Record<string, string>): string | null {
+  if (actionType === 'send_sms') return vars.client_phone || null;
+  if (actionType === 'send_email') return vars.client_email || null;
+  if (actionType === 'request_review') return vars.client_email || vars.client_phone || null;
+  return null;
+}
+
+// ── Délai maximal d'une action (T10.4) ──────────────────────
+
+function delaiActionMs(): number {
+  const v = Number(process.env.AUTOMATION_ACTION_TIMEOUT_MS);
+  return Number.isFinite(v) && v > 0 ? v : 20_000;
+}
+
+/**
+ * Un fournisseur muet ne doit pas suspendre le tick : au-delà du délai,
+ * l'action est réputée échouée (cause transitoire → reprise), et le tick passe
+ * à la tâche suivante. La promesse d'origine continue en arrière-plan ; si
+ * elle aboutit tard, la reprise pourra doubler l'envoi — c'est le prix d'une
+ * file qui ne se fige jamais (F5 : clé d'idempotence fournisseur à venir).
+ */
+function avecDelaiMax<T>(p: Promise<T>, ms: number, quoi: string): Promise<T> {
+  let minuterie: NodeJS.Timeout;
+  const garde = new Promise<never>((_, rej) => {
+    minuterie = setTimeout(() => rej(new Error(`${quoi} timed out after ${Math.round(ms / 1000)}s`)), ms);
+  });
+  return Promise.race([p, garde]).finally(() => clearTimeout(minuterie)) as Promise<T>;
+}
+
+// ── Execute actions for a rule ──────────────────────────────
+
+/** Fenêtre pendant laquelle une action immédiate déjà exécutée n'est pas rejouée (F3). */
+const FENETRE_IDEMPOTENCE_MS = 24 * 3600_000;
+
+/**
+ * Réserve l'exécution d'une action IMMÉDIATE (F3).
+ *
+ * Auparavant, une action à délai 0 s'exécutait sans laisser de trace avant
+ * l'envoi : le même hook posté deux fois (double clic, rejeu réseau, deux
+ * onglets) envoyait deux confirmations. On passe désormais par la même table
+ * que les actions différées : une ligne `running` portant la clé
+ * `règle:entité:index`, protégée par l'index unique `idx_scheduled_tasks_dedup`
+ * (pending/running). Deux exécutions concurrentes → la seconde reçoit 23505 et
+ * s'efface. Une exécution déjà `completed` depuis moins de 24 h → on ne rejoue
+ * pas non plus, sauf rejeu LÉGITIME signalé par l'émetteur
+ * (`metadata.rescheduled` : rendez-vous déplacé, le client doit être reprévenu).
+ *
+ * Retourne `null` quand il ne faut PAS exécuter ; sinon l'id de la réservation
+ * (ou `undefined` si la réservation n'a pas pu être écrite — on exécute quand
+ * même, une confirmation vaut mieux qu'un silence).
+ */
+async function reserverExecutionImmediate(
+  supabase: SupabaseClient,
+  rule: AutomationRule,
+  event: CRMEvent,
+  action: AutomationRule['actions'][number],
+  executionKey: string,
+): Promise<string | null | undefined> {
+  if (!event.metadata?.rescheduled) {
+    const depuis = new Date(Date.now() - FENETRE_IDEMPOTENCE_MS).toISOString();
+    const { data: dejaFaite, error } = await supabase
+      .from('automation_scheduled_tasks')
+      .select('id')
+      .eq('org_id', event.orgId)
+      .eq('execution_key', executionKey)
+      .eq('status', 'completed')
+      .gte('completed_at', depuis)
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      console.error(`[automationEngine] vérification d'idempotence impossible (${executionKey}) — exécution quand même:`, error.message);
+    } else if (dejaFaite) {
+      logger.info(`[automationEngine] action immédiate déjà exécutée il y a moins de 24 h, ignorée : ${executionKey}`);
+      return null;
+    }
+  }
+
+  const { data, error } = await supabase
+    .from('automation_scheduled_tasks')
+    .insert({
+      org_id: event.orgId,
+      automation_rule_id: rule.id,
+      entity_type: event.entityType,
+      entity_id: event.entityId,
+      action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, event_actor_id: event.actorId || null },
+      execute_at: new Date().toISOString(),
+      status: 'running',
+      attempts: 1,
+      execution_key: executionKey,
+    })
+    .select('id')
+    .maybeSingle();
+  if (error) {
+    if (error.code === '23505') {
+      logger.info(`[automationEngine] action immédiate déjà en cours ou en attente, ignorée : ${executionKey}`);
+      return null;
+    }
+    console.error(`[automationEngine] réservation impossible (${executionKey}) — exécution sans réservation:`, error.message);
+    return undefined;
+  }
+  return data?.id ?? undefined;
+}
+
+/** Clôt la réservation d'une action immédiate. */
+async function cloreReservation(supabase: SupabaseClient, id: string | null | undefined, succes: boolean, erreur?: string | null) {
+  if (!id) return;
+  const { error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update(succes
+      ? { status: 'completed', completed_at: new Date().toISOString(), last_error: null }
+      : { status: 'failed', completed_at: new Date().toISOString(), last_error: erreur || null })
+    .eq('id', id);
+  if (error) console.error(`[automationEngine] clôture de réservation impossible (${id}):`, error.message);
 }
 
 async function executeRuleActions(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
+  cache: CacheReglages,
 ) {
+  const reglages = await reglagesDe(cache, config.supabase, event.orgId);
+  if (reglages.enPause) {
+    logger.info(`[automationEngine] org ${event.orgId} en pause — règle "${rule.name}" non exécutée`);
+    return;
+  }
+
   const vars = await resolveEntityVariables(
     config.supabase,
     event.orgId,
     event.entityType,
     event.entityId,
   );
-
-  const ctx: ActionContext = {
-    supabase: config.supabase,
-    orgId: event.orgId,
-    entityType: event.entityType,
-    entityId: event.entityId,
-    twilio: config.twilio,
-    baseUrl: config.baseUrl,
-    langue: await langueOrg(config.supabase, event.orgId),
-  };
 
   for (let i = 0; i < rule.actions.length; i++) {
     const action = rule.actions[i];
@@ -218,7 +586,7 @@ async function executeRuleActions(
         automation_rule_id: rule.id,
         entity_type: event.entityType,
         entity_id: event.entityId,
-        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+        action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, event_actor_id: event.actorId || null },
         execute_at: nextSendTime().toISOString(),
         status: 'pending',
         execution_key: executionKey,
@@ -233,16 +601,67 @@ async function executeRuleActions(
       continue;
     }
 
+    // Plafond quotidien du forfait (M4) : au-delà, l'envoi est reporté à
+    // demain matin — jamais perdu, jamais envoyé en trop.
+    const canal = action.type === 'send_sms' ? 'sms' : action.type === 'send_email' ? 'email' : null;
+    if (canal) {
+      const verdict = await verifierPlafondQuotidien(config.supabase, event.orgId, canal);
+      if (!verdict.ok) {
+        const { error: capError } = await config.supabase.from('automation_scheduled_tasks').insert({
+          org_id: event.orgId,
+          automation_rule_id: rule.id,
+          entity_type: event.entityType,
+          entity_id: event.entityId,
+          action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, event_actor_id: event.actorId || null },
+          execute_at: demainMatin().toISOString(),
+          status: 'pending',
+          execution_key: executionKey,
+          last_error: verdict.raison,
+        });
+        if (capError && capError.code !== '23505') {
+          console.error(`[automationEngine] report pour plafond impossible (rule ${rule.id}, org ${event.orgId}):`, capError.message);
+        }
+        logger.info(`[automationEngine] ${action.type} reporté à demain (plafond quotidien) — règle "${rule.name}"`);
+        continue;
+      }
+    }
+
+    const reservation = await reserverExecutionImmediate(config.supabase, rule, event, action, executionKey);
+    if (reservation === null) continue;
+
+    const ctx: ActionContext = {
+      supabase: config.supabase,
+      orgId: event.orgId,
+      entityType: event.entityType,
+      entityId: event.entityId,
+      twilio: config.twilio,
+      baseUrl: config.baseUrl,
+      // Une demande d'avis est une sollicitation : elle compte dans le plafond
+      // de fréquence par client, même immédiate (T11.6).
+      commercial: action.type === 'request_review',
+      langue: reglages.langue,
+    };
+
     const startTime = Date.now();
+    const trace = {
+      recipient: destinataireDe(action.type, vars),
+      actor_id: event.actorId || null,
+      rule_snapshot: { trigger_event: rule.trigger_event, conditions: rule.conditions, delay_seconds: rule.delay_seconds, action },
+    };
 
     try {
-      const result = await executeAction(action.type, action.config, vars, ctx);
+      let result;
+      if (reglages.essaiABlanc) {
+        result = { success: true, data: { dry_run: true, to: trace.recipient } };
+      } else {
+        result = await avecDelaiMax(executeAction(action.type, action.config, vars, ctx), delaiActionMs(), action.type);
+      }
       const durationMs = Date.now() - startTime;
 
-      // Log execution
-      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
+      await ecrireLog(config.supabase, {
         org_id: event.orgId,
         automation_rule_id: rule.id,
+        scheduled_task_id: reservation ?? null,
         trigger_event: event.type,
         entity_type: event.entityType,
         entity_id: event.entityId,
@@ -252,10 +671,10 @@ async function executeRuleActions(
         result_data: result.data || null,
         result_error: result.error || null,
         duration_ms: durationMs,
+        ...trace,
+        dry_run: reglages.essaiABlanc,
       });
-      if (logError) {
-        console.error(`[automationEngine] failed to write execution log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
-      }
+      await cloreReservation(config.supabase, reservation, result.success, result.error);
 
       if (!result.success) {
         console.error(`[automationEngine] action ${action.type} failed for rule "${rule.name}":`, result.error);
@@ -264,21 +683,23 @@ async function executeRuleActions(
       const durationMs = Date.now() - startTime;
       console.error(`[automationEngine] action ${action.type} threw for rule "${rule.name}":`, err.message);
 
-      const { error: logError } = await config.supabase.from('automation_execution_logs').insert({
+      await ecrireLog(config.supabase, {
         org_id: event.orgId,
         automation_rule_id: rule.id,
+        scheduled_task_id: reservation ?? null,
         trigger_event: event.type,
         entity_type: event.entityType,
         entity_id: event.entityId,
         action_type: action.type,
         action_config: action.config,
         result_success: false,
+        result_data: null,
         result_error: err.message,
         duration_ms: durationMs,
+        ...trace,
+        dry_run: false,
       });
-      if (logError) {
-        console.error(`[automationEngine] failed to write failure log (rule ${rule.id}, org ${event.orgId}):`, logError.message);
-      }
+      await cloreReservation(config.supabase, reservation, false, err.message);
     }
   }
 }
@@ -309,10 +730,39 @@ const RETARD_TOLERE_MS = 30 * 60 * 1000; // 30 minutes
  * parce que le décalage vient alors du tick de 5 minutes, pas d'une erreur de
  * cadence.
  */
+/** Composantes de l'heure locale d'un instant dans un fuseau. */
+function composantesLocales(d: Date, tz: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).formatToParts(d);
+  const g = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  return { y: g('year'), mo: g('month'), d: g('day'), h: g('hour') % 24, mi: g('minute'), s: g('second') };
+}
+
+/** L'instant UTC dont l'heure murale dans `tz` est `c` (deux itérations suffisent, DST compris). */
+function instantLocal(tz: string, c: { y: number; mo: number; d: number; h: number; mi: number; s: number }): Date {
+  let devine = Date.UTC(c.y, c.mo - 1, c.d, c.h, c.mi, c.s);
+  for (let i = 0; i < 2; i++) {
+    const r = composantesLocales(new Date(devine), tz);
+    devine -= Date.UTC(r.y, r.mo - 1, r.d, r.h, r.mi, r.s) - Date.UTC(c.y, c.mo - 1, c.d, c.h, c.mi, c.s);
+  }
+  return new Date(devine);
+}
+
+/**
+ * « N jours avant, à la même heure LOCALE » (F14). Soustraire N × 86 400 s
+ * décalait le rappel d'une heure quand un changement d'heure tombait entre les
+ * deux dates : rappel J-7 à 11 h pour un rendez-vous à 10 h (T9.2).
+ */
+function joursAvantHeureLocale(rendezVous: Date, jours: number, tz: string): Date {
+  const c = composantesLocales(rendezVous, tz);
+  const cal = new Date(Date.UTC(c.y, c.mo - 1, c.d) - jours * 86_400_000);
+  return instantLocal(tz, { y: cal.getUTCFullYear(), mo: cal.getUTCMonth() + 1, d: cal.getUTCDate(), h: c.h, mi: c.mi, s: c.s });
+}
+
 async function resolveExecuteAt(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
+  fuseau: string,
 ): Promise<Date | null> {
   // Negative delay = "X seconds before the event's reference time"
   // Used for appointment reminders (e.g., -86400 = 1 day before start_time)
@@ -321,6 +771,7 @@ async function resolveExecuteAt(
       .from('schedule_events')
       .select('start_at, start_time')
       .eq('id', event.entityId)
+      .eq('org_id', event.orgId)
       .maybeSingle();
 
     // Une erreur de lecture ne doit pas être confondue avec « pas de date » :
@@ -334,7 +785,10 @@ async function resolveExecuteAt(
     const startField = evt?.start_at || evt?.start_time;
     if (startField) {
       const eventTime = new Date(startField).getTime();
-      const executeAt = new Date(eventTime + rule.delay_seconds * 1000);
+      const enJours = rule.delay_seconds % 86_400 === 0;
+      const executeAt = enJours
+        ? joursAvantHeureLocale(new Date(eventTime), -rule.delay_seconds / 86_400, fuseau)
+        : new Date(eventTime + rule.delay_seconds * 1000);
       const retard = Date.now() - executeAt.getTime();
 
       if (retard > RETARD_TOLERE_MS) {
@@ -350,6 +804,17 @@ async function resolveExecuteAt(
         // reste juste.
         return new Date(Date.now() + 5000);
       }
+
+      // Un rappel « avant » que les heures calmes repousseraient APRÈS le
+      // rendez-vous n'a plus de sens (rappel 2 h avant un rendez-vous à 7 h :
+      // échu à 5 h, poussé à 8 h, une heure après le passage — T9.5). « C'est
+      // aujourd'hui, on s'en vient ! » ne peut pas partir la veille au soir :
+      // on l'abandonne, et on le dit.
+      const smsOuCourriel = rule.actions.some((a) => a.type === 'send_sms' || a.type === 'send_email');
+      if (smsOuCourriel && isQuietHours(executeAt) && nextSendTime(executeAt).getTime() > eventTime) {
+        logger.info(`[automationEngine] rappel abandonné (les heures calmes le pousseraient après le rendez-vous) — règle "${rule.name}"`);
+        return null;
+      }
       return executeAt;
     }
   }
@@ -364,8 +829,10 @@ async function scheduleDelayedActions(
   rule: AutomationRule,
   event: CRMEvent,
   config: EngineConfig,
+  cache: CacheReglages,
 ) {
-  const executeAt = await resolveExecuteAt(rule, event, config);
+  const { fuseau } = await reglagesDe(cache, config.supabase, event.orgId);
+  const executeAt = await resolveExecuteAt(rule, event, config, fuseau);
 
   // `null` = créneau dépassé ou date de référence illisible : on ne planifie
   // rien plutôt que d'envoyer un rappel devenu faux.
@@ -382,7 +849,7 @@ async function scheduleDelayedActions(
       automation_rule_id: rule.id,
       entity_type: event.entityType,
       entity_id: event.entityId,
-      action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
+      action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata, event_actor_id: event.actorId || null },
       execute_at: executeAt.toISOString(),
       status: 'pending',
       execution_key: executionKey,
@@ -400,27 +867,27 @@ async function scheduleDelayedActions(
 
 // ── Event handler ───────────────────────────────────────────
 
-
-// ── Convert delay_value + delay_unit to seconds ───────────
-function delayToSeconds(value: number, unit: string): number {
-  if (unit === 'immediate' || value <= 0) return 0;
-  if (unit === 'minutes') return value * 60;
-  if (unit === 'hours') return value * 3600;
-  if (unit === 'days') return value * 86400;
-  return 0;
-}
-
 async function handleEvent(event: CRMEvent) {
   if (!engineConfig) return;
+  if (!automationsActivees()) {
+    logger.info(`[automationEngine] AUTOMATIONS_ENABLED=false — événement ${event.type} ignoré (org ${event.orgId})`);
+    return;
+  }
+
+  const cache: CacheReglages = new Map();
 
   try {
-    // ── 1. Match automation_rules (legacy system) ──
+    // ── 1. Match automation_rules ──
+    // Ordre explicite (F17) : sans lui, l'ordre d'exécution de deux règles du
+    // même événement dépendait du plan d'exécution de Postgres.
     const { data: rules, error } = await engineConfig.supabase
       .from('automation_rules')
       .select('*')
       .eq('org_id', event.orgId)
       .eq('trigger_event', event.type)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (error) {
       console.error('[automationEngine] failed to fetch rules:', error.message);
@@ -428,19 +895,25 @@ async function handleEvent(event: CRMEvent) {
 
     if (rules && rules.length > 0) {
       for (const rule of rules as AutomationRule[]) {
-        if (!evaluateConditions(rule.conditions, event)) continue;
-        if (rule.delay_seconds !== 0) {
-          await scheduleDelayedActions(rule, event, engineConfig);
-        } else if (event.metadata?.suppress_immediate) {
-          // Visite créée en lot (plan de service, job multi-visites) : seule la
-          // PREMIÈRE visite déclenche la confirmation immédiate — sans ce
-          // garde, un plan de 10 visites envoyait 10 confirmations d'un coup
-          // au client. Les rappels datés (délai négatif) ne sont pas touchés :
-          // ils passent par scheduleDelayedActions ci-dessus et restent calés
-          // sur la date de CHAQUE visite.
-          logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
-        } else {
-          await executeRuleActions(rule, event, engineConfig);
+        // Chaque règle est isolée (T10.7) : une lecture qui explose dans la
+        // première ne doit pas faire sauter les suivantes.
+        try {
+          if (!evaluateConditions(rule.conditions, event)) continue;
+          if (rule.delay_seconds !== 0) {
+            await scheduleDelayedActions(rule, event, engineConfig, cache);
+          } else if (event.metadata?.suppress_immediate) {
+            // Visite créée en lot (plan de service, job multi-visites) : seule la
+            // PREMIÈRE visite déclenche la confirmation immédiate — sans ce
+            // garde, un plan de 10 visites envoyait 10 confirmations d'un coup
+            // au client. Les rappels datés (délai négatif) ne sont pas touchés :
+            // ils passent par scheduleDelayedActions ci-dessus et restent calés
+            // sur la date de CHAQUE visite.
+            logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
+          } else {
+            await executeRuleActions(rule, event, engineConfig, cache);
+          }
+        } catch (err: any) {
+          console.error(`[automationEngine] règle "${rule.name}" (${rule.id}) en erreur sur ${event.type}:`, err.message);
         }
       }
     }
@@ -471,16 +944,23 @@ const MAX_TASK_ATTEMPTS = 4;
  * Distinction volontaire : une panne SMTP passagère mérite une reprise, un
  * client sans adresse courriel n'en méritera jamais — le réessayer trois fois
  * ne ferait que retarder l'inévitable et polluer les journaux.
+ *
+ * Deux sources : le drapeau `permanent` posé par l'action elle-même (préféré,
+ * F26), et — pour les erreurs qui n'en portent pas — une liste de motifs.
  */
-function isTransientFailure(error?: string | null): boolean {
+function isTransientFailure(error?: string | null, permanent?: boolean): boolean {
+  if (permanent) return false;
   if (!error) return true; // cause inconnue → on laisse sa chance à la reprise
   const definitifs = [
     'no recipient',           // pas d'adresse / pas de téléphone
     'not configured',         // SMTP ou Twilio absent (config, pas incident)
-    'opted out',              // désabonnement : ne jamais réessayer
+    'opted out',              // désabonnement SMS : ne jamais réessayer
+    'has unsubscribed',       // désabonnement courriel (F26) : idem
     'plan does not include',  // forfait insuffisant
     'are disabled',           // fonctionnalité désactivée dans les réglages
     'frequency cap',          // plafond atteint : le retenter donnerait le même refus
+    'consent',                // pas de consentement commercial (F7)
+    'règle désactivée',       // la règle a été éteinte pendant l'attente (F16)
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));
@@ -501,9 +981,10 @@ function isTransientFailure(error?: string | null): boolean {
 function nextStateAfterFailure(
   attempts: number,
   error?: string | null,
+  permanent?: boolean,
 ): Record<string, unknown> {
   const dejaTentees = Number(attempts || 0) + 1; // `attempts` a été incrémenté à la prise
-  const peutReessayer = dejaTentees < MAX_TASK_ATTEMPTS && isTransientFailure(error);
+  const peutReessayer = dejaTentees < MAX_TASK_ATTEMPTS && isTransientFailure(error, permanent);
 
   if (!peutReessayer) {
     return {
@@ -567,13 +1048,33 @@ async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
   }
 }
 
+/** Index de l'action dans la règle, porté par la clé `règle:entité:index`. */
+function indexActionDe(executionKey: string | null | undefined): number | null {
+  const m = /:(\d+)$/.exec(executionKey || '');
+  return m ? Number(m[1]) : null;
+}
+
+/** Annule une tâche avec son motif (visible dans l'historique, F25). */
+async function annulerTache(supabase: SupabaseClient, taskId: string, motif: string) {
+  const { error } = await supabase
+    .from('automation_scheduled_tasks')
+    .update({ status: 'cancelled', completed_at: new Date().toISOString(), last_error: motif })
+    .eq('id', taskId);
+  if (error) console.error(`[automationEngine] failed to cancel scheduled task ${taskId}:`, error.message);
+}
+
 export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!engineConfig) return;
+  if (!automationsActivees()) {
+    logger.info('[automationEngine] AUTOMATIONS_ENABLED=false — tick ignoré, la file reste intacte');
+    return;
+  }
 
   // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
   await recupererTachesFigees(supabase);
 
   const now = new Date().toISOString();
+  const cache: CacheReglages = new Map();
 
   // Fetch pending tasks that are ready
   const { data: tasks, error } = await supabase
@@ -584,7 +1085,11 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // (org_id, automation_rule_id) qui porte l'isolation multi-tenant).
     // PostgREST répondait PGRST201 et AUCUNE tâche d'automatisation planifiée
     // n'était plus exécutée.
-    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions)')
+    //
+    // `is_active` et `actions` sont relus ICI, à l'exécution (F16) : la copie
+    // faite à la planification peut avoir des jours — l'entrepreneur qui
+    // désactive une règle ou corrige un texte doit être obéi.
+    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions, is_active, trigger_event, delay_seconds)')
     .eq('status', 'pending')
     .lte('execute_at', now)
     .order('execute_at', { ascending: true })
@@ -605,13 +1110,36 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // un courriel de relance pouvait partir à 3h du matin.
     const taskType = task.action_config?.type;
     if ((taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()) {
+      const prochaine = nextSendTime();
+      // Un rappel « avant le rendez-vous » que le report ferait partir APRÈS
+      // le rendez-vous est annulé (T9.5) : mieux vaut rien qu'un « on s'en
+      // vient ! » une heure après le passage.
+      const debut = task.action_config?.event_metadata?.start_time;
+      const debutMs = debut ? new Date(debut).getTime() : NaN;
+      const avantLeRendezVous = Number.isFinite(debutMs) && new Date(task.execute_at).getTime() <= debutMs;
+      if (avantLeRendezVous && debutMs < prochaine.getTime()) {
+        await annulerTache(supabase, task.id, 'Rappel abandonné : les heures calmes le pousseraient après le rendez-vous');
+        continue;
+      }
       const { error: pushError } = await supabase
         .from('automation_scheduled_tasks')
-        .update({ execute_at: nextSendTime().toISOString() })
+        .update({ execute_at: prochaine.toISOString() })
         .eq('id', task.id);
       if (pushError) {
         console.error(`[automationEngine] failed to push task ${task.id} out of quiet hours:`, pushError.message);
       }
+      continue;
+    }
+
+    // Org en pause (M2) : la tâche attend, sans consommer de tentative, et
+    // sans encombrer le tick (repoussée d'une heure).
+    const reglages = await reglagesDe(cache, supabase, task.org_id);
+    if (reglages.enPause) {
+      const { error: pushError } = await supabase
+        .from('automation_scheduled_tasks')
+        .update({ execute_at: new Date(Date.now() + 3600_000).toISOString() })
+        .eq('id', task.id);
+      if (pushError) console.error(`[automationEngine] failed to push paused task ${task.id}:`, pushError.message);
       continue;
     }
 
@@ -645,24 +1173,61 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     try {
       const actionConfig = task.action_config;
       const actionType = actionConfig.type as ActionType;
-      const config = actionConfig.config || {};
+      const regle = task.automation_rules || null;
+
+      // F5 — reprise après un arrêt brutal : si l'exécution précédente de CETTE
+      // tâche a déjà été journalisée réussie (le processus est mort entre
+      // l'envoi et la clôture), on clôt sans renvoyer. Twilio et Resend n'offrent
+      // pas de clé d'idempotence sur l'envoi : ce journal est notre seule garde.
+      if (Number(task.attempts) >= 1 && (actionType === 'send_sms' || actionType === 'send_email' || actionType === 'request_review')) {
+        const { data: dejaReussie, error: dejaErr } = await supabase
+          .from('automation_execution_logs')
+          .select('id')
+          .eq('scheduled_task_id', task.id)
+          .eq('result_success', true)
+          .limit(1)
+          .maybeSingle();
+        if (!dejaErr && dejaReussie) {
+          const { error: e } = await supabase.from('automation_scheduled_tasks')
+            .update({ status: 'completed', completed_at: new Date().toISOString(), last_error: null })
+            .eq('id', task.id);
+          if (e) console.error(`[automationEngine] failed to close scheduled task ${task.id}:`, e.message);
+          logger.info(`[automationEngine] tâche ${task.id} déjà exécutée avec succès — clôturée sans renvoi`);
+          continue;
+        }
+      }
+
+      // F16 — la règle telle qu'elle est MAINTENANT prime sur la copie.
+      if (regle && regle.is_active === false) {
+        await annulerTache(supabase, task.id, 'Règle désactivée pendant l’attente');
+        continue;
+      }
+      let config = actionConfig.config || {};
+      const index = indexActionDe(task.execution_key);
+      const actionsRegle: any[] = Array.isArray(regle?.actions) ? regle.actions : [];
+      let actionActuelle = index !== null ? actionsRegle[index] : null;
+      if (!(actionActuelle && actionActuelle.type === actionType)) {
+        // Clé sans index (ancienne tâche, tâche insérée à la main) : on retrouve
+        // l'action par son type quand il n'y en a qu'une de ce type.
+        const memeType = actionsRegle.filter((a) => a?.type === actionType);
+        actionActuelle = memeType.length === 1 ? memeType[0] : null;
+      }
+      if (actionActuelle?.config) {
+        config = actionActuelle.config;
+      }
 
       // Check stop conditions before executing
-      const shouldStop = await checkStopConditions(
+      const motifArret = await checkStopConditions(
         supabase,
+        task.org_id,
         task.entity_type,
         task.entity_id,
         actionConfig.trigger_event,
+        actionConfig.event_metadata || {},
       );
 
-      if (shouldStop) {
-        const { error: cancelError } = await supabase
-          .from('automation_scheduled_tasks')
-          .update({ status: 'cancelled', completed_at: now })
-          .eq('id', task.id);
-        if (cancelError) {
-          console.error(`[automationEngine] failed to cancel scheduled task ${task.id}:`, cancelError.message);
-        }
+      if (motifArret) {
+        await annulerTache(supabase, task.id, motifArret);
         continue;
       }
 
@@ -672,6 +1237,43 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         task.entity_type,
         task.entity_id,
       );
+
+      const delaiRegle = Number(regle?.delay_seconds ?? 1);
+      const commerciale = estCommerciale(actionConfig.trigger_event, delaiRegle) && (actionType === 'send_sms' || actionType === 'send_email');
+
+      // Consentement (F7) : une sollicitation commerciale exige que le client
+      // n'ait pas dit non. Échec DÉFINITIF, jamais repris.
+      if (commerciale) {
+        const consentement = await lireConsentement(supabase, task.org_id, vars.client_id || null);
+        if (consentement === 'none') {
+          const erreur = 'No marketing consent for this client — commercial message withheld';
+          await ecrireLog(supabase, {
+            org_id: task.org_id, automation_rule_id: task.automation_rule_id, scheduled_task_id: task.id,
+            trigger_event: actionConfig.trigger_event || 'scheduled', entity_type: task.entity_type, entity_id: task.entity_id,
+            action_type: actionType, action_config: config, result_success: false, result_data: null, result_error: erreur, duration_ms: 0,
+            recipient: destinataireDe(actionType, vars), actor_id: actionConfig.event_actor_id || null,
+            rule_snapshot: regle ? { trigger_event: regle.trigger_event, conditions: regle.conditions, delay_seconds: regle.delay_seconds, action: { type: actionType, config } } : null,
+            dry_run: false,
+          });
+          const { error: e } = await supabase.from('automation_scheduled_tasks')
+            .update(nextStateAfterFailure(task.attempts, erreur, true)).eq('id', task.id);
+          if (e) console.error(`[automationEngine] failed to close scheduled task ${task.id}:`, e.message);
+          continue;
+        }
+      }
+
+      // Plafond quotidien du forfait (M4) : reporté à demain, sans tentative consommée.
+      const canal = actionType === 'send_sms' ? 'sms' : actionType === 'send_email' ? 'email' : null;
+      if (canal) {
+        const verdict = await verifierPlafondQuotidien(supabase, task.org_id, canal);
+        if (!verdict.ok) {
+          const { error: e } = await supabase.from('automation_scheduled_tasks')
+            .update({ status: 'pending', attempts: task.attempts, execute_at: demainMatin().toISOString(), last_error: verdict.raison })
+            .eq('id', task.id);
+          if (e) console.error(`[automationEngine] report pour plafond impossible (${task.id}):`, e.message);
+          continue;
+        }
+      }
 
       const ctx: ActionContext = {
         supabase,
@@ -684,15 +1286,16 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         // plafond de fréquence. Les actions immédiates (confirmations) ne
         // passent pas ici et restent exemptes.
         commercial: true,
-        langue: await langueOrg(supabase, task.org_id),
+        langue: reglages.langue,
       };
 
       const startTime = Date.now();
-      const result = await executeAction(actionType, config, vars, ctx);
+      const result = reglages.essaiABlanc
+        ? { success: true, data: { dry_run: true, to: destinataireDe(actionType, vars) } }
+        : await avecDelaiMax(executeAction(actionType, config, vars, ctx), delaiActionMs(), actionType);
       const durationMs = Date.now() - startTime;
 
-      // Log execution
-      const { error: logError } = await supabase.from('automation_execution_logs').insert({
+      await ecrireLog(supabase, {
         org_id: task.org_id,
         automation_rule_id: task.automation_rule_id,
         scheduled_task_id: task.id,
@@ -705,27 +1308,34 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         result_data: result.data || null,
         result_error: result.error || null,
         duration_ms: durationMs,
+        recipient: destinataireDe(actionType, vars),
+        actor_id: actionConfig.event_actor_id || null,
+        rule_snapshot: regle ? { trigger_event: regle.trigger_event, conditions: regle.conditions, delay_seconds: regle.delay_seconds, action: { type: actionType, config } } : null,
+        dry_run: reglages.essaiABlanc,
       });
-      if (logError) {
-        console.error(`[automationEngine] failed to write execution log for task ${task.id} (org ${task.org_id}):`, logError.message);
-      }
 
       // Update task status — avec reprise sur échec transitoire.
+      const etatSuivant = result.success
+        ? { status: 'completed', completed_at: new Date().toISOString(), last_error: null }
+        : nextStateAfterFailure(task.attempts, result.error, result.permanent);
       const { error: statusError } = await supabase
         .from('automation_scheduled_tasks')
-        .update(
-          result.success
-            ? {
-                status: 'completed',
-                completed_at: new Date().toISOString(),
-                last_error: null,
-              }
-            : nextStateAfterFailure(task.attempts, result.error),
-        )
+        .update(etatSuivant)
         .eq('id', task.id);
       if (statusError) {
         // La tâche resterait 'running' pour toujours : personne ne la reprend.
         console.error(`[automationEngine] failed to close scheduled task ${task.id}:`, statusError.message);
+      }
+
+      // Échec définitif : l'entrepreneur doit le savoir (T10.3), en français.
+      if (etatSuivant.status === 'failed') {
+        await notifierAdmins(supabase, task.org_id, {
+          type: 'automation_failed',
+          title: `Automatisation non envoyée : ${regle?.name || actionType}`,
+          body: traduireErreurAutomatisation(result.error),
+          entity_type: task.entity_type,
+          entity_id: task.entity_id,
+        });
       }
     } catch (err: any) {
       console.error(`[automationEngine] scheduled task ${task.id} failed:`, err.message);
@@ -745,32 +1355,37 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
 /**
  * Faut-il abandonner cette tâche planifiée ?
  *
- * `true` = la relance n'a plus lieu d'être (facture payée, devis accepté,
- * rendez-vous annulé…). La tâche est alors annulée DÉFINITIVEMENT.
+ * Retourne le MOTIF (chaîne) quand la relance n'a plus lieu d'être (facture
+ * payée, devis accepté, rendez-vous annulé…) — il est écrit dans `last_error`
+ * pour qu'une annulation se voie (F25) — et `null` quand la tâche peut partir.
  *
- * D'où la précaution centrale de cette fonction : `supabase-js` ne lève jamais
- * d'exception, il retourne `{ data, error }`. Les six lectures ci-dessous ne
- * lisaient que `data` — sur erreur (délai dépassé, incident réseau, RLS),
- * `data` vaut `null`, que le code interprétait comme « entité supprimée » et
+ * Toutes les lectures portent `org_id` (F1) : sous `service_role`, c'est le
+ * seul garde-fou entre les organisations.
+ *
+ * Précaution centrale : `supabase-js` ne lève jamais d'exception, il retourne
+ * `{ data, error }`. Sur erreur (délai dépassé, incident réseau, RLS), `data`
+ * vaut `null`, que le code interprétait comme « entité supprimée » et
  * traduisait par une annulation irrémédiable. Un hoquet de deux secondes
  * suffisait à supprimer des relances en attente, sans log ni reprise.
  *
- * Règle appliquée partout maintenant : une erreur de LECTURE ne conclut rien.
- * On laisse la tâche en place ; le tick suivant réessaiera.
+ * Règle appliquée partout : une erreur de LECTURE ne conclut rien. On laisse
+ * la tâche en place ; le tick suivant réessaiera.
  */
 async function checkStopConditions(
   supabase: SupabaseClient,
+  orgId: string,
   entityType: string,
   entityId: string,
   triggerEvent?: string,
-): Promise<boolean> {
+  eventMetadata: Record<string, any> = {},
+): Promise<string | null> {
   /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
-  const illisible = (table: string, message: string): boolean => {
+  const illisible = (table: string, message: string): null => {
     console.error(
       `[automationEngine] condition d'arrêt indéterminable (${table}, ${entityType} ${entityId}) — tâche conservée:`,
       message,
     );
-    return false; // ne PAS annuler
+    return null; // ne PAS annuler
   };
 
   // Invoice reminders: stop if paid, cancelled, disputed, or client archived
@@ -779,45 +1394,63 @@ async function checkStopConditions(
       .from('invoices')
       .select('status, client_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('invoices', error.message);
-    if (!inv) return true; // Invoice deleted
-    if (['paid', 'cancelled', 'void'].includes(inv.status)) return true;
+    if (!inv) return 'Facture supprimée';
+    if (['paid', 'cancelled', 'void'].includes(inv.status)) return `Facture ${inv.status === 'paid' ? 'payée' : 'annulée'}`;
+    // Estimate follow-ups (ancien flux) : stop if accepted or rejected
+    if (triggerEvent === 'estimate.sent' && ['accepted', 'rejected'].includes(inv.status)) return `Estimation ${inv.status}`;
     // Check if client is archived/deleted
     if (inv.client_id) {
       const { data: cl, error: clErr } = await supabase
-        .from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+        .from('clients').select('deleted_at').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
       if (clErr) return illisible('clients', clErr.message);
-      if (cl?.deleted_at) return true;
+      if (cl?.deleted_at) return 'Client archivé';
     }
   }
 
-  // Estimate follow-ups: stop if accepted, rejected, or lead archived
-  if (entityType === 'invoice' && triggerEvent === 'estimate.sent') {
-    const { data: inv, error } = await supabase
-      .from('invoices')
-      .select('status')
-      .eq('id', entityId)
-      .maybeSingle();
-
-    if (error) return illisible('invoices', error.message);
-    if (!inv) return true;
-    if (['paid', 'accepted', 'rejected', 'cancelled', 'void'].includes(inv.status)) return true;
-  }
-
-  // Appointment reminders: stop if cancelled
+  // Appointment reminders: stop if cancelled, deleted, or the job is gone
   if (entityType === 'schedule_event' || entityType === 'appointment') {
     const { data: evt, error } = await supabase
       .from('schedule_events')
-      .select('status, deleted_at')
+      .select('status, deleted_at, job_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('schedule_events', error.message);
-    if (!evt) return true;
-    if (evt.deleted_at) return true;
-    if (evt.status === 'cancelled') return true;
+    if (!evt) return 'Rendez-vous supprimé';
+    if (evt.deleted_at) return 'Rendez-vous supprimé';
+    if (evt.status === 'cancelled') return 'Rendez-vous annulé';
+    if (evt.job_id) {
+      const { data: job, error: jobErr } = await supabase
+        .from('jobs').select('deleted_at, status').eq('id', evt.job_id).eq('org_id', orgId).maybeSingle();
+      if (jobErr) return illisible('jobs', jobErr.message);
+      if (!job || job.deleted_at) return 'Job supprimée';
+      if (job.status === 'cancelled') return 'Job annulée';
+    }
+  }
+
+  // Job follow-ups (thank you, cross-sell…): stop if the job is deleted or cancelled
+  if (entityType === 'job') {
+    const { data: job, error } = await supabase
+      .from('jobs')
+      .select('deleted_at, status, client_id')
+      .eq('id', entityId)
+      .eq('org_id', orgId)
+      .maybeSingle();
+
+    if (error) return illisible('jobs', error.message);
+    if (!job || job.deleted_at) return 'Job supprimée';
+    if (job.status === 'cancelled') return 'Job annulée';
+    if (job.client_id) {
+      const { data: cl, error: clErr } = await supabase
+        .from('clients').select('deleted_at').eq('id', job.client_id).eq('org_id', orgId).maybeSingle();
+      if (clErr) return illisible('clients', clErr.message);
+      if (cl?.deleted_at) return 'Client archivé';
+    }
   }
 
   // Quote follow-ups: stop once the client responded (approved, declined,
@@ -827,12 +1460,13 @@ async function checkStopConditions(
       .from('quotes')
       .select('status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('quotes', error.message);
-    if (!quote) return true; // Quote deleted
-    if (quote.deleted_at) return true;
-    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return true;
+    if (!quote) return 'Soumission supprimée';
+    if (quote.deleted_at) return 'Soumission supprimée';
+    if (['approved', 'declined', 'changes_requested', 'expired', 'converted', 'archived', 'void'].includes(quote.status)) return `Soumission ${quote.status}`;
   }
 
   // Lead: stop if archived or deleted (a lead is a client with status='lead')
@@ -841,17 +1475,25 @@ async function checkStopConditions(
       .from('clients')
       .select('status, lead_status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('clients', error.message);
-    if (!lead) return true;
-    if (lead.deleted_at) return true;
-    // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.
-    if (lead.status !== 'lead') return true;
-    if (['lost', 'closed', 'converted', 'closed_won', 'closed_lost'].includes(lead.lead_status)) return true;
+    if (!lead) return 'Prospect supprimé';
+    if (lead.deleted_at) return 'Prospect archivé';
+    // Stop once it's no longer an open lead (promoted/won) or funnel-closed.
+    if (lead.status !== 'lead') return 'Prospect converti en client';
+    // F25 : une tâche ARMÉE PAR la perte du prospect (réengagement à 90 jours)
+    // ne doit pas être annulée parce que le prospect est perdu — c'est sa
+    // raison d'être. Les autres suivis de prospect s'arrêtent bien sur « lost ».
+    const armeeParLaPerte = triggerEvent === 'lead.status_changed' && eventMetadata?.new_status === 'lost';
+    const fermes = armeeParLaPerte
+      ? ['closed', 'converted', 'closed_won']
+      : ['lost', 'closed', 'converted', 'closed_won', 'closed_lost'];
+    if (fermes.includes(lead.lead_status)) return `Prospect ${lead.lead_status}`;
   }
 
-  return false;
+  return null;
 }
 
 // ── Public API ──────────────────────────────────────────────

@@ -55,6 +55,18 @@ router.post('/cron/retention', async (req, res) => {
   return res.status(200).json({ ok: true, result: data });
 });
 
+// Journaux du moteur d'automatisations (exécutions + tâches closes) : 12 mois,
+// puis suppression physique — ce sont des journaux techniques, la rétention
+// est leur seule finalité (Loi 25, F21). Fonction SQL `purge_automation_history`.
+router.post('/cron/purge-automations', async (req, res) => {
+  if (!checkCronAuth(req, res)) return;
+  const svc = getServiceClient();
+  const { data, error } = await svc.rpc('purge_automation_history', { p_months: 12 });
+  if (error) return sendSafeError(res, error, 'Cron job failed.', '[cron]');
+  logger.info('[cron] purge_automation_history:', { result: data });
+  return res.status(200).json({ ok: true, result: data });
+});
+
 router.post('/cron/purge-audit', async (req, res) => {
   if (!checkCronAuth(req, res)) return;
   const svc = getServiceClient();

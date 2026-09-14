@@ -1,0 +1,53 @@
+{
+  "preset_key": "lead_followup_14d",
+  "trigger_event": "lead.created",
+  "delay_seconds": 1209600,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-09-27T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_14d:aaaaaaaa-0000-4000-8000-000000000001:0"
+    },
+    {
+      "action": "create_task",
+      "execute_at": "2026-09-27T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_14d:aaaaaaaa-0000-4000-8000-000000000001:1"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-09-27T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_14d:aaaaaaaa-0000-4000-8000-000000000001:2"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-27T15:00:00.000Z",
+      "execution_key": "regle-lead_followup_14d:aaaaaaaa-0000-4000-8000-000000000001:3"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Toujours intéressé?",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait deux semaines depuis votre demande — êtes-vous toujours à la recherche de nos services?</p><p>Un simple mot et on vous prépare une soumission.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "tache",
+      "body": "Prospect sans réponse — Marie Tremblay\nAucune réponse depuis 14 jours. Faire un dernier appel, ou clore le dossier.",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Prospect sans réponse — 14 jours\nMarie Tremblay ne répond plus. Une tâche de suivi a été créée.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "lead_followup_final",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

@@ -1,0 +1,33 @@
+{
+  "preset_key": "invoice_sent_reminder_1d",
+  "trigger_event": "invoice.sent",
+  "delay_seconds": 86400,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-09-14T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_1d:aaaaaaaa-0000-4000-8000-000000000005:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-14T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_1d:aaaaaaaa-0000-4000-8000-000000000005:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Petit rappel amical : la facture <strong>INV-000042</strong> de <strong>1 626,90 $</strong> est en attente de paiement.</p><p>Si vous avez déjà payé, ignorez ce message.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "invoice_reminded",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

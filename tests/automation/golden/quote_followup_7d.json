@@ -1,0 +1,54 @@
+{
+  "preset_key": "quote_followup_7d",
+  "trigger_event": "quote.sent",
+  "delay_seconds": 604800,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-quote_followup_7d:aaaaaaaa-0000-4000-8000-000000000004:0"
+    },
+    {
+      "action": "send_email",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-quote_followup_7d:aaaaaaaa-0000-4000-8000-000000000004:1"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-quote_followup_7d:aaaaaaaa-0000-4000-8000-000000000004:2"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-quote_followup_7d:aaaaaaaa-0000-4000-8000-000000000004:3"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, votre soumission de Plomberie Tremblay inc. est toujours valide. Des questions? Répondez à ce message.",
+      "moment": "differe"
+    },
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Votre soumission est toujours valide",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Votre soumission est toujours valide et on garde votre place.</p><p>Si vous avez des questions ou souhaitez aller de l'avant, répondez à ce courriel.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Soumission sans réponse — 7 jours\nMarie Tremblay n'a pas répondu à sa soumission depuis 7 jours.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "follow_up_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

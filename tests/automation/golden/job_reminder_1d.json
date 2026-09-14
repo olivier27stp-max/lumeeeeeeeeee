@@ -1,0 +1,44 @@
+{
+  "preset_key": "job_reminder_1d",
+  "trigger_event": "appointment.created",
+  "delay_seconds": -86400,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-24T13:00:00.000Z",
+      "execution_key": "regle-job_reminder_1d:aaaaaaaa-0000-4000-8000-000000000003:0"
+    },
+    {
+      "action": "send_email",
+      "execute_at": "2026-09-24T13:00:00.000Z",
+      "execution_key": "regle-job_reminder_1d:aaaaaaaa-0000-4000-8000-000000000003:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-24T13:00:00.000Z",
+      "execution_key": "regle-job_reminder_1d:aaaaaaaa-0000-4000-8000-000000000003:2"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Rappel : votre rendez-vous avec Plomberie Tremblay inc. est demain à 09 h 00. Répondez à ce message si vous devez le déplacer.",
+      "moment": "differe"
+    },
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Votre rendez-vous est demain",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Votre rendez-vous est <strong>demain</strong>, le 2026-09-25 à 09 h 00.</p><p>Un empêchement? Répondez à ce courriel et on trouvera un autre moment.</p><p>À demain!<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "reminder_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

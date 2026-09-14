@@ -25,12 +25,14 @@ import PermissionGate from '../components/PermissionGate';
 import MessageEditor from '../components/automations/MessageEditor';
 import {
   type AutomationRule,
+  type AutomationFailure,
   getAutomationRules,
   toggleAutomationRule,
-  getFailureCountsByRule,
+  getRecentAutomationFailures,
   getAutomationLanguage,
   setAutomationLanguage,
 } from '../lib/automationRulesApi';
+import { traduireErreurAutomatisation } from '../lib/automationErreurs';
 
 // ── Automation name translations (for DB-seeded English names) ──
 // Couvre toutes les variantes de noms semées par les migrations
@@ -48,6 +50,8 @@ const AUTOMATION_NAME_FR: Record<string, string> = {
   'Lost Lead Re-engagement — 90 Days': 'Réengagement prospect perdu — 90 jours',
   'Lost Lead Re-engagement': 'Réengagement prospect perdu',
   'Lost Lead — Re-engagement': 'Prospect perdu — Réengagement',
+  // Jobs
+  'Contract Signed': 'Contrat signé',
   // Quotes / Estimates
   'Estimate Follow-Up': "Suivi d'estimation",
   'Estimate Follow-Up (3 days)': "Suivi d'estimation (3 jours)",
@@ -266,6 +270,7 @@ const TRIGGER_DISPLAY: Record<string, { en: string; fr: string }> = {
   'quote.sent':            { en: 'Quote sent',            fr: 'Devis envoyé' },
   'quote.approved':        { en: 'Quote approved',        fr: 'Devis accepté' },
   'quote.declined':        { en: 'Quote declined',        fr: 'Devis refusé' },
+  'agreement.signed':      { en: 'Contract signed',       fr: 'Contrat signé' },
   'invoice.sent':          { en: 'Invoice sent',          fr: 'Facture envoyée' },
   'invoice.paid':          { en: 'Invoice paid',          fr: 'Facture payée' },
   'invoice.overdue':       { en: 'Invoice overdue',       fr: 'Facture en retard' },
@@ -335,8 +340,16 @@ export default function Automations() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  /** Échecs par règle sur 7 jours — alimente le badge d'alerte. */
-  const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
+  /** Échecs des 7 derniers jours — badge d'alerte et raisons lisibles dans le détail. */
+  const [failures, setFailures] = useState<AutomationFailure[]>([]);
+  const failureCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const f of failures) {
+      if (!f.automation_rule_id) continue;
+      counts[f.automation_rule_id] = (counts[f.automation_rule_id] || 0) + 1;
+    }
+    return counts;
+  }, [failures]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   // Langue dans laquelle les messages d'automatisation partent aux clients.
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
@@ -379,7 +392,7 @@ export default function Automations() {
       // jamais que ses clients n'avaient rien reçu.
       // Non bloquant : la liste doit s'afficher même si ce chargement échoue.
       try {
-        setFailureCounts(await getFailureCountsByRule());
+        setFailures(await getRecentAutomationFailures(200));
       } catch (e: any) {
         console.error('Failed to load automation failures:', e.message);
       }
@@ -784,6 +797,27 @@ export default function Automations() {
                                       </div>
                                     </div>
                                   </div>
+
+                                  {/* Pourquoi ça n'a pas marché (F22) : la raison de chaque
+                                      échec récent, en français — jamais le texte technique
+                                      brut (« SMTP not configured »). */}
+                                  {failures.some((f) => f.automation_rule_id === rule.id) && (
+                                    <div className="mt-3 pt-3 border-t border-outline/40">
+                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-300 mb-1">
+                                        {fr ? 'Derniers échecs (7 jours)' : 'Recent failures (7 days)'}
+                                      </p>
+                                      <ul className="space-y-0.5 text-[12px] text-text-secondary">
+                                        {failures.filter((f) => f.automation_rule_id === rule.id).slice(0, 5).map((f) => (
+                                          <li key={f.id} className="flex items-baseline gap-2">
+                                            <span className="text-[11px] text-text-tertiary tabular-nums shrink-0">
+                                              {new Date(f.created_at).toLocaleString(fr ? 'fr-CA' : 'en-CA', { dateStyle: 'short', timeStyle: 'short' })}
+                                            </span>
+                                            <span>{getActionLabel(f.action_type, fr)} — {traduireErreurAutomatisation(f.result_error)}</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
 
                                   {/* Le texte réellement envoyé au client, éditable.
                                       La page n'affichait que le TYPE d'action

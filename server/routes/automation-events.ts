@@ -17,6 +17,31 @@ import { validate, automationEventSchema } from '../lib/validation';
 
 const router = Router();
 
+/**
+ * L'entité existe-t-elle DANS L'ORG de l'appelant ? (F1)
+ *
+ * Ces routes reçoivent des ids du navigateur et émettaient sans vérifier :
+ * un membre de l'org A postait l'id d'une visite de l'org B, le moteur lisait
+ * la visite sous `service_role` et envoyait la confirmation au client de B —
+ * au nom de A, avec son numéro (prouvé sur staging, T7). Toute route vérifie
+ * désormais l'appartenance avant d'émettre ; 404 sinon, sans dire si l'id
+ * existe ailleurs.
+ */
+async function appartientALOrg(
+  admin: ReturnType<typeof getServiceClient>,
+  table: string,
+  id: string,
+  orgId: string,
+): Promise<boolean> {
+  if (!id || !orgId) return false;
+  const { data, error } = await admin.from(table).select('id').eq('id', id).eq('org_id', orgId).maybeSingle();
+  if (error) {
+    console.error(`[automation-events] vérification d'appartenance impossible (${table} ${id}, org ${orgId}):`, error.message);
+    return false;
+  }
+  return !!data;
+}
+
 // ── POST /automations/events/appointment-created ──
 // Called after a schedule_event is created
 router.post('/automations/events/appointment-created', validate(automationEventSchema), async (req, res) => {
@@ -27,8 +52,12 @@ router.post('/automations/events/appointment-created', validate(automationEventS
     const { eventId, jobId, clientId, startTime, title, address, suppressImmediate } = req.body;
     if (!eventId) return res.status(400).json({ error: 'eventId is required' });
 
-    // Fetch details for variable resolution
     const admin = getServiceClient();
+    if (!(await appartientALOrg(admin, 'schedule_events', eventId, auth.orgId))) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Fetch details for variable resolution
     let clientName = '';
     let clientEmail = '';
     let clientPhone = '';
@@ -99,6 +128,9 @@ router.post('/automations/events/appointment-cancelled', validate(automationEven
 
     const { eventId, jobId, clientId } = req.body;
     if (!eventId) return res.status(400).json({ error: 'eventId is required' });
+    if (!(await appartientALOrg(getServiceClient(), 'schedule_events', eventId, auth.orgId))) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
 
     await eventBus.emit('appointment.cancelled', {
       orgId: auth.orgId,
@@ -136,6 +168,9 @@ router.post('/automations/events/appointment-rescheduled', validate(automationEv
 
     const { eventId, jobId, clientId, startTime } = req.body;
     if (!eventId) return res.status(400).json({ error: 'eventId is required' });
+    if (!(await appartientALOrg(getServiceClient(), 'schedule_events', eventId, auth.orgId))) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
 
     // ── 1. Annuler les rappels calés sur l'ANCIENNE date ──
     //
@@ -327,6 +362,9 @@ router.post('/automations/events/deal-stage-changed', validate(automationEventSc
     if (!dealId) return res.status(400).json({ error: 'dealId is required' });
 
     const admin = getServiceClient();
+    if (!(await appartientALOrg(admin, 'pipeline_deals', dealId, auth.orgId))) {
+      return res.status(404).json({ error: 'Deal not found' });
+    }
     let clientName = '';
     let clientEmail = '';
     let clientPhone = '';
@@ -385,11 +423,16 @@ router.post('/automations/events/quote-sent', validate(automationEventSchema), a
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const { quoteId, leadId, channel } = req.body;
+    // F19 : un événement sans entité planifiait des relances sur un id vide.
+    if (!quoteId) return res.status(400).json({ error: 'quoteId is required' });
+    if (!(await appartientALOrg(getServiceClient(), 'quotes', quoteId, auth.orgId))) {
+      return res.status(404).json({ error: 'Quote not found' });
+    }
 
     await eventBus.emit('quote.sent', {
       orgId: auth.orgId,
       entityType: 'quote',
-      entityId: quoteId || '',
+      entityId: quoteId,
       actorId: auth.user.id,
       metadata: { lead_id: leadId || null, channel: channel || 'email' },
     });
@@ -405,11 +448,15 @@ router.post('/automations/events/quote-approved', validate(automationEventSchema
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const { quoteId, leadId } = req.body;
+    if (!quoteId) return res.status(400).json({ error: 'quoteId is required' });
+    if (!(await appartientALOrg(getServiceClient(), 'quotes', quoteId, auth.orgId))) {
+      return res.status(404).json({ error: 'Quote not found' });
+    }
 
     await eventBus.emit('quote.approved', {
       orgId: auth.orgId,
       entityType: 'quote',
-      entityId: quoteId || '',
+      entityId: quoteId,
       actorId: auth.user.id,
       metadata: { lead_id: leadId || null },
     });
@@ -435,6 +482,7 @@ router.post('/automations/events/invoice-paid', validate(automationEventSchema),
       .eq('id', invoiceId)
       .eq('org_id', auth.orgId)
       .maybeSingle();
+    if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
     let clientName = '';
     let clientEmail = '';
@@ -490,6 +538,7 @@ router.post('/automations/events/lead-created', validate(automationEventSchema),
       .eq('id', leadId)
       .eq('org_id', auth.orgId)
       .maybeSingle();
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
     await eventBus.emit('lead.created', {
       orgId: auth.orgId,
@@ -525,6 +574,7 @@ router.post('/automations/events/lead-status-changed', validate(automationEventS
       .eq('id', leadId)
       .eq('org_id', auth.orgId)
       .maybeSingle();
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
     await eventBus.emit('lead.status_changed', {
       orgId: auth.orgId,

@@ -24,6 +24,15 @@ import { AUTOMATION_PRESETS } from './automationPresets.data';
  * @param activateAll À passer UNIQUEMENT à la création de l'org (aucun
  *   toggle utilisateur encore possible) — force is_active=true partout.
  */
+/**
+ * Presets créés DÉSACTIVÉS, même à la création de l'org.
+ *
+ * `lost_lead_reengagement` relance 90 jours après un refus un prospect qui n'a
+ * jamais été client : aucune relation d'affaires, donc aucun consentement
+ * implicite au sens de la LCAP (F7). L'entrepreneur l'active sciemment.
+ */
+export const PRESETS_INACTIFS_PAR_DEFAUT = new Set(['lost_lead_reengagement']);
+
 export async function ensureAutomationPresets(
   admin: SupabaseClient,
   orgId: string,
@@ -80,7 +89,7 @@ export async function ensureAutomationPresets(
         conditions: p.conditions,
         delay_seconds: p.delay_seconds,
         actions: p.actions,
-        is_active: true,
+        is_active: !PRESETS_INACTIFS_PAR_DEFAUT.has(p.preset_key),
         is_preset: true,
         preset_key: p.preset_key,
       })),
@@ -95,7 +104,8 @@ export async function ensureAutomationPresets(
       .update({ is_active: true })
       .eq('org_id', orgId)
       .eq('is_preset', true)
-      .eq('is_active', false);
+      .eq('is_active', false)
+      .not('preset_key', 'in', `(${[...PRESETS_INACTIFS_PAR_DEFAUT].join(',')})`);
     if (actErr) throw actErr;
   }
 

@@ -1,0 +1,44 @@
+{
+  "preset_key": "lost_lead_reengagement",
+  "trigger_event": "lead.status_changed",
+  "delay_seconds": 7776000,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-12-12T15:00:00.000Z",
+      "execution_key": "regle-lost_lead_reengagement:aaaaaaaa-0000-4000-8000-000000000001:0"
+    },
+    {
+      "action": "send_sms",
+      "execute_at": "2026-12-12T15:00:00.000Z",
+      "execution_key": "regle-lost_lead_reengagement:aaaaaaaa-0000-4000-8000-000000000001:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-12-12T15:00:00.000Z",
+      "execution_key": "regle-lost_lead_reengagement:aaaaaaaa-0000-4000-8000-000000000001:2"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Toujours des projets?",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait un moment! Si vous avez des projets d'entretien ou de nettoyage, on serait heureux de vous aider.</p><p>Répondez à ce courriel pour une soumission sans engagement.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, ça fait un bout! Si vous avez des projets, Plomberie Tremblay inc. est là. Répondez STOP pour vous désabonner.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "reengagement_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

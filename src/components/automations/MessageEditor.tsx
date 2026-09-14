@@ -12,7 +12,7 @@ import { Mail, MessageSquare, Loader2, Check, Eye, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage } from '../../lib/automationRulesApi';
-import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
+import { htmlVersTexte, texteVersHtml, remplacerVariables, variablesInconnues, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 import EmailPreviewEditor from './EmailPreviewEditor';
 
 interface Props {
@@ -47,6 +47,8 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
   const modifie = texte !== body;
+  /** Variables que le serveur remplacera par du vide — à montrer AVANT l'enregistrement. */
+  const inconnues = useMemo(() => (estCourriel ? [] : variablesInconnues(texte)), [texte, estCourriel]);
 
   /** Lignes du courriel, variables remplacées — pour l'aperçu compact. */
   const lignesApercu = useMemo(
@@ -149,6 +151,14 @@ export default function MessageEditor({ ruleId, ruleName, actionType, body, subj
           </span>
         )}
       </p>
+
+      {inconnues.length > 0 && (
+        <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400" role="alert">
+          {fr
+            ? `Variable inconnue : ${inconnues.map((v) => `[${v}]`).join(', ')} — elle sera vide dans le message envoyé. Utilisez les variables proposées ci-dessous.`
+            : `Unknown variable: ${inconnues.map((v) => `[${v}]`).join(', ')} — it will be blank in the sent message. Use the variables suggested below.`}
+        </p>
+      )}
 
       <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
         <Eye size={10} className="text-text-tertiary" />

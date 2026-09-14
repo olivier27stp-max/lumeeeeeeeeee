@@ -1,0 +1,39 @@
+{
+  "preset_key": "google_review",
+  "trigger_event": "job.completed",
+  "delay_seconds": 7200,
+  "planifie": [
+    {
+      "action": "request_review",
+      "execute_at": "2026-09-13T17:00:00.000Z",
+      "execution_key": "regle-google_review:aaaaaaaa-0000-4000-8000-000000000002:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-13T17:00:00.000Z",
+      "execution_key": "regle-google_review:aaaaaaaa-0000-4000-8000-000000000002:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, merci d'avoir choisi Plomberie Tremblay inc. ! Comment s'est passé notre service ? Notez-nous en 10 secondes : https://app.lume.test/survey/<jeton>",
+      "moment": "differe"
+    },
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "body": "\n    <div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\">\n      <h2>Bonjour Marie,</h2>\n      <p>Nous venons de terminer <strong>Nettoyage de gouttières</strong> et votre opinion compte pour nous.</p>\n      <p>Notez votre expérience en 10 secondes :</p>\n      <p style=\"text-align:center;margin:30px 0;\">\n        <a href=\"https://app.lume.test/survey/<jeton>\" style=\"background:#171717;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;\">\n          Noter mon expérience\n        </a>\n      </p>\n      <p>Merci d'avoir choisi Plomberie Tremblay inc. !</p>\n    </div>\n  ",
+      "moment": "differe"
+    },
+    {
+      "canal": "avis",
+      "body": "sent: Plomberie Tremblay inc. — Comment s'est passé notre service ?",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

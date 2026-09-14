@@ -1,0 +1,64 @@
+{
+  "preset_key": "invoice_sent_reminder_30d",
+  "trigger_event": "invoice.sent",
+  "delay_seconds": 2592000,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-10-13T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_30d:aaaaaaaa-0000-4000-8000-000000000005:0"
+    },
+    {
+      "action": "send_sms",
+      "execute_at": "2026-10-13T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_30d:aaaaaaaa-0000-4000-8000-000000000005:1"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-10-13T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_30d:aaaaaaaa-0000-4000-8000-000000000005:2"
+    },
+    {
+      "action": "create_task",
+      "execute_at": "2026-10-13T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_30d:aaaaaaaa-0000-4000-8000-000000000005:3"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-10-13T15:00:00.000Z",
+      "execution_key": "regle-invoice_sent_reminder_30d:aaaaaaaa-0000-4000-8000-000000000005:4"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Facture INV-000042 en souffrance (30 jours)",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>La facture <strong>INV-000042</strong> de <strong>1 626,90 $</strong> est en souffrance depuis 30 jours.</p><p>Merci de la régler sans tarder, ou contactez-nous pour convenir d'une entente de paiement.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, votre facture de Plomberie Tremblay inc. est en souffrance depuis 30 jours. Merci de la régler rapidement ou de nous contacter.",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Facture INV-000042 — 30 jours de retard\nCette facture demande une intervention rapide.",
+      "moment": "differe"
+    },
+    {
+      "canal": "tache",
+      "body": "Facture INV-000042 — 30 jours de retard, à escalader\nLe retard dépasse 30 jours. À transmettre à un responsable ou à mettre en recouvrement.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "invoice_reminded",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}
