@@ -56,6 +56,10 @@ COPY src/lib/permissions.ts ./src/lib/permissions.ts
 # — commit c12b767). The stub exists so Railway/BuildKit cache layers that
 # still reference this COPY resolve cleanly.
 COPY src/lib/supabaseAdmin.ts ./src/lib/supabaseAdmin.ts
+# search_help (server/lib/agent/tools-aide.ts) lit la doc produit du site : sans cette ligne,
+# le conteneur crashe au demarrage (Cannot find module) - prod 502 le 2026-09-14.
+# tests/dockerfile-imports-src.test.ts verifie que chaque import src/ du serveur est copie.
+COPY src/pages/marketing/fonctionsData.ts ./src/pages/marketing/fonctionsData.ts
 
 # Install tsx for running TypeScript server
 RUN npx tsx --version || npm i -g tsx
