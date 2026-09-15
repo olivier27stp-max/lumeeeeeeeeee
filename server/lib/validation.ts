@@ -245,6 +245,8 @@ export const supportChatSchema = z.object({
   humain: z.boolean().optional(),
   /** 'suggestion' = question classique cliquée (réponse fixe, étage 0). */
   origine: z.enum(['texte', 'suggestion']).optional(),
+  /** Route courante de l'app (ex. /jobs/123) — chemin seulement, jamais de query. */
+  page: z.string().trim().max(200).regex(/^\/[A-Za-z0-9/_-]*$/).optional(),
 });
 export const supportMessageSchema = z.object({
   message: z.string().trim().min(1, 'Write a message.').max(5000),
