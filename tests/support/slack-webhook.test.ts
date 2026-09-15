@@ -68,7 +68,9 @@ describe('signature Slack', () => {
     const corps = '{"type":"x"}';
     const { ts, sig } = signer(corps);
     expect(verifierSignatureSlack({ signature: sig, timestamp: ts }, corps, SECRET)).toBe(true);
-    expect(verifierSignatureSlack({ signature: sig.replace(/.$/, '0'), timestamp: ts }, corps, SECRET)).toBe(false);
+    // Dernier caractère changé pour un AUTRE (si le hash finit déjà par 0, on met 1) : sinon la « signature altérée » serait identique.
+    const alteree = sig.slice(0, -1) + (sig.endsWith('0') ? '1' : '0');
+    expect(verifierSignatureSlack({ signature: alteree, timestamp: ts }, corps, SECRET)).toBe(false);
     expect(verifierSignatureSlack({ signature: sig, timestamp: ts }, corps + ' ', SECRET)).toBe(false);
     const vieux = signer(corps, Math.floor(Date.now() / 1000) - 600);
     expect(verifierSignatureSlack({ signature: vieux.sig, timestamp: vieux.ts }, corps, SECRET)).toBe(false);
