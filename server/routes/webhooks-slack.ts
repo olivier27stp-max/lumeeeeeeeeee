@@ -23,6 +23,17 @@ import { logger } from '../lib/logger';
 import { verifierSignatureSlack, identiteBot, nomUtilisateurSlack, texteDepuisSlack } from '../lib/slack';
 import { ajouterMessage, notifierClientReponse, type Ticket } from '../lib/support/tickets';
 
+/**
+ * Trace de chaque appel reçu (table webhook_receipts, service_role) : quand
+ * « Slack n'appelle pas », c'est le seul témoin lisible sans les logs Railway.
+ * Best-effort : ne bloque jamais la réponse.
+ */
+function enregistrerRecu(r: { signature_ok: boolean | null; event_type: string | null; reference: string | null; outcome: string; summary?: Record<string, unknown> }): void {
+  getServiceClient().from('webhook_receipts').insert({ provider: 'slack', ...r, summary: r.summary || {} }).then(({ error }) => {
+    if (error) logger.warn('[webhooks/slack] trace non écrite', { error: error.message });
+  }, (err: any) => logger.warn('[webhooks/slack] trace non écrite', { error: err?.message }));
+}
+
 export interface EvenementMessageSlack {
   type: string;
   subtype?: string;
@@ -44,24 +55,25 @@ export function estReponseDansUnFil(e: EvenementMessageSlack, bot: { user_id: st
   return !!(e.text && e.text.trim());
 }
 
-async function traiter(e: EvenementMessageSlack): Promise<void> {
+async function traiter(e: EvenementMessageSlack): Promise<string> {
   const bot = await identiteBot();
-  if (!estReponseDansUnFil(e, bot)) return;
+  if (!estReponseDansUnFil(e, bot)) return 'ignored:not-a-thread-reply';
   const admin = getServiceClient();
   const { data: ticket, error } = await admin.from('support_tickets').select('*').eq('slack_channel_id', e.channel).eq('slack_thread_ts', e.thread_ts).maybeSingle();
-  if (error) { logger.error('[webhooks/slack] lecture du ticket impossible', { error: error.message }); return; }
-  if (!ticket) return; // un fil qui n'est pas un ticket : rien à faire
+  if (error) { logger.error('[webhooks/slack] lecture du ticket impossible', { error: error.message }); return `error:${error.message}`; }
+  if (!ticket) return 'ignored:unknown-thread'; // un fil qui n'est pas un ticket : rien à faire
   const t = ticket as Ticket;
-  if (t.status === 'closed') return;
+  if (t.status === 'closed') return 'ignored:closed';
 
   const auteur = e.user ? await nomUtilisateurSlack(e.user) : 'Support';
   const corps = texteDepuisSlack(e.text || '');
-  if (!corps) return;
+  if (!corps) return 'ignored:empty';
   const m = await ajouterMessage(admin, { ticket: t, author: 'agent', body: corps, authorName: auteur, slackTs: e.ts });
-  if (!m) return; // rejeu Slack : déjà enregistré
+  if (!m) return 'ignored:duplicate'; // rejeu Slack : déjà enregistré
   await admin.from('support_tickets').update({ status: 'answered' }).eq('id', t.id).neq('status', 'closed');
   await notifierClientReponse(admin, t, corps, auteur);
   logger.info('[webhooks/slack] réponse relayée au client', { ticketId: t.id, auteur });
+  return 'relayed';
 }
 
 export async function slackWebhookHandler(req: express.Request, res: express.Response) {
@@ -72,18 +84,31 @@ export async function slackWebhookHandler(req: express.Request, res: express.Res
   }
   const corps: Buffer | string = Buffer.isBuffer(req.body) ? req.body : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}));
   const valide = verifierSignatureSlack({ signature: req.header('x-slack-signature'), timestamp: req.header('x-slack-request-timestamp') }, corps, secret);
-  if (!valide) return res.status(401).json({ error: 'Invalid signature.' });
+  if (!valide) {
+    enregistrerRecu({ signature_ok: false, event_type: null, reference: null, outcome: 'rejected:signature', summary: { has_signature: !!req.header('x-slack-signature'), has_timestamp: !!req.header('x-slack-request-timestamp'), retry: req.header('x-slack-retry-num') || null } });
+    return res.status(401).json({ error: 'Invalid signature.' });
+  }
 
   let charge: any;
   try { charge = JSON.parse(typeof corps === 'string' ? corps : corps.toString('utf8')); } catch { return res.status(400).json({ error: 'Invalid JSON.' }); }
 
   // Poignée de main à la création de l'abonnement (Slack vérifie l'URL).
-  if (charge?.type === 'url_verification') return res.status(200).json({ challenge: charge.challenge });
+  if (charge?.type === 'url_verification') {
+    enregistrerRecu({ signature_ok: true, event_type: 'url_verification', reference: null, outcome: 'challenge' });
+    return res.status(200).json({ challenge: charge.challenge });
+  }
 
   // Réponse immédiate (Slack rejoue au-delà de 3 s), traitement ensuite.
   res.status(200).json({ ok: true });
-  if (charge?.type !== 'event_callback' || !charge.event) return;
-  traiter(charge.event as EvenementMessageSlack).catch((err: any) => {
-    logger.error('[webhooks/slack] traitement en erreur', { error: err?.message || String(err) });
-  });
+  const ev = charge?.event as EvenementMessageSlack | undefined;
+  const typeEv = `${charge?.type || '?'}${ev?.type ? ':' + ev.type : ''}${ev?.subtype ? '/' + ev.subtype : ''}`;
+  const resume = { event_id: charge?.event_id || null, channel: ev?.channel || null, ts: ev?.ts || null, thread_ts: ev?.thread_ts || null, user: ev?.user || null, bot_id: ev?.bot_id || null, retry: req.header('x-slack-retry-num') || null };
+  if (charge?.type !== 'event_callback' || !ev) { enregistrerRecu({ signature_ok: true, event_type: typeEv, reference: null, outcome: 'ignored:not-event', summary: resume }); return; }
+  traiter(ev).then(
+    (outcome) => enregistrerRecu({ signature_ok: true, event_type: typeEv, reference: ev.thread_ts || ev.ts || null, outcome, summary: resume }),
+    (err: any) => {
+      logger.error('[webhooks/slack] traitement en erreur', { error: err?.message || String(err) });
+      enregistrerRecu({ signature_ok: true, event_type: typeEv, reference: ev.thread_ts || ev.ts || null, outcome: `error:${String(err?.message || err).slice(0, 200)}`, summary: resume });
+    },
+  );
 }
