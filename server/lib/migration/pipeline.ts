@@ -277,6 +277,7 @@ export async function analyzeMigrationFile(admin: SupabaseClient, migration: Mig
 /** Repère un identifiant externe probable dans la ligne brute. */
 function extractExternalId(entity: TargetEntity, row: Record<string, string>): string | null {
   const wanted: Record<string, string[]> = {
+    tax_config: ['tax id', 'tax code', 'code', 'id'],
     client: ['client id', 'customer id', 'contact id', 'id'],
     job: ['job number', 'job #', 'job id', 'work order', 'no de job', 'id'],
     invoice: ['invoice number', 'invoice #', 'invoice no', 'no de facture', 'numero de facture', 'id'],

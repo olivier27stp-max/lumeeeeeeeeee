@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { creerClientStripe } from '../lib/stripe-sdk';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { documentTaxLines } from '../lib/taxResolve';
 import { emailFrom, twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
@@ -857,12 +858,16 @@ router.get('/quotes/public/:token', async (req, res) => {
       }
     }
 
+    // Ventilation TPS / TVQ… (applied_taxes, sinon taxes résolues pour le client).
+    const taxLines = await documentTaxLines(admin, 'quote', quote);
+
     return res.json({
       quote: {
         id: quote.id, quote_number: quote.quote_number, title: quote.title, status: quote.status,
         valid_until: quote.valid_until, created_at: quote.created_at,
         subtotal_cents: Number(quote.subtotal_cents || 0), discount_cents: Number(quote.discount_cents || 0),
         tax_rate_label: quote.tax_rate_label || 'Tax', tax_cents: Number(quote.tax_cents || 0),
+        tax_lines: taxLines,
         total_cents: Number(quote.total_cents || 0), currency: quote.currency || 'CAD',
         notes: quote.notes, contract_disclaimer: quote.contract_disclaimer,
         deposit_required: quote.deposit_required, deposit_type: quote.deposit_type,

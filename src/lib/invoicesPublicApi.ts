@@ -40,6 +40,8 @@ export interface PublicInvoice {
   subtotal_cents: number;
   discount_cents: number | null;
   tax_cents: number;
+  /** Ventilation par taxe (TPS, TVQ…) ; vide → une seule ligne « Taxes ». */
+  tax_lines?: Array<{ name: string; rate: number; amount_cents: number; registration_number?: string | null }>;
   total_cents: number;
   paid_cents: number;
   balance_cents: number;

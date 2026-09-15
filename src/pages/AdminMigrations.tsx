@@ -246,7 +246,7 @@ function ListRow({ m, onOpen }: { m: AdminMigrationListItem; onOpen: () => void 
 }
 
 const CATEGORY_OPTIONS = [
-  ['clients', 'Clients'], ['properties', 'Propriétés'], ['services', 'Produits et services'],
+  ['taxes', 'Noms de taxes'], ['clients', 'Clients'], ['properties', 'Propriétés'], ['services', 'Produits et services'],
   ['quotes', 'Soumissions'], ['jobs', 'Jobs'], ['visits', 'Visites'], ['invoices', 'Factures'],
 ] as const;
 
@@ -254,7 +254,7 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const id = useId();
   const [orgId, setOrgId] = useState('');
   const [email, setEmail] = useState('');
-  const [categories, setCategories] = useState<string[]>(['clients', 'properties', 'services', 'quotes', 'jobs', 'visits', 'invoices']);
+  const [categories, setCategories] = useState<string[]>(['taxes', 'clients', 'properties', 'services', 'quotes', 'jobs', 'visits', 'invoices']);
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   return (
@@ -814,7 +814,7 @@ const MAPPING_STATUS_LABELS_FR: Record<string, string> = {
   suggested: 'Proposé', confirmed: 'Confirmé', corrected: 'Corrigé', rejected: 'Ignoré', needs_review: 'À vérifier',
 };
 const ENTITY_LABELS_FR: Record<string, string> = {
-  client: 'Clients', property: 'Propriétés', service: 'Produits et services', quote: 'Soumissions',
+  tax_config: 'Noms de taxes', client: 'Clients', property: 'Propriétés', service: 'Produits et services', quote: 'Soumissions',
   job: 'Jobs', visit: 'Visites', invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
 };
 type FieldCatalog = Record<string, { field: string; labelFr: string; labelEn: string }[]>;

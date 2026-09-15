@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { computeTaxLines, getDocumentTaxLines, saveAppliedTaxes, type TaxLine } from './taxApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import { emitQuoteDeclined, emitQuoteApproved } from './automationEventsApi';
 import { syncEntityPin } from './fieldSalesApi';
@@ -168,6 +169,8 @@ export interface QuoteStatusHistoryEntry {
 
 export interface QuoteDetail {
   quote: Quote;
+  /** Ventilation par taxe (TPS, TVQ…) — [] quand rien n'est connu. */
+  tax_lines: TaxLine[];
   line_items: QuoteLineItem[];
   sections: QuoteSection[];
   send_log: QuoteSendLogEntry[];
@@ -260,6 +263,8 @@ export async function createQuote(payload: {
   require_payment_method?: boolean;
   tax_rate?: number;
   tax_rate_label?: string;
+  /** Taxes appliquées (nom, taux, composée) — ventilation affichée sur le devis. */
+  tax_lines?: TaxLine[] | null;
   discount_type?: 'percentage' | 'fixed' | null;
   discount_value?: number;
   source_template_id?: string | null;
@@ -368,6 +373,20 @@ export async function createQuote(payload: {
   const { error: recalcErr } = await supabase.rpc('rpc_recalculate_quote', { p_quote_id: quoteId });
   if (recalcErr) console.error('[createQuote] recalculate failed:', recalcErr.message);
 
+  // 5b. Ventilation par taxe (applied_taxes) : montants calculés sur les
+  // totaux réellement enregistrés, pour que TPS + TVQ = tax_cents du devis.
+  if (payload.tax_lines && payload.tax_lines.length > 0 && (payload.tax_rate ?? 0) > 0) {
+    try {
+      const { data: totals } = await supabase
+        .from('quotes').select('subtotal_cents, discount_cents').eq('id', quoteId).maybeSingle();
+      const base = (Number(totals?.subtotal_cents) || 0) - (Number(totals?.discount_cents) || 0);
+      await saveAppliedTaxes('quote', quoteId, computeTaxLines(base, payload.tax_lines));
+    } catch (taxErr: any) {
+      // Le devis existe ; la ventilation, elle, retombera sur les taxes résolues à l'affichage.
+      console.error('[createQuote] applied_taxes non persistées:', taxErr?.message || taxErr);
+    }
+  }
+
   // 6. Automation: new quote created → move deal to "New Prospect"
   moveLeadDealToStage(payload.lead_id || null, 'new_prospect');
 
@@ -417,8 +436,11 @@ export async function getQuoteById(quoteId: string): Promise<QuoteDetail | null>
     client = data;
   }
 
+  const tax_lines = await getDocumentTaxLines('quote', quote as Quote);
+
   return {
     quote: quote as Quote,
+    tax_lines,
     line_items: (itemsRes.data || []) as QuoteLineItem[],
     sections: (sectionsRes.data || []) as QuoteSection[],
     send_log: (sendLogRes.data || []) as QuoteSendLogEntry[],
@@ -667,6 +689,7 @@ export async function duplicateQuote(quoteId: string): Promise<QuoteDetail> {
     require_payment_method: source.quote.require_payment_method,
     tax_rate: source.quote.tax_rate,
     tax_rate_label: source.quote.tax_rate_label,
+    tax_lines: source.tax_lines,
     discount_type: source.quote.discount_type,
     discount_value: source.quote.discount_value,
     quote_type: source.quote.quote_type,

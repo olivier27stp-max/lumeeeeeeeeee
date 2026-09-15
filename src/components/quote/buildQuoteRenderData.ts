@@ -67,6 +67,9 @@ export function buildQuoteRenderData(
     tax_cents: q.tax_cents,
     tax_rate: q.tax_rate,
     tax_rate_label: q.tax_rate_label,
+    tax_breakdown: (detail.tax_lines || []).map(l => ({
+      name: l.name, rate: l.rate, amount_cents: l.amount_cents, registration_number: l.registration_number || null,
+    })),
     total_cents: q.total_cents,
 
     deposit_required: q.deposit_required,

@@ -1,5 +1,12 @@
 // ── Shared types for quote visual rendering ──
 
+export interface QuoteTaxLine {
+  name: string;
+  rate: number;
+  amount_cents: number;
+  registration_number?: string | null;
+}
+
 export interface QuoteRenderData {
   // Quote
   quote_number: string;
@@ -16,6 +23,8 @@ export interface QuoteRenderData {
   tax_cents: number;
   tax_rate: number;
   tax_rate_label: string;
+  /** Ventilation par taxe (TPS, TVQ…). Vide → une seule ligne « Taxes ». */
+  tax_breakdown: QuoteTaxLine[];
   total_cents: number;
 
   // Deposit

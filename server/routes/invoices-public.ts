@@ -18,6 +18,7 @@
  */
 import { Router } from 'express';
 import { getServiceClient } from '../lib/supabase';
+import { documentTaxLines } from '../lib/taxResolve';
 import { getCompanyBranding } from '../lib/companyBranding';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
@@ -151,9 +152,12 @@ router.get('/invoices/public/:token', async (req, res) => {
     // Tâche de fond : l'affichage ne dépend pas de cette écriture.
     void enregistrerVueFacture(admin, invoice, req);
 
+    // Ventilation TPS / TVQ… (applied_taxes, sinon taxes résolues pour le client).
+    const taxLines = await documentTaxLines(admin, 'invoice', invoice as any);
+
     const { org_id: _org, client_id: _client, is_viewed: _v, view_count: _vc, ...publique } = invoice as any;
     return res.json({
-      invoice: publique,
+      invoice: { ...publique, tax_lines: taxLines },
       items: itemsRes.data ?? [],
       client: clientRes.data ?? null,
       company: company ?? null,

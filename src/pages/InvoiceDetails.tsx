@@ -565,10 +565,17 @@ export default function InvoiceDetails() {
             <span className="text-text-secondary">{t.invoiceDetails.subtotal}</span>
             <span className="font-semibold">{formatMoneyFromCents(invoice.subtotal_cents, invoice.currency || 'CAD')}</span>
           </p>
-          <p className="flex items-center justify-between text-sm">
-            <span className="text-text-secondary">{t.invoiceDetails.tax}</span>
-            <span className="font-semibold">{formatMoneyFromCents(invoice.tax_cents, invoice.currency || 'CAD')}</span>
-          </p>
+          {appliedTaxesQuery.data && appliedTaxesQuery.data.length > 0 ? appliedTaxesQuery.data.map((tax, i) => (
+            <p key={i} className="flex items-center justify-between text-sm">
+              <span className="text-text-secondary">{tax.name} ({tax.rate}%)</span>
+              <span className="font-semibold">{formatMoneyFromCents(tax.amount_cents, invoice.currency || 'CAD')}</span>
+            </p>
+          )) : (
+            <p className="flex items-center justify-between text-sm">
+              <span className="text-text-secondary">{t.invoiceDetails.tax}</span>
+              <span className="font-semibold">{formatMoneyFromCents(invoice.tax_cents, invoice.currency || 'CAD')}</span>
+            </p>
+          )}
           <p className="flex items-center justify-between border-t border-outline-subtle pt-2 text-base">
             <span className="font-semibold text-text-primary">{t.common.total}</span>
             <span className="font-semibold text-text-primary">{formatMoneyFromCents(invoice.total_cents, invoice.currency || 'CAD')}</span>

@@ -692,7 +692,7 @@ router.post('/migration-admin/migrations/:id/test-import', async (req, res) => {
       try {
         await prepareStaging(admin, migration);
         // détection des doublons contre les données actives (lecture seule)
-        const entities: TargetEntity[] = ['client', 'property', 'job', 'quote', 'invoice'];
+        const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'job', 'quote', 'invoice'];
         for (const entity of entities) {
           const { data: records } = await admin
             .from('migration_staging_records')

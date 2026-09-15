@@ -57,6 +57,7 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
     subtotal: 'Sous-total',
     discount: 'Rabais',
     tax: 'Taxes',
+    regNo: 'Nº :',
     total: 'Total',
     deposit: 'Dépôt requis',
     depositDue: 'Payable à l\'acceptation pour confirmer cette soumission',
@@ -82,6 +83,7 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
     subtotal: 'Subtotal',
     discount: 'Discount',
     tax: 'Tax',
+    regNo: 'No:',
     total: 'Total',
     deposit: 'Deposit Required',
     depositDue: 'Due upon acceptance to confirm this quote',
@@ -236,10 +238,27 @@ export default function MinimalProTemplate({ data }: { data: QuoteRenderData }) 
           <div className="w-64 text-[12px]">
             <div className="flex justify-between py-1.5"><span className="text-[#9ca3af]">{L.subtotal}</span><span className="tabular-nums">{fmt(data.subtotal_cents)}</span></div>
             {data.discount_cents > 0 && <div className="flex justify-between py-1.5 text-[#dc2626]"><span>{L.discount}</span><span className="tabular-nums">-{fmt(data.discount_cents)}</span></div>}
-            <div className="flex justify-between py-1.5"><span className="text-[#9ca3af]">{data.tax_rate_label || L.tax}</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
+            {data.tax_breakdown && data.tax_breakdown.length > 0 ? (
+              data.tax_breakdown.map((tax, i) => (
+                <div key={i} className="flex justify-between py-1.5"><span className="text-[#9ca3af]">{tax.name} ({tax.rate}%)</span><span className="tabular-nums">{fmt(tax.amount_cents)}</span></div>
+              ))
+            ) : (
+              <div className="flex justify-between py-1.5"><span className="text-[#9ca3af]">{data.tax_rate_label || L.tax}</span><span className="tabular-nums">{fmt(data.tax_cents)}</span></div>
+            )}
             <div className="flex justify-between pt-2.5 mt-1 border-t border-[#e5e7eb] text-[14px] font-semibold"><span>{L.total}</span><span className="tabular-nums">{fmt(data.total_cents)}</span></div>
           </div>
         </div>
+
+        {/* ── Numéros d'enregistrement des taxes ── */}
+        {data.tax_breakdown && data.tax_breakdown.some(t => t.registration_number) && (
+          <div className="mt-3 flex justify-end">
+            <div className="w-64 text-[10px] text-[#9ca3af] space-y-0.5">
+              {data.tax_breakdown.filter(t => t.registration_number).map((tax, i) => (
+                <div key={i}>{tax.name} {L.regNo} {tax.registration_number}</div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Deposit ── */}
         {data.deposit_required && data.deposit_cents > 0 && (

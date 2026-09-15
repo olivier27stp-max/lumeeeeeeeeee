@@ -185,6 +185,38 @@ export async function findDuplicatesForEntity(
     return matches;
   }
 
+  if (entity === 'tax_config') {
+    // Chaque bureau est préchargé (TPS/TVQ…) : un « TPS » importé sur un bureau
+    // qui a déjà TPS dans la même région est un doublon fort.
+    const existing = await fetchAll<{ id: string; name: string | null; rate: number | null; region: string | null; is_active: boolean | null }>(
+      admin, 'tax_configs', 'id, name, rate, region, is_active', orgId,
+    );
+    const byKey = new Map<string, { id: string; rate: number | null }>();
+    for (const t of existing) {
+      if (t.is_active === false) continue;
+      const key = `${(t.name ?? '').trim().toLowerCase()}|${(t.region ?? '').trim().toUpperCase()}`;
+      if (key !== '|' && !byKey.has(key)) byKey.set(key, { id: t.id, rate: t.rate });
+    }
+    for (const r of records) {
+      const n = r.normalized ?? {};
+      const name = str(n.name).toLowerCase();
+      if (!name) continue;
+      const region = str(n.region).toUpperCase();
+      const hit = byKey.get(`${name}|${region}`) ?? (region ? undefined : byKey.get(`${name}|`));
+      if (!hit) continue;
+      const rate = typeof n.rate === 'number' ? n.rate : null;
+      const sameRate = rate !== null && hit.rate !== null && Math.abs(Number(hit.rate) - rate) < 0.0005;
+      matches.push({
+        stagingRecordId: r.id,
+        existingTable: 'tax_configs',
+        existingId: hit.id,
+        matchReasons: sameRate ? ['name', 'region', 'rate'] : ['name', 'region'],
+        score: sameRate ? 95 : 85,
+      });
+    }
+    return matches;
+  }
+
   if (entity === 'quote') {
     const existing = await fetchAll<{ id: string; quote_number: string | null }>(admin, 'quotes', 'id, quote_number', orgId);
     const byNumber = new Map<string, string>();

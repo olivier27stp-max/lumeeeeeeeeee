@@ -304,6 +304,28 @@ const MONEY_FIELDS = new Set(['total', 'subtotal', 'tax', 'price', 'cost', 'amou
 const DATE_FIELDS = new Set(['created_date', 'sale_date', 'start_date', 'end_date', 'issued_date', 'due_date', 'valid_until', 'date']);
 const DATETIME_FIELDS = new Set(['start_at', 'end_at']);
 const RELATION_FIELDS = new Set(['client_ref', 'property_ref', 'job_ref', 'invoice_ref']);
+const PERCENT_FIELDS = new Set(['rate']);
+const BOOLEAN_FIELDS = new Set(['is_compound']);
+
+/** « 9,975 % », « 9.975 », « 0.09975 » (fraction) → pourcentage 9.975 ; null si illisible. */
+export function parsePercent(v: string): number | null {
+  const cleaned = v.replace(/\s/g, '').replace('%', '').replace(',', '.');
+  if (!/^-?\d*\.?\d+$/.test(cleaned)) return null;
+  let n = Number(cleaned);
+  if (!Number.isFinite(n) || n < 0) return null;
+  // Fraction décimale (0.05 = 5 %) — seulement quand la valeur brute n'a pas de « % »
+  // et est < 1 : un vrai taux de 0,5 % s'écrit « 0.5% » ou « 0,5 % ».
+  if (!v.includes('%') && n > 0 && n < 1) n = n * 100;
+  return Math.round(n * 10000) / 10000;
+}
+
+/** oui/non, yes/no, true/false, 1/0, x/vide → booléen ; null si illisible. */
+export function parseBooleanFlexible(v: string): boolean | null {
+  const s = v.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'y', 'oui', 'o', 'x', 'vrai', 'compound', 'composee', 'composée'].includes(s)) return true;
+  if (['0', 'false', 'no', 'n', 'non', 'faux', ''].includes(s)) return false;
+  return null;
+}
 
 /**
  * Applique les correspondances (header → target_field) à une ligne brute et
@@ -350,6 +372,18 @@ export function normalizeRow(
       }
       relations.external_id = value.slice(0, 120);
       normalized.external_id = value.slice(0, 120);
+      continue;
+    }
+    if (entity === 'tax_config' && PERCENT_FIELDS.has(field)) {
+      const pct = parsePercent(value);
+      if (pct === null) problems.push(`invalid_number:${field}`);
+      else normalized[field] = pct;
+      continue;
+    }
+    if (entity === 'tax_config' && BOOLEAN_FIELDS.has(field)) {
+      const b = parseBooleanFlexible(value);
+      if (b === null) problems.push(`invalid_boolean:${field}`);
+      else normalized[field] = b;
       continue;
     }
     if (MONEY_FIELDS.has(field)) {

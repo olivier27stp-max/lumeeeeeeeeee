@@ -560,7 +560,11 @@ export default function QuoteDetails() {
                 <div className="bg-surface-secondary border-t border-outline px-5 py-3 space-y-1.5">
                   <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{language === 'fr' ? 'Sous-total' : 'Subtotal'}</span><span className="text-text-primary">{formatQuoteMoney(quote.subtotal_cents)}</span></div>
                   {quote.discount_cents > 0 && <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{isFr ? 'Rabais' : 'Discount'}</span><span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span></div>}
-                  <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{(quote.tax_rate_label === 'No tax' && language === 'fr') ? 'Aucune taxe' : (quote.tax_rate_label || (language === 'fr' ? 'Taxe' : 'Tax'))}</span><span className="text-text-primary">{formatQuoteMoney(quote.tax_cents)}</span></div>
+                  {detail.tax_lines.length > 0 ? detail.tax_lines.map((tax, i) => (
+                    <div key={i} className="flex justify-between text-[13px]"><span className="text-text-secondary">{tax.name} ({tax.rate}%)</span><span className="text-text-primary">{formatQuoteMoney(tax.amount_cents)}</span></div>
+                  )) : (
+                    <div className="flex justify-between text-[13px]"><span className="text-text-secondary">{(quote.tax_rate_label === 'No tax' && language === 'fr') ? 'Aucune taxe' : (quote.tax_rate_label || (language === 'fr' ? 'Taxe' : 'Tax'))}</span><span className="text-text-primary">{formatQuoteMoney(quote.tax_cents)}</span></div>
+                  )}
                   <div className="flex justify-between text-[15px] font-bold border-t border-outline pt-2"><span className="text-text-primary">Total</span><span className="text-text-primary">{formatQuoteMoney(quote.total_cents)}</span></div>
                 </div>
               </>
