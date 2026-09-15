@@ -166,9 +166,14 @@ describe('SQL — RLS deny-all et bucket privé', () => {
 
 describe('post-audit — garde-fous et neutralité des données migrées', () => {
   it('la demande d\'approbation refuse fichiers tronqués et colonnes non tranchées', () => {
+    // Les gardes vivent désormais dans server/lib/migration/execution.ts (partagées avec le bot) ;
+    // la route doit y déléguer, et le module doit porter les deux gardes.
     const body = routeBody(adminSrc, "'/migration-admin/migrations/:id/request-approval'");
-    expect(body).toContain("'truncated'");
-    expect(body).toContain("'needs_review'");
+    expect(body).toContain('demanderApprobation(');
+    const execSrc = read('server/lib/migration/execution.ts');
+    const garde = execSrc.slice(execSrc.indexOf('export async function demanderApprobation'));
+    expect(garde).toContain("'truncated'");
+    expect(garde).toContain("'needs_review'");
   });
 
   it('l\'import final purge le bruit d\'activité après validation', () => {

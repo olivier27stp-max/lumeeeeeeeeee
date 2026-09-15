@@ -214,6 +214,20 @@ export function saveMappingTemplate(id: string, name: string): Promise<{ ok: boo
   return apiFetch(`/migrations/${id}/save-template`, { method: 'POST', body: JSON.stringify({ name }) });
 }
 
+/** Le bot fait une passe maintenant (analyse, correspondances, doublons, import test, questions) et renvoie ce qu'il a décidé. */
+export function lancerBotMigration(id: string): Promise<RapportBotMigration> {
+  return apiFetch(`/migrations/${id}/bot`, { method: 'POST' });
+}
+export interface DecisionBotMigration { etape: string; cible: string; decision: string; detail?: string }
+export interface RapportBotMigration {
+  migration_id: string; declencheur: 'manuel' | 'cron'; debut: string; fin: string;
+  statut_avant: string; statut_apres: string; decisions: DecisionBotMigration[]; questions_posees: number; arret: string; cout_cents: number | null;
+}
+/** Le cron reprend la migration tout seul tant que c'est vrai. */
+export function definirBotActif(id: string, actif: boolean): Promise<any> {
+  return patchMigration(id, { bot_actif: actif });
+}
+
 export function applyMappingTemplate(id: string, templateId: string): Promise<{ ok: boolean; applied: number }> {
   return apiFetch(`/migrations/${id}/apply-template`, { method: 'POST', body: JSON.stringify({ template_id: templateId }) });
 }

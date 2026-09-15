@@ -21,6 +21,7 @@ import {
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate,
   type AdminMigrationListItem, type MigrationStaffEntry,
 } from '../lib/migrationAdminApi';
+import { lancerBotMigration, definirBotActif, type RapportBotMigration } from '../lib/migrationAdminApi';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
@@ -423,6 +424,9 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
+      {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
+        <button type="button" className={primary} onClick={() => act(async () => { const r = await lancerBotMigration(m.id); toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`); }, 'Passe du bot terminée')}>Confier au bot</button>
+      )}
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client'].includes(m.status) && (
         <button type="button" className={subtle} onClick={() => act(() => startAnalysis(m.id), 'Analyse relancée')}>Relancer l'analyse</button>
       )}
@@ -587,6 +591,48 @@ function StaffCard({ migrationId }: { migrationId: string }) {
   );
 }
 
+/** Le bot de migration : actif ou non, dernière passe, ses décisions. L'approbation et l'import final restent humains. */
+function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
+  const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+  const [busy, setBusy] = useState(false);
+  const basculer = async () => {
+    setBusy(true);
+    try { await definirBotActif(m.id, !m.bot_actif); toast.success(m.bot_actif ? 'Bot mis en pause' : 'Bot actif : il reprend la migration toutes les 10 minutes'); onChanged(); }
+    catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="section-card p-5 lg:col-span-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-[14px] font-bold text-text-primary">Bot de migration</h3>
+          <p className="text-[12.5px] text-text-secondary">Analyse, correspondances, doublons, import test et questions au client. Jamais l'approbation ni l'import final.</p>
+        </div>
+        <button type="button" disabled={busy} onClick={basculer} className={`h-9 px-3.5 rounded-md text-[13px] font-medium border transition-colors ${m.bot_actif ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-surface-card border-outline text-text-secondary'}`}>
+          {m.bot_actif ? 'Actif — mettre en pause' : 'Activer le bot (toutes les 10 min)'}
+        </button>
+      </div>
+      {rapport ? (
+        <div className="mt-3">
+          <p className="text-[12.5px] text-text-secondary">
+            Dernière passe {new Date(rapport.fin).toLocaleString('fr-CA')} ({rapport.declencheur}) : {rapport.statut_avant} → {rapport.statut_apres} · {rapport.decisions.length} décision{rapport.decisions.length > 1 ? 's' : ''} · {rapport.arret}
+            {rapport.cout_cents != null ? ` · ${rapport.cout_cents.toFixed(2)} ¢ de modèle` : ''}
+          </p>
+          {rapport.decisions.length > 0 && (
+            <ul className="mt-2 space-y-1 max-h-56 overflow-auto text-[12.5px]">
+              {rapport.decisions.map((d, i) => (
+                <li key={i} className="flex gap-2"><span className="text-text-tertiary w-28 shrink-0">{d.etape}</span><span className="text-text-secondary">{d.cible} — <span className="text-text-primary">{d.decision}</span>{d.detail ? ` (${d.detail})` : ''}</span></li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : (
+        <p className="mt-3 text-[12.5px] text-text-tertiary">Aucune passe encore. « Confier au bot » lance une passe maintenant ; « Activer » le fait revenir tout seul.</p>
+      )}
+    </div>
+  );
+}
+
 function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   const m = d.migration;
   const [ttl, setTtl] = useState(48);
@@ -596,6 +642,7 @@ function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <CarteBot m={m} onChanged={onChanged} />
       <div className="section-card p-5">
         <h3 className="text-[14px] font-bold text-text-primary mb-3">Invitation</h3>
         {activeInv ? (
