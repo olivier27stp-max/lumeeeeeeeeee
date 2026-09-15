@@ -68,10 +68,11 @@ describe('deterministicEntityId — idempotence', () => {
 });
 
 describe('ordre d\'import', () => {
-  it('respecte les dépendances (taxes → services → clients → propriétés → jobs → soumissions → visites → factures)', () => {
-    expect(IMPORT_ORDER).toEqual(['tax_config', 'service', 'client', 'property', 'job', 'quote', 'visit', 'invoice']);
+  it('respecte les dépendances (taxes → services → clients → propriétés → adresses de facturation → jobs → soumissions → visites → factures)', () => {
+    expect(IMPORT_ORDER).toEqual(['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice']);
     expect(IMPORT_ORDER.indexOf('tax_config')).toBeLessThan(IMPORT_ORDER.indexOf('service'));
     expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('property'));
+    expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('billing_property'));
     expect(IMPORT_ORDER.indexOf('job')).toBeLessThan(IMPORT_ORDER.indexOf('visit'));
     expect(IMPORT_ORDER.indexOf('job')).toBeLessThan(IMPORT_ORDER.indexOf('invoice'));
   });
@@ -109,6 +110,46 @@ describe('buildEntityRow — contraintes NOT NULL de prod (leçon E2E 2026-08-24
     expect(buildEntityRow('tax_config', { ...base, normalized: { name: 'TPS' } } as any, ctx).ok).toBe(false);
     expect(buildEntityRow('tax_config', { ...base, normalized: { name: 'TPS', rate: 150 } } as any, ctx).ok).toBe(false);
     expect(buildEntityRow('tax_config', { ...base, normalized: { rate: 5 } } as any, ctx).ok).toBe(false);
+  });
+
+  it('adresse de facturation : properties.kind = billing, jamais principale, client obligatoire', () => {
+    const res = buildEntityRow('billing_property', {
+      id: 'b1', row_number: 1, entity_type: 'billing_property', external_id: null, status: 'ready',
+      normalized: { address: '12 rue des Comptables', city: 'Laval', province: 'QC', postal_code: 'H7A 1A1' },
+      relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx);
+    expect(res.ok).toBe(true);
+    const row = (res as any).row;
+    expect(row.kind).toBe('billing');
+    expect(row.is_primary).toBe(false);
+    expect(row.client_id).toBe('client-1');
+    expect(row.city).toBe('Laval');
+
+    const orphan = buildEntityRow('billing_property', {
+      id: 'b2', row_number: 2, entity_type: 'billing_property', external_id: null, status: 'ready',
+      normalized: { address: '1 rue X' }, relations: { client_ref: 'Inconnu' },
+    } as any, ctx);
+    expect(orphan.ok).toBe(false);
+    expect((orphan as any).reason).toBe('orphan');
+
+    // la propriété de SERVICE reste explicitement kind = service
+    const svc = buildEntityRow('property', {
+      id: 'p1', row_number: 3, entity_type: 'property', external_id: null, status: 'ready',
+      normalized: { address: '99 rue Y' }, relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx);
+    expect((svc as any).row.kind).toBe('service');
+  });
+
+  it('deux adresses de facturation pour le même client = doublon interne (une seule active par client)', async () => {
+    const { planIntraDedupe } = await import('../../server/lib/migration/importer');
+    const rows = [
+      { id: 'b1', row_number: 1, entity_type: 'billing_property', external_id: null, status: 'ready', normalized: { address: '1 rue A' }, relations: { client_ref: 'Marc Tremblay' } },
+      { id: 'b2', row_number: 2, entity_type: 'billing_property', external_id: null, status: 'ready', normalized: { address: '2 rue B' }, relations: { client_ref: 'Marc Tremblay' } },
+      { id: 'b3', row_number: 3, entity_type: 'billing_property', external_id: null, status: 'ready', normalized: { address: '1 rue A' }, relations: { client_ref: 'Julie Roy' } },
+    ] as any[];
+    const plan = planIntraDedupe('billing_property', rows);
+    expect(plan.siblingOf.get('b2')).toBe('b1');
+    expect(plan.siblingOf.has('b3')).toBe(false); // même adresse, client distinct : légitime
   });
 
   it('job sans sous-total : jamais de null sur les colonnes monétaires', () => {

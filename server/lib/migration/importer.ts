@@ -20,13 +20,17 @@ import type {
 } from './types';
 
 // Taxes en premier : les services (taxable) et les documents s'y réfèrent.
-export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'job', 'quote', 'visit', 'invoice'];
+export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice'];
 
+/** Table active cible. `property` et `billing_property` partagent `properties`
+ *  (kind = 'service' | 'billing') : toute mesure « par table » doit donc
+ *  passer par les ids de staging (voir runPostImportValidation). */
 export const TABLE_BY_ENTITY: Record<string, string> = {
   tax_config: 'tax_configs',
   service: 'predefined_services',
   client: 'clients',
   property: 'properties',
+  billing_property: 'properties',
   job: 'jobs',
   quote: 'quotes',
   visit: 'schedule_events',
@@ -38,6 +42,7 @@ const CATEGORY_BY_ENTITY: Record<string, string> = {
   service: 'services',
   client: 'clients',
   property: 'properties',
+  billing_property: 'billing_addresses',
   job: 'jobs',
   quote: 'quotes',
   visit: 'visits',
@@ -231,6 +236,12 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   } else if (entity === 'property') {
     const addr = normalizeAddressKey(str(n.address));
     if (addr) keys.push(`a:${addr}`);
+  } else if (entity === 'billing_property') {
+    // Une seule adresse de facturation active par client (index unique) : deux
+    // lignes pour le même client = même dossier, la première gagne. Deux
+    // clients facturés à la même adresse restent DISTINCTS (pas de clé adresse).
+    const client = refKey(str((rec.relations ?? {}).client_ref));
+    if (client) keys.push(`bc:${client}`);
   } else if (entity === 'job') {
     const num = refKey(str(n.job_number));
     if (num) keys.push(`j:${num}`);
@@ -471,6 +482,33 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
         name: safeStr(n.name) || null,
+        kind: 'service',
+        is_primary: false,
+        created_by: ctx.createdBy,
+      },
+    };
+  }
+
+  if (entity === 'billing_property') {
+    const address = str(n.address);
+    if (!address) return { ok: false, reason: 'invalid' };
+    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    if (!clientId) return { ok: false, reason: 'orphan' };
+    // Le trigger trg_properties_billing_mirror (20260915000000) reflète cette
+    // ligne dans clients.billing_address et passe billing_same_as_service à
+    // false : le client est facturé à cette adresse dès l'import.
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        client_id: clientId,
+        address: safeStr(n.address),
+        city: safeStr(n.city) || null,
+        province: safeStr(n.province) || null,
+        postal_code: str(n.postal_code) || null,
+        country: safeStr(n.country) || null,
+        name: 'Adresse de facturation',
+        kind: 'billing',
         is_primary: false,
         created_by: ctx.createdBy,
       },
@@ -1535,25 +1573,53 @@ export async function runPostImportValidation(
   const approvedByEntity = (approval?.report as DryRunReport | null)?.byEntity ?? null;
   for (const entity of entities) {
     const table = TABLE_BY_ENTITY[entity];
-    const [{ count: expected }, { count: actual }] = await Promise.all([
-      admin
-        .from('migration_staging_records')
-        .select('id', { count: 'exact', head: true })
-        .eq('migration_id', migration.id)
-        .eq('entity_type', entity)
-        .in('status', ['imported', 'merged']),
-      admin
+    const sharedTable = Object.entries(TABLE_BY_ENTITY).some(([e, t]) => t === table && e !== entity);
+    const { count: expected } = await admin
+      .from('migration_staging_records')
+      .select('id', { count: 'exact', head: true })
+      .eq('migration_id', migration.id)
+      .eq('entity_type', entity)
+      .in('status', ['imported', 'merged']);
+    let actual = 0;
+    if (!sharedTable) {
+      const { count } = await admin
         .from('migration_import_records')
         .select('id', { count: 'exact', head: true })
         .eq('migration_id', migration.id)
         .eq('entity_table', table)
-        .in('action', ['created', 'merged']),
-    ]);
-    checks.push({ name: `count:${entity}`, expected: expected ?? 0, actual: actual ?? 0, ok: (expected ?? 0) === (actual ?? 0) });
+        .in('action', ['created', 'merged']);
+      actual = count ?? 0;
+    } else {
+      // Table partagée (property / billing_property → properties) : compter par
+      // ids de staging de CETTE entité, sinon les deux se contaminent.
+      const stagingIds: string[] = [];
+      for (let offset = 0; ; offset += STAGING_PAGE) {
+        const { data } = await admin
+          .from('migration_staging_records')
+          .select('id')
+          .eq('migration_id', migration.id)
+          .eq('entity_type', entity)
+          .range(offset, offset + STAGING_PAGE - 1);
+        if (!data || data.length === 0) break;
+        for (const r of data as { id: string }[]) stagingIds.push(r.id);
+        if (data.length < STAGING_PAGE) break;
+      }
+      for (let i = 0; i < stagingIds.length; i += CHUNK) {
+        const { count } = await admin
+          .from('migration_import_records')
+          .select('id', { count: 'exact', head: true })
+          .eq('migration_id', migration.id)
+          .eq('entity_table', table)
+          .in('action', ['created', 'merged'])
+          .in('staging_record_id', stagingIds.slice(i, i + CHUNK));
+        actual += count ?? 0;
+      }
+    }
+    checks.push({ name: `count:${entity}`, expected: expected ?? 0, actual, ok: (expected ?? 0) === actual });
 
     if (approvedByEntity && approvedByEntity[entity]) {
       const promised = (approvedByEntity[entity]?.wouldCreate ?? 0) + (approvedByEntity[entity]?.wouldMerge ?? 0);
-      checks.push({ name: `approved:${entity}`, expected: promised, actual: actual ?? 0, ok: promised === (actual ?? 0) });
+      checks.push({ name: `approved:${entity}`, expected: promised, actual, ok: promised === actual });
     }
   }
 

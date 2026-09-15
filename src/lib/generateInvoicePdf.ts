@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { versDate } from './dateSeule';
 import type { InvoiceDetail } from './invoicesApi';
 import { formatMoneyFromCents, toClientDisplayName } from './invoicesApi';
+import { resolveInvoiceBillingAddress } from './invoiceBillingAddress';
 
 export interface PdfCompanyInfo {
   company_name?: string | null;
@@ -117,6 +118,16 @@ export function downloadInvoicePdf(detail: InvoiceDetail, company?: PdfCompanyIn
   doc.text(clientName, rightCol - 180, clientStartY + 14);
 
   let cY = clientStartY + 28;
+  // Billing address (snapshot for issued invoices, live for drafts) — the
+  // HTML preview shows it, the PDF must match.
+  const billTo = resolveInvoiceBillingAddress(detail);
+  if (billTo) {
+    for (const line of doc.splitTextToSize(billTo, 180) as string[]) {
+      doc.text(line, rightCol - 180, cY);
+      cY += 12;
+    }
+    cY += 2;
+  }
   if (client?.email) {
     doc.text(client.email, rightCol - 180, cY);
     cY += 14;

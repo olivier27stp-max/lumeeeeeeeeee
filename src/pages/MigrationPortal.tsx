@@ -47,8 +47,13 @@ const CRM_LABELS: Record<string, string> = {
 };
 
 const ENTITY_LABELS_FR: Record<string, string> = {
-  tax_config: 'Noms de taxes', client: 'Clients', property: 'Propriétés', service: 'Produits et services', quote: 'Soumissions',
+  tax_config: 'Noms de taxes', client: 'Clients', property: 'Propriétés', billing_property: 'Adresses de facturation',
+  service: 'Produits et services', quote: 'Soumissions',
   job: 'Jobs', visit: 'Visites', invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
+  // catégories de fichier (category_detected) affichées avec le même dictionnaire
+  clients: 'Clients', properties: 'Propriétés', billing_addresses: 'Adresses de facturation',
+  services: 'Produits et services', quotes: 'Soumissions', jobs: 'Jobs', visits: 'Visites',
+  invoices: 'Factures', payments: 'Paiements',
 };
 
 function formatBytes(n: number): string {
@@ -345,10 +350,10 @@ function PortalBody({ fr, token, session, onRefresh }: { fr: boolean; token: str
 }
 
 function SummaryCards({ fr, session }: { fr: boolean; session: PortalSession }) {
-  const entries = ['client', 'property', 'job', 'visit', 'quote', 'invoice']
+  const entries = ['client', 'property', 'billing_property', 'job', 'visit', 'quote', 'invoice']
     .map((e) => ({ key: e, label: ENTITY_LABELS_FR[e], count: session.detected_counts[e] ?? 0 }));
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
       {entries.map((e) => (
         <div key={e.key} className="rounded-lg border border-[#e6e2d8] bg-white px-3 py-2.5">
           <div className="text-[18px] font-extrabold leading-tight">{e.count}</div>

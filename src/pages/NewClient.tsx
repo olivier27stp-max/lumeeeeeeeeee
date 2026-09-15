@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient, findClientsByEmail, type ClientPhone } from '../lib/clientsApi';
+import { upsertBillingProperty } from '../lib/propertiesApi';
 import { isEntityNumberTaken, peekNextNumbers } from '../lib/numbersApi';
 import { DEFAULT_LEAD_SOURCES, DEFAULT_LEAD_SOURCE_LABELS_FR, createLeadSource, listLeadSources } from '../lib/leadSourcesApi';
 import { resolveTaxes, type TaxConfig } from '../lib/taxApi';
@@ -63,6 +64,7 @@ export default function NewClient() {
   const [taxTouched, setTaxTouched] = useState(false);
   const [billingSame, setBillingSame] = useState(true);
   const [billingSearch, setBillingSearch] = useState('');
+  const [billingStructured, setBillingStructured] = useState<StructuredAddress | null>(null);
   const [saving, setSaving] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
 
@@ -261,6 +263,27 @@ export default function NewClient() {
         tax_ids: taxTouched ? Array.from(selectedTaxIds) : null,
         client_number: clientNumberToSend || undefined,
       });
+      // The DB trigger already seeded the billing property from the text
+      // above; when a suggestion was picked, enrich it with the structured
+      // fields (city, postal code, geo). Non-blocking: the client exists.
+      if (!billingSame && billingStructured) {
+        try {
+          await upsertBillingProperty(created.id, {
+            address: billingStructured.formatted_address,
+            street_number: billingStructured.street_number || null,
+            street_name: billingStructured.street_name || null,
+            city: billingStructured.city || null,
+            province: billingStructured.province || null,
+            postal_code: billingStructured.postal_code || null,
+            country: billingStructured.country || null,
+            latitude: billingStructured.latitude ?? null,
+            longitude: billingStructured.longitude ?? null,
+            place_id: billingStructured.place_id || null,
+          });
+        } catch (err) {
+          console.error('[NewClient] billing property enrich failed:', err);
+        }
+      }
       guard.release();
       toast.success(t.clients.clientCreated);
       navigate(`/clients/${created.id}`);
@@ -581,8 +604,8 @@ export default function NewClient() {
                     <span className={fieldLabel}>{fr ? 'Adresse de facturation' : 'Billing address'}</span>
                     <AddressAutocomplete
                       value={billingSearch}
-                      onChange={setBillingSearch}
-                      onSelect={(addr) => setBillingSearch(addr.formatted_address)}
+                      onChange={(value) => { setBillingSearch(value); setBillingStructured(null); }}
+                      onSelect={(addr) => { setBillingStructured(addr); setBillingSearch(addr.formatted_address); }}
                       placeholder={fr ? 'Commencez à taper une adresse…' : 'Start typing an address...'}
                     />
                     <p className="text-[12px] text-text-tertiary">

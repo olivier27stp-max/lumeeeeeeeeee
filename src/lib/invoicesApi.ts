@@ -106,6 +106,8 @@ export interface InvoiceDetail {
     tax_cents: number;
     paid_at: string | null;
     deleted_at: string | null;
+    /** « Bill to » address frozen at creation (migration 20260915000000). */
+    billing_address_snapshot?: string | null;
   };
   client: {
     id: string;
@@ -542,6 +544,7 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
       viewed_at: invoiceRow.viewed_at || null,
       view_count: Number(invoiceRow.view_count || 0),
       last_viewed_at: invoiceRow.last_viewed_at || null,
+      billing_address_snapshot: (invoiceRow as any).billing_address_snapshot ?? null,
     },
     client: clientRow
       ? {

@@ -74,7 +74,7 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
   try {
     await prepareStaging(admin, migration);
     // Même liste que main (fb3a0342) : les taxes importées sont dédoublonnées contre les taxes actives.
-    const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'job', 'quote', 'invoice'];
+    const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'billing_property', 'job', 'quote', 'invoice'];
     for (const entity of entities) {
       const { data: records } = await admin
         .from('migration_staging_records')

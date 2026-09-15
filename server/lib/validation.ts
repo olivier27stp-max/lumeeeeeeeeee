@@ -516,7 +516,7 @@ export const idRequiredSchema = z.object({
 // ─── Migration assistée (console interne + portail temporaire) ───────────
 
 const migrationCategoryEnum = z.enum([
-  'taxes', 'clients', 'properties', 'services', 'quotes', 'jobs', 'visits',
+  'taxes', 'clients', 'properties', 'billing_addresses', 'services', 'quotes', 'jobs', 'visits',
   'invoices', 'payments', 'notes', 'attachments', 'team_members', 'custom_fields',
 ]);
 
@@ -527,7 +527,7 @@ const migrationSourceCrmEnum = z.enum([
 export const migrationCreateSchema = z.object({
   org_id: z.string().uuid('org_id must be a valid UUID.'),
   source_crm: migrationSourceCrmEnum.optional(),
-  categories: z.array(migrationCategoryEnum).min(1).max(13).optional(),
+  categories: z.array(migrationCategoryEnum).min(1).max(14).optional(),
   priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   internal_notes: z.string().max(4000).optional().nullable(),
@@ -543,7 +543,7 @@ export const migrationApproveOnBehalfSchema = z.object({
 
 export const migrationPatchSchema = z.object({
   source_crm: migrationSourceCrmEnum.optional(),
-  categories: z.array(migrationCategoryEnum).min(1).max(13).optional(),
+  categories: z.array(migrationCategoryEnum).min(1).max(14).optional(),
   priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
   target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   internal_notes: z.string().max(4000).optional().nullable(),
@@ -572,7 +572,7 @@ export const migrationStatusChangeSchema = z.object({
 });
 
 const migrationTargetEntityEnum = z.enum([
-  'tax_config', 'client', 'property', 'service', 'quote', 'job', 'visit', 'invoice', 'line_item', 'payment',
+  'tax_config', 'client', 'property', 'billing_property', 'service', 'quote', 'job', 'visit', 'invoice', 'line_item', 'payment',
 ]);
 
 export const migrationMappingDecisionSchema = z.object({

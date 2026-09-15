@@ -21,7 +21,18 @@ describe('entityForCategory', () => {
     expect(entityForCategory('clients')).toBe('client');
     expect(entityForCategory('invoices')).toBe('invoice');
     expect(entityForCategory('taxes')).toBe('tax_config');
+    expect(entityForCategory('billing_addresses')).toBe('billing_property');
     expect(entityForCategory(null)).toBe(null);
+  });
+
+  it('billing_property : catalogue de champs dédié, client obligatoire', () => {
+    const fields = FIELD_CATALOG.billing_property.map((f) => f.field);
+    expect(fields).toEqual(expect.arrayContaining(['address', 'city', 'province', 'postal_code', 'country', 'client_ref']));
+    expect(FIELD_CATALOG.billing_property.find((f) => f.field === 'client_ref')?.required).toBe(true);
+    const [addr, client] = suggestMappings('billing_addresses', [col('Billing Address', 'address'), col('Customer Name', 'name', 1)], 'billing_addresses.csv');
+    expect(addr.targetEntity).toBe('billing_property');
+    expect(addr.targetField).toBe('address');
+    expect(client.targetField).toBe('client_ref');
   });
 });
 

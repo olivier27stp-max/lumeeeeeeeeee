@@ -152,8 +152,12 @@ export async function findDuplicatesForEntity(
     return matches;
   }
 
-  if (entity === 'property') {
-    const existing = await fetchAll<{ id: string; address: string | null }>(admin, 'properties', 'id, address', orgId);
+  if (entity === 'property' || entity === 'billing_property') {
+    // Même table, jamais mélangées : une adresse de service et une adresse de
+    // facturation identiques sont deux dossiers légitimes.
+    const wantedKind = entity === 'billing_property' ? 'billing' : 'service';
+    const existing = (await fetchAll<{ id: string; address: string | null; kind: string | null }>(admin, 'properties', 'id, address, kind', orgId))
+      .filter((p) => (p.kind ?? 'service') === wantedKind);
     const byAddress = new Map<string, string>();
     for (const p of existing) {
       const key = normalizeAddressKey(p.address ?? '');

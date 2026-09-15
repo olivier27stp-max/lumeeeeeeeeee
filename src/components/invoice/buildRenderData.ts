@@ -1,4 +1,5 @@
 import type { InvoiceDetail } from '../../lib/invoicesApi';
+import { resolveInvoiceBillingAddress } from '../../lib/invoiceBillingAddress';
 import type { InvoiceRenderData, InvoiceTaxLine } from './types';
 
 /**
@@ -45,13 +46,9 @@ export function buildRenderData(
     client_email: client?.email || null,
     client_phone: client?.phone || null,
     client_company: (client as any)?.company || null,
-    // Billing address: a distinct billing address when the client opted out of
-    // "same as service address", otherwise the service (property) address.
-    client_address: client
-      ? ((client as any).billing_same_as_service === false && (client as any).billing_address
-          ? (client as any).billing_address
-          : (client as any).address || null)
-      : null,
+    // Billing address: snapshot frozen at creation for issued invoices; live
+    // resolution (billing property, else service address) for drafts.
+    client_address: resolveInvoiceBillingAddress(detail),
 
     company_name: company?.company_name || 'LUME',
     company_email: company?.company_email || null,

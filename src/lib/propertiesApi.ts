@@ -2,15 +2,23 @@ import { supabase } from './supabase';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 
 /**
- * A property is a service location belonging to a client. A client can have
- * many properties; each has a name + a (structured) address. Jobs, quotes and
- * invoices are assigned to a property. See migration
- * `20260707000000_properties_feature.sql`.
+ * A property is an address belonging to a client.
+ * - kind = 'service' (default): a service location. A client can have many;
+ *   jobs, quotes and invoices are assigned to one. See migration
+ *   `20260707000000_properties_feature.sql`.
+ * - kind = 'billing': the client's billing address — at most ONE active per
+ *   client, never primary. Mirrored by DB trigger into
+ *   `clients.billing_address`; used on invoices when
+ *   `clients.billing_same_as_service` is false. See migration
+ *   `20260915000000_billing_properties.sql`.
  */
+export type PropertyKind = 'service' | 'billing';
+
 export interface PropertyRecord {
   id: string;
   org_id: string;
   client_id: string;
+  kind: PropertyKind;
   name: string;
   address: string | null;
   street_number: string | null;
@@ -30,6 +38,7 @@ export interface PropertyRecord {
 
 export interface PropertyPayload {
   client_id: string;
+  kind?: PropertyKind;
   name: string;
   address?: string | null;
   street_number?: string | null;
@@ -44,7 +53,8 @@ export interface PropertyPayload {
   is_primary?: boolean;
 }
 
-/** List a client's properties (primary first, then oldest first). */
+/** List a client's SERVICE properties (primary first, then oldest first).
+ *  The billing address is a separate entity: see getBillingProperty. */
 export async function listPropertiesByClient(clientId: string): Promise<PropertyRecord[]> {
   if (!clientId) return [];
   const orgId = await getCurrentOrgIdOrThrow();
@@ -53,11 +63,56 @@ export async function listPropertiesByClient(clientId: string): Promise<Property
     .select('*')
     .eq('org_id', orgId)
     .eq('client_id', clientId)
+    .eq('kind', 'service')
     .is('deleted_at', null)
     .order('is_primary', { ascending: false })
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data || []) as PropertyRecord[];
+}
+
+/** The client's active billing address (kind = 'billing'), or null. */
+export async function getBillingProperty(clientId: string): Promise<PropertyRecord | null> {
+  if (!clientId) return null;
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .eq('org_id', orgId)
+    .eq('client_id', clientId)
+    .eq('kind', 'billing')
+    .is('deleted_at', null)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as PropertyRecord | null) || null;
+}
+
+export type BillingAddressInput = Omit<PropertyPayload, 'client_id' | 'kind' | 'name' | 'is_primary'>;
+
+/**
+ * Create or update the client's billing address (one per client). Creating it
+ * also flips `clients.billing_same_as_service` to false (DB trigger), so the
+ * client is billed there from now on.
+ */
+export async function upsertBillingProperty(clientId: string, input: BillingAddressInput): Promise<PropertyRecord> {
+  if (!clientId) throw new Error('client_id is required to save a billing address.');
+  const existing = await getBillingProperty(clientId);
+  if (existing) return updateProperty(existing.id, input);
+  return createProperty({
+    ...input,
+    client_id: clientId,
+    kind: 'billing',
+    name: 'Adresse de facturation',
+    is_primary: false,
+  });
+}
+
+/** Remove the client's billing address (soft delete; the mirror column is cleared by trigger). */
+export async function removeBillingProperty(clientId: string): Promise<void> {
+  const existing = await getBillingProperty(clientId);
+  if (existing) await softDeleteProperty(existing.id);
 }
 
 export async function getPropertyById(id: string): Promise<PropertyRecord | null> {
@@ -87,6 +142,7 @@ function cleanPayload(payload: Partial<PropertyPayload>): Record<string, any> {
   if (payload.longitude !== undefined) out.longitude = payload.longitude ?? null;
   if (payload.place_id !== undefined) out.place_id = payload.place_id?.trim() || null;
   if (payload.is_primary !== undefined) out.is_primary = payload.is_primary;
+  if (payload.kind !== undefined) out.kind = payload.kind;
   return out;
 }
 
@@ -101,8 +157,10 @@ export async function createProperty(payload: PropertyPayload): Promise<Property
   if (!payload.name?.trim()) throw new Error('Le nom de la propriété est requis.');
   const orgId = await getCurrentOrgIdOrThrow();
 
-  let isPrimary = payload.is_primary ?? false;
-  if (payload.is_primary === undefined) {
+  const kind: PropertyKind = payload.kind ?? 'service';
+  // A billing address is never the primary (service) property.
+  let isPrimary = kind === 'billing' ? false : (payload.is_primary ?? false);
+  if (kind === 'service' && payload.is_primary === undefined) {
     const existing = await listPropertiesByClient(payload.client_id);
     if (existing.length === 0) isPrimary = true;
   }
@@ -112,6 +170,7 @@ export async function createProperty(payload: PropertyPayload): Promise<Property
     name: payload.name.trim(),
     org_id: orgId,
     client_id: payload.client_id,
+    kind,
     is_primary: isPrimary,
   };
 

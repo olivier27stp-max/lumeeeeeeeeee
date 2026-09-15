@@ -135,6 +135,15 @@ describe('catégorie de fichier', () => {
   it('par signature d\'en-têtes quand le nom est neutre', () => {
     expect(detectCategory('export.csv', ['Invoice Number', 'Due Date', 'Total'])).toBe('invoices');
   });
+
+  it('adresses de facturation : entité distincte des propriétés (nom de fichier puis en-têtes)', () => {
+    expect(detectCategory('billing_addresses.csv', [])).toBe('billing_addresses');
+    expect(detectCategory('Adresses de facturation.csv', [])).toBe('billing_addresses');
+    expect(detectCategory('properties.csv', [])).toBe('properties');
+    expect(detectCategory('export.csv', ['Customer', 'Billing Address', 'Billing City', 'Billing Zip'])).toBe('billing_addresses');
+    // un export client qui porte les DEUX adresses reste un export de propriétés/clients, pas de facturation
+    expect(detectCategory('export.csv', ['Customer', 'Service Address', 'Billing Address'])).toBe('properties');
+  });
 });
 
 describe('sécurité anti-injection CSV', () => {

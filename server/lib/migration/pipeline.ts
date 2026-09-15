@@ -284,6 +284,7 @@ function extractExternalId(entity: TargetEntity, row: Record<string, string>): s
     quote: ['quote number', 'quote #', 'estimate number', 'no de soumission', 'id'],
     visit: ['visit id', 'appointment id', 'id'],
     property: ['property id', 'location id', 'id'],
+    billing_property: ['billing address id', 'address id', 'id'],
     service: ['item id', 'product id', 'id'],
     line_item: ['id'],
     payment: ['payment id', 'reference', 'id'],

@@ -66,6 +66,7 @@ export const MIGRATION_CATEGORIES = [
   'taxes',
   'clients',
   'properties',
+  'billing_addresses',
   'services',
   'quotes',
   'jobs',
@@ -88,17 +89,21 @@ export const IMPORTABLE_CATEGORIES: MigrationCategory[] = [
   'services',
   'clients',
   'properties',
+  'billing_addresses',
   'quotes',
   'jobs',
   'visits',
   'invoices',
 ];
 
-/** Entités cibles d'une correspondance colonne → champ Lume. */
+/** Entités cibles d'une correspondance colonne → champ Lume.
+ *  `billing_property` = adresse de facturation d'un client (table
+ *  `properties`, kind = 'billing', migration 20260915000000). */
 export const TARGET_ENTITIES = [
   'tax_config',
   'client',
   'property',
+  'billing_property',
   'service',
   'quote',
   'job',

@@ -267,6 +267,71 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
     },
   ],
 
+  // Adresse de facturation d'un client (properties.kind = 'billing') : un
+  // fichier « billing addresses » / « adresses de facturation », une ligne par
+  // client. Pas de nom de propriété ni de géo : c'est une adresse postale.
+  billing_property: [
+    {
+      field: 'address',
+      labelFr: 'Adresse de facturation',
+      labelEn: 'Billing address',
+      types: ['address', 'text'],
+      required: true,
+      synonyms: [
+        'billing address', 'billing street', 'billing address 1', 'billing address line 1', 'bill to address',
+        'bill to', 'invoice address', 'mailing address', 'address', 'street', 'street address', 'address 1',
+        'adresse de facturation', 'adresse facturation', 'adresse postale', 'facturer a', 'adresse', 'rue',
+      ],
+    },
+    {
+      field: 'city',
+      labelFr: 'Ville',
+      labelEn: 'City',
+      types: ['name', 'text'],
+      synonyms: ['billing city', 'city', 'town', 'ville de facturation', 'ville', 'municipalite', 'localite'],
+    },
+    {
+      field: 'province',
+      labelFr: 'Province',
+      labelEn: 'Province',
+      types: ['text', 'status'],
+      synonyms: ['billing province', 'billing state', 'province', 'state', 'state province', 'prov', 'etat', 'region'],
+    },
+    {
+      field: 'postal_code',
+      labelFr: 'Code postal',
+      labelEn: 'Postal code',
+      types: ['postal_code', 'text', 'number'],
+      synonyms: ['billing postal code', 'billing zip', 'postal code', 'zip', 'zip code', 'zip postal code', 'postal', 'code postal', 'cp'],
+    },
+    {
+      field: 'country',
+      labelFr: 'Pays',
+      labelEn: 'Country',
+      types: ['name', 'text', 'status'],
+      synonyms: ['billing country', 'country', 'pays'],
+    },
+    {
+      field: 'client_ref',
+      labelFr: 'Client associé',
+      labelEn: 'Client reference',
+      types: ['id', 'name', 'number', 'text'],
+      required: true,
+      synonyms: [
+        'customer', 'client', 'customer name', 'client name', 'customer id', 'client id',
+        'account', 'parent customer', 'contact', 'contact name',
+        'nom du client', 'no client', 'numero de client', 'client associe',
+      ],
+    },
+    {
+      field: 'notes',
+      labelFr: 'Notes',
+      labelEn: 'Notes',
+      types: ['text'],
+      synonyms: ['notes', 'note', 'comments', 'memo', 'commentaires', 'remarques'],
+    },
+  ],
+
   property: [
     {
       field: 'address',
@@ -1064,6 +1129,7 @@ export function entityForCategory(cat: MigrationCategory | null): TargetEntity |
     case 'taxes': return 'tax_config';
     case 'clients': return 'client';
     case 'properties': return 'property';
+    case 'billing_addresses': return 'billing_property';
     case 'services': return 'service';
     case 'quotes': return 'quote';
     case 'jobs': return 'job';
@@ -1086,6 +1152,7 @@ function entityFromFileName(fileName: string): TargetEntity | null {
   if (has('payment', 'paiement')) return 'payment';
   if (has('quote', 'estimate', 'proposal', 'soumission', 'devis')) return 'quote';
   if (has('visit', 'appointment', 'schedule', 'rendez vous', 'visite', 'event')) return 'visit';
+  if (has('billing address', 'billing addresses', 'adresse de facturation', 'adresses de facturation', 'bill to')) return 'billing_property';
   if (has('service address', 'propert', 'location', 'emplacement')) return 'property';
   if (has('job', 'work order', 'travaux', 'workorder')) return 'job';
   if (has('client', 'customer', 'contact', 'lead')) return 'client';

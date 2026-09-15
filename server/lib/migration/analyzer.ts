@@ -390,6 +390,7 @@ export async function analyzeCsvBuffer(buf: Buffer): Promise<AnalyzedFile> {
 const FILENAME_PATTERNS: [RegExp, MigrationCategory][] = [
   // taxes avant services/items : « tax_rates.csv », « taxes_items.csv »
   [/\btax(es|e)?\b|tax rates?|sales tax|\btps\b|\btvq\b|\bgst\b|\bhst\b|\bvat\b/, 'taxes'],
+  [/billing addr|adresses? de facturation|bill to/, 'billing_addresses'],
   [/propriet|propert|service address/, 'properties'],
   [/invoice|facture/, 'invoices'],
   [/payment|paiement/, 'payments'],
@@ -420,6 +421,10 @@ export function detectCategory(fileName: string, headers: string[]): MigrationCa
   if (has(/quote (number|no|#)|estimate (number|no|#)|numero de (soumission|devis)/)) return 'quotes';
   if ((has(/start time|heure de debut/) && has(/end time|heure de fin/)) || has(/appointment|rendez vous/)) {
     return 'visits';
+  }
+  // un fichier dont TOUTES les colonnes d'adresse sont « billing » = adresses de facturation
+  if (has(/billing (address|street)|adresse de facturation|bill to/) && !has(/service address|adresse de service|\bproperty\b|propriete/)) {
+    return 'billing_addresses';
   }
   if (has(/\bproperty\b|propriete|service address|adresse de service/)) return 'properties';
   if (has(/unit price|prix unitaire|default price/) && has(/item|service|product|produit|\bname\b|\bnom\b/)) {
