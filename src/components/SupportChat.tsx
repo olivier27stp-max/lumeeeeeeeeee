@@ -14,6 +14,10 @@ import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { captureClientException } from '../lib/sentry';
 import SupportPanel from './SupportPanel';
+import { ARTICLES } from './supportArticles';
+
+/** Les mêmes questions classiques que le tiroir d'aide ; un clic = réponse fixe côté serveur (étage 0), sans modèle. */
+const SUGGESTIONS_IDS = ['quote-to-invoice', 'get-paid', 'add-member', 'schedule-job', 'import-clients'];
 import {
   chatSupport, sendSupportMessage, escalateSupportTicket, listSupportTickets, getSupportTicket,
   type SupportTicket, type SlaKey, type SupportRequestError,
@@ -92,8 +96,8 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
     toast.error(e?.message || ts.sendFailed);
   }, [ts]);
 
-  async function envoyer(humain = false) {
-    const message = texte.trim();
+  async function envoyer(humain = false, suggestion?: string) {
+    const message = (suggestion ?? texte).trim();
     if ((!message && !humain) || envoi) return;
     setEnvoi(true);
     try {
@@ -105,7 +109,7 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
         setTicket(r.ticket);
         toast.success(ts.humanNotified.replace('{delay}', sla(r.slaKey)));
       } else {
-        const r = await chatSupport({ ticketId: ticket?.id, message: message || (fr ? 'Je veux parler à un humain.' : 'I want to talk to a human.'), humain });
+        const r = await chatSupport({ ticketId: ticket?.id, message: message || (fr ? 'Je veux parler à un humain.' : 'I want to talk to a human.'), humain, origine: suggestion ? 'suggestion' : 'texte' });
         setTicket(r.ticket);
         if (r.escalated) toast.success(ts.humanNotified.replace('{delay}', sla(r.slaKey)));
       }
@@ -199,6 +203,23 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
           <div className="flex items-center gap-2 text-[11px] text-text-tertiary"><Loader2 size={12} className="animate-spin" /> {chezHumain ? ts.sending : ts.aiThinking}</div>
         )}
       </div>
+
+      {/* Questions classiques — comme les suggestions du widget d'accueil ; un clic = réponse fixe, sans modèle */}
+      {messages.length === 0 && !envoi && (
+        <div className="mt-2 rounded-xl border border-outline-subtle px-3 py-2">
+          <p className="text-[10.5px] text-text-tertiary mb-1">{ts.suggestionsIntro}</p>
+          {SUGGESTIONS_IDS.map((id) => ARTICLES.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => !!a).map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => envoyer(false, fr ? a.q_fr : a.q_en)}
+              className="block w-full text-left text-[12.5px] text-text-secondary hover:text-text-primary py-1.5 border-b border-outline-subtle last:border-0"
+            >
+              {fr ? a.q_fr : a.q_en}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Saisie */}
       {!ferme && (
