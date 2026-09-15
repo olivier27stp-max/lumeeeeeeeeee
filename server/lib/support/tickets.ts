@@ -158,13 +158,42 @@ function enTeteSlack(t: Ticket, ctx: ContexteOrg, motif: string): { text: string
   };
 }
 
-function transcriptSlack(messages: MessageTicket[]): string {
-  const lignes = messages.slice(-10).map((m) => {
-    const qui = m.author === 'user' ? `👤 ${m.author_name || 'Client'}` : m.author === 'ai' ? '🤖 Assistant' : m.author === 'agent' ? `🧑‍💼 ${m.author_name || 'Support'}` : '·';
-    return `*${echapperSlack(qui)}* — ${echapperSlack(m.body).slice(0, 700)}`;
-  });
-  const texte = lignes.join('\n\n');
-  return texte.length > 2800 ? `…\n${texte.slice(-2800)}` : texte;
+function libelleAuteur(m: MessageTicket): string {
+  return m.author === 'user' ? `👤 ${m.author_name || 'Client'}` : m.author === 'ai' ? '🤖 Assistant' : m.author === 'agent' ? `🧑‍💼 ${m.author_name || 'Support'}` : '·';
+}
+
+/**
+ * La conversation COMPLÈTE (pas les 10 derniers, pas coupée), en morceaux
+ * de ≤ 3 500 caractères pour Slack. Rafba veut la lire en entier dans le
+ * canal du client — c'est ce qui lui manquait avec l'extrait.
+ */
+export function transcriptSlackComplet(messages: MessageTicket[], tailleMax = 3500): string[] {
+  const visibles = messages.filter((m) => m.author !== 'system');
+  const lignes = visibles.map((m) => `*${echapperSlack(libelleAuteur(m))}* — ${echapperSlack(m.body)}`);
+  const morceaux: string[] = [];
+  let courant = '';
+  for (const l of lignes) {
+    if (l.length > tailleMax) {
+      // Un seul message plus long que la limite : on vide l'en-cours, puis on le tranche.
+      if (courant) { morceaux.push(courant); courant = ''; }
+      for (let i = 0; i < l.length; i += tailleMax) morceaux.push(l.slice(i, i + tailleMax));
+      continue;
+    }
+    const ajout = courant ? `
+
+${l}` : l;
+    if (courant && (courant.length + ajout.length) > tailleMax) { morceaux.push(courant); courant = l; continue; }
+    courant += ajout;
+  }
+  if (courant) morceaux.push(courant);
+  return morceaux;
+}
+
+/** Export texte de la conversation (fichier .txt déposé dans le canal, si files:write). */
+export function transcriptTexte(t: Ticket, messages: MessageTicket[]): string {
+  const entete = [`Conversation de support — ${t.company_name || ''}`, `Sujet : ${t.subject}`, `De : ${t.user_name || ''}${t.user_email ? ` <${t.user_email}>` : ''}`, `Ouverte le : ${t.created_at}`, ''];
+  const corps = messages.filter((m) => m.author !== 'system').map((m) => `[${m.created_at.slice(0, 16).replace('T', ' ')}] ${libelleAuteur(m)}\n${m.body}\n`);
+  return [...entete, ...corps].join('\n');
 }
 
 function escapeHtml(s: string): string {
@@ -224,8 +253,20 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
       }
       const { text, blocks } = enTeteSlack(ticket, ctx, motif);
       const parent = await envoyerMessageSlack({ channel: cible, text, blocks });
-      const transcript = transcriptSlack(messages);
-      if (transcript) await envoyerMessageSlack({ channel: parent.channel, thread_ts: parent.ts, text: transcript });
+      // Dans le canal du client, la conversation se lit au premier niveau, en
+      // entier ; dans #support (repli), elle reste sous l'en-tête, dans le fil.
+      const dansLeFil = canalEntreprise ? {} : { thread_ts: parent.ts };
+      for (const morceau of transcriptSlackComplet(messages)) {
+        await envoyerMessageSlack({ channel: parent.channel, ...dansLeFil, text: morceau });
+      }
+      // Export .txt de la même conversation (scope files:write ; sinon on s'en passe).
+      try {
+        const { deposerFichierSlack } = await import('../slack');
+        const date = new Date().toISOString().slice(0, 10);
+        await deposerFichierSlack({ channel: parent.channel, ...dansLeFil, nom: `conversation-${(ticket.company_name || 'client').replace(/[^\w.-]+/g, '-').toLowerCase()}-${date}.txt`, titre: `Conversation complète — ${ticket.company_name || ''} (${date})`, contenu: transcriptTexte(ticket, messages) });
+      } catch (e: any) {
+        logger.info('[support] export .txt non déposé dans Slack', { error: e?.message, indice: /missing_scope/.test(String(e?.message)) ? 'ajouter le scope files:write à l’app Slack' : undefined });
+      }
       maj.slack_channel_id = parent.channel;
       maj.slack_thread_ts = parent.ts;
       const { data } = await admin.from('support_tickets').update(maj).eq('id', ticket.id).select('*').single();

@@ -102,6 +102,18 @@ export async function membresDuCanal(channel: string): Promise<string[]> {
   }
   return out;
 }
+/**
+ * Dépose un fichier texte dans un canal (files.getUploadURLExternal →
+ * PUT → files.completeUploadExternal). Scope : files:write. Lève sinon.
+ */
+export async function deposerFichierSlack(p: { channel: string; thread_ts?: string; nom: string; titre: string; contenu: string }): Promise<void> {
+  const octets = Buffer.from(p.contenu, 'utf8');
+  const u = await appel<{ upload_url: string; file_id: string }>('files.getUploadURLExternal', null, { filename: p.nom, length: String(octets.length) });
+  const put = await fetch(u.upload_url, { method: 'POST', body: octets, signal: AbortSignal.timeout(20_000) });
+  if (!put.ok) throw new Error(`Slack upload : ${put.status}`);
+  await appel('files.completeUploadExternal', { files: [{ id: u.file_id, title: p.titre }], channel_id: p.channel, ...(p.thread_ts ? { thread_ts: p.thread_ts } : {}) });
+}
+
 export async function archiverCanalSlack(channel: string): Promise<void> {
   try { await appel('conversations.archive', { channel }); } catch (e: any) { if (!/already_archived|is_archived/.test(String(e?.message))) throw e; }
 }
