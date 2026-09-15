@@ -10,7 +10,11 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
-import { executerBotMigration } from '../../server/lib/migration/bot';
+import { executerBotMigration, TYPE_NOTIFICATION_ADMIN } from '../../server/lib/migration/bot';
+import { approuverAuNomDuClient } from '../../server/lib/migration/execution';
+
+/** QA_BOT_MODE=client rejoue l'ancien parcours (questions au client) ; défaut : autonome, le client ne fait rien. */
+const MODE: 'client' | 'autonome' = process.env.QA_BOT_MODE === 'client' ? 'client' : 'autonome';
 import { MIGRATION_BUCKET } from '../../server/lib/migration/pipeline';
 
 const url = process.env.VITE_SUPABASE_URL!;
@@ -43,7 +47,7 @@ const jobsCsv = [
 
 // ── Migration + fichiers, comme le portail ──
 const { data: mig, error: eMig } = await admin.from('data_migrations').insert({
-  org_id: orgId, source_crm: 'jobber', status: 'files_uploaded', categories: ['clients', 'jobs'], priority: 'normal',
+  org_id: orgId, source_crm: 'jobber', status: 'files_uploaded', categories: ['clients', 'jobs'], priority: 'normal', bot_mode: MODE,
   internal_notes: 'QA bot de migration (synthétique) — à supprimer', invited_email: email, invited_user_id: userId, assigned_admin: userId, created_by: userId,
 }).select('id').single();
 if (eMig) throw eMig;
@@ -59,7 +63,7 @@ async function deposer(nom: string, contenu: string) {
 }
 await deposer('clients.csv', clientsCsv);
 await deposer('jobs.csv', jobsCsv);
-console.log(`migration ${migId} créée (org ${orgId}) avec 2 fichiers`);
+console.log(`migration ${migId} créée (org ${orgId}) avec 2 fichiers — mode ${MODE}`);
 
 const fautes: string[] = [];
 let cout = 0;
@@ -71,8 +75,15 @@ try {
     for (const d of r.decisions) console.log(`   [${d.etape}] ${d.cible} — ${d.decision}${d.detail ? ` (${d.detail})` : ''}`);
     if (r.statut_apres === 'waiting_for_approval') break;
     if (r.arret.startsWith('erreur interne')) { fautes.push(r.arret); break; }
-    // Le « client » répond à chaque question ouverte par la première option.
     const { data: qs } = await admin.from('migration_issues').select('id, title, options').eq('migration_id', migId).eq('client_visible', true).is('client_answer', null).is('resolved_at', null);
+    if (MODE === 'autonome') {
+      // Le client n'a rien à faire : aucune question visible ne doit exister, et le bot ne doit pas attendre le client.
+      if (qs?.length) fautes.push(`${qs.length} question(s) visible(s) par le client en mode autonome : ${qs.map((q) => q.title).join(' | ')}`);
+      if (r.statut_apres === 'waiting_for_client') fautes.push('statut waiting_for_client en mode autonome');
+      if (fautes.length) break;
+      continue;
+    }
+    // Mode client : le « client » répond à chaque question ouverte par la première option.
     if (!qs?.length) { if (passe === 4) fautes.push(`arrêt sans question ni approbation : ${r.arret}`); continue; }
     for (const q of qs) {
       const rep = Array.isArray(q.options) && q.options.length ? String(q.options[0]) : 'MM/JJ';
@@ -93,12 +104,29 @@ try {
   console.log('correspondances :', JSON.stringify(c));
   const { data: dups } = await admin.from('migration_duplicate_candidates').select('decision, score').eq('migration_id', migId);
   console.log('doublons :', JSON.stringify(dups ?? []));
+  if (MODE === 'autonome' && fin!.status === 'waiting_for_approval') {
+    const { data: notifs } = await admin.from('notifications').select('id, user_id, title').eq('type', TYPE_NOTIFICATION_ADMIN).eq('link', `/admin/migrations#${migId}`);
+    console.log(`notifications admin : ${(notifs ?? []).length}`);
+    if (!(notifs ?? []).some((n) => n.user_id === userId)) fautes.push("aucune notification d'approbation pour l'admin assigné");
+    const { data: visibles } = await admin.from('migration_issues').select('id').eq('migration_id', migId).eq('client_visible', true).is('resolved_at', null);
+    if (visibles?.length) fautes.push(`${visibles.length} question(s) encore visible(s) par le client`);
+    // L'admin approuve au nom du client (geste humain, hors bot) : la migration passe à approved.
+    const { data: mAvant } = await admin.from('data_migrations').select('*').eq('id', migId).single();
+    const refus = await approuverAuNomDuClient(admin, mAvant as any, { id: userId, role: 'platform_admin' }, { commentaire: 'QA' });
+    if (refus) fautes.push(`approbation au nom du client refusée : ${refus}`);
+    const { data: apres } = await admin.from('data_migrations').select('status').eq('id', migId).single();
+    console.log(`après approbation au nom du client : ${apres!.status}`);
+    if (apres!.status !== 'approved') fautes.push(`statut ${apres!.status} après approbation au nom du client (attendu approved)`);
+    const { data: appr } = await admin.from('migration_approvals').select('decision, confirmed_text, comment').eq('migration_id', migId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (!appr || appr.decision !== 'approved' || appr.confirmed_text !== null || !/au nom du client/.test(String(appr.comment))) fautes.push('ligne d’approbation au nom du client incorrecte');
+  }
   const { data: msgs } = await admin.from('migration_messages').select('author_kind, body').eq('migration_id', migId).order('created_at');
   for (const x of msgs ?? []) console.log(`message ${x.author_kind} : ${String(x.body).slice(0, 160).replace(/\n/g, ' / ')}`);
   console.log(`coût modèle total : ${cout.toFixed(2)} ¢`);
 } finally {
   await admin.from('data_migrations').update({ status: 'cancelled', deleted_at: new Date().toISOString() }).eq('id', migId);
-  console.log('migration QA marquée annulée + supprimée (soft)');
+  await admin.from('notifications').update({ deleted_at: new Date().toISOString(), is_read: true }).eq('type', TYPE_NOTIFICATION_ADMIN).eq('link', `/admin/migrations#${migId}`);
+  console.log('migration QA marquée annulée + supprimée (soft), notifications QA retirées');
 }
-console.log(fautes.length ? `\nECHEC : ${fautes.join(' ; ')}` : '\nOK : le bot a mené la migration jusqu’à la demande d’approbation, sans la franchir.');
+console.log(fautes.length ? `\nECHEC : ${fautes.join(' ; ')}` : MODE === 'autonome' ? '\nOK : le bot a mené la migration jusqu’à l’approbation sans rien demander au client ; l’admin a approuvé au nom du client.' : '\nOK : le bot a mené la migration jusqu’à la demande d’approbation, sans la franchir.');
 process.exit(fautes.length ? 1 : 0);

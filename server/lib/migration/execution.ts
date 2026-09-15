@@ -15,6 +15,42 @@ import type { MigrationRow, TargetEntity, DryRunReport } from './types';
 export type ActeurMigration = { id: string | null; role: 'platform_admin' | 'assistant' | 'system' };
 
 /**
+ * Approbation au nom du client, par un admin plateforme (mode autonome : le
+ * client n'a rien à faire). Même ligne `migration_approvals` que le portail,
+ * mais `confirmed_text` reste null et le commentaire dit qui a approuvé :
+ * l'audit ne prétend jamais que le client a tapé la phrase.
+ * Réservé au rôle platform_admin ; le bot n'y touche pas (test statique).
+ * Renvoie la raison du refus, ou null si l'approbation est enregistrée.
+ */
+export async function approuverAuNomDuClient(admin: SupabaseClient, migration: MigrationRow, acteur: { id: string; role: 'platform_admin' }, extras: { commentaire?: string | null; ip?: string | null; userAgent?: string | null } = {}): Promise<string | null> {
+  if (migration.status !== 'waiting_for_approval') return "Aucune approbation n'est attendue pour le moment.";
+  const { data: batch } = await admin
+    .from('migration_import_batches').select('id, totals')
+    .eq('migration_id', migration.id).eq('kind', 'test').eq('status', 'completed')
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (!batch) return "Aucun rapport d'import test à approuver.";
+  const { data: prev } = await admin.from('migration_approvals').select('report_version').eq('migration_id', migration.id).order('report_version', { ascending: false }).limit(1).maybeSingle();
+  const version = (prev?.report_version ?? 0) + 1;
+  const commentaire = ["Approuvée par l'équipe Lume au nom du client (mode autonome du bot).", (extras.commentaire ?? '').trim()].filter(Boolean).join(' ').slice(0, 1000);
+  const { error } = await admin.from('migration_approvals').insert({
+    migration_id: migration.id, report_version: version, report: batch.totals ?? {}, decision: 'approved',
+    confirmed_text: null, comment: commentaire, user_id: acteur.id,
+    ip_address: extras.ip && /^[0-9a-fA-F:.]+$/.test(extras.ip) ? extras.ip : null,
+    user_agent: (extras.userAgent ?? '').slice(0, 300) || null,
+  });
+  if (error) throw error;
+  const { error: stErr } = await admin.from('data_migrations').update({ status: 'approved' }).eq('id', migration.id).eq('status', 'waiting_for_approval');
+  if (stErr) throw stErr;
+  migration.status = 'approved';
+  await admin.from('migration_messages').insert({
+    migration_id: migration.id, author_id: acteur.id, author_kind: 'admin',
+    body: "L'équipe Lume a validé l'aperçu de votre migration en votre nom : vous n'avez rien à faire. L'import définitif suivra. Si quelque chose ne va pas, écrivez-nous ici.",
+  });
+  await logMigrationAudit(admin, { migrationId: migration.id, action: 'approval.on_behalf', actorId: acteur.id, actorRole: 'platform_admin', meta: { report_version: version, commentaire: (extras.commentaire ?? '').slice(0, 200) || null } });
+  return null;
+}
+
+/**
  * Import test (dry-run, aucune écriture dans les tables actives) :
  * staging → doublons contre les données actives → rapport. Synchrone ici
  * (la route l'exécute en arrière-plan ; le bot attend le rapport).

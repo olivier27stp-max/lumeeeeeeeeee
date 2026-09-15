@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { couvertureGabarit, validerVerdicts, deciderDoublon, deciderMapping, constatsRejets, interpreterReponseColonne, SEUIL_CONFIRMATION, SEUIL_GABARIT, MAX_PASSES } from '../server/lib/migration/bot';
+import { couvertureGabarit, validerVerdicts, deciderDoublon, deciderMapping, modeBot, constatsRejets, interpreterReponseColonne, SEUIL_CONFIRMATION, SEUIL_GABARIT, MAX_PASSES, RAPPEL_ADMIN_HEURES } from '../server/lib/migration/bot';
 import { FIELD_CATALOG } from '../server/lib/migration/mapping';
 
 const lu = (p: string) => readFileSync(resolve(__dirname, '..', ...p.split('/')), 'utf8');
@@ -43,6 +43,15 @@ describe('verdicts de correspondance', () => {
     expect(deciderMapping({ position: 0, field: 'email', confidence: 0.89, raison: '', candidats: [] })).toBe('demander');
     expect(deciderMapping({ position: 0, field: null, confidence: 0.99, raison: '', candidats: [] })).toBe('demander');
   });
+  it('mode autonome : jamais « demander » — une colonne incertaine est conservée dans les notes', () => {
+    expect(deciderMapping({ position: 0, field: 'email', confidence: 0.9, raison: '', candidats: [] }, 'autonome')).toBe('confirmer');
+    expect(deciderMapping({ position: 0, field: 'email', confidence: 0.89, raison: '', candidats: [] }, 'autonome')).toBe('conserver');
+    expect(deciderMapping({ position: 0, field: null, confidence: 0.99, raison: '', candidats: [] }, 'autonome')).toBe('conserver');
+    expect(modeBot({ bot_mode: 'client' })).toBe('client');
+    expect(modeBot({ bot_mode: 'autonome' })).toBe('autonome');
+    expect(modeBot({ bot_mode: null })).toBe('autonome');
+    expect(modeBot({})).toBe('autonome');
+  });
 });
 
 describe('doublons', () => {
@@ -53,6 +62,12 @@ describe('doublons', () => {
     expect(deciderDoublon({ score: 95, decision: 'pending', match_reasons: ['name', 'address'] })).toBe('demander');
     expect(deciderDoublon({ score: 80, decision: 'review', match_reasons: ['email'] })).toBe('create_new');
     expect(deciderDoublon({ score: 95, decision: 'merge', match_reasons: ['email'] })).toBeNull();
+  });
+  it('mode autonome : le nom seul donne une nouvelle fiche (rien de perdu, fusionnable plus tard) ; la fusion sur courriel/téléphone reste', () => {
+    expect(deciderDoublon({ score: 95, decision: 'pending', match_reasons: ['name'] }, 'autonome')).toBe('create_new');
+    expect(deciderDoublon({ score: 95, decision: 'pending', match_reasons: ['email', 'name'] }, 'autonome')).toBe('merge');
+    expect(deciderDoublon({ score: 80, decision: 'review', match_reasons: ['name'] }, 'autonome')).toBe('create_new');
+    expect(deciderDoublon({ score: 95, decision: 'merge', match_reasons: ['name'] }, 'autonome')).toBeNull();
   });
 });
 
@@ -92,12 +107,29 @@ describe('garde-fous', () => {
     // Les décisions sont auditées comme « assistant », jamais comme un admin.
     expect(src).toContain("role: 'assistant'");
     expect(src).not.toContain("actorRole: 'platform_admin'");
+    // Mode autonome : l'approbation au nom du client est un geste d'admin (route), jamais du bot ; l'admin est prévenu, pas le client.
+    expect(src).not.toMatch(/approuverAuNomDuClient/);
+    expect(src).toContain("if (mode === 'autonome') await resoudreQuestionsAutonome(");
+    expect(src).toContain("client_visible: false");
+    expect(RAPPEL_ADMIN_HEURES).toBeGreaterThanOrEqual(24);
+  });
+  it("l'approbation au nom du client est honnête : confirmed_text null, commentaire explicite, rôle platform_admin, message au client", () => {
+    const e = lu('server/lib/migration/execution.ts');
+    expect(e).toContain('confirmed_text: null');
+    expect(e).toContain("au nom du client");
+    expect(e).toContain("action: 'approval.on_behalf'");
+    expect(e).toContain("actorRole: 'platform_admin'");
+    expect(e).toContain("author_kind: 'admin'");
+    const r = lu('server/routes/migration-admin.ts');
+    expect(r).toContain("router.post('/migration-admin/migrations/:id/approve-on-behalf'");
+    expect(r).toContain("'bot_actif', 'bot_mode'] as const");
+    expect(lu('src/pages/AdminMigrations.tsx')).toContain('Approuver au nom du client');
   });
   it('les routes admin et le bot partagent le même import test et la même demande d approbation', () => {
     const r = lu('server/routes/migration-admin.ts');
-    expect(r).toContain("import { lancerImportTest, demanderApprobation } from '../lib/migration/execution';");
+    expect(r).toContain("import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';");
     expect(r).toContain("router.post('/migration-admin/migrations/:id/bot'");
-    expect(r).toContain("'bot_actif'] as const");
+    expect(r).toContain("'bot_actif', 'bot_mode'] as const");
     expect(lu('server/index.ts')).toContain("withAdvisoryLock('migration-bot'");
     expect(lu('src/pages/AdminMigrations.tsx')).toContain('Confier au bot');
   });

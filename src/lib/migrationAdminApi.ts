@@ -227,6 +227,15 @@ export interface RapportBotMigration {
 export function definirBotActif(id: string, actif: boolean): Promise<any> {
   return patchMigration(id, { bot_actif: actif });
 }
+export type ModeBotMigration = 'client' | 'autonome';
+/** 'autonome' : le client n'a rien à faire (défauts sûrs, admin prévenu) ; 'client' : questions dans le portail. */
+export function definirModeBot(id: string, mode: ModeBotMigration): Promise<any> {
+  return patchMigration(id, { bot_mode: mode });
+}
+/** Approbation au nom du client par l'admin (mode autonome) : même ligne d'approbation, commentaire explicite. */
+export function approuverAuNomDuClient(id: string, comment?: string): Promise<{ ok: boolean; status: string }> {
+  return apiFetch(`/migrations/${id}/approve-on-behalf`, { method: 'POST', body: JSON.stringify({ comment: comment ?? null }) });
+}
 
 export function applyMappingTemplate(id: string, templateId: string): Promise<{ ok: boolean; applied: number }> {
   return apiFetch(`/migrations/${id}/apply-template`, { method: 'POST', body: JSON.stringify({ template_id: templateId }) });

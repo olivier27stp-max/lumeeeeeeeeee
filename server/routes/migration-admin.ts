@@ -20,19 +20,21 @@ import {
   migrationIssueCreateSchema,
   migrationDuplicateDecisionSchema,
   migrationFinalImportSchema,
+  migrationApproveOnBehalfSchema,
   migrationMessageSchema,
   migrationStaffMapSchema,
   migrationTemplateSaveSchema,
   migrationTemplateApplySchema,
 } from '../lib/validation';
 import { platformAdminIds, getBaseUrl } from '../lib/config';
+import { extractIP } from '../lib/security';
 import { assertTransition, canTransition, InvalidTransitionError } from '../lib/migration/state-machine';
 import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
 import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
-import { lancerImportTest, demanderApprobation } from '../lib/migration/execution';
+import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
 import { executerBotMigration } from '../lib/migration/bot';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
@@ -266,7 +268,7 @@ router.patch('/migration-admin/migrations/:id', validate(migrationPatchSchema), 
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
 
-    const allowed = ['priority', 'target_date', 'internal_notes', 'invited_email', 'invited_user_id', 'assigned_admin', 'assigned_assistant', 'categories', 'source_crm', 'freeze_start', 'freeze_end', 'bot_actif'] as const;
+    const allowed = ['priority', 'target_date', 'internal_notes', 'invited_email', 'invited_user_id', 'assigned_admin', 'assigned_assistant', 'categories', 'source_crm', 'freeze_start', 'freeze_end', 'bot_actif', 'bot_mode'] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in req.body) patch[key] = (req.body as Record<string, unknown>)[key];
@@ -711,6 +713,26 @@ router.post('/migration-admin/migrations/:id/bot', async (req, res) => {
     return res.json(rapport);
   } catch (err: any) {
     return sendSafeError(res, err, 'Passe du bot impossible.', '[migration-admin]');
+  }
+});
+
+// ── Approbation au nom du client (mode autonome) : un admin plateforme, jamais le bot ──
+router.post('/migration-admin/migrations/:id/approve-on-behalf', validate(migrationApproveOnBehalfSchema), async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const refus = await approuverAuNomDuClient(admin, migration, { id: auth.user.id, role: 'platform_admin' }, {
+      commentaire: (req.body as { comment?: string | null }).comment ?? null,
+      ip: extractIP(req),
+      userAgent: req.header('user-agent') ?? null,
+    });
+    if (refus) return res.status(409).json({ error: refus });
+    return res.json({ ok: true, status: migration.status });
+  } catch (err: any) {
+    return sendSafeError(res, err, "Approbation au nom du client impossible.", '[migration-admin]');
   }
 });
 
