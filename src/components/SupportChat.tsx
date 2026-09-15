@@ -123,9 +123,6 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
 
   if (fallbackForm) return <SupportPanel bare />;
 
-  if (charge) {
-    return <div className="flex justify-center py-10"><Loader2 size={18} className="animate-spin text-text-tertiary" /></div>;
-  }
 
   if (showList) {
     return (
