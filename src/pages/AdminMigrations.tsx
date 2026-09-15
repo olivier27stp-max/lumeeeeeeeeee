@@ -831,10 +831,15 @@ function ConfidenceBadge({ value }: { value: number }) {
 // Même tableau que le portail client (MigrationPortal › Correspondance des colonnes) :
 // une liste déroulante par colonne, alimentée par FIELD_CATALOG, « Ne pas importer » = rejet.
 function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
+  const qc = useQueryClient();
   const m = d.migration;
   const catalog: FieldCatalog = d.field_catalog ?? {};
+  // Décisions en vol : appliquées à l'écran immédiatement, confirmées (ou annulées) au retour du serveur.
+  const [pending, setPending] = useState<Record<string, Partial<any>>>({});
   const columns = ((d.columns ?? []) as any[]).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-  const mappingByColumn = new Map<string, any>((d.mappings ?? []).map((mp: any) => [mp.column_id, mp]));
+  const mappingByColumn = new Map<string, any>(
+    (d.mappings ?? []).map((mp: any) => [mp.column_id, pending[mp.id] ? { ...mp, ...pending[mp.id] } : mp]),
+  );
   const byFile = new Map<string, any[]>();
   for (const c of columns) {
     const arr = byFile.get(c.file_id) ?? [];
@@ -849,11 +854,18 @@ function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   if (columns.length === 0) return <div className="section-card p-5 text-[13px] text-text-tertiary">Aucune correspondance (analyse pas encore faite).</div>;
 
   const decide = async (mp: any, payload: { status: string; target_entity?: string | null; target_field?: string | null }, okMsg: string) => {
+    const clearPending = () => setPending((prev) => { const next = { ...prev }; delete next[mp.id]; return next; });
+    setPending((prev) => ({ ...prev, [mp.id]: payload }));
     try {
-      await decideMapping(m.id, mp.id, payload);
-      toast.success(okMsg);
-      onChanged();
+      const saved = await decideMapping(m.id, mp.id, payload);
+      // Patch ciblé du cache : pas de rechargement des dix requêtes du détail.
+      qc.setQueryData(['migration-admin-detail', m.id], (prev: any) => prev
+        ? { ...prev, mappings: (prev.mappings ?? []).map((x: any) => (x.id === mp.id ? { ...x, ...saved } : x)) }
+        : prev);
+      clearPending();
+      toast.success(okMsg, { duration: 1200 });
     } catch (err: any) {
+      clearPending();
       toast.error(err?.message ?? 'Erreur');
     }
   };
