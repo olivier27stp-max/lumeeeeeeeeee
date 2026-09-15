@@ -63,6 +63,11 @@ try {
   await cas('paiements depuis le dossier', 'app', 'Est-ce que mes paiements en ligne sont configurés ?', { transfert: false });
   await cas('migration : statut (outil)', 'app', 'Où en est ma migration de données ?', { transfert: false });
   await cas('bug → humain', 'app', 'Quand je clique sur Envoyer la facture, ça affiche une erreur 500.', { transfert: true });
+  // Un « comment faire » banal hors FAQ ne part JAMAIS tout seul chez l'équipe (incident du 2026-09-15 : « supprimer des tâches » escaladé).
+  await cas('comment faire hors FAQ → Lumi répond, pas de transfert', 'app', 'comment je fais pour supprimer des taches', { transfert: false, contient: /tâche|travaux|Tâches/i });
+  await cas('comment faire hors FAQ (2) → pas de transfert', 'app', 'je veux archiver un client qui a fermé', { transfert: false });
+  await cas('hors Lume → pas de transfert', 'app', 'Est-ce que je dois charger la TVQ à un client de l’Ontario ?', { transfert: false });
+  await cas('« ça n’a pas marché, quelqu’un ? » → humain', 'app', 'Non ça marche pas votre affaire, je veux parler à quelqu’un.', { transfert: true });
   await cas('portail : question de migration', 'migration_portal', 'Est-ce que vous avez besoin de quelque chose de moi pour la migration ?', { transfert: false });
   await cas('public : prix, sans compte', 'public', 'C’est combien par mois ?', { transfert: false, contient: /150|340|495/ });
   await cas('public : client existant renvoyé au chat de l’app', 'public', 'Je suis déjà client et ma facture est fausse, tu peux la corriger ?', { transfert: false, contient: /connect|Aide|chat/i });
@@ -83,6 +88,6 @@ try {
     console.log('migration QA annulée + supprimée (soft)');
   }
 }
-console.log(`\ncoût total : ${cout.toFixed(2)} ¢ pour ${9} tours`);
+console.log(`\ncoût total : ${cout.toFixed(2)} ¢ pour 13 tours`);
 console.log(fautes.length ? `\nECHEC : ${fautes.join(' ; ')}` : '\nOK : le même Lumi répond depuis le dossier, transfère les bugs, ignore les comptes en public, démarre une migration autonome.');
 process.exit(fautes.length ? 1 : 0);

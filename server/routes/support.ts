@@ -27,7 +27,7 @@ import { reponseFaqPour } from '../lib/support/faq';
 import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
 import { journaliserTrace } from '../lib/lumi/traces';
 import {
-  contexteOrg, creerTicket, ticketDe, messagesDuTicket, ajouterMessage, escaladerTicket, relayerMessageClient, slaTexte,
+  contexteOrg, creerTicket, ticketDe, messagesDuTicket, ajouterMessage, escaladerTicket, relayerMessageClient, humainActifRecemment, slaTexte,
   type Ticket, type MessageTicket,
 } from '../lib/support/tickets';
 
@@ -71,10 +71,15 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     }
     await ajouterMessage(admin, { ticket, author: 'user', body: message, authorName: ctx.userName });
 
-    // Ticket déjà chez un humain : on relaie, l'IA ne répond plus.
-    if (ticket.status === 'open' || ticket.status === 'answered') {
+    // Ticket déjà chez un humain : le message part dans son canal, mais Lumi répond quand même aux
+    // questions banales (sinon chaque question suivante remplit le support). Exception : un humain
+    // a écrit il y a moins de 30 min — la conversation est vivante, on ne parle pas par-dessus lui.
+    const chezHumain = ticket.status === 'open' || ticket.status === 'answered';
+    if (chezHumain) {
       await relayerMessageClient(admin, ticket, ctx, message);
-      return res.json({ ticket: vue(ticket, await messagesDuTicket(admin, ticket.id)), reply: null, escalated: true, slaKey: ticket.sla_key, sla: slaTexte(ticket.sla_key || '2d', ctx.langue) });
+      if (humain || await humainActifRecemment(admin, ticket.id)) {
+        return res.json({ ticket: vue(ticket, await messagesDuTicket(admin, ticket.id)), reply: null, escalated: true, slaKey: ticket.sla_key, sla: slaTexte(ticket.sla_key || '2d', ctx.langue) });
+      }
     }
 
     let reply: string | null = null;
@@ -85,6 +90,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     if (fixe) {
       reply = fixe.reponse;
       await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
+      if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
       void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 0, action: `faq:${fixe.id}`, resultat: 'ok', model: null, costCents: 0, dureeMs: 0 });
     } else if (!humain) {
       const historique = (await messagesDuTicket(admin, ticket.id))
@@ -107,6 +113,8 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         transferer = r.transferer;
         motif = r.motif || motif;
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
+        // L'équipe voit ce que Lumi a répondu dans son canal ; elle n'a rien à faire si ça suffit.
+        if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
         void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 6, action: 'app', outils: r.outils, resultat: transferer ? 'proposition' : 'ok', model: 'claude-sonnet-5', costCents: r.coutCents, dureeMs: Date.now() - debut });
       } catch (e: any) {
         // L'assistant tombe → un humain prend le relais, jamais un mur.
@@ -116,13 +124,13 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
       }
     }
 
-    if (transferer) {
+    if (transferer && !chezHumain) {
       const r = await escaladerTicket(admin, ticket, ctx, motif || 'Transféré');
       ticket = r.ticket;
     }
     return res.json({
       ticket: vue(ticket, await messagesDuTicket(admin, ticket.id)),
-      reply, escalated: transferer,
+      reply, escalated: transferer || chezHumain,
       slaKey: ctx.slaKey, sla: slaTexte(ctx.slaKey, ctx.langue),
     });
   } catch (err: any) {

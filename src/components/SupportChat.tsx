@@ -8,7 +8,7 @@
  * classique (SupportPanel), qui crée quand même un ticket.
  */
 import React, { useEffect, useId, useRef, useState, useCallback } from 'react';
-import { Loader2, Send, UserRound, Bot, LifeBuoy, ArrowLeft, Plus } from 'lucide-react';
+import { Loader2, Send, LifeBuoy, ArrowLeft, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -158,62 +158,70 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
   const chezHumain = ticket?.status === 'open' || ticket?.status === 'answered';
   const ferme = ticket?.status === 'closed';
   const messages = ticket?.messages || [];
+  const suggestions = SUGGESTIONS_IDS.map((id) => ARTICLES.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => !!a);
 
+  // Même interface que le widget Lumi du site (LumiAgent.tsx) : Lumi animé en
+  // haut, bulles arrondies, questions suggérées, saisie ronde, avertissement IA.
   return (
-    <div className={cn('flex flex-col', compact ? 'h-full' : 'min-h-[420px]')}>
-      {/* Barre : état + conversations */}
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="text-[11.5px] text-text-tertiary leading-snug">
+    <div className={cn('flex flex-col bg-surface', compact ? 'h-full' : 'min-h-[520px] rounded-2xl border border-outline-subtle overflow-hidden')}>
+      {/* Zone héro avec Lumi animé */}
+      <div className="px-4 pt-3 pb-3 bg-gradient-to-br from-[#e8f0ff] to-[#f3ecff] dark:from-[#1c2434] dark:to-[#261f36] text-center shrink-0">
+        <video className="w-[96px] h-[96px] object-cover rounded-2xl mx-auto" src="/agent/lumi.mp4" poster="/agent/lumi-poster.png" autoPlay loop muted playsInline aria-hidden="true" />
+        <p className="mt-2 text-[11.5px] text-text-tertiary leading-snug">
           {ferme ? ts.closedNotice : chezHumain ? ts.humanNotified.replace('{delay}', sla(ticket?.slaKey)) : ts.chatIntro}
         </p>
-        <div className="flex items-center gap-1 shrink-0">
-          {recents.length > 0 && (
-            <button type="button" onClick={() => setShowList(true)} className="text-[11px] font-semibold text-primary hover:underline">{ts.recentConversations}</button>
-          )}
-          {ticket && (
-            <button type="button" onClick={() => { setTicket(null); setTexte(''); }} aria-label={ts.newConversation} title={ts.newConversation} className="w-7 h-7 rounded-lg hover:bg-surface-secondary flex items-center justify-center text-text-tertiary">
-              <Plus size={14} />
-            </button>
-          )}
-        </div>
+        {(recents.length > 0 || ticket) && (
+          <div className="mt-1.5 flex items-center justify-center gap-3">
+            {recents.length > 0 && (
+              <button type="button" onClick={() => setShowList(true)} className="text-[11px] font-semibold text-primary hover:underline">{ts.recentConversations}</button>
+            )}
+            {ticket && (
+              <button type="button" onClick={() => { setTicket(null); setTexte(''); }} className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-secondary hover:text-text-primary">
+                <Plus size={12} aria-hidden="true" /> {ts.newConversation}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Messages */}
-      <div ref={listeRef} role="log" aria-live="polite" aria-label={ts.title} className={cn('flex-1 overflow-y-auto space-y-2.5 rounded-xl border border-outline-subtle bg-surface-secondary/30 p-3', compact ? '' : 'max-h-[460px]')}>
+      {/* Conversation */}
+      <div ref={listeRef} role="log" aria-live="polite" aria-label={ts.title} className={cn('flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-surface-secondary/30', compact ? '' : 'max-h-[460px]')}>
         {messages.length === 0 && (
-          <div className="flex items-start gap-2">
-            <span className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><Bot size={13} className="text-primary" /></span>
-            <p className="text-[12.5px] text-text-secondary leading-relaxed bg-surface rounded-xl px-3 py-2">{ts.welcome}</p>
-          </div>
+          <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm">{ts.welcome}</div>
         )}
         {messages.map((m) => (
-          <div key={m.id} className={cn('flex items-start gap-2', m.author === 'user' && 'flex-row-reverse')}>
-            <span className={cn('w-6 h-6 rounded-full flex items-center justify-center shrink-0', m.author === 'user' ? 'bg-surface-tertiary' : m.author === 'agent' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-primary/10')} aria-hidden="true">
-              {m.author === 'user' ? <UserRound size={13} className="text-text-secondary" /> : m.author === 'agent' ? <LifeBuoy size={13} className="text-green-700 dark:text-green-300" /> : <Bot size={13} className="text-primary" />}
-            </span>
-            <div className={cn('max-w-[85%]', m.author === 'user' && 'text-right')}>
-              <p className="text-[10px] text-text-tertiary mb-0.5">
-                {m.author === 'user' ? ts.youLabel : m.author === 'agent' ? (m.authorName || ts.agentLabel) : ts.aiLabel}
-              </p>
-              <p className={cn('text-[12.5px] leading-relaxed rounded-xl px-3 py-2 whitespace-pre-wrap text-left', m.author === 'user' ? 'bg-primary text-white' : 'bg-surface text-text-secondary')}>{m.body}</p>
+          m.author === 'user' ? (
+            <div key={m.id} className="ml-auto bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-2xl rounded-tr-sm px-3.5 py-3 text-[13.5px] leading-relaxed max-w-[92%] whitespace-pre-wrap">{m.body}</div>
+          ) : (
+            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap">
+              {m.author === 'agent' && (
+                <p className="text-[10.5px] font-semibold text-green-700 dark:text-green-300 mb-1 inline-flex items-center gap-1"><LifeBuoy size={11} aria-hidden="true" /> {m.authorName || ts.agentLabel}</p>
+              )}
+              {m.body}
             </div>
-          </div>
+          )
         ))}
         {envoi && (
-          <div className="flex items-center gap-2 text-[11px] text-text-tertiary"><Loader2 size={12} className="animate-spin" /> {chezHumain ? ts.sending : ts.aiThinking}</div>
+          <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 max-w-[60%] shadow-sm" aria-label={chezHumain ? ts.sending : ts.aiThinking}>
+            <span className="inline-flex gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce" />
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Questions classiques — comme les suggestions du widget d'accueil ; un clic = réponse fixe, sans modèle */}
-      {messages.length === 0 && !envoi && (
-        <div className="mt-2 rounded-xl border border-outline-subtle px-3 py-2">
-          <p className="text-[10.5px] text-text-tertiary mb-1">{ts.suggestionsIntro}</p>
-          {SUGGESTIONS_IDS.map((id) => ARTICLES.find((a) => a.id === id)).filter((a): a is NonNullable<typeof a> => !!a).map((a) => (
+      {/* Questions suggérées — comme le widget d'accueil ; un clic = réponse fixe, sans modèle */}
+      {messages.length === 0 && !envoi && !ferme && (
+        <div className="px-4 py-2.5 border-t border-outline-subtle shrink-0">
+          <p className="text-[11px] text-text-tertiary mb-1.5">{ts.suggestionsIntro}</p>
+          {suggestions.map((a) => (
             <button
               key={a.id}
               type="button"
               onClick={() => envoyer(false, fr ? a.q_fr : a.q_en)}
-              className="block w-full text-left text-[12.5px] text-text-secondary hover:text-text-primary py-1.5 border-b border-outline-subtle last:border-0"
+              className="block w-full text-left text-[13px] text-text-secondary hover:text-text-primary py-2 border-b border-outline-subtle last:border-0"
             >
               {fr ? a.q_fr : a.q_en}
             </button>
@@ -223,32 +231,34 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
 
       {/* Saisie */}
       {!ferme && (
-        <form onSubmit={(e) => { e.preventDefault(); envoyer(false); }} className="mt-3 space-y-2">
-          <label htmlFor={champId} className="sr-only">{ts.chatPlaceholder}</label>
-          <textarea
-            id={champId}
-            value={texte}
-            onChange={(e) => setTexte(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); envoyer(false); } }}
-            rows={2}
-            maxLength={5000}
-            placeholder={ts.chatPlaceholder}
-            className="w-full px-3.5 py-2.5 rounded-xl border border-outline-subtle bg-surface text-[13px] text-text-primary placeholder:text-text-tertiary focus:border-primary focus:outline-none transition-colors resize-none"
-          />
-          <div className="flex items-center justify-between gap-2">
-            {!chezHumain ? (
-              <button type="button" onClick={() => envoyer(true)} disabled={envoi} className="text-[12px] font-semibold text-text-secondary hover:text-primary inline-flex items-center gap-1.5">
-                <LifeBuoy size={13} /> {ts.talkToHuman}
-              </button>
-            ) : <span />}
+        <form onSubmit={(e) => { e.preventDefault(); envoyer(false); }} className="shrink-0 border-t border-outline-subtle">
+          <div className="flex items-center gap-2 px-3.5 pt-3 pb-2">
+            <label htmlFor={champId} className="sr-only">{ts.chatPlaceholder}</label>
+            <input
+              id={champId}
+              value={texte}
+              onChange={(e) => setTexte(e.target.value)}
+              maxLength={5000}
+              placeholder={ts.chatPlaceholder}
+              autoComplete="off"
+              className="flex-1 h-10 rounded-full border border-outline-subtle bg-surface-secondary px-4 text-[13px] text-text-primary placeholder:text-text-tertiary outline-none focus:border-outline focus-visible:ring-2 focus-visible:ring-primary/40"
+            />
             <button
               type="submit"
-              disabled={!texte.trim() || envoi}
-              className={cn('inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all shrink-0', texte.trim() && !envoi ? 'bg-primary text-white hover:opacity-90' : 'bg-surface-secondary text-text-tertiary cursor-not-allowed')}
+              disabled={envoi || !texte.trim()}
+              aria-label={ts.send}
+              className="w-9 h-9 rounded-full bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center shrink-0 disabled:opacity-40"
             >
               {envoi ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-              {ts.send}
             </button>
+          </div>
+          <div className="flex items-center justify-between px-3.5 pb-3">
+            <span className="text-[10px] text-text-tertiary">{ts.aiDisclaimer}</span>
+            {!chezHumain && (
+              <button type="button" onClick={() => envoyer(true)} disabled={envoi} className="text-[11px] font-semibold text-text-secondary hover:text-primary inline-flex items-center gap-1">
+                <LifeBuoy size={12} aria-hidden="true" /> {ts.talkToHuman}
+              </button>
+            )}
           </div>
         </form>
       )}

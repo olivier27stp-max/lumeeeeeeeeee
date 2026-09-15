@@ -244,7 +244,7 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
 }
 
 /** Message du client sur un ticket déjà escaladé → dans le fil Slack (ou courriel). */
-export async function relayerMessageClient(admin: SupabaseClient, ticket: Ticket, ctx: ContexteOrg, body: string): Promise<void> {
+export async function relayerMessageClient(admin: SupabaseClient, ticket: Ticket, ctx: ContexteOrg, body: string, auteur: 'client' | 'lumi' = 'client'): Promise<void> {
   if (ticket.slack_thread_ts && ticket.slack_channel_id && isSlackConfigured()) {
     try {
       // Dans le canal de l'entreprise, le client écrit au premier niveau (une
@@ -252,16 +252,24 @@ export async function relayerMessageClient(admin: SupabaseClient, ticket: Ticket
       const { canalClientExistant } = await import('./canaux-slack');
       const canal = await canalClientExistant(admin, ticket.org_id);
       const auPremierNiveau = !!canal && canal.channel_id === ticket.slack_channel_id;
-      const r = await envoyerMessageSlack({ channel: ticket.slack_channel_id, ...(auPremierNiveau ? {} : { thread_ts: ticket.slack_thread_ts }), text: `*👤 ${echapperSlack(ticket.user_name || 'Client')}* — ${echapperSlack(body)}` });
-      await admin.from('support_messages').update({ slack_ts: r.ts }).eq('ticket_id', ticket.id).eq('author', 'user').is('slack_ts', null).order('created_at', { ascending: false }).limit(1);
+      const entete = auteur === 'lumi' ? '*🤖 Lumi a répondu*' : `*👤 ${echapperSlack(ticket.user_name || 'Client')}*`;
+      const r = await envoyerMessageSlack({ channel: ticket.slack_channel_id, ...(auPremierNiveau ? {} : { thread_ts: ticket.slack_thread_ts }), text: `${entete} — ${echapperSlack(body)}` });
+      if (auteur === 'client') await admin.from('support_messages').update({ slack_ts: r.ts }).eq('ticket_id', ticket.id).eq('author', 'user').is('slack_ts', null).order('created_at', { ascending: false }).limit(1);
       return;
     } catch (e: any) {
       logger.error('[support] relais Slack impossible', { ticketId: ticket.id, error: e?.message });
     }
   }
-  if (isMailerConfigured()) {
+  if (isMailerConfigured() && auteur === 'client') {
     await sendEmail({ from: emailFrom, to: supportEmail, replyTo: ticket.user_email || undefined, subject: `Re: [${ticket.priority === 'priority' ? 'PRIORITY' : 'Normal'} · ${ctx.planLabel}] ${ticket.subject}`, html: `<p style="white-space:pre-wrap;font-family:sans-serif;">${escapeHtml(body)}</p>` });
   }
+}
+
+/** Un humain a écrit dans ce ticket il y a moins de `minutes` : la conversation est vivante, on ne parle pas par-dessus lui. */
+export async function humainActifRecemment(admin: SupabaseClient, ticketId: string, minutes = 30): Promise<boolean> {
+  const { data } = await admin.from('support_messages').select('author, created_at').eq('ticket_id', ticketId).in('author', ['agent', 'user']).order('created_at', { ascending: false }).limit(6);
+  const dernierAgent = (data ?? []).find((m) => m.author === 'agent');
+  return !!dernierAgent && Date.now() - new Date(dernierAgent.created_at).getTime() < minutes * 60_000;
 }
 
 /** Réponse d'un humain (Slack) → le client : notification dans l'app + courriel — et le portail de migration si c'est de là qu'il écrivait. */

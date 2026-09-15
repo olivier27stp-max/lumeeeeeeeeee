@@ -54,6 +54,21 @@ describe('questions classiques (étage 0, sans modèle)', () => {
   });
 });
 
+describe('transfert : seulement quand il le faut', () => {
+  it('le prompt interdit de transférer un « comment faire » et porte la carte de l’app ; sur un ticket déjà chez un humain, Lumi répond quand même sauf conversation humaine vivante', async () => {
+    await repondreSupportIA(contexte, [], 'comment je fais pour supprimer des taches');
+    const systeme: string = appels[0].system.map((b: any) => b.text).join('\n');
+    expect(systeme).toContain('HOW-TO QUESTIONS ARE YOURS');
+    expect(systeme).toContain('APP MAP');
+    expect(systeme).toContain('/tasks');
+    expect(systeme).not.toContain('you searched and found nothing useful');
+    const route = readFileSync('server/routes/support.ts', 'utf8');
+    expect(route).toContain('await humainActifRecemment(admin, ticket.id)');
+    expect(route).toContain("relayerMessageClient(admin, ticket, ctx, reply, 'lumi')");
+    expect(route).not.toContain("l'IA ne répond plus");
+  });
+});
+
 describe('assistant de support', () => {
   it('question « comment faire » : outil search_help puis réponse, pas de transfert', async () => {
     scenario = [

@@ -3732,7 +3732,11 @@ const en = {
     // Conversation (assistant first, then a human)
     chatIntro: 'The assistant answers right away. Someone from the team takes over whenever it’s needed.',
     welcome: 'Hi! I’m Lumi, the same assistant as on the website and in your migration portal. I know your account: ask your question, or pick one below. If it goes beyond what I know, I’ll hand you to the team.',
-    suggestionsIntro: 'Common questions:',
+    suggestionsIntro: 'Ask me things like:',
+    lumiSubtitle: 'Lume assistant',
+    browseHelp: 'Browse help',
+    askLumi: 'Ask Lumi',
+    aiDisclaimer: 'Lumi is an AI and can make mistakes.',
     chatPlaceholder: 'Type your question…',
     talkToHuman: 'Talk to a human',
     humanNotified: 'Your request is with the team — reply within {delay}. You’ll also get an email.',
