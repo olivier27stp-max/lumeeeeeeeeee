@@ -32,6 +32,11 @@ const requiredEnvSchema = z.object({
 
 const optionalEnvSchema = z.object({
   // Stripe
+  // Support humain dans Slack (routes/webhooks-slack.ts, lib/slack.ts) — sans
+  // ces trois-là, le support retombe sur le courriel.
+  SLACK_BOT_TOKEN: z.string().optional(),
+  SLACK_SIGNING_SECRET: z.string().optional(),
+  SLACK_SUPPORT_CHANNEL_ID: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional()
     .refine(v => !v || v.startsWith('sk_'), 'STRIPE_SECRET_KEY must start with sk_'),
   STRIPE_PUBLISHABLE_KEY: z.string().optional()

@@ -3,15 +3,16 @@ import { Search, ChevronDown, LifeBuoy, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
-import SupportPanel from './SupportPanel';
-import { ARTICLES } from './SupportDrawer';
+import { useSearchParams } from 'react-router-dom';
+import SupportChat from './SupportChat';
+import { ARTICLES } from './supportArticles';
 
 /**
  * Full-page support view for Settings → Support.
  *
  * Shares its answers with the support drawer (single ARTICLES source), so the
  * two never drift apart. The page leads with self-serve help and keeps the
- * contact form below it — same order as the drawer, just laid out wide.
+ * support conversation below it — same order as the drawer, laid out wide.
  */
 export default function SupportPage() {
   const { t, language } = useTranslation();
@@ -20,6 +21,9 @@ export default function SupportPage() {
   // dans SupportDrawer.tsx (question et réponse gardées côte à côte).
   const isFr = language === 'fr';
   const navigate = useNavigate();
+  // `/support?ticket=…` : la notification « Réponse du support » mène ici.
+  const [params] = useSearchParams();
+  const ticketId = params.get('ticket');
 
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -121,7 +125,7 @@ export default function SupportPage() {
         )}
       </div>
 
-      {/* Contact form */}
+      {/* Conversation : assistant, puis humain */}
       <div className="section-card p-5 space-y-4">
         <div className="flex items-center gap-2">
           <Mail size={15} className="text-text-tertiary" />
@@ -129,7 +133,7 @@ export default function SupportPage() {
             {ts.writeUs}
           </h3>
         </div>
-        <SupportPanel bare />
+        <SupportChat initialTicketId={ticketId} />
       </div>
     </div>
   );

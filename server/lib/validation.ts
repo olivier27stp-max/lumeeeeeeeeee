@@ -237,6 +237,20 @@ export const supportRequestSchema = z.object({
   category: z.enum(['question', 'bug', 'billing', 'feature', 'other']).optional(),
 });
 
+// Conversation de support (assistant IA puis humain via Slack).
+export const supportChatSchema = z.object({
+  ticketId: z.string().uuid().optional(),
+  message: z.string().trim().min(1, 'Write a message.').max(5000),
+  /** true = « Parler à un humain » dès le premier message, sans passer par l'assistant. */
+  humain: z.boolean().optional(),
+});
+export const supportMessageSchema = z.object({
+  message: z.string().trim().min(1, 'Write a message.').max(5000),
+});
+export const supportEscalateSchema = z.object({
+  reason: z.string().trim().max(300).optional(),
+});
+
 // ─── Invoice Templates ──────────────────────────────────────────────────────
 
 export const invoiceTemplateSchema = z.object({
