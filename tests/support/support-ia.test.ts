@@ -74,7 +74,10 @@ describe('assistant de support', () => {
 
   it('le prompt système ancre la réponse : FAQ, entreprise, forfait, délai, règles de transfert', async () => {
     await repondreSupportIA(contexte, [], 'Bonjour');
-    const systeme: string = appels[0].system;
+    const brut = appels[0].system;
+    const systeme: string = Array.isArray(brut) ? brut.map((b: any) => b.text).join('\n') : brut;
+    // Partie stable (identité, règles, FAQ) en cache 1 h ; le dossier du client vient après, hors cache.
+    expect(Array.isArray(brut) && brut[0].cache_control?.type).toBe('ephemeral');
     expect(systeme).toContain('Plomberie Tremblay');
     expect(systeme).toContain('Scale');
     expect(systeme).toContain('1 jour ouvrable');
@@ -82,5 +85,33 @@ describe('assistant de support', () => {
     expect(systeme).toMatch(/transfer_to_human/);
     expect(appels[0].model).toBe('claude-sonnet-5');
     expect(appels[0].tools.map((t: any) => t.name)).toEqual(['search_help', 'transfer_to_human']);
+  });
+  it('le même Lumi partout : le dossier du client entre dans le prompt, les outils migration n’apparaissent que si la surface les fournit', async () => {
+    await repondreSupportIA({ ...contexte, surface: 'app', dossier: 'Abonnement : forfait Scale, statut active.\nMigration de données (depuis jobber) : import test concluant, en attente de l\'approbation.' }, [], 'Où en est ma migration ?', { statutMigration: async () => 'Migration depuis jobber : en attente de l\'approbation.', demarrerMigration: async () => ({ ok: true, lien: 'https://x/migration/invite/t', expire: '2026-09-18' }) });
+    const systeme: string = appels[0].system.map((b: any) => b.text).join('\n');
+    expect(systeme).toContain('THE SAME assistant everywhere');
+    expect(systeme).toContain('DOSSIER');
+    expect(systeme).toContain('import test concluant');
+    expect(appels[0].tools.map((t: any) => t.name)).toEqual(['search_help', 'transfer_to_human', 'get_migration_status', 'start_migration']);
+  });
+  it('surface publique : visiteur sans compte, pas de dossier ni de transfert, connaissance du site (prix, démo), tutoiement', async () => {
+    await repondreSupportIA({ langue: 'fr', companyName: '', planLabel: '', userName: 'visiteur', slaTexte: '', surface: 'public', dossier: null }, [], 'C’est combien ?');
+    const systeme: string = appels[0].system.map((b: any) => b.text).join('\n');
+    expect(systeme).toContain('150 $/mois');
+    expect(systeme).toContain('VISITEUR');
+    expect(systeme).not.toContain('DOSSIER');
+    expect(appels[0].tools.map((t: any) => t.name)).toEqual(['search_help']);
+  });
+  it('start_migration : le lien du portail revient au modèle, une migration existante refuse d’en créer une autre', async () => {
+    scenario = [
+      { content: [{ type: 'tool_use', id: 'tu1', name: 'start_migration', input: { source_crm: 'jobber' } }], stop_reason: 'tool_use' },
+      { content: [{ type: 'text', text: 'Voici votre lien.' }], stop_reason: 'end_turn' },
+    ];
+    const r = await repondreSupportIA({ ...contexte, surface: 'app', dossier: '' }, [], 'Je veux importer mes clients de Jobber', { demarrerMigration: async ({ sourceCrm }) => ({ ok: true, lien: `https://x/migration/invite/${sourceCrm}`, expire: '2026-09-18' }) });
+    expect(r.transferer).toBe(false);
+    expect(r.outils).toEqual(['start_migration']);
+    const resultat = appels[1].messages.at(-1).content[0];
+    expect(resultat.is_error).toBe(false);
+    expect(resultat.content).toContain('https://x/migration/invite/jobber');
   });
 });

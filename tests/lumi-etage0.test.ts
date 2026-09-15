@@ -80,7 +80,7 @@ describe('réponses fixes du widget public', () => {
   });
   it('la route publique répond sans Gemini et trace l étage 0', () => {
     const s = lu('server/routes/sales-chat.ts');
-    expect(s.indexOf('reponseFixePour(dernier)')).toBeLessThan(s.indexOf('await generateContent('));
+    expect(s.indexOf('reponseFixePour(dernier)')).toBeLessThan(s.indexOf('await repondreSupportIA('));
     expect(s).toContain("return res.json({ reply: fixe.reponse, fixe: fixe.id });");
     expect(s).toContain('etage: 0, action: fixe.id');
   });

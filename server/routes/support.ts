@@ -22,6 +22,9 @@ import { supportEmail } from '../lib/config';
 import { isMailerConfigured } from '../lib/mailer';
 import { isSlackConfigured } from '../lib/slack';
 import { isSupportIAConfigured, repondreSupportIA } from '../lib/support/ia';
+import { dossierClient } from '../lib/support/dossier';
+import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
+import { journaliserTrace } from '../lib/lumi/traces';
 import {
   contexteOrg, creerTicket, ticketDe, messagesDuTicket, ajouterMessage, escaladerTicket, relayerMessageClient, slaTexte,
   type Ticket, type MessageTicket,
@@ -82,11 +85,22 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         .slice(0, -1) // le message courant est passé à part
         .map((m) => ({ role: m.author === 'user' ? 'user' as const : 'assistant' as const, content: m.body }));
       try {
-        const r = await repondreSupportIA({ langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue) }, historique, message);
+        const debut = Date.now();
+        // Le même Lumi partout : il connaît le compte (dossier) et peut suivre ou démarrer une migration.
+        const dossier = await dossierClient(admin, auth.orgId, auth.user.id);
+        const r = await repondreSupportIA(
+          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte },
+          historique, message,
+          {
+            statutMigration: () => statutMigrationPour(admin, auth.orgId),
+            demarrerMigration: ({ sourceCrm }) => demarrerMigrationPour(admin, { orgId: auth.orgId, userId: auth.user.id, userEmail: ctx.userEmail, companyName: ctx.companyName, sourceCrm }),
+          },
+        );
         reply = r.texte;
         transferer = r.transferer;
         motif = r.motif || motif;
-        await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Assistant' });
+        await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
+        void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: 'texte', enonce: message, etage: 6, action: 'app', outils: r.outils, resultat: transferer ? 'proposition' : 'ok', model: 'claude-sonnet-5', costCents: r.coutCents, dureeMs: Date.now() - debut });
       } catch (e: any) {
         // L'assistant tombe → un humain prend le relais, jamais un mur.
         console.error('[support/chat] assistant en erreur, transfert humain:', e?.message);

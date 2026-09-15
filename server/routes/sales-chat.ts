@@ -16,9 +16,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
-import { generateContent, isGeminiConfigured, geminiModel, type GeminiContent } from '../lib/agent/gemini';
+import { repondreSupportIA, isSupportIAConfigured, MODELE_SUPPORT } from '../lib/support/ia';
 import { getServiceClient } from '../lib/supabase';
-import { journaliserTrace, normaliserEnonce, usageGemini } from '../lib/lumi/traces';
+import { journaliserTrace, normaliserEnonce } from '../lib/lumi/traces';
 import { reponseFixePour } from '../lib/agent/reponsesFixes';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cache-semantique';
@@ -39,26 +39,22 @@ const salesChatSchema = z.object({
   origine: z.enum(['texte', 'suggestion']).optional(),
 });
 
-import { SYSTEM_PROMPT } from '../lib/agent/promptVente';
 
 
 router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) => {
   try {
-    if (!isGeminiConfigured()) {
+    if (!isSupportIAConfigured()) {
       return res.status(503).json({ error: 'Sales chat unavailable.' });
     }
 
     const { messages } = req.body as z.infer<typeof salesChatSchema>;
 
-    // On ne garde que les 10 derniers tours et on mappe vers le format Gemini.
-    // (assistant -> 'model'). On ignore un éventuel message d'accueil purement
-    // client : le 1er contenu doit venir de l'utilisateur côté Gemini, donc on
-    // laisse tomber les 'model' en tête.
+    // On ne garde que les 10 derniers tours ; un message d'accueil purement
+    // client en tête est ignoré (la conversation commence par l'utilisateur).
     const trimmed = messages.slice(-10);
-    const contents: GeminiContent[] = [];
+    const contents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
     for (const m of trimmed) {
       const role = m.role === 'assistant' ? 'model' : 'user';
-      // Gemini exige que la conversation commence par un tour 'user'.
       if (contents.length === 0 && role === 'model') continue;
       contents.push({ role, parts: [{ text: m.content }] });
     }
@@ -90,22 +86,20 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
         return res.json({ reply: s.entree.texte, cache: 'semantique' });
       }
     }
-    const result = await generateContent({
-      systemInstruction: SYSTEM_PROMPT,
-      contents,
-      temperature: 0.6,
-      maxOutputTokens: 400, // réponses courtes de vendeur, avec marge
-      disableThinking: true, // pas de « réflexion » : sinon elle mange le budget
-                             // et la réponse est coupée (bug MAX_TOKENS constaté).
-    });
+    // Le même Lumi que dans l'app et le portail (Sonnet 5, surface publique : aucun compte, aucun dossier).
+    const historique = contents.slice(0, -1).map((c) => ({ role: c.role === 'model' ? 'assistant' as const : 'user' as const, content: c.parts[0]?.text ?? '' }));
+    const r = await repondreSupportIA(
+      { langue: 'fr', companyName: '', planLabel: '', userName: 'visiteur', slaTexte: '', surface: 'public', dossier: null },
+      historique, dernier,
+    );
 
-    // Trace sans tenant (page publique) : tokens Gemini, aucun coût inventé (pas de grille Gemini dans tarifs.ts).
+    // Trace sans tenant (page publique) : coût réel du modèle.
     void journaliserTrace(getServiceClient(), {
       orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
-      enonce: normaliserEnonce(contents[contents.length - 1]?.parts?.[0]?.text ?? null),
-      etage: 6, resultat: 'ok', model: geminiModel, promptVersion: VERSION_PROMPT, usage: usageGemini(result.usage), costCents: null, dureeMs: Date.now() - debut,
+      enonce: normaliserEnonce(dernier),
+      etage: 6, action: 'support-public', outils: r.outils, resultat: 'ok', model: MODELE_SUPPORT, promptVersion: VERSION_PROMPT, costCents: r.coutCents, dureeMs: Date.now() - debut,
     });
-    const reply = (result.text || '').trim();
+    const reply = (r.texte || '').trim();
     if (vecteur && reply) void memoriserSemantique({ genre: 'public' }, { enonce: dernier, vec: vecteur, texte: reply, fiches: [], outils: [], version: 0 });
     if (!reply) {
       return res.json({
@@ -114,7 +108,7 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
     }
     return res.json({ reply });
   } catch (err: any) {
-    // 429 Gemini (quota) -> on le remonte tel quel pour que le widget affiche
+    // 429 du modèle (quota) -> on le remonte tel quel pour que le widget affiche
     // le bon message d'attente.
     if (err?.status === 429) {
       return res.status(429).json({ error: 'Rate limited.' });

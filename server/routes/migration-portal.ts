@@ -22,6 +22,7 @@ import {
 } from '../lib/validation';
 import { hashToken, isValidTokenFormat, randomSleep, checkInvitationUsable } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
+import { repondreDansLePortail } from '../lib/support/portail';
 import { analyzeMigrationFile, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { FIELD_CATALOG } from '../lib/migration/mapping';
@@ -805,7 +806,19 @@ router.post('/migration-portal/messages', validate(migrationMessageSchema), asyn
     if (error) throw error;
     await logMigrationAudit(admin, { migrationId: migration.id, action: 'message.send', actorId: user.id, actorRole: 'client' });
     await touchMigrationActivity(admin, migration.id);
-    return res.status(201).json(data);
+    // Le même Lumi qu'ailleurs répond ici (dossier + statut de la migration) ; s'il transfère, l'équipe reprend dans Slack.
+    let reply: { id: string; author_kind: string; body: string; created_at: string } | null = null;
+    try {
+      const r = await repondreDansLePortail(admin, migration, user, (req.body as { body: string }).body);
+      if (r.texte) {
+        const authorId = migration.assigned_admin ?? migration.created_by;
+        const { data: rep } = await admin.from('migration_messages').insert({ migration_id: migration.id, author_id: authorId, author_kind: 'assistant', body: r.texte }).select('id, author_kind, body, created_at').single();
+        reply = rep ?? null;
+      }
+    } catch (e: any) {
+      console.error('[migration-portal] assistant en erreur:', e?.message);
+    }
+    return res.status(201).json({ ...data, reply });
   } catch (err: any) {
     return sendSafeError(res, err, 'Envoi impossible.', '[migration-portal]');
   }

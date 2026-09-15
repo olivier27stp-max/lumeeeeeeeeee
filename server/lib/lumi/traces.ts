@@ -24,7 +24,7 @@ import { logger } from '../logger';
 import { normaliser } from './normaliser';
 import type { UsageTokens } from './tarifs';
 
-export type CanalTrace = 'lumi' | 'public' | 'agent' | 'transcription' | 'migration';
+export type CanalTrace = 'lumi' | 'public' | 'agent' | 'transcription' | 'migration' | 'support';
 export type OrigineTrace = 'texte' | 'suggestion' | 'voix' | 'carte' | 'repli' | 'lien' | 'api';
 export type ResultatTrace = 'ok' | 'refus' | 'erreur' | 'proposition';
 export const ORIGINES_TRACE: readonly OrigineTrace[] = ['texte', 'suggestion', 'voix', 'carte', 'repli', 'lien', 'api'];

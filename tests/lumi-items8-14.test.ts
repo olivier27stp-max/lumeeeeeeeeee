@@ -33,7 +33,9 @@ describe('item 8 — version du prompt', () => {
   it('le prompt de vente vit dans son module, la route l importe, et la version part dans les traces', () => {
     expect(SYSTEM_PROMPT).toContain('150 $/mois');
     const route = lu('server/routes/sales-chat.ts');
-    expect(route).toContain("import { SYSTEM_PROMPT } from '../lib/agent/promptVente';");
+    // Le même Lumi partout : la route publique passe par le cerveau de support, qui porte la connaissance du site.
+    expect(route).toContain("import { repondreSupportIA, isSupportIAConfigured, MODELE_SUPPORT } from '../lib/support/ia';");
+    expect(lu('server/lib/support/ia.ts')).toContain("import { SYSTEM_PROMPT as CONNAISSANCE_PUBLIQUE } from '../agent/promptVente';");
     expect(route).not.toContain('const SYSTEM_PROMPT = `');
     expect(route).toContain('promptVersion: VERSION_PROMPT');
     expect(lu('server/routes/lumi.ts')).toContain('promptVersion: VERSION_PROMPT');
