@@ -32,7 +32,7 @@ vi.mock('../../server/lib/supabase', () => ({
         return { data: null, error: null };
       };
       o.single = o.maybeSingle;
-      o.then = (res: any) => Promise.resolve({ data: null, error: null }).then(res);
+      o.then = (res: any, rej?: any) => Promise.resolve({ data: null, error: null }).then(res, rej);
       return o;
     },
   }),
