@@ -31,6 +31,7 @@ import clientErrorsRouter from './routes/client-errors';
 import leadsRouter from './routes/leads';
 import paymentsRouter, { stripeWebhookHandler } from './routes/payments';
 import { emailWebhookHandler } from './routes/webhooks-email';
+import { slackWebhookHandler } from './routes/webhooks-slack';
 import messagesRouter from './routes/messages';
 import quotesRouter, { quoteRedirectRouter } from './routes/quotes';
 import invoicesPublicRouter from './routes/invoices-public';
@@ -254,6 +255,7 @@ const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
   '/webhooks/stripe-connect',
   '/webhooks/paypal',
   '/webhooks/email',   // Resend (rebonds), signature Svix vérifiée
+  '/webhooks/slack',   // Réponses du support humain, signature Slack vérifiée
 ];
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
@@ -325,6 +327,8 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: 
 app.post('/api/webhooks/stripe-connect', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookHandler);
 // Rebonds courriel (Resend) : corps brut pour la signature Svix (audit QA n°8).
 app.post('/api/webhooks/email', express.raw({ type: 'application/json', limit: '1mb' }), emailWebhookHandler);
+// Slack (support humain) : signature sur le corps brut, comme les deux précédents.
+app.post('/api/webhooks/slack', express.raw({ type: 'application/json', limit: '1mb' }), slackWebhookHandler);
 
 // ── Global body parsing (after stripe webhook raw route) ──
 // L'audio du micro (POST /api/agent/transcribe) arrive en base64 : jusqu'à

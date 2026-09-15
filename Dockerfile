@@ -60,6 +60,8 @@ COPY src/lib/supabaseAdmin.ts ./src/lib/supabaseAdmin.ts
 # le conteneur crashe au demarrage (Cannot find module) - prod 502 le 2026-09-14.
 # tests/dockerfile-imports-src.test.ts verifie que chaque import src/ du serveur est copie.
 COPY src/pages/marketing/fonctionsData.ts ./src/pages/marketing/fonctionsData.ts
+# FAQ du support, lue par l'assistant de support (server/lib/support/ia.ts).
+COPY src/components/supportArticles.ts ./src/components/supportArticles.ts
 
 # Install tsx for running TypeScript server
 RUN npx tsx --version || npm i -g tsx
