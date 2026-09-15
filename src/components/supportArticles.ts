@@ -159,8 +159,8 @@ export const ARTICLES: Article[] = [
     path: '/finances',
     q_fr: 'Comment annuler une facture ou la marquer payée ?',
     q_en: 'How do I void an invoice or mark it paid?',
-    a_fr: "Ouvrez la facture (Finances → Facturation) → menu « … » → « Marquer payée » ou « Annuler », puis confirmez. Une facture ne se supprime pas : on l'annule, elle reste dans l'historique.",
-    a_en: 'Open the invoice (Finances → Invoicing) → “…” menu → “Mark paid” or “Void”, then confirm. An invoice is never deleted: you void it and it stays in the history.',
+    a_fr: "Ouvrez la facture (Finances → Facturation) → menu « … » → « Marquer payée » ou « Annuler », puis confirmez : la facture annulée reste dans l'historique. Pour la retirer de la liste, dans Finances → Facturation, menu « … » de la ligne → « Supprimer » (confirmation).",
+    a_en: 'Open the invoice (Finances → Invoicing) → “…” menu → “Mark paid” or “Void”, then confirm: a voided invoice stays in the history. To remove it from the list, in Finances → Invoicing, use the row’s “…” menu → “Delete” (confirmation).',
     tags: 'facture annuler supprimer payee marquer payee void',
   },
   {

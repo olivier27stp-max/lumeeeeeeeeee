@@ -109,7 +109,9 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
         setTicket(r.ticket);
         toast.success(ts.humanNotified.replace('{delay}', sla(r.slaKey)));
       } else {
-        const r = await chatSupport({ ticketId: ticket?.id, message: message || (fr ? 'Je veux parler à un humain.' : 'I want to talk to a human.'), humain, origine: suggestion ? 'suggestion' : 'texte' });
+        // La page courante part avec la question : Lumi dit où cliquer d'ici, pas depuis le menu.
+        const page = typeof window !== 'undefined' && /^\/[A-Za-z0-9/_-]*$/.test(window.location.pathname) ? window.location.pathname.slice(0, 200) : undefined;
+        const r = await chatSupport({ ticketId: ticket?.id, message: message || (fr ? 'Je veux parler à un humain.' : 'I want to talk to a human.'), humain, origine: suggestion ? 'suggestion' : 'texte', page });
         setTicket(r.ticket);
         if (r.escalated) toast.success(ts.humanNotified.replace('{delay}', sla(r.slaKey)));
       }

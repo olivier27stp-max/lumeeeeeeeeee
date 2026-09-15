@@ -87,7 +87,7 @@ export async function submitSupportRequest(input: SupportRequestInput): Promise<
 }
 
 /** Un tour avec l'assistant (ou un transfert direct à un humain avec `humain: true`). */
-export async function chatSupport(input: { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion' }): Promise<SupportChatResult> {
+export async function chatSupport(input: { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion'; page?: string }): Promise<SupportChatResult> {
   return appel<SupportChatResult>('/api/support/chat', { method: 'POST', body: JSON.stringify(input) });
 }
 

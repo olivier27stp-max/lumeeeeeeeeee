@@ -52,6 +52,8 @@ export interface ContexteSupport {
   surface?: SurfaceSupport;
   /** Dossier client (support/dossier.ts). Jamais pour la surface publique. */
   dossier?: string | null;
+  /** Route de l'app où le client se trouve en écrivant (ex. /jobs/123) : Lumi répond « ici », pas « depuis le menu ». */
+  page?: string | null;
 }
 
 /** Ce que l'assistant peut FAIRE, fourni par la surface (le module ne touche pas à la base lui-même). */
@@ -116,7 +118,8 @@ ${faqTexte(langue)}`;
 function promptVariable(c: ContexteSupport, surface: SurfaceSupport): string {
   if (surface === 'public') return '';
   const ou = surface === 'migration_portal' ? 'They are writing from the data-migration portal (they are not logged in to the app; questions about their migration are expected here).' : 'They are writing from the help chat inside the app.';
-  return `You are talking to ${c.userName} from "${c.companyName}" (${c.planLabel} plan). ${ou} A human replies within ${c.slaTexte}.
+  const page = c.page && surface === 'app' ? ` They are currently on the page ${c.page} of the app: when the answer is on that page, say where to click from where they are (« ici, en haut à droite… »), not from the main menu.` : '';
+  return `You are talking to ${c.userName} from "${c.companyName}" (${c.planLabel} plan). ${ou}${page} A human replies within ${c.slaTexte}.
 
 DOSSIER (this client only, read-only, as of now):
 ${c.dossier?.trim() || '(dossier indisponible pour ce tour : ne devine rien sur le compte, transfère si la question porte dessus)'}`;
@@ -155,6 +158,12 @@ function outilsPour(surface: SurfaceSupport, outils: OutilsSupport): Anthropic.M
 }
 
 export interface MessageSupport { role: 'user' | 'assistant'; content: string }
+
+/** Pour mesurer (scripts/qa/compter-tokens-support.mts) : les deux blocs du prompt, tels qu'envoyés. */
+export function promptsPourMesure(langue: 'fr' | 'en', surface: SurfaceSupport, dossier: string | null): { stable: string; variable: string } {
+  const outils: OutilsSupport = surface === 'public' ? {} : { statutMigration: async () => '', demarrerMigration: async () => ({ ok: false, raison: '' }) };
+  return { stable: promptStable(langue, surface, outils), variable: promptVariable({ langue, companyName: 'Entreprise', planLabel: 'Scale', userName: 'Client', slaTexte: '4 heures ouvrables', surface, dossier }, surface) };
+}
 
 /**
  * Un tour de conversation. `historique` = les messages précédents (client et

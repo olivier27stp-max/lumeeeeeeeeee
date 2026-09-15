@@ -26,6 +26,9 @@ import { dossierClient } from '../lib/support/dossier';
 import { reponseFaqPour } from '../lib/support/faq';
 import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
 import { journaliserTrace } from '../lib/lumi/traces';
+import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cache-semantique';
+import { versionOrg } from '../lib/lumi/version-org';
+import { PLAFOND_MODELE_PAR_JOUR, reponsesModeleAujourdhui, texteAuPlafond, PORTEE_CACHE_SUPPORT } from '../lib/support/garde-fous';
 import {
   contexteOrg, creerTicket, ticketDe, messagesDuTicket, ajouterMessage, escaladerTicket, relayerMessageClient, humainActifRecemment, slaTexte,
   type Ticket, type MessageTicket,
@@ -54,7 +57,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
-    const { ticketId, message, humain, origine } = req.body as { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion' };
+    const { ticketId, message, humain, origine, page } = req.body as { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion'; page?: string };
     const admin = getServiceClient();
 
     if (!isSupportIAConfigured() && !humain) {
@@ -97,12 +100,29 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         .filter((m) => (m.author === 'user' || m.author === 'ai'))
         .slice(0, -1) // le message courant est passé à part
         .map((m) => ({ role: m.author === 'user' ? 'user' as const : 'assistant' as const, content: m.body }));
-      try {
-        const debut = Date.now();
+      const debut = Date.now();
+      // Étage 4 : même question (reformulée) déjà répondue dans cette entreprise → même réponse, 0 modèle.
+      // Seulement en début de conversation (pas de contexte à perdre) ; l'index se vide à chaque écriture de Lumi (versionOrg).
+      const premierMessage = historique.length === 0;
+      const vecteur = premierMessage ? await embed(message) : null;
+      const version = vecteur ? await versionOrg(auth.orgId) : null;
+      const memo = vecteur ? await chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), vecteur, version) : null;
+      // Plafond par entreprise et par jour : au-delà, réponses fixes seulement, jamais le modèle.
+      const auPlafond = !memo && (await reponsesModeleAujourdhui(admin, auth.orgId)) >= PLAFOND_MODELE_PAR_JOUR;
+      if (memo) {
+        reply = memo.entree.texte;
+        await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
+        if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
+        void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 4, action: 'cache-semantique', resultat: 'ok', model: null, costCents: 0, dureeMs: Date.now() - debut });
+      } else if (auPlafond) {
+        reply = texteAuPlafond(ctx.langue);
+        await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
+        void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 0, action: 'plafond-jour', resultat: 'refus', model: null, costCents: 0, dureeMs: Date.now() - debut });
+      } else try {
         // Le même Lumi partout : il connaît le compte (dossier) et peut suivre ou démarrer une migration.
         const dossier = await dossierClient(admin, auth.orgId, auth.user.id);
         const r = await repondreSupportIA(
-          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte },
+          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte, page: page ?? null },
           historique, message,
           {
             statutMigration: () => statutMigrationPour(admin, auth.orgId),
@@ -115,6 +135,8 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
         // L'équipe voit ce que Lumi a répondu dans son canal ; elle n'a rien à faire si ça suffit.
         if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
+        // Mémoriser pour l'entreprise : seulement une réponse sans outil ni transfert (un « comment faire »), jamais une réponse liée à l'état du moment.
+        if (vecteur && !transferer && r.outils.length === 0 && !page) void memoriserSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: version ?? 0 });
         void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 6, action: 'app', outils: r.outils, resultat: transferer ? 'proposition' : 'ok', model: 'claude-sonnet-5', costCents: r.coutCents, dureeMs: Date.now() - debut });
       } catch (e: any) {
         // L'assistant tombe → un humain prend le relais, jamais un mur.
