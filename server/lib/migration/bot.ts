@@ -50,6 +50,7 @@ import { coutEnCents } from '../lumi/tarifs';
 import { journaliserTrace } from '../lumi/traces';
 import { logger } from '../logger';
 import { platformAdminIds } from '../config';
+import { isSlackConfigured, canalSupport, envoyerMessageSlack, echapperSlack } from '../slack';
 
 export const SEUIL_CONFIRMATION = 0.9;
 export const SEUIL_GABARIT = 0.8;
@@ -459,12 +460,19 @@ async function resoudreQuestionsAutonome(admin: Admin, m: MigrationRow, acteur: 
  */
 async function alerterAdmin(admin: Admin, m: MigrationRow, acteur: ActeurMigration, motif: 'approbation' | 'bloque', detail: string, rapport: RapportBot): Promise<number> {
   const cibles = new Set<string>([...platformAdminIds, ...(m.assigned_admin ? [m.assigned_admin] : [])]);
-  if (!cibles.size) return 0;
   const lien = `/admin/migrations#${m.id}`;
   const depuis = new Date(Date.now() - RAPPEL_ADMIN_HEURES * 3600 * 1000).toISOString();
   const titre = motif === 'approbation' ? 'Migration prête : approbation au nom du client' : 'Migration bloquée : le bot a besoin de vous';
   let envoyees = 0;
   try {
+    // Le même canal que le support humain (Slack) : une alerte par (migration, motif) par délai de rappel, l'audit fait foi.
+    if (isSlackConfigured()) {
+      const { data: dejaSlack } = await admin.from('migration_audit_logs').select('id').eq('migration_id', m.id).eq('action', 'bot.admin.alerte').eq('meta->>motif', motif).gte('created_at', depuis).limit(1).maybeSingle();
+      if (!dejaSlack) {
+        await envoyerMessageSlack({ channel: canalSupport(), text: `🤖 *${echapperSlack(titre)}*\n${echapperSlack(detail)}\nConsole : ${lien}` });
+        envoyees += 1;
+      }
+    }
     for (const userId of cibles) {
       const { data: deja } = await admin.from('notifications').select('id').eq('user_id', userId).eq('type', TYPE_NOTIFICATION_ADMIN).eq('link', lien).eq('icon', motif).gte('created_at', depuis).limit(1).maybeSingle();
       if (deja) continue;

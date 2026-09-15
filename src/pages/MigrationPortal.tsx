@@ -1004,7 +1004,7 @@ function MessagesSection({ fr, token }: { fr: boolean; token: string }) {
         {messages.map((m) => (
           <div key={m.id} className={`max-w-[85%] rounded-lg px-3 py-2 text-[13px] ${m.author_kind === 'client' ? 'ml-auto bg-[#eeeae0]' : 'bg-white border border-[#e6e2d8]'}`}>
             <div className="text-[10px] text-[#a09a8c] mb-0.5">
-              {m.author_kind === 'client' ? (fr ? 'Vous' : 'You') : 'Lume'} · {new Date(m.created_at).toLocaleString(fr ? 'fr-CA' : 'en-CA')}
+              {m.author_kind === 'client' ? (fr ? 'Vous' : 'You') : m.author_kind === 'assistant' ? 'Lumi' : (fr ? 'Équipe Lume' : 'Lume team')} · {new Date(m.created_at).toLocaleString(fr ? 'fr-CA' : 'en-CA')}
             </div>
             {m.body}
           </div>

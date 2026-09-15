@@ -96,11 +96,14 @@ export async function contexteOrg(admin: SupabaseClient, orgId: string, user: { 
 
 export async function creerTicket(admin: SupabaseClient, p: {
   orgId: string; userId: string; subject: string; category?: string | null; ctx: ContexteOrg; status: 'ai' | 'open';
+  /** D'où le client écrit (défaut : app). Le portail de migration rattache le ticket à sa migration. */
+  source?: 'app' | 'migration_portal' | 'public'; migrationId?: string | null;
 }): Promise<Ticket> {
   const { data, error } = await admin.from('support_tickets').insert({
     org_id: p.orgId, user_id: p.userId, subject: p.subject.slice(0, 200), category: p.category || null,
     priority: p.ctx.isPriority ? 'priority' : 'normal', plan_slug: p.ctx.plan, sla_key: p.ctx.slaKey, status: p.status,
     company_name: p.ctx.companyName, user_email: p.ctx.userEmail, user_name: p.ctx.userName,
+    source: p.source ?? 'app', migration_id: p.migrationId ?? null,
   }).select('*').single();
   if (error) throw new Error(`support_tickets insert : ${error.message}`);
   return data as Ticket;
@@ -244,9 +247,18 @@ export async function relayerMessageClient(admin: SupabaseClient, ticket: Ticket
   }
 }
 
-/** Réponse d'un humain (Slack) → le client : notification dans l'app + courriel. */
+/** Réponse d'un humain (Slack) → le client : notification dans l'app + courriel — et le portail de migration si c'est de là qu'il écrivait. */
 export async function notifierClientReponse(admin: SupabaseClient, ticket: Ticket, body: string, auteur: string): Promise<void> {
   const langue: 'fr' | 'en' = 'fr';
+  const migrationId = (ticket as { migration_id?: string | null }).migration_id ?? null;
+  if (migrationId) {
+    const { data: mig } = await admin.from('data_migrations').select('assigned_admin, created_by').eq('id', migrationId).maybeSingle();
+    const authorId = (mig as { assigned_admin?: string | null; created_by?: string } | null)?.assigned_admin ?? (mig as { created_by?: string } | null)?.created_by ?? ticket.user_id;
+    if (authorId) {
+      const { error } = await admin.from('migration_messages').insert({ migration_id: migrationId, author_id: authorId, author_kind: 'admin', body: body.slice(0, 10_000) });
+      if (error) logger.error('[support] copie dans le portail de migration impossible', { ticketId: ticket.id, error: error.message });
+    }
+  }
   if (ticket.user_id) {
     const { error } = await admin.from('notifications').insert({
       org_id: ticket.org_id, user_id: ticket.user_id, type: 'support_reply', category: 'support',
