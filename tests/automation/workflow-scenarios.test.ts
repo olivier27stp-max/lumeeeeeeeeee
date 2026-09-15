@@ -76,8 +76,8 @@ const REVIEW_REQUEST_SCENARIO: WorkflowScenario = {
     'Immediate (delay 0)',
     'Send survey link by email and SMS',
     'Log review_request record for tracking',
-    '4-5 stars → Google/Facebook review page + invite message',
-    '1-3 stars → internal feedback form + follow-up task',
+    '5 stars → Google/Facebook review page + invite message',
+    '1-4 stars → internal feedback form + follow-up task',
   ],
   stopConditions: [
     'Review already sent to this client in last 7 days',
@@ -242,8 +242,8 @@ describe('Scenario — Review Request Workflow', () => {
   });
 
   it('branches on the rating', () => {
-    expect(s.steps).toContain('4-5 stars → Google/Facebook review page + invite message');
-    expect(s.steps).toContain('1-3 stars → internal feedback form + follow-up task');
+    expect(s.steps).toContain('5 stars → Google/Facebook review page + invite message');
+    expect(s.steps).toContain('1-4 stars → internal feedback form + follow-up task');
   });
 });
 

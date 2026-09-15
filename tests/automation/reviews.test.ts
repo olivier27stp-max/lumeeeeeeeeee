@@ -16,15 +16,16 @@ import {
 } from '../../server/lib/reviews';
 
 describe('Avis clients — seuil de note', () => {
-  it('4 et 5 étoiles = avis public', () => {
-    expect(isPositiveRating(4)).toBe(true);
+  it('5 étoiles seulement = avis public', () => {
     expect(isPositiveRating(5)).toBe(true);
+    expect(isPositiveRating(4)).toBe(false);
   });
 
-  it('1 à 3 étoiles = commentaires internes', () => {
+  it('1 à 4 étoiles = commentaires internes', () => {
     expect(isPositiveRating(1)).toBe(false);
     expect(isPositiveRating(2)).toBe(false);
     expect(isPositiveRating(3)).toBe(false);
+    expect(isPositiveRating(4)).toBe(false);
   });
 
   it('valide une note entière de 1 à 5 seulement', () => {
@@ -68,7 +69,7 @@ describe('Avis clients — prochaine étape du sondage', () => {
     // Politique Google (« review gating ») : on ne filtre jamais qui peut
     // laisser un avis. La note basse change l'ORDRE (formulaire privé d'abord),
     // pas l'accès au lien public.
-    const next = surveyNextStep(2, both);
+    const next = surveyNextStep(4, both);
     expect(next.step).toBe('feedback_form');
     expect(next.destinations).toHaveLength(2);
     expect(next.auto_redirect_url).toBeNull();
@@ -88,7 +89,7 @@ describe('Avis clients — prochaine étape du sondage', () => {
   });
 
   it('note haute + deux plateformes → choix, pas de redirection automatique', () => {
-    const next = surveyNextStep(4, both);
+    const next = surveyNextStep(5, both);
     expect(next.step).toBe('public_review');
     expect(next.destinations).toHaveLength(2);
     expect(next.auto_redirect_url).toBeNull();

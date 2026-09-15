@@ -4,8 +4,8 @@
    Workflow en deux temps :
      GET  /survey/:token           → état du sondage + plateformes d'avis
      POST /survey/:token           → la NOTE (1-5)
-                                     4-5 : liens Google/Facebook + message
-                                     1-3 : formulaire de commentaires
+                                     5   : liens Google/Facebook + message
+                                     1-4 : formulaire de commentaires
      POST /survey/:token/feedback  → le COMMENTAIRE (note basse)
    ═══════════════════════════════════════════════════════════════ */
 

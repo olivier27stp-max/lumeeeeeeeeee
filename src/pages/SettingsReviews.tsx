@@ -2,8 +2,8 @@
    SettingsReviews — Réglages « Avis clients » (/settings/reviews)
 
    Workflow : job terminée → sondage d'étoiles envoyé tout de suite
-     • 4-5 étoiles → redirection Google / Facebook + message d'invitation
-     • 1-3 étoiles → formulaire de commentaires interne + tâche de suivi
+     • 5 étoiles → redirection Google / Facebook + message d'invitation
+     • 4 étoiles ou moins → formulaire de commentaires interne + tâche de suivi
 
    Cette page possède les liens de redirection, le message d'invitation et
    l'interrupteur principal (colonnes de company_settings). Les délais et
@@ -250,7 +250,7 @@ export default function SettingsReviews() {
             <div className="flex items-center gap-2 font-semibold text-text-primary">
               <span className="h-6 w-6 rounded-full bg-emerald-600 text-white text-[12px] flex items-center justify-center">2</span>
               <ThumbsUp size={14} />
-              {isFr ? '4 ou 5 étoiles' : '4 or 5 stars'}
+              {isFr ? '5 étoiles' : '5 stars'}
             </div>
             <p className="text-text-secondary">
               {isFr
@@ -262,7 +262,7 @@ export default function SettingsReviews() {
             <div className="flex items-center gap-2 font-semibold text-text-primary">
               <span className="h-6 w-6 rounded-full bg-amber-500 text-white text-[12px] flex items-center justify-center">3</span>
               <ThumbsDown size={14} />
-              {isFr ? '3 étoiles ou moins' : '3 stars or less'}
+              {isFr ? '4 étoiles ou moins' : '4 stars or less'}
             </div>
             <p className="text-text-secondary">
               {isFr
@@ -322,7 +322,7 @@ export default function SettingsReviews() {
       {/* ── Liens de redirection ── */}
       <div className="section-card p-6 space-y-5">
         <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-          <ExternalLink size={12} /> {isFr ? 'Pages d’avis (4-5 étoiles)' : 'Review pages (4-5 stars)'}
+          <ExternalLink size={12} /> {isFr ? 'Pages d’avis (5 étoiles)' : 'Review pages (5 stars)'}
         </h3>
 
         <div>
@@ -377,12 +377,12 @@ export default function SettingsReviews() {
       {/* ── Message d'invitation ── */}
       <div className="section-card p-6 space-y-4">
         <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
-          <MessageSquareText size={12} /> {isFr ? 'Message d’invitation (4-5 étoiles)' : 'Invite message (4-5 stars)'}
+          <MessageSquareText size={12} /> {isFr ? 'Message d’invitation (5 étoiles)' : 'Invite message (5 stars)'}
         </h3>
         <textarea
           value={form.review_invite_message}
           onChange={(e) => update('review_invite_message', e.target.value)}
-          aria-label={isFr ? 'Message d’invitation (4-5 étoiles)' : 'Invite message (4-5 stars)'}
+          aria-label={isFr ? 'Message d’invitation (5 étoiles)' : 'Invite message (5 stars)'}
           rows={3}
           maxLength={400}
           placeholder={inviteDefault}
