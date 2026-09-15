@@ -211,14 +211,26 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
 
   if (isSlackConfigured()) {
     try {
+      // Un canal par entreprise (canaux-slack.ts). S'il ne peut pas être créé
+      // (scope channels:manage manquant…), le fil va dans #support comme avant.
+      const { canalClient, signalerDansSupport } = await import('./canaux-slack');
+      let cible = canalSupport();
+      let canalEntreprise: Awaited<ReturnType<typeof canalClient>> | null = null;
+      try {
+        canalEntreprise = await canalClient(admin, ticket.org_id, ticket.company_name || ctx.companyName, ctx.planLabel);
+        cible = canalEntreprise.channel_id;
+      } catch (e: any) {
+        logger.warn('[support] canal client impossible, fil dans #support', { orgId: ticket.org_id, error: e?.message, indice: /missing_scope/.test(String(e?.message)) ? 'ajouter le scope channels:manage à l’app Slack et la réinstaller' : undefined });
+      }
       const { text, blocks } = enTeteSlack(ticket, ctx, motif);
-      const parent = await envoyerMessageSlack({ channel: canalSupport(), text, blocks });
+      const parent = await envoyerMessageSlack({ channel: cible, text, blocks });
       const transcript = transcriptSlack(messages);
       if (transcript) await envoyerMessageSlack({ channel: parent.channel, thread_ts: parent.ts, text: transcript });
       maj.slack_channel_id = parent.channel;
       maj.slack_thread_ts = parent.ts;
       const { data } = await admin.from('support_tickets').update(maj).eq('id', ticket.id).select('*').single();
       await ajouterMessage(admin, { ticket, author: 'system', body: 'escalated:slack' });
+      if (canalEntreprise) await signalerDansSupport(ticket, canalEntreprise, motif);
       return { ok: true, canal: 'slack', ticket: (data as Ticket) || { ...ticket, ...maj } as Ticket };
     } catch (e: any) {
       logger.error('[support] escalade Slack impossible, repli courriel', { ticketId: ticket.id, error: e?.message });
@@ -235,7 +247,12 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
 export async function relayerMessageClient(admin: SupabaseClient, ticket: Ticket, ctx: ContexteOrg, body: string): Promise<void> {
   if (ticket.slack_thread_ts && ticket.slack_channel_id && isSlackConfigured()) {
     try {
-      const r = await envoyerMessageSlack({ channel: ticket.slack_channel_id, thread_ts: ticket.slack_thread_ts, text: `*👤 ${echapperSlack(ticket.user_name || 'Client')}* — ${echapperSlack(body)}` });
+      // Dans le canal de l'entreprise, le client écrit au premier niveau (une
+      // conversation, pas un ticket) ; dans #support (repli), dans le fil.
+      const { canalClientExistant } = await import('./canaux-slack');
+      const canal = await canalClientExistant(admin, ticket.org_id);
+      const auPremierNiveau = !!canal && canal.channel_id === ticket.slack_channel_id;
+      const r = await envoyerMessageSlack({ channel: ticket.slack_channel_id, ...(auPremierNiveau ? {} : { thread_ts: ticket.slack_thread_ts }), text: `*👤 ${echapperSlack(ticket.user_name || 'Client')}* — ${echapperSlack(body)}` });
       await admin.from('support_messages').update({ slack_ts: r.ts }).eq('ticket_id', ticket.id).eq('author', 'user').is('slack_ts', null).order('created_at', { ascending: false }).limit(1);
       return;
     } catch (e: any) {
