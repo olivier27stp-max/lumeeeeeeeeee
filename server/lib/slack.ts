@@ -9,7 +9,8 @@
  * Pas de SDK : trois appels HTTP (chat.postMessage, users.info, auth.test) et
  * une signature HMAC. Env :
  *   SLACK_BOT_TOKEN            xoxb-… (scopes : chat:write, channels:history,
- *                              channels:read, users:read ; groups:* si canal privé)
+ *                              channels:read, channels:manage (un canal par
+ *                              entreprise cliente), users:read)
  *   SLACK_SIGNING_SECRET       vérifie chaque webhook entrant
  *   SLACK_SUPPORT_CHANNEL_ID   C0…  (le canal, pas son nom)
  * Sans les trois : `isSlackConfigured()` = false et le support retombe sur le
@@ -65,6 +66,50 @@ export async function envoyerMessageSlack(p: {
     unfurl_media: false,
   });
   return { ts: r.ts, channel: r.channel };
+}
+
+// ── Canaux (un canal par entreprise cliente) — scope channels:manage ──
+export async function creerCanalSlack(nom: string): Promise<{ id: string; name: string }> {
+  // `name_taken` : on suffixe (-2, -3…) — deux entreprises peuvent porter le même nom.
+  for (let i = 0; i < 6; i++) {
+    const candidat = i === 0 ? nom : `${nom.slice(0, 76)}-${i + 1}`;
+    try {
+      const r = await appel<{ channel: { id: string; name: string } }>('conversations.create', { name: candidat, is_private: false });
+      return { id: r.channel.id, name: r.channel.name };
+    } catch (e: any) {
+      if (!/name_taken/.test(String(e?.message))) throw e;
+    }
+  }
+  throw new Error(`Slack conversations.create : name_taken (${nom})`);
+}
+export async function inviterDansCanal(channel: string, users: string[]): Promise<void> {
+  if (!users.length) return;
+  try {
+    await appel('conversations.invite', { channel, users: users.slice(0, 1000).join(',') });
+  } catch (e: any) {
+    // Déjà membres, ou un des ids invalide : pas une erreur pour nous.
+    if (!/already_in_channel|cant_invite_self|cant_invite|user_not_found/.test(String(e?.message))) throw e;
+  }
+}
+export async function membresDuCanal(channel: string): Promise<string[]> {
+  const out: string[] = [];
+  let cursor = '';
+  for (let i = 0; i < 10; i++) {
+    const r = await appel<{ members?: string[]; response_metadata?: { next_cursor?: string } }>('conversations.members', null, { channel, limit: '200', ...(cursor ? { cursor } : {}) });
+    out.push(...(r.members || []));
+    cursor = r.response_metadata?.next_cursor || '';
+    if (!cursor) break;
+  }
+  return out;
+}
+export async function definirSujetCanal(channel: string, topic: string): Promise<void> {
+  await appel('conversations.setTopic', { channel, topic: topic.slice(0, 250) });
+}
+/** Messages de premier niveau d'un canal depuis `oldest` (exclu), du plus ancien au plus récent. */
+export interface MessageCanalSlack { ts: string; thread_ts?: string; user?: string; bot_id?: string; subtype?: string; text?: string }
+export async function lireHistoriqueSlack(channel: string, oldest?: string, limite = 200): Promise<MessageCanalSlack[]> {
+  const r = await appel<{ messages?: MessageCanalSlack[] }>('conversations.history', null, { channel, limit: String(limite), ...(oldest ? { oldest, inclusive: 'false' } : {}) });
+  return (r.messages || []).slice().sort((a, b) => Number(a.ts) - Number(b.ts));
 }
 
 /** Répliques d'un fil (sans le parent), pour le relevé périodique. */

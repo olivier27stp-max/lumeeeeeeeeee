@@ -102,6 +102,16 @@ export async function releverReponsesSlack(admin: SupabaseClient = getServiceCli
       logger.error('[support/relais] relevé impossible pour un ticket', { ticketId: t.id, error: e?.message || String(e) });
     }
   }
+  // Canaux clients : ce que l'équipe écrit au premier niveau va au dernier ticket ouvert de l'entreprise.
+  try {
+    const { messagesCanauxClients } = await import('./canaux-slack');
+    for (const { canal, ticket, message } of await messagesCanauxClients(admin)) {
+      const verdict = await relayerReponseSlack({ type: 'message', channel: canal.channel_id, subtype: message.subtype, user: message.user, bot_id: message.bot_id, text: message.text, ts: message.ts, thread_ts: ticket.slack_thread_ts || `0.${message.ts}` }, ticket);
+      if (verdict === 'relayed') relayes += 1;
+    }
+  } catch (e: any) {
+    logger.error('[support/relais] relevé des canaux clients en erreur', { error: e?.message || String(e) });
+  }
   if (relayes) logger.info('[support/relais] relevé Slack', { relayes });
   return relayes;
 }
