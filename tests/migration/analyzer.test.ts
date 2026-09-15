@@ -123,6 +123,13 @@ describe('catégorie de fichier', () => {
     expect(detectCategory('Invoices 2024.csv', [])).toBe('invoices');
     expect(detectCategory('factures.csv', [])).toBe('invoices');
     expect(detectCategory('jobs-2024.csv', [])).toBe('jobs');
+    expect(detectCategory('tax_rates.csv', [])).toBe('taxes');
+    expect(detectCategory('Taxes.csv', [])).toBe('taxes');
+    expect(detectCategory('services_taxables.csv', [])).toBe('services');
+  });
+
+  it('taxes par signature d\'en-têtes', () => {
+    expect(detectCategory('export.csv', ['Tax Name', 'Rate', 'Region'])).toBe('taxes');
   });
 
   it('par signature d\'en-têtes quand le nom est neutre', () => {

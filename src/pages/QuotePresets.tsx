@@ -444,6 +444,7 @@ export default function QuotePresets() {
       tax_cents: 0,
       tax_rate: 0,
       tax_rate_label: '',
+      tax_breakdown: [],
       total_cents: 0,
       deposit_required: !!productsSection?.depositEnabled,
       deposit_cents: 0,

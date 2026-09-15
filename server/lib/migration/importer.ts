@@ -19,9 +19,11 @@ import type {
   TargetEntity,
 } from './types';
 
-export const IMPORT_ORDER: TargetEntity[] = ['service', 'client', 'property', 'job', 'quote', 'visit', 'invoice'];
+// Taxes en premier : les services (taxable) et les documents s'y réfèrent.
+export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'job', 'quote', 'visit', 'invoice'];
 
 export const TABLE_BY_ENTITY: Record<string, string> = {
+  tax_config: 'tax_configs',
   service: 'predefined_services',
   client: 'clients',
   property: 'properties',
@@ -32,6 +34,7 @@ export const TABLE_BY_ENTITY: Record<string, string> = {
 };
 
 const CATEGORY_BY_ENTITY: Record<string, string> = {
+  tax_config: 'taxes',
   service: 'services',
   client: 'clients',
   property: 'properties',
@@ -240,6 +243,10 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   } else if (entity === 'service') {
     const name = refKey(str(n.name));
     if (name) keys.push(`s:${name}`);
+  } else if (entity === 'tax_config') {
+    // Même nom + même région = même taxe (« TPS » du Québec ≠ « TPS » de l'Ontario).
+    const name = refKey(str(n.name));
+    if (name) keys.push(`x:${name}|${refKey(str(n.region))}`);
   }
   return keys;
 }
@@ -381,6 +388,31 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   const n = rec.normalized ?? {};
   const r = rec.relations ?? {};
   const orgId = ctx.migration.org_id;
+
+  if (entity === 'tax_config') {
+    const name = safeStr(n.name).slice(0, 60);
+    if (!name) return { ok: false, reason: 'invalid' };
+    const rate = num(n.rate);
+    if (rate === null || rate < 0 || rate > 100) return { ok: false, reason: 'invalid' };
+    const region = safeStr(n.region).toUpperCase().slice(0, 12);
+    const country = safeStr(n.country).toUpperCase().slice(0, 2);
+    const sortOrder = num(n.sort_order);
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        name,
+        rate,
+        type: 'percentage',
+        region,
+        country: country || 'CA',
+        is_compound: n.is_compound === true,
+        is_active: true,
+        sort_order: sortOrder === null ? 0 : Math.max(0, Math.round(sortOrder)),
+        registration_number: safeStr(n.registration_number).slice(0, 40) || null,
+      },
+    };
+  }
 
   if (entity === 'service') {
     const name = safeStr(n.name);
@@ -1150,6 +1182,13 @@ export async function runFinalImport(
       }
     }
 
+    // Taxes importées : rattachées au groupe par défaut du bureau, sinon elles
+    // ne seraient jamais appliquées (même règle que POST /taxes/config).
+    if (entity === 'tax_config' && importedIds.length > 0) {
+      const newIds = importRecords.filter((ir) => ir.action === 'created' && ir.entity_table === table).map((ir) => ir.entity_id);
+      await linkTaxConfigsToDefaultGroup(admin, migration.org_id, newIds);
+    }
+
     // Doublons internes : fusion vers le dossier primaire réellement importé.
     for (const rec of siblings) {
       const primaryId = intra.siblingOf.get(rec.id)!;
@@ -1259,6 +1298,36 @@ export async function purgeImportActivityNoise(
 
 // ---------------------------------------------------------------------------
 // Rollback — uniquement les entités créées par le lot
+
+/**
+ * Rattache des tax_configs au groupe par défaut du bureau (créé « Custom
+ * Taxes » s'il n'existe pas). Idempotent : la paire (groupe, taxe) est unique.
+ */
+async function linkTaxConfigsToDefaultGroup(admin: SupabaseClient, orgId: string, taxConfigIds: string[]): Promise<void> {
+  if (taxConfigIds.length === 0) return;
+  try {
+    let { data: group } = await admin.from('tax_groups').select('id').eq('org_id', orgId).eq('is_default', true).maybeSingle();
+    if (!group) {
+      const { data: created, error: groupErr } = await admin
+        .from('tax_groups')
+        .insert({ org_id: orgId, name: 'Custom Taxes', region: '', country: '', is_default: true })
+        .select('id')
+        .single();
+      if (groupErr) throw groupErr;
+      group = created;
+    }
+    if (!group) return;
+    const { error: linkErr } = await admin
+      .from('tax_group_items')
+      .upsert(taxConfigIds.map((id, i) => ({ tax_group_id: group!.id, tax_config_id: id, sort_order: 50 + i })), {
+        onConflict: 'tax_group_id,tax_config_id',
+        ignoreDuplicates: true,
+      });
+    if (linkErr) throw linkErr;
+  } catch (err: any) {
+    console.error('[migration-importer] tax group link failed:', err?.message || err);
+  }
+}
 
 /**
  * Purge des pins créés par le trigger auto-pin (20260743000000) pour les
@@ -1371,7 +1440,9 @@ export async function rollbackFinalBatch(
   for (const [table, ids] of byTable) {
     for (let i = 0; i < ids.length; i += CHUNK) {
       const chunk = ids.slice(i, i + CHUNK);
-      if (table === 'predefined_services') {
+      if (table === 'predefined_services' || table === 'tax_configs') {
+        // Pas de deleted_at sur ces tables : désactivation (une taxe inactive
+        // n'est plus résolue ni appliquée).
         const { data, error } = await admin.from(table).update({ is_active: false }).in('id', chunk).select('id');
         if (error) console.error('[migration-importer] rollback deactivate failed:', error.message);
         else deactivated += (data ?? []).length;

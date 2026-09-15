@@ -47,7 +47,7 @@ const CRM_LABELS: Record<string, string> = {
 };
 
 const ENTITY_LABELS_FR: Record<string, string> = {
-  client: 'Clients', property: 'Propriétés', service: 'Produits et services', quote: 'Soumissions',
+  tax_config: 'Noms de taxes', client: 'Clients', property: 'Propriétés', service: 'Produits et services', quote: 'Soumissions',
   job: 'Jobs', visit: 'Visites', invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
 };
 

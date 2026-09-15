@@ -3,9 +3,9 @@
 
    Deux temps :
      1. la note (1-5 étoiles)
-     2a. 4-5 étoiles → message d'invitation + Google / Facebook
+     2a. 5 étoiles → message d'invitation + Google / Facebook
          (redirection automatique si une seule plateforme est configurée)
-     2b. 1-3 étoiles → formulaire de commentaires interne
+     2b. 4 étoiles ou moins → formulaire de commentaires interne
    ═══════════════════════════════════════════════════════════════ */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -121,7 +121,7 @@ export default function SatisfactionSurvey() {
         setInviteMessage(isFr ? data.invite_message : data.invite_message_en);
         if (data.submitted && data.rating != null) {
           setRating(data.rating);
-          if (data.rating >= 4) {
+          if (data.rating >= 5) {
             setStep('public_review');
             // Déjà noté : on montre les liens sans relancer le compte à rebours.
           } else if (data.feedback_needed) {

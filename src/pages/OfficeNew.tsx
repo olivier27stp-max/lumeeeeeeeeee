@@ -6,7 +6,7 @@
  * actif et accès immédiat pour d'autres owners/admins sont facultatifs.
  * Réservé au propriétaire ; bloqué à la limite de bureaux du forfait.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building2, CreditCard, Loader2, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -39,6 +39,7 @@ export default function OfficeNew() {
   const fr = language === 'fr';
   const { current, currentRole } = useCompany();
   const sourceName = current?.companyName || (fr ? 'bureau actuel' : 'current office');
+  const ids = useId();
 
   // ── Form state ──
   const [name, setName] = useState('');
@@ -232,8 +233,8 @@ export default function OfficeNew() {
           <section className="space-y-4">
             <SectionTitle icon={Building2} title={fr ? 'Identité' : 'Identity'} />
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Nom du bureau' : 'Office name'} <span className="text-danger">*</span></label>
-              <input
+              <label htmlFor={`${ids}-name`} className={fieldLabel}>{fr ? 'Nom du bureau' : 'Office name'} <span className="text-danger">*</span></label>
+              <input id={`${ids}-name`}
                 autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -251,7 +252,7 @@ export default function OfficeNew() {
               optional={fr ? 'facultatif' : 'optional'}
             />
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Adresse' : 'Address'}</label>
+              <p className={fieldLabel}>{fr ? 'Adresse' : 'Address'}</p>
               <AddressAutocomplete
                 value={addressSearch}
                 onChange={setAddressSearch}
@@ -262,43 +263,43 @@ export default function OfficeNew() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Rue' : 'Street'}</label>
-                <input value={street1} onChange={(e) => setStreet1(e.target.value)} className="glass-input w-full" />
+                <label htmlFor={`${ids}-street1`} className={fieldLabel}>{fr ? 'Rue' : 'Street'}</label>
+                <input id={`${ids}-street1`} value={street1} onChange={(e) => setStreet1(e.target.value)} className="glass-input w-full" />
               </div>
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Bureau / suite' : 'Unit / suite'}</label>
-                <input value={street2} onChange={(e) => setStreet2(e.target.value)} className="glass-input w-full" />
+                <label htmlFor={`${ids}-street2`} className={fieldLabel}>{fr ? 'Bureau / suite' : 'Unit / suite'}</label>
+                <input id={`${ids}-street2`} value={street2} onChange={(e) => setStreet2(e.target.value)} className="glass-input w-full" />
               </div>
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Ville' : 'City'}</label>
-                <input value={city} onChange={(e) => setCity(e.target.value)} className="glass-input w-full" />
+                <label htmlFor={`${ids}-city`} className={fieldLabel}>{fr ? 'Ville' : 'City'}</label>
+                <input id={`${ids}-city`} value={city} onChange={(e) => setCity(e.target.value)} className="glass-input w-full" />
               </div>
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Province / État' : 'Province / State'}</label>
-                <input value={province} onChange={(e) => setProvince(e.target.value)} className="glass-input w-full" />
+                <label htmlFor={`${ids}-province`} className={fieldLabel}>{fr ? 'Province / État' : 'Province / State'}</label>
+                <input id={`${ids}-province`} value={province} onChange={(e) => setProvince(e.target.value)} className="glass-input w-full" />
               </div>
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Code postal' : 'Postal code'}</label>
-                <input value={postalCode} onChange={(e) => setPostalCode(e.target.value)} className="glass-input w-full" />
+                <label htmlFor={`${ids}-postal`} className={fieldLabel}>{fr ? 'Code postal' : 'Postal code'}</label>
+                <input id={`${ids}-postal`} value={postalCode} onChange={(e) => setPostalCode(e.target.value)} className="glass-input w-full" />
               </div>
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Pays' : 'Country'}</label>
-                <input value={country} onChange={(e) => setCountry(e.target.value)} className="glass-input w-full" placeholder="CA" />
+                <label htmlFor={`${ids}-country`} className={fieldLabel}>{fr ? 'Pays' : 'Country'}</label>
+                <input id={`${ids}-country`} value={country} onChange={(e) => setCountry(e.target.value)} className="glass-input w-full" placeholder="CA" />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Téléphone' : 'Phone'}</label>
-                <input value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full" type="tel" />
+                <label htmlFor={`${ids}-phone`} className={fieldLabel}>{fr ? 'Téléphone' : 'Phone'}</label>
+                <input id={`${ids}-phone`} value={phone} onChange={(e) => setPhone(e.target.value)} className="glass-input w-full" type="tel" />
               </div>
               <div className="space-y-2">
-                <label className={fieldLabel}>{fr ? 'Courriel' : 'Email'}</label>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} className="glass-input w-full" type="email" />
+                <label htmlFor={`${ids}-email`} className={fieldLabel}>{fr ? 'Courriel' : 'Email'}</label>
+                <input id={`${ids}-email`} value={email} onChange={(e) => setEmail(e.target.value)} className="glass-input w-full" type="email" />
               </div>
             </div>
             <div className="space-y-2">
-              <label className={fieldLabel}>{fr ? 'Site web' : 'Website'}</label>
-              <input value={website} onChange={(e) => setWebsite(e.target.value)} className="glass-input w-full" placeholder="https://" />
+              <label htmlFor={`${ids}-website`} className={fieldLabel}>{fr ? 'Site web' : 'Website'}</label>
+              <input id={`${ids}-website`} value={website} onChange={(e) => setWebsite(e.target.value)} className="glass-input w-full" placeholder="https://" />
             </div>
           </section>
 
@@ -310,8 +311,9 @@ export default function OfficeNew() {
             />
             <div className="space-y-3">
               {inheritOptions.map((opt) => (
-                <label key={opt.key} className="flex items-start gap-3 cursor-pointer">
+                <label key={opt.key} htmlFor={`${ids}-inh-${opt.key}`} className="flex items-start gap-3 cursor-pointer">
                   <input
+                    id={`${ids}-inh-${opt.key}`}
                     type="checkbox"
                     checked={inherit[opt.key]}
                     onChange={(e) => setInherit((prev) => ({ ...prev, [opt.key]: e.target.checked }))}
@@ -351,8 +353,9 @@ export default function OfficeNew() {
             ) : (
               <div className="space-y-2">
                 {members.map((m) => (
-                  <label key={m.user_id} className="flex items-center gap-3 cursor-pointer rounded-xl border border-outline-subtle px-3 py-2.5 hover:bg-surface-secondary transition-colors">
+                  <label key={m.user_id} htmlFor={`${ids}-m-${m.user_id}`} className="flex items-center gap-3 cursor-pointer rounded-xl border border-outline-subtle px-3 py-2.5 hover:bg-surface-secondary transition-colors">
                     <input
+                      id={`${ids}-m-${m.user_id}`}
                       type="checkbox"
                       checked={grant.has(m.user_id)}
                       onChange={() => toggleGrant(m.user_id)}

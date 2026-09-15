@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n';
 import {
   formatMoneyFromCents,
   getCompanySettings,
+  getInvoiceAppliedTaxes,
   getInvoiceById,
   getOrgBillingSettings,
   saveInvoiceDraft,
@@ -31,15 +32,20 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
   const [emailTo, setEmailTo] = useState('');
   const [phoneTo, setPhoneTo] = useState('');
   const [company, setCompany] = useState<any>(null);
+  const [appliedTaxes, setAppliedTaxes] = useState<Array<{ name: string; rate: number; amount_cents: number; registration_number?: string | null }>>([]);
   const { t, language } = useTranslation();
   const fr = language === 'fr';
 
   useEffect(() => {
     if (!isOpen || !invoiceId) return;
     setLoading(true);
-    Promise.all([getInvoiceById(invoiceId), getOrgBillingSettings(), getCompanySettings()])
-      .then(([invoiceDetail, settings, companyInfo]) => {
+    Promise.all([
+      getInvoiceById(invoiceId), getOrgBillingSettings(), getCompanySettings(),
+      getInvoiceAppliedTaxes(invoiceId).catch(() => []),
+    ])
+      .then(([invoiceDetail, settings, companyInfo, taxes]) => {
         setDetail(invoiceDetail);
+        setAppliedTaxes(taxes || []);
         setBillingSettings(settings || null);
         setCompany(companyInfo || null);
         setEmailTo(invoiceDetail?.client?.email || '');
@@ -55,8 +61,8 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
 
   const renderData = useMemo(() => {
     if (!detail) return null;
-    return buildRenderData(detail, company);
-  }, [detail, company]);
+    return buildRenderData(detail, company, null, appliedTaxes);
+  }, [detail, company, appliedTaxes]);
 
   async function handleSend() {
     if (!detail || !invoiceId) return;

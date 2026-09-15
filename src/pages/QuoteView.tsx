@@ -39,6 +39,7 @@ interface QuoteData {
     discount_cents: number;
     tax_rate_label: string;
     tax_cents: number;
+    tax_lines?: Array<{ name: string; rate: number; amount_cents: number; registration_number?: string | null }>;
     total_cents: number;
     currency: string;
     notes: string | null;
@@ -752,7 +753,12 @@ export default function QuoteView() {
                     <span className="text-[#333] font-medium">-{formatQuoteMoney(quote.discount_cents, cur)}</span>
                   </div>
                 )}
-                {quote.tax_cents > 0 && (
+                {quote.tax_lines && quote.tax_lines.length > 0 ? quote.tax_lines.map((tax, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-[#888]">{tax.name} ({tax.rate}%)</span>
+                    <span className="text-[#333] font-medium">{formatQuoteMoney(tax.amount_cents, cur)}</span>
+                  </div>
+                )) : quote.tax_cents > 0 && (
                   <div className="flex justify-between">
                     <span className="text-[#888]">{quote.tax_rate_label}</span>
                     <span className="text-[#333] font-medium">{formatQuoteMoney(quote.tax_cents, cur)}</span>

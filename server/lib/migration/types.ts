@@ -63,6 +63,7 @@ export const SOURCE_CRMS = [
 export type SourceCrm = (typeof SOURCE_CRMS)[number];
 
 export const MIGRATION_CATEGORIES = [
+  'taxes',
   'clients',
   'properties',
   'services',
@@ -83,6 +84,7 @@ export type MigrationCategory = (typeof MIGRATION_CATEGORIES)[number];
  * détectées/comptées mais déclarées « non supportées » honnêtement dans l'UI.
  */
 export const IMPORTABLE_CATEGORIES: MigrationCategory[] = [
+  'taxes',
   'services',
   'clients',
   'properties',
@@ -94,6 +96,7 @@ export const IMPORTABLE_CATEGORIES: MigrationCategory[] = [
 
 /** Entités cibles d'une correspondance colonne → champ Lume. */
 export const TARGET_ENTITIES = [
+  'tax_config',
   'client',
   'property',
   'service',

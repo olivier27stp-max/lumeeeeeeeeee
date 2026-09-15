@@ -323,10 +323,17 @@ export default function QuoteDetailsModal({
                     <span className="text-danger">-{formatQuoteMoney(quote.discount_cents)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-text-tertiary">{quote.tax_rate_label || (fr ? 'Taxe' : 'Tax')}</span>
-                  <span>{formatQuoteMoney(quote.tax_cents)}</span>
-                </div>
+                {detail.tax_lines && detail.tax_lines.length > 0 ? detail.tax_lines.map((tax, i) => (
+                  <div key={i} className="flex justify-between text-sm">
+                    <span className="text-text-tertiary">{tax.name} ({tax.rate}%)</span>
+                    <span>{formatQuoteMoney(tax.amount_cents)}</span>
+                  </div>
+                )) : (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-text-tertiary">{quote.tax_rate_label || (fr ? 'Taxe' : 'Tax')}</span>
+                    <span>{formatQuoteMoney(quote.tax_cents)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-base font-bold border-t border-outline pt-2">
                   <span>Total</span>
                   <span>{formatQuoteMoney(quote.total_cents)}</span>

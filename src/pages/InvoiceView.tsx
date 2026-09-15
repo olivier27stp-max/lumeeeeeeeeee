@@ -231,7 +231,11 @@ export default function InvoiceView() {
               {!!invoice.discount_cents && invoice.discount_cents > 0 && (
                 <div className="flex justify-between"><span className="text-[#888]">{isFr ? 'Rabais' : 'Discount'}</span><span className="text-[#333]">−{fmtMoney(invoice.discount_cents, cur)}</span></div>
               )}
-              <div className="flex justify-between"><span className="text-[#888]">{isFr ? 'Taxes' : 'Tax'}</span><span className="text-[#333]">{fmtMoney(invoice.tax_cents, cur)}</span></div>
+              {invoice.tax_lines && invoice.tax_lines.length > 0 ? invoice.tax_lines.map((tax, i) => (
+                <div key={i} className="flex justify-between"><span className="text-[#888]">{tax.name} ({tax.rate}%)</span><span className="text-[#333]">{fmtMoney(tax.amount_cents, cur)}</span></div>
+              )) : (
+                <div className="flex justify-between"><span className="text-[#888]">{isFr ? 'Taxes' : 'Tax'}</span><span className="text-[#333]">{fmtMoney(invoice.tax_cents, cur)}</span></div>
+              )}
               <div className="flex justify-between border-t border-[#eee] pt-2 mt-2 text-[15px]"><span className="font-semibold text-[#111]">Total</span><span className="font-bold text-[#111]">{fmtMoney(invoice.total_cents, cur)}</span></div>
               {invoice.paid_cents > 0 && (
                 <>

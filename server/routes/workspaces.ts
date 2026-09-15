@@ -1,14 +1,11 @@
 // POST /api/workspaces/create — formulaire de création de workspace.
 //
-// Un workspace = une compagnie = un company_group + son propre abonnement.
-//   - mode 'onboarding' : complète l'org auto-provisionné après paiement
-//     (remplace l'ancien assistant 3 étapes) et pose onboarding_done ;
-//   - mode 'new' : un propriétaire crée une 2e compagnie → nouvel org dans un
-//     NOUVEAU company_group ; le client bascule dessus puis va au /checkout.
-// Serveur-autoritaire, idempotent en mode onboarding (safe au retry).
+// Un workspace = la compagnie de l'utilisateur (un seul par compte) ; ses
+// bureaux dépendent du forfait. L'org est auto-provisionné au 1er login :
+// cette route la complète après paiement (remplace l'ancien assistant 3
+// étapes) et pose onboarding_done. Serveur-autoritaire, idempotent.
 
 import { Router } from 'express';
-import crypto from 'crypto';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
@@ -29,7 +26,6 @@ const optionalText = (max: number) => z.string().trim().max(max).nullable().opti
 const optionalUrl = z.string().trim().max(500).nullable().optional().or(z.literal(''));
 
 const workspaceSchema = z.object({
-  mode: z.enum(['onboarding', 'new']),
   company: z.object({
     name: z.string().trim().min(1, 'Company name is required.').max(200),
     industry: z.string().refine((v) => listIndustries().includes(v), { message: 'Unsupported industry.' }),
@@ -102,53 +98,13 @@ router.post('/workspaces/create', validate(workspaceSchema), async (req, res) =>
         : null,
     };
 
-    let orgId: string;
-
-    if (body.mode === 'new') {
-      // Seul un propriétaire de sa compagnie actuelle peut en ouvrir une autre.
-      const { data: mem } = await admin
-        .from('memberships')
-        .select('role')
-        .eq('user_id', userId)
-        .eq('org_id', auth.orgId)
-        .maybeSingle();
-      if (mem?.role !== 'owner') {
-        return res.status(403).json({ error: 'Only a company owner can create a new workspace.' });
-      }
-
-      // NOUVEAU groupe : sans company_group_id explicite, le trigger DB
-      // rattacherait l'org au groupe existant du même créateur (= un bureau
-      // de plus, partageant le quota et l'abonnement). Ici on veut une
-      // compagnie séparée avec son propre abonnement.
-      const { data: newOrg, error: orgErr } = await admin
-        .from('orgs')
-        .insert({
-          ...buildWorkspaceOrgPatch(input),
-          created_by: userId,
-          company_group_id: crypto.randomUUID(),
-        })
-        .select('id')
-        .single();
-      if (orgErr || !newOrg) {
-        console.error('[workspaces/create] org insert:', orgErr?.message);
-        return res.status(500).json({ error: 'Failed to create workspace.' });
-      }
-      orgId = newOrg.id;
-
-      const { error: memErr } = await admin
-        .from('memberships')
-        .insert({ user_id: userId, org_id: orgId, role: 'owner', status: 'active' });
-      if (memErr) {
-        console.error('[workspaces/create] membership insert:', memErr.message);
-        return res.status(500).json({ error: 'Workspace created but failed to attach owner.' });
-      }
-    } else {
-      orgId = auth.orgId;
+    const orgId = auth.orgId;
+    {
       const { error } = await admin.from('orgs').update(buildWorkspaceOrgPatch(input)).eq('id', orgId);
       if (error) console.warn('[workspaces/create] orgs update:', error.message);
     }
 
-    // Profil (mode onboarding : nom complet demandé sur la 1re page).
+    // Profil : nom complet demandé sur la 1re page.
     const fullName = (input.profile?.full_name || '').trim();
     if (fullName) {
       const { error } = await admin.from('profiles').upsert({ id: userId, full_name: fullName }, { onConflict: 'id' });
@@ -179,7 +135,7 @@ router.post('/workspaces/create', validate(workspaceSchema), async (req, res) =>
 
     const invitesSent = await processInvites(admin, orgId, userId, body.invites, '[workspaces/create]');
 
-    if (body.mode === 'onboarding') {
+    {
       const { error } = await admin.from('profiles').update({ onboarding_done: true }).eq('id', userId);
       if (error) console.warn('[workspaces/create] onboarding_done:', error.message);
     }
@@ -187,13 +143,9 @@ router.post('/workspaces/create', validate(workspaceSchema), async (req, res) =>
     return res.json({
       ok: true,
       org_id: orgId,
-      mode: body.mode,
       seeded,
       tax_region: taxRegion,
       invites_sent: invitesSent.length,
-      // Mode 'new' : pas d'abonnement encore → le client bascule sur l'org
-      // puis ouvre /checkout (un abonnement par workspace).
-      next: body.mode === 'new' ? '/checkout' : '/day',
     });
   } catch (err: any) {
     console.error('[workspaces/create]', err?.message || err);

@@ -208,15 +208,20 @@ export default function InvoiceEdit() {
     }).catch(() => {});
   }, [clientId, taxAutoMode]);
 
+  // Ventilation par taxe (TPS, TVQ…) sur les montants courants du formulaire.
+  const previewTaxBreakdown = useMemo(() => {
+    if (!taxAutoMode || resolvedTaxes.length === 0) return [];
+    const subtotal = normalizedItems.reduce((s, i) => s + i.qty * i.unit_price_cents, 0);
+    const disc = Math.max(0, Math.round(discountDollars * 100));
+    return calculateTaxes(subtotal, disc, resolvedTaxes);
+  }, [normalizedItems, discountDollars, resolvedTaxes, taxAutoMode]);
+
   // Auto-calculate tax from resolved rates
   useEffect(() => {
     if (!taxAutoMode || resolvedTaxes.length === 0) return;
-    const subtotal = normalizedItems.reduce((s, i) => s + i.qty * i.unit_price_cents, 0);
-    const disc = Math.max(0, Math.round(discountDollars * 100));
-    const breakdown = calculateTaxes(subtotal, disc, resolvedTaxes);
-    const autoTax = breakdown.reduce((s, t) => s + t.amount_cents, 0);
+    const autoTax = previewTaxBreakdown.reduce((s, t) => s + t.amount_cents, 0);
     setTaxDollars(autoTax / 100);
-  }, [normalizedItems, discountDollars, resolvedTaxes, taxAutoMode]);
+  }, [previewTaxBreakdown, resolvedTaxes, taxAutoMode]);
 
   const taxCents = Math.max(0, Math.round(taxDollars * 100));
   const discountCents = Math.max(0, Math.round(discountDollars * 100));
@@ -429,10 +434,12 @@ export default function InvoiceEdit() {
           })),
       },
       company,
+      null,
+      previewTaxBreakdown,
     );
   }, [
     clientId, clientName, clientEmail, clientPhone, subject, dueDate, notes,
-    lines, totals, companyQuery.data, detailQuery.data,
+    lines, totals, companyQuery.data, detailQuery.data, previewTaxBreakdown,
   ]);
 
   const fmt = (cents: number) => formatMoneyFromCents(cents, 'CAD');

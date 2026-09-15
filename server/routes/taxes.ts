@@ -4,6 +4,7 @@ import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib
 import { validate } from '../lib/validation';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { TAX_PRESETS as PRESETS, seedTaxPreset } from '../lib/seedOrgDefaults';
+import { resolveTaxesForOrg } from '../lib/taxResolve';
 
 const router = Router();
 router.use(maxBodySize());
@@ -50,85 +51,9 @@ router.get('/taxes/resolve', async (req, res) => {
 
     const clientId = req.query.client_id as string;
     const leadId = req.query.lead_id as string;
-    let region = '';
-
-    const PROVINCE_MAP: Record<string, string> = {
-      'QUEBEC': 'QC', 'QUÉBEC': 'QC', 'ONTARIO': 'ON', 'BRITISH COLUMBIA': 'BC',
-      'ALBERTA': 'AB', 'SASKATCHEWAN': 'SK', 'MANITOBA': 'MB',
-      'NEW BRUNSWICK': 'NB', 'NOVA SCOTIA': 'NS', 'PEI': 'PE',
-      'PRINCE EDWARD ISLAND': 'PE', 'NEWFOUNDLAND': 'NL',
-      'NEWFOUNDLAND AND LABRADOR': 'NL',
-      // US state names
-      'CALIFORNIA': 'US-CA', 'TEXAS': 'US-TX', 'FLORIDA': 'US-FL',
-      'NEW YORK': 'US-NY', 'ILLINOIS': 'US-IL', 'WASHINGTON': 'US-WA',
-      'GEORGIA': 'US-GA', 'ARIZONA': 'US-AZ',
-    };
-
     // Load the client/lead row once (leads live in the clients table too).
-    // tax_exempt ships behind a migration — retry without it so resolve keeps
-    // working before the column exists.
-    const rowId = clientId || leadId;
-    let clientRow: { province?: string | null; address?: string | null; tax_exempt?: boolean } | null = null;
-    if (rowId) {
-      const full = await admin.from('clients').select('province, address, tax_exempt').eq('id', rowId).eq('org_id', auth.orgId).maybeSingle();
-      if (full.error) {
-        const fallback = await admin.from('clients').select('province, address').eq('id', rowId).eq('org_id', auth.orgId).maybeSingle();
-        clientRow = fallback.data;
-      } else {
-        clientRow = full.data;
-      }
-    }
-
-    // Tax-exempt client (governments, First Nations, non-profits…): no taxes
-    // on their documents, whatever the region.
-    if (clientRow?.tax_exempt) {
-      return res.json({ taxes: [], group: null, region: 'EXEMPT', exempt: true });
-    }
-
-    // Try to detect region from the client's province
-    if (clientRow?.province) {
-      region = clientRow.province.toUpperCase().trim();
-      region = PROVINCE_MAP[region] || region;
-    }
-    // Fallback: scan the address for a province name
-    if (!region && clientRow?.address) {
-      const addr = clientRow.address.toUpperCase();
-      for (const [name, code] of Object.entries(PROVINCE_MAP)) {
-        if (addr.includes(name)) { region = code; break; }
-      }
-    }
-
-    // Find matching group for this region, or fallback to default
-    let group = null;
-    if (region) {
-      const { data } = await admin.from('tax_groups').select('*')
-        .eq('org_id', auth.orgId).eq('region', region).eq('is_active', true).maybeSingle();
-      group = data;
-    }
-    if (!group) {
-      const { data } = await admin.from('tax_groups').select('*')
-        .eq('org_id', auth.orgId).eq('is_default', true).eq('is_active', true).maybeSingle();
-      group = data;
-    }
-    if (!group) {
-      // Aucun groupe (lien groupe↔taxes jamais créé ou dérivé) : les taxes
-      // actives de l'org restent la vérité — ne pas prétendre « non configuré ».
-      const { data: orphanConfigs } = await admin.from('tax_configs').select('*')
-        .eq('org_id', auth.orgId).eq('is_active', true).order('sort_order');
-      return res.json({ taxes: orphanConfigs || [], group: null, region });
-    }
-
-    // Get taxes in this group
-    const { data: items } = await admin.from('tax_group_items')
-      .select('*, tax_configs(*)')
-      .eq('tax_group_id', group.id)
-      .order('sort_order');
-
-    const taxes = (items || [])
-      .map((i: any) => i.tax_configs)
-      .filter((t: any) => t && t.is_active);
-
-    return res.json({ taxes, group, region });
+    const resolved = await resolveTaxesForOrg(admin, auth.orgId, clientId || leadId || null);
+    return res.json(resolved);
   } catch (err: any) {
     console.error('[taxes] resolve failed:', err.message);
     return res.status(500).json({ error: 'Internal server error' });

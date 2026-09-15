@@ -388,6 +388,8 @@ export async function analyzeCsvBuffer(buf: Buffer): Promise<AnalyzedFile> {
 // ordre voulu : les catégories « entité » spécifiques avant les génériques
 // (« customer_invoices » → invoices, « client_notes » → notes… clients en dernier)
 const FILENAME_PATTERNS: [RegExp, MigrationCategory][] = [
+  // taxes avant services/items : « tax_rates.csv », « taxes_items.csv »
+  [/\btax(es|e)?\b|tax rates?|sales tax|\btps\b|\btvq\b|\bgst\b|\bhst\b|\bvat\b/, 'taxes'],
   [/propriet|propert|service address/, 'properties'],
   [/invoice|facture/, 'invoices'],
   [/payment|paiement/, 'payments'],
@@ -409,6 +411,8 @@ export function detectCategory(fileName: string, headers: string[]): MigrationCa
   const h = headers.map((x) => fold(x).replace(/[^a-z0-9#]+/g, ' ').trim());
   const has = (re: RegExp): boolean => h.some((x) => re.test(x));
 
+  // taxes d'abord : « Tax Name » + « Rate » n'a rien d'un client ni d'un service
+  if (has(/tax name|tax code|nom de (la )?taxe|code de taxe/) && has(/\brate\b|percent|taux|pourcentage/)) return 'taxes';
   // payments avant invoices : un export de paiements référence des factures
   if (has(/payment method|payment date|mode de paiement|date de paiement/)) return 'payments';
   if (has(/invoice (number|no|num|#)|numero de facture|no de facture/)) return 'invoices';

@@ -68,8 +68,9 @@ describe('deterministicEntityId — idempotence', () => {
 });
 
 describe('ordre d\'import', () => {
-  it('respecte les dépendances (services → clients → propriétés → jobs → soumissions → visites → factures)', () => {
-    expect(IMPORT_ORDER).toEqual(['service', 'client', 'property', 'job', 'quote', 'visit', 'invoice']);
+  it('respecte les dépendances (taxes → services → clients → propriétés → jobs → soumissions → visites → factures)', () => {
+    expect(IMPORT_ORDER).toEqual(['tax_config', 'service', 'client', 'property', 'job', 'quote', 'visit', 'invoice']);
+    expect(IMPORT_ORDER.indexOf('tax_config')).toBeLessThan(IMPORT_ORDER.indexOf('service'));
     expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('property'));
     expect(IMPORT_ORDER.indexOf('job')).toBeLessThan(IMPORT_ORDER.indexOf('visit'));
     expect(IMPORT_ORDER.indexOf('job')).toBeLessThan(IMPORT_ORDER.indexOf('invoice'));
@@ -90,6 +91,25 @@ describe('buildEntityRow — contraintes NOT NULL de prod (leçon E2E 2026-08-24
     propertyIdByRef: new Map(),
     jobIdByRef: new Map(),
   } as any;
+
+  it('taxe : nom + taux en pourcentage, région majuscule, pays CA par défaut, active', () => {
+    const res = buildEntityRow('tax_config', {
+      id: 't1', row_number: 1, entity_type: 'tax_config', external_id: null, status: 'ready',
+      normalized: { name: 'TVQ', rate: 9.975, region: 'qc', is_compound: false, registration_number: '1234567890 TQ 0001' },
+      relations: {},
+    } as any, ctx);
+    expect(res.ok).toBe(true);
+    const row = (res as any).row;
+    expect(row).toMatchObject({ org_id: 'org-1', name: 'TVQ', rate: 9.975, type: 'percentage', region: 'QC', country: 'CA', is_compound: false, is_active: true, sort_order: 0 });
+    expect(row.registration_number).toBe('1234567890 TQ 0001');
+  });
+
+  it('taxe sans taux lisible ou hors 0-100 : rejetée, jamais insérée à 0', () => {
+    const base = { id: 't2', row_number: 2, entity_type: 'tax_config', external_id: null, status: 'ready', relations: {} };
+    expect(buildEntityRow('tax_config', { ...base, normalized: { name: 'TPS' } } as any, ctx).ok).toBe(false);
+    expect(buildEntityRow('tax_config', { ...base, normalized: { name: 'TPS', rate: 150 } } as any, ctx).ok).toBe(false);
+    expect(buildEntityRow('tax_config', { ...base, normalized: { rate: 5 } } as any, ctx).ok).toBe(false);
+  });
 
   it('job sans sous-total : jamais de null sur les colonnes monétaires', () => {
     const res = buildEntityRow('job', {

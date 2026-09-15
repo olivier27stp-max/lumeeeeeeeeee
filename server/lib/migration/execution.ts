@@ -37,7 +37,8 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
   await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.test.start', actorId: acteur.id, actorRole: acteur.role, target: `batch:${batch.id}` });
   try {
     await prepareStaging(admin, migration);
-    const entities: TargetEntity[] = ['client', 'property', 'job', 'quote', 'invoice'];
+    // Même liste que main (fb3a0342) : les taxes importées sont dédoublonnées contre les taxes actives.
+    const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'job', 'quote', 'invoice'];
     for (const entity of entities) {
       const { data: records } = await admin
         .from('migration_staging_records')

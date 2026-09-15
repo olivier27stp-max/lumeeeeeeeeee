@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isNullLikeValue, isScientificNotation, localToUtcIso, normalizeAddressKey,
   normalizeDigits, normalizePostalCode, normalizeRow, parseDateFlexible,
-  parseDateTimeFlexible, parseMoneyToCents, stripInvisible,
+  parseDateTimeFlexible, parseMoneyToCents, stripInvisible, parsePercent, parseBooleanFlexible,
 } from '../../server/lib/migration/normalize';
 
 describe('parseMoneyToCents', () => {
@@ -207,5 +207,34 @@ describe('inférence de convention de date par colonne (précision)', async () =
     expect(res.normalized.start_at).toBe('2024-05-12T09:00:00'); // heure récupérée
     expect(res.normalized.due_date).toBe('2024-04-05'); // convention dmy respectée
     expect(res.problems).toEqual([]);
+  });
+});
+
+describe('taxes — taux et composée', () => {
+  it('parsePercent : « 9,975 % », « 9.975 », fraction 0.05 → 5', () => {
+    expect(parsePercent('9,975 %')).toBe(9.975);
+    expect(parsePercent('9.975')).toBe(9.975);
+    expect(parsePercent('5%')).toBe(5);
+    expect(parsePercent('0.05')).toBe(5);
+    expect(parsePercent('0.5%')).toBe(0.5);
+    expect(parsePercent('abc')).toBe(null);
+    expect(parsePercent('-2')).toBe(null);
+  });
+
+  it('parseBooleanFlexible : oui/non, yes/no, 1/0', () => {
+    expect(parseBooleanFlexible('Oui')).toBe(true);
+    expect(parseBooleanFlexible('yes')).toBe(true);
+    expect(parseBooleanFlexible('1')).toBe(true);
+    expect(parseBooleanFlexible('non')).toBe(false);
+    expect(parseBooleanFlexible('No')).toBe(false);
+    expect(parseBooleanFlexible('peut-être')).toBe(null);
+  });
+
+  it('normalizeRow tax_config : taux en pourcentage, composée en booléen', () => {
+    const rec = normalizeRow('tax_config', { 'Tax Name': 'TVQ', 'Rate': '9,975 %', 'Compound': 'non', 'Province': 'QC' }, {
+      'Tax Name': 'name', 'Rate': 'rate', 'Compound': 'is_compound', 'Province': 'region',
+    });
+    expect(rec.normalized).toMatchObject({ name: 'TVQ', rate: 9.975, is_compound: false, region: 'QC' });
+    expect(rec.problems).toEqual([]);
   });
 });

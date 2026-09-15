@@ -20,6 +20,7 @@ describe('entityForCategory', () => {
   it('mappe les catégories vers les entités', () => {
     expect(entityForCategory('clients')).toBe('client');
     expect(entityForCategory('invoices')).toBe('invoice');
+    expect(entityForCategory('taxes')).toBe('tax_config');
     expect(entityForCategory(null)).toBe(null);
   });
 });

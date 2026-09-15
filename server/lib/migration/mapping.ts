@@ -24,6 +24,77 @@ export function normalizeHeader(h: string): string {
 // ── Catalogue des champs cibles ──
 
 export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
+  // Noms de taxes (tax_configs) : TPS, TVQ, HST… Le taux est un pourcentage
+  // (9.975), jamais une fraction — convention de TAX_PRESETS.
+  tax_config: [
+    {
+      field: 'name',
+      labelFr: 'Nom de la taxe',
+      labelEn: 'Tax name',
+      types: ['name', 'text'],
+      required: true,
+      synonyms: [
+        'name', 'tax', 'tax name', 'tax code', 'code', 'label', 'tax label', 'sales tax', 'sales tax name',
+        'nom', 'taxe', 'nom de la taxe', 'nom de taxe', 'code de taxe', 'libelle', 'libelle de taxe',
+      ],
+    },
+    {
+      field: 'rate',
+      labelFr: 'Taux (%)',
+      labelEn: 'Rate (%)',
+      types: ['number', 'money', 'text'],
+      synonyms: [
+        'rate', 'tax rate', 'percent', 'percentage', 'rate percent', 'tax percent', 'tax percentage',
+        'taux', 'taux de taxe', 'pourcentage', 'taux en pourcentage',
+      ],
+    },
+    {
+      field: 'region',
+      labelFr: 'Région / province',
+      labelEn: 'Region / province',
+      types: ['text', 'status', 'name'],
+      synonyms: [
+        'region', 'province', 'state', 'jurisdiction', 'tax region', 'tax jurisdiction', 'agency', 'tax agency',
+        'territoire', 'juridiction', 'region fiscale', 'organisme',
+      ],
+    },
+    {
+      field: 'country',
+      labelFr: 'Pays',
+      labelEn: 'Country',
+      types: ['text', 'status', 'name'],
+      synonyms: ['country', 'country code', 'pays', 'code pays'],
+    },
+    {
+      field: 'is_compound',
+      labelFr: 'Taxe composée',
+      labelEn: 'Compound tax',
+      types: ['boolean', 'text', 'status'],
+      synonyms: [
+        'compound', 'is compound', 'compound tax', 'tax on tax', 'piggyback', 'stacked',
+        'composee', 'taxe composee', 'cumulative', 'taxe sur taxe',
+      ],
+    },
+    {
+      field: 'registration_number',
+      labelFr: "Numéro d'enregistrement",
+      labelEn: 'Registration number',
+      types: ['id', 'text', 'number'],
+      synonyms: [
+        'registration number', 'registration', 'tax number', 'tax id', 'tax registration', 'account number',
+        'gst number', 'hst number', 'qst number', 'pst number', 'vat number', 'business number',
+        'numero d enregistrement', 'numero de taxe', 'no de taxe', 'numero tps', 'numero tvq', 'numero d entreprise', 'neq',
+      ],
+    },
+    {
+      field: 'sort_order',
+      labelFr: "Ordre d'application",
+      labelEn: 'Application order',
+      types: ['number', 'text'],
+      synonyms: ['order', 'sort order', 'sequence', 'position', 'priority', 'ordre', 'sequence d application', 'position'],
+    },
+  ],
+
   client: [
     {
       field: 'first_name',
@@ -990,6 +1061,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
 
 export function entityForCategory(cat: MigrationCategory | null): TargetEntity | null {
   switch (cat) {
+    case 'taxes': return 'tax_config';
     case 'clients': return 'client';
     case 'properties': return 'property';
     case 'services': return 'service';
@@ -1009,6 +1081,7 @@ function entityFromFileName(fileName: string): TargetEntity | null {
   const n = normalizeHeader(fileName);
   const has = (...words: string[]): boolean => words.some((w) => n.includes(w));
   if (has('line item', 'ligne de facture', 'lignes')) return 'line_item';
+  if (has('tax', 'taxe', 'tps', 'tvq', 'gst', 'hst', 'vat')) return 'tax_config';
   if (has('invoice', 'facture')) return 'invoice';
   if (has('payment', 'paiement')) return 'payment';
   if (has('quote', 'estimate', 'proposal', 'soumission', 'devis')) return 'quote';

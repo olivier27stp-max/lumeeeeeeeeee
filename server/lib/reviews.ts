@@ -2,15 +2,15 @@
    Avis clients — règles pures du workflow de sondage.
 
    job terminée → sondage d'étoiles (1-5) envoyé tout de suite
-     • 4-5 étoiles : redirection vers Google / Facebook + message d'invitation
-     • 1-3 étoiles : formulaire de commentaires interne + tâche de suivi
+     • 5 étoiles : redirection vers Google / Facebook + message d'invitation
+     • 4 étoiles ou moins : formulaire de commentaires interne + tâche de suivi
 
    Aucune dépendance : partagé entre l'action request_review, la route
    publique /api/survey et les tests.
    ═══════════════════════════════════════════════════════════════ */
 
 /** Note minimale (incluse) à partir de laquelle on demande un avis public. */
-export const POSITIVE_RATING_MIN = 4;
+export const POSITIVE_RATING_MIN = 5;
 
 export type ReviewPlatform = 'google' | 'facebook';
 

@@ -282,7 +282,12 @@ export function downloadQuotePdf(detail: QuoteDetail, company?: PdfCompanyInfo |
   if (quote.discount_cents > 0) {
     totalsRows.push([L('Discount', 'Rabais'), `-${fmt(quote.discount_cents)}`]);
   }
-  if (quote.tax_cents > 0) {
+  const taxLines = detail.tax_lines || [];
+  if (taxLines.length > 0) {
+    for (const tax of taxLines) {
+      totalsRows.push([`${tax.name} (${tax.rate}%)`, fmt(tax.amount_cents)]);
+    }
+  } else if (quote.tax_cents > 0) {
     totalsRows.push([quote.tax_rate_label || L('Tax', 'Taxes'), fmt(quote.tax_cents)]);
   }
 

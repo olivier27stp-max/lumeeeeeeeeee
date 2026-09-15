@@ -13,12 +13,10 @@ async function authHeaders() {
   };
 }
 
-export type WorkspaceMode = 'onboarding' | 'new';
 export type InviteRole = 'admin' | 'technician' | 'sales_rep';
 export type EmployeeCount = '1' | '2-5' | '6-15' | '16-50' | '50+';
 
 export interface WorkspaceCreateInput {
-  mode: WorkspaceMode;
   company: {
     name: string;
     industry: string;
@@ -52,16 +50,14 @@ export interface WorkspaceCreateInput {
 export interface WorkspaceCreateResult {
   ok: boolean;
   org_id: string;
-  mode: WorkspaceMode;
   tax_region: string;
   invites_sent: number;
-  next: '/checkout' | '/day';
 }
 
 /**
- * Crée / complète un workspace (compagnie). Mode 'onboarding' : complète
- * l'org courant après paiement. Mode 'new' : nouvelle compagnie séparée
- * (nouveau company_group), à abonner ensuite via /checkout.
+ * Complète le workspace (compagnie) de l'utilisateur après paiement :
+ * nom, industrie, coordonnées, préférences, avis, invitations.
+ * Un seul workspace par compte ; les bureaux dépendent du forfait.
  */
 export async function createWorkspace(input: WorkspaceCreateInput): Promise<WorkspaceCreateResult> {
   const res = await fetch(`${API_BASE}/workspaces/create`, {
