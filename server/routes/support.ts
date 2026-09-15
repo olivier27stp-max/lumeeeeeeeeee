@@ -23,6 +23,7 @@ import { isMailerConfigured } from '../lib/mailer';
 import { isSlackConfigured } from '../lib/slack';
 import { isSupportIAConfigured, repondreSupportIA } from '../lib/support/ia';
 import { dossierClient } from '../lib/support/dossier';
+import { reponseFaqPour } from '../lib/support/faq';
 import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
 import { journaliserTrace } from '../lib/lumi/traces';
 import {
@@ -53,7 +54,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
-    const { ticketId, message, humain } = req.body as { ticketId?: string; message: string; humain?: boolean };
+    const { ticketId, message, humain, origine } = req.body as { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion' };
     const admin = getServiceClient();
 
     if (!isSupportIAConfigured() && !humain) {
@@ -79,7 +80,13 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     let reply: string | null = null;
     let transferer = !!humain;
     let motif = humain ? 'Le client a demandé à parler à un humain' : '';
-    if (!humain) {
+    // Étage 0 : une question classique (la FAQ, mot pour mot) a une réponse fixe — 0 appel modèle, même Lumi.
+    const fixe = humain ? null : reponseFaqPour(message, ctx.langue);
+    if (fixe) {
+      reply = fixe.reponse;
+      await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
+      void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 0, action: `faq:${fixe.id}`, resultat: 'ok', model: null, costCents: 0, dureeMs: 0 });
+    } else if (!humain) {
       const historique = (await messagesDuTicket(admin, ticket.id))
         .filter((m) => (m.author === 'user' || m.author === 'ai'))
         .slice(0, -1) // le message courant est passé à part
@@ -100,7 +107,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         transferer = r.transferer;
         motif = r.motif || motif;
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
-        void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: 'texte', enonce: message, etage: 6, action: 'app', outils: r.outils, resultat: transferer ? 'proposition' : 'ok', model: 'claude-sonnet-5', costCents: r.coutCents, dureeMs: Date.now() - debut });
+        void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 6, action: 'app', outils: r.outils, resultat: transferer ? 'proposition' : 'ok', model: 'claude-sonnet-5', costCents: r.coutCents, dureeMs: Date.now() - debut });
       } catch (e: any) {
         // L'assistant tombe → un humain prend le relais, jamais un mur.
         console.error('[support/chat] assistant en erreur, transfert humain:', e?.message);

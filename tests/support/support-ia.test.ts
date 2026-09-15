@@ -24,9 +24,35 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }));
 
 import { repondreSupportIA } from '../../server/lib/support/ia';
+import { reponseFaqPour } from '../../server/lib/support/faq';
+import { ARTICLES } from '../../src/components/supportArticles';
+import { readFileSync } from 'node:fs';
 
 const contexte = { langue: 'fr' as const, companyName: 'Plomberie Tremblay', planLabel: 'Scale', userName: 'Marie', slaTexte: '1 jour ouvrable' };
 beforeEach(() => { appels.length = 0; scenario = []; process.env.ANTHROPIC_API_KEY = 'test'; });
+
+describe('questions classiques (étage 0, sans modèle)', () => {
+  it('une question de la FAQ mot pour mot (normalisée, fr ou en) a une réponse fixe avec sa page ; une variante descend au modèle', () => {
+    const a = ARTICLES.find((x) => x.id === 'quote-to-invoice')!;
+    const fr = reponseFaqPour(a.q_fr, 'fr');
+    expect(fr?.id).toBe('quote-to-invoice');
+    expect(fr?.reponse).toContain(a.a_fr);
+    expect(fr?.reponse).toContain('/quotes');
+    expect(reponseFaqPour(a.q_fr.toUpperCase().replace('?', ''), 'fr')?.id).toBe('quote-to-invoice');
+    expect(reponseFaqPour(a.q_en, 'en')?.reponse).toContain(a.a_en);
+    expect(reponseFaqPour('comment je transforme un devis en facture pour un client précis ?', 'fr')).toBeNull();
+    expect(reponseFaqPour('', 'fr')).toBeNull();
+  });
+  it('la route répond à l’étage 0 avant le modèle et le chat de l’app propose les questions classiques, comme le widget d’accueil', () => {
+    const route = readFileSync('server/routes/support.ts', 'utf8');
+    expect(route.indexOf('reponseFaqPour(message')).toBeLessThan(route.indexOf('await repondreSupportIA('));
+    expect(route).toContain('etage: 0, action: `faq:');
+    const chat = readFileSync('src/components/SupportChat.tsx', 'utf8');
+    expect(chat).toContain('ts.suggestionsIntro');
+    expect(chat).toContain("origine: suggestion ? 'suggestion' : 'texte'");
+    for (const id of ['quote-to-invoice', 'get-paid', 'add-member', 'schedule-job', 'import-clients']) expect(ARTICLES.some((a) => a.id === id), id).toBe(true);
+  });
+});
 
 describe('assistant de support', () => {
   it('question « comment faire » : outil search_help puis réponse, pas de transfert', async () => {

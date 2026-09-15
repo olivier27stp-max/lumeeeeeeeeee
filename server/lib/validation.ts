@@ -243,6 +243,8 @@ export const supportChatSchema = z.object({
   message: z.string().trim().min(1, 'Write a message.').max(5000),
   /** true = « Parler à un humain » dès le premier message, sans passer par l'assistant. */
   humain: z.boolean().optional(),
+  /** 'suggestion' = question classique cliquée (réponse fixe, étage 0). */
+  origine: z.enum(['texte', 'suggestion']).optional(),
 });
 export const supportMessageSchema = z.object({
   message: z.string().trim().min(1, 'Write a message.').max(5000),
