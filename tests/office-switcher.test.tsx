@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompanyContext } from '../src/contexts/CompanyContext';
 import type { CompanyContextValue, CompanyMembership } from '../src/contexts/CompanyContext';
+import { MemoryRouter } from 'react-router-dom';
 import { OfficeSwitcher } from '../src/components/OfficeSwitcher';
 
 const ORG_A = '11111111-1111-1111-1111-111111111111';
@@ -100,9 +101,11 @@ describe('OfficeSwitcher (header pill)', () => {
     const switchCompany = vi.fn();
     act(() => {
       root.render(
+        <MemoryRouter>
         <CompanyContext.Provider value={makeCtx(switchCompany)}>
           <OfficeSwitcher />
-        </CompanyContext.Provider>,
+        </CompanyContext.Provider>
+        </MemoryRouter>,
       );
     });
     const trigger = container.querySelector('button')!;
@@ -118,9 +121,11 @@ describe('OfficeSwitcher (header pill)', () => {
     const switchCompany = vi.fn();
     act(() => {
       root.render(
+        <MemoryRouter>
         <CompanyContext.Provider value={makeCtx(switchCompany)}>
           <OfficeSwitcher />
-        </CompanyContext.Provider>,
+        </CompanyContext.Provider>
+        </MemoryRouter>,
       );
     });
 
@@ -143,9 +148,11 @@ describe('OfficeSwitcher (header pill)', () => {
     const switchCompany = vi.fn();
     act(() => {
       root.render(
+        <MemoryRouter>
         <CompanyContext.Provider value={makeCtx(switchCompany, 'sales_rep')}>
           <OfficeSwitcher />
-        </CompanyContext.Provider>,
+        </CompanyContext.Provider>
+        </MemoryRouter>,
       );
     });
     // Only owner/admin may switch offices — others get no header control.
@@ -157,9 +164,11 @@ describe('OfficeSwitcher (header pill)', () => {
     const switchCompany = vi.fn();
     act(() => {
       root.render(
+        <MemoryRouter>
         <CompanyContext.Provider value={makeCtx(switchCompany, 'admin')}>
           <OfficeSwitcher />
-        </CompanyContext.Provider>,
+        </CompanyContext.Provider>
+        </MemoryRouter>,
       );
     });
     openTrigger();

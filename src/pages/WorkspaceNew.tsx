@@ -1,39 +1,29 @@
 /**
- * WorkspaceNew — formulaire multi-pages de création de workspace (compagnie).
+ * WorkspaceNew — formulaire multi-pages de configuration du workspace.
  *
- * Deux modes, une seule UI :
- *   - 'onboarding' : après paiement, complète l'org auto-provisionné
- *     (remplace l'ancien assistant 3 étapes). Rendu plein écran hors shell.
- *   - 'new' : un propriétaire ouvre une 2e compagnie (/workspaces/new).
- *     Nouveau company_group → à la fin, bascule dessus et va au /checkout
- *     (un abonnement par workspace).
+ * Affiché plein écran après paiement, à la place de l'ancien assistant
+ * 3 étapes : complète l'org auto-provisionnée au 1er login. Un seul
+ * workspace par compte ; ses bureaux dépendent du forfait (Réglages → Bureaux).
  *
  * Pages : Entreprise* → Coordonnées → Préférences → Avis clients → Équipe →
  * Récapitulatif. Seule la 1re est obligatoire ; les autres se passent.
  * Brouillon en sessionStorage (un rafraîchissement ne perd rien).
  */
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useId, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  ArrowLeft, ArrowRight, Building2, Check, Loader2, MapPin, Plus, Settings2, Star, Trash2, Users, X,
+  ArrowLeft, ArrowRight, Building2, Check, Loader2, MapPin, Plus, Settings2, Star, Trash2, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { captureClientException } from '../lib/sentry';
 import { STORAGE_BUCKETS } from '../lib/storage';
 import { useCompany } from '../contexts/CompanyContext';
-import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { useTranslation } from '../i18n';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import FileUpload from '../components/FileUpload';
-import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
-import {
-  createWorkspace,
-  type EmployeeCount,
-  type InviteRole,
-  type WorkspaceMode,
-} from '../lib/workspacesApi';
+import { createWorkspace, type EmployeeCount, type InviteRole } from '../lib/workspacesApi';
 
 // ── Constantes ──────────────────────────────────────────────────────
 
@@ -46,6 +36,7 @@ const INVITE_ROLES: InviteRole[] = ['admin', 'technician', 'sales_rep'];
 
 type StepId = 'company' | 'contact' | 'preferences' | 'reviews' | 'team' | 'review';
 const STEPS: StepId[] = ['company', 'contact', 'preferences', 'reviews', 'team', 'review'];
+const STORAGE_KEY = 'lume-workspace-form';
 
 interface Invite { email: string; role: InviteRole }
 
@@ -110,21 +101,26 @@ function defaultState(language: string): FormState {
 
 const fieldLabel = 'text-xs font-medium text-text-tertiary';
 
+function roleLabel(role: InviteRole, fr: boolean): string {
+  if (role === 'admin') return 'Admin';
+  if (role === 'technician') return fr ? 'Technicien' : 'Technician';
+  return fr ? 'Ventes' : 'Sales';
+}
+
 // ── Composant ───────────────────────────────────────────────────────
 
-export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode; onComplete?: () => void }) {
-  const navigate = useNavigate();
+export default function WorkspaceNew({ onComplete }: { onComplete?: () => void }) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
-  const { currentOrgId, currentRole, userId, refresh } = useCompany();
-  const storageKey = `lume-workspace-form:${mode}`;
+  const { currentOrgId, userId, refresh } = useCompany();
+  const ids = useId();
 
   const [step, setStep] = useState<StepId>('company');
   const [state, setState] = useState<FormState>(() => {
     try {
-      const raw = sessionStorage.getItem(storageKey);
+      const raw = sessionStorage.getItem(STORAGE_KEY);
       if (raw) return { ...defaultState(language), ...JSON.parse(raw) };
-    } catch { /* ignore */ }
+    } catch { /* brouillon illisible : on repart à vide */ }
     return defaultState(language);
   });
   const [saving, setSaving] = useState(false);
@@ -132,13 +128,13 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
   const [inviteDraft, setInviteDraft] = useState<Invite>({ email: '', role: 'technician' });
 
   useEffect(() => {
-    try { sessionStorage.setItem(storageKey, JSON.stringify(state)); } catch { /* ignore */ }
-  }, [state, storageKey]);
+    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { /* quota : le brouillon est un confort */ }
+  }, [state]);
 
-  // Préremplissage en onboarding : nom du profil + nom d'org auto-provisionné
-  // (seulement si l'utilisateur n'a rien saisi encore).
+  // Préremplissage : nom du profil + nom d'org auto-provisionné (seulement
+  // si l'utilisateur n'a rien saisi encore).
   useEffect(() => {
-    if (mode !== 'onboarding' || !userId) return;
+    if (!userId) return;
     (async () => {
       try {
         const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', userId).maybeSingle();
@@ -147,32 +143,24 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
           const { data: cs } = await supabase.from('company_settings').select('company_name').eq('org_id', currentOrgId).limit(1).maybeSingle();
           if (cs?.company_name) setState((s) => (s.company_name ? s : { ...s, company_name: cs.company_name as string }));
         }
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        console.warn('[WorkspaceNew] préremplissage échoué', err);
+      }
     })();
-  }, [mode, userId, currentOrgId]);
+  }, [userId, currentOrgId]);
 
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) => setState((s) => ({ ...s, [k]: v }));
-
-  // Garde « quitter sans sauvegarder » — mode 'new' seulement (dans le shell).
-  const [dirty, setDirty] = useState(false);
-  const guard = useNavigationGuard(mode === 'new' && dirty && !saving);
-  useEffect(() => {
-    if (mode !== 'new' || !dirty) return;
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [mode, dirty]);
 
   const stepIdx = STEPS.indexOf(step);
   const industryLabel = (key: string) => ((t as any).onboarding?.industries?.[key] as string) || key;
   const companyValid = state.company_name.trim().length > 0 && !!state.industry && !!state.employee_count
-    && (mode !== 'onboarding' || state.full_name.trim().length > 0);
+    && state.full_name.trim().length > 0;
   const isOptional = step !== 'company' && step !== 'review';
 
   const goNext = () => {
     setError(null);
     if (step === 'company' && !companyValid) {
-      setError(fr ? 'Nom, industrie et taille d\'équipe sont requis.' : 'Name, industry and team size are required.');
+      setError(fr ? 'Nom, entreprise, industrie et taille d’équipe sont requis.' : 'Name, company, industry and team size are required.');
       return;
     }
     const next = STEPS[stepIdx + 1];
@@ -181,7 +169,6 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
   const goBack = () => { setError(null); const prev = STEPS[stepIdx - 1]; if (prev) setStep(prev); };
 
   const onAddressSelect = (a: StructuredAddress) => {
-    setDirty(true);
     setState((s) => ({
       ...s,
       address_search: a.formatted_address,
@@ -210,8 +197,7 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
     try {
       const hasAddress = [state.street1, state.street2, state.city, state.province, state.postal_code, state.country].some((v) => v.trim());
       const goal = Math.round(parseFloat(state.revenue_goal.replace(/[^\d.]/g, '')) * 100);
-      const result = await createWorkspace({
-        mode,
+      await createWorkspace({
         company: {
           name: state.company_name.trim(),
           industry: state.industry,
@@ -219,7 +205,7 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
           logo_url: state.logo_url || null,
           language: state.language,
         },
-        profile: mode === 'onboarding' ? { full_name: state.full_name.trim() } : null,
+        profile: { full_name: state.full_name.trim() },
         contact: {
           phone: state.phone.trim() || null,
           email: state.email.trim() || null,
@@ -244,40 +230,16 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
         invites: state.invites,
       });
 
-      try { sessionStorage.removeItem(storageKey); } catch { /* ignore */ }
-      guard.release();
-      setDirty(false);
-
-      if (mode === 'new') {
-        // Bascule sur le nouveau workspace puis paiement de SON abonnement :
-        // /checkout démarre directement à l'étape de paiement.
-        try {
-          localStorage.setItem('lume-active-org', result.org_id);
-          sessionStorage.setItem('onb_step', 'checkout');
-        } catch { /* ignore */ }
-        window.location.assign('/checkout');
-        return;
-      }
-
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* brouillon déjà consommé */ }
       await refresh();
       toast.success(fr ? 'Votre workspace est prêt.' : 'Your workspace is ready.');
       onComplete?.();
     } catch (err: any) {
+      captureClientException(err, { contexte: 'WorkspaceNew: createWorkspace' });
       setError(err?.message || (fr ? 'Échec de la création.' : 'Failed to create workspace.'));
       setSaving(false);
     }
   };
-
-  const close = () => navigate('/settings/offices');
-
-  // Mode 'new' : réservé au propriétaire (le serveur refuse aussi).
-  if (mode === 'new' && currentRole && currentRole !== 'owner') {
-    return (
-      <div className="p-8 max-w-xl mx-auto text-[13px] text-amber-700 rounded-xl border border-amber-500/30 bg-amber-500/5 mt-8">
-        {fr ? 'Seul le propriétaire de la compagnie peut créer un nouveau workspace.' : 'Only the company owner can create a new workspace.'}
-      </div>
-    );
-  }
 
   const stepTitles: Record<StepId, string> = {
     company: fr ? 'Entreprise' : 'Business',
@@ -292,40 +254,21 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
   };
 
   return (
-    <div
-      className={cn(
-        'relative min-h-full bg-surface flex flex-col text-text-primary',
-        mode === 'onboarding' && 'min-h-screen',
-      )}
-      onInput={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
-      onChange={(e) => { if (e.nativeEvent.isTrusted) setDirty(true); }}
-    >
+    <div className="relative min-h-screen bg-surface flex flex-col text-text-primary">
       {/* ── En-tête ── */}
       <div className="relative px-6 pt-8 pb-2 text-center">
-        {mode === 'onboarding' && (
-          <div className="flex items-center justify-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-lg bg-text-primary flex items-center justify-center">
-              <span className="text-[14px] font-bold text-surface">L</span>
-            </div>
-            <span className="text-[18px] font-semibold tracking-tight">Lume</span>
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-lg bg-text-primary flex items-center justify-center">
+            <span className="text-[14px] font-bold text-surface">L</span>
           </div>
-        )}
+          <span className="text-[18px] font-semibold tracking-tight">Lume</span>
+        </div>
         <h2 className="text-[30px] font-extrabold tracking-tight leading-tight">
-          {mode === 'onboarding'
-            ? (fr ? 'Configurons votre workspace' : 'Let\'s set up your workspace')
-            : (fr ? 'Nouveau workspace' : 'New workspace')}
+          {fr ? 'Configurons votre workspace' : 'Let’s set up your workspace'}
         </h2>
         <p className="text-[13px] text-text-tertiary mt-1">
-          {mode === 'onboarding'
-            ? (fr ? 'Quelques infos pour personnaliser votre CRM. Seule la première page est obligatoire.' : 'A few details to personalize your CRM. Only the first page is required.')
-            : (fr ? 'Une compagnie séparée, avec ses propres bureaux, données et abonnement.' : 'A separate company with its own offices, data and subscription.')}
+          {fr ? 'Quelques infos pour personnaliser votre CRM. Seule la première page est obligatoire.' : 'A few details to personalize your CRM. Only the first page is required.'}
         </p>
-        {mode === 'new' && (
-          <button type="button" onClick={close} aria-label={t.common.cancel}
-            className="absolute right-6 top-6 p-2 rounded-xl border border-outline hover:bg-surface-secondary transition-colors">
-            <X size={18} />
-          </button>
-        )}
       </div>
 
       {/* ── Progression ── */}
@@ -335,16 +278,15 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
             const Icon = stepIcons[s];
             const done = i < stepIdx;
             const active = s === step;
+            const reachable = done || (i > 0 && companyValid);
             return (
               <li key={s} className="flex-1 min-w-0">
                 <button
                   type="button"
-                  onClick={() => { if (done || (i > 0 && companyValid)) { setError(null); setStep(s); } }}
-                  className={cn(
-                    'w-full flex flex-col items-center gap-1.5 group',
-                    !(done || (i > 0 && companyValid)) && 'cursor-default',
-                  )}
+                  onClick={() => { if (reachable) { setError(null); setStep(s); } }}
+                  className={cn('w-full flex flex-col items-center gap-1.5', !reachable && 'cursor-default')}
                   aria-current={active ? 'step' : undefined}
+                  aria-label={stepTitles[s]}
                 >
                   <span className={cn('h-1.5 w-full rounded-full transition-colors', (done || active) ? 'bg-primary' : 'bg-outline')} />
                   <span className={cn('flex items-center gap-1 text-[11px] font-semibold truncate', active ? 'text-primary' : done ? 'text-text-secondary' : 'text-text-tertiary')}>
@@ -377,24 +319,18 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
             >
               {step === 'company' && (
                 <>
-                  {mode === 'onboarding' && (
-                    <div className="space-y-2">
-                      <label className={fieldLabel}>{fr ? 'Votre nom complet' : 'Your full name'} <span className="text-danger">*</span></label>
-                      <input autoFocus value={state.full_name} onChange={(e) => update('full_name', e.target.value)} className="glass-input w-full" maxLength={120} />
-                    </div>
-                  )}
+                  <Field id={`${ids}-full-name`} label={fr ? 'Votre nom complet' : 'Your full name'} required value={state.full_name} onChange={(v) => update('full_name', v)} autoFocus maxLength={120} />
+                  <Field id={`${ids}-company`} label={fr ? 'Nom de l’entreprise' : 'Company name'} required value={state.company_name} onChange={(v) => update('company_name', v)} maxLength={200} placeholder={fr ? 'Ex. Vision Lavage' : 'e.g. ABC Landscaping'} />
                   <div className="space-y-2">
-                    <label className={fieldLabel}>{fr ? 'Nom de l\'entreprise' : 'Company name'} <span className="text-danger">*</span></label>
-                    <input autoFocus={mode === 'new'} value={state.company_name} onChange={(e) => update('company_name', e.target.value)} className="glass-input w-full" maxLength={200} placeholder={fr ? 'Ex. Vision Lavage' : 'e.g. ABC Landscaping'} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className={fieldLabel}>{fr ? 'Industrie' : 'Industry'} <span className="text-danger">*</span></label>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <p className={fieldLabel}>{fr ? 'Industrie' : 'Industry'} <span className="text-danger">*</span></p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2" role="radiogroup" aria-label={fr ? 'Industrie' : 'Industry'}>
                       {INDUSTRY_KEYS.map((key) => (
                         <button
                           key={key}
                           type="button"
-                          onClick={() => { setDirty(true); update('industry', key); }}
+                          role="radio"
+                          aria-checked={state.industry === key}
+                          onClick={() => update('industry', key)}
                           className={cn(
                             'px-3 py-2 rounded-xl border text-[13px] text-left transition-colors',
                             state.industry === key ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-outline-subtle hover:bg-surface-secondary',
@@ -406,13 +342,15 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className={fieldLabel}>{fr ? 'Taille de l\'équipe' : 'Team size'} <span className="text-danger">*</span></label>
-                    <div className="flex flex-wrap gap-2">
+                    <p className={fieldLabel}>{fr ? 'Taille de l’équipe' : 'Team size'} <span className="text-danger">*</span></p>
+                    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={fr ? 'Taille de l’équipe' : 'Team size'}>
                       {EMPLOYEE_OPTIONS.map((opt) => (
                         <button
                           key={opt}
                           type="button"
-                          onClick={() => { setDirty(true); update('employee_count', opt); }}
+                          role="radio"
+                          aria-checked={state.employee_count === opt}
+                          onClick={() => update('employee_count', opt)}
                           className={cn(
                             'px-3.5 py-2 rounded-full border text-[13px] transition-colors',
                             state.employee_count === opt ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-outline-subtle hover:bg-surface-secondary',
@@ -425,29 +363,29 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className={fieldLabel}>{fr ? 'Langue' : 'Language'}</label>
-                      <select value={state.language} onChange={(e) => update('language', e.target.value as 'fr' | 'en')} className="glass-input w-full">
+                      <label htmlFor={`${ids}-language`} className={fieldLabel}>{fr ? 'Langue' : 'Language'}</label>
+                      <select id={`${ids}-language`} value={state.language} onChange={(e) => update('language', e.target.value as 'fr' | 'en')} className="glass-input w-full">
                         <option value="fr">Français</option>
                         <option value="en">English</option>
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className={fieldLabel}>Logo</label>
+                      <p className={fieldLabel}>Logo</p>
                       {state.logo_url ? (
                         <div className="flex items-center gap-3">
-                          <img src={state.logo_url} alt="" className="h-10 w-10 rounded-lg object-contain bg-surface-secondary border border-outline-subtle" />
-                          <button type="button" onClick={() => { setDirty(true); update('logo_url', ''); }} className="glass-button inline-flex items-center gap-1.5 text-[11px] !text-danger !border-danger/30">
+                          <img src={state.logo_url} alt={fr ? 'Logo de l’entreprise' : 'Company logo'} className="h-10 w-10 rounded-lg object-contain bg-surface-secondary border border-outline-subtle" />
+                          <button type="button" onClick={() => update('logo_url', '')} className="glass-button inline-flex items-center gap-1.5 text-[11px] !text-danger !border-danger/30">
                             <Trash2 size={11} /> {fr ? 'Retirer' : 'Remove'}
                           </button>
                         </div>
                       ) : (
                         <FileUpload
                           bucket={STORAGE_BUCKETS.COMPANY_LOGOS}
-                          path={mode === 'onboarding' && currentOrgId ? currentOrgId : `pending/${userId || 'anon'}`}
+                          path={currentOrgId || `pending/${userId || 'anon'}`}
                           accept="image/*"
                           maxSizeMb={5}
                           normalizeImageMaxDim={1024}
-                          onUpload={(url) => { setDirty(true); update('logo_url', url); }}
+                          onUpload={(url) => update('logo_url', url)}
                         />
                       )}
                     </div>
@@ -458,22 +396,22 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
               {step === 'contact' && (
                 <>
                   <div className="space-y-2">
-                    <label className={fieldLabel}>{fr ? 'Adresse' : 'Address'}</label>
+                    <p className={fieldLabel}>{fr ? 'Adresse' : 'Address'}</p>
                     <AddressAutocomplete value={state.address_search} onChange={(v) => update('address_search', v)} onSelect={onAddressSelect} className="glass-input w-full" placeholder={fr ? 'Rechercher une adresse…' : 'Search an address…'} />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label={fr ? 'Rue' : 'Street'} value={state.street1} onChange={(v) => update('street1', v)} />
-                    <Field label={fr ? 'Bureau / suite' : 'Unit / suite'} value={state.street2} onChange={(v) => update('street2', v)} />
-                    <Field label={fr ? 'Ville' : 'City'} value={state.city} onChange={(v) => update('city', v)} />
-                    <Field label={fr ? 'Province / État' : 'Province / State'} value={state.province} onChange={(v) => update('province', v)} hint={fr ? 'Sert à installer les bonnes taxes (défaut : Québec).' : 'Used to install the right taxes (default: Quebec).'} />
-                    <Field label={fr ? 'Code postal' : 'Postal code'} value={state.postal_code} onChange={(v) => update('postal_code', v)} />
-                    <Field label={fr ? 'Pays' : 'Country'} value={state.country} onChange={(v) => update('country', v)} placeholder="CA" />
+                    <Field id={`${ids}-street1`} label={fr ? 'Rue' : 'Street'} value={state.street1} onChange={(v) => update('street1', v)} />
+                    <Field id={`${ids}-street2`} label={fr ? 'Bureau / suite' : 'Unit / suite'} value={state.street2} onChange={(v) => update('street2', v)} />
+                    <Field id={`${ids}-city`} label={fr ? 'Ville' : 'City'} value={state.city} onChange={(v) => update('city', v)} />
+                    <Field id={`${ids}-province`} label={fr ? 'Province / État' : 'Province / State'} value={state.province} onChange={(v) => update('province', v)} hint={fr ? 'Sert à installer les bonnes taxes (défaut : Québec).' : 'Used to install the right taxes (default: Quebec).'} />
+                    <Field id={`${ids}-postal`} label={fr ? 'Code postal' : 'Postal code'} value={state.postal_code} onChange={(v) => update('postal_code', v)} />
+                    <Field id={`${ids}-country`} label={fr ? 'Pays' : 'Country'} value={state.country} onChange={(v) => update('country', v)} placeholder="CA" />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label={fr ? 'Téléphone' : 'Phone'} value={state.phone} onChange={(v) => update('phone', v)} type="tel" />
-                    <Field label={fr ? 'Courriel de l\'entreprise' : 'Business email'} value={state.email} onChange={(v) => update('email', v)} type="email" />
+                    <Field id={`${ids}-phone`} label={fr ? 'Téléphone' : 'Phone'} value={state.phone} onChange={(v) => update('phone', v)} type="tel" />
+                    <Field id={`${ids}-email`} label={fr ? 'Courriel de l’entreprise' : 'Business email'} value={state.email} onChange={(v) => update('email', v)} type="email" />
                   </div>
-                  <Field label={fr ? 'Site web' : 'Website'} value={state.website} onChange={(v) => update('website', v)} placeholder="https://" />
+                  <Field id={`${ids}-website`} label={fr ? 'Site web' : 'Website'} value={state.website} onChange={(v) => update('website', v)} placeholder="https://" />
                 </>
               )}
 
@@ -481,26 +419,27 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className={fieldLabel}>{fr ? 'Devise' : 'Currency'}</label>
-                      <select value={state.currency} onChange={(e) => update('currency', e.target.value as 'CAD' | 'USD')} className="glass-input w-full">
+                      <label htmlFor={`${ids}-currency`} className={fieldLabel}>{fr ? 'Devise' : 'Currency'}</label>
+                      <select id={`${ids}-currency`} value={state.currency} onChange={(e) => update('currency', e.target.value as 'CAD' | 'USD')} className="glass-input w-full">
                         <option value="CAD">CAD</option>
                         <option value="USD">USD</option>
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className={fieldLabel}>{fr ? 'Fuseau horaire' : 'Timezone'}</label>
-                      <select value={state.timezone} onChange={(e) => update('timezone', e.target.value)} className="glass-input w-full">
+                      <label htmlFor={`${ids}-timezone`} className={fieldLabel}>{fr ? 'Fuseau horaire' : 'Timezone'}</label>
+                      <select id={`${ids}-timezone`} value={state.timezone} onChange={(e) => update('timezone', e.target.value)} className="glass-input w-full">
                         {timezoneOptions(state.timezone).map((z) => <option key={z} value={z}>{z}</option>)}
                       </select>
                     </div>
                   </div>
                   <Field
+                    id={`${ids}-goal`}
                     label={fr ? 'Objectif de revenu annuel' : 'Annual revenue goal'}
                     value={state.revenue_goal}
                     onChange={(v) => update('revenue_goal', v.replace(/[^\d.]/g, ''))}
                     placeholder="$250000"
                     inputMode="decimal"
-                    hint={fr ? 'Affiché sur l\'accueil pour suivre votre progression.' : 'Shown on the home page to track progress.'}
+                    hint={fr ? 'Affiché sur l’accueil pour suivre votre progression.' : 'Shown on the home page to track progress.'}
                   />
                 </>
               )}
@@ -509,28 +448,30 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
                 <>
                   <p className="text-[13px] text-text-secondary">
                     {fr
-                      ? 'À la fin d\'une job, Lume envoie un sondage d\'étoiles. Les notes 4-5 sont dirigées vers votre page Google ou Facebook ; les notes basses restent internes. Vous pourrez le régler plus tard dans Réglages → Avis clients.'
+                      ? 'À la fin d’une job, Lume envoie un sondage d’étoiles. Les notes 4-5 sont dirigées vers votre page Google ou Facebook ; les notes basses restent internes. Vous pourrez le régler plus tard dans Réglages → Avis clients.'
                       : 'When a job ends, Lume sends a star survey. 4-5 star ratings are routed to your Google or Facebook page; low ratings stay internal. You can adjust this later in Settings → Customer reviews.'}
                   </p>
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input type="checkbox" checked={state.review_enabled} onChange={(e) => update('review_enabled', e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
+                  <label htmlFor={`${ids}-review-enabled`} className="flex items-start gap-3 cursor-pointer">
+                    <input id={`${ids}-review-enabled`} type="checkbox" checked={state.review_enabled} onChange={(e) => update('review_enabled', e.target.checked)} className="h-4 w-4 mt-0.5 rounded" />
                     <span>
-                      <span className="block text-[13px] font-medium">{fr ? 'Activer les demandes d\'avis' : 'Enable review requests'}</span>
+                      <span className="block text-[13px] font-medium">{fr ? 'Activer les demandes d’avis' : 'Enable review requests'}</span>
                       <span className="text-[12px] text-text-tertiary">{fr ? 'Nécessite au moins un lien ci-dessous.' : 'Requires at least one link below.'}</span>
                     </span>
                   </label>
-                  <Field label={fr ? 'Lien d\'avis Google' : 'Google review link'} value={state.google_review_url} onChange={(v) => update('google_review_url', v)} placeholder="https://g.page/r/…/review" hint={fr ? 'Fiche Google Business → « Obtenir plus d\'avis » → copier le lien.' : 'Google Business profile → “Get more reviews” → copy the link.'} />
-                  <Field label={fr ? 'Lien d\'avis Facebook' : 'Facebook review link'} value={state.facebook_review_url} onChange={(v) => update('facebook_review_url', v)} placeholder="https://www.facebook.com/…/reviews" />
+                  <Field id={`${ids}-google`} label={fr ? 'Lien d’avis Google' : 'Google review link'} value={state.google_review_url} onChange={(v) => update('google_review_url', v)} placeholder="https://g.page/r/…/review" hint={fr ? 'Fiche Google Business → « Obtenir plus d’avis » → copier le lien.' : 'Google Business profile → “Get more reviews” → copy the link.'} />
+                  <Field id={`${ids}-facebook`} label={fr ? 'Lien d’avis Facebook' : 'Facebook review link'} value={state.facebook_review_url} onChange={(v) => update('facebook_review_url', v)} placeholder="https://www.facebook.com/…/reviews" />
                 </>
               )}
 
               {step === 'team' && (
                 <>
                   <p className="text-[13px] text-text-secondary">
-                    {fr ? 'Invitez jusqu\'à 5 personnes maintenant. Vous pourrez en ajouter d\'autres dans Réglages → Membres.' : 'Invite up to 5 people now. You can add more later in Settings → Members.'}
+                    {fr ? 'Invitez jusqu’à 5 personnes maintenant. Vous pourrez en ajouter d’autres dans Réglages → Membres.' : 'Invite up to 5 people now. You can add more later in Settings → Members.'}
                   </p>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <input
+                      id={`${ids}-invite-email`}
+                      aria-label={fr ? 'Courriel à inviter' : 'Email to invite'}
                       value={inviteDraft.email}
                       onChange={(e) => setInviteDraft((d) => ({ ...d, email: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addInvite(); } }}
@@ -538,12 +479,8 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
                       type="email"
                       placeholder={fr ? 'courriel@exemple.com' : 'email@example.com'}
                     />
-                    <select value={inviteDraft.role} onChange={(e) => setInviteDraft((d) => ({ ...d, role: e.target.value as InviteRole }))} className="glass-input sm:w-44">
-                      {INVITE_ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r === 'admin' ? 'Admin' : r === 'technician' ? (fr ? 'Technicien' : 'Technician') : (fr ? 'Ventes' : 'Sales')}
-                        </option>
-                      ))}
+                    <select id={`${ids}-invite-role`} aria-label={fr ? 'Rôle' : 'Role'} value={inviteDraft.role} onChange={(e) => setInviteDraft((d) => ({ ...d, role: e.target.value as InviteRole }))} className="glass-input sm:w-44">
+                      {INVITE_ROLES.map((r) => <option key={r} value={r}>{roleLabel(r, fr)}</option>)}
                     </select>
                     <button type="button" onClick={addInvite} className="glass-button inline-flex items-center justify-center gap-1.5">
                       <Plus size={14} /> {fr ? 'Ajouter' : 'Add'}
@@ -555,10 +492,8 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
                         <li key={inv.email} className="flex items-center justify-between gap-3 rounded-xl border border-outline-subtle px-3 py-2">
                           <span className="text-[13px] truncate">{inv.email}</span>
                           <span className="flex items-center gap-3 shrink-0">
-                            <span className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                              {inv.role === 'admin' ? 'Admin' : inv.role === 'technician' ? (fr ? 'Technicien' : 'Technician') : (fr ? 'Ventes' : 'Sales')}
-                            </span>
-                            <button type="button" onClick={() => update('invites', state.invites.filter((i) => i.email !== inv.email))} className="text-text-tertiary hover:text-danger" aria-label={fr ? 'Retirer' : 'Remove'}>
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">{roleLabel(inv.role, fr)}</span>
+                            <button type="button" onClick={() => update('invites', state.invites.filter((i) => i.email !== inv.email))} className="text-text-tertiary hover:text-danger" aria-label={fr ? `Retirer ${inv.email}` : `Remove ${inv.email}`}>
                               <Trash2 size={13} />
                             </button>
                           </span>
@@ -572,7 +507,7 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
               {step === 'review' && (
                 <div className="space-y-4">
                   <Summary title={stepTitles.company} onEdit={() => setStep('company')} rows={[
-                    ...(mode === 'onboarding' ? [[fr ? 'Vous' : 'You', state.full_name]] : []),
+                    [fr ? 'Vous' : 'You', state.full_name],
                     [fr ? 'Entreprise' : 'Company', state.company_name],
                     [fr ? 'Industrie' : 'Industry', state.industry ? industryLabel(state.industry) : ''],
                     [fr ? 'Équipe' : 'Team', state.employee_count === '1' ? (fr ? 'Juste moi' : 'Just me') : state.employee_count],
@@ -590,22 +525,15 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
                     [fr ? 'Objectif annuel' : 'Annual goal', state.revenue_goal ? `$${state.revenue_goal}` : ''],
                   ]} />
                   <Summary title={stepTitles.reviews} onEdit={() => setStep('reviews')} rows={[
-                    [fr ? 'Demandes d\'avis' : 'Review requests', state.review_enabled && (state.google_review_url || state.facebook_review_url) ? (fr ? 'Activées' : 'Enabled') : (fr ? 'Désactivées' : 'Disabled')],
+                    [fr ? 'Demandes d’avis' : 'Review requests', state.review_enabled && (state.google_review_url || state.facebook_review_url) ? (fr ? 'Activées' : 'Enabled') : (fr ? 'Désactivées' : 'Disabled')],
                     ['Google', state.google_review_url],
                     ['Facebook', state.facebook_review_url],
                   ]} />
                   <Summary title={stepTitles.team} onEdit={() => setStep('team')} rows={
                     state.invites.length > 0
-                      ? state.invites.map((i) => [i.email, i.role === 'admin' ? 'Admin' : i.role === 'technician' ? (fr ? 'Technicien' : 'Technician') : (fr ? 'Ventes' : 'Sales')])
+                      ? state.invites.map((i) => [i.email, roleLabel(i.role, fr)])
                       : [[fr ? 'Invitations' : 'Invites', '']]
                   } />
-                  {mode === 'new' && (
-                    <p className="text-[12px] text-text-tertiary">
-                      {fr
-                        ? 'À la création, vous passerez au paiement de l\'abonnement de ce workspace. Vos autres workspaces ne changent pas.'
-                        : 'After creation you will pay for this workspace\'s subscription. Your other workspaces are unaffected.'}
-                    </p>
-                  )}
                 </div>
               )}
             </motion.div>
@@ -635,20 +563,12 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
             ) : (
               <button type="button" onClick={handleSubmit} disabled={saving} className="glass-button-primary inline-flex items-center gap-2">
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                {saving
-                  ? (fr ? 'Création…' : 'Creating…')
-                  : mode === 'new'
-                    ? (fr ? 'Créer et passer au paiement' : 'Create and go to payment')
-                    : (fr ? 'Terminer la configuration' : 'Finish setup')}
+                {saving ? (fr ? 'Création…' : 'Creating…') : (fr ? 'Terminer la configuration' : 'Finish setup')}
               </button>
             )}
           </div>
         </div>
       </div>
-
-      {mode === 'new' && (
-        <LeaveFormConfirm open={guard.active} onConfirm={guard.confirmLeave} onCancel={guard.cancelLeave} />
-      )}
     </div>
   );
 }
@@ -656,15 +576,16 @@ export default function WorkspaceNew({ mode, onComplete }: { mode: WorkspaceMode
 // ── Sous-composants ─────────────────────────────────────────────────
 
 function Field({
-  label, value, onChange, placeholder, type = 'text', hint, inputMode,
+  id, label, value, onChange, placeholder, type = 'text', hint, inputMode, required, autoFocus, maxLength,
 }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
+  id: string; label: string; value: string; onChange: (v: string) => void; placeholder?: string;
   type?: string; hint?: string; inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+  required?: boolean; autoFocus?: boolean; maxLength?: number;
 }) {
   return (
     <div className="space-y-2">
-      <label className={fieldLabel}>{label}</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} className="glass-input w-full" placeholder={placeholder} type={type} inputMode={inputMode} />
+      <label htmlFor={id} className={fieldLabel}>{label}{required && <> <span className="text-danger">*</span></>}</label>
+      <input id={id} value={value} onChange={(e) => onChange(e.target.value)} className="glass-input w-full" placeholder={placeholder} type={type} inputMode={inputMode} autoFocus={autoFocus} maxLength={maxLength} />
       {hint && <p className="text-[11px] text-text-tertiary">{hint}</p>}
     </div>
   );
@@ -683,7 +604,7 @@ function Summary({ title, rows, onEdit }: { title: string; rows: string[][]; onE
         </button>
       </div>
       {filled.length === 0 ? (
-        <p className="text-[12px] text-text-tertiary">{fr ? 'Rien pour l\'instant — vous pourrez compléter plus tard.' : 'Nothing yet — you can complete this later.'}</p>
+        <p className="text-[12px] text-text-tertiary">{fr ? 'Rien pour l’instant — vous pourrez compléter plus tard.' : 'Nothing yet — you can complete this later.'}</p>
       ) : (
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
           {filled.map(([k, v]) => (

@@ -1,16 +1,11 @@
 // Helpers purs du formulaire de création de workspace (POST /workspaces/create).
 //
-// Un workspace = une compagnie = un company_group avec son propre abonnement.
-// Deux modes :
-//   - 'onboarding' : l'org existe déjà (auto-provisionné au 1er login), on la
-//     complète après paiement ;
-//   - 'new' : un utilisateur existant crée une 2e compagnie → nouvel org dans
-//     un NOUVEAU company_group, puis passe au checkout pour son abonnement.
+// Un workspace = la compagnie de l'utilisateur (un seul par compte) ; ses
+// bureaux sont limités par le forfait. L'org existe déjà (auto-provisionné
+// au 1er login) : le formulaire la complète après paiement.
 //
 // Schéma prod (baseline 01_schema.sql) : `orgs` = name / employee_count /
 // logo_url / company_group_id. Tout le reste vit dans company_settings.
-
-export type WorkspaceMode = 'onboarding' | 'new';
 
 export interface WorkspaceAddress {
   street1?: string | null;

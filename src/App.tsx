@@ -260,7 +260,7 @@ function OnboardingWorkspaceWrapper({ onComplete }: { onComplete: () => void }) 
   if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-surface"><div className="animate-pulse text-text-muted text-sm">Loading...</div></div>;
   return (
     <React.Suspense fallback={<div className="h-screen w-screen flex items-center justify-center bg-surface"><div className="animate-pulse text-text-muted text-sm">Loading...</div></div>}>
-      <WorkspaceNew mode="onboarding" onComplete={onComplete} />
+      <WorkspaceNew onComplete={onComplete} />
     </React.Suspense>
   );
 }
@@ -1529,8 +1529,6 @@ function AuthenticatedApp({
                     <Route path="/clients/new" element={<Gated permission="clients.create"><NewClient /></Gated>} />
                     {/* Nouveau bureau — page pleine hors du layout Réglages (owner seulement, gate serveur) */}
                     <Route path="/offices/new" element={<Gated permission="settings.update"><OfficeNew /></Gated>} />
-                    {/* Nouveau workspace (compagnie séparée + son abonnement) — owner seulement */}
-                    <Route path="/workspaces/new" element={<Gated permission="settings.update"><WorkspaceNew mode="new" /></Gated>} />
                     {/* Edit reuses the Clients list page, which opens its edit drawer from the :id route param */}
                     <Route path="/clients/:id/edit" element={<Gated permission="clients.update"><div className="px-8 py-6"><Clients /></div></Gated>} />
                     <Route path="/clients/:id" element={<Gated permission="clients.read"><TenantGuardRoute table="clients" redirectTo="/clients"><div className="px-8 py-6"><ClientDetails /></div></TenantGuardRoute></Gated>} />
