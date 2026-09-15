@@ -67,6 +67,13 @@ export async function envoyerMessageSlack(p: {
   return { ts: r.ts, channel: r.channel };
 }
 
+/** Répliques d'un fil (sans le parent), pour le relevé périodique. */
+export interface RepliqueSlack { ts: string; user?: string; bot_id?: string; subtype?: string; text?: string }
+export async function lireRepliquesSlack(channel: string, threadTs: string, limite = 100): Promise<RepliqueSlack[]> {
+  const r = await appel<{ messages?: RepliqueSlack[] }>('conversations.replies', null, { channel, ts: threadTs, limit: String(limite) });
+  return (r.messages || []).filter((m) => m.ts !== threadTs);
+}
+
 // ── Identité du bot (pour ignorer ses propres messages dans le fil) ──
 let identite: { user_id: string; bot_id: string | null } | null = null;
 export async function identiteBot(): Promise<{ user_id: string; bot_id: string | null }> {

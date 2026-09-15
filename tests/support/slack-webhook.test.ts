@@ -46,7 +46,8 @@ vi.mock('../../server/lib/slack', async (orig) => {
 });
 
 import { verifierSignatureSlack } from '../../server/lib/slack';
-import { estReponseDansUnFil, slackWebhookHandler } from '../../server/routes/webhooks-slack';
+import { slackWebhookHandler } from '../../server/routes/webhooks-slack';
+import { estReponseDansUnFil } from '../../server/lib/support/relais-slack';
 
 const SECRET = 'secret-de-test';
 function signer(corps: string, ts = Math.floor(Date.now() / 1000)) {
