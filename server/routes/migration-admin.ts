@@ -34,7 +34,7 @@ import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
-import { entityForCategory, normalizeHeader } from '../lib/migration/mapping';
+import { entityForCategory, normalizeHeader, FIELD_CATALOG } from '../lib/migration/mapping';
 import { DEFAULT_INVITE_TTL_HOURS, IMPORTABLE_CATEGORIES } from '../lib/migration/types';
 import type { MigrationRow, MigrationStatus, TargetEntity } from '../lib/migration/types';
 
@@ -248,6 +248,7 @@ router.get('/migration-admin/migrations/:id', async (req, res) => {
       messages: messages.data ?? [],
       staging_counts: stagingCounts,
       crm_config: getCrmConfig(migration.source_crm),
+      field_catalog: FIELD_CATALOG,
     });
   } catch (err: any) {
     return sendSafeError(res, err, 'Impossible de charger la migration.', '[migration-admin]');
@@ -513,6 +514,12 @@ router.post('/migration-admin/migrations/:id/mappings/:mappingId', validate(migr
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
 
     const body = req.body as { target_entity?: string | null; target_field?: string | null; status: string };
+    if (body.target_entity && body.target_field) {
+      const fields = FIELD_CATALOG[body.target_entity as TargetEntity] ?? [];
+      if (!fields.some((f) => f.field === body.target_field)) {
+        return res.status(400).json({ error: 'Champ cible inconnu.' });
+      }
+    }
     const patch: Record<string, unknown> = {
       status: body.status,
       decided_by: auth.user.id,

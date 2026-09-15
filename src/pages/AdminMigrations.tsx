@@ -810,69 +810,147 @@ function TemplateControls({ migrationId, sourceCrm, onChanged }: { migrationId: 
   );
 }
 
+const MAPPING_STATUS_LABELS_FR: Record<string, string> = {
+  suggested: 'Proposé', confirmed: 'Confirmé', corrected: 'Corrigé', rejected: 'Ignoré', needs_review: 'À vérifier',
+};
+const ENTITY_LABELS_FR: Record<string, string> = {
+  client: 'Clients', property: 'Propriétés', service: 'Produits et services', quote: 'Soumissions',
+  job: 'Jobs', visit: 'Visites', invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
+};
+type FieldCatalog = Record<string, { field: string; labelFr: string; labelEn: string }[]>;
+
+function ConfidenceBadge({ value }: { value: number }) {
+  const cls = value >= 90
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : value >= 70
+      ? 'bg-amber-50 text-amber-700 border-amber-200'
+      : 'bg-red-50 text-red-700 border-red-200';
+  return <span className={`inline-flex items-center px-2 h-5 rounded-full border text-[11px] font-semibold ${cls}`}>{value}%</span>;
+}
+
+// Même tableau que le portail client (MigrationPortal › Correspondance des colonnes) :
+// une liste déroulante par colonne, alimentée par FIELD_CATALOG, « Ne pas importer » = rejet.
 function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   const m = d.migration;
-  const colById = new Map((d.columns ?? []).map((c: any) => [c.id, c]));
-  const fileById = new Map((d.files ?? []).map((f: any) => [f.id, f]));
-  const rows = (d.mappings ?? []).slice().sort((a: any, b: any) => {
-    const ca = colById.get(a.column_id) as any;
-    const cb = colById.get(b.column_id) as any;
-    return `${a.file_id}${ca?.position ?? 0}`.localeCompare(`${b.file_id}${cb?.position ?? 0}`);
-  });
-  if (rows.length === 0) return <div className="section-card p-5 text-[13px] text-text-tertiary">Aucune correspondance (analyse pas encore faite).</div>;
+  const catalog: FieldCatalog = d.field_catalog ?? {};
+  const columns = ((d.columns ?? []) as any[]).slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const mappingByColumn = new Map<string, any>((d.mappings ?? []).map((mp: any) => [mp.column_id, mp]));
+  const byFile = new Map<string, any[]>();
+  for (const c of columns) {
+    const arr = byFile.get(c.file_id) ?? [];
+    arr.push(c);
+    byFile.set(c.file_id, arr);
+  }
+  const files = ((d.files ?? []) as any[]).filter((f) => byFile.has(f.id));
+  for (const fileId of byFile.keys()) {
+    if (!files.some((f) => f.id === fileId)) files.push({ id: fileId, original_name: fileId });
+  }
+
+  if (columns.length === 0) return <div className="section-card p-5 text-[13px] text-text-tertiary">Aucune correspondance (analyse pas encore faite).</div>;
+
+  const decide = async (mp: any, payload: { status: string; target_entity?: string | null; target_field?: string | null }, okMsg: string) => {
+    try {
+      await decideMapping(m.id, mp.id, payload);
+      toast.success(okMsg);
+      onChanged();
+    } catch (err: any) {
+      toast.error(err?.message ?? 'Erreur');
+    }
+  };
+
   return (
     <div className="section-card p-5">
       <TemplateControls migrationId={m.id} sourceCrm={m.source_crm} onChanged={onChanged} />
-      <div className="border border-outline rounded-md overflow-x-auto">
-        <div className="grid min-w-[900px] text-[12px]" style={{ gridTemplateColumns: '1fr 1fr 1.2fr 70px 110px 160px' }}>
-          {['Fichier', 'Colonne', 'Aperçu masqué', 'Conf.', 'Statut', 'Décision'].map((h) => (
-            <div key={h} className="px-3 py-2 bg-surface-secondary/60 border-b border-outline font-semibold text-text-secondary">{h}</div>
-          ))}
-          {rows.map((mp: any) => {
-            const col = colById.get(mp.column_id) as any;
-            const file = fileById.get(mp.file_id) as any;
-            const cell = 'px-3 py-2 border-b border-outline/30 flex items-center min-w-0 text-text-primary';
-            return (
-              <MappingAdminRow key={mp.id} mp={mp} col={col} file={file} cell={cell} migrationId={m.id} onChanged={onChanged} />
-            );
-          })}
-        </div>
+      <p className="text-[12px] text-text-tertiary mb-3">
+        Choisir un champ Lume dans la liste corrige la colonne; « Ne pas importer » l'ignore. Les décisions prises ici priment sur les gabarits.
+      </p>
+      <div className="space-y-5">
+        {files.map((file) => (
+          <div key={file.id}>
+            <div className="text-[12px] font-semibold text-text-secondary mb-1.5">{file.original_name}</div>
+            <div className="border border-outline rounded-md overflow-x-auto">
+              <div className="grid min-w-[720px] text-[12px]" style={{ gridTemplateColumns: '1.1fr 1.3fr 1.3fr 70px 150px' }}>
+                {['Colonne', 'Aperçu (masqué)', 'Champ Lume', 'Conf.', 'Statut'].map((h) => (
+                  <div key={h} className="px-3 py-2 bg-surface-secondary/60 border-b border-outline font-semibold text-text-secondary">{h}</div>
+                ))}
+                {(byFile.get(file.id) ?? []).map((col) => (
+                  <MappingAdminRow
+                    key={col.id}
+                    col={col}
+                    mapping={mappingByColumn.get(col.id)}
+                    catalog={catalog}
+                    onSelect={(mp, entity, field) => {
+                      if (!entity || !field) return decide(mp, { status: 'rejected', target_entity: null, target_field: null }, 'Colonne ignorée');
+                      return decide(mp, { status: 'corrected', target_entity: entity, target_field: field }, 'Correspondance mise à jour');
+                    }}
+                    onConfirm={(mp) => decide(mp, { status: 'confirmed' }, 'Correspondance confirmée')}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function MappingAdminRow({ mp, col, file, cell, migrationId, onChanged }: any) {
+function MappingAdminRow({ col, mapping, catalog, onSelect, onConfirm }: {
+  col: any;
+  mapping?: any;
+  catalog: FieldCatalog;
+  onSelect: (mp: any, entity: string | null, field: string | null) => void;
+  onConfirm: (mp: any) => void;
+}) {
+  const cell = 'px-3 py-2 border-b border-outline/30 flex items-center min-w-0 text-text-primary';
+  const value = mapping?.target_entity && mapping?.target_field ? `${mapping.target_entity}:${mapping.target_field}` : '';
+  const knownValue = !value || (catalog[mapping.target_entity] ?? []).some((f) => f.field === mapping.target_field);
+  const canConfirm = mapping && (mapping.status === 'suggested' || mapping.status === 'needs_review') && !!mapping.target_field;
   return (
     <>
-      <div className={cell}><span className="truncate text-text-secondary">{file?.original_name ?? '—'}</span></div>
       <div className={cell}>
         <div className="min-w-0">
-          <div className="truncate font-medium">{col?.header ?? '—'}</div>
-          <div className="text-[10px] text-text-tertiary">{col?.detected_type} → {mp.target_entity ?? '?'}·{mp.target_field ?? '—'}</div>
+          <div className="truncate font-medium">{col.header}</div>
+          <div className="text-[10px] text-text-tertiary">{col.detected_type}</div>
         </div>
       </div>
-      <div className={`${cell} text-text-tertiary`}><span className="truncate">{(col?.samples_masked ?? []).slice(0, 3).join(' · ')}</span></div>
-      <div className={cell}>{mp.confidence}%</div>
-      <div className={cell}>{mp.status}</div>
-      <div className={`${cell} gap-2 text-[12px]`}>
-        {mp.status !== 'confirmed' && (
-          <button
-            type="button"
-            className="underline text-emerald-700"
-            onClick={async () => { try { await decideMapping(migrationId, mp.id, { status: 'confirmed' }); onChanged(); } catch (err: any) { toast.error(err?.message ?? 'Erreur'); } }}
+      <div className={`${cell} text-text-tertiary`}>
+        <span className="truncate">{(col.samples_masked ?? []).slice(0, 3).join(' · ') || '—'}</span>
+      </div>
+      <div className={cell}>
+        {mapping ? (
+          <select
+            aria-label={`Champ cible pour ${col.header}`}
+            className="w-full h-8 px-2 text-[12px] bg-surface-card border border-outline rounded-md"
+            value={value}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (!v) onSelect(mapping, null, null);
+              else {
+                const [entity, field] = v.split(':');
+                onSelect(mapping, entity, field);
+              }
+            }}
           >
-            Confirmer
-          </button>
+            <option value="">— Ne pas importer —</option>
+            {!knownValue && <option value={value}>{ENTITY_LABELS_FR[mapping.target_entity] ?? mapping.target_entity} · {mapping.target_field}</option>}
+            {Object.entries(catalog).map(([entity, fields]) => (
+              <optgroup key={entity} label={ENTITY_LABELS_FR[entity] ?? entity}>
+                {fields.map((f) => (
+                  <option key={`${entity}:${f.field}`} value={`${entity}:${f.field}`}>{f.labelFr}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        ) : (
+          <span className="text-text-tertiary">—</span>
         )}
-        {mp.status !== 'rejected' && (
-          <button
-            type="button"
-            className="underline text-red-600"
-            onClick={async () => { try { await decideMapping(migrationId, mp.id, { status: 'rejected', target_entity: null, target_field: null }); onChanged(); } catch (err: any) { toast.error(err?.message ?? 'Erreur'); } }}
-          >
-            Rejeter
-          </button>
+      </div>
+      <div className={cell}>{mapping ? <ConfidenceBadge value={mapping.confidence} /> : '—'}</div>
+      <div className={`${cell} gap-2 text-text-secondary`}>
+        <span>{mapping ? (MAPPING_STATUS_LABELS_FR[mapping.status] ?? mapping.status) : '—'}</span>
+        {canConfirm && (
+          <button type="button" className="underline text-emerald-700" onClick={() => onConfirm(mapping)}>Confirmer</button>
         )}
       </div>
     </>
