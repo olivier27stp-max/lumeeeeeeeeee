@@ -102,6 +102,12 @@ export async function membresDuCanal(channel: string): Promise<string[]> {
   }
   return out;
 }
+export async function archiverCanalSlack(channel: string): Promise<void> {
+  try { await appel('conversations.archive', { channel }); } catch (e: any) { if (!/already_archived|is_archived/.test(String(e?.message))) throw e; }
+}
+export async function desarchiverCanalSlack(channel: string): Promise<void> {
+  try { await appel('conversations.unarchive', { channel }); } catch (e: any) { if (!/not_archived/.test(String(e?.message))) throw e; }
+}
 export async function definirSujetCanal(channel: string, topic: string): Promise<void> {
   await appel('conversations.setTopic', { channel, topic: topic.slice(0, 250) });
 }

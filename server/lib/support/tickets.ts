@@ -249,9 +249,10 @@ export async function relayerMessageClient(admin: SupabaseClient, ticket: Ticket
     try {
       // Dans le canal de l'entreprise, le client écrit au premier niveau (une
       // conversation, pas un ticket) ; dans #support (repli), dans le fil.
-      const { canalClientExistant } = await import('./canaux-slack');
+      const { canalClientExistant, desarchiverSiBesoin } = await import('./canaux-slack');
       const canal = await canalClientExistant(admin, ticket.org_id);
       const auPremierNiveau = !!canal && canal.channel_id === ticket.slack_channel_id;
+      if (auPremierNiveau && canal) await desarchiverSiBesoin(admin, canal);
       const entete = auteur === 'lumi' ? '*🤖 Lumi a répondu*' : `*👤 ${echapperSlack(ticket.user_name || 'Client')}*`;
       const r = await envoyerMessageSlack({ channel: ticket.slack_channel_id, ...(auPremierNiveau ? {} : { thread_ts: ticket.slack_thread_ts }), text: `${entete} — ${echapperSlack(body)}` });
       if (auteur === 'client') await admin.from('support_messages').update({ slack_ts: r.ts }).eq('ticket_id', ticket.id).eq('author', 'user').is('slack_ts', null).order('created_at', { ascending: false }).limit(1);

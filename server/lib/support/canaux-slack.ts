@@ -21,10 +21,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../logger';
 import {
   canalSupport, creerCanalSlack, inviterDansCanal, membresDuCanal, definirSujetCanal, envoyerMessageSlack, lireHistoriqueSlack, identiteBot, echapperSlack,
+  archiverCanalSlack, desarchiverCanalSlack,
 } from '../slack';
 import { ajouterMessage, type Ticket } from './tickets';
 
-export interface CanalClient { org_id: string; channel_id: string; channel_name: string; last_seen_ts: string | null }
+export interface CanalClient { org_id: string; channel_id: string; channel_name: string; last_seen_ts: string | null; archived_at?: string | null }
 
 /** `client-plomberie-tremblay` : minuscules, sans accent, tirets, ≤ 60 caractères (Slack : 80 max). Pur, testé. */
 export function nomCanalPour(companyName: string): string {
@@ -39,14 +40,23 @@ export function nomCanalPour(companyName: string): string {
 }
 
 export async function canalClientExistant(admin: SupabaseClient, orgId: string): Promise<CanalClient | null> {
-  const { data } = await admin.from('support_slack_channels').select('org_id, channel_id, channel_name, last_seen_ts').eq('org_id', orgId).maybeSingle();
+  const { data } = await admin.from('support_slack_channels').select('org_id, channel_id, channel_name, last_seen_ts, archived_at').eq('org_id', orgId).maybeSingle();
   return (data as CanalClient) || null;
 }
 
-/** Le canal de l'entreprise, créé au besoin. Lève si Slack refuse (scope manquant…). */
+/** Un canal archivé (client inactif) revient dans la barre latérale dès qu'on doit y écrire. */
+export async function desarchiverSiBesoin(admin: SupabaseClient, canal: CanalClient): Promise<CanalClient> {
+  if (!canal.archived_at) return canal;
+  await desarchiverCanalSlack(canal.channel_id);
+  await admin.from('support_slack_channels').update({ archived_at: null }).eq('org_id', canal.org_id);
+  logger.info('[support/canaux] canal client désarchivé', { channel: canal.channel_name });
+  return { ...canal, archived_at: null };
+}
+
+/** Le canal de l'entreprise, créé au besoin (ou désarchivé). Lève si Slack refuse (scope manquant…). */
 export async function canalClient(admin: SupabaseClient, orgId: string, companyName: string, planLabel: string): Promise<CanalClient> {
   const existant = await canalClientExistant(admin, orgId);
-  if (existant) return existant;
+  if (existant) return desarchiverSiBesoin(admin, existant);
 
   const cree = await creerCanalSlack(nomCanalPour(companyName));
   try {
@@ -86,6 +96,42 @@ export async function signalerDansSupport(t: Ticket, canal: CanalClient, titre: 
   }
 }
 
+/** Jours sans demande ouverte avant d'archiver le canal d'un client. `SLACK_ARCHIVE_APRES_JOURS=0` désactive ; défaut 7. */
+export function joursAvantArchivage(env: NodeJS.ProcessEnv = process.env): number {
+  if (env.SLACK_ARCHIVE_APRES_JOURS === '0') return 0;
+  const v = Number(env.SLACK_ARCHIVE_APRES_JOURS);
+  return Number.isFinite(v) && v >= 1 ? v : 7;
+}
+
+/**
+ * Archive les canaux des clients sans demande vivante depuis N jours : ils
+ * sortent de la barre latérale (l'historique reste lisible dans Slack) et
+ * reviennent d'eux-mêmes à la prochaine demande (`canalClient`). Retourne le
+ * nombre archivé.
+ */
+export async function archiverCanauxInactifs(admin: SupabaseClient, jours: number = joursAvantArchivage()): Promise<number> {
+  if (!jours) return 0;
+  const { data: canaux, error } = await admin.from('support_slack_channels').select('org_id, channel_id, channel_name, last_seen_ts, archived_at').is('archived_at', null);
+  if (error) { logger.error('[support/canaux] lecture des canaux impossible', { error: error.message }); return 0; }
+  const limite = new Date(Date.now() - jours * 86_400_000).toISOString();
+  let archives = 0;
+  for (const c of (canaux || []) as CanalClient[]) {
+    try {
+      // Vivant = un ticket non fermé, ou n'importe quel message depuis moins de N jours.
+      const { data: vivant } = await admin.from('support_tickets').select('id').eq('org_id', c.org_id)
+        .or(`status.in.(ai,open,answered),last_message_at.gte.${limite}`).limit(1).maybeSingle();
+      if (vivant) continue;
+      await archiverCanalSlack(c.channel_id);
+      await admin.from('support_slack_channels').update({ archived_at: new Date().toISOString() }).eq('org_id', c.org_id);
+      archives += 1;
+      logger.info('[support/canaux] canal client archivé (inactif)', { channel: c.channel_name, jours });
+    } catch (e: any) {
+      logger.error('[support/canaux] archivage impossible', { channel: c.channel_name, error: e?.message || String(e) });
+    }
+  }
+  return archives;
+}
+
 /**
  * Le ticket visé par un message écrit au premier niveau d'un canal client :
  * le dernier ticket non fermé de l'entreprise ; sinon un nouveau ticket
@@ -113,7 +159,7 @@ export async function ticketPourMessageCanal(admin: SupabaseClient, orgId: strin
  * le relais lui-même (dédoublonnage, notification) est fait par l'appelant.
  */
 export async function messagesCanauxClients(admin: SupabaseClient): Promise<Array<{ canal: CanalClient; ticket: Ticket; message: { ts: string; user?: string; bot_id?: string; subtype?: string; text?: string } }>> {
-  const { data: canaux, error } = await admin.from('support_slack_channels').select('org_id, channel_id, channel_name, last_seen_ts').order('created_at', { ascending: false }).limit(100);
+  const { data: canaux, error } = await admin.from('support_slack_channels').select('org_id, channel_id, channel_name, last_seen_ts, archived_at').is('archived_at', null).order('created_at', { ascending: false }).limit(100);
   if (error) { logger.error('[support/canaux] lecture des canaux impossible', { error: error.message }); return []; }
   const bot = await identiteBot();
   const sortie: Array<{ canal: CanalClient; ticket: Ticket; message: { ts: string; user?: string; bot_id?: string; subtype?: string; text?: string } }> = [];

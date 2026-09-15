@@ -47,7 +47,7 @@ const client: any = {
   },
 };
 
-const slack = { crees: [] as string[], invites: [] as any[], sujets: [] as any[], postes: [] as any[], historique: [] as any[], membres: ['URAFBA', 'UBOT', 'UGROK'] };
+const slack = { crees: [] as string[], invites: [] as any[], sujets: [] as any[], postes: [] as any[], historique: [] as any[], membres: ['URAFBA', 'UBOT', 'UGROK'], archives: [] as string[], desarchives: [] as string[] };
 vi.mock('../../server/lib/slack', () => ({
   canalSupport: () => 'CSUPPORT',
   identiteBot: async () => ({ user_id: 'UBOT', bot_id: 'BBOT' }),
@@ -57,14 +57,58 @@ vi.mock('../../server/lib/slack', () => ({
   definirSujetCanal: async (channel: string, topic: string) => { slack.sujets.push({ channel, topic }); },
   envoyerMessageSlack: async (p: any) => { slack.postes.push(p); return { ts: '9.9', channel: p.channel }; },
   lireHistoriqueSlack: async () => slack.historique,
+  archiverCanalSlack: async (c: string) => { slack.archives.push(c); },
+  desarchiverCanalSlack: async (c: string) => { slack.desarchives.push(c); },
   echapperSlack: (s: string) => s,
 }));
 vi.mock('../../server/lib/mailer', () => ({ isMailerConfigured: () => false, sendEmail: vi.fn() }));
 vi.mock('../../server/lib/helpers', () => ({ resolvePublicBaseUrl: () => 'https://lumecrm.net', normalizeE164: (s: string) => s, findOrCreateConversation: async () => ({ id: 'c' }) }));
 
-import { nomCanalPour, canalClient, ticketPourMessageCanal, messagesCanauxClients } from '../../server/lib/support/canaux-slack';
+import { nomCanalPour, canalClient, ticketPourMessageCanal, messagesCanauxClients, archiverCanauxInactifs, joursAvantArchivage } from '../../server/lib/support/canaux-slack';
 
-beforeEach(() => { journal.length = 0; mappings = []; ticketsOuverts = []; derniersTickets = []; slack.crees = []; slack.invites = []; slack.sujets = []; slack.postes = []; slack.historique = []; });
+beforeEach(() => { journal.length = 0; mappings = []; ticketsOuverts = []; derniersTickets = []; slack.crees = []; slack.invites = []; slack.sujets = []; slack.postes = []; slack.historique = []; slack.archives = []; slack.desarchives = []; });
+
+describe('archivage des canaux inactifs', () => {
+  it('sans demande vivante depuis 7 jours → archivé et marqué ; avec une demande vivante → gardé', async () => {
+    mappings = [
+      { org_id: 'org-calme', channel_id: 'C_calme', channel_name: 'client-calme', last_seen_ts: null, archived_at: null },
+      { org_id: 'org-actif', channel_id: 'C_actif', channel_name: 'client-actif', last_seen_ts: null, archived_at: null },
+    ];
+    // Le mock rend « un ticket vivant » seulement pour org-actif.
+    ticketsOuverts = [];
+    const brut = client.from;
+    client.from = (table: string) => {
+      const o = brut(table);
+      if (table === 'support_tickets') {
+        const req = journal.at(-1)!;
+        o.or = () => o;
+        o.maybeSingle = async () => ({ data: req.filtres.some(([c, v]: any) => c === 'org_id' && v === 'org-actif') ? { id: 'vivant' } : null, error: null });
+      }
+      return o;
+    };
+    try {
+      expect(await archiverCanauxInactifs(client, 7)).toBe(1);
+    } finally { client.from = brut; }
+    expect(slack.archives).toEqual(['C_calme']);
+    const maj = journal.filter((j) => j.table === 'support_slack_channels' && j.op === 'update').map((j) => j.valeur as any);
+    expect(maj).toHaveLength(1);
+    expect(maj[0].archived_at).toBeTruthy();
+  });
+
+  it('un canal archivé est désarchivé à la prochaine demande', async () => {
+    mappings = [{ org_id: 'org1', channel_id: 'C1', channel_name: 'client-x', last_seen_ts: null, archived_at: '2026-09-01T00:00:00Z' }];
+    const c = await canalClient(client, 'org1', 'X', 'Scale');
+    expect(c.archived_at).toBeNull();
+    expect(slack.desarchives).toEqual(['C1']);
+    expect(slack.crees).toEqual([]);
+  });
+
+  it('délai : défaut 7 jours, 0 désactive', () => {
+    expect(joursAvantArchivage({})).toBe(7);
+    expect(joursAvantArchivage({ SLACK_ARCHIVE_APRES_JOURS: '3' })).toBe(3);
+    expect(joursAvantArchivage({ SLACK_ARCHIVE_APRES_JOURS: '0' })).toBe(0);
+  });
+});
 
 describe('nomCanalPour', () => {
   it('normalise le nom de l’entreprise pour Slack', () => {
