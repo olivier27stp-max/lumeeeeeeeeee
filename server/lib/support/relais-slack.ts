@@ -140,4 +140,14 @@ export function demarrerReleveSlack(): void {
   };
   setTimeout(() => { void passage(); }, 5_000);
   setInterval(() => { void passage(); }, cadence);
+
+  // Archivage des canaux clients inactifs : une fois par heure suffit.
+  const archivage = async () => {
+    try {
+      const { archiverCanauxInactifs } = await import('./canaux-slack');
+      await archiverCanauxInactifs(getServiceClient());
+    } catch (e: any) { logger.error('[support/canaux] archivage en erreur', { error: e?.message || String(e) }); }
+  };
+  setTimeout(() => { void archivage(); }, 60_000);
+  setInterval(() => { void archivage(); }, 60 * 60_000);
 }
