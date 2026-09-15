@@ -1351,6 +1351,10 @@ app.listen(port, '0.0.0.0', () => {
     // détection installée le 2026-07-31. Les sondes et la télémétrie écrivaient
     // dans security_events, mais rien ne lisait cette table : une détection que
     // personne ne regarde équivaut à pas de détection.
+    // Relevé des fils Slack du support (filet quand les événements ne sont pas livrés).
+    import('./lib/support/relais-slack').then(({ demarrerReleveSlack }) => {
+      demarrerReleveSlack();
+    }).catch((e: any) => captureCronFailure('slack-relais-startup', e));
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));
