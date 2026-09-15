@@ -21,7 +21,8 @@ import {
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate,
   type AdminMigrationListItem, type MigrationStaffEntry,
 } from '../lib/migrationAdminApi';
-import { lancerBotMigration, definirBotActif, type RapportBotMigration } from '../lib/migrationAdminApi';
+import { lancerBotMigration, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
+import { confirmer } from '../components/ui/ConfirmDialog';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
@@ -436,6 +437,13 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
       {m.status === 'test_review' && (
         <button type="button" className={primary} onClick={() => act(() => requestApproval(m.id), 'Approbation demandée au client')}>Demander l'approbation</button>
       )}
+      {m.status === 'waiting_for_approval' && (
+        <button type="button" className={primary} onClick={async () => {
+          const ok = await confirmer({ title: 'Approuver au nom du client', message: "Vous validez l'aperçu de l'import test à la place du client (mode autonome). L'approbation sera enregistrée à votre nom, avec un commentaire qui le dit, et le client en sera informé dans son portail. L'import final reste un geste séparé.", confirmLabel: 'Approuver au nom du client' });
+          if (!ok) return;
+          await act(() => approuverAuNomDuClient(m.id), 'Approuvée au nom du client — passez la migration « prête pour l\'import final »');
+        }}>Approuver au nom du client</button>
+      )}
       {(m.status === 'approved' || m.status === 'completed_with_warnings') && (
         <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'ready_for_final_import'), 'Migration prête pour l\'import final')}>
           {m.status === 'approved' ? 'Marquer prête pour l\'import' : 'Préparer l\'import complémentaire'}
@@ -595,9 +603,17 @@ function StaffCard({ migrationId }: { migrationId: string }) {
 function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
   const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
   const [busy, setBusy] = useState(false);
+  const autonome = m.bot_mode !== 'client';
   const basculer = async () => {
     setBusy(true);
     try { await definirBotActif(m.id, !m.bot_actif); toast.success(m.bot_actif ? 'Bot mis en pause' : 'Bot actif : il reprend la migration toutes les 10 minutes'); onChanged(); }
+    catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+    finally { setBusy(false); }
+  };
+  const changerMode = async (mode: 'client' | 'autonome') => {
+    if ((mode === 'autonome') === autonome) return;
+    setBusy(true);
+    try { await definirModeBot(m.id, mode); toast.success(mode === 'autonome' ? 'Mode autonome : le client n\'a rien à faire, le bot vous prévient' : 'Mode client : les questions passent par le portail'); onChanged(); }
     catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
     finally { setBusy(false); }
   };
@@ -606,7 +622,12 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="text-[14px] font-bold text-text-primary">Bot de migration</h3>
-          <p className="text-[12.5px] text-text-secondary">Analyse, correspondances, doublons, import test et questions au client. Jamais l'approbation ni l'import final.</p>
+          <p className="text-[12.5px] text-text-secondary">Analyse, correspondances, doublons, import test. Jamais l'approbation ni l'import final.</p>
+          <div className="mt-2 inline-flex rounded-md border border-outline overflow-hidden text-[12.5px]" role="group" aria-label="Mode du bot">
+            <button type="button" disabled={busy} onClick={() => changerMode('autonome')} className={`px-3 h-8 ${autonome ? 'bg-[#d8d0c2] text-black font-medium' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary'}`}>Autonome — le client n'a rien à faire</button>
+            <button type="button" disabled={busy} onClick={() => changerMode('client')} className={`px-3 h-8 border-l border-outline ${!autonome ? 'bg-[#d8d0c2] text-black font-medium' : 'bg-surface-card text-text-secondary hover:bg-surface-secondary'}`}>Questions au client</button>
+          </div>
+          <p className="mt-1.5 text-[12px] text-text-tertiary">{autonome ? 'Colonne incertaine → conservée dans les notes ; doublon sur le nom seul → nouvelle fiche ; ce qui bloque vous est notifié, jamais au client. Quand l\'import test est propre, vous approuvez au nom du client.' : 'Les colonnes incertaines et les doublons sur le nom sont demandés au client dans son portail (statut « attente du client »).'}</p>
         </div>
         <button type="button" disabled={busy} onClick={basculer} className={`h-9 px-3.5 rounded-md text-[13px] font-medium border transition-colors ${m.bot_actif ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-surface-card border-outline text-text-secondary'}`}>
           {m.bot_actif ? 'Actif — mettre en pause' : 'Activer le bot (toutes les 10 min)'}

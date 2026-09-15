@@ -533,6 +533,10 @@ export const migrationCreateSchema = z.object({
   assigned_assistant: z.string().uuid().optional().nullable(),
 });
 
+export const migrationApproveOnBehalfSchema = z.object({
+  comment: z.string().max(500).optional().nullable(),
+});
+
 export const migrationPatchSchema = z.object({
   source_crm: migrationSourceCrmEnum.optional(),
   categories: z.array(migrationCategoryEnum).min(1).max(13).optional(),
@@ -544,6 +548,7 @@ export const migrationPatchSchema = z.object({
   assigned_admin: z.string().uuid().optional().nullable(),
   assigned_assistant: z.string().uuid().optional().nullable(),
   bot_actif: z.boolean().optional(),
+  bot_mode: z.enum(['client', 'autonome']).optional(),
   freeze_start: z.string().optional().nullable(),
   freeze_end: z.string().optional().nullable(),
 }).refine((obj) => Object.keys(obj).length > 0, 'Request body cannot be empty.');

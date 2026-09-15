@@ -21,7 +21,17 @@
  *     7. 0 erreur bloquante, 0 doublon en attente, 0 question ouverte →
  *        demande d'approbation + message au client ; sinon → questions, arrêt
  *
- * Jamais : l'approbation (client) ni l'import final / rollback (admin).
+ * Mode (data_migrations.bot_mode) :
+ *   'autonome' (défaut) — le client n'a RIEN à faire : aucune question dans le
+ *     portail. Colonne incertaine → conservée dans les notes (rejected, valeurs
+ *     gardées par _unmapped) ; doublon sur le nom seul → nouvelle fiche
+ *     (fusionnable plus tard) ; ce qui bloque quand même → l'admin Lume est
+ *     prévenu (notification), jamais le client. Quand l'import test est propre,
+ *     l'admin est prévenu pour approuver au nom du client (route admin
+ *     approve-on-behalf — jamais le bot).
+ *   'client' — questions regroupées dans le portail, statut waiting_for_client.
+ *
+ * Jamais : l'approbation (client ou admin) ni l'import final / rollback (admin).
  * Chaque décision : migration_audit_logs, acteur 'assistant', et le rapport
  * de la passe dans data_migrations.bot_dernier_rapport.
  * Le modèle ne reçoit que des en-têtes et des échantillons MASQUÉS
@@ -39,6 +49,7 @@ import type { MigrationRow, MigrationCategory, TargetEntity, DryRunReport, Field
 import { coutEnCents } from '../lumi/tarifs';
 import { journaliserTrace } from '../lumi/traces';
 import { logger } from '../logger';
+import { platformAdminIds } from '../config';
 
 export const SEUIL_CONFIRMATION = 0.9;
 export const SEUIL_GABARIT = 0.8;
@@ -46,6 +57,10 @@ export const MAX_PASSES = 6;
 export const TYPE_QUESTION_COLONNE = 'bot_colonne';
 export const TYPE_QUESTION_DOUBLON = 'bot_doublon';
 export const OPTION_IGNORER = 'Ignorer cette colonne';
+export type ModeBot = 'client' | 'autonome';
+/** En mode autonome, l'admin est (re)prévenu au plus une fois par ce délai. */
+export const RAPPEL_ADMIN_HEURES = 72;
+export const TYPE_NOTIFICATION_ADMIN = 'migration_bot';
 const MODELE = process.env.LUMI_MODEL_MIGRATION || 'claude-sonnet-5';
 
 export interface DecisionBot {
@@ -114,18 +129,33 @@ export function validerVerdicts(brut: unknown, champs: FieldDef[]): VerdictColon
   return out;
 }
 
-/** Règle de doublon : courriel ou téléphone identique → fusion ; nom seul → demander ; faible → nouvelle fiche. */
-export function deciderDoublon(d: { score: number; decision: string; match_reasons: string | string[] | null }): 'merge' | 'create_new' | 'demander' | null {
+/** Mode du bot pour une migration : autonome par défaut (le client n'a rien à faire). */
+export function modeBot(m: Pick<MigrationRow, 'bot_mode'>): ModeBot {
+  return m.bot_mode === 'client' ? 'client' : 'autonome';
+}
+
+/**
+ * Règle de doublon : courriel ou téléphone identique → fusion ; nom seul →
+ * demander (mode client) ou nouvelle fiche (mode autonome : rien n'est perdu,
+ * deux fiches se fusionnent plus tard dans Lume) ; faible → nouvelle fiche.
+ */
+export function deciderDoublon(d: { score: number; decision: string; match_reasons: string | string[] | null }, mode: ModeBot = 'client'): 'merge' | 'create_new' | 'demander' | null {
   if (d.decision !== 'pending' && d.decision !== 'review') return null;
   const raisons = Array.isArray(d.match_reasons) ? d.match_reasons : String(d.match_reasons ?? '').split(/[,\s]+/).filter(Boolean);
   if (d.decision === 'review' || d.score < 90) return 'create_new';
   if (raisons.some((r) => /email|courriel|phone|tel/i.test(r))) return 'merge';
-  return 'demander';
+  return mode === 'autonome' ? 'create_new' : 'demander';
 }
 
-/** Décision de mapping à partir d'un verdict validé. */
-export function deciderMapping(v: VerdictColonne): 'confirmer' | 'demander' {
-  return v.field && v.confidence >= SEUIL_CONFIRMATION ? 'confirmer' : 'demander';
+/**
+ * Décision de mapping à partir d'un verdict validé : confirmer à ≥ 0,90 ;
+ * sinon demander au client (mode client) ou conserver la colonne dans les
+ * notes (mode autonome : la valeur reste lisible sur la fiche, l'admin peut
+ * corriger la correspondance avant l'import).
+ */
+export function deciderMapping(v: VerdictColonne, mode: ModeBot = 'client'): 'confirmer' | 'demander' | 'conserver' {
+  if (v.field && v.confidence >= SEUIL_CONFIRMATION) return 'confirmer';
+  return mode === 'autonome' ? 'conserver' : 'demander';
 }
 
 /** Constats lisibles à partir des lignes rejetées, par entité et raison. */
@@ -321,9 +351,9 @@ async function appliquerGabarits(admin: Admin, m: MigrationRow, acteur: ActeurMi
 }
 
 /** Étape 3 : un appel modèle par fichier pour les colonnes encore à vérifier. */
-async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot): Promise<{ confirmees: number; questions: number }> {
+async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot, mode: ModeBot): Promise<{ confirmees: number; questions: number; conservees: number }> {
   const { data: files } = await admin.from('migration_files').select('id, original_name, category_detected').eq('migration_id', m.id).eq('kind', 'data').is('deleted_at', null).eq('parse_status', 'parsed');
-  let confirmees = 0, questions = 0;
+  let confirmees = 0, questions = 0, conservees = 0;
   for (const f of files ?? []) {
     const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence').eq('file_id', f.id).eq('status', 'needs_review');
     if (!maps?.length) continue;
@@ -344,13 +374,19 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
       const col: any = cols?.find((c) => c.position === v.position);
       const mp = col ? aTraiter.find((x) => x.column_id === col.id) : null;
       if (!col || !mp) continue;
-      if (deciderMapping(v) === 'confirmer') {
+      const choix = deciderMapping(v, mode);
+      if (choix === 'confirmer') {
         await admin.from('migration_field_mappings').update({ target_entity: entity, target_field: v.field, status: 'confirmed', confidence: Math.round(v.confidence * 100), reason: `bot : ${v.raison}`.slice(0, 200), decided_by: null, decided_role: 'assistant', decided_at: new Date().toISOString() }).eq('id', mp.id);
         await audit(admin, m, acteur, 'bot.mapping.confirme', `mapping:${mp.id}`, { field: v.field, confidence: v.confidence }, rapport, { etape: 'correspondances', cible: `${f.original_name} · ${col.header}`, decision: `→ ${v.field} (${Math.round(v.confidence * 100)} %)`, detail: v.raison });
         confirmees += 1;
+        continue;
+      }
+      const candidats = [...(v.field ? [v.field] : []), ...v.candidats].filter((x, i, a) => a.indexOf(x) === i).slice(0, 3)
+        .map((field) => ({ field, label: champs.find((c) => c.field === field)?.labelFr ?? field }));
+      if (choix === 'conserver') {
+        await conserverColonne(admin, m, acteur, rapport, { mappingId: mp.id, columnId: col.id, header: col.header, fichier: f.original_name, candidats, exemples: (col.samples_masked ?? []).slice(0, 3), raison: v.raison, confidence: v.confidence });
+        conservees += 1;
       } else {
-        const candidats = [...(v.field ? [v.field] : []), ...v.candidats].filter((x, i, a) => a.indexOf(x) === i).slice(0, 3)
-          .map((field) => ({ field, label: champs.find((c) => c.field === field)?.labelFr ?? field }));
         const options = [...candidats.map((c) => c.label), OPTION_IGNORER];
         const { data: issue } = await admin.from('migration_issues').insert({
           migration_id: m.id, type: TYPE_QUESTION_COLONNE, severity: 'warning', column_id: col.id, client_visible: true,
@@ -363,17 +399,96 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
       }
     }
   }
-  return { confirmees, questions };
+  return { confirmees, questions, conservees };
+}
+
+/**
+ * Mode autonome : une colonne incertaine n'est pas demandée au client, elle est
+ * conservée dans les notes de la fiche (mapping `rejected` → `_unmapped` → bloc
+ * « Champs non importés (ancien CRM) »). Rien n'est perdu ; l'admin voit le
+ * constat et peut corriger la correspondance avant l'import final.
+ */
+async function conserverColonne(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot, c: { mappingId: string; columnId: string | null; header: string; fichier: string; candidats: Array<{ field: string; label: string }>; exemples: unknown[]; raison: string; confidence: number }): Promise<void> {
+  const maintenant = new Date().toISOString();
+  await admin.from('migration_field_mappings')
+    .update({ target_field: null, status: 'rejected', confidence: Math.round(Math.max(0, Math.min(1, c.confidence)) * 100), reason: `bot autonome : conservée dans les notes (${c.raison})`.slice(0, 200), decided_by: null, decided_role: 'assistant', decided_at: maintenant })
+    .eq('id', c.mappingId).eq('migration_id', m.id);
+  await admin.from('migration_issues').insert({
+    migration_id: m.id, type: TYPE_QUESTION_COLONNE, severity: 'info', column_id: c.columnId, client_visible: false,
+    title: `Colonne « ${c.header} » du fichier ${c.fichier} conservée dans les notes (mode autonome)${c.candidats.length ? ` — candidats : ${c.candidats.map((x) => x.label).join(' / ')}` : ''}.`,
+    details_masked: { mapping_id: c.mappingId, column_id: c.columnId, header: c.header, candidats: c.candidats, exemples: c.exemples, mode: 'autonome' },
+    options: [], resolved_at: maintenant, resolution: 'conservée dans les notes (mode autonome)',
+  });
+  await audit(admin, m, acteur, 'bot.mapping.conserve', `mapping:${c.mappingId}`, { candidats: c.candidats.map((x) => x.field), confidence: c.confidence }, rapport, { etape: 'correspondances', cible: `${c.fichier} · ${c.header}`, decision: 'conservée dans les notes (mode autonome)', detail: c.candidats.map((x) => x.label).join(' / ') || 'aucun candidat' });
+}
+
+/**
+ * Mode autonome : les questions encore ouvertes au client (posées en mode
+ * client, ou avant la bascule) reçoivent le défaut sûr — colonne → notes,
+ * doublon → nouvelle fiche — et sortent du portail. Les réponses déjà données
+ * ont été appliquées avant (appliquerReponses).
+ */
+async function resoudreQuestionsAutonome(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot): Promise<number> {
+  const { data: issues } = await admin.from('migration_issues').select('id, type, details_masked')
+    .eq('migration_id', m.id).in('type', [TYPE_QUESTION_COLONNE, TYPE_QUESTION_DOUBLON]).eq('client_visible', true).is('client_answer', null).is('resolved_at', null);
+  let n = 0;
+  for (const iss of issues ?? []) {
+    const d = (iss.details_masked ?? {}) as Record<string, any>;
+    const maintenant = new Date().toISOString();
+    if (iss.type === TYPE_QUESTION_COLONNE && d.mapping_id) {
+      await admin.from('migration_field_mappings')
+        .update({ target_field: null, status: 'rejected', reason: 'bot autonome : conservée dans les notes (question sans réponse)', decided_by: null, decided_role: 'assistant', decided_at: maintenant })
+        .eq('id', d.mapping_id).eq('migration_id', m.id);
+      await admin.from('migration_issues').update({ client_visible: false, resolved_at: maintenant, resolution: 'conservée dans les notes (mode autonome, sans réponse du client)' }).eq('id', iss.id);
+      await audit(admin, m, acteur, 'bot.question.autonome', `mapping:${d.mapping_id}`, { defaut: 'notes' }, rapport, { etape: 'réponses', cible: `colonne ${d.header ?? ''}`, decision: 'conservée dans les notes (mode autonome)' });
+      n += 1;
+    } else if (iss.type === TYPE_QUESTION_DOUBLON && d.dup_id) {
+      await admin.from('migration_duplicate_candidates').update({ decision: 'create_new', decided_by: null, decided_at: maintenant }).eq('id', d.dup_id).eq('migration_id', m.id);
+      await admin.from('migration_issues').update({ client_visible: false, resolved_at: maintenant, resolution: 'nouvelle fiche (mode autonome, sans réponse du client)' }).eq('id', iss.id);
+      await audit(admin, m, acteur, 'bot.question.autonome', `duplicate:${d.dup_id}`, { defaut: 'create_new' }, rapport, { etape: 'réponses', cible: 'doublon', decision: 'nouvelle fiche (mode autonome)' });
+      n += 1;
+    }
+  }
+  return n;
+}
+
+/**
+ * Mode autonome : prévenir l'admin Lume (jamais le client) — notification dans
+ * SON workspace (les notifications se lisent par org), au plus une par
+ * (migration, motif) par RAPPEL_ADMIN_HEURES. Ne lève jamais.
+ */
+async function alerterAdmin(admin: Admin, m: MigrationRow, acteur: ActeurMigration, motif: 'approbation' | 'bloque', detail: string, rapport: RapportBot): Promise<number> {
+  const cibles = new Set<string>([...platformAdminIds, ...(m.assigned_admin ? [m.assigned_admin] : [])]);
+  if (!cibles.size) return 0;
+  const lien = `/admin/migrations#${m.id}`;
+  const depuis = new Date(Date.now() - RAPPEL_ADMIN_HEURES * 3600 * 1000).toISOString();
+  const titre = motif === 'approbation' ? 'Migration prête : approbation au nom du client' : 'Migration bloquée : le bot a besoin de vous';
+  let envoyees = 0;
+  try {
+    for (const userId of cibles) {
+      const { data: deja } = await admin.from('notifications').select('id').eq('user_id', userId).eq('type', TYPE_NOTIFICATION_ADMIN).eq('link', lien).eq('icon', motif).gte('created_at', depuis).limit(1).maybeSingle();
+      if (deja) continue;
+      const { data: membre } = await admin.from('memberships').select('org_id').eq('user_id', userId).eq('status', 'active').order('created_at', { ascending: true }).limit(1).maybeSingle();
+      if (!membre?.org_id) continue;
+      const { error } = await admin.from('notifications').insert({ org_id: membre.org_id, user_id: userId, type: TYPE_NOTIFICATION_ADMIN, category: 'migration', title: titre, body: detail.length > 180 ? `${detail.slice(0, 177)}…` : detail, link: lien, icon: motif });
+      if (error) throw error;
+      envoyees += 1;
+    }
+    if (envoyees) await audit(admin, m, acteur, 'bot.admin.alerte', null, { motif, destinataires: envoyees }, rapport, { etape: 'admin', cible: 'notification', decision: `${envoyees} admin prévenu${envoyees > 1 ? 's' : ''} (${motif})`, detail });
+  } catch (err: any) {
+    logger.error('[migration-bot] alerte admin non envoyée', { error: err?.message || String(err), migrationId: m.id, motif });
+  }
+  return envoyees;
 }
 
 /** Étape 5 : doublons. */
-async function traiterDoublons(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot): Promise<{ decides: number; questions: number }> {
+async function traiterDoublons(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot, mode: ModeBot): Promise<{ decides: number; questions: number }> {
   const { data: dups } = await admin.from('migration_duplicate_candidates').select('id, staging_record_id, score, decision, match_reasons').eq('migration_id', m.id).in('decision', ['pending', 'review']);
   let decides = 0, questions = 0;
   const { data: ouvertes } = await admin.from('migration_issues').select('details_masked').eq('migration_id', m.id).eq('type', TYPE_QUESTION_DOUBLON).is('resolved_at', null);
   const dejaDemandes = new Set((ouvertes ?? []).map((i: any) => String(i.details_masked?.dup_id ?? '')));
   for (const d of dups ?? []) {
-    const decision = deciderDoublon(d as any);
+    const decision = deciderDoublon(d as any, mode);
     if (!decision) continue;
     if (decision === 'demander') {
       if (dejaDemandes.has(d.id)) continue;
@@ -387,7 +502,7 @@ async function traiterDoublons(admin: Admin, m: MigrationRow, acteur: ActeurMigr
       continue;
     }
     await admin.from('migration_duplicate_candidates').update({ decision, decided_by: null, decided_at: new Date().toISOString() }).eq('id', d.id);
-    await audit(admin, m, acteur, 'bot.doublon.decide', `duplicate:${d.id}`, { decision, score: d.score, raisons: d.match_reasons }, rapport, { etape: 'doublons', cible: `doublon ${d.score} %`, decision: decision === 'merge' ? 'fusion (courriel ou téléphone identique)' : 'nouvelle fiche (ressemblance faible)' });
+    await audit(admin, m, acteur, 'bot.doublon.decide', `duplicate:${d.id}`, { decision, score: d.score, raisons: d.match_reasons }, rapport, { etape: 'doublons', cible: `doublon ${d.score} %`, decision: decision === 'merge' ? 'fusion (courriel ou téléphone identique)' : d.score >= 90 && d.decision === 'pending' ? 'nouvelle fiche (même nom seulement — fusionnable plus tard, mode autonome)' : 'nouvelle fiche (ressemblance faible)' });
     decides += 1;
   }
   return { decides, questions };
@@ -435,6 +550,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   const rapport: RapportBot = { migration_id: migrationId, declencheur: opts.declencheur, debut, fin: debut, statut_avant: m0?.status ?? 'inconnue', statut_apres: m0?.status ?? 'inconnue', decisions: [], questions_posees: 0, arret: '', cout_cents: null };
   if (!m0) { rapport.arret = 'migration introuvable'; rapport.fin = new Date().toISOString(); return rapport; }
   const m = m0;
+  const mode = modeBot(m);
   // Doublons tranchés depuis le dernier dry-run : un import test frais s'impose avant d'approuver, une seule fois.
   let doublonsDepuisTest = 0;
   try {
@@ -453,8 +569,9 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
       }
       if (s === 'mapping' || s === 'human_review' || s === 'waiting_for_client') {
         await appliquerReponses(admin, m, acteur, rapport);
+        if (mode === 'autonome') await resoudreQuestionsAutonome(admin, m, acteur, rapport);
         await appliquerGabarits(admin, m, acteur, rapport);
-        const { questions } = await proposerParModele(admin, m, acteur, rapport);
+        const { questions } = await proposerParModele(admin, m, acteur, rapport, mode);
         rapport.questions_posees += questions;
         const ouvertes = await questionsOuvertes(admin, m);
         const { count: aVerifier } = await admin.from('migration_field_mappings').select('id', { count: 'exact', head: true }).eq('migration_id', m.id).eq('status', 'needs_review');
@@ -464,6 +581,12 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
           rapport.decisions.push({ etape: 'import test', cible: 'dry-run', decision: `${r.report.totals.wouldCreate} à créer, ${r.report.totals.wouldMerge} à fusionner, ${r.report.totals.blockingErrors} erreur${r.report.totals.blockingErrors > 1 ? 's' : ''} bloquante${r.report.totals.blockingErrors > 1 ? 's' : ''}` });
           continue; // → test_review
         }
+        if (mode === 'autonome') {
+          // Jamais waiting_for_client : ce qui reste (fichier sans catégorie, verdict manquant, question posée par l'admin) revient à l'admin.
+          rapport.arret = `bloqué sans le client : ${aVerifier ?? 0} colonne${(aVerifier ?? 0) > 1 ? 's' : ''} sans verdict, ${ouvertes.length} question${ouvertes.length > 1 ? 's' : ''} ouverte${ouvertes.length > 1 ? 's' : ''} (admin prévenu)`;
+          await alerterAdmin(admin, m, acteur, 'bloque', `Migration ${m.source_crm} : ${rapport.arret}. Ouvrez la console pour trancher.`, rapport);
+          break;
+        }
         await envoyerQuestions(admin, m, acteur, rapport);
         if (m.status !== 'waiting_for_client') { await poserStatut(admin, m, 'human_review', rapport); await poserStatut(admin, m, 'waiting_for_client', rapport); }
         rapport.arret = `${ouvertes.length} question${ouvertes.length > 1 ? 's' : ''} en attente du client, ${aVerifier ?? 0} colonne${(aVerifier ?? 0) > 1 ? 's' : ''} à vérifier`;
@@ -471,7 +594,8 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
       }
       if (s === 'test_review') {
         await appliquerReponses(admin, m, acteur, rapport);
-        const { decides, questions } = await traiterDoublons(admin, m, acteur, rapport);
+        if (mode === 'autonome') await resoudreQuestionsAutonome(admin, m, acteur, rapport);
+        const { decides, questions } = await traiterDoublons(admin, m, acteur, rapport, mode);
         doublonsDepuisTest += decides;
         rapport.questions_posees += questions;
         await constaterRejets(admin, m, acteur, rapport);
@@ -485,9 +609,22 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
           if (doublonsDepuisTest > 0) { doublonsDepuisTest = 0; await poserStatut(admin, m, 'ready_for_test', rapport); continue; }
           const refus = await demanderApprobation(admin, m, acteur);
           if (refus) { rapport.arret = refus; break; }
-          await messagePortail(admin, m, acteur, `Bonjour ! L'import test est concluant : ${report?.totals.wouldCreate ?? 0} fiches à créer, ${report?.totals.wouldMerge ?? 0} à fusionner avec des fiches existantes, aucune erreur bloquante. Il ne reste qu'à approuver dans la section « Approbation » pour lancer l'import définitif.`);
+          const resume = `${report?.totals.wouldCreate ?? 0} fiches à créer, ${report?.totals.wouldMerge ?? 0} à fusionner avec des fiches existantes, aucune erreur bloquante`;
+          if (mode === 'autonome') {
+            await messagePortail(admin, m, acteur, `Bonjour ! L'import test est concluant : ${resume}. Vous n'avez rien à faire : l'équipe Lume valide et lance l'import définitif. Écrivez-nous ici si quelque chose vous semble incorrect.`);
+            rapport.decisions.push({ etape: 'approbation', cible: 'admin', decision: 'à approuver au nom du client' });
+            rapport.arret = "en attente de l'approbation par l'admin au nom du client";
+            await alerterAdmin(admin, m, acteur, 'approbation', `Migration ${m.source_crm} : ${resume}. Approuvez au nom du client dans la console, puis lancez l'import final.`, rapport);
+            break;
+          }
+          await messagePortail(admin, m, acteur, `Bonjour ! L'import test est concluant : ${resume}. Il ne reste qu'à approuver dans la section « Approbation » pour lancer l'import définitif.`);
           rapport.decisions.push({ etape: 'approbation', cible: 'client', decision: 'demandée' });
           rapport.arret = "en attente de l'approbation du client";
+          break;
+        }
+        if (mode === 'autonome') {
+          rapport.arret = `bloqué sans le client : ${bloquantes} erreur${bloquantes > 1 ? 's' : ''} bloquante${bloquantes > 1 ? 's' : ''}, ${dupsEnAttente ?? 0} doublon${(dupsEnAttente ?? 0) > 1 ? 's' : ''} à trancher, ${ouvertes.length} question${ouvertes.length > 1 ? 's' : ''} ouverte${ouvertes.length > 1 ? 's' : ''} (admin prévenu)`;
+          await alerterAdmin(admin, m, acteur, 'bloque', `Migration ${m.source_crm} : ${rapport.arret}. Voir les rejets et les constats dans la console.`, rapport);
           break;
         }
         await envoyerQuestions(admin, m, acteur, rapport);
@@ -501,7 +638,15 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
         rapport.decisions.push({ etape: 'import test', cible: 'dry-run', decision: `${r.report.totals.wouldCreate} à créer, ${r.report.totals.blockingErrors} erreur(s) bloquante(s)` });
         continue;
       }
-      if (s === 'waiting_for_approval') { rapport.arret = "en attente de l'approbation du client (jamais faite par le bot)"; break; }
+      if (s === 'waiting_for_approval') {
+        if (mode === 'autonome') {
+          await alerterAdmin(admin, m, acteur, 'approbation', `Migration ${m.source_crm} toujours en attente : approuvez au nom du client dans la console, puis lancez l'import final.`, rapport);
+          rapport.arret = "en attente de l'approbation par l'admin au nom du client (jamais faite par le bot)";
+          break;
+        }
+        rapport.arret = "en attente de l'approbation du client (jamais faite par le bot)";
+        break;
+      }
       if (s === 'approved' || s === 'ready_for_final_import') { rapport.arret = "prêt pour l'import final : un humain clique (jamais le bot)"; break; }
       rapport.arret = `rien à faire au statut ${s}`;
       break;
@@ -521,9 +666,17 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
 
 /** Cron : une passe sur chaque migration où le bot est actif et qui a quelque chose à faire. */
 export async function passeCronBot(admin: Admin): Promise<number> {
-  const { data } = await admin.from('data_migrations').select('id, status').eq('bot_actif', true).is('deleted_at', null)
-    .in('status', ['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review']);
+  const { data } = await admin.from('data_migrations').select('id, status, bot_mode, bot_derniere_execution').eq('bot_actif', true).is('deleted_at', null)
+    .in('status', ['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review', 'waiting_for_approval']);
+  const rappel = Date.now() - RAPPEL_ADMIN_HEURES * 3600 * 1000;
   let n = 0;
-  for (const m of data ?? []) { await executerBotMigration(admin, m.id, { acteurId: null, declencheur: 'cron' }); n += 1; }
+  for (const m of data ?? []) {
+    // En attente d'approbation : seul le mode autonome a quelque chose à faire (rappeler l'admin), et pas plus d'une fois par délai de rappel.
+    if (m.status === 'waiting_for_approval') {
+      if (modeBot(m) !== 'autonome') continue;
+      if (m.bot_derniere_execution && new Date(m.bot_derniere_execution).getTime() > rappel) continue;
+    }
+    await executerBotMigration(admin, m.id, { acteurId: null, declencheur: 'cron' }); n += 1;
+  }
   return n;
 }

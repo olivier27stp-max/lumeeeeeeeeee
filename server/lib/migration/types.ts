@@ -233,6 +233,11 @@ export interface MigrationRow {
   invited_email: string | null;
   assigned_admin: string | null;
   assigned_assistant: string | null;
+  bot_actif?: boolean;
+  /** 'autonome' (défaut) : jamais de question au client ; 'client' : questions dans le portail. */
+  bot_mode?: 'client' | 'autonome' | null;
+  bot_derniere_execution?: string | null;
+  bot_dernier_rapport?: Record<string, unknown> | null;
   freeze_start: string | null;
   freeze_end: string | null;
   freeze_confirmed_at: string | null;
