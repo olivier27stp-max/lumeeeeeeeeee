@@ -31,7 +31,9 @@ import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
 import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
-import { runDryRun, runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
+import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
+import { lancerImportTest, demanderApprobation } from '../lib/migration/execution';
+import { executerBotMigration } from '../lib/migration/bot';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { entityForCategory, normalizeHeader, FIELD_CATALOG } from '../lib/migration/mapping';
@@ -264,7 +266,7 @@ router.patch('/migration-admin/migrations/:id', validate(migrationPatchSchema), 
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
 
-    const allowed = ['priority', 'target_date', 'internal_notes', 'invited_email', 'invited_user_id', 'assigned_admin', 'assigned_assistant', 'categories', 'source_crm', 'freeze_start', 'freeze_end'] as const;
+    const allowed = ['priority', 'target_date', 'internal_notes', 'invited_email', 'invited_user_id', 'assigned_admin', 'assigned_assistant', 'categories', 'source_crm', 'freeze_start', 'freeze_end', 'bot_actif'] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
       if (key in req.body) patch[key] = (req.body as Record<string, unknown>)[key];
@@ -668,88 +670,14 @@ router.post('/migration-admin/migrations/:id/test-import', async (req, res) => {
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
-
-    if (migration.status !== 'ready_for_test') {
-      if (!canTransition(migration.status, 'ready_for_test')) {
-        return res.status(409).json({ error: `L'import test n'est pas disponible depuis le statut « ${migration.status} ».` });
-      }
-      await admin.from('data_migrations').update({ status: 'ready_for_test' }).eq('id', migration.id).eq('status', migration.status);
-      migration.status = 'ready_for_test';
+    if (migration.status !== 'ready_for_test' && !canTransition(migration.status, 'ready_for_test')) {
+      return res.status(409).json({ error: `L'import test n'est pas disponible depuis le statut « ${migration.status} ».` });
     }
-    await admin.from('data_migrations').update({ status: 'testing' }).eq('id', migration.id).eq('status', 'ready_for_test');
-    migration.status = 'testing';
-
-    const { data: batch, error: batchErr } = await admin
-      .from('migration_import_batches')
-      .insert({ migration_id: migration.id, kind: 'test', status: 'running', started_by: auth.user.id })
-      .select()
-      .single();
-    if (batchErr) throw batchErr;
-
-    await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.test.start', actorId: auth.user.id, actorRole: 'platform_admin', target: `batch:${batch.id}` });
-
-    void (async () => {
-      try {
-        await prepareStaging(admin, migration);
-        // détection des doublons contre les données actives (lecture seule)
-        const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'job', 'quote', 'invoice'];
-        for (const entity of entities) {
-          const { data: records } = await admin
-            .from('migration_staging_records')
-            .select('id, normalized, relations')
-            .eq('migration_id', migration.id)
-            .eq('entity_type', entity)
-            .in('status', ['ready', 'duplicate'])
-            .limit(20000);
-          if (!records || records.length === 0) continue;
-          const matches = await findDuplicatesForEntity(admin, migration.org_id, entity, records as any);
-          if (matches.length === 0) continue;
-          const { data: existing } = await admin
-            .from('migration_duplicate_candidates')
-            .select('staging_record_id, existing_table, existing_id')
-            .eq('migration_id', migration.id);
-          const seen = new Set((existing ?? []).map((e: any) => `${e.staging_record_id}|${e.existing_table}|${e.existing_id}`));
-          const fresh = matches.filter((m) => !seen.has(`${m.stagingRecordId}|${m.existingTable}|${m.existingId}`));
-          if (fresh.length > 0) {
-            const { error: dupErr } = await admin.from('migration_duplicate_candidates').insert(
-              fresh.map((m) => ({
-                migration_id: migration.id,
-                staging_record_id: m.stagingRecordId,
-                existing_table: m.existingTable,
-                existing_id: m.existingId,
-                match_reasons: m.matchReasons,
-                score: m.score,
-                decision: m.score >= 90 ? 'pending' : 'review',
-              })),
-            );
-            if (dupErr) console.error('[migration-admin] duplicates insert failed:', dupErr.message);
-            const dupIds = fresh.filter((m) => m.score >= 75).map((m) => m.stagingRecordId);
-            for (let i = 0; i < dupIds.length; i += 200) {
-              await admin
-                .from('migration_staging_records')
-                .update({ status: 'duplicate' })
-                .in('id', dupIds.slice(i, i + 200))
-                .eq('migration_id', migration.id);
-            }
-          }
-        }
-
-        const report = await runDryRun(admin, migration);
-        const { error: doneErr } = await admin
-          .from('migration_import_batches')
-          .update({ status: 'completed', totals: report as unknown as Record<string, unknown>, finished_at: new Date().toISOString() })
-          .eq('id', batch.id);
-        if (doneErr) console.error('[migration-admin] test batch update failed:', doneErr.message);
-        await admin.from('data_migrations').update({ status: 'test_review' }).eq('id', migration.id).eq('status', 'testing');
-        await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.test.done', actorRole: 'system', target: `batch:${batch.id}`, meta: { totals: report.totals } });
-      } catch (err: any) {
-        console.error('[migration-admin] test import failed:', err?.message || err);
-        await admin.from('migration_import_batches').update({ status: 'failed', error: 'internal_error', finished_at: new Date().toISOString() }).eq('id', batch.id);
-        await admin.from('data_migrations').update({ status: 'failed' }).eq('id', migration.id).eq('status', 'testing');
-      }
-    })();
-
-    return res.status(202).json({ ok: true, batch_id: batch.id });
+    // Même geste que le bot (server/lib/migration/execution.ts) : lancé en arrière-plan ici,
+    // la progression vit dans migration_import_batches et data_migrations.status.
+    void lancerImportTest(admin, migration, { id: auth.user.id, role: 'platform_admin' })
+      .catch((err) => console.error('[migration-admin] test import failed:', err?.message || err));
+    return res.status(202).json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Import test impossible.', '[migration-admin]');
   }
@@ -763,58 +691,26 @@ router.post('/migration-admin/migrations/:id/request-approval', async (req, res)
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
-    if (migration.status !== 'test_review') {
-      return res.status(409).json({ error: 'Un import test complété est requis avant de demander l\'approbation.' });
-    }
-    const { data: batch } = await admin
-      .from('migration_import_batches')
-      .select('id, status')
-      .eq('migration_id', migration.id)
-      .eq('kind', 'test')
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!batch) return res.status(409).json({ error: 'Aucun import test complété.' });
-
-    // Garde-fous anti-perte silencieuse (audit 2026-08-25, Q117) :
-    // 1) un fichier tronqué signifie des lignes jamais analysées — on ne fait
-    //    pas approuver un rapport incomplet : scinder le fichier d'abord.
-    const { data: truncated } = await admin
-      .from('migration_files')
-      .select('original_name')
-      .eq('migration_id', migration.id)
-      .eq('parse_error', 'truncated')
-      .is('deleted_at', null)
-      .limit(5);
-    if ((truncated ?? []).length > 0) {
-      return res.status(409).json({
-        error: `Fichier(s) tronqué(s) (limite de lignes) : ${(truncated ?? []).map((f) => f.original_name).join(', ')} — scindez les exports puis ré-analysez.`,
-      });
-    }
-    // 2) des colonnes « À vérifier » non tranchées = données qui n'entreront
-    //    pas dans l'import sans que personne ne l'ait décidé.
-    const { count: pendingMappings } = await admin
-      .from('migration_field_mappings')
-      .select('id', { count: 'exact', head: true })
-      .eq('migration_id', migration.id)
-      .eq('status', 'needs_review');
-    if ((pendingMappings ?? 0) > 0) {
-      return res.status(409).json({
-        error: `${pendingMappings} colonne(s) « À vérifier » non tranchée(s) — confirmez ou rejetez chaque correspondance avant de demander l'approbation.`,
-      });
-    }
-
-    const { error } = await admin
-      .from('data_migrations')
-      .update({ status: 'waiting_for_approval' })
-      .eq('id', migration.id)
-      .eq('status', 'test_review');
-    if (error) throw error;
-    await logMigrationAudit(admin, { migrationId: migration.id, action: 'approval.request', actorId: auth.user.id, actorRole: 'platform_admin' });
+    const refus = await demanderApprobation(admin, migration, { id: auth.user.id, role: 'platform_admin' });
+    if (refus) return res.status(409).json({ error: refus });
     return res.json({ ok: true });
   } catch (err: any) {
     return sendSafeError(res, err, 'Demande d\'approbation impossible.', '[migration-admin]');
+  }
+});
+
+// ── Bot de migration : une passe « lorsque demandé » ─────────────────
+router.post('/migration-admin/migrations/:id/bot', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const rapport = await executerBotMigration(admin, migration.id, { acteurId: auth.user.id, declencheur: 'manuel' });
+    return res.json(rapport);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Passe du bot impossible.', '[migration-admin]');
   }
 });
 

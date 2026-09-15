@@ -529,6 +529,7 @@ export const migrationPatchSchema = z.object({
   invited_user_id: z.string().uuid().optional().nullable(),
   assigned_admin: z.string().uuid().optional().nullable(),
   assigned_assistant: z.string().uuid().optional().nullable(),
+  bot_actif: z.boolean().optional(),
   freeze_start: z.string().optional().nullable(),
   freeze_end: z.string().optional().nullable(),
 }).refine((obj) => Object.keys(obj).length > 0, 'Request body cannot be empty.');

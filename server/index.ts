@@ -1292,6 +1292,18 @@ app.listen(port, '0.0.0.0', () => {
         setTimeout(runDunning, 30_000);
         logger.info('[dunning] Cron started (every 6h, lock-guarded)');
 
+        // Bot de migration — reprend chaque migration où bot_actif est vrai
+        // (fichiers déposés, réponses du client…). Dix minutes : le client
+        // répond à l'échelle de l'heure, pas de la seconde.
+        import('./lib/migration/bot').then(({ passeCronBot }) => {
+          const runBot = () =>
+            withAdvisoryLock('migration-bot', () => withCronCheckIn('migration-bot', () => passeCronBot(getServiceClient())))
+              .catch((e: any) => captureCronFailure('migration-bot', e));
+          setInterval(runBot, 10 * 60 * 1000);
+          setTimeout(runBot, 60_000);
+          logger.info('[migration-bot] Cron started (every 10min, lock-guarded)');
+        });
+
         // Abonnements figés — période dépassée alors que le statut reste
         // `active`. Ne suspend RIEN : pose une trace dans security_events.
         // Constat du 2026-09-03 : les 7 abonnements de prod étaient dans ce
