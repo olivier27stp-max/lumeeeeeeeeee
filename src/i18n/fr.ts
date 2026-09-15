@@ -3724,7 +3724,11 @@ const fr: TranslationKeys = {
     // Conversation (assistant puis humain)
     chatIntro: 'L’assistant répond tout de suite. Une personne de l’équipe prend le relais dès que c’est nécessaire.',
     welcome: 'Bonjour ! Moi c’est Lumi, le même assistant que sur le site et dans votre portail de migration. Je connais votre compte : posez votre question, ou choisissez-en une ci-dessous. Si ça dépasse ce que je sais, je vous passe à l’équipe.',
-    suggestionsIntro: 'Questions classiques :',
+    suggestionsIntro: 'Posez-moi des questions comme :',
+    lumiSubtitle: 'Assistant Lume',
+    browseHelp: 'Parcourir l’aide',
+    askLumi: 'Poser la question à Lumi',
+    aiDisclaimer: 'Lumi est une IA et peut se tromper.',
     chatPlaceholder: 'Écrivez votre question…',
     talkToHuman: 'Parler à un humain',
     humanNotified: 'Votre demande est chez l’équipe — réponse sous {delay}. Vous serez aussi prévenu par courriel.',

@@ -28,7 +28,7 @@ const client: any = {
     o.update = (v: unknown) => { req.op = 'update'; req.valeur = v; return o; };
     const reponse = () => {
       if (table === 'support_slack_channels' && req.op === 'select') {
-        const org = req.filtres.find(([c]: any) => c === 'org_id')?.[1];
+        const org = (req.filtres as Array<[string, unknown]>).find(([c]) => c === 'org_id')?.[1];
         return org ? mappings.find((m) => m.org_id === org) || null : mappings;
       }
       if (table === 'support_slack_channels' && req.op === 'insert') { mappings.push(req.valeur); return req.valeur; }

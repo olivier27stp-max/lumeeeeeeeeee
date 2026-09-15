@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, X, ChevronDown, LifeBuoy, ArrowLeft } from 'lucide-react';
+import { Search, X, ChevronDown, LifeBuoy, ArrowLeft, BookOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { Z } from '../lib/zIndex';
@@ -34,13 +34,14 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
   /** Élément focalisé avant l'ouverture — on lui rend le focus à la fermeture. */
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
-  // Reset to the browse view each time the drawer opens, so it never reopens
-  // mid-form with stale state.
+  // Le tiroir s'ouvre directement sur Lumi (la même interface que sur le
+  // site) ; les articles sont derrière « Parcourir l'aide ». `showForm` = vue
+  // conversation.
   useEffect(() => {
     if (!open) return;
     setQuery('');
     setExpanded(null);
-    setShowForm(false);
+    setShowForm(true);
     returnFocusRef.current = document.activeElement as HTMLElement | null;
   }, [open]);
 
@@ -60,7 +61,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (showForm) setShowForm(false);
+        if (!showForm) setShowForm(true); // articles → retour à Lumi
         else onClose();
         return;
       }
@@ -136,29 +137,42 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
             // écraserait la restauration vers le FAB.
             onAnimationComplete={(definition: unknown) => {
               const x = (definition as { x?: number | string })?.x;
-              if (x === 0) searchRef.current?.focus();
+              if (x !== 0) return;
+              if (showForm) panelRef.current?.querySelector<HTMLInputElement>('form input')?.focus();
+              else searchRef.current?.focus();
             }}
             style={{ zIndex: Z.supportDrawer }}
             className="fixed top-0 right-0 bottom-0 w-full sm:w-[420px] bg-surface-elevated border-l border-outline shadow-2xl flex flex-col"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-outline-subtle shrink-0">
-              <div className="flex items-center gap-2.5">
-                {showForm && (
+            {/* Header — le même que le widget Lumi du site */}
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-outline-subtle shrink-0">
+              {showForm ? (
+                <>
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.18)]" aria-hidden="true" />
+                  <h2 className="font-bold text-[15px] text-text-primary">Lumi</h2>
+                  <span className="text-xs text-text-tertiary">· {ts.lumiSubtitle}</span>
                   <button
+                    type="button"
                     onClick={() => setShowForm(false)}
+                    className="ml-auto inline-flex items-center gap-1.5 text-[12px] font-semibold text-text-secondary hover:text-text-primary"
+                  >
+                    <BookOpen size={14} aria-hidden="true" /> {ts.browseHelp}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(true)}
                     aria-label={ts.back}
                     className="w-7 h-7 rounded-lg hover:bg-surface-secondary flex items-center justify-center text-text-secondary transition-colors"
                   >
                     <ArrowLeft size={16} />
                   </button>
-                )}
-                <h2 className="text-[16px] font-bold text-text-primary">
-                  {showForm
-                    ? ts.contactTitle
-                    : ts.needHand}
-                </h2>
-              </div>
+                  <h2 className="text-[16px] font-bold text-text-primary">{ts.needHand}</h2>
+                  <span className="ml-auto" />
+                </>
+              )}
               <button
                 onClick={onClose}
                 aria-label={ts.close}
@@ -169,7 +183,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
             </div>
 
             {showForm ? (
-              <div className="flex-1 overflow-hidden p-5 flex flex-col">
+              <div className="flex-1 overflow-hidden flex flex-col">
                 <SupportChat compact />
               </div>
             ) : (
@@ -203,7 +217,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                         {ts.drawerNoMatch}
                       </p>
                       <button onClick={() => setShowForm(true)} className="glass-button-primary text-[13px]">
-                        {ts.askSupport}
+                        {ts.askLumi}
                       </button>
                     </div>
                   ) : (
@@ -277,7 +291,7 @@ export default function SupportDrawer({ open, onClose }: { open: boolean; onClos
                     className="w-full glass-button-primary inline-flex items-center justify-center gap-2 !py-2.5"
                   >
                     <LifeBuoy size={15} />
-                    {ts.getSupport}
+                    {ts.askLumi}
                   </button>
                 </div>
               </>
