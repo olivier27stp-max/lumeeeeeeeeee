@@ -5,9 +5,10 @@
      • 5 étoiles → redirection Google / Facebook + message d'invitation
      • 4 étoiles ou moins → formulaire de commentaires interne + tâche de suivi
 
-   Cette page possède les liens de redirection, le message d'invitation et
-   l'interrupteur principal (colonnes de company_settings). Les délais et
-   textes des automatisations restent dans Réglages → Messagerie SMS.
+   Cette page possède les liens de redirection, l'interrupteur principal et
+   TOUS les textes vus par le client (colonnes review_* de company_settings :
+   SMS, courriel, question, message note basse, remerciement, invitation),
+   plus le SMS de rappel de l'automatisation review_reminder_7d.
    ═══════════════════════════════════════════════════════════════ */
 
 import { useEffect, useId, useState } from 'react';
@@ -24,6 +25,9 @@ import {
   Zap,
   Facebook,
   Globe,
+  Mail,
+  MessageSquare,
+  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
@@ -31,7 +35,7 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { cn } from '../lib/utils';
 import { PageHeader } from '../components/ui';
 import { useTranslation } from '../i18n';
-import { getAutomationRules, toggleAutomationRule, type AutomationRule } from '../lib/automationRulesApi';
+import { getAutomationRules, toggleAutomationRule, updateRuleSmsBody, type AutomationRule } from '../lib/automationRulesApi';
 
 // Miroir de server/lib/reviews.ts (texte par défaut affiché au client).
 const DEFAULT_INVITE_FR =
@@ -41,6 +45,44 @@ const DEFAULT_INVITE_EN =
   'Thank you so much! Your review means the world to a small business like ours. '
   + 'Would you take 30 seconds to share your experience? It truly helps us.';
 
+// Défauts des messages (miroir de server/lib/reviews.ts).
+const DEFAULT_SMS_FR =
+  "Bonjour [client_first_name], merci d'avoir choisi [company_name] ! "
+  + "Comment s'est passé notre service ? Notez-nous en 10 secondes : [survey_url]";
+const DEFAULT_EMAIL_SUBJECT_FR = "[company_name] — Comment s'est passé notre service ?";
+const DEFAULT_EMAIL_BODY_FR =
+  'Bonjour [client_first_name],\n\n'
+  + 'Nous venons de terminer [job_name] et votre opinion compte pour nous.\n\n'
+  + 'Notez votre expérience en 10 secondes :\n\n'
+  + '[survey_url]\n\n'
+  + "Merci d'avoir choisi [company_name] !";
+const DEFAULT_QUESTION_FR = "Comment s'est passé notre service ?";
+const DEFAULT_QUESTION_EN = 'How did we do?';
+const DEFAULT_LOW_RATING_FR =
+  "Nous sommes désolés que ce ne soit pas à la hauteur. Dites-nous ce qui n'a pas fonctionné : "
+  + "votre message est envoyé directement à l'équipe, il n'est pas publié.";
+const DEFAULT_LOW_RATING_EN =
+  "We're sorry it wasn't up to par. Tell us what went wrong: your message goes straight to the team, it is not published.";
+const DEFAULT_THANK_YOU_FR = "Merci pour votre franchise. Un membre de l'équipe vous contactera rapidement.";
+const DEFAULT_THANK_YOU_EN = 'Thank you for your honesty. A team member will reach out to you shortly.';
+
+const TEMPLATE_VARIABLES = ['client_first_name', 'client_name', 'company_name', 'job_name', 'survey_url'] as const;
+
+const SAMPLE_VARS: Record<string, string> = {
+  client_first_name: 'Marie',
+  client_name: 'Marie Tremblay',
+  company_name: 'Votre entreprise',
+  job_name: 'Lavage de vitres',
+  survey_url: 'https://lumecrm.net/survey/8f3a…',
+};
+
+function resolveSample(template: string, companyName?: string): string {
+  const vars: Record<string, string> = { ...SAMPLE_VARS, company_name: companyName || SAMPLE_VARS.company_name };
+  return template
+    .replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
+    .replace(/\[(\w+)\]/g, (_, k) => vars[k] ?? '');
+}
+
 const REVIEW_PRESET_KEYS = ['google_review', 'review_reminder_7d'];
 
 interface ReviewSettings {
@@ -49,6 +91,13 @@ interface ReviewSettings {
   google_review_url: string;
   facebook_review_url: string;
   review_invite_message: string;
+  review_sms_body: string;
+  review_email_subject: string;
+  review_email_body: string;
+  review_survey_question: string;
+  review_low_rating_message: string;
+  review_thank_you_message: string;
+  company_name: string;
 }
 
 const EMPTY: ReviewSettings = {
@@ -56,6 +105,13 @@ const EMPTY: ReviewSettings = {
   google_review_url: '',
   facebook_review_url: '',
   review_invite_message: '',
+  review_sms_body: '',
+  review_email_subject: '',
+  review_email_body: '',
+  review_survey_question: '',
+  review_low_rating_message: '',
+  review_thank_you_message: '',
+  company_name: '',
 };
 
 function normalizeUrl(raw: string): string {
@@ -91,6 +147,9 @@ export default function SettingsReviews() {
   const [saved, setSaved] = useState(false);
   const [rules, setRules] = useState<AutomationRule[]>([]);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [ruleDraft, setRuleDraft] = useState('');
+  const [savingRule, setSavingRule] = useState(false);
 
   const update = <K extends keyof ReviewSettings>(key: K, value: ReviewSettings[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -106,7 +165,7 @@ export default function SettingsReviews() {
       const [{ data, error }, allRules] = await Promise.all([
         supabase
           .from('company_settings')
-          .select('id, review_enabled, google_review_url, facebook_review_url, review_invite_message')
+          .select('id, company_name, review_enabled, google_review_url, facebook_review_url, review_invite_message, review_sms_body, review_email_subject, review_email_body, review_survey_question, review_low_rating_message, review_thank_you_message')
           .eq('org_id', orgId)
           .limit(1)
           .maybeSingle(),
@@ -120,6 +179,13 @@ export default function SettingsReviews() {
           google_review_url: data.google_review_url || '',
           facebook_review_url: data.facebook_review_url || '',
           review_invite_message: data.review_invite_message || '',
+          review_sms_body: data.review_sms_body || '',
+          review_email_subject: data.review_email_subject || '',
+          review_email_body: data.review_email_body || '',
+          review_survey_question: data.review_survey_question || '',
+          review_low_rating_message: data.review_low_rating_message || '',
+          review_thank_you_message: data.review_thank_you_message || '',
+          company_name: data.company_name || '',
         });
       }
       setRules(allRules.filter((r) => r.preset_key && REVIEW_PRESET_KEYS.includes(r.preset_key)));
@@ -165,6 +231,12 @@ export default function SettingsReviews() {
         google_review_url: google,
         facebook_review_url: facebook,
         review_invite_message: form.review_invite_message.trim() || null,
+        review_sms_body: form.review_sms_body.trim() || null,
+        review_email_subject: form.review_email_subject.trim() || null,
+        review_email_body: form.review_email_body.trim() || null,
+        review_survey_question: form.review_survey_question.trim() || null,
+        review_low_rating_message: form.review_low_rating_message.trim() || null,
+        review_thank_you_message: form.review_thank_you_message.trim() || null,
         updated_at: new Date().toISOString(),
       };
 
@@ -206,8 +278,43 @@ export default function SettingsReviews() {
     }
   }
 
+  function smsBodyOf(rule: AutomationRule): string {
+    return String(rule.actions.find((a) => a.type === 'send_sms')?.config?.body || '');
+  }
+
+  async function handleSaveRuleSms(rule: AutomationRule) {
+    setSavingRule(true);
+    try {
+      await updateRuleSmsBody(rule.id, ruleDraft.trim());
+      setRules((prev) => prev.map((r) => (r.id === rule.id
+        ? { ...r, actions: r.actions.map((a) => (a.type === 'send_sms' ? { ...a, config: { ...a.config, body: ruleDraft.trim() } } : a)) }
+        : r)));
+      setEditingRuleId(null);
+      toast.success(isFr ? 'SMS de rappel enregistré.' : 'Reminder SMS saved.');
+    } catch (e: any) {
+      toast.error(e?.message || (isFr ? 'Impossible d’enregistrer le SMS.' : 'Could not save the SMS.'));
+    } finally {
+      setSavingRule(false);
+    }
+  }
+
   const inviteDefault = isFr ? DEFAULT_INVITE_FR : DEFAULT_INVITE_EN;
   const invitePreview = form.review_invite_message.trim() || inviteDefault;
+  const smsPreview = resolveSample(form.review_sms_body.trim() || DEFAULT_SMS_FR, form.company_name);
+  const emailSubjectPreview = resolveSample(form.review_email_subject.trim() || DEFAULT_EMAIL_SUBJECT_FR, form.company_name);
+  const emailBodyPreview = resolveSample(form.review_email_body.trim() || DEFAULT_EMAIL_BODY_FR, form.company_name);
+  const questionDefault = isFr ? DEFAULT_QUESTION_FR : DEFAULT_QUESTION_EN;
+  const lowRatingDefault = isFr ? DEFAULT_LOW_RATING_FR : DEFAULT_LOW_RATING_EN;
+  const thankYouDefault = isFr ? DEFAULT_THANK_YOU_FR : DEFAULT_THANK_YOU_EN;
+
+  const variablesHint = (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-text-tertiary">
+      <span>{isFr ? 'Variables :' : 'Variables:'}</span>
+      {TEMPLATE_VARIABLES.map((v) => (
+        <code key={v} className="rounded-md bg-surface-secondary border border-outline px-1.5 py-0.5 text-[11px] text-text-secondary">[{v}]</code>
+      ))}
+    </div>
+  );
 
   if (loading) {
     return (
@@ -418,6 +525,146 @@ export default function SettingsReviews() {
         </div>
       </div>
 
+      {/* ── Messages du sondage (SMS + courriel) ── */}
+      <div className="section-card p-6 space-y-5">
+        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+          <Send size={12} /> {isFr ? 'Messages envoyés à la fin de la job' : 'Messages sent when the job is done'}
+        </h3>
+        {variablesHint}
+
+        <div className="space-y-2">
+          <label htmlFor={`${id}-sms`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+            <MessageSquare size={10} /> SMS
+          </label>
+          <textarea
+            id={`${id}-sms`}
+            value={form.review_sms_body}
+            onChange={(e) => update('review_sms_body', e.target.value)}
+            rows={3}
+            maxLength={320}
+            placeholder={DEFAULT_SMS_FR}
+            className="glass-input w-full resize-none"
+          />
+          <div className="flex items-center justify-between text-[12px] text-text-tertiary">
+            <span>{isFr ? 'Le lien [survey_url] est ajouté à la fin s’il manque.' : 'The [survey_url] link is appended if missing.'}</span>
+            <span>{form.review_sms_body.length}/320</span>
+          </div>
+          <div className="rounded-2xl border border-outline bg-surface-subtle p-4">
+            <p className="text-[11px] uppercase tracking-wider text-text-tertiary mb-2">{isFr ? 'Aperçu' : 'Preview'}</p>
+            <div className="max-w-[320px] rounded-2xl rounded-bl-sm bg-[#e5e5ea] text-black px-3.5 py-2.5 text-[14px] leading-snug">{smsPreview}</div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor={`${id}-email-subject`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1">
+            <Mail size={10} /> {isFr ? 'Courriel — objet' : 'Email — subject'}
+          </label>
+          <input
+            id={`${id}-email-subject`}
+            type="text"
+            value={form.review_email_subject}
+            onChange={(e) => update('review_email_subject', e.target.value)}
+            maxLength={200}
+            placeholder={DEFAULT_EMAIL_SUBJECT_FR}
+            className="glass-input w-full"
+          />
+          <label htmlFor={`${id}-email-body`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider flex items-center gap-1 pt-2">
+            <Mail size={10} /> {isFr ? 'Courriel — corps' : 'Email — body'}
+          </label>
+          <textarea
+            id={`${id}-email-body`}
+            value={form.review_email_body}
+            onChange={(e) => update('review_email_body', e.target.value)}
+            rows={7}
+            maxLength={2000}
+            placeholder={DEFAULT_EMAIL_BODY_FR}
+            className="glass-input w-full resize-y"
+          />
+          <div className="flex items-center justify-between text-[12px] text-text-tertiary">
+            <span>{isFr ? 'Texte simple. Une ligne vide = nouveau paragraphe. [survey_url] devient le bouton « Noter mon expérience ».' : 'Plain text. A blank line = new paragraph. [survey_url] becomes the “Rate my experience” button.'}</span>
+            <span>{form.review_email_body.length}/2000</span>
+          </div>
+          <div className="rounded-2xl border border-outline bg-surface-subtle p-4 space-y-3">
+            <p className="text-[11px] uppercase tracking-wider text-text-tertiary">{isFr ? 'Aperçu' : 'Preview'}</p>
+            <div className="rounded-xl border border-outline bg-surface-card overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-outline text-[13px]"><span className="text-text-tertiary">{isFr ? 'Objet :' : 'Subject:'}</span> <strong>{emailSubjectPreview}</strong></div>
+              <div className="px-5 py-4 text-[14px] leading-relaxed text-text-primary space-y-3">
+                {emailBodyPreview.split(/\n{2,}/).map((para, i) => (
+                  para.trim() === SAMPLE_VARS.survey_url
+                    ? (
+                      <div key={i} className="flex justify-center py-1">
+                        <span className="rounded-lg bg-neutral-900 text-white text-[13px] font-bold px-8 py-3">{isFr ? 'Noter mon expérience' : 'Rate my experience'}</span>
+                      </div>
+                    )
+                    : <p key={i} className="whitespace-pre-line">{para}</p>
+                ))}
+                {!emailBodyPreview.includes(SAMPLE_VARS.survey_url) && (
+                  <div className="flex justify-center py-1">
+                    <span className="rounded-lg bg-neutral-900 text-white text-[13px] font-bold px-8 py-3">{isFr ? 'Noter mon expérience' : 'Rate my experience'}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Textes de la page du sondage ── */}
+      <div className="section-card p-6 space-y-5">
+        <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
+          <Star size={12} /> {isFr ? 'Textes de la page du sondage' : 'Survey page texts'}
+        </h3>
+
+        <div className="space-y-1">
+          <label htmlFor={`${id}-question`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            {isFr ? 'Question au-dessus des étoiles' : 'Question above the stars'}
+          </label>
+          <input
+            id={`${id}-question`}
+            type="text"
+            value={form.review_survey_question}
+            onChange={(e) => update('review_survey_question', e.target.value)}
+            maxLength={160}
+            placeholder={questionDefault}
+            className="glass-input w-full"
+          />
+          <p className="text-[12px] text-text-tertiary">{isFr ? 'Précédée de « Bonjour Prénom, » quand le prénom est connu.' : 'Preceded by “Hi First name,” when the first name is known.'}</p>
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor={`${id}-low`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            {isFr ? 'Message note basse (4 étoiles ou moins)' : 'Low rating message (4 stars or less)'}
+          </label>
+          <textarea
+            id={`${id}-low`}
+            value={form.review_low_rating_message}
+            onChange={(e) => update('review_low_rating_message', e.target.value)}
+            rows={3}
+            maxLength={400}
+            placeholder={lowRatingDefault}
+            className="glass-input w-full resize-none"
+          />
+          <p className="text-[12px] text-text-tertiary">{isFr ? 'Affiché au-dessus du formulaire de commentaires.' : 'Shown above the feedback form.'}</p>
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor={`${id}-thanks`} className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
+            {isFr ? 'Remerciement après les commentaires' : 'Thank-you after feedback'}
+          </label>
+          <textarea
+            id={`${id}-thanks`}
+            value={form.review_thank_you_message}
+            onChange={(e) => update('review_thank_you_message', e.target.value)}
+            rows={2}
+            maxLength={300}
+            placeholder={thankYouDefault}
+            className="glass-input w-full resize-none"
+          />
+        </div>
+
+        <p className="text-[12px] text-text-tertiary">{isFr ? 'Vide = texte par défaut affiché en gris.' : 'Empty = the default text shown in grey.'}</p>
+      </div>
+
       {/* ── Automatisations liées ── */}
       <div className="section-card p-6 space-y-3">
         <h3 className="text-[13px] font-semibold uppercase tracking-wider text-text-tertiary flex items-center gap-1.5">
@@ -430,7 +677,8 @@ export default function SettingsReviews() {
         ) : (
           <ul className="divide-y divide-outline">
             {rules.map((rule) => (
-              <li key={rule.id} className="flex items-center justify-between gap-4 py-3">
+              <li key={rule.id} className="py-3 space-y-3">
+              <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium text-text-primary">
                     {rule.preset_key === 'google_review'
@@ -460,12 +708,47 @@ export default function SettingsReviews() {
                     rule.is_active ? 'translate-x-6' : 'translate-x-1',
                   )} />
                 </button>
+              </div>
+              {rule.preset_key !== 'google_review' && rule.actions.some((a) => a.type === 'send_sms') && (
+                editingRuleId === rule.id ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={ruleDraft}
+                      onChange={(e) => setRuleDraft(e.target.value)}
+                      aria-label={isFr ? 'Texte du SMS de rappel' : 'Reminder SMS text'}
+                      rows={3}
+                      maxLength={320}
+                      className="glass-input w-full resize-none"
+                    />
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-text-tertiary">
+                      <span>{isFr ? 'Variables : [client_first_name] [company_name] [review_page_url]' : 'Variables: [client_first_name] [company_name] [review_page_url]'}</span>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setEditingRuleId(null)} className="glass-button text-[12px]">{isFr ? 'Annuler' : 'Cancel'}</button>
+                        <button type="button" onClick={() => handleSaveRuleSms(rule)} disabled={savingRule || !ruleDraft.trim()} className="glass-button text-[12px] !bg-primary !text-white !border-primary disabled:opacity-50">
+                          {savingRule ? (isFr ? 'Enregistrement…' : 'Saving…') : (isFr ? 'Enregistrer le SMS' : 'Save SMS')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start justify-between gap-3 rounded-xl border border-outline bg-surface-subtle px-3 py-2">
+                    <p className="text-[13px] text-text-secondary whitespace-pre-line">{smsBodyOf(rule)}</p>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingRuleId(rule.id); setRuleDraft(smsBodyOf(rule)); }}
+                      className="glass-button inline-flex items-center gap-1 text-[12px] shrink-0"
+                    >
+                      <Pencil size={11} /> {isFr ? 'Modifier' : 'Edit'}
+                    </button>
+                  </div>
+                )
+              )}
               </li>
             ))}
           </ul>
         )}
         <p className="text-[12px] text-text-tertiary">
-          {isFr ? 'Textes des SMS et délais : ' : 'SMS wording and delays: '}
+          {isFr ? 'Délais et autres automatisations : ' : 'Delays and other automations: '}
           <Link to="/settings/messaging" className="text-primary hover:underline">
             {isFr ? 'Réglages → Messagerie SMS' : 'Settings → SMS Messaging'}
           </Link>

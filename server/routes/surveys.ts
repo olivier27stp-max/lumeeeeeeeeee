@@ -17,11 +17,12 @@ import {
   reviewDestinations,
   reviewInviteMessage,
   surveyNextStep,
+  surveyTexts,
 } from '../lib/reviews';
 
 const router = Router();
 
-const COMPANY_REVIEW_COLUMNS = 'company_name, google_review_url, facebook_review_url, review_invite_message';
+const COMPANY_REVIEW_COLUMNS = 'company_name, google_review_url, facebook_review_url, review_invite_message, review_survey_question, review_low_rating_message, review_thank_you_message';
 
 async function loadCompany(supabase: ReturnType<typeof getServiceClient>, orgId: string) {
   const { data } = await supabase
@@ -83,6 +84,8 @@ router.get('/survey/:token', async (req, res) => {
       destinations: reviewDestinations(company),
       invite_message: reviewInviteMessage(company, 'fr'),
       invite_message_en: reviewInviteMessage(company, 'en'),
+      texts: surveyTexts(company, 'fr'),
+      texts_en: surveyTexts(company, 'en'),
       // Rétro-compat pour d'anciens clients de l'API
       google_review_url: reviewDestinations(company).find((d) => d.platform === 'google')?.url || null,
     });
@@ -202,6 +205,8 @@ router.post('/survey/:token', async (req, res) => {
       auto_redirect_url: next.auto_redirect_url,
       invite_message: reviewInviteMessage(company, 'fr'),
       invite_message_en: reviewInviteMessage(company, 'en'),
+      texts: surveyTexts(company, 'fr'),
+      texts_en: surveyTexts(company, 'en'),
       feedback_needed: !positive && !inlineFeedback,
       // Rétro-compat
       redirect_to_review: positive,

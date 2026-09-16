@@ -19,6 +19,8 @@ const AUTO_REDIRECT_SECONDS = 5;
 
 interface Destination { platform: 'google' | 'facebook'; url: string }
 
+interface SurveyTexts { question: string; low_rating_message: string; thank_you_message: string; invite_message: string }
+
 interface SurveyData {
   token: string;
   submitted: boolean;
@@ -31,6 +33,8 @@ interface SurveyData {
   destinations: Destination[];
   invite_message: string;
   invite_message_en: string;
+  texts?: SurveyTexts;
+  texts_en?: SurveyTexts;
 }
 
 type Step = 'rate' | 'public_review' | 'feedback' | 'done';
@@ -102,6 +106,7 @@ export default function SatisfactionSurvey() {
 
   const [destinations, setDestinations] = useState<Destination[]>([]);
   const [inviteMessage, setInviteMessage] = useState('');
+  const [texts, setTexts] = useState<SurveyTexts | null>(null);
   const [autoRedirectUrl, setAutoRedirectUrl] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(AUTO_REDIRECT_SECONDS);
   /** Commentaire public (note haute) : copié dans le presse-papiers puis collé par le client sur Google. */
@@ -119,6 +124,7 @@ export default function SatisfactionSurvey() {
         setSurvey(data);
         setDestinations(data.destinations || []);
         setInviteMessage(isFr ? data.invite_message : data.invite_message_en);
+        setTexts((isFr ? data.texts : data.texts_en) || null);
         if (data.submitted && data.rating != null) {
           setRating(data.rating);
           if (data.rating >= 5) {
@@ -251,6 +257,9 @@ export default function SatisfactionSurvey() {
 
   const firstName = survey?.client_name ? survey.client_name.split(' ')[0] : '';
   const company = survey?.company_name || '';
+  const question = texts?.question || (isFr ? 'Comment s’est passé notre service ?' : 'How did we do?');
+  const lowRatingMessage = texts?.low_rating_message || `${T.sorry} ${T.tellUs}`;
+  const thankYouMessage = texts?.thank_you_message || `${T.thanksFeedback} ${T.followUp}`;
 
   // ── 2a. Note haute : message + plateformes ──
   if (step === 'public_review') {
@@ -328,8 +337,7 @@ export default function SatisfactionSurvey() {
       <Card>
         <div className="text-center mb-6">
           <Stars value={rating} size={28} />
-          <h1 className="text-xl font-bold text-gray-900 mt-5 mb-2">{T.sorry}</h1>
-          <p className="text-gray-600 text-sm">{T.tellUs}</p>
+          <p className="text-gray-700 text-base leading-relaxed mt-5">{lowRatingMessage}</p>
         </div>
         <textarea
           value={feedback}
@@ -363,8 +371,7 @@ export default function SatisfactionSurvey() {
           <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
             <Check size={24} />
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">{T.thanksFeedback}</h1>
-          <p className="text-gray-600">{survey?.feedback_submitted ? T.alreadyDone : T.followUp}</p>
+          <p className="text-gray-700 text-base leading-relaxed">{survey?.feedback_submitted ? T.alreadyDone : thankYouMessage}</p>
           {liensPublics}
         </div>
       </Card>
@@ -378,8 +385,8 @@ export default function SatisfactionSurvey() {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">{company || T.yourExperience}</h1>
         <p className="text-gray-600">
           {firstName
-            ? (isFr ? `Bonjour ${firstName}, comment s’est passé notre service ?` : `Hi ${firstName}, how did we do?`)
-            : (isFr ? 'Comment s’est passé notre service ?' : 'How did we do?')}
+            ? `${isFr ? 'Bonjour' : 'Hi'} ${firstName}, ${question}`
+            : question}
         </p>
         {survey?.job_name && (
           <p className="text-sm text-gray-500 mt-1">

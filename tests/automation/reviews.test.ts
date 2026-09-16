@@ -7,6 +7,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   DEFAULT_REVIEW_INVITE_MESSAGE_FR,
+  DEFAULT_SURVEY_QUESTION_FR,
+  reviewEmail,
+  reviewSmsBody,
+  surveyTexts,
   isPositiveRating,
   isValidRating,
   normalizeReviewUrl,
@@ -110,5 +114,56 @@ describe('Avis clients — message d’invitation', () => {
 
   it('texte personnalisé prioritaire', () => {
     expect(reviewInviteMessage({ review_invite_message: 'Merci !' }, 'fr')).toBe('Merci !');
+  });
+});
+
+describe('Avis clients — messages personnalisables', () => {
+  const vars = {
+    client_first_name: 'Marie',
+    client_name: 'Marie Tremblay',
+    company_name: 'Vision Lavage',
+    job_name: 'Lavage de vitres',
+    survey_url: 'https://lumecrm.net/survey/abc',
+  };
+
+  it('SMS par défaut, variables résolues', () => {
+    const body = reviewSmsBody({}, vars);
+    expect(body).toContain('Bonjour Marie');
+    expect(body).toContain('Vision Lavage');
+    expect(body).toContain(vars.survey_url);
+  });
+
+  it('SMS personnalisé, lien ajouté s’il manque', () => {
+    const body = reviewSmsBody({ review_sms_body: 'Salut [client_first_name], une note pour [company_name] ?' }, vars);
+    expect(body).toBe('Salut Marie, une note pour Vision Lavage ? https://lumecrm.net/survey/abc');
+  });
+
+  it('courriel par défaut : objet résolu + bouton vers le sondage', () => {
+    const mail = reviewEmail({}, vars);
+    expect(mail.subject).toBe("Vision Lavage — Comment s'est passé notre service ?");
+    expect(mail.html).toContain(`href="${vars.survey_url}"`);
+    expect(mail.html).toContain('Noter mon expérience');
+    expect(mail.html).toContain('Lavage de vitres');
+  });
+
+  it('courriel personnalisé : paragraphes, HTML échappé, bouton ajouté à la fin si [survey_url] absent', () => {
+    const mail = reviewEmail({
+      review_email_subject: 'Votre avis, [client_first_name] ?',
+      review_email_body: 'Bonjour [client_first_name],\n\nMerci <3 pour votre confiance.',
+    }, vars);
+    expect(mail.subject).toBe('Votre avis, Marie ?');
+    expect(mail.html).toContain('<p style="margin:0 0 16px;">Bonjour Marie,</p>');
+    expect(mail.html).toContain('Merci &lt;3 pour votre confiance.');
+    expect(mail.html.indexOf('Noter mon expérience')).toBeGreaterThan(mail.html.indexOf('confiance'));
+    expect(mail.text.endsWith(vars.survey_url)).toBe(true);
+  });
+
+  it('textes de la page : défauts FR/EN puis personnalisés', () => {
+    expect(surveyTexts({}, 'fr').question).toBe(DEFAULT_SURVEY_QUESTION_FR);
+    expect(surveyTexts({}, 'en').question).toBe('How did we do?');
+    const t = surveyTexts({ review_survey_question: 'Alors, content ?', review_thank_you_message: 'Merci !' }, 'fr');
+    expect(t.question).toBe('Alors, content ?');
+    expect(t.thank_you_message).toBe('Merci !');
+    expect(t.low_rating_message.length).toBeGreaterThan(10);
   });
 });

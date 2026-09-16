@@ -5,7 +5,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
-import { reviewDestinations } from '../reviews';
+import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -769,7 +769,7 @@ export async function executeRequestReview(
   // 1. Réglages « Avis clients » : au moins une plateforme + interrupteur actif
   const { data: cs } = await ctx.supabase
     .from('company_settings')
-    .select('review_enabled, google_review_url, facebook_review_url')
+    .select('review_enabled, google_review_url, facebook_review_url, review_sms_body, review_email_subject, review_email_body')
     .eq('org_id', ctx.orgId)
     .limit(1)
     .maybeSingle();
@@ -851,47 +851,36 @@ export async function executeRequestReview(
   vars.survey_url = surveyUrl;
   vars.review_link = surveyUrl;
 
-  // 8. Courriel : gabarit personnalisé « review_request » sinon texte par défaut
-  const companyLabel = vars.company_name || 'notre équipe';
-  let subject = `${companyLabel} — Comment s'est passé notre service ?`;
-  let body = `
-    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-      <h2>Bonjour ${clientGreeting},</h2>
-      <p>Nous venons de terminer <strong>${vars.job_name || 'votre projet'}</strong> et votre opinion compte pour nous.</p>
-      <p>Notez votre expérience en 10 secondes :</p>
-      <p style="text-align:center;margin:30px 0;">
-        <a href="${surveyUrl}" style="background:#171717;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">
-          Noter mon expérience
-        </a>
-      </p>
-      <p>Merci d'avoir choisi ${companyLabel} !</p>
-    </div>
-  `;
+  // 8. Textes : Réglages → Avis clients (company_settings.review_*), sinon
+  // gabarit courriel « review_request » de l'org, sinon défauts de reviews.ts.
+  const messageVars: Record<string, string> = {
+    ...vars,
+    client_first_name: clientGreeting,
+    client_name: vars.client_name || clientGreeting,
+    company_name: vars.company_name || 'notre équipe',
+    job_name: vars.job_name || 'votre projet',
+    survey_url: surveyUrl,
+    review_link: surveyUrl,
+  };
 
-  const { data: emailTemplate } = await ctx.supabase
-    .from('email_templates')
-    .select('subject, body')
-    .eq('org_id', ctx.orgId)
-    .eq('type', 'review_request')
-    .eq('is_default', true)
-    .eq('is_active', true)
-    .maybeSingle();
+  let { subject, html: body } = reviewEmail(cs, messageVars);
 
-  if (emailTemplate) {
-    // Résolution via `resolveTemplate`, comme partout ailleurs : tous les
-    // presets du produit utilisent [var], et un second résolveur maison ne
-    // comprenait que {var}. Les variables complètes de l'entité sont
-    // disponibles ; les quatre clés locales restent prioritaires (formule de
-    // politesse + lien du sondage).
-    const templateVars: Record<string, string> = {
-      ...vars,
-      client_name: clientGreeting,
-      company_name: vars.company_name || '',
-      job_name: vars.job_name || 'votre projet',
-      review_link: surveyUrl,
-    };
-    subject = resolveTemplate(emailTemplate.subject, templateVars);
-    body = resolveTemplate(emailTemplate.body, templateVars);
+  if (!String(cs?.review_email_body || '').trim()) {
+    const { data: emailTemplate } = await ctx.supabase
+      .from('email_templates')
+      .select('subject, body')
+      .eq('org_id', ctx.orgId)
+      .eq('type', 'review_request')
+      .eq('is_default', true)
+      .eq('is_active', true)
+      .maybeSingle();
+    if (emailTemplate) {
+      // Résolution via `resolveTemplate`, comme partout ailleurs : tous les
+      // presets du produit utilisent [var], et un second résolveur maison ne
+      // comprenait que {var}.
+      subject = resolveTemplate(emailTemplate.subject, messageVars);
+      body = resolveTemplate(emailTemplate.body, messageVars);
+    }
   }
 
   // 9. Envoi : courriel si on a l'adresse, SMS si on a le numéro.
@@ -899,10 +888,8 @@ export async function executeRequestReview(
     ? await executeSendEmail({ subject, body }, vars, ctx)
     : { success: false, error: 'Client has no email address.' };
 
-  const smsBody = `Bonjour ${clientGreeting}, merci d'avoir choisi ${companyLabel} ! `
-    + `Comment s'est passé notre service ? Notez-nous en 10 secondes : ${surveyUrl}`;
   const smsResult = vars.client_phone
-    ? await executeSendSms({ body: smsBody }, vars, ctx)
+    ? await executeSendSms({ body: reviewSmsBody(cs, messageVars) }, vars, ctx)
     : { success: false, error: 'Client has no phone number.' };
 
   const sent = emailResult.success || smsResult.success;
