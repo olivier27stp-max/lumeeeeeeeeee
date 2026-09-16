@@ -624,11 +624,21 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
     if (!clientId) return { ok: false, reason: 'orphan' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
-    const subtotal = num(n.subtotal_cents);
+    let subtotal = num(n.subtotal_cents);
     const tax = num(n.tax_cents);
+    // Rabais : convention Lume = total = sous-total − rabais + taxes (soustrait
+    // avant taxes). Un rabais négatif ou absent vaut 0.
+    const discount = Math.max(0, num(n.discount_cents) ?? 0);
     let total = num(n.total_cents);
-    if (total === null && subtotal !== null) total = subtotal + (tax ?? 0);
+    if (total === null && subtotal !== null) total = subtotal - discount + (tax ?? 0);
     if (total === null) return { ok: false, reason: 'invalid' };
+    if (discount > 0 && subtotal !== null && total !== null) {
+      // Certains CRM exportent un sous-total déjà net du rabais : on le remet
+      // brut pour que Sous-total − Rabais + Taxes = Total sur la facture Lume.
+      const gross = subtotal - discount + (tax ?? 0);
+      const net = subtotal + (tax ?? 0);
+      if (gross !== total && net === total) subtotal = subtotal + discount;
+    }
     const paid = num(n.paid_amount_cents);
     const balance = num(n.balance_cents);
     let status: string;
@@ -651,7 +661,8 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         status,
         issued_at: str(n.issued_date) ? `${str(n.issued_date)}T12:00:00` : null,
         due_date: str(n.due_date) || null,
-        subtotal_cents: subtotal ?? total,
+        subtotal_cents: subtotal ?? (total + discount - (tax ?? 0)),
+        discount_cents: discount,
         tax_cents: tax ?? 0,
         total_cents: total,
         paid_cents: paidCents,

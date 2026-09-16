@@ -935,6 +935,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'discount',
+      labelFr: 'Rabais',
+      labelEn: 'Discount',
+      types: ['money', 'number', 'text'],
+      synonyms: [
+        'discount', 'discounts', 'discount amount', 'discount total', 'total discount', 'invoice discount',
+        'rabais', 'remise', 'escompte', 'reduction', 'montant du rabais',
+      ],
+    },
+    {
       field: 'paid_amount',
       labelFr: 'Montant payé',
       labelEn: 'Paid amount',

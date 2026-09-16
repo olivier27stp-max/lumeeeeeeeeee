@@ -515,3 +515,42 @@ describe('quotes.title NOT NULL (leçon E2E round 8)', async () => {
     expect(r2.title).toBe('Soumission importée');
   });
 });
+
+describe('facture — rabais (discount_cents, soustrait avant taxes)', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' }, createdBy: 'u',
+    clientIdByRef: new Map([['marc tremblay', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+  } as any;
+  const inv = (extra: Record<string, unknown>) => (buildEntityRow('invoice', {
+    id: 'x', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+    normalized: { invoice_number: '78', ...extra },
+    relations: { client_ref: 'Marc Tremblay' },
+  } as any, ctx) as any).row;
+
+  it('sans rabais → discount_cents 0, montants inchangés', () => {
+    const row = inv({ subtotal_cents: 10000, tax_cents: 1498, total_cents: 11498 });
+    expect(row.discount_cents).toBe(0);
+    expect(row.subtotal_cents).toBe(10000);
+    expect(row.total_cents).toBe(11498);
+  });
+  it('sous-total brut exporté → conservé tel quel', () => {
+    const row = inv({ subtotal_cents: 10000, discount_cents: 1000, tax_cents: 1348, total_cents: 10348 });
+    expect(row.discount_cents).toBe(1000);
+    expect(row.subtotal_cents).toBe(10000);
+    expect(row.subtotal_cents - row.discount_cents + row.tax_cents).toBe(row.total_cents);
+  });
+  it('sous-total déjà net du rabais → remis brut pour que la facture s\'additionne', () => {
+    const row = inv({ subtotal_cents: 9000, discount_cents: 1000, tax_cents: 1348, total_cents: 10348 });
+    expect(row.subtotal_cents).toBe(10000);
+    expect(row.subtotal_cents - row.discount_cents + row.tax_cents).toBe(row.total_cents);
+  });
+  it('total absent → recalculé sous-total − rabais + taxes', () => {
+    const row = inv({ subtotal_cents: 10000, discount_cents: 1000, tax_cents: 1348 });
+    expect(row.total_cents).toBe(10348);
+  });
+  it('rabais négatif → 0', () => {
+    const row = inv({ subtotal_cents: 10000, discount_cents: -500, tax_cents: 0, total_cents: 10000 });
+    expect(row.discount_cents).toBe(0);
+  });
+});
