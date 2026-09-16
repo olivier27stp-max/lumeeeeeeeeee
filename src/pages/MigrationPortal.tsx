@@ -350,10 +350,11 @@ function PortalBody({ fr, token, session, onRefresh }: { fr: boolean; token: str
 }
 
 function SummaryCards({ fr, session }: { fr: boolean; session: PortalSession }) {
-  const entries = ['client', 'property', 'billing_property', 'job', 'visit', 'quote', 'invoice']
+  // Même ordre que l'import (IMPORT_ORDER côté serveur) : taxes et services d'abord.
+  const entries = ['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'visit', 'quote', 'invoice']
     .map((e) => ({ key: e, label: ENTITY_LABELS_FR[e], count: session.detected_counts[e] ?? 0 }));
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+    <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
       {entries.map((e) => (
         <div key={e.key} className="rounded-lg border border-[#e6e2d8] bg-white px-3 py-2.5">
           <div className="text-[18px] font-extrabold leading-tight">{e.count}</div>

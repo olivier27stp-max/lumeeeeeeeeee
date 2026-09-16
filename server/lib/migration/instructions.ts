@@ -40,6 +40,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
       { fr: 'Rapport « Jobs » et « Visits »', en: '"Jobs" and "Visits" reports' },
       { fr: 'Rapport « Invoices » et « Payments »', en: '"Invoices" and "Payments" reports' },
       { fr: 'Rapport « Quotes »', en: '"Quotes" report' },
+      { fr: 'Taux de taxe (Settings → Products & Services → Tax Rates) — un CSV nom / taux / région', en: 'Tax rates (Settings → Products & Services → Tax Rates) — one CSV with name / rate / region' },
     ],
     formats: ['csv'],
     steps: [
@@ -63,6 +64,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
       { fr: 'Export « Customers » (Customers → Export)', en: '"Customers" export (Customers → Export)' },
       { fr: 'Rapport « Jobs » (Reporting)', en: '"Jobs" report (Reporting)' },
       { fr: 'Rapport « Invoices »', en: '"Invoices" report' },
+      { fr: 'Taux de taxe (Settings → Tax Rates) — un CSV nom / taux', en: 'Tax rates (Settings → Tax Rates) — one CSV with name / rate' },
     ],
     formats: ['csv'],
     steps: [
@@ -82,6 +84,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
     name: 'ServiceTitan',
     reports: [
       { fr: 'Rapports personnalisés Customers / Jobs / Invoices (Reports)', en: 'Custom Customers / Jobs / Invoices reports (Reports)' },
+      { fr: 'Taux de taxe (Settings → Invoicing → Tax Zones) — un CSV nom / taux / région', en: 'Tax rates (Settings → Invoicing → Tax Zones) — one CSV with name / rate / region' },
     ],
     formats: ['csv', 'xlsx (réexporter en CSV)'],
     steps: [
@@ -121,6 +124,7 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
       { fr: 'Liste des clients (Sales → Customers → Export)', en: 'Customer list (Sales → Customers → Export)' },
       { fr: 'Rapport « Invoice List » / « Transaction List »', en: '"Invoice List" / "Transaction List" report' },
       { fr: 'Liste « Products and Services »', en: '"Products and Services" list' },
+      { fr: 'Taux de taxe (Taxes → Sales Tax Settings) — un CSV nom / taux / organisme', en: 'Tax rates (Taxes → Sales Tax Settings) — one CSV with name / rate / agency' },
     ],
     formats: ['csv', 'xlsx (réexporter en CSV)'],
     steps: [
@@ -138,7 +142,10 @@ export const CRM_EXPORT_CONFIGS: Record<SourceCrm, CrmExportConfig> = {
   other: {
     key: 'other',
     name: 'Autre CRM',
-    reports: [{ fr: 'Tout export CSV disponible (clients, jobs, factures…)', en: 'Any available CSV export (clients, jobs, invoices…)' }],
+    reports: [
+      { fr: 'Tout export CSV disponible (clients, jobs, factures…)', en: 'Any available CSV export (clients, jobs, invoices…)' },
+      { fr: 'Vos taxes (nom, taux en %, région) — un petit CSV suffit', en: 'Your taxes (name, rate in %, region) — a small CSV is enough' },
+    ],
     formats: ['csv'],
     steps: [
       { fr: 'Cherchez une fonction « Export » ou « Rapports » dans votre CRM.', en: 'Look for an "Export" or "Reports" feature in your CRM.' },
