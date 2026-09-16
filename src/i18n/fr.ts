@@ -3738,7 +3738,7 @@ const fr: TranslationKeys = {
     aiThinking: 'L’assistant réfléchit…',
     sending: 'Envoi…',
     newConversation: 'Nouvelle conversation',
-    recentConversations: 'Mes conversations',
+    recentConversations: 'Historique',
     noConversations: 'Aucune conversation pour le moment.',
     closedNotice: 'Conversation fermée. Écrivez ici pour la rouvrir, ou commencez-en une nouvelle.',
     status_ai: 'Assistant',
