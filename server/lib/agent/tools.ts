@@ -174,7 +174,7 @@ const searchLeads: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_leads',
-    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status.',
+    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status. Create, edit, move in the pipeline, delete, convert → create_lead, update_lead, update_lead_status, delete_lead, convert_lead_to_client, convert_lead_to_job.',
     parameters: {
       type: 'object',
       properties: {
@@ -433,7 +433,7 @@ const listQuotes: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_quotes',
-    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count), then number, title, status and total.',
+    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count), then number, title, status and total. Edit, duplicate, send by text, convert to invoice, presets → update_quote, duplicate_quote, send_quote_sms, convert_quote_to_invoice, *_quote_preset.',
     parameters: {
       type: 'object',
       properties: {
@@ -483,7 +483,7 @@ const listInvoices: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'list_invoices',
-    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance.',
+    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance. Partial payment, void, edit, duplicate, recurring, payment link, refund → record_invoice_payment, void_invoice, update_invoice, duplicate_invoice, *_recurring_invoice, create_payment_request, refund_payment.',
     parameters: {
       type: 'object',
       properties: {

@@ -519,7 +519,8 @@ const getTeam: AgentTool = {
   declaration: {
     name: 'get_team',
     description:
-      'List the team members: name, email, role, status. Returns the member needed to assign a job.',
+      'List the team members: name, email, role, status. Returns the member needed to assign a job. '
+      + 'Invite, change role, suspend, reactivate, teams, hourly rate → invite_member, update_member_role, remove_member, reactivate_member, *_team, set_hourly_rate.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -549,7 +550,8 @@ const getTimesheets: AgentTool = {
     name: 'get_timesheets',
     description:
       'Hours worked per employee over a date range (default: last 7 days). '
-      + 'Computed from punch-in/punch-out entries, breaks deducted — the same math as the Timesheets screen.',
+      + 'Computed from punch-in/punch-out entries, breaks deducted — the same math as the Timesheets screen. '
+      + 'Clock in/out, breaks, approval, payroll → punch_in, punch_out, start_break, end_break, approve_timesheet, add_payroll_adjustment, mark_payroll_period_paid.',
     parameters: {
       type: 'object',
       properties: {
@@ -725,7 +727,7 @@ const listServices: AgentTool = {
     description:
       'The org’s catalog of predefined services/products with their usual price. Use it BEFORE creating a '
       + 'job/quote/invoice so prices and labels match what the business normally charges — « add 2 window '
-      + 'cleanings at the usual rate ».',
+      + 'cleanings at the usual rate ». Add or change a catalog item → create_service, update_service, archive_service. Taxes → get_tax_config, setup_taxes.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -786,7 +788,7 @@ const listAutomations: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_automations',
-    description: 'List the automation rules: name, trigger event, active or not.',
+    description: 'List the automation rules: name, trigger event, active or not. To pause/enable one, change its message text or language → toggle_automation_rule, update_automation_message, update_automation_sms_body, set_automation_language.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -810,7 +812,7 @@ const getAutomationHealth: AgentTool = {
       'Why automations did or did not send lately. Reads the recent execution log and reports how many '
       + 'messages went out vs failed, WITH the reason for each failure (client has no phone/email, no '
       + 'sender number set up, texting not configured…). Use for « why aren’t my automations sending », '
-      + '« are my reminders going out ».',
+      + '« are my reminders going out ». To pause or fix a rule → toggle_automation_rule, update_automation_message.',
     parameters: { type: 'object', properties: {} },
   },
   handler: async (_args, ctx) => {
@@ -1676,7 +1678,8 @@ const createClientTool: AgentTool = {
     name: 'create_client',
     description:
       'Create a client in the CRM. Duplicates are detected and merged by the same rule as the app. '
-      + 'If several existing clients share the name the user gave, ask which one BEFORE creating.',
+      + 'If several existing clients share the name the user gave, ask which one BEFORE creating. '
+      + 'A prospect who has not bought yet → create_lead (update_lead, update_lead_status, convert_lead_to_job). Delete → delete_client. Addresses → *_property.',
     parameters: {
       type: 'object',
       properties: {
@@ -2196,7 +2199,8 @@ const sendQuoteTool: AgentTool = {
     description:
       "Email a quote to its client — IT ACTUALLY SENDS through the app's own engine (share link, "
       + 'templates, tracking). ALWAYS show the user which quote goes to whom and get their explicit OK '
-      + 'first. Get quote ids from the quotes list.',
+      + 'first. Get quote ids from the quotes list. By text message → send_quote_sms. Edit, duplicate, convert to '
+      + 'invoice, presets/templates → update_quote, duplicate_quote, convert_quote_to_invoice, *_quote_preset, *_quote_template.',
     parameters: {
       type: 'object',
       properties: {
@@ -2790,7 +2794,8 @@ const markInvoicePaidTool: AgentTool = {
       'Mark an invoice as fully PAID — records a full manual payment (cash, e-transfer, cheque…) and '
       + 'stops payment reminders, exactly like "Mark as paid" in Lume. Use for money received OUTSIDE '
       + 'Stripe/PayPal. This does NOT charge anyone. Get the invoice id from the invoices list or '
-      + 'the overdue payments list. ALWAYS confirm the invoice and amount with the user first.',
+      + 'the overdue payments list. ALWAYS confirm the invoice and amount with the user first. '
+      + 'PARTIAL amount → search and use record_invoice_payment. Cancel/void, edit, duplicate → void_invoice, update_invoice, duplicate_invoice.',
     parameters: {
       type: 'object',
       properties: {
@@ -2985,7 +2990,8 @@ const updateJobTool: AgentTool = {
     description:
       "Edit a job completely: title, description, type, address (re-geocoded for the map), and/or "
       + 'REPLACE its line items (amounts and taxes recomputed by the app\u2019s own calculator). '
-      + 'Only provided fields change. To move dates, reschedule the visit.',
+      + 'Only provided fields change. To move dates, reschedule the visit. Delete, recurrence, checklists, tags, '
+      + 'contracts, billing milestones → delete_job, create_recurrence_rule, *_job_checklist, set_job_tags, create_job_agreement, save_job_billing_milestones.',
     parameters: {
       type: 'object',
       properties: {
