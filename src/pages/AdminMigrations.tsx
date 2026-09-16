@@ -1,8 +1,11 @@
-// Console interne des migrations assistées — /admin/migrations
-// Réservée à l'administrateur plateforme Lume (PLATFORM_OWNER_ID). La page se
-// gate elle-même via GET /api/migration-admin/check et redirige sinon ; le
-// serveur re-vérifie de toute façon chaque requête. Hors navigation : on y
-// accède par URL directe. Périmètre limité aux projets de migration.
+// Console interne des migrations assistées — onglet « Migrations » du
+// Creator Space (/creator-space/migrations ; l'ancienne URL /admin/migrations
+// y redirige). Réservée aux comptes de platformAdminIds. Montée en mode
+// `embedded` par le Creator Space, qui a déjà passé la sonde
+// /api/creator-space/check (même liste platformAdminIds) ; montée seule, la
+// page se gate elle-même via GET /api/migration-admin/check et redirige sinon.
+// Le serveur re-vérifie de toute façon chaque requête. Périmètre limité aux
+// projets de migration.
 
 import { useId, useState } from 'react';
 import { Navigate } from 'react-router-dom';
@@ -90,17 +93,21 @@ function StatusBadgeMig({ status }: { status: string }) {
   );
 }
 
-export default function AdminMigrations() {
-  const gate = useQuery({ queryKey: ['migration-admin-check'], queryFn: checkPlatformAdmin, staleTime: 5 * 60_000, retry: false });
+export default function AdminMigrations({ embedded = false }: { embedded?: boolean }) {
+  // Embarquée dans le Creator Space : la sonde /api/creator-space/check a déjà
+  // validé l'appartenance à platformAdminIds, inutile de re-sonder ici.
+  const gate = useQuery({ queryKey: ['migration-admin-check'], queryFn: checkPlatformAdmin, staleTime: 5 * 60_000, retry: false, enabled: !embedded });
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  if (gate.isLoading) {
-    return <div className="flex items-center justify-center py-24 text-text-tertiary"><Loader2 size={22} className="animate-spin" /></div>;
+  if (!embedded) {
+    if (gate.isLoading) {
+      return <div className="flex items-center justify-center py-24 text-text-tertiary"><Loader2 size={22} className="animate-spin" /></div>;
+    }
+    if (!gate.data) return <Navigate to="/" replace />;
   }
-  if (!gate.data) return <Navigate to="/" replace />;
 
   return (
-    <div className="px-8 py-6">
+    <div className={embedded ? undefined : 'px-8 py-6'}>
       {selectedId
         ? <MigrationDetail id={selectedId} onBack={() => setSelectedId(null)} />
         : <MigrationList onOpen={setSelectedId} />}

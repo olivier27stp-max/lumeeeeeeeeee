@@ -143,6 +143,11 @@ describe('montage serveur et surface publique', () => {
   it('aucun bouton d\'import permanent dans le CRM : la route admin est hors navigation', () => {
     const appSrc = read('src/App.tsx');
     expect(appSrc).toContain("path=\"/admin/migrations\"");
+    // La console vit dans le Creator Space (onglet Migrations, gate platformAdminIds) ;
+    // l'ancienne URL redirige.
+    expect(appSrc).toContain("pathname: '/creator-space/migrations'");
+    const creatorSrc = read('src/pages/creator-space/CreatorSpace.tsx');
+    expect(creatorSrc).toContain('<Route path="migrations" element={<AdminMigrations embedded />} />');
     // pas d'entrée de navigation ('id: …migrations…') dans les navSections
     const navSlice = appSrc.slice(appSrc.indexOf('navSections'), appSrc.indexOf('navSections') + 6000);
     expect(navSlice).not.toContain('/admin/migrations');

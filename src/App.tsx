@@ -129,9 +129,12 @@ const Timesheets = React.lazy(() => import('./pages/Timesheets'));
 const Statistiques = React.lazy(() => import('./pages/Statistiques'));
 const QuoteMeasure = React.lazy(() => import('./pages/QuoteMeasure'));
 const QuoteNew = React.lazy(() => import('./pages/QuoteNew'));
-// Console interne des migrations assistées — la page se gate elle-même via
-// GET /api/migration-admin/check (PLATFORM_OWNER_ID) et redirige sinon.
-const AdminMigrations = React.lazy(() => import('./pages/AdminMigrations'));
+// La console des migrations vit dans le Creator Space (onglet Migrations) ;
+// /admin/migrations reste comme redirection (liens des notifications, favoris).
+function AdminMigrationsRedirect() {
+  const location = useLocation();
+  return <Navigate to={{ pathname: '/creator-space/migrations', hash: location.hash }} replace />;
+}
 // Creator Space — espace interne plateforme (platformAdminIds), la page se
 // gate elle-même via GET /api/creator-space/check et redirige sinon.
 const CreatorSpace = React.lazy(() => import('./pages/creator-space/CreatorSpace'));
@@ -828,7 +831,13 @@ function CreatorSpaceBar() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const fetching = useIsFetching({ queryKey: ['creator-space'] }) > 0;
+  // Les requêtes du Creator Space ('creator-space', …) et de l'onglet
+  // Migrations ('migration-admin-list', 'migration-admin-detail', …).
+  const isCreatorQuery = (q: { queryKey: readonly unknown[] }) => {
+    const k = String(q.queryKey[0] ?? '');
+    return k.startsWith('creator-space') || k.startsWith('migration-admin');
+  };
+  const fetching = useIsFetching({ predicate: isCreatorQuery }) > 0;
   const inSpace = location.pathname.startsWith('/creator-space');
 
   // Close : ferme la vue interne ouverte (panneau ?org=), sinon revient à
@@ -885,7 +894,7 @@ function CreatorSpaceBar() {
           </button>
           <button
             type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['creator-space'] })}
+            onClick={() => queryClient.invalidateQueries({ predicate: isCreatorQuery })}
             className={actionCls}
             title="Actualiser les données"
             disabled={fetching}
@@ -1642,10 +1651,10 @@ function AuthenticatedApp({
                         inter-tenants (orgs, utilisateurs, revenus) depuis
                         l'application. L'URL redirige désormais comme toute
                         route inconnue. */}
-                    {/* Console interne des migrations assistées — hors nav,
-                        réservée à PLATFORM_OWNER_ID (guard serveur + gate dans
-                        la page). Périmètre limité aux projets de migration. */}
-                    <Route path="/admin/migrations" element={<React.Suspense fallback={null}><AdminMigrations /></React.Suspense>} />
+                    {/* Console interne des migrations assistées — désormais
+                        l'onglet Migrations du Creator Space ; l'ancienne URL
+                        redirige (hash conservé). Hors nav. */}
+                    <Route path="/admin/migrations" element={<AdminMigrationsRedirect />} />
                     {/* Creator Space — hors nav, réservé à platformAdminIds
                         (guard serveur par-handler + gate dans la page).
                         Lecture seule : vues plateforme inter-compagnies. */}

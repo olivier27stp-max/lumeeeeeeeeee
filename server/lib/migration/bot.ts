@@ -460,7 +460,7 @@ async function resoudreQuestionsAutonome(admin: Admin, m: MigrationRow, acteur: 
  */
 async function alerterAdmin(admin: Admin, m: MigrationRow, acteur: ActeurMigration, motif: 'approbation' | 'bloque', detail: string, rapport: RapportBot): Promise<number> {
   const cibles = new Set<string>([...platformAdminIds, ...(m.assigned_admin ? [m.assigned_admin] : [])]);
-  const lien = `/admin/migrations#${m.id}`;
+  const lien = `/creator-space/migrations#${m.id}`;
   const depuis = new Date(Date.now() - RAPPEL_ADMIN_HEURES * 3600 * 1000).toISOString();
   const titre = motif === 'approbation' ? 'Migration prête : approbation au nom du client' : 'Migration bloquée : le bot a besoin de vous';
   let envoyees = 0;
