@@ -63,4 +63,11 @@ Marketplace / Connexions (Paramètres → Marketplace, /settings/marketplace ; /
 API & MCP (Paramètres → API & MCP, /settings/api) : brancher le CRM à Claude ; « Adresse du serveur MCP » (« Copier »), « Trois étapes, une minute ».
 Support (Paramètres → Support, /settings/support) : « Rechercher dans l'aide… », « Questions fréquentes », « Aller à la page → », « Nous écrire ». Le bouton « Aide » (bouée, en bas à droite) ouvre le même Lumi.
 Vie privée et données (/account/privacy) : « Télécharger » (export de ses données), demande de suppression du compte (« Motif (optionnel) » → « Envoyer la demande », réponse sous 30 jours), « Réinitialiser les préférences de témoins ».
+Sécurité / 2FA : s'active à la première action sensible (inviter un membre) : code QR à scanner (Google Authenticator, Authy, 1Password, app Mots de passe) puis code à 6 chiffres ; redemandé ensuite pour ces actions.
+Connexion (/auth) : « Mot de passe oublié » → courriel avec lien vers /reset-password ; /register crée un compte ; /verify-email confirme le courriel.
+Notifications : la cloche en haut de l'app ; aucune page de réglage des notifications.
+Rentabilité d'un job (/jobs/:id) : « Afficher la rentabilité » (main-d'œuvre, dépenses, profit) ; les dépenses se saisissent via Lumi (« ajoute 80 $ de dépenses sur le job 12 »).
+PayPal : mode de paiement possible quand on enregistre un paiement sur une facture ; le paiement en ligne des clients passe par Lume Payments (Stripe). Courriels : envoyés par Lume, aucune boîte externe (Gmail, Outlook) à connecter.
+Pages reçues par VOS clients (sans compte, sur téléphone) : /quote/:token approuver une soumission, /contract/:token signer, /invoice/:token voir la facture, /pay/:token payer, /portal/:token portail, /survey/:token noter le service.
+Invitation d'équipe (/invite/:token) : page reçue par un membre invité. Portail de migration (/migration/invite/:token) : déposer les fichiers d'export d'un autre CRM. Consentement (/oauth/consent) : autoriser Claude via API & MCP.
 Inscription et abonnement (/checkout, /checkout/success) : parcours en 8 étapes (compte, entreprise, équipe, revenus, objectifs, provenance, plan, paiement), « Suivant », « Continuer au paiement », « Activez votre plan » ; « Se connecter » si le compte existe.`;

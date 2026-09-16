@@ -1194,20 +1194,21 @@ router.get('/settings', async (req: Request, res: Response) => {
 
     if (error) return sendSafeError(res, error, 'Field sales operation failed.', '[field-sales]');
 
-    // Return defaults if no record exists yet
+    // Return defaults if no record exists yet — the REAL columns of field_settings
+    // (audit 2026-09-16 : the route described columns that never existed, so
+    // every save failed with « column does not exist »).
     if (!data) {
       return res.json({
         org_id: auth.orgId,
-        allow_voice_notes: true,
-        default_pin_radius: 50,
-        require_gps_on_knock: false,
-        daily_goal_knocks: 50,
-        daily_goal_leads: 5,
-        custom_statuses: [],
-        pin_colors: {},
-        working_hours_start: '08:00',
-        working_hours_end: '20:00',
-        timezone: 'UTC',
+        feature_enabled: false,
+        territory_restriction_enabled: false,
+        auto_revisit_days: 3,
+        auto_followup_days: 1,
+        voice_notes_enabled: true,
+        ai_summaries_enabled: false,
+        show_peer_payouts: true,
+        default_pin_template_id: null,
+        automation_defaults: {},
       });
     }
 
@@ -1229,17 +1230,17 @@ router.put('/settings', async (req: Request, res: Response) => {
     
     
 
+    // Only the columns that exist in field_settings (see SCHEMA_SNAPSHOT.md).
     const allowed = [
-      'allow_voice_notes',
-      'default_pin_radius',
-      'require_gps_on_knock',
-      'daily_goal_knocks',
-      'daily_goal_leads',
-      'custom_statuses',
-      'pin_colors',
-      'working_hours_start',
-      'working_hours_end',
-      'timezone',
+      'feature_enabled',
+      'territory_restriction_enabled',
+      'auto_revisit_days',
+      'auto_followup_days',
+      'voice_notes_enabled',
+      'ai_summaries_enabled',
+      'show_peer_payouts',
+      'default_pin_template_id',
+      'automation_defaults',
     ];
     const updates: Record<string, any> = { org_id: auth.orgId };
     for (const key of allowed) {

@@ -414,12 +414,15 @@ export const aiChatSchema = z.object({
 
 // ─── Goals ──────────────────────────────────────────────────────
 
+// Aligné sur ce que la route lit réellement (metric, target_value, period, start_date, end_date) —
+// l'ancien schéma exigeait title/metric_type, que la route ignorait : tout POST était refusé (audit 2026-09-16).
 export const createGoalSchema = z.object({
-  title: z.string().trim().min(1, 'title is required.'),
-  target_value: z.number().min(0).max(999_999_999),
-  metric_type: z.string().trim().min(1, 'metric_type is required.'),
-  period: z.string().trim().optional(),
-}).passthrough();
+  metric: z.enum(['revenue', 'jobs', 'leads']),
+  target_value: z.number().min(0).max(999_999_999_999),
+  period: z.enum(['weekly', 'monthly', 'quarterly', 'yearly']).optional(),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'start_date must be YYYY-MM-DD.'),
+  end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'end_date must be YYYY-MM-DD.'),
+}).strict();
 
 // ─── Feature Flags ──────────────────────────────────────────────
 

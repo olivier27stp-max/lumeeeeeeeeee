@@ -37,7 +37,8 @@
  * Le modèle ne reçoit que des en-têtes et des échantillons MASQUÉS
  * (migration_file_columns.samples_masked), jamais une valeur source.
  */
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { clientAnthropic } from '../lumi/llm';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { logMigrationAudit, touchMigrationActivity } from './audit';
@@ -186,11 +187,6 @@ export function interpreterReponseColonne(reponse: string, candidats: Array<{ fi
 
 // ── Modèle : un appel par fichier ─────────────────────────────────
 
-let client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!client) client = new Anthropic();
-  return client;
-}
 
 export async function proposerMappings(admin: Admin, migration: MigrationRow, p: {
   fileName: string; entity: TargetEntity; sourceCrm: string;
@@ -202,7 +198,7 @@ export async function proposerMappings(admin: Admin, migration: MigrationRow, p:
   const colonnes = p.colonnes.map((c) => `#${c.position} « ${c.header} » type=${c.detected_type ?? '?'} exemples=${JSON.stringify(c.samples.slice(0, 5))}`).join('\n');
   const debut = Date.now();
   try {
-    const res = await anthropic().messages.create({
+    const res = await clientAnthropic().messages.create({
       model: MODELE,
       max_tokens: 2000,
       system: [{

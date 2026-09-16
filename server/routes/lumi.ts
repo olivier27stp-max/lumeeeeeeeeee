@@ -20,21 +20,25 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { etatBudget, journaliserUsage, reglagesPourPalier, attenteRalenti, alerterSiSeuilFranchi } from '../lib/lumi/budget';
-import { modeleLumi } from '../lib/lumi/tarifs';
+import { etatBudget, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
+import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
 import { getUserContext } from '../lib/rbac';
-import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
+import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, OUTILS_DE_BASE, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
-import { classifier, modeRouteur } from '../lib/lumi/routeur';
-import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg } from '../lib/lumi/cache-reponses';
+import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
+import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent, outilsDuSousAgent } from '../lib/lumi/sous-agents';
+import { indiceOutils } from '../lib/lumi/indices-outils';
+import type { IdTopic } from '../lib/lumi/topics';
+import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
+import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
@@ -84,9 +88,28 @@ function dernierEnonceUtilisateur(msgs: Msg[]): string | null {
   for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'user' && typeof msgs[i].content === 'string') return msgs[i].content as string;
   return null;
 }
+/** Dernier texte de Lumi (blocs texte du dernier message assistant), pour le routeur. */
+function dernierTexteAssistant(msgs: Msg[]): string | null {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.role !== 'assistant') continue;
+    if (typeof m.content === 'string') return m.content;
+    const t = m.content.filter((b: any) => b.type === 'text').map((b: any) => String(b.text)).join(' ').trim();
+    return t || null;
+  }
+  return null;
+}
+/** L'échange précédent, s'il existe, pour que le routeur classe une suite de conversation. */
+function contexteRouteur(msgs: Msg[]): ContexteRouteur | null {
+  const utilisateur = dernierEnonceUtilisateur(msgs);
+  const lumi = dernierTexteAssistant(msgs);
+  return utilisateur && lumi ? { utilisateur, lumi } : null;
+}
 
 // Au-delà, on résume plutôt que de renvoyer 200 messages au modèle.
 const MAX_MESSAGES_HISTORIQUE = 60;
+/** Une carte de confirmation n'est exécutable que 15 min (mandat §5.6, B9). */
+export const EXPIRATION_PROPOSITION_MS = 15 * 60_000;
 
 type Msg = Anthropic.Messages.MessageParam;
 
@@ -104,7 +127,7 @@ function ouvrirSse(res: Response) {
 }
 
 // ── Historique ──────────────────────────────────────────────────
-async function chargerHistorique(conversationId: string, cleRefs?: string): Promise<Msg[]> {
+async function chargerHistorique(conversationId: string, cleRefs?: string, max = MAX_MESSAGES_HISTORIQUE): Promise<Msg[]> {
   const { data, error } = await getServiceClient()
     .from('lumi_messages')
     .select('role, content, refs, created_at')
@@ -115,10 +138,10 @@ async function chargerHistorique(conversationId: string, cleRefs?: string): Prom
   // redémarrage du serveur n'efface plus ce que l'assistant sait désigner.
   if (cleRefs) for (const m of data ?? []) if ((m as any).refs) restaurerRefs(cleRefs, (m as any).refs);
   let msgs = (data ?? []).map((m: any) => ({ role: m.role, content: m.content }) as Msg);
-  if (msgs.length > MAX_MESSAGES_HISTORIQUE) {
+  if (msgs.length > max) {
     // On coupe à une frontière de message utilisateur TEXTE (jamais entre un
     // tool_use et son tool_result, sinon l'API refuse la conversation).
-    let i = msgs.length - MAX_MESSAGES_HISTORIQUE;
+    let i = msgs.length - max;
     while (i < msgs.length && !(msgs[i].role === 'user' && typeof msgs[i].content === 'string')) i++;
     msgs = msgs.slice(i);
   }
@@ -189,16 +212,9 @@ async function contexteTour(req: Request, res: Response) {
     res.status(403).json({ error: 'Lumi is not included in this plan.', code: 'plan_sans_lumi', budget });
     return null;
   }
-  // Plafond atteint : Lumi ralentit au lieu de mourir — un tour par minute
-  // (sur Haiku, effort bas) jusqu'au 1er. Le client n'est jamais à sec.
-  if (budget.palier === 'ralenti') {
-    const attente = await attenteRalenti(admin, auth.orgId);
-    if (attente > 0) {
-      res.setHeader('Retry-After', String(attente));
-      res.status(429).json({ error: 'Lumi is slowed down this month.', code: 'ralenti', retry_after_s: attente, budget });
-      return null;
-    }
-  }
+  // Plafond atteint (palier « epuise ») : rien n'est refusé ici. Les étages
+  // déterministes (raccourcis, caches) répondent encore ; l'appel au modèle
+  // est bloqué par la réservation dans executerTourSse (message gabarit).
   // Alerte à l'exploitant au passage à 60 % (une fois par org et par mois).
   void alerterSiSeuilFranchi(admin, auth.orgId, budget, async (subject, text) => {
     const to = process.env.LUMI_ALERT_EMAIL || process.env.SECURITY_ALERT_EMAIL;
@@ -220,9 +236,10 @@ async function contexteTour(req: Request, res: Response) {
     const { data } = await admin.from('org_knowledge').select('key, value').eq('org_id', auth.orgId).eq('category', 'assistant').eq('is_active', true).order('updated_at', { ascending: false }).limit(30);
     souvenirs = (data ?? []).map((n: any) => ({ key: String(n.key), value: String(n.value ?? '') }));
   } catch { /* non-fatal : Lumi peut encore les relire avec recall_notes */ }
-  const systeme = promptSystemeLumi({ companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs });
+  const promptCtx = { companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs };
+  const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
-  return { auth, admin, budget, systeme, language, accessToken, fuseau, userName };
+  return { auth, admin, budget, systeme, promptCtx, language, accessToken, fuseau, userName };
 }
 
 async function executerTourSse(opts: {
@@ -238,6 +255,10 @@ async function executerTourSse(opts: {
   params?: Record<string, unknown> | null;
   /** Étages 3-4 : mémoriser la réponse si le tour est cachable (premier message, lecture seule). */
   cache?: { historiqueVide: boolean; vecteur: Promise<number[] | null> | null };
+  /** Verdict du routeur actif déjà obtenu par la route (étage 5 manqué) : tracé, sans second appel. */
+  routeur?: ResultatRouteur | null;
+  /** Sous-agent (topic sûr du routeur) : seuls ses outils sont chargés, le sujet est ajouté au bloc variable (B7). */
+  sousAgent?: IdTopic | null;
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -248,9 +269,11 @@ async function executerTourSse(opts: {
   let usage: UsageAgrege = usageVide();
   let model: string | null = null;
   let erreurModele: string | null = null;
+  let ecritureExecutee = false;
   const fiches: Fiche[] = [];
   const emettre = (e: EvenementLumi) => {
     if (e.type === 'tool' && e.statut === 'fin' && !outils.includes(e.name)) outils.push(e.name);
+    if (e.type === 'executed') ecritureExecutee = true; // un tour qui a écrit ne se met jamais en cache
     if (e.type === 'usage') { usage = ajouterUsage(usage, e.usage); model = e.model; }
     if (e.type === 'error') erreurModele = e.message;
     if (e.type === 'fiches') for (const f of e.fiches) if (!fiches.some((x) => x.href === f.href)) fiches.push(f);
@@ -260,17 +283,27 @@ async function executerTourSse(opts: {
   opts.req.on('close', () => { ferme = true; });
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
-  const observation = modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null;
+  const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
   const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => {
     const routeur = observation ? await observation : null;
+    // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
+    // dans ai_usage comme en mode actif, jamais un coût hors budget.
+    if (routeur && !opts.routeur && routeur.usage) {
+      void journaliserUsage(ctx.admin, {
+        orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, model: MODELE_ROUTEUR,
+        input_tokens: routeur.usage.input_tokens, output_tokens: routeur.usage.output_tokens,
+        cache_creation_input_tokens: routeur.usage.cache_creation_input_tokens, cache_read_input_tokens: routeur.usage.cache_read_input_tokens,
+        cost_cents: coutEnCents(MODELE_ROUTEUR, routeur.usage),
+      });
+    }
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
       enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
-      params: { ...(opts.params ?? {}), ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}) },
+      params: { ...(opts.params ?? {}), ...(opts.sousAgent ? { sous_agent: opts.sousAgent } : {}), ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}) },
       outils, resultat, model, promptVersion: VERSION_PROMPT, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
     });
     // Escalade humaine : le modèle a refusé ou n'a pas pu finir.
-    if (erreurModele === 'refusal' || erreurModele === 'trop_d_etapes') {
+    if (erreurModele === 'refusal' || erreurModele === 'trop_d_etapes' || erreurModele === 'plafond_tour') {
       void escalader(ctx.admin, {
         orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, motif: erreurModele === 'refusal' ? 'refus_modele' : 'trop_d_etapes', fr: ctx.language === 'fr',
         detail: erreurModele === 'refusal'
@@ -284,13 +317,29 @@ async function executerTourSse(opts: {
     for (const recu of opts.execute ?? []) if (!ferme) emettreSse('executed', recu);
     const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
     if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant, cleRefs);
-    const resultat = await tourLumi({
+    const reglages = reglagesPourPalier(ctx.budget.palier, modeleLumi());
+    // Qualité : les sujets qui raisonnent (rapports, analyse financière) gardent une réflexion medium, hors palier dégradé.
+    if (opts.sousAgent && ctx.budget.palier === 'normal') reglages.effort = effortDuSousAgent(opts.sousAgent);
+    // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
+    const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
-      systeme: ctx.systeme,
-      reglages: reglagesPourPalier(ctx.budget.palier, modeleLumi()),
+      // Bloc variable du tour : sujet du sous-agent + indices d'outils différés (code, 0 token d'API).
+      systeme: (() => {
+        const focus = [
+          opts.sousAgent ? focusDuSousAgent(opts.sousAgent, ctx.language) : null,
+          opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
+        ].filter((x): x is string => !!x).join('\n\n');
+        return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
+      })(),
+      sousAgent: opts.sousAgent ?? null,
+      reglages,
+      budget: {
+        reserver: (cents) => reserverBudget(ctx.admin, ctx.auth.orgId, cents),
+        regler: (id, cents) => reglerBudget(ctx.admin, id, cents),
+      },
       autorisations: await autorisationsDe(ctx.admin, ctx.auth.orgId, ctx.auth.user.id, Object.keys(TOOLS_BY_NAME).filter((n) => TOOLS_BY_NAME[n]?.kind === 'write')),
       ecrituresRestantes: Math.max(0, PLAFOND_ECRITURES_PAR_CONVERSATION - compterEcritures([...opts.historique, ...opts.nouveauxAvant])),
       historique: [...opts.historique, ...opts.nouveauxAvant],
@@ -302,17 +351,30 @@ async function executerTourSse(opts: {
         cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
       }),
     });
+    if (resultat.plafond) {
+      // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
+      // message gabarit (0 token), les actions rapides restent servies.
+      const texte = messagePause(ctx.language);
+      if (!ferme) emettreSse('text', { type: 'text', delta: texte });
+      resultat.nouveauxMessages.push({ role: 'assistant', content: [{ type: 'text', text: texte }] });
+      resultat.texte = resultat.texte ? `${resultat.texte}\n\n${texte}` : texte;
+    }
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition, etage: ETAGE.agent });
-    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
+    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null);
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
-    if (opts.cache && opts.enonce && !erreurModele && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok' })) {
+    if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee, enonce: opts.enonce })) {
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };
       void ecrireReponse(p, { texte: resultat.texte, fiches, outils });
       void (async () => {
         const vec = opts.cache?.vecteur ? await opts.cache.vecteur : null;
         if (vec) await memoriserSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches, outils, version: await versionOrg(p.orgId) });
+        // Réponse d'aide pure (seul search_help a servi, aucun nom d'org ni de personne dedans) → cache global 24 h.
+        const nomsSensibles = [ctx.promptCtx.companyName, ctx.promptCtx.userName].filter((x): x is string => !!x && x.length > 2);
+        if (vec && outils.length > 0 && outils.every((o) => o === 'search_help') && !nomsSensibles.some((n) => resultat.texte.toLowerCase().includes(n.toLowerCase()))) {
+          await memoriserSemantique({ genre: 'global', espace: 'aide' }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches: [], outils, version: 0 });
+        }
       })();
     }
   } catch (err: any) {
@@ -345,7 +407,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (conversationId) {
       const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversationId).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
       if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+      // Fenêtre d'historique selon le palier de budget (60 messages ; 6 en économe/restreint).
+      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`, reglagesPourPalier(ctx.budget.palier, modeleLumi()).historique_messages);
     } else {
       const { data: conv, error } = await ctx.admin.from('lumi_conversations')
         .insert({ org_id: ctx.auth.orgId, user_id: ctx.auth.user.id, title: message.slice(0, 80) })
@@ -372,14 +435,16 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // à retirer des énoncés exacts.
     const repli = origine === 'repli' || estUnRepli(message);
     const enoncePrecedent = repli ? dernierEnonceUtilisateur(historique) : null;
+    // Jamais un courriel en guise de prénom (« Bonjour will@… »).
+    const ctxRaccourci = {
+      client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
+      language: ctx.language, fuseau: ctx.fuseau,
+      prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
+    };
     const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);
     if (raccourci) {
       const debut = Date.now();
-      const reponse = await repondreRaccourci(raccourci, {
-        client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
-        language: ctx.language, fuseau: ctx.fuseau, // Jamais un courriel en guise de prénom (« Bonjour will@… »).
-        prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
-      });
+      const reponse = await repondreRaccourci(raccourci, ctxRaccourci);
       if (reponse) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
@@ -403,20 +468,26 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (repli && enoncePrecedent) {
       void retirerReponse({ orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: enoncePrecedent });
       void oublierSemantique({ genre: 'tenant', orgId: ctx.auth.orgId, userId: ctx.auth.user.id }, enoncePrecedent);
+      void oublierSemantique({ genre: 'global', espace: 'aide' }, enoncePrecedent);
     }
     // Étages 3 (exact) et 4 (sémantique) : premier message d'une conversation seulement,
     // jamais après un repli ni avec une proposition en attente.
     const premierMessage = historique.length === 0 && !enAttente.length && !repli;
     const vecteur = premierMessage ? embed(message) : null;
-    if (premierMessage) {
+    // Jamais de cache pour une demande de document ou de mémoire (voir enonceCachable).
+    if (premierMessage && enonceCachable(message)) {
       const debut = Date.now();
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
       let hit: { texte: string; fiches: Fiche[]; outils: string[] } | null = await lireReponse(p);
       let etage: number = ETAGE.cacheReponse;
       if (!hit) {
         const vec = await vecteur;
-        const s = vec ? await chercherSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, vec, await versionOrg(p.orgId)) : null;
+        const s = vec ? await chercherSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, vec, await versionOrg(p.orgId), message) : null;
         if (s) { hit = s.entree; etage = ETAGE.cacheSemantique; }
+        // Cache d'AIDE partagé par toutes les orgs (B8) : « comment je fais X dans
+        // Lume » répondu une fois pour tout le monde (aucune donnée d'org dedans).
+        const g = !s && vec ? await chercherSemantique({ genre: 'global', espace: 'aide' }, vec, null, message) : null;
+        if (g) { hit = g.entree; etage = ETAGE.cacheSemantique; }
       }
       if (hit) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
@@ -435,7 +506,85 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       }
     }
 
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
+    // Règle stricte : une conversation qui a déjà coûté plus que le plafond ne
+    // repasse plus par le modèle (gabarit, 0 token) ; les étages 0-4 ci-dessus
+    // ont déjà eu leur chance. Vérifié seulement quand l'historique est long.
+    if (historique.length >= 10) {
+      const { data: lignes } = await ctx.admin.from('ai_usage').select('cost_cents').eq('conversation_id', conversationId!);
+      const depense = ((lignes ?? []) as Array<{ cost_cents: number | string }>).reduce((s, l) => s + Number(l.cost_cents ?? 0), 0);
+      if (depense >= reglesCout().plafond_cout_conversation_cents) {
+        const debut = Date.now();
+        const texte = messagePlafondConversation(ctx.language);
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('text', { type: 'text', delta: texte });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, etage: ETAGE.interface });
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.interface, action: 'plafond_conversation', params: { depense_cents: Math.round(depense * 100) / 100 },
+          outils: [], resultat: 'refus', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
+    // Étage 5 — routeur ACTIF (LUMI_ROUTEUR=actif) : Haiku classe l'énoncé
+    // (~0,03 ¢, prompt en cache) ; une action déterministe reconnue avec assez
+    // de confiance (SEUIL_CONFIANCE) répond sans le gros modèle — 0,3 à 0,6 ¢
+    // économisés par tour reconnu. Sinon le verdict voyage dans la trace du
+    // tour (calibrage du seuil), sans second appel. PREMIER message d'une
+    // conversation seulement (comme les caches) : le routeur ne voit que
+    // l'énoncé, et « il a-tu des factures pas payées ? » après une fiche
+    // client était routé vers TOUS les retards (sondage du 2026-09-16).
+    // Jamais après un repli ni avec une proposition en attente.
+    let routeur: ResultatRouteur | null = null;
+    if (modeRouteur() === 'actif' && !enAttente.length && !repli) {
+      const debut = Date.now();
+      // Suite de conversation : le routeur voit l'échange précédent (tronqué) et
+      // n'agit que si le message se suffit (changement de période) — un « il »
+      // ou « le pire » reste au modèle complet, qui a tout le contexte.
+      routeur = await classifier(message, contexteRouteur(historique));
+      const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
+      if (routeur.usage) {
+        void journaliserUsage(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, model: MODELE_ROUTEUR,
+          input_tokens: routeur.usage.input_tokens, output_tokens: routeur.usage.output_tokens,
+          cache_creation_input_tokens: routeur.usage.cache_creation_input_tokens, cache_read_input_tokens: routeur.usage.cache_read_input_tokens, cost_cents: coutRouteur,
+        });
+      }
+      const r = routeur.decision === 'action' && routeur.verdict?.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
+      const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
+      if (r && reponse) {
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('tool', { type: 'tool', name: r.tool, statut: 'debut' });
+        emettreSse('tool', { type: 'tool', name: r.tool, statut: 'fin' });
+        emettreSse('text', { type: 'text', delta: reponse.texte });
+        if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: null, raccourci: r.id, etage: ETAGE.routeur });
+        // La même question, redemandée : servie par les caches (étages 3-4), sans même le routeur. Premier message seulement.
+        if (premierMessage) {
+          const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
+          void ecrireReponse(p, { texte: reponse.texte, fiches: reponse.fiches, outils: [r.tool] });
+          void (async () => {
+            const vec = vecteur ? await vecteur : null;
+            if (vec) await memoriserSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, { enonce: message, vec, texte: reponse.texte, fiches: reponse.fiches, outils: [r.tool], version: await versionOrg(p.orgId) });
+          })();
+        }
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: r.id,
+          params: { ...(r.periode ? { periode: r.periode } : {}), ...(r.numero ? { numero: r.numero } : {}), routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
+          outils: [r.tool], resultat: 'ok', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
+    // B7 : un topic sûr sans action déterministe → le modèle part avec les outils de ce sous-agent seulement.
+    const sousAgent = sousAgentDepuisVerdict(routeur);
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');
@@ -515,6 +664,19 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const enAttente = propositionsEnAttente(historique);
     if (!enAttente.length || !enAttente.some((a) => a.tool_use_id === tool_use_id)) {
       return res.status(409).json({ error: 'No such pending action.', code: 'aucune_proposition' });
+    }
+    // B9 : une proposition n'est valable que 15 min. Passé ce délai, Confirmer
+    // refuse (le message suivant l'annule, comme d'habitude) : on n'exécute
+    // jamais une carte oubliée ouverte sur un écran.
+    if (decision === 'confirm') {
+      const { data: dernier } = await ctx.admin.from('lumi_messages').select('created_at').eq('conversation_id', conversation_id).eq('role', 'assistant').order('created_at', { ascending: false }).limit(1).maybeSingle();
+      const age = dernier?.created_at ? Date.now() - new Date(dernier.created_at as string).getTime() : 0;
+      if (age > EXPIRATION_PROPOSITION_MS) {
+        return res.status(409).json({
+          error: ctx.language === 'fr' ? 'Cette proposition a expiré (15 minutes). Redemande-la à Lumi pour l’exécuter.' : 'This proposal has expired (15 minutes). Ask Lumi again to run it.',
+          code: 'proposition_expiree',
+        });
+      }
     }
     // Cran d'arrêt : au-delà du plafond, Confirmer refuse (la proposition reste
     // affichée, l'utilisateur ouvre une nouvelle conversation pour continuer).

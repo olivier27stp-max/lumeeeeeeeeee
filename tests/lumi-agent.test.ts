@@ -68,26 +68,30 @@ vi.mock('../server/lib/supabase', () => ({
 }));
 
 describe('paliers de budget (le client n est jamais à sec)', () => {
-  it('normal sous 60 %, économe à partir de 60 %, ralenti à 100 %', async () => {
+  it('normal sous 70 %, économe à 70 %, restreint à 90 %, épuisé à 100 %', async () => {
     const { palierBudget, reglagesPourPalier } = await import('../server/lib/lumi/budget');
     expect(palierBudget(4000, 0)).toBe('normal');
-    expect(palierBudget(4000, 2399)).toBe('normal');
-    expect(palierBudget(4000, 2400)).toBe('econome');
-    expect(palierBudget(4000, 3999)).toBe('econome');
-    expect(palierBudget(4000, 4000)).toBe('ralenti');
+    expect(palierBudget(4000, 2799)).toBe('normal');
+    expect(palierBudget(4000, 2800)).toBe('econome');
+    expect(palierBudget(4000, 3599)).toBe('econome');
+    expect(palierBudget(4000, 3600)).toBe('restreint');
+    expect(palierBudget(4000, 3999)).toBe('restreint');
+    expect(palierBudget(4000, 4000)).toBe('epuise');
     expect(palierBudget(0, 500)).toBe('normal'); // pas de plafond → pas de pente
-    // La pente joue AVANT tout refus : modèle moins cher, réflexion réduite.
-    expect(reglagesPourPalier('normal', 'claude-sonnet-5')).toEqual({ model: 'claude-sonnet-5', effort: 'medium' });
-    expect(reglagesPourPalier('econome', 'claude-sonnet-5')).toEqual({ model: 'claude-haiku-4-5', effort: 'low' });
-    expect(reglagesPourPalier('ralenti', 'claude-sonnet-5')).toEqual({ model: 'claude-haiku-4-5', effort: 'low' });
+    // La pente joue AVANT tout refus : modèle moins cher, réflexion et historique réduits, puis étapes bornées.
+    // Effort bas par défaut (règle stricte, LUMI_EFFORT=medium pour revenir) : la réflexion étendue est réservée aux sous-agents complexes.
+    expect(reglagesPourPalier('normal', 'claude-sonnet-5')).toMatchObject({ model: 'claude-sonnet-5', effort: 'low', historique_messages: 60, max_etapes: 8, modele_autorise: true });
+    expect(reglagesPourPalier('econome', 'claude-sonnet-5')).toMatchObject({ model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 8 });
+    expect(reglagesPourPalier('restreint', 'claude-sonnet-5')).toMatchObject({ model: 'claude-haiku-4-5', effort: 'low', max_etapes: 2 });
+    expect(reglagesPourPalier('epuise', 'claude-sonnet-5')).toMatchObject({ max_etapes: 0, modele_autorise: false });
   });
 
   it('etatBudget expose le palier ; à plafond atteint, epuise reste vrai (garde-fou interne)', async () => {
     const { etatBudget } = await import('../server/lib/lumi/budget');
-    const eco = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 2500 }) as any, 'org-1');
+    const eco = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 2900 }) as any, 'org-1');
     expect(eco.palier).toBe('econome');
     const plein = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 4000 }) as any, 'org-1');
-    expect(plein).toMatchObject({ palier: 'ralenti', epuise: true });
+    expect(plein).toMatchObject({ palier: 'epuise', epuise: true });
   });
 
   it('le tour utilise le modèle et l effort du palier', async () => {
@@ -99,6 +103,29 @@ describe('paliers de budget (le client n est jamais à sec)', () => {
     // Haiku n'accepte pas l'effort : il n'est pas envoyé (voir parametresReflexion).
     expect(instantanes[0].output_config).toBeUndefined();
     expect(journal[0].model).toBe('claude-haiku-4-5');
+  });
+
+  it('plafond dur : réservation refusée → rien ne part au modèle, le tour rend plafond', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    const avant = instantanes.length;
+    const reservations: number[] = [];
+    const r = await tourLumi({ ...baseTour([], []), budget: { reserver: async (c) => { reservations.push(c); return { id: null, statut: 'capped' }; }, regler: async () => {} } });
+    expect(r.plafond).toBe(true);
+    expect(instantanes.length).toBe(avant);       // aucun appel API
+    expect(reservations[0]).toBeGreaterThan(0);   // le coût maximal a bien été estimé
+    // Palier épuisé : 0 étape → plafond sans même réserver.
+    const r2 = await tourLumi({ ...baseTour([], []), reglages: { model: 'claude-haiku-4-5', effort: 'low', max_etapes: 0 } });
+    expect(r2.plafond).toBe(true);
+    expect(instantanes.length).toBe(avant);
+  });
+
+  it('réservation acceptée → réglée au coût réel après l appel', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'text', text: 'Ok.' }], stop_reason: 'end_turn', usage });
+    const regles: Array<[string | null, number]> = [];
+    const r = await tourLumi({ ...baseTour([], []), budget: { reserver: async () => ({ id: 'res-1', statut: 'ok' }), regler: async (id, c) => { regles.push([id, c]); } } });
+    expect(r.plafond).toBeUndefined();
+    expect(regles).toEqual([['res-1', r.cost_cents]]);
   });
 });
 
@@ -198,7 +225,7 @@ describe('orchestrateur', () => {
     const charges = params.tools.filter((t: any) => !t.defer_loading && !t.type);
     expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(params.thinking).toEqual({ type: 'adaptive' });
-    expect(params.output_config).toEqual({ effort: 'medium' });
+    expect(params.output_config).toEqual({ effort: 'low' }); // effort bas par défaut (règle stricte, regles-cout.ts)
   });
 
   it('outil de LECTURE : exécuté avec les gardes, résultat renvoyé au modèle, second appel', async () => {
@@ -273,7 +300,7 @@ describe('outils différés (tool search)', () => {
     const { promptSystemeLumi } = await import('../server/lib/lumi/orchestrateur');
     const stable = promptSystemeLumi({ companyName: 'X', userName: null, language: 'fr', todayIso: '2026-09-10' })[0].text;
     expect(stable).toContain('tool_search_tool_regex');
-    expect(stable).toMatch(/quote\|invoice/);
+    expect(stable).toMatch(/invoice\|payment/); // les familles d'outils, avec leurs motifs de recherche
   });
 
   it('une réponse sans appel client (recherche seule) relance la boucle sans message vide', async () => {
@@ -545,6 +572,11 @@ describe('Lumi parle comme un collègue, pas comme une base de données', () => 
     // cache pour toute la plateforme, pas une écriture 1 h par entreprise.
     const autre = promptSystemeLumi({ companyName: 'Plomberie Roy', userName: 'Marc', language: 'fr', todayIso: '2026-09-11' });
     expect(autre[0].text).toBe(stable);
+    // … et d'une langue à l'autre : la consigne de langue est dans le bloc variable (B1).
+    const anglais = promptSystemeLumi({ companyName: 'Roy Plumbing', userName: 'Marc', language: 'en', todayIso: '2026-09-11' });
+    expect(anglais[0].text).toBe(stable);
+    expect(anglais[1].text).toContain('Always reply in English');
+    expect(autre[1].text).toContain('Réponds toujours en français');
     expect(autre[1].text).toContain('Entreprise : Plomberie Roy.');
   });
 });

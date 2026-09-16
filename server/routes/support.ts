@@ -106,7 +106,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
       const premierMessage = historique.length === 0;
       const vecteur = premierMessage ? await embed(message) : null;
       const version = vecteur ? await versionOrg(auth.orgId) : null;
-      const memo = vecteur ? await chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), vecteur, version) : null;
+      const memo = vecteur ? await chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), vecteur, version, message) : null;
       // Plafond par entreprise et par jour : au-delà, réponses fixes seulement, jamais le modèle.
       const auPlafond = !memo && (await reponsesModeleAujourdhui(admin, auth.orgId)) >= PLAFOND_MODELE_PAR_JOUR;
       if (memo) {

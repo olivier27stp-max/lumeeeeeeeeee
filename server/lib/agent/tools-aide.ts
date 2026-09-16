@@ -8,21 +8,59 @@
  * les plus proches AVEC la page d'origine, pour que Lumi cite sa source.
  * Règle dure inchangée : pas dans un résultat = « je ne sais pas ».
  *
- * Index en mémoire au premier appel (8 pages, ~23 ko) : aucune migration,
+ * Index en mémoire au premier appel : les 6 pages Fonctionnalités du site, la
+ * carte de l'app (routes et boutons exacts) et la FAQ du support : aucune migration,
  * aucune base. Score = mots-clés normalisés en commun (titre ×3, points ×2,
  * FAQ ×2, texte ×1). Volontairement simple : c'est du support produit, pas
  * de la recherche sémantique.
  */
 import type { AgentTool } from './tools';
 import { FONCTIONS, type Bi } from '../../../src/pages/marketing/fonctionsData';
+import { ARTICLES, type Article } from '../../../src/components/supportArticles';
+import { CARTE_APP } from '../support/carte-app';
 import { normaliser } from '../lumi/normaliser';
 
 interface Passage { page: string; slug: string; titre: string; texte: string; poids: number; mots: Set<string> }
 
-const VIDES = new Set(['le', 'la', 'les', 'de', 'des', 'du', 'un', 'une', 'et', 'ou', 'en', 'a', 'au', 'aux', 'ce', 'ca', 'que', 'qui', 'dans', 'sur', 'pour', 'par', 'est', 'je', 'tu', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses', 'the', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'is', 'my', 'your', 'comment', 'how', 'do', 'i', 'faire', 'fais', 'peux', 'peut', 'lume', 'avec', 'with']);
+const VIDES = new Set(['le', 'la', 'les', 'de', 'des', 'du', 'un', 'une', 'et', 'ou', 'en', 'a', 'au', 'aux', 'ce', 'ca', 'que', 'qui', 'dans', 'sur', 'pour', 'par', 'est', 'je', 'tu', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses', 'the', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'is', 'my', 'your', 'comment', 'how', 'do', 'i', 'faire', 'fais', 'peux', 'peut', 'lume', 'avec', 'with', 'sont', 'suis', 'ont', 'ete', 'etre', 'quoi', 'where', 'what', 'are', 'can']);
 
 function mots(s: string): Set<string> {
   return new Set(normaliser(s).filter((m) => m.length > 2 && !VIDES.has(m)));
+}
+
+/**
+ * La carte de l'app (routes et boutons exacts, relevés dans le code) : une
+ * ligne = un écran ou une action. « Titre (/route ; …) : description ».
+ * Audit du 2026-09-16 : la carte couvrait 44 % des 62 écrans du CRM mais
+ * n'était lue que par l'assistant de support ; Lumi dans l'app ne voyait que
+ * les 6 pages marketing. Indexée ici, elle sert aux deux.
+ */
+export function passagesCarteApp(carte: string = CARTE_APP): Passage[] {
+  const out: Passage[] = [];
+  let section = '';
+  for (const brute of carte.split('\n')) {
+    const ligne = brute.trim();
+    if (!ligne) continue;
+    const titreSection = /^═+\s*(.+?)\s*═+$/.exec(ligne);
+    if (titreSection) { section = titreSection[1]; continue; }
+    const m = /^([^:(]+?)\s*(\(([^)]*)\))?\s*:\s*(.+)$/.exec(ligne);
+    if (!m) continue;
+    const titre = m[1].trim();
+    // La route est le premier « /… » de la parenthèse (« Paramètres → Avis clients, /settings/reviews ») ; sinon la page Support.
+    const route = /\/[a-z0-9\-/:]+/i.exec(m[3] ?? '')?.[0] ?? '';
+    const page = route.startsWith('/') ? route : '/settings/support';
+    // Poids 3 comme un titre de page : un écran nommé bat un passage marketing sur un mot commun.
+    out.push({ page, slug: `carte:${page}`, titre: section ? `${section} — ${titre}` : titre, texte: ligne, poids: 3, mots: mots(`${section} ${titre} ${m[3] ?? ''} ${m[4]}`) });
+  }
+  return out;
+}
+
+/** La FAQ du support (mêmes réponses que le tiroir d'aide), pour que Lumi dans l'app les trouve aussi. */
+export function passagesArticles(articles: Article[] = ARTICLES): Passage[] {
+  return articles.map((a) => ({
+    page: a.path ?? '/settings/support', slug: `article:${a.id}`, titre: a.q_fr, texte: a.a_fr, poids: 2,
+    mots: mots(`${a.q_fr} ${a.q_en} ${a.a_fr} ${a.a_en} ${a.tags}`),
+  }));
 }
 
 let INDEX: Passage[] | null = null;
@@ -38,6 +76,7 @@ function index(): Passage[] {
     for (const s of f.steps) out.push({ page, slug: f.slug, titre: `${titre} — ${s.t.fr}`, texte: s.d.fr, poids: 1, mots: mots(`${bi(s.t)} ${bi(s.d)}`) });
     for (const q of f.faq) out.push({ page, slug: f.slug, titre: `${titre} — ${q.q.fr}`, texte: q.a.fr, poids: 2, mots: mots(`${bi(q.q)} ${bi(q.a)}`) });
   }
+  out.push(...passagesCarteApp(), ...passagesArticles());
   INDEX = out;
   return out;
 }
@@ -68,7 +107,7 @@ export const searchHelp: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_help',
-    description: 'Questions about Lume itself — how-to ("how do I set up the request form?", "can my client pay online?"), but ALSO the Lume subscription, plans, billing, a failed payment, quote presets and what they contain: searches the product documentation and returns the closest passages WITH their page. Call it BEFORE saying a topic is not yours or pointing to support. Answer only from these passages and name the page as the source; if nothing matches, say you do not know.',
+    description: 'Questions about Lume itself — how-to ("how do I set up the request form?", "can my client pay online?"), but ALSO the Lume subscription, plans, billing, a failed payment, and what a quote preset IS: searches the product documentation. NOT for the OWN presets/templates/services of the business (list_quote_presets, list_quote_templates, list_services) and returns the closest passages WITH their page. Call it BEFORE saying a topic is not yours or pointing to support. Answer only from these passages and name the page as the source; if nothing matches, say you do not know.',
     parameters: {
       type: 'object',
       properties: { query: { type: 'string', description: 'The question, in the user\'s words.' } },

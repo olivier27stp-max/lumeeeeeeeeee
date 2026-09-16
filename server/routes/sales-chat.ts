@@ -22,6 +22,8 @@ import { journaliserTrace, normaliserEnonce } from '../lib/lumi/traces';
 import { reponseFixePour } from '../lib/agent/reponsesFixes';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cache-semantique';
+import { reponsesPubliquesAujourdhui } from '../lib/support/garde-fous';
+import { reglesCout } from '../lib/lumi/regles-cout';
 
 const router = Router();
 
@@ -77,7 +79,7 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
     // (aucune donnée client ici) ; seulement quand la question est le premier message.
     const vecteur = contents.length === 1 ? await embed(dernier) : null;
     if (vecteur) {
-      const s = await chercherSemantique({ genre: 'public' }, vecteur, null);
+      const s = await chercherSemantique({ genre: 'public' }, vecteur, null, dernier);
       if (s) {
         void journaliserTrace(getServiceClient(), {
           orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
@@ -85,6 +87,16 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
         });
         return res.json({ reply: s.entree.texte, cache: 'semantique' });
       }
+    }
+    // Règle stricte : plafond GLOBAL de réponses du modèle par 24 h sur le site
+    // (toutes IP confondues) — une ferme d'IP ne brûle plus le compte. Au-delà :
+    // réponse fixe vers la démo, 0 token, tracée.
+    if ((await reponsesPubliquesAujourdhui(getServiceClient())) >= reglesCout().plafond_public_par_jour) {
+      void journaliserTrace(getServiceClient(), {
+        orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',
+        enonce: normaliserEnonce(dernier), etage: 0, action: 'plafond_public', resultat: 'refus', model: null, costCents: 0, dureeMs: Date.now() - debut,
+      });
+      return res.json({ reply: "Bonne question ! Le plus simple, c'est une courte démo — tu veux que je t'aide à en réserver une ?", fixe: 'plafond_public' });
     }
     // Le même Lumi que dans l'app et le portail (Sonnet 5, surface publique : aucun compte, aucun dossier).
     const historique = contents.slice(0, -1).map((c) => ({ role: c.role === 'model' ? 'assistant' as const : 'user' as const, content: c.parts[0]?.text ?? '' }));

@@ -18,6 +18,7 @@ import {
 } from './tools-etendus';
 import { OUTILS_RAPPORTS } from './tools-rapports';
 import { searchHelp } from './tools-aide';
+import { OUTILS_DOMAINES } from './outils-domaines';
 
 export interface ToolContext {
   client: SupabaseClient;
@@ -173,7 +174,7 @@ const searchLeads: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_leads',
-    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status.',
+    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status. Create, edit, move in the pipeline, delete, convert → create_lead, update_lead, update_lead_status, delete_lead, convert_lead_to_client, convert_lead_to_job. The pipeline BOARD (deal cards, stages, values) → list_deals, update_deal_stage, delete_deal.',
     parameters: {
       type: 'object',
       properties: {
@@ -432,7 +433,7 @@ const listQuotes: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_quotes',
-    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count), then number, title, status and total.',
+    description: 'List quotes, optionally filtered by status or a search term. Returns total_matching (exact count), then number, title, status and total. Edit, duplicate, send by text, convert to invoice, presets → update_quote, duplicate_quote, send_quote_sms, convert_quote_to_invoice, *_quote_preset.',
     parameters: {
       type: 'object',
       properties: {
@@ -482,7 +483,7 @@ const listInvoices: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'list_invoices',
-    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance.',
+    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance. Partial payment, void, back to draft, edit, duplicate, delete, recurring, invoice templates, payment link, refund, card on file → record_invoice_payment, void_invoice, revert_invoice_to_draft, update_invoice, duplicate_invoice, delete_invoice, *_recurring_invoice, *_invoice_template, create_payment_request, resend_payment_request, refund_payment, charge_card_on_file.',
     parameters: {
       type: 'object',
       properties: {
@@ -894,6 +895,8 @@ export const AGENT_TOOLS: AgentTool[] = [
   ...OUTILS_LECTURE_ETENDUS,
   ...OUTILS_ECRITURE_ETENDUS,
   ...OUTILS_RAPPORTS,
+  // Couverture d'exécution à 100 % (2026-09-16) : leads, argent, terrain, équipe, réglages, porte-à-porte, formations.
+  ...OUTILS_DOMAINES,
 ];
 
 export const TOOLS_BY_NAME: Record<string, AgentTool> = Object.fromEntries(
