@@ -1,7 +1,7 @@
 # LUMI_RESULTS — étape B (coûts stricts, plafond dur, routeur, sous-agents)
 
 Date : 2026-09-16 · Branche : `feat/lumi-runtime` (PR #403, brouillon, merge par Will) · Base : `origin/main` 09511b21
-Aucune migration exécutée. Aucun merge fait par l'agent. Tout est testé (tsc vert ; suite complète = mêmes 4 rouges que `main`, hors Lumi).
+Migration B3 appliquée sur staging puis en prod le 2026-09-16 sur autorisation de Rafba (voir §6). Aucun merge fait par l'agent. Tout est testé (tsc vert ; suite complète = mêmes 4 rouges que `main`, hors Lumi).
 
 ## 1. Résultat en une ligne
 
@@ -89,7 +89,7 @@ Lecture : sur le sondage, un tour qui va au modèle coûte 0,73 ¢ (15,4 ¢ / 21
 
 ## 6. Pour mettre en prod (Will)
 
-1. Migration : **appliquée sur staging le 2026-09-16** (lien Postgres direct, une transaction ; `check:db-coherence` ✅, `check:schema-refs` : seul l'écart préexistant `migration_field_mappings.admin_flag`). **Prod : à faire** — le jeton `SUPABASE_ACCESS_TOKEN` de `.env.local` est expiré (401 sur l'API de gestion et sur le MCP) ; régénérer un jeton (Supabase → Account → Access Tokens), le mettre dans `.env.local`, puis `npm run db:apply:prod -- supabase/migrations/20260916120000_lumi_budget_reservations.sql`.
+1. Migration : **appliquée sur staging puis en prod le 2026-09-16** (autorisation de Rafba). Vérifié en prod : 2 tables, 5 fonctions, cron `lumi_expire_reservations` toutes les 5 min ; `check:broken-objects` aucun ; `check:db-coherence` aucun écart ; `check:schema-refs -- --prod` : seul l'écart préexistant `migration_field_mappings.admin_flag` (autre chantier). Le jeton d'accès avait expiré en cours de journée ; régénéré par Rafba.
 2. Merger la PR #403 (squash).
 3. Railway : rien d'obligatoire. Recommandé : `LUMI_ROUTEUR=observation` deux semaines (verdicts tracés dans `lumi_traces.params.routeur`), puis `actif`. Les règles de coût sont actives par défaut.
 4. Surveiller `ai_usage` (coût réel) et `lumi_traces` (part par étage, `action = plafond_*`, `budget_epuise`) la première semaine.
