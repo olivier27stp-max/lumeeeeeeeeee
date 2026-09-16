@@ -95,7 +95,7 @@ function qtePositive(v: any): number {
  * `String(undefined)` = "undefined" inséré en base (donnée corrompue
  * silencieuse). On refuse proprement à la place. Renvoie la valeur nettoyée.
  */
-function champRequis(v: any, nomLisible: string): string {
+export function champRequis(v: any, nomLisible: string): string {
   const s = v == null ? '' : String(v).trim();
   if (!s) throw new Error(`${nomLisible} est requis — précise-le et réessaie.`);
   return s;
@@ -255,7 +255,7 @@ function messageHumainErreur(e: any, contexte?: string): string {
     : 'L\'action n\'a pas fonctionné côté Lume. Dis-le simplement et propose de réessayer.';
 }
 
-async function executerIdempotent(
+export async function executerIdempotent(
   ctx: ToolContext,
   outil: string,
   args: Record<string, any>,
@@ -1792,7 +1792,7 @@ async function signalerEvenement(ctx: ToolContext, chemin: string, corps: Record
  * handlers d'envoi le convertissent en EffetPartiel pour NE PAS retenter (donc
  * ne jamais dupliquer un envoi au client).
  */
-class AppelInterneIncertain extends Error {
+export class AppelInterneIncertain extends Error {
   constructor(public cause: string) {
     super(cause);
     this.name = 'AppelInterneIncertain';
@@ -1817,7 +1817,7 @@ function envoiIncertain(quoi: string): EffetPartiel {
 /** Délai au-delà duquel un appel interne est abandonné (ms). */
 const TIMEOUT_APPEL_INTERNE_MS = Number(process.env.MCP_INTERNAL_TIMEOUT_MS) || 20_000;
 
-async function appelInterne(
+export async function appelInterne(
   ctx: ToolContext,
   chemin: string,
   corps: Record<string, any>,

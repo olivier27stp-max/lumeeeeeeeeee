@@ -33,7 +33,8 @@ export function estSousAgent(topic: string | null | undefined): topic is IdTopic
 /** Outils chargés pour un sous-agent : ceux du topic + les transverses, seulement s'ils existent. Ordre stable (cache). */
 export function outilsDuSousAgent(topic: IdTopic): string[] {
   const t = TOPICS.find((x) => x.id === topic);
-  const noms = [...(t?.outils ?? []), ...OUTILS_TRANSVERSES];
+  // Le noyau seulement (outils du quotidien) : les ~200 outils de couverture restent différés, trouvables par tool_search.
+  const noms = [...(t?.noyau ?? t?.outils ?? []), ...OUTILS_TRANSVERSES];
   const vus = new Set<string>();
   return noms.filter((n) => TOOLS_BY_NAME[n] && !vus.has(n) && vus.add(n));
 }

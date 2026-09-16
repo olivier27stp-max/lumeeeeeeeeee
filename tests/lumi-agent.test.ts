@@ -300,7 +300,7 @@ describe('outils différés (tool search)', () => {
     const { promptSystemeLumi } = await import('../server/lib/lumi/orchestrateur');
     const stable = promptSystemeLumi({ companyName: 'X', userName: null, language: 'fr', todayIso: '2026-09-10' })[0].text;
     expect(stable).toContain('tool_search_tool_regex');
-    expect(stable).toMatch(/quote\|invoice/);
+    expect(stable).toMatch(/invoice\|payment/); // les familles d'outils, avec leurs motifs de recherche
   });
 
   it('une réponse sans appel client (recherche seule) relance la boucle sans message vide', async () => {

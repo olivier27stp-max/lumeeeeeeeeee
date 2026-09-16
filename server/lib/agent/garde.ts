@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { validerArgs } from './validation-args';
 import { getUserContext, hasPermission } from '../rbac';
+import { PERMISSIONS_DOMAINES, OUTILS_FINANCIERS_DOMAINES } from './outils-domaines';
 import { TOOLS_BY_NAME, type ToolContext } from './tools';
 
 export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite: string }> = {
@@ -93,6 +94,8 @@ export const PERMISSION_PAR_OUTIL: Record<string, { cle: PermissionKey; capacite
   remember_this:             { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
   forget_note:               { cle: 'settings.update',    capacite: 'la mémoire de Lumi (réglage d’entreprise)' },
   get_recent_agent_actions:  { cle: 'reports.read',       capacite: 'le journal des actions de Lumi' },
+  // Domaines (couverture 100 %) : une permission par outil, déclarée dans chaque module.
+  ...PERMISSIONS_DOMAINES,
 };
 
 export const OUTILS_FINANCIERS = new Set([
@@ -103,6 +106,7 @@ export const OUTILS_FINANCIERS = new Set([
   'compare_revenue', 'get_top_clients', 'get_churn_risk',
   'get_job_profitability', 'get_top_services',
   'build_report',
+  ...OUTILS_FINANCIERS_DOMAINES,
 ]);
 
 // Champs à blanchir pour un membre sans droit aux montants. On couvre les

@@ -18,6 +18,7 @@ import {
 } from './tools-etendus';
 import { OUTILS_RAPPORTS } from './tools-rapports';
 import { searchHelp } from './tools-aide';
+import { OUTILS_DOMAINES } from './outils-domaines';
 
 export interface ToolContext {
   client: SupabaseClient;
@@ -894,6 +895,8 @@ export const AGENT_TOOLS: AgentTool[] = [
   ...OUTILS_LECTURE_ETENDUS,
   ...OUTILS_ECRITURE_ETENDUS,
   ...OUTILS_RAPPORTS,
+  // Couverture d'exécution à 100 % (2026-09-16) : leads, argent, terrain, équipe, réglages, porte-à-porte, formations.
+  ...OUTILS_DOMAINES,
 ];
 
 export const TOOLS_BY_NAME: Record<string, AgentTool> = Object.fromEntries(

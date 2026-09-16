@@ -11,6 +11,8 @@
  * appartient à exactement un topic (sauf la mémoire et les rapports,
  * transverses) et que chaque outil cité existe.
  */
+import { TOPICS_DOMAINES } from '../agent/outils-domaines';
+
 export type IdTopic = 'planification' | 'facturation' | 'clients' | 'communications' | 'equipe' | 'rapports' | 'memoire' | 'hors_scope' | 'multi';
 
 export interface Topic {
@@ -19,6 +21,13 @@ export interface Topic {
   description: string;
   /** Outils (lecture + écriture) que ce topic autorise. */
   outils: string[];
+  /**
+   * Noyau du topic : les outils du quotidien, CHARGÉS d'office par le
+   * sous-agent (bloc d'outils court, en cache). Les autres outils du topic
+   * (couverture 100 %) restent différés, découverts par tool_search.
+   * Rempli à l'initialisation = la liste d'origine, avant l'ajout des domaines.
+   */
+  noyau?: string[];
   /** Ce que le topic refuse, redirigé ailleurs. */
   refuse: string;
 }
@@ -83,6 +92,12 @@ export const TOPICS: readonly Topic[] = [
     refuse: 'Rien : l’agent complet répond, sans restriction d’outils.',
   },
 ];
+
+// Les outils des domaines (couverture 100 %) rejoignent leur topic ; un outil dans deux topics ou sans topic fait échouer les tests.
+for (const t of TOPICS) {
+  t.noyau = [...t.outils];
+  for (const o of TOPICS_DOMAINES[t.id] ?? []) if (!t.outils.includes(o)) t.outils.push(o);
+}
 
 export const TOPICS_PAR_ID: ReadonlyMap<IdTopic, Topic> = new Map(TOPICS.map((t) => [t.id, t]));
 

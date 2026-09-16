@@ -16,6 +16,8 @@
  * Le test tests/lumi-registre.test.ts vérifie que chaque outil d'écriture
  * de TOOLS_BY_NAME a une entrée ici, et rien d'autre.
  */
+import { REGISTRE_DOMAINES } from './outils-domaines';
+
 export interface AttributsEcriture {
   sensible: boolean;
   anodine: boolean;
@@ -64,6 +66,8 @@ export const REGISTRE_ECRITURES: Readonly<Record<string, AttributsEcriture>> = {
   // Mémoire de Lumi
   remember_this:            S({ anodine: true }),
   forget_note:              S({ anodine: true }),
+  // Domaines (tools-leads, tools-argent, tools-terrain, tools-equipe, tools-reglages, tools-d2d-formations).
+  ...Object.fromEntries(Object.entries(REGISTRE_DOMAINES).map(([n, a]) => [n, S(a)])),
 };
 
 export function attributsEcriture(outil: string): AttributsEcriture | null {
