@@ -749,7 +749,15 @@ router.get('/lumi/conversations/:id', async (req, res) => {
     const { data: conv } = await getServiceClient().from('lumi_conversations').select('id, title').eq('id', id).eq('org_id', auth.orgId).eq('user_id', auth.user.id).maybeSingle();
     if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
     const msgs = await chargerHistorique(id);
-    return res.json({ conversation: conv, messages: rendreMessages(msgs) });
+    // Tokens et coût réels de la conversation (table ai_usage, écrite à chaque
+    // appel au modèle) : le chiffre vérifiable, pas une estimation.
+    let usage: { model: string | null; input_tokens: number; output_tokens: number; cache_read_input_tokens: number; cost_cents: number; appels: number } | undefined;
+    const { data: lignes } = await getServiceClient().from('ai_usage').select('model, input_tokens, output_tokens, cache_read_input_tokens, cost_cents').eq('conversation_id', id).eq('org_id', auth.orgId);
+    if (lignes && lignes.length) {
+      usage = { model: (lignes[lignes.length - 1] as any).model ?? null, input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cost_cents: 0, appels: lignes.length };
+      for (const l of lignes as any[]) { usage.input_tokens += l.input_tokens || 0; usage.output_tokens += l.output_tokens || 0; usage.cache_read_input_tokens += l.cache_read_input_tokens || 0; usage.cost_cents += l.cost_cents || 0; }
+    }
+    return res.json({ conversation: conv, messages: rendreMessages(msgs), usage });
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to load conversation.', '[lumi/conversation]');
   }
