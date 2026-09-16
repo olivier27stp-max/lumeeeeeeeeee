@@ -1042,8 +1042,8 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
     },
     {
       field: 'unit_price',
-      labelFr: 'Prix unitaire',
-      labelEn: 'Unit price',
+      labelFr: 'Prix unitaire (avant taxes)',
+      labelEn: 'Unit price (before tax)',
       types: ['money', 'number', 'text'],
       synonyms: [
         'unit price', 'rate', 'price', 'price each', 'each', 'sales price',
@@ -1052,8 +1052,8 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
     },
     {
       field: 'line_total',
-      labelFr: 'Total de la ligne',
-      labelEn: 'Line total',
+      labelFr: 'Total de la ligne (avant taxes)',
+      labelEn: 'Line total (before tax)',
       types: ['money', 'number', 'text'],
       synonyms: [
         'amount', 'total', 'line total', 'line amount', 'extended amount', 'ext amount',
