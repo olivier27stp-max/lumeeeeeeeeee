@@ -305,6 +305,7 @@ export async function tourLumi(opts: {
   const espaceRefs = `${opts.orgId}:${opts.userId}`;
   let texteTotal = '';
   let coutTotal = 0;
+  let coutHorsCacheFroid = 0;
 
   const maxEtapes = Math.min(MAX_ETAPES, Math.max(0, opts.reglages?.max_etapes ?? MAX_ETAPES));
   if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
@@ -312,7 +313,7 @@ export async function tourLumi(opts: {
   for (let etape = 0; etape < maxEtapes; etape++) {
     // Règle stricte : un tour qui a déjà coûté plus que le plafond s'arrête ici
     // (l'historique est cohérent : le dernier message porte les tool_result).
-    if (coutTotal >= reglesCout().plafond_cout_tour_cents) {
+    if (coutHorsCacheFroid >= reglesCout().plafond_cout_tour_cents) {
       opts.emettre({ type: 'error', message: 'plafond_tour' });
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
     }
@@ -342,6 +343,12 @@ export async function tourLumi(opts: {
 
     const cout = coutEnCents(model, reponse.usage);
     coutTotal += cout;
+    // Le plafond par tour vise les boucles, pas le démarrage à froid du préfixe
+    // (écriture 1 h, une fois par heure creuse pour toute la plateforme) : il
+    // se mesure hors écriture 1 h. Sans détail, tout est compté (jamais sous-compté).
+    const usageAppel = reponse.usage;
+    const ecrit1h = usageAppel.cache_creation ? usageAppel.cache_creation.ephemeral_1h_input_tokens : 0;
+    coutHorsCacheFroid += coutEnCents(model, { ...usageAppel, cache_creation_input_tokens: Math.max(0, (usageAppel.cache_creation_input_tokens ?? 0) - ecrit1h), cache_creation: usageAppel.cache_creation ? { ...usageAppel.cache_creation, ephemeral_1h_input_tokens: 0 } : undefined });
     await opts.journaliser(reponse.usage, model, cout);
     if (reservation && opts.budget) await opts.budget.regler(reservation.id, cout);
     opts.emettre({ type: 'usage', model, usage: reponse.usage, cost_cents: cout });

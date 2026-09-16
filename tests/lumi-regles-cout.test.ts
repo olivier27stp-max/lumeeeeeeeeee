@@ -36,7 +36,9 @@ describe('les règles sont branchées dans le code (pas seulement écrites)', ()
     const s = lu('server/lib/lumi/orchestrateur.ts');
     expect(s).toContain('const MAX_TOKENS = reglesCout().max_tokens_sortie;');
     expect(s).toContain("opts.reglages?.effort ?? reglesCout().effort_defaut");
-    expect(s).toContain('if (coutTotal >= reglesCout().plafond_cout_tour_cents)');
+    // Mesuré hors écriture 1 h du préfixe (le froid n'est pas une boucle).
+    expect(s).toContain('if (coutHorsCacheFroid >= reglesCout().plafond_cout_tour_cents)');
+    expect(s).toContain('ephemeral_1h_input_tokens: 0');
     expect(s).toContain("message: 'plafond_tour'");
   });
   it('route : plafond de conversation servi en gabarit et escalade sur plafond_tour', () => {
