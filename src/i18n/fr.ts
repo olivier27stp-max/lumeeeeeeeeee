@@ -3740,7 +3740,7 @@ const fr: TranslationKeys = {
     newConversation: 'Nouvelle conversation',
     recentConversations: 'Mes conversations',
     noConversations: 'Aucune conversation pour le moment.',
-    closedNotice: 'Cette conversation est fermée. Commencez-en une nouvelle si besoin.',
+    closedNotice: 'Conversation fermée. Écrivez ici pour la rouvrir, ou commencez-en une nouvelle.',
     status_ai: 'Assistant',
     status_open: 'Chez l’équipe',
     status_answered: 'Répondu',

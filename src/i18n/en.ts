@@ -3748,7 +3748,7 @@ const en = {
     newConversation: 'New conversation',
     recentConversations: 'My conversations',
     noConversations: 'No conversations yet.',
-    closedNotice: 'This conversation is closed. Start a new one if you need to.',
+    closedNotice: 'This conversation is closed. Write here to reopen it, or start a new one.',
     status_ai: 'Assistant',
     status_open: 'With the team',
     status_answered: 'Answered',

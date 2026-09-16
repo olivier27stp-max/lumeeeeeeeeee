@@ -228,8 +228,8 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
         </div>
       )}
 
-      {/* Saisie */}
-      {!ferme && (
+      {/* Saisie — aussi quand la conversation est fermée : écrire la rouvre. */}
+      {(
         <form onSubmit={(e) => { e.preventDefault(); envoyer(false); }} className="shrink-0 border-t border-outline-subtle">
           <div className="flex items-center gap-2 px-3.5 pt-3 pb-2">
             <label htmlFor={champId} className="sr-only">{ts.chatPlaceholder}</label>

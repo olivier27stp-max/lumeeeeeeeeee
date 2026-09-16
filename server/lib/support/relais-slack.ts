@@ -147,7 +147,9 @@ export function demarrerReleveSlack(): void {
   const archivage = async () => {
     try {
       const { archiverCanauxInactifs } = await import('./canaux-slack');
-      await archiverCanauxInactifs(getServiceClient());
+      const { fermerTicketsInactifs } = await import('./tickets');
+      await fermerTicketsInactifs(getServiceClient());   // conversations sans suite → fermées (le client peut rouvrir)
+      await archiverCanauxInactifs(getServiceClient()); // puis canaux sans conversation vivante → archivés
     } catch (e: any) { logger.error('[support/canaux] archivage en erreur', { error: e?.message || String(e) }); }
   };
   setTimeout(() => { void archivage(); }, 60_000);

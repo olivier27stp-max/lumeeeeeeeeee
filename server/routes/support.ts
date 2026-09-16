@@ -30,7 +30,7 @@ import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cach
 import { versionOrg } from '../lib/lumi/version-org';
 import { PLAFOND_MODELE_PAR_JOUR, reponsesModeleAujourdhui, texteAuPlafond, PORTEE_CACHE_SUPPORT } from '../lib/support/garde-fous';
 import {
-  contexteOrg, creerTicket, ticketDe, messagesDuTicket, ajouterMessage, escaladerTicket, relayerMessageClient, humainActifRecemment, slaTexte,
+  contexteOrg, creerTicket, ticketDe, messagesDuTicket, ajouterMessage, escaladerTicket, relayerMessageClient, humainActifRecemment, slaTexte, rouvrirTicket,
   type Ticket, type MessageTicket,
 } from '../lib/support/tickets';
 
@@ -67,7 +67,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     const ctx = await contexteOrg(admin, auth.orgId, auth.user);
     let ticket: Ticket | null = ticketId ? await ticketDe(admin, ticketId, auth.orgId, auth.user.id) : null;
     if (ticketId && !ticket) return res.status(404).json({ error: 'Conversation not found.' });
-    if (ticket && ticket.status === 'closed') return res.status(409).json({ error: 'Conversation is closed.', code: 'closed' });
+    if (ticket && ticket.status === 'closed') ticket = await rouvrirTicket(admin, ticket);
 
     if (!ticket) {
       ticket = await creerTicket(admin, { orgId: auth.orgId, userId: auth.user.id, subject: message.split('\n')[0].slice(0, 120), ctx, status: 'ai' });
@@ -166,9 +166,9 @@ router.post('/support/:id/messages', limiteChat, validate(supportMessageSchema),
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
-    const ticket = await ticketDe(admin, String(req.params.id), auth.orgId, auth.user.id);
+    let ticket = await ticketDe(admin, String(req.params.id), auth.orgId, auth.user.id);
     if (!ticket) return res.status(404).json({ error: 'Conversation not found.' });
-    if (ticket.status === 'closed') return res.status(409).json({ error: 'Conversation is closed.', code: 'closed' });
+    if (ticket.status === 'closed') ticket = await rouvrirTicket(admin, ticket);
     const ctx = await contexteOrg(admin, auth.orgId, auth.user);
     const { message } = req.body as { message: string };
     await ajouterMessage(admin, { ticket, author: 'user', body: message, authorName: ctx.userName });
@@ -192,9 +192,9 @@ router.post('/support/:id/escalate', validate(supportEscalateSchema), async (req
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const admin = getServiceClient();
-    const ticket = await ticketDe(admin, String(req.params.id), auth.orgId, auth.user.id);
+    let ticket = await ticketDe(admin, String(req.params.id), auth.orgId, auth.user.id);
     if (!ticket) return res.status(404).json({ error: 'Conversation not found.' });
-    if (ticket.status === 'closed') return res.status(409).json({ error: 'Conversation is closed.', code: 'closed' });
+    if (ticket.status === 'closed') ticket = await rouvrirTicket(admin, ticket);
     const ctx = await contexteOrg(admin, auth.orgId, auth.user);
     const { reason } = req.body as { reason?: string };
     const r = await escaladerTicket(admin, ticket, ctx, reason || 'Le client a demandé à parler à un humain');
