@@ -46,10 +46,31 @@ export function sousAgentDepuisVerdict(r: ResultatRouteur | null | undefined): I
 }
 
 /** Ligne ajoutée au bloc VARIABLE du prompt (jamais au bloc stable) quand un sous-agent est chargé. */
+/**
+ * Consignes propres à un sous-agent (bloc variable). Courtes, et seulement là où
+ * l'effort bas rendait le modèle hésitant (batterie du 2026-09-16) :
+ *  - memoire : « retiens que… » avec un souvenir semblable déjà en place →
+ *    le modèle répondait « déjà noté » sans appeler remember_this ;
+ *  - planification : « crée un job… » → il demandait s'il fallait des articles
+ *    au lieu de proposer la carte (que l'utilisateur relit de toute façon).
+ */
+const CONSIGNES_SOUS_AGENT: Partial<Record<IdTopic, { fr: string; en: string }>> = {
+  memoire: {
+    fr: "Quand on te demande de retenir un fait, appelle remember_this même si un souvenir semblable existe déjà (il est mis à jour) ; ne réponds jamais « déjà noté » sans l'appel.",
+    en: 'When asked to remember something, call remember_this even if a similar note already exists (it gets updated); never answer "already noted" without the call.',
+  },
+  planification: {
+    fr: 'Pour créer ou déplacer un job, propose la carte tout de suite avec ce qui est fourni (articles vides permis) : pas de question préalable sur les articles ou les prix, l’utilisateur relit la carte.',
+    en: 'To create or move a job, propose the card right away with what was given (empty items allowed): no preliminary question about items or prices, the user reviews the card.',
+  },
+};
+
 export function focusDuSousAgent(topic: IdTopic, langue: 'fr' | 'en'): string {
   const t = TOPICS.find((x) => x.id === topic);
   const sujet = t?.description ?? topic;
-  return langue === 'fr'
+  const consigne = CONSIGNES_SOUS_AGENT[topic]?.[langue];
+  return (langue === 'fr'
     ? `Sujet de ce tour : ${sujet} Les outils de ce sujet sont chargés ; si la demande en sort, cherche l'outil avec tool_search_tool_regex.`
-    : `Topic of this turn: ${sujet} This topic's tools are loaded; if the request goes beyond it, look the tool up with tool_search_tool_regex.`;
+    : `Topic of this turn: ${sujet} This topic's tools are loaded; if the request goes beyond it, look the tool up with tool_search_tool_regex.`)
+    + (consigne ? ` ${consigne}` : '');
 }
