@@ -82,22 +82,47 @@ export async function embed(texte: string, fetchImpl: typeof fetch = fetch): Pro
 }
 
 /** La meilleure entrée au-dessus du seuil, pour cette portée et cette version (pur sur l'index). */
-export function meilleure(index: EntreeSemantique[], vec: number[], version: number | null, ageMaxMs = Infinity, maintenant = Date.now()): { entree: EntreeSemantique; similarite: number } | null {
+/** Mots creux d'une question (verbes de demande, déterminants) : ils ne distinguent rien. */
+const MOTS_CREUX: ReadonlySet<string> = new Set(['montre', 'montrer', 'voir', 'liste', 'lister', 'dis', 'donne', 'quoi', 'quel', 'quels', 'quelle', 'quelles', 'combien', 'comment', 'avec', 'pour', 'dans', 'tous', 'toutes', 'mes', 'mon', 'les', 'des', 'une', 'pas', 'que', 'qui', 'est', 'sont', 'jai', 'moi', 'show', 'list', 'what', 'which', 'the', 'and', 'all']);
+/** Mots porteurs d'un énoncé normalisé (≥ 3 lettres, hors mots creux), pour le garde lexical. */
+function motsPorteurs(enonce: string): Set<string> {
+  return new Set((normaliserEnonce(enonce) ?? '').split(/\s+/).filter((m) => m.length >= 3 && !MOTS_CREUX.has(m)));
+}
+
+/**
+ * Garde lexical : deux questions courtes qui ne diffèrent que par le nom clé
+ * (« mes modèles de soumission » / « mes modèles de facture ») ont un cosinus
+ * ≥ 0,92 et recevaient la même réponse (batterie du 2026-09-16). En plus du
+ * cosinus, il faut que ≥ 60 % des mots porteurs de la question soient dans
+ * l'énoncé mémorisé. Sans énoncé fourni (appelants anciens) : pas de garde.
+ */
+export const PART_MOTS_COMMUNS_MIN = 0.6;
+export function lexicalementProche(enonce: string, memorise: string): boolean {
+  const a = motsPorteurs(enonce);
+  if (a.size === 0) return true;
+  const b = motsPorteurs(memorise);
+  let communs = 0;
+  for (const m of a) if (b.has(m)) communs += 1;
+  return communs / a.size >= PART_MOTS_COMMUNS_MIN;
+}
+
+export function meilleure(index: EntreeSemantique[], vec: number[], version: number | null, ageMaxMs = Infinity, maintenant = Date.now(), enonce?: string | null): { entree: EntreeSemantique; similarite: number } | null {
   let best: { entree: EntreeSemantique; similarite: number } | null = null;
   for (const e of index) {
     if (version !== null && e.version !== version) continue;
     // Expiration PAR ENTRÉE : la clé de l'index est prolongée à chaque écriture,
     // une vieille réponse survivait tant que l'org en mémorisait d'autres.
     if (maintenant - e.ts > ageMaxMs) continue;
+    if (enonce && !lexicalementProche(enonce, e.enonce)) continue;
     const s = cosinus(vec, e.vec);
     if (s >= SEUIL_SIMILARITE && (!best || s > best.similarite)) best = { entree: e, similarite: s };
   }
   return best;
 }
 
-export async function chercherSemantique(p: Portee, vec: number[], version: number | null): Promise<{ entree: EntreeSemantique; similarite: number } | null> {
+export async function chercherSemantique(p: Portee, vec: number[], version: number | null, enonce?: string | null): Promise<{ entree: EntreeSemantique; similarite: number } | null> {
   const index = (await magasin().get<EntreeSemantique[]>(cleIndex(p))) ?? [];
-  return meilleure(index, vec, version, (p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S) * 1000);
+  return meilleure(index, vec, version, (p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S) * 1000, Date.now(), enonce);
 }
 
 export async function memoriserSemantique(p: Portee, e: Omit<EntreeSemantique, 'ts'>): Promise<void> {

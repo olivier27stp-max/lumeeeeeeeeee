@@ -149,6 +149,7 @@ Autres formulations courantes → topic, action :
 - « réponds à Sophie que j'arrive à 10 h » → communications, action null (écriture)
 - « écris un courriel de remerciement à Lapointe » → communications, action null (écriture)
 - « mes heures de la semaine », « la paie de mes gars » → equipe, action null
+- « pointe-moi », « je commence ma journée », « je pars en pause », « je reviens de pause », « pointe-moi dehors » → equipe, action null (pointage, pas le brief)
 - « ajoute une tâche rappeler le fournisseur » → equipe, action null (écriture)
 - « qu'est-ce qui reste à faire » → equipe, taches
 - « mes stats de porte-à-porte » → equipe, action null

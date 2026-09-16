@@ -107,7 +107,7 @@ export const searchHelp: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_help',
-    description: 'Questions about Lume itself — how-to ("how do I set up the request form?", "can my client pay online?"), but ALSO the Lume subscription, plans, billing, a failed payment, quote presets and what they contain: searches the product documentation and returns the closest passages WITH their page. Call it BEFORE saying a topic is not yours or pointing to support. Answer only from these passages and name the page as the source; if nothing matches, say you do not know.',
+    description: 'Questions about Lume itself — how-to ("how do I set up the request form?", "can my client pay online?"), but ALSO the Lume subscription, plans, billing, a failed payment, and what a quote preset IS: searches the product documentation. NOT for the OWN presets/templates/services of the business (list_quote_presets, list_quote_templates, list_services) and returns the closest passages WITH their page. Call it BEFORE saying a topic is not yours or pointing to support. Answer only from these passages and name the page as the source; if nothing matches, say you do not know.',
     parameters: {
       type: 'object',
       properties: { query: { type: 'string', description: 'The question, in the user\'s words.' } },

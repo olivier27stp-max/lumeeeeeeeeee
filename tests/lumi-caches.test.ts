@@ -17,6 +17,20 @@ vi.mock('../server/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn()
 
 import { magasinPourTests } from '../server/lib/lumi/magasin';
 import { cleReponse, lireReponse, ecrireReponse, retirerReponse, invaliderOrg, versionOrg, tourCachable, TTL_REPONSE_S } from '../server/lib/lumi/cache-reponses';
+import { lexicalementProche } from '../server/lib/lumi/cache-semantique';
+
+describe('garde lexical du cache sémantique', () => {
+  it('deux questions qui ne diffèrent que par le nom clé ne se servent pas l une l autre', () => {
+    expect(lexicalementProche('Montre-moi mes modèles de facture.', 'montre moi mes modeles de soumission avec les prix')).toBe(false);
+    expect(lexicalementProche('mes modèles de soumission', 'montre moi mes modeles de soumission avec les prix')).toBe(true);
+    expect(lexicalementProche('ai-je des jobs en retard', 'est ce que j ai des jobs en retard')).toBe(true);
+    // Sans énoncé fourni, meilleure() ne filtre pas (appelants anciens).
+    const e = { enonce: 'mes modeles de soumission', vec: [1, 0], texte: 'x', fiches: [], outils: [], version: 0, ts: Date.now() };
+    expect(meilleure([e], [1, 0], null)).not.toBeNull();
+    expect(meilleure([e], [1, 0], null, Infinity, Date.now(), 'mes modèles de facture')).toBeNull();
+    expect(meilleure([e], [1, 0], null, Infinity, Date.now(), 'mes modèles de soumission')).not.toBeNull();
+  });
+});
 import { cleIndex, cosinus, meilleure, chercherSemantique, memoriserSemantique, oublierSemantique, SEUIL_SIMILARITE, embed } from '../server/lib/lumi/cache-semantique';
 
 const lu = (p: string) => readFileSync(resolve(__dirname, '..', ...p.split('/')), 'utf8');
@@ -125,7 +139,7 @@ describe('branchement', () => {
   });
   it('agent public : index partagé seulement (aucun tenant), après les réponses fixes', () => {
     const s = lu('server/routes/sales-chat.ts');
-    expect(s).toContain("chercherSemantique({ genre: 'public' }, vecteur, null)");
+    expect(s).toContain("chercherSemantique({ genre: 'public' }, vecteur, null, dernier)"); // l'énoncé sert au garde lexical
     expect(s).not.toMatch(/genre: 'tenant'/);
     expect(s.indexOf('reponseFixePour(dernier)')).toBeLessThan(s.indexOf("chercherSemantique({ genre: 'public' }"));
   });

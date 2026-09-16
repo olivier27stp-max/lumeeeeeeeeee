@@ -79,7 +79,7 @@ router.post('/public/sales-chat', validate(salesChatSchema), async (req, res) =>
     // (aucune donnée client ici) ; seulement quand la question est le premier message.
     const vecteur = contents.length === 1 ? await embed(dernier) : null;
     if (vecteur) {
-      const s = await chercherSemantique({ genre: 'public' }, vecteur, null);
+      const s = await chercherSemantique({ genre: 'public' }, vecteur, null, dernier);
       if (s) {
         void journaliserTrace(getServiceClient(), {
           orgId: null, userId: null, canal: 'public', origine: (req.body as any)?.origine === 'suggestion' ? 'suggestion' : 'texte',

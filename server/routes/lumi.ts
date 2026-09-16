@@ -35,6 +35,7 @@ import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
 import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
 import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent } from '../lib/lumi/sous-agents';
+import { indiceOutils } from '../lib/lumi/indices-outils';
 import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
@@ -325,7 +326,14 @@ async function executerTourSse(opts: {
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
-      systeme: opts.sousAgent ? promptSystemeLumi({ ...ctx.promptCtx, focus: focusDuSousAgent(opts.sousAgent, ctx.language) }) : ctx.systeme,
+      // Bloc variable du tour : sujet du sous-agent + indices d'outils différés (code, 0 token d'API).
+      systeme: (() => {
+        const focus = [
+          opts.sousAgent ? focusDuSousAgent(opts.sousAgent, ctx.language) : null,
+          opts.enonce ? indiceOutils(opts.enonce, ctx.language) : null,
+        ].filter((x): x is string => !!x).join('\n\n');
+        return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
+      })(),
       sousAgent: opts.sousAgent ?? null,
       reglages,
       budget: {
@@ -474,11 +482,11 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       let etage: number = ETAGE.cacheReponse;
       if (!hit) {
         const vec = await vecteur;
-        const s = vec ? await chercherSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, vec, await versionOrg(p.orgId)) : null;
+        const s = vec ? await chercherSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, vec, await versionOrg(p.orgId), message) : null;
         if (s) { hit = s.entree; etage = ETAGE.cacheSemantique; }
         // Cache d'AIDE partagé par toutes les orgs (B8) : « comment je fais X dans
         // Lume » répondu une fois pour tout le monde (aucune donnée d'org dedans).
-        const g = !s && vec ? await chercherSemantique({ genre: 'global', espace: 'aide' }, vec, null) : null;
+        const g = !s && vec ? await chercherSemantique({ genre: 'global', espace: 'aide' }, vec, null, message) : null;
         if (g) { hit = g.entree; etage = ETAGE.cacheSemantique; }
       }
       if (hit) {

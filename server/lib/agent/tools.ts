@@ -174,7 +174,7 @@ const searchLeads: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'search_leads',
-    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status. Create, edit, move in the pipeline, delete, convert → create_lead, update_lead, update_lead_status, delete_lead, convert_lead_to_client, convert_lead_to_job.',
+    description: 'Search leads (prospects) by name, company, email or phone. Returns total_matching (exact count) and the matching leads with id and status. Create, edit, move in the pipeline, delete, convert → create_lead, update_lead, update_lead_status, delete_lead, convert_lead_to_client, convert_lead_to_job. The pipeline BOARD (deal cards, stages, values) → list_deals, update_deal_stage, delete_deal.',
     parameters: {
       type: 'object',
       properties: {
@@ -483,7 +483,7 @@ const listInvoices: AgentTool = {
   needsIdentity: true,
   declaration: {
     name: 'list_invoices',
-    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance. Partial payment, void, edit, duplicate, recurring, payment link, refund → record_invoice_payment, void_invoice, update_invoice, duplicate_invoice, *_recurring_invoice, create_payment_request, refund_payment.',
+    description: 'List invoices, optionally filtered by status (all, draft, past_due, paid). Returns invoice number, client, status, total and balance. Partial payment, void, back to draft, edit, duplicate, delete, recurring, invoice templates, payment link, refund, card on file → record_invoice_payment, void_invoice, revert_invoice_to_draft, update_invoice, duplicate_invoice, delete_invoice, *_recurring_invoice, *_invoice_template, create_payment_request, resend_payment_request, refund_payment, charge_card_on_file.',
     parameters: {
       type: 'object',
       properties: {
