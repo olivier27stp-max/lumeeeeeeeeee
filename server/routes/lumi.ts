@@ -453,10 +453,13 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // (~0,03 ¢, prompt en cache) ; une action déterministe reconnue avec assez
     // de confiance (SEUIL_CONFIANCE) répond sans le gros modèle — 0,3 à 0,6 ¢
     // économisés par tour reconnu. Sinon le verdict voyage dans la trace du
-    // tour (calibrage du seuil), sans second appel. Jamais après un repli ni
-    // avec une proposition en attente : le modèle doit en rendre compte.
+    // tour (calibrage du seuil), sans second appel. PREMIER message d'une
+    // conversation seulement (comme les caches) : le routeur ne voit que
+    // l'énoncé, et « il a-tu des factures pas payées ? » après une fiche
+    // client était routé vers TOUS les retards (sondage du 2026-09-16).
+    // Jamais après un repli ni avec une proposition en attente.
     let routeur: ResultatRouteur | null = null;
-    if (modeRouteur() === 'actif' && !enAttente.length && !repli) {
+    if (modeRouteur() === 'actif' && premierMessage) {
       const debut = Date.now();
       routeur = await classifier(message);
       const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
