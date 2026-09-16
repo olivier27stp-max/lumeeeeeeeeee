@@ -1,0 +1,1671 @@
+{
+ "passe1_froid": {
+  "synthese": {
+   "date": "2026-09-16T16:40:51.319Z",
+   "api": "http://localhost:3012",
+   "compte": "willhebert30@gmail.com",
+   "requetes": 29,
+   "conversations": 16,
+   "appels_modele": 34,
+   "appels_par_requete": 1.1724137931034482,
+   "cout_par_tour_cents": {
+    "moyen": 0.6784965517241381,
+    "p95": 2.0544,
+    "max": 2.9303
+   },
+   "cout_par_conversation_cents": {
+    "moyen": 1.2297750000000003,
+    "p95": 2.0544,
+    "max": 4.762700000000001
+   },
+   "repartition_cents": {
+    "entree_fraiche": 1.4588,
+    "cache_ecrit_1h": 4.3768,
+    "cache_ecrit_5m": 3.79175,
+    "cache_lu": 5.70298,
+    "sortie": 4.346
+   },
+   "etages": {
+    "1": 3,
+    "2": 5,
+    "6": 21
+   },
+   "latence_ms": {
+    "moyenne": 4459.724137931034,
+    "p95": 11059
+   },
+   "projection_cad_par_client_mois": {
+    "leger_20": 0.33,
+    "moyen_150": 2.51,
+    "lourd_600": 10.03
+   },
+   "note": "projection = coût moyen par conversation (USD) × conversations/mois × 1,36 CAD/USD"
+  },
+  "resultats": [
+   {
+    "conversation": "retards",
+    "tour": 1,
+    "message": "Combien de factures en retard j'ai en ce moment ?",
+    "etage": 1,
+    "raccourci": "retards",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 1968,
+    "outils": [
+     "get_overdue_payments"
+    ],
+    "proposition": false,
+    "texte": "3 factures en retard, 1 971,82 $ au total :\n• INV-000004 · Jean-Pierre Gagnon · 172,46 $ · 47 jours\n• INV-000006 · Sophie Bouchard · 1 626,90 $ · 28 jours\n• INV",
+    "erreur": null,
+    "conversation_id": "e8cbcc3c-b948-4f61-8e31-f2075a275e74"
+   },
+   {
+    "conversation": "retards",
+    "tour": 2,
+    "message": "C'est qui le pire ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 343,
+      "cache_1h": 6798,
+      "cache_lu": 0,
+      "output": 125,
+      "cost_cents": 2.9303
+     }
+    ],
+    "cost_cents": 2.9303,
+    "duree_ms": 4896,
+    "outils": [],
+    "proposition": false,
+    "texte": "Le pire, c'est Jean-Pierre Gagnon avec la facture INV-000004, en retard depuis 47 jours (172,46 $). Il a d'ailleurs une deuxième facture en retard de 11 jours, ",
+    "erreur": null,
+    "conversation_id": "e8cbcc3c-b948-4f61-8e31-f2075a275e74"
+   },
+   {
+    "conversation": "retards",
+    "tour": 3,
+    "message": "Ok relance-le poliment",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 1469,
+      "cache_5m": 137,
+      "cache_1h": 0,
+      "cache_lu": 14419,
+      "output": 425,
+      "cost_cents": 1.0414
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1812,
+      "cache_1h": 0,
+      "cache_lu": 7278,
+      "output": 192,
+      "cost_cents": 0.791
+     }
+    ],
+    "cost_cents": 1.8324000000000003,
+    "duree_ms": 12747,
+    "outils": [
+     "get_overdue_payments"
+    ],
+    "proposition": false,
+    "texte": "Voici le texto que je propose d'envoyer à Jean-Pierre Gagnon (438-555-0102) :\n\n« Bonjour M. Gagnon, un petit rappel de la part de Vision Lavage : deux factures ",
+    "erreur": null,
+    "conversation_id": "e8cbcc3c-b948-4f61-8e31-f2075a275e74"
+   },
+   {
+    "conversation": "horaire",
+    "tour": 1,
+    "message": "C'est quoi mon horaire demain ?",
+    "etage": 2,
+    "raccourci": "agenda",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 638,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "Rien de prévu demain : le calendrier est libre.",
+    "erreur": null,
+    "conversation_id": "198f4ac7-722e-4ac8-97ac-d8d9f89e4ac4"
+   },
+   {
+    "conversation": "horaire",
+    "tour": 2,
+    "message": "Pis cette semaine ?",
+    "etage": 2,
+    "raccourci": "agenda",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 604,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "1 visite cette semaine :\n\nMercredi 16 septembre\n• 14 h · Jean-Pierre Gagnon · Estimation revêtement — Gagnon — 456 Boul. René-Lévesque, Québec, QC",
+    "erreur": null,
+    "conversation_id": "198f4ac7-722e-4ac8-97ac-d8d9f89e4ac4"
+   },
+   {
+    "conversation": "client-360",
+    "tour": 1,
+    "message": "Parle-moi de mon client le plus récent",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 179,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 122,
+      "cost_cents": 0.3031
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1121,
+      "cache_1h": 0,
+      "cache_lu": 6977,
+      "output": 185,
+      "cost_cents": 0.6052
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 461,
+      "cache_1h": 0,
+      "cache_lu": 8098,
+      "output": 100,
+      "cost_cents": 0.3776
+     }
+    ],
+    "cost_cents": 1.2858999999999998,
+    "duree_ms": 10124,
+    "outils": [
+     "search_clients",
+     "get_client_profile"
+    ],
+    "proposition": false,
+    "texte": "Ton client le plus récent, c'est « Automatisation mtubrr9d », ajouté le 9 septembre 2026. Il a un seul job à son dossier (archivé, 344,93 $ de valeur totale), a",
+    "erreur": null,
+    "conversation_id": "db5b5b40-2b60-41da-8fd1-090cb4358240"
+   },
+   {
+    "conversation": "client-360",
+    "tour": 2,
+    "message": "Il a-tu des factures pas payées ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 117,
+      "cache_1h": 0,
+      "cache_lu": 8559,
+      "output": 36,
+      "cost_cents": 0.2368
+     }
+    ],
+    "cost_cents": 0.2368,
+    "duree_ms": 3636,
+    "outils": [],
+    "proposition": false,
+    "texte": "Non, aucune facture en attente ni en retard pour ce client — le solde impayé est à zéro.",
+    "erreur": null,
+    "conversation_id": "db5b5b40-2b60-41da-8fd1-090cb4358240"
+   },
+   {
+    "conversation": "creneau",
+    "tour": 1,
+    "message": "Trouve-moi un trou de 2 h jeudi prochain",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 1562,
+      "cache_5m": 186,
+      "cache_1h": 0,
+      "cache_lu": 13782,
+      "output": 248,
+      "cost_cents": 0.8825
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1640,
+      "cache_1h": 0,
+      "cache_lu": 6984,
+      "output": 341,
+      "cost_cents": 0.8911
+     }
+    ],
+    "cost_cents": 1.7736,
+    "duree_ms": 11059,
+    "outils": [
+     "get_day_route"
+    ],
+    "proposition": false,
+    "texte": "Jeudi le 24 septembre est complètement libre, aucune visite prévue — tu peux caser ton bloc de 2 heures où tu veux, par exemple 9 h à 11 h ou 13 h à 15 h.",
+    "erreur": null,
+    "conversation_id": "a33778ef-e0b6-4596-9d9b-bda45b99c40f"
+   },
+   {
+    "conversation": "howto",
+    "tour": 1,
+    "message": "Comment je fais pour envoyer une facture à un client ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 1311,
+      "cache_5m": 184,
+      "cache_1h": 0,
+      "cache_lu": 13780,
+      "output": 216,
+      "cost_cents": 0.7998
+     }
+    ],
+    "cost_cents": 0.7998,
+    "duree_ms": 5496,
+    "outils": [],
+    "proposition": false,
+    "texte": "C'est simple : je peux créer une facture brouillon pour un client (avec les articles et le montant), puis l'envoyer directement par courriel via Lume — tu n'as ",
+    "erreur": null,
+    "conversation_id": "cab3f12b-e475-409e-8f40-816cc25388b4"
+   },
+   {
+    "conversation": "howto",
+    "tour": 2,
+    "message": "Et pour la marquer payée ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1433,
+      "cache_1h": 0,
+      "cache_lu": 6982,
+      "output": 101,
+      "cost_cents": 0.5993
+     }
+    ],
+    "cost_cents": 0.5993,
+    "duree_ms": 3268,
+    "outils": [],
+    "proposition": false,
+    "texte": "Une fois la facture existante, je peux la marquer comme payée pour noter un paiement déjà reçu (comptant, virement, chèque) — ça n'encaisse rien chez le client,",
+    "erreur": null,
+    "conversation_id": "cab3f12b-e475-409e-8f40-816cc25388b4"
+   },
+   {
+    "conversation": "brief",
+    "tour": 1,
+    "message": "Mon brief du matin",
+    "etage": 1,
+    "raccourci": "briefing",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 612,
+    "outils": [
+     "get_morning_briefing"
+    ],
+    "proposition": false,
+    "texte": "Bonjour. 1 visite aujourd'hui : 14 h Jean-Pierre Gagnon. 3 factures en retard pour 1 971,82 $, la plus vieille chez Jean-Pierre Gagnon (47 jours). 1 tâche à fai",
+    "erreur": null,
+    "conversation_id": "db0013c2-41c2-4b72-8347-a280ca0baacb"
+   },
+   {
+    "conversation": "soumissions",
+    "tour": 1,
+    "message": "Mes soumissions en attente",
+    "etage": 2,
+    "raccourci": "devis-attente",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 550,
+    "outils": [
+     "list_quotes"
+    ],
+    "proposition": false,
+    "texte": "Aucun devis en attente de réponse.",
+    "erreur": null,
+    "conversation_id": "1af208fb-3fff-4182-8e29-66526200e29e"
+   },
+   {
+    "conversation": "soumissions",
+    "tour": 2,
+    "message": "Laquelle traîne depuis le plus longtemps ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 212,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 106,
+      "cost_cents": 0.2954
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 150,
+      "cache_1h": 0,
+      "cache_lu": 7010,
+      "output": 42,
+      "cost_cents": 0.2201
+     }
+    ],
+    "cost_cents": 0.5155,
+    "duree_ms": 4678,
+    "outils": [
+     "list_quotes"
+    ],
+    "proposition": false,
+    "texte": "Confirmé, il n'y a aucune soumission en attente de réponse en ce moment — donc rien qui traîne.",
+    "erreur": null,
+    "conversation_id": "1af208fb-3fff-4182-8e29-66526200e29e"
+   },
+   {
+    "conversation": "revenus",
+    "tour": 1,
+    "message": "Mes revenus ce mois-ci vs le mois passé",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 918,
+      "cache_5m": 184,
+      "cache_1h": 0,
+      "cache_lu": 13780,
+      "output": 121,
+      "cost_cents": 0.6262
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1173,
+      "cache_1h": 0,
+      "cache_lu": 6982,
+      "output": 114,
+      "cost_cents": 0.5473
+     }
+    ],
+    "cost_cents": 1.1735,
+    "duree_ms": 6304,
+    "outils": [
+     "compare_revenue"
+    ],
+    "proposition": false,
+    "texte": "Ce mois-ci (1er au 16 septembre), tu as facturé 1 626,90 $ contre 172,46 $ sur la même période le mois passé — une belle hausse de plus de 800 %. Tu as aussi aj",
+    "erreur": null,
+    "conversation_id": "58be28bc-958e-4a2c-bdc3-0ccb07361c6f"
+   },
+   {
+    "conversation": "revenus",
+    "tour": 2,
+    "message": "Pourquoi c'est plus bas ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 131,
+      "cache_1h": 0,
+      "cache_lu": 8155,
+      "output": 169,
+      "cost_cents": 0.3653
+     }
+    ],
+    "cost_cents": 0.3653,
+    "duree_ms": 3622,
+    "outils": [],
+    "proposition": false,
+    "texte": "Attention, c'est l'inverse : ce mois-ci est beaucoup plus haut que le mois passé (1 626,90 $ vs 172,46 $ à la même date). Est-ce que tu veux dire autre chose, g",
+    "erreur": null,
+    "conversation_id": "58be28bc-958e-4a2c-bdc3-0ccb07361c6f"
+   },
+   {
+    "conversation": "taches",
+    "tour": 1,
+    "message": "Crée une tâche : rappeler le fournisseur demain 9 h",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 188,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 85,
+      "cost_cents": 0.2684
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 320,
+      "cache_1h": 0,
+      "cache_lu": 6986,
+      "output": 33,
+      "cost_cents": 0.2531
+     }
+    ],
+    "cost_cents": 0.5215000000000001,
+    "duree_ms": 4472,
+    "outils": [],
+    "proposition": true,
+    "texte": "C'est fait, la tâche « Rappeler le fournisseur » est créée pour demain.",
+    "erreur": null,
+    "conversation_id": "fca0b33b-e019-47ae-8bb7-0240dcb8fa15"
+   },
+   {
+    "conversation": "taches",
+    "tour": 2,
+    "message": "Mes tâches en cours",
+    "etage": 2,
+    "raccourci": "taches",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 552,
+    "outils": [
+     "list_tasks"
+    ],
+    "proposition": false,
+    "texte": "3 tâches à faire :\n• Rappeler Marie Tremblay — Samedi 12 septembre\n• Rappeler le fournisseur — Jeudi 17 septembre\n• Rappeler le fournisseur de sel — Vendredi 18",
+    "erreur": null,
+    "conversation_id": "fca0b33b-e019-47ae-8bb7-0240dcb8fa15"
+   },
+   {
+    "conversation": "memoire",
+    "tour": 1,
+    "message": "Retiens que le lavage de vitres c'est toujours 80 $ minimum",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 409,
+      "cache_5m": 191,
+      "cache_1h": 0,
+      "cache_lu": 13787,
+      "output": 192,
+      "cost_cents": 0.5973
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 629,
+      "cache_1h": 0,
+      "cache_lu": 6989,
+      "output": 33,
+      "cost_cents": 0.3304
+     }
+    ],
+    "cost_cents": 0.9277000000000001,
+    "duree_ms": 9263,
+    "outils": [],
+    "proposition": true,
+    "texte": "C'est noté : lavage de vitres, minimum 80 $ à partir de maintenant.",
+    "erreur": null,
+    "conversation_id": "9dc66862-3e11-42f0-a0a1-99182824c73c"
+   },
+   {
+    "conversation": "memoire",
+    "tour": 2,
+    "message": "C'est quoi mon minimum pour les vitres ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 914,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 25,
+      "cost_cents": 0.3899
+     }
+    ],
+    "cost_cents": 0.3899,
+    "duree_ms": 2943,
+    "outils": [],
+    "proposition": false,
+    "texte": "Ton minimum pour le lavage de vitres est de 80 $.",
+    "erreur": null,
+    "conversation_id": "9dc66862-3e11-42f0-a0a1-99182824c73c"
+   },
+   {
+    "conversation": "joual",
+    "tour": 1,
+    "message": "chu tu occupé demain matin ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 217,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 124,
+      "cost_cents": 0.3146
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 140,
+      "cache_1h": 0,
+      "cache_lu": 7015,
+      "output": 23,
+      "cost_cents": 0.1987
+     }
+    ],
+    "cost_cents": 0.5133,
+    "duree_ms": 4186,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "T'as rien de prévu demain, ta matinée est libre.",
+    "erreur": null,
+    "conversation_id": "1922bbfd-795d-4f0e-92ce-fc0d15d250c8"
+   },
+   {
+    "conversation": "joual",
+    "tour": 2,
+    "message": "faque tu peux tu me céduler un rappel vendredi ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 187,
+      "cache_1h": 0,
+      "cache_lu": 7015,
+      "output": 121,
+      "cost_cents": 0.3085
+     }
+    ],
+    "cost_cents": 0.3085,
+    "duree_ms": 3160,
+    "outils": [],
+    "proposition": false,
+    "texte": "Un rappel de quoi exactement, pour vendredi le 18? Donne-moi le sujet et je te crée ça.",
+    "erreur": null,
+    "conversation_id": "1922bbfd-795d-4f0e-92ce-fc0d15d250c8"
+   },
+   {
+    "conversation": "ambigu",
+    "tour": 1,
+    "message": "Envoie-lui un texto",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 214,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 123,
+      "cost_cents": 0.3129
+     }
+    ],
+    "cost_cents": 0.3129,
+    "duree_ms": 4066,
+    "outils": [],
+    "proposition": false,
+    "texte": "Je ne suis pas certain de savoir à qui tu fais référence — peux-tu me préciser le client (ou lead) et le message que tu veux envoyer ?",
+    "erreur": null,
+    "conversation_id": "ac99b8dd-b472-4b63-a763-2ed25601b6fa"
+   },
+   {
+    "conversation": "ambigu",
+    "tour": 2,
+    "message": "À Tremblay, pour dire que j'arrive à 10 h",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 147,
+      "cache_1h": 0,
+      "cache_lu": 7012,
+      "output": 52,
+      "cost_cents": 0.2294
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 972,
+      "cache_5m": 179,
+      "cache_1h": 0,
+      "cache_lu": 14497,
+      "output": 165,
+      "cost_cents": 0.6941
+     }
+    ],
+    "cost_cents": 0.9235,
+    "duree_ms": 7278,
+    "outils": [
+     "search_clients"
+    ],
+    "proposition": false,
+    "texte": "Je m'apprête à envoyer ce texto à Marie Tremblay (514-555-0101) : « Bonjour Marie, je vous confirme mon arrivée vers 10 h aujourd'hui. À tantôt! » — je confirme",
+    "erreur": null,
+    "conversation_id": "ac99b8dd-b472-4b63-a763-2ed25601b6fa"
+   },
+   {
+    "conversation": "equipe",
+    "tour": 1,
+    "message": "Où est mon équipe en ce moment ?",
+    "etage": 1,
+    "raccourci": "ou-equipe",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 518,
+    "outils": [
+     "get_team_locations"
+    ],
+    "proposition": false,
+    "texte": "Personne n’est localisé en ce moment (positions des 20 dernières minutes, avec consentement seulement).",
+    "erreur": null,
+    "conversation_id": "bc52c535-556b-49da-9c50-fbb13117686c"
+   },
+   {
+    "conversation": "equipe",
+    "tour": 2,
+    "message": "Les feuilles de temps de la semaine",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 270,
+      "cache_5m": 274,
+      "cache_1h": 0,
+      "cache_lu": 13870,
+      "output": 221,
+      "cost_cents": 0.6209
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 450,
+      "cache_1h": 0,
+      "cache_lu": 7072,
+      "output": 51,
+      "cost_cents": 0.3053
+     }
+    ],
+    "cost_cents": 0.9262,
+    "duree_ms": 6820,
+    "outils": [
+     "get_timesheets"
+    ],
+    "proposition": false,
+    "texte": "Aucune heure enregistrée cette semaine (du lundi au 16 septembre) — pas de punch-in/punch-out pour l'instant.",
+    "erreur": null,
+    "conversation_id": "bc52c535-556b-49da-9c50-fbb13117686c"
+   },
+   {
+    "conversation": "hors-scope",
+    "tour": 1,
+    "message": "Peux-tu me bâtir un site web ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 220,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 84,
+      "cost_cents": 0.2754
+     }
+    ],
+    "cost_cents": 0.2754,
+    "duree_ms": 4791,
+    "outils": [],
+    "proposition": false,
+    "texte": "Ça, ce n'est pas quelque chose que je peux faire — c'est en dehors de ce que Lume me permet de gérer. Je peux t'aider avec ton CRM (clients, jobs, devis, factur",
+    "erreur": null,
+    "conversation_id": "19816f72-c9ec-4df3-b948-b36a181a87e4"
+   },
+   {
+    "conversation": "english",
+    "tour": 1,
+    "message": "How many jobs do I have this week?",
+    "etage": 2,
+    "raccourci": "agenda",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 651,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "1 visit this week:\n\nWednesday, September 16\n• 2:00 p.m. · Jean-Pierre Gagnon · Estimation revêtement — Gagnon — 456 Boul. René-Lévesque, Québec, QC",
+    "erreur": null,
+    "conversation_id": "8d7a93a4-1040-47ae-9b7a-4485a6c7b6f2"
+   },
+   {
+    "conversation": "english",
+    "tour": 2,
+    "message": "Which ones are not invoiced yet?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 290,
+      "cache_1h": 4144,
+      "cache_lu": 2627,
+      "output": 76,
+      "cost_cents": 1.859
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 119,
+      "cache_1h": 0,
+      "cache_lu": 7061,
+      "output": 24,
+      "cost_cents": 0.1954
+     }
+    ],
+    "cost_cents": 2.0544,
+    "duree_ms": 4140,
+    "outils": [
+     "list_jobs"
+    ],
+    "proposition": false,
+    "texte": "None right now — you don't have any jobs waiting to be invoiced.",
+    "erreur": null,
+    "conversation_id": "8d7a93a4-1040-47ae-9b7a-4485a6c7b6f2"
+   },
+   {
+    "conversation": "abonnement",
+    "tour": 1,
+    "message": "Mon paiement Lume a échoué, je fais quoi ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 331,
+      "cache_5m": 226,
+      "cache_1h": 0,
+      "cache_lu": 13822,
+      "output": 156,
+      "cost_cents": 0.5551
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 799,
+      "cache_1h": 0,
+      "cache_lu": 7024,
+      "output": 115,
+      "cost_cents": 0.4556
+     }
+    ],
+    "cost_cents": 1.0107,
+    "duree_ms": 6290,
+    "outils": [
+     "search_help"
+    ],
+    "proposition": false,
+    "texte": "Va dans Paramètres → Forfait & facturation, le statut va afficher « En retard » ; clique sur le bouton du portail de facturation et mets ta carte à jour. Le pai",
+    "erreur": null,
+    "conversation_id": "1e22644f-a075-4baf-88ad-444d0116eac0"
+   }
+  ]
+ },
+ "passe2_chaud": {
+  "synthese": {
+   "date": "2026-09-16T16:43:55.830Z",
+   "api": "http://localhost:3012",
+   "compte": "willhebert30@gmail.com",
+   "requetes": 30,
+   "conversations": 17,
+   "appels_modele": 30,
+   "appels_par_requete": 1,
+   "cout_par_tour_cents": {
+    "moyen": 0.5137466666666666,
+    "p95": 1.7953999999999999,
+    "max": 1.8674
+   },
+   "cout_par_conversation_cents": {
+    "moyen": 0.9066117647058822,
+    "p95": 2.0540000000000003,
+    "max": 2.1505
+   },
+   "repartition_cents": {
+    "entree_fraiche": 1.9638,
+    "cache_ecrit_1h": 0,
+    "cache_ecrit_5m": 3.61375,
+    "cache_lu": 5.44784,
+    "sortie": 4.387
+   },
+   "etages": {
+    "1": 3,
+    "2": 5,
+    "4": 5,
+    "6": 17
+   },
+   "latence_ms": {
+    "moyenne": 4243.566666666667,
+    "p95": 15416
+   },
+   "projection_cad_par_client_mois": {
+    "leger_20": 0.25,
+    "moyen_150": 1.85,
+    "lourd_600": 7.4
+   },
+   "note": "projection = coût moyen par conversation (USD) × conversations/mois × 1,36 CAD/USD"
+  },
+  "resultats": [
+   {
+    "conversation": "retards",
+    "tour": 1,
+    "message": "Combien de factures en retard j'ai en ce moment ?",
+    "etage": 1,
+    "raccourci": "retards",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 880,
+    "outils": [
+     "get_overdue_payments"
+    ],
+    "proposition": false,
+    "texte": "3 factures en retard, 1 971,82 $ au total :\n• INV-000004 · Jean-Pierre Gagnon · 172,46 $ · 47 jours\n• INV-000006 · Sophie Bouchard · 1 626,90 $ · 28 jours\n• INV",
+    "erreur": null,
+    "conversation_id": "bc206c35-e098-484e-8684-d04aaa0eead3"
+   },
+   {
+    "conversation": "retards",
+    "tour": 2,
+    "message": "C'est qui le pire ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 383,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 51,
+      "cost_cents": 0.2831
+     }
+    ],
+    "cost_cents": 0.2831,
+    "duree_ms": 2973,
+    "outils": [],
+    "proposition": false,
+    "texte": "C'est Sophie Bouchard, avec 1 626,90 $ en retard depuis 28 jours — le montant le plus élevé du lot.",
+    "erreur": null,
+    "conversation_id": "bc206c35-e098-484e-8684-d04aaa0eead3"
+   },
+   {
+    "conversation": "retards",
+    "tour": 3,
+    "message": "Ok relance-le poliment",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 1220,
+      "cache_5m": 63,
+      "cache_1h": 0,
+      "cache_lu": 14425,
+      "output": 190,
+      "cost_cents": 0.7383
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1527,
+      "cache_1h": 0,
+      "cache_lu": 7244,
+      "output": 121,
+      "cost_cents": 0.648
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 401,
+      "cache_1h": 0,
+      "cache_lu": 8771,
+      "output": 205,
+      "cost_cents": 0.4811
+     }
+    ],
+    "cost_cents": 1.8674,
+    "duree_ms": 18539,
+    "outils": [
+     "search_clients",
+     "get_overdue_payments"
+    ],
+    "proposition": false,
+    "texte": "J'aperçois deux fiches identiques pour Sophie Bouchard (même téléphone et courriel) — je pourrai les fusionner plus tard si tu veux. En attendant, voici le text",
+    "erreur": null,
+    "conversation_id": "bc206c35-e098-484e-8684-d04aaa0eead3"
+   },
+   {
+    "conversation": "horaire",
+    "tour": 1,
+    "message": "C'est quoi mon horaire demain ?",
+    "etage": 2,
+    "raccourci": "agenda",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 816,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "Rien de prévu demain : le calendrier est libre.",
+    "erreur": null,
+    "conversation_id": "acf25105-82d6-4cce-aa9d-89891026dd93"
+   },
+   {
+    "conversation": "horaire",
+    "tour": 2,
+    "message": "Pis cette semaine ?",
+    "etage": 2,
+    "raccourci": "agenda",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 791,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "1 visite cette semaine :\n\nMercredi 16 septembre\n• 14 h · Jean-Pierre Gagnon · Estimation revêtement — Gagnon — 456 Boul. René-Lévesque, Québec, QC",
+    "erreur": null,
+    "conversation_id": "acf25105-82d6-4cce-aa9d-89891026dd93"
+   },
+   {
+    "conversation": "client-360",
+    "tour": 1,
+    "message": "Parle-moi de mon client le plus récent",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 915,
+      "cache_5m": 219,
+      "cache_1h": 0,
+      "cache_lu": 13815,
+      "output": 229,
+      "cost_cents": 0.7431
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1164,
+      "cache_1h": 0,
+      "cache_lu": 7017,
+      "output": 116,
+      "cost_cents": 0.5477
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 621,
+      "cache_1h": 0,
+      "cache_lu": 8181,
+      "output": 93,
+      "cost_cents": 0.4123
+     }
+    ],
+    "cost_cents": 1.7031,
+    "duree_ms": 8582,
+    "outils": [
+     "search_clients",
+     "search_clients"
+    ],
+    "proposition": false,
+    "texte": "Je n'ai pas accès à un tri par date de création dans la recherche clients, donc je ne peux pas garantir lequel est réellement « le plus récent ». Peux-tu me dir",
+    "erreur": null,
+    "conversation_id": "e51a971c-16d3-4154-8586-3c96d6cf3062"
+   },
+   {
+    "conversation": "client-360",
+    "tour": 2,
+    "message": "Il a-tu des factures pas payées ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 110,
+      "cache_1h": 0,
+      "cache_lu": 8802,
+      "output": 147,
+      "cost_cents": 0.3509
+     }
+    ],
+    "cost_cents": 0.3509,
+    "duree_ms": 3495,
+    "outils": [],
+    "proposition": false,
+    "texte": "Je n'ai pas encore réussi à identifier ton client le plus récent — peux-tu me donner son nom ou sa compagnie pour que je vérifie ses factures ?",
+    "erreur": null,
+    "conversation_id": "e51a971c-16d3-4154-8586-3c96d6cf3062"
+   },
+   {
+    "conversation": "creneau",
+    "tour": 1,
+    "message": "Trouve-moi un trou de 2 h jeudi prochain",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 1462,
+      "cache_5m": 226,
+      "cache_1h": 0,
+      "cache_lu": 13822,
+      "output": 292,
+      "cost_cents": 0.9173
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1681,
+      "cache_1h": 0,
+      "cache_lu": 7024,
+      "output": 317,
+      "cost_cents": 0.8781
+     }
+    ],
+    "cost_cents": 1.7953999999999999,
+    "duree_ms": 15416,
+    "outils": [
+     "get_day_route"
+    ],
+    "proposition": false,
+    "texte": "Jeudi prochain (24 septembre), ta journée est complètement libre — aucun rendez-vous prévu. Tu peux caler ton trou de 2 h n'importe quand, par exemple 9 h à 11 ",
+    "erreur": null,
+    "conversation_id": "75ecb136-92e4-451c-8800-1fe60c475cf1"
+   },
+   {
+    "conversation": "howto",
+    "tour": 1,
+    "message": "Comment je fais pour envoyer une facture à un client ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 1296,
+      "cache_5m": 224,
+      "cache_1h": 0,
+      "cache_lu": 13820,
+      "output": 198,
+      "cost_cents": 0.7896
+     }
+    ],
+    "cost_cents": 0.7896,
+    "duree_ms": 5717,
+    "outils": [],
+    "proposition": false,
+    "texte": "C'est simple : si tu as déjà une facture prête pour un client, dis-le-moi (le client et ce qu'elle contient) et je te montre l'envoi avant de l'expédier — sinon",
+    "erreur": null,
+    "conversation_id": "0de17ed9-1c70-4517-ab2b-8ddffd467bea"
+   },
+   {
+    "conversation": "howto",
+    "tour": 2,
+    "message": "Et pour la marquer payée ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1414,
+      "cache_1h": 0,
+      "cache_lu": 7022,
+      "output": 97,
+      "cost_cents": 0.5913
+     }
+    ],
+    "cost_cents": 0.5913,
+    "duree_ms": 2855,
+    "outils": [],
+    "proposition": false,
+    "texte": "Ça se fait aussi facilement : tu me donnes le numéro de la facture (ou le nom du client) et je te confirme avant de la marquer payée — cette action note simplem",
+    "erreur": null,
+    "conversation_id": "0de17ed9-1c70-4517-ab2b-8ddffd467bea"
+   },
+   {
+    "conversation": "brief",
+    "tour": 1,
+    "message": "Mon brief du matin",
+    "etage": 1,
+    "raccourci": "briefing",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 1000,
+    "outils": [
+     "get_morning_briefing"
+    ],
+    "proposition": false,
+    "texte": "Bonjour. 1 visite aujourd'hui : 14 h Jean-Pierre Gagnon. 3 factures en retard pour 1 971,82 $, la plus vieille chez Jean-Pierre Gagnon (47 jours). 2 tâches à fa",
+    "erreur": null,
+    "conversation_id": "6c9ee5c1-bf3e-4bca-9560-1e5f436035ed"
+   },
+   {
+    "conversation": "soumissions",
+    "tour": 1,
+    "message": "Mes soumissions en attente",
+    "etage": 2,
+    "raccourci": "devis-attente",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 872,
+    "outils": [
+     "list_quotes"
+    ],
+    "proposition": false,
+    "texte": "Aucun devis en attente de réponse.",
+    "erreur": null,
+    "conversation_id": "ff3239e9-2b04-4480-88b6-3b3c17b43b47"
+   },
+   {
+    "conversation": "soumissions",
+    "tour": 2,
+    "message": "Laquelle traîne depuis le plus longtemps ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 252,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 151,
+      "cost_cents": 0.3504
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 195,
+      "cache_1h": 0,
+      "cache_lu": 7050,
+      "output": 42,
+      "cost_cents": 0.2322
+     }
+    ],
+    "cost_cents": 0.5826,
+    "duree_ms": 5560,
+    "outils": [
+     "list_quotes"
+    ],
+    "proposition": false,
+    "texte": "Confirmé, tu n'as aucune soumission en attente de réponse en ce moment — donc rien qui traîne.",
+    "erreur": null,
+    "conversation_id": "ff3239e9-2b04-4480-88b6-3b3c17b43b47"
+   },
+   {
+    "conversation": "revenus",
+    "tour": 1,
+    "message": "Mes revenus ce mois-ci vs le mois passé",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 905,
+      "cache_5m": 224,
+      "cache_1h": 0,
+      "cache_lu": 13820,
+      "output": 108,
+      "cost_cents": 0.6214
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1160,
+      "cache_1h": 0,
+      "cache_lu": 7022,
+      "output": 119,
+      "cost_cents": 0.5498
+     }
+    ],
+    "cost_cents": 1.1711999999999998,
+    "duree_ms": 5670,
+    "outils": [
+     "compare_revenue"
+    ],
+    "proposition": false,
+    "texte": "Ce mois-ci (1er au 16 septembre), tu as facturé 1 626,90 $ contre 172,46 $ sur la même période le mois passé, donc une belle hausse de plus de 800 %. À noter : ",
+    "erreur": null,
+    "conversation_id": "3a2ab625-5ae7-4ae7-88bc-1c67f1398606"
+   },
+   {
+    "conversation": "revenus",
+    "tour": 2,
+    "message": "Pourquoi c'est plus bas ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 136,
+      "cache_1h": 0,
+      "cache_lu": 8182,
+      "output": 248,
+      "cost_cents": 0.446
+     }
+    ],
+    "cost_cents": 0.446,
+    "duree_ms": 4562,
+    "outils": [],
+    "proposition": false,
+    "texte": "En fait c'est l'inverse : ce mois-ci est beaucoup plus haut (1 626,90 $) que le mois passé à la même date (172,46 $). Par contre, si tu compares au total comple",
+    "erreur": null,
+    "conversation_id": "3a2ab625-5ae7-4ae7-88bc-1c67f1398606"
+   },
+   {
+    "conversation": "taches",
+    "tour": 1,
+    "message": "Crée une tâche : rappeler le fournisseur demain 9 h",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 228,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 85,
+      "cost_cents": 0.2784
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 368,
+      "cache_1h": 0,
+      "cache_lu": 7026,
+      "output": 46,
+      "cost_cents": 0.2789
+     }
+    ],
+    "cost_cents": 0.5572999999999999,
+    "duree_ms": 4382,
+    "outils": [],
+    "proposition": true,
+    "texte": "C'est déjà fait — la tâche « Rappeler le fournisseur » est déjà créée pour demain, 17 septembre.",
+    "erreur": null,
+    "conversation_id": "911304c7-0a68-4a32-8dfc-988734a3b4da"
+   },
+   {
+    "conversation": "taches",
+    "tour": 2,
+    "message": "Mes tâches en cours",
+    "etage": 2,
+    "raccourci": "taches",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 628,
+    "outils": [
+     "list_tasks"
+    ],
+    "proposition": false,
+    "texte": "3 tâches à faire :\n• Rappeler Marie Tremblay — Samedi 12 septembre\n• Rappeler le fournisseur — Jeudi 17 septembre\n• Rappeler le fournisseur de sel — Vendredi 18",
+    "erreur": null,
+    "conversation_id": "911304c7-0a68-4a32-8dfc-988734a3b4da"
+   },
+   {
+    "conversation": "memoire",
+    "tour": 1,
+    "message": "Retiens que le lavage de vitres c'est toujours 80 $ minimum",
+    "etage": 4,
+    "raccourci": null,
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 706,
+    "outils": [],
+    "proposition": false,
+    "texte": "C'est noté : lavage de vitres, minimum 80 $ à partir de maintenant.",
+    "erreur": null,
+    "conversation_id": "4a1e585d-2cef-47d6-ad38-6d06cba43f5e"
+   },
+   {
+    "conversation": "memoire",
+    "tour": 2,
+    "message": "C'est quoi mon minimum pour les vitres ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 285,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 25,
+      "cost_cents": 0.2326
+     }
+    ],
+    "cost_cents": 0.2326,
+    "duree_ms": 2728,
+    "outils": [],
+    "proposition": false,
+    "texte": "80 $, c'est ton minimum pour le lavage de vitres.",
+    "erreur": null,
+    "conversation_id": "4a1e585d-2cef-47d6-ad38-6d06cba43f5e"
+   },
+   {
+    "conversation": "joual",
+    "tour": 1,
+    "message": "chu tu occupé demain matin ?",
+    "etage": 4,
+    "raccourci": null,
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 688,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "T'as rien de prévu demain, ta matinée est libre.",
+    "erreur": null,
+    "conversation_id": "a48833ce-ae1f-41dc-a244-bb0d9a737898"
+   },
+   {
+    "conversation": "joual",
+    "tour": 2,
+    "message": "faque tu peux tu me céduler un rappel vendredi ?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 47,
+      "cache_1h": 0,
+      "cache_lu": 7015,
+      "output": 71,
+      "cost_cents": 0.2235
+     }
+    ],
+    "cost_cents": 0.2235,
+    "duree_ms": 2576,
+    "outils": [],
+    "proposition": false,
+    "texte": "Un rappel pour quoi exactement? Donne-moi le sujet et je te le programme pour vendredi.",
+    "erreur": null,
+    "conversation_id": "a48833ce-ae1f-41dc-a244-bb0d9a737898"
+   },
+   {
+    "conversation": "ambigu",
+    "tour": 1,
+    "message": "Envoie-lui un texto",
+    "etage": 4,
+    "raccourci": null,
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 736,
+    "outils": [],
+    "proposition": false,
+    "texte": "Je ne suis pas certain de savoir à qui tu fais référence — peux-tu me préciser le client (ou lead) et le message que tu veux envoyer ?",
+    "erreur": null,
+    "conversation_id": "3d9c09de-c258-4563-9c4f-465dcf7607a6"
+   },
+   {
+    "conversation": "ambigu",
+    "tour": 2,
+    "message": "À Tremblay, pour dire que j'arrive à 10 h",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 81,
+      "cache_1h": 0,
+      "cache_lu": 7012,
+      "output": 120,
+      "cost_cents": 0.2809
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 3601,
+      "cache_5m": 321,
+      "cache_1h": 0,
+      "cache_lu": 21305,
+      "output": 252,
+      "cost_cents": 1.4786
+     }
+    ],
+    "cost_cents": 1.7594999999999998,
+    "duree_ms": 8916,
+    "outils": [
+     "search_clients",
+     "search_leads"
+    ],
+    "proposition": false,
+    "texte": "Voici le message que je m'apprête à envoyer à Marie Tremblay (514-555-0101) :\n\n« Bonjour, j'arrive vers 10 h. À bientôt! »\n\nJe confirme l'envoi ?",
+    "erreur": null,
+    "conversation_id": "3d9c09de-c258-4563-9c4f-465dcf7607a6"
+   },
+   {
+    "conversation": "equipe",
+    "tour": 1,
+    "message": "Où est mon équipe en ce moment ?",
+    "etage": 1,
+    "raccourci": "ou-equipe",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 554,
+    "outils": [
+     "get_team_locations"
+    ],
+    "proposition": false,
+    "texte": "Personne n’est localisé en ce moment (positions des 20 dernières minutes, avec consentement seulement).",
+    "erreur": null,
+    "conversation_id": "dbf17c51-2ec0-402b-8067-ff6d9d0db1c8"
+   },
+   {
+    "conversation": "equipe",
+    "tour": 2,
+    "message": "Les feuilles de temps de la semaine",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 374,
+      "cache_5m": 0,
+      "cache_1h": 0,
+      "cache_lu": 14144,
+      "output": 227,
+      "cost_cents": 0.5847
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 556,
+      "cache_1h": 0,
+      "cache_lu": 7072,
+      "output": 57,
+      "cost_cents": 0.3378
+     }
+    ],
+    "cost_cents": 0.9225,
+    "duree_ms": 6355,
+    "outils": [
+     "get_timesheets"
+    ],
+    "proposition": false,
+    "texte": "Aucune heure enregistrée pour cette semaine (du 14 au 20 septembre) pour l'instant — pas de punch-in/punch-out trouvés.",
+    "erreur": null,
+    "conversation_id": "dbf17c51-2ec0-402b-8067-ff6d9d0db1c8"
+   },
+   {
+    "conversation": "hors-scope",
+    "tour": 1,
+    "message": "Peux-tu me bâtir un site web ?",
+    "etage": 4,
+    "raccourci": null,
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 871,
+    "outils": [],
+    "proposition": false,
+    "texte": "Ça, ce n'est pas quelque chose que je peux faire — c'est en dehors de ce que Lume me permet de gérer. Je peux t'aider avec ton CRM (clients, jobs, devis, factur",
+    "erreur": null,
+    "conversation_id": "8eb0fc3e-9f0d-4c54-8f07-532c97a27d69"
+   },
+   {
+    "conversation": "english",
+    "tour": 1,
+    "message": "How many jobs do I have this week?",
+    "etage": 2,
+    "raccourci": "agenda",
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 658,
+    "outils": [
+     "query_schedule"
+    ],
+    "proposition": false,
+    "texte": "1 visit this week:\n\nWednesday, September 16\n• 2:00 p.m. · Jean-Pierre Gagnon · Estimation revêtement — Gagnon — 456 Boul. René-Lévesque, Québec, QC",
+    "erreur": null,
+    "conversation_id": "95c35f29-f350-4649-87c7-acb76036ed82"
+   },
+   {
+    "conversation": "english",
+    "tour": 2,
+    "message": "Which ones are not invoiced yet?",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 0,
+      "cache_1h": 0,
+      "cache_lu": 7061,
+      "output": 95,
+      "cost_cents": 0.2366
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 138,
+      "cache_1h": 0,
+      "cache_lu": 7061,
+      "output": 29,
+      "cost_cents": 0.2051
+     }
+    ],
+    "cost_cents": 0.4417,
+    "duree_ms": 4669,
+    "outils": [
+     "list_jobs"
+    ],
+    "proposition": false,
+    "texte": "You're all clear — no jobs are pending invoicing this week (or overall, actually).",
+    "erreur": null,
+    "conversation_id": "95c35f29-f350-4649-87c7-acb76036ed82"
+   },
+   {
+    "conversation": "abonnement",
+    "tour": 1,
+    "message": "Mon paiement Lume a échoué, je fais quoi ?",
+    "etage": 4,
+    "raccourci": null,
+    "appels": [],
+    "cost_cents": 0,
+    "duree_ms": 779,
+    "outils": [
+     "search_help"
+    ],
+    "proposition": false,
+    "texte": "Va dans Paramètres → Forfait & facturation, le statut va afficher « En retard » ; clique sur le bouton du portail de facturation et mets ta carte à jour. Le pai",
+    "erreur": null,
+    "conversation_id": "876c9ec5-0ea6-4915-ad57-e81acaa28c8d"
+   },
+   {
+    "conversation": "facturer",
+    "tour": 1,
+    "message": "Fais-moi la facture du dernier job terminé",
+    "etage": 6,
+    "raccourci": null,
+    "appels": [
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 221,
+      "cache_1h": 0,
+      "cache_lu": 6798,
+      "output": 94,
+      "cost_cents": 0.2856
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 651,
+      "cache_1h": 0,
+      "cache_lu": 7019,
+      "output": 297,
+      "cost_cents": 0.6005
+     },
+     {
+      "model": "claude-sonnet-5",
+      "input": 2,
+      "cache_5m": 1559,
+      "cache_1h": 0,
+      "cache_lu": 7670,
+      "output": 265,
+      "cost_cents": 0.8086
+     }
+    ],
+    "cost_cents": 1.6947,
+    "duree_ms": 14333,
+    "outils": [
+     "list_jobs",
+     "get_job"
+    ],
+    "proposition": false,
+    "texte": "Le dernier job terminé est le numéro 34 « Test sondage » pour Marie Tremblay (11 septembre), avec une ligne « Lavage de vitres » à 1,00 $. Comme le minimum fact",
+    "erreur": null,
+    "conversation_id": "be71fe3f-01d6-41b1-beb5-0c1c14fe27d0"
+   }
+  ]
+ }
+}
