@@ -8,7 +8,7 @@
  * classique (SupportPanel), qui crée quand même un ticket.
  */
 import React, { useEffect, useId, useRef, useState, useCallback } from 'react';
-import { Loader2, Send, LifeBuoy, ArrowLeft, Plus } from 'lucide-react';
+import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -182,18 +182,17 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
         <p className="mt-2 text-[11.5px] text-text-tertiary leading-snug">
           {ferme ? ts.closedNotice : chezHumain ? ts.humanNotified.replace('{delay}', sla(ticket?.slaKey)) : ts.chatIntro}
         </p>
-        {(recents.length > 0 || ticket) && (
-          <div className="mt-1.5 flex items-center justify-center gap-3">
-            {recents.length > 0 && (
-              <button type="button" onClick={() => setShowList(true)} className="text-[11px] font-semibold text-primary hover:underline">{ts.recentConversations}</button>
-            )}
-            {ticket && (
-              <button type="button" onClick={() => { setTicket(null); setTexte(''); }} className="inline-flex items-center gap-1 text-[11px] font-semibold text-text-secondary hover:text-text-primary">
-                <Plus size={12} aria-hidden="true" /> {ts.newConversation}
+        {/* Toujours visible : l'historique est un bouton, pas un lien qu'on cherche. */}
+        <div className="mt-2 flex items-center justify-center gap-2">
+          <button type="button" onClick={() => setShowList(true)} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-text-primary bg-surface border border-outline-subtle rounded-full px-3 py-1.5 hover:bg-surface-secondary transition-colors">
+            <History size={13} aria-hidden="true" /> {ts.recentConversations}{recents.length > 0 ? ` (${recents.length})` : ''}
+          </button>
+          {ticket && (
+              <button type="button" onClick={() => { setTicket(null); setTexte(''); }} className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-text-secondary bg-surface border border-outline-subtle rounded-full px-3 py-1.5 hover:bg-surface-secondary transition-colors">
+                <Plus size={13} aria-hidden="true" /> {ts.newConversation}
               </button>
             )}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Conversation */}

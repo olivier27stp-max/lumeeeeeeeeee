@@ -3746,7 +3746,7 @@ const en = {
     aiThinking: 'The assistant is thinking…',
     sending: 'Sending…',
     newConversation: 'New conversation',
-    recentConversations: 'My conversations',
+    recentConversations: 'History',
     noConversations: 'No conversations yet.',
     closedNotice: 'This conversation is closed. Write here to reopen it, or start a new one.',
     status_ai: 'Assistant',
