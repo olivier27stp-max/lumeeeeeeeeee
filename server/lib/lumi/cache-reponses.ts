@@ -45,8 +45,11 @@ export { versionOrg, invaliderOrg } from './version-org';
 import { versionOrg } from './version-org';
 
 /** Un tour est-il cachable ? Lecture seule, texte, pas de proposition, premier message. */
-export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string }): boolean {
-  if (!t.historiqueVide || t.proposition || t.resultat !== 'ok') return false;
+export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string; ecritureExecutee?: boolean }): boolean {
+  // Une écriture exécutée d'office (anodine, ou mode « argent ») n'apparaît ni
+  // dans `outils` ni comme proposition : sans ce garde, « C'est noté » était
+  // mis en cache et rejoué sans rien écrire (audit du 2026-09-16, A5).
+  if (!t.historiqueVide || t.proposition || t.resultat !== 'ok' || t.ecritureExecutee) return false;
   if (!t.texte.trim()) return false;
   return t.outils.every((o) => TOOLS_BY_NAME[o]?.kind === 'read');
 }

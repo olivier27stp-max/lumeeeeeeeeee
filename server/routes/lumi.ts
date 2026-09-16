@@ -248,9 +248,11 @@ async function executerTourSse(opts: {
   let usage: UsageAgrege = usageVide();
   let model: string | null = null;
   let erreurModele: string | null = null;
+  let ecritureExecutee = false;
   const fiches: Fiche[] = [];
   const emettre = (e: EvenementLumi) => {
     if (e.type === 'tool' && e.statut === 'fin' && !outils.includes(e.name)) outils.push(e.name);
+    if (e.type === 'executed') ecritureExecutee = true; // un tour qui a écrit ne se met jamais en cache
     if (e.type === 'usage') { usage = ajouterUsage(usage, e.usage); model = e.model; }
     if (e.type === 'error') erreurModele = e.message;
     if (e.type === 'fiches') for (const f of e.fiches) if (!fiches.some((x) => x.href === f.href)) fiches.push(f);
@@ -307,7 +309,7 @@ async function executerTourSse(opts: {
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition, etage: ETAGE.agent });
     void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
-    if (opts.cache && opts.enonce && !erreurModele && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok' })) {
+    if (opts.cache && opts.enonce && !erreurModele && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee })) {
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };
       void ecrireReponse(p, { texte: resultat.texte, fiches, outils });
       void (async () => {

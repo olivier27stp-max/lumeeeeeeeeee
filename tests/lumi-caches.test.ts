@@ -58,6 +58,8 @@ describe('cache exact (étage 3)', () => {
     expect(tourCachable(base)).toBe(true);
     expect(tourCachable({ ...base, historiqueVide: false })).toBe(false);
     expect(tourCachable({ ...base, proposition: true })).toBe(false);
+    // Écriture exécutée d'office (remember_this, mode argent) : jamais en cache.
+    expect(tourCachable({ ...base, ecritureExecutee: true })).toBe(false);
     expect(tourCachable({ ...base, outils: ['list_jobs', 'create_task'] })).toBe(false);
     expect(tourCachable({ ...base, texte: '  ' })).toBe(false);
     expect(tourCachable({ ...base, resultat: 'erreur' })).toBe(false);
