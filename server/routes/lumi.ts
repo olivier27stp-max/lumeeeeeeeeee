@@ -90,6 +90,8 @@ function dernierEnonceUtilisateur(msgs: Msg[]): string | null {
 
 // Au-delà, on résume plutôt que de renvoyer 200 messages au modèle.
 const MAX_MESSAGES_HISTORIQUE = 60;
+/** Une carte de confirmation n'est exécutable que 15 min (mandat §5.6, B9). */
+export const EXPIRATION_PROPOSITION_MS = 15 * 60_000;
 
 type Msg = Anthropic.Messages.MessageParam;
 
@@ -612,6 +614,19 @@ router.post('/lumi/execute', validate(executeSchema), async (req, res) => {
     const enAttente = propositionsEnAttente(historique);
     if (!enAttente.length || !enAttente.some((a) => a.tool_use_id === tool_use_id)) {
       return res.status(409).json({ error: 'No such pending action.', code: 'aucune_proposition' });
+    }
+    // B9 : une proposition n'est valable que 15 min. Passé ce délai, Confirmer
+    // refuse (le message suivant l'annule, comme d'habitude) : on n'exécute
+    // jamais une carte oubliée ouverte sur un écran.
+    if (decision === 'confirm') {
+      const { data: dernier } = await ctx.admin.from('lumi_messages').select('created_at').eq('conversation_id', conversation_id).eq('role', 'assistant').order('created_at', { ascending: false }).limit(1).maybeSingle();
+      const age = dernier?.created_at ? Date.now() - new Date(dernier.created_at as string).getTime() : 0;
+      if (age > EXPIRATION_PROPOSITION_MS) {
+        return res.status(409).json({
+          error: ctx.language === 'fr' ? 'Cette proposition a expiré (15 minutes). Redemande-la à Lumi pour l’exécuter.' : 'This proposal has expired (15 minutes). Ask Lumi again to run it.',
+          code: 'proposition_expiree',
+        });
+      }
     }
     // Cran d'arrêt : au-delà du plafond, Confirmer refuse (la proposition reste
     // affichée, l'utilisateur ouvre une nouvelle conversation pour continuer).

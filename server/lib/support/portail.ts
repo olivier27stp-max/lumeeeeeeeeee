@@ -10,6 +10,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { repondreSupportIA, isSupportIAConfigured } from './ia';
+import { PLAFOND_MODELE_PAR_JOUR, reponsesModeleAujourdhui } from './garde-fous';
 import { dossierClient } from './dossier';
 import { statutMigrationPour } from './migration-outils';
 import { contexteOrg, creerTicket, ajouterMessage, messagesDuTicket, escaladerTicket, relayerMessageClient, slaTexte, type Ticket } from './tickets';
@@ -44,7 +45,10 @@ export async function repondreDansLePortail(admin: SupabaseClient, migration: Mi
   let texte: string | null = null;
   let transferer = false;
   let motif = '';
-  if (isSupportIAConfigured()) {
+  // Règle stricte : même plafond par entreprise et par jour que le chat support
+  // de l'app ; au-delà, l'équipe prend le relais (0 token), jamais le modèle.
+  const auPlafond = isSupportIAConfigured() && (await reponsesModeleAujourdhui(admin, migration.org_id)) >= PLAFOND_MODELE_PAR_JOUR;
+  if (isSupportIAConfigured() && !auPlafond) {
     try {
       const historique = (await messagesDuTicket(admin, ticket.id))
         .filter((m) => m.author === 'user' || m.author === 'ai')
@@ -68,7 +72,7 @@ export async function repondreDansLePortail(admin: SupabaseClient, migration: Mi
     }
   } else {
     transferer = true;
-    motif = 'Assistant non configuré';
+    motif = auPlafond ? 'Plafond du jour atteint' : 'Assistant non configuré';
   }
   if (transferer) {
     const r = await escaladerTicket(admin, ticket, ctx, motif || 'Transféré');

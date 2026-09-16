@@ -54,4 +54,14 @@ describe('les règles sont branchées dans le code (pas seulement écrites)', ()
     const s = lu('server/routes/sales-chat.ts');
     expect(s).toContain('reponsesPubliquesAujourdhui(getServiceClient())) >= reglesCout().plafond_public_par_jour');
   });
+  it('portail de migration : même plafond par entreprise et par jour que le support (faille fermée)', () => {
+    const s = lu('server/lib/support/portail.ts');
+    expect(s).toContain('reponsesModeleAujourdhui(admin, migration.org_id)) >= PLAFOND_MODELE_PAR_JOUR');
+    expect(s).toContain("if (isSupportIAConfigured() && !auPlafond)");
+  });
+  it('B9 : une proposition expire après 15 minutes', () => {
+    const s = lu('server/routes/lumi.ts');
+    expect(s).toContain('export const EXPIRATION_PROPOSITION_MS = 15 * 60_000;');
+    expect(s).toContain("code: 'proposition_expiree'");
+  });
 });
