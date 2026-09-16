@@ -37,7 +37,7 @@ import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur } from '.
 import { sousAgentDepuisVerdict, focusDuSousAgent } from '../lib/lumi/sous-agents';
 import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
-import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg } from '../lib/lumi/cache-reponses';
+import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
 import { PERMISSION_PAR_OUTIL } from '../lib/agent/garde';
@@ -447,7 +447,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // jamais après un repli ni avec une proposition en attente.
     const premierMessage = historique.length === 0 && !enAttente.length && !repli;
     const vecteur = premierMessage ? embed(message) : null;
-    if (premierMessage) {
+    // Jamais de cache pour une demande de document ou de mémoire (voir enonceCachable).
+    if (premierMessage && enonceCachable(message)) {
       const debut = Date.now();
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
       let hit: { texte: string; fiches: Fiche[]; outils: string[] } | null = await lireReponse(p);

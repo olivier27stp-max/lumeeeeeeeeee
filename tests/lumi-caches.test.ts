@@ -63,6 +63,9 @@ describe('cache exact (étage 3)', () => {
     // Un énoncé de mémoire (« retiens que… ») n'est jamais une lecture, quoi qu'ait fait le tour.
     expect(tourCachable({ ...base, enonce: 'Retiens que je ne travaille jamais le dimanche.' })).toBe(false);
     expect(tourCachable({ ...base, enonce: 'Oublie ça' })).toBe(false);
+    // Une demande de document non plus (« un rapport des jobs » ≠ « combien de jobs »).
+    expect(tourCachable({ ...base, enonce: "Un rapport des jobs de cette semaine, s'il te plaît." })).toBe(false);
+    expect(tourCachable({ ...base, enonce: 'Sors-moi un PDF de mes retards' })).toBe(false);
     expect(tourCachable({ ...base, enonce: 'Combien de clients ai-je ?' })).toBe(true);
     expect(tourCachable({ ...base, outils: ['list_jobs', 'create_task'] })).toBe(false);
     expect(tourCachable({ ...base, texte: '  ' })).toBe(false);
