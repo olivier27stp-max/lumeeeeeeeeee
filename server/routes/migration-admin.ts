@@ -15,7 +15,7 @@ import {
   migrationPatchSchema,
   migrationInvitationSchema,
   migrationStatusChangeSchema,
-  migrationMappingDecisionSchema,
+  migrationMappingDecisionSchema, migrationMappingFlagSchema,
   migrationIssueResolveSchema,
   migrationIssueCreateSchema,
   migrationDuplicateDecisionSchema,
@@ -552,6 +552,45 @@ router.post('/migration-admin/migrations/:id/mappings/:mappingId', validate(migr
     return res.json(data);
   } catch (err: any) {
     return sendSafeError(res, err, 'Décision de correspondance impossible.', '[migration-admin]');
+  }
+});
+
+// Drapeau de couleur sur une correspondance (note interne admin, invisible
+// pour le client). flag: null = retirer le drapeau.
+router.post('/migration-admin/migrations/:id/mappings/:mappingId/flag', validate(migrationMappingFlagSchema), async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+
+    const body = req.body as { flag: string | null };
+    const { data, error } = await admin
+      .from('migration_field_mappings')
+      .update({ admin_flag: body.flag })
+      .eq('id', req.params.mappingId)
+      .eq('migration_id', migration.id)
+      .select()
+      .maybeSingle();
+    if (error) {
+      if (/admin_flag|schema cache|does not exist/i.test(error.message)) {
+        return res.status(503).json({ error: 'Colonne admin_flag absente — appliquez le SQL 20260916040000.', code: 'not_provisioned' });
+      }
+      throw error;
+    }
+    if (!data) return res.status(404).json({ error: 'Correspondance introuvable.' });
+    await logMigrationAudit(admin, {
+      migrationId: migration.id,
+      action: 'mapping.flag',
+      actorId: auth.user.id,
+      actorRole: 'platform_admin',
+      target: `mapping:${req.params.mappingId}`,
+      meta: { flag: body.flag },
+    });
+    return res.json(data);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Drapeau impossible.', '[migration-admin]');
   }
 });
 

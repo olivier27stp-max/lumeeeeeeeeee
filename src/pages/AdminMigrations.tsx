@@ -9,7 +9,7 @@ import { Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, Copy, Loader2, Plus, RefreshCw, Search, ShieldCheck, Database,
+  ArrowLeft, Copy, Flag, Loader2, Plus, RefreshCw, Search, ShieldCheck, Database,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import {
@@ -18,8 +18,8 @@ import {
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
   rollbackMigration, closeMigration, sendAdminMessage, getMigrationAudit, getFileDownloadUrl,
   reanalyzeFile, rejectFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
-  getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate,
-  type AdminMigrationListItem, type MigrationStaffEntry,
+  getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
+  type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
 import { lancerBotMigration, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -940,20 +940,38 @@ function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
     }
   };
 
+  // Drapeau de couleur : note interne admin, invisible pour le client. null = retirer.
+  const setFlag = async (mp: any, flag: MappingFlag | null) => {
+    const clearPending = () => setPending((prev) => { const next = { ...prev }; delete next[mp.id]; return next; });
+    setPending((prev) => ({ ...prev, [mp.id]: { ...(prev[mp.id] ?? {}), admin_flag: flag } }));
+    try {
+      const saved = await flagMapping(m.id, mp.id, flag);
+      qc.setQueryData(['migration-admin-detail', m.id], (prev: any) => prev
+        ? { ...prev, mappings: (prev.mappings ?? []).map((x: any) => (x.id === mp.id ? { ...x, ...saved } : x)) }
+        : prev);
+      clearPending();
+    } catch (err: any) {
+      clearPending();
+      toast.error(err?.message ?? 'Erreur');
+    }
+  };
+  const flaggedCount = [...mappingByColumn.values()].filter((mp: any) => !!mp?.admin_flag).length;
+
   return (
     <div className="section-card p-5">
       <TemplateControls migrationId={m.id} sourceCrm={m.source_crm} onChanged={onChanged} />
       <p className="text-[12px] text-text-tertiary mb-3">
         Choisir un champ Lume dans la liste corrige la colonne; « Ne pas importer » l'ignore. Les décisions prises ici priment sur les gabarits.
+        {' '}Le drapeau colore une ligne pour vous seul (le client ne le voit pas){flaggedCount > 0 ? ` — ${flaggedCount} ligne(s) marquée(s)` : ''}.
       </p>
       <div className="space-y-5">
         {files.map((file) => (
           <div key={file.id}>
             <div className="text-[12px] font-semibold text-text-secondary mb-1.5">{file.original_name}</div>
             <div className="border border-outline rounded-md overflow-x-auto">
-              <div className="grid min-w-[720px] text-[12px]" style={{ gridTemplateColumns: '1.1fr 1.3fr 1.3fr 70px 150px' }}>
-                {['Colonne', 'Aperçu (masqué)', 'Champ Lume', 'Conf.', 'Statut'].map((h) => (
-                  <div key={h} className="px-3 py-2 bg-surface-secondary/60 border-b border-outline font-semibold text-text-secondary">{h}</div>
+              <div className="grid min-w-[760px] text-[12px]" style={{ gridTemplateColumns: '40px 1.1fr 1.3fr 1.3fr 70px 150px' }}>
+                {['', 'Colonne', 'Aperçu (masqué)', 'Champ Lume', 'Conf.', 'Statut'].map((h, i) => (
+                  <div key={h || `h${i}`} className="px-3 py-2 bg-surface-secondary/60 border-b border-outline font-semibold text-text-secondary">{h}</div>
                 ))}
                 {(byFile.get(file.id) ?? []).map((col) => (
                   <MappingAdminRow
@@ -966,6 +984,7 @@ function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
                       return decide(mp, { status: 'corrected', target_entity: entity, target_field: field }, 'Correspondance mise à jour');
                     }}
                     onConfirm={(mp) => decide(mp, { status: 'confirmed' }, 'Correspondance confirmée')}
+                    onFlag={setFlag}
                   />
                 ))}
               </div>
@@ -977,19 +996,80 @@ function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   );
 }
 
-function MappingAdminRow({ col, mapping, catalog, onSelect, onConfirm }: {
+// Couleurs de drapeau : fond de ligne + pastille. Pas de rouge/vert ambigu avec les
+// badges de confiance : le drapeau est un repère personnel, pas un statut.
+const FLAG_COLORS: { id: MappingFlag; label: string; row: string; dot: string }[] = [
+  { id: 'red', label: 'Rouge', row: 'bg-red-50', dot: 'bg-red-500' },
+  { id: 'amber', label: 'Ambre', row: 'bg-amber-50', dot: 'bg-amber-500' },
+  { id: 'green', label: 'Vert', row: 'bg-emerald-50', dot: 'bg-emerald-500' },
+  { id: 'blue', label: 'Bleu', row: 'bg-sky-50', dot: 'bg-sky-500' },
+  { id: 'purple', label: 'Mauve', row: 'bg-violet-50', dot: 'bg-violet-500' },
+];
+
+function FlagPicker({ value, onChange, label }: { value: MappingFlag | null; onChange: (f: MappingFlag | null) => void; label: string }) {
+  const [open, setOpen] = useState(false);
+  const current = FLAG_COLORS.find((c) => c.id === value);
+  return (
+    <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false); }}>
+      <button
+        type="button"
+        aria-label={current ? `Drapeau ${current.label} sur ${label} — modifier` : `Marquer ${label} d'un drapeau`}
+        aria-expanded={open}
+        title={current ? `Drapeau ${current.label}` : 'Drapeau (note interne)'}
+        onClick={() => setOpen((o) => !o)}
+        className={`h-7 w-7 inline-flex items-center justify-center rounded-md border transition-colors ${
+          current ? `${current.dot} border-transparent text-white` : 'border-transparent text-text-tertiary hover:border-outline hover:text-text-secondary'
+        }`}
+      >
+        <Flag className="w-3.5 h-3.5" fill={current ? 'currentColor' : 'none'} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute left-0 top-8 z-20 flex items-center gap-1.5 p-1.5 bg-surface-card border border-outline rounded-md shadow-md">
+          {FLAG_COLORS.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="menuitem"
+              aria-label={`Drapeau ${c.label}`}
+              title={c.label}
+              onClick={() => { onChange(c.id); setOpen(false); }}
+              className={`h-5 w-5 rounded-full ${c.dot} ${value === c.id ? 'ring-2 ring-offset-1 ring-text-primary' : 'hover:scale-110'} transition-transform`}
+            />
+          ))}
+          {value && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onChange(null); setOpen(false); }}
+              className="ml-1 px-1.5 h-5 text-[11px] rounded border border-outline text-text-secondary hover:bg-surface-secondary whitespace-nowrap"
+            >
+              Retirer
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MappingAdminRow({ col, mapping, catalog, onSelect, onConfirm, onFlag }: {
   col: any;
   mapping?: any;
   catalog: FieldCatalog;
   onSelect: (mp: any, entity: string | null, field: string | null) => void;
   onConfirm: (mp: any) => void;
+  onFlag: (mp: any, flag: MappingFlag | null) => void;
 }) {
-  const cell = 'px-3 py-2 border-b border-outline/30 flex items-center min-w-0 text-text-primary';
+  const flag = FLAG_COLORS.find((c) => c.id === mapping?.admin_flag) ?? null;
+  const cell = `px-3 py-2 border-b border-outline/30 flex items-center min-w-0 text-text-primary ${flag ? flag.row : ''}`;
   const value = mapping?.target_entity && mapping?.target_field ? `${mapping.target_entity}:${mapping.target_field}` : '';
   const knownValue = !value || (catalog[mapping.target_entity] ?? []).some((f) => f.field === mapping.target_field);
   const canConfirm = mapping && (mapping.status === 'suggested' || mapping.status === 'needs_review') && !!mapping.target_field;
   return (
     <>
+      <div className={`${cell} px-1.5 justify-center`}>
+        {mapping ? <FlagPicker value={flag?.id ?? null} label={col.header} onChange={(f) => onFlag(mapping, f)} /> : null}
+      </div>
       <div className={cell}>
         <div className="min-w-0">
           <div className="truncate font-medium">{col.header}</div>

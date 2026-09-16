@@ -136,6 +136,12 @@ export function decideMapping(
   return apiFetch(`/migrations/${id}/mappings/${mappingId}`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
+export type MappingFlag = 'red' | 'amber' | 'green' | 'blue' | 'purple';
+
+export function flagMapping(id: string, mappingId: string, flag: MappingFlag | null): Promise<any> {
+  return apiFetch(`/migrations/${id}/mappings/${mappingId}/flag`, { method: 'POST', body: JSON.stringify({ flag }) });
+}
+
 export function createIssue(id: string, payload: { type: string; severity?: string; title: string; client_visible?: boolean; options?: string[] }): Promise<any> {
   return apiFetch(`/migrations/${id}/issues`, { method: 'POST', body: JSON.stringify(payload) });
 }

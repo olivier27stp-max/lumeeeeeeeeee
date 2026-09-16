@@ -581,6 +581,10 @@ export const migrationMappingDecisionSchema = z.object({
   target_field: z.string().trim().max(80).optional().nullable(),
 });
 
+export const migrationMappingFlagSchema = z.object({
+  flag: z.enum(['red', 'amber', 'green', 'blue', 'purple']).nullable(),
+});
+
 export const migrationIssueCreateSchema = z.object({
   type: z.string().trim().min(1).max(60),
   severity: z.enum(['info', 'warning', 'error', 'blocking']).optional(),
