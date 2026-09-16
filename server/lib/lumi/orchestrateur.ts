@@ -339,7 +339,7 @@ export async function tourLumi(opts: {
     });
     stream.on('text', (delta) => { texteTotal += delta; opts.emettre({ type: 'text', delta }); });
     const reponse = await stream.finalMessage();
-    signalerAppelLumi(model, { systeme: opts.systeme, outils }); // arme le maintien du cache 1 h sur CE préfixe (cache-chaud.ts)
+    signalerAppelLumi(model, { systeme: opts.systeme, outils }, opts.sousAgent ?? 'base'); // arme le maintien du cache 1 h sur CE préfixe (cache-chaud.ts)
 
     const cout = coutEnCents(model, reponse.usage);
     coutTotal += cout;

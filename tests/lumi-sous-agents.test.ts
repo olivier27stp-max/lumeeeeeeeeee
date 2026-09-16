@@ -9,13 +9,13 @@ import { TOPICS } from '../server/lib/lumi/topics';
 import { TOOLS_BY_NAME } from '../server/lib/agent/tools';
 
 describe('outilsDuSousAgent', () => {
-  it('chaque sous-agent charge ses outils + les transverses, tous existants, entre 5 et 25', () => {
+  it('chaque sous-agent charge TOUS ses outils + les transverses, tous existants, entre 5 et 80 (≈ 11 k tokens max, cachés 1 h)', () => {
     for (const t of TOPICS.filter((x) => estSousAgent(x.id))) {
       const noms = outilsDuSousAgent(t.id);
       for (const n of noms) expect(TOOLS_BY_NAME[n], `${t.id}: ${n}`).toBeDefined();
       for (const n of OUTILS_TRANSVERSES) expect(noms).toContain(n);
       expect(noms.length).toBeGreaterThanOrEqual(5);
-      expect(noms.length).toBeLessThanOrEqual(25);
+      expect(noms.length).toBeLessThanOrEqual(80);
       expect(new Set(noms).size).toBe(noms.length);
     }
   });

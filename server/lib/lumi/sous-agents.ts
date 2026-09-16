@@ -30,11 +30,21 @@ export function estSousAgent(topic: string | null | undefined): topic is IdTopic
   return !!t && t.outils.length > 0;
 }
 
-/** Outils chargés pour un sous-agent : ceux du topic + les transverses, seulement s'ils existent. Ordre stable (cache). */
+/**
+ * Outils chargés pour un sous-agent : TOUS ceux du topic (noyau + couverture) +
+ * les transverses. Ordre stable (cache 1 h par topic, 7 à 11 k tokens).
+ *
+ * Pourquoi tout charger plutôt que le noyau + tool_search (batterie du
+ * 2026-09-16, ai_usage) : les définitions chargées par tool_search s'insèrent
+ * dans le bloc d'outils, AVANT le prompt système — tout le préfixe qui suit
+ * (prompt stable 12 k, conversation) est relu au plein tarif à chaque étape
+ * suivante : 27 000 à 30 000 tokens non cachés, 6 à 7 ¢ le tour, plafond
+ * atteint. Un jeu complet coûte 0,2 ¢ par étape en lecture cachée et évite
+ * l'étape de recherche (≈ 0,6 ¢ + 3 s). Hors sujet courant, tool_search reste.
+ */
 export function outilsDuSousAgent(topic: IdTopic): string[] {
   const t = TOPICS.find((x) => x.id === topic);
-  // Le noyau seulement (outils du quotidien) : les ~200 outils de couverture restent différés, trouvables par tool_search.
-  const noms = [...(t?.noyau ?? t?.outils ?? []), ...OUTILS_TRANSVERSES];
+  const noms = [...(t?.outils ?? []), ...OUTILS_TRANSVERSES];
   const vus = new Set<string>();
   return noms.filter((n) => TOOLS_BY_NAME[n] && !vus.has(n) && vus.add(n));
 }

@@ -29,15 +29,40 @@ const CADENCE_VERIFICATION_MS = 5 * 60_000;
 let dernierAppelReel = 0;
 let dernierPing = 0;
 let dernierModele = '';
+type Prefixe = { systeme: Anthropic.Messages.TextBlockParam[]; outils: Anthropic.Messages.ToolUnion[] };
 /** Le préfixe (système + outils) du dernier vrai appel : c'est LUI qu'on rafraîchit, pas un préfixe théorique. */
-let dernierPrefixe: { systeme: Anthropic.Messages.TextBlockParam[]; outils: Anthropic.Messages.ToolUnion[] } | null = null;
+let dernierPrefixe: Prefixe | null = null;
+/**
+ * Un préfixe PAR JEU D'OUTILS (jeu de base + un par sous-agent, ≤ 8) : depuis
+ * que chaque sous-agent charge tout son topic (7 à 11 k tokens), laisser
+ * refroidir un topic coûte 2 à 3 ¢ à sa prochaine utilisation ; le garder
+ * chaud coûte ~0,2 ¢ par ping. Chaque entrée a sa propre horloge.
+ */
+const prefixes = new Map<string, { prefixe: Prefixe; dernierAppelReel: number; dernierPing: number }>();
+export const MAX_PREFIXES_CHAUDS = 8;
 
-/** À appeler à chaque appel réel au modèle : c'est ce qui arme le maintien. */
-export function signalerAppelLumi(model: string, prefixe?: { systeme: Anthropic.Messages.TextBlockParam[]; outils: Anthropic.Messages.ToolUnion[] }): void {
+/** À appeler à chaque appel réel au modèle : c'est ce qui arme le maintien. `cle` = jeu d'outils (base ou topic). */
+export function signalerAppelLumi(model: string, prefixe?: Prefixe, cle = 'base'): void {
   dernierAppelReel = Date.now();
   dernierModele = model;
-  if (prefixe) dernierPrefixe = prefixe;
+  if (prefixe) {
+    dernierPrefixe = prefixe;
+    const e = prefixes.get(cle);
+    if (e) { e.prefixe = prefixe; e.dernierAppelReel = Date.now(); }
+    else {
+      if (prefixes.size >= MAX_PREFIXES_CHAUDS) {
+        // Le plus ancien s'en va : on ne pinge jamais plus de MAX_PREFIXES_CHAUDS préfixes.
+        let plusVieux: string | null = null; let t = Infinity;
+        for (const [k, v] of prefixes) if (v.dernierAppelReel < t) { t = v.dernierAppelReel; plusVieux = k; }
+        if (plusVieux) prefixes.delete(plusVieux);
+      }
+      prefixes.set(cle, { prefixe, dernierAppelReel: Date.now(), dernierPing: 0 });
+    }
+  }
 }
+
+/** Pour les tests : l'état des préfixes suivis. */
+export function prefixesSuivis(): ReadonlyMap<string, { dernierAppelReel: number; dernierPing: number }> { return prefixes; }
 
 /** Fenêtre après le dernier appel réel pendant laquelle on garde le cache chaud. 0 = désactivé. */
 export function fenetreMaintienMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -64,12 +89,12 @@ type ClientMinimal = { messages: { create: (p: Anthropic.Messages.MessageCreateP
  * bloc stable — le même pour fr et en depuis B1 —, réglages de réflexion) : c'est la seule façon de
  * rafraîchir l'entrée de cache que les vrais appels lisent.
  */
-export async function pingerCache(client: ClientMinimal, model: string = dernierModele || modeleLumi()): Promise<{ model: string; cost_cents: number; cache_lu: number; cache_ecrit: number }> {
+export async function pingerCache(client: ClientMinimal, model: string = dernierModele || modeleLumi(), prefixe: Prefixe | null = dernierPrefixe): Promise<{ model: string; cost_cents: number; cache_lu: number; cache_ecrit: number }> {
   const { outilsClaude, promptSystemeLumi, parametresReflexion } = await import('./orchestrateur');
   const { reglesCout } = await import('./regles-cout');
   // Seul le bloc stable (1 h) compte : on le prend tel quel du dernier appel ; le bloc variable est jetable.
-  const systeme = dernierPrefixe ? [dernierPrefixe.systeme[0]] : [promptSystemeLumi({ companyName: null, userName: null, language: 'fr', todayIso: new Date().toISOString().slice(0, 10) })[0]];
-  const outils = dernierPrefixe ? dernierPrefixe.outils : outilsClaude();
+  const systeme = prefixe ? [prefixe.systeme[0]] : [promptSystemeLumi({ companyName: null, userName: null, language: 'fr', todayIso: new Date().toISOString().slice(0, 10) })[0]];
+  const outils = prefixe ? prefixe.outils : outilsClaude();
   const reflexion = parametresReflexion(model, reglesCout().effort_defaut);
   const reponse = await client.messages.create({
     model,
@@ -90,14 +115,23 @@ export function demarrerMaintienCacheChaud(): void {
   const fenetreMs = fenetreMaintienMs();
   if (!fenetreMs || !process.env.ANTHROPIC_API_KEY) return;
   const t = setInterval(async () => {
-    if (!doitPinger({ dernierAppelReel, dernierPing, maintenant: Date.now(), fenetreMs })) return;
-    try {
-      const r = await pingerCache(clientAnthropic());
-      logger.info('[lumi] cache 1 h rafraîchi', r);
-    } catch (e: any) {
-      dernierPing = Date.now(); // pas de rafale de tentatives : on réessaie au prochain créneau
-      logger.warn('[lumi] rafraîchissement du cache impossible', { error: e?.message || String(e) });
+    const maintenant = Date.now();
+    // Sans préfixe suivi (aucun appel réel depuis le démarrage) : l'horloge globale, préfixe par défaut.
+    const cibles: Array<{ cle: string; prefixe: Prefixe | null; etat: { dernierAppelReel: number; dernierPing: number } }> = prefixes.size
+      ? [...prefixes].map(([cle, e]) => ({ cle, prefixe: e.prefixe, etat: e }))
+      : [{ cle: 'base', prefixe: null, etat: { dernierAppelReel, dernierPing } }];
+    for (const c of cibles) {
+      if (!doitPinger({ dernierAppelReel: c.etat.dernierAppelReel, dernierPing: c.etat.dernierPing, maintenant, fenetreMs })) continue;
+      try {
+        const r = await pingerCache(clientAnthropic(), undefined, c.prefixe);
+        c.etat.dernierPing = Date.now();
+        logger.info('[lumi] cache 1 h rafraîchi', { jeu: c.cle, ...r });
+      } catch (e: any) {
+        c.etat.dernierPing = Date.now(); // pas de rafale de tentatives : on réessaie au prochain créneau
+        logger.warn('[lumi] rafraîchissement du cache impossible', { jeu: c.cle, error: e?.message || String(e) });
+      }
     }
+    if (!prefixes.size) dernierPing = Math.max(dernierPing, cibles[0].etat.dernierPing);
   }, CADENCE_VERIFICATION_MS);
   t.unref?.();
 }

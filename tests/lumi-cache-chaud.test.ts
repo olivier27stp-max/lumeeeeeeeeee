@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 vi.mock('../server/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-import { doitPinger, fenetreMaintienMs, pingerCache, DELAI_RAFRAICHISSEMENT_MS } from '../server/lib/lumi/cache-chaud';
+import { doitPinger, fenetreMaintienMs, pingerCache, DELAI_RAFRAICHISSEMENT_MS, signalerAppelLumi, prefixesSuivis, MAX_PREFIXES_CHAUDS } from '../server/lib/lumi/cache-chaud';
 import { outilsClaude, promptSystemeLumi } from '../server/lib/lumi/orchestrateur';
 
 const MIN = 60_000;
@@ -58,5 +58,17 @@ describe('pingerCache', () => {
     expect(r.cache_lu).toBe(6700);
     expect(r.cost_cents).toBeGreaterThan(0);
     expect(r.cost_cents).toBeLessThan(0.3);
+  });
+});
+
+describe('signalerAppelLumi : un préfixe par jeu d outils', () => {
+  it('suit le jeu de base et chaque sous-agent séparément, jamais plus de MAX_PREFIXES_CHAUDS', () => {
+    const p = (n: string) => ({ systeme: [{ type: 'text' as const, text: n }], outils: [] });
+    signalerAppelLumi('claude-sonnet-5', p('base'), 'base');
+    signalerAppelLumi('claude-sonnet-5', p('facturation'), 'facturation');
+    expect([...prefixesSuivis().keys()]).toEqual(['base', 'facturation']);
+    for (let i = 0; i < MAX_PREFIXES_CHAUDS + 3; i++) signalerAppelLumi('claude-sonnet-5', p(`t${i}`), `t${i}`);
+    expect(prefixesSuivis().size).toBe(MAX_PREFIXES_CHAUDS);
+    expect(prefixesSuivis().has('base')).toBe(false); // le plus ancien est parti
   });
 });

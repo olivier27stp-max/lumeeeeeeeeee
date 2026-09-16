@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { motsCles, outilsSuggeres, indiceOutils } from '../server/lib/lumi/indices-outils';
 import { OUTILS_DE_BASE } from '../server/lib/lumi/orchestrateur';
+import { outilsDuSousAgent } from '../server/lib/lumi/sous-agents';
 
 describe('indices d outils', () => {
   it('traduit le vocabulaire québécois vers les mots des outils', () => {
@@ -30,18 +31,25 @@ describe('indices d outils', () => {
     ];
     for (const [q, outil] of cas) expect(outilsSuggeres(q), q).toContain(outil);
   });
-  it('ne suggère jamais un outil déjà chargé, et au plus 6 noms', () => {
+  it('au plus 6 noms ; un outil déjà chargé n est jamais dans le motif à charger', () => {
     for (const q of ['Combien de clients j’ai ?', 'Pointe-moi', 'Crée une facture pour Gagnon']) {
       const s = outilsSuggeres(q);
       expect(s.length).toBeLessThanOrEqual(6);
-      for (const n of s) expect(OUTILS_DE_BASE.has(n), n).toBe(false);
+      const l = indiceOutils(q, 'fr') ?? '';
+      const motif = /motif `\^\(([a-z_|]+)\)\$`/.exec(l)?.[1]?.split('|') ?? [];
+      for (const n of motif) expect(OUTILS_DE_BASE.has(n), n).toBe(false);
     }
   });
-  it('la ligne du bloc variable porte le motif exact, ou rien quand rien ne ressemble', () => {
+  it('la ligne du bloc variable sépare chargés et différés, porte le motif exact, ou rien quand rien ne ressemble', () => {
     const l = indiceOutils('Pointe-moi, je commence ma journée.', 'fr');
     expect(l).toMatch(/tool_search_tool_regex, motif `\^\((punch_in|[a-z_|]+)\)\$`/);
     expect(l).toContain('punch_in');
     expect(indiceOutils('Bonjour', 'fr')).toBeNull();
     expect(indiceOutils('Clock me in', 'en')).toMatch(/^Deferred tools/);
+    // Sous-agent equipe : punch_in est chargé → « utilise-le directement », plus de motif pour lui.
+    const charges = new Set(outilsDuSousAgent('equipe'));
+    const le = indiceOutils('Pointe-moi, je commence ma journée.', 'fr', charges) ?? '';
+    expect(le).toMatch(/^Outils déjà chargés .*punch_in/);
+    expect(/motif `\^\(([a-z_|]+)\)\$`/.exec(le)?.[1]?.split('|') ?? []).not.toContain('punch_in');
   });
 });

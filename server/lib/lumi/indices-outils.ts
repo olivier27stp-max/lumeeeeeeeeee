@@ -54,7 +54,6 @@ let INDEX: Indice[] | null = null;
 function index(): Indice[] {
   if (INDEX) return INDEX;
   INDEX = AGENT_TOOLS
-    .filter((t) => !OUTILS_DE_BASE.has(t.declaration.name))
     .map((t) => ({
       nom: t.declaration.name,
       nomMots: motsDuNom(t.declaration.name),
@@ -73,7 +72,7 @@ export function motsCles(enonce: string): string[] {
   return [...out];
 }
 
-/** Les outils différés qui ressemblent le plus à la demande (nom d'outil ×3, verbe générique ×2, description ×1), au plus `limite`. Pur, testé. */
+/** Les outils qui ressemblent le plus à la demande (nom d'outil ×3, verbe générique ×2, description ×1), au plus `limite`. Pur, testé. */
 export function outilsSuggeres(enonce: string, limite = 6, outils: Indice[] = index()): string[] {
   const cles = motsCles(enonce);
   if (!cles.length) return [];
@@ -89,12 +88,27 @@ export function outilsSuggeres(enonce: string, limite = 6, outils: Indice[] = in
   return scores.slice(0, limite).map((x) => x.nom);
 }
 
-/** Ligne du bloc VARIABLE : les candidats et le motif exact pour tool_search_tool_regex. Vide s'il n'y a rien à suggérer. */
-export function indiceOutils(enonce: string, langue: 'fr' | 'en'): string | null {
+/**
+ * Ligne du bloc VARIABLE : les candidats déjà chargés (à utiliser tels quels) et
+ * les candidats différés avec le motif exact pour tool_search_tool_regex.
+ * `charges` = les outils réellement dans le bloc d'outils de ce tour (jeu de
+ * base ou sous-agent). Vide s'il n'y a rien à suggérer.
+ */
+export function indiceOutils(enonce: string, langue: 'fr' | 'en', charges: ReadonlySet<string> = OUTILS_DE_BASE): string | null {
   const noms = outilsSuggeres(enonce);
   if (!noms.length) return null;
-  const motif = `^(${noms.join('|')})$`;
-  return langue === 'fr'
-    ? `Outils différés qui semblent correspondre à cette demande (charge-les d'abord avec tool_search_tool_regex, motif \`${motif}\`, puis agis ; ne dis jamais « je n'ai pas d'outil » avant d'avoir essayé) : ${noms.join(', ')}.`
-    : `Deferred tools that seem to match this request (load them first with tool_search_tool_regex, pattern \`${motif}\`, then act; never say "I have no tool" before trying): ${noms.join(', ')}.`;
+  const dispo = noms.filter((n) => charges.has(n));
+  const differes = noms.filter((n) => !charges.has(n));
+  const motif = `^(${differes.join('|')})$`;
+  const parties: string[] = [];
+  if (langue === 'fr') {
+    if (dispo.length) parties.push(`Outils déjà chargés qui semblent correspondre à cette demande (utilise-les directement) : ${dispo.join(', ')}.`);
+    if (differes.length) parties.push(`Outils différés qui semblent correspondre (charge-les avec tool_search_tool_regex, motif \`${motif}\`, puis agis) : ${differes.join(', ')}.`);
+    parties.push("Ne dis jamais « je n'ai pas d'outil » avant d'avoir essayé.");
+  } else {
+    if (dispo.length) parties.push(`Loaded tools that seem to match this request (use them directly): ${dispo.join(', ')}.`);
+    if (differes.length) parties.push(`Deferred tools that seem to match (load them with tool_search_tool_regex, pattern \`${motif}\`, then act): ${differes.join(', ')}.`);
+    parties.push('Never say "I have no tool" before trying.');
+  }
+  return parties.join(' ');
 }

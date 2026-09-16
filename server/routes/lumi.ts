@@ -28,13 +28,13 @@ import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
 import { getUserContext } from '../lib/rbac';
-import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
+import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, OUTILS_DE_BASE, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
 import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
-import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent } from '../lib/lumi/sous-agents';
+import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent, outilsDuSousAgent } from '../lib/lumi/sous-agents';
 import { indiceOutils } from '../lib/lumi/indices-outils';
 import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
@@ -330,7 +330,7 @@ async function executerTourSse(opts: {
       systeme: (() => {
         const focus = [
           opts.sousAgent ? focusDuSousAgent(opts.sousAgent, ctx.language) : null,
-          opts.enonce ? indiceOutils(opts.enonce, ctx.language) : null,
+          opts.enonce ? indiceOutils(opts.enonce, ctx.language, new Set(opts.sousAgent ? outilsDuSousAgent(opts.sousAgent) : OUTILS_DE_BASE)) : null,
         ].filter((x): x is string => !!x).join('\n\n');
         return focus ? promptSystemeLumi({ ...ctx.promptCtx, focus }) : ctx.systeme;
       })(),
