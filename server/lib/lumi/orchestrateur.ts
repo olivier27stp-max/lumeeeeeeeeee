@@ -37,6 +37,7 @@ import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { executerEcriture, type ReçuExecution } from './execution';
+import { signalerAppelLumi } from './cache-chaud';
 import { ECRITURES_ANODINES } from '../agent/registre';
 
 const MAX_ETAPES = 8;
@@ -303,6 +304,7 @@ export async function tourLumi(opts: {
     });
     stream.on('text', (delta) => { texteTotal += delta; opts.emettre({ type: 'text', delta }); });
     const reponse = await stream.finalMessage();
+    signalerAppelLumi(model); // arme le maintien du cache 1 h (cache-chaud.ts)
 
     const cout = coutEnCents(model, reponse.usage);
     coutTotal += cout;

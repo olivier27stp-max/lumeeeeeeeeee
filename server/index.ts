@@ -1358,6 +1358,10 @@ app.listen(port, '0.0.0.0', () => {
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));
+    // Cache 1 h de Lumi gardé chaud dans la foulée d'une activité réelle (0,15 ¢ le ping contre 2,7 ¢ le démarrage à froid).
+    import('./lib/lumi/cache-chaud').then(({ demarrerMaintienCacheChaud }) => {
+      demarrerMaintienCacheChaud();
+    }).catch((e: any) => captureCronFailure('lumi-cache-chaud-startup', e));
 
     // Scheduled reports — check every hour
     import('./lib/scheduled-reports').then(({ processScheduledReports }) => {
