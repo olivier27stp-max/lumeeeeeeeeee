@@ -24,10 +24,10 @@ describe('messageRouteur', () => {
 });
 
 describe('effortDuSousAgent', () => {
-  it('rapports et facturation en medium ; les autres suivent la règle stricte (low)', () => {
+  it('rapports en medium ; les autres suivent la règle stricte (low) — facturation en medium perdait des actions et doublait le coût', () => {
     expect(SOUS_AGENTS_COMPLEXES.has('rapports')).toBe(true);
     expect(effortDuSousAgent('rapports')).toBe('medium');
-    expect(effortDuSousAgent('facturation')).toBe('medium');
+    expect(effortDuSousAgent('facturation')).toBe('low');
     expect(effortDuSousAgent('planification')).toBe('low');
     expect(effortDuSousAgent(null)).toBe('low');
   });

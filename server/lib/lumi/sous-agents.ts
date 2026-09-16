@@ -66,8 +66,14 @@ const CONSIGNES_SOUS_AGENT: Partial<Record<IdTopic, { fr: string; en: string }>>
   },
 };
 
-/** Sujets qui raisonnent vraiment (rapports, analyse financière) : réflexion medium ; les autres suivent la règle stricte (low). */
-export const SOUS_AGENTS_COMPLEXES: ReadonlySet<IdTopic> = new Set<IdTopic>(['rapports', 'facturation']);
+/**
+ * Sujets qui raisonnent vraiment : réflexion medium ; les autres suivent la
+ * règle stricte (low). Mesuré (batterie du 2026-09-16) : facturation en medium
+ * a FAIT PERDRE deux actions (le modèle posait des questions au lieu de
+ * proposer la carte) et doublé le coût des tours modèle (0,58 → 1,03 ¢) ;
+ * seuls les rapports restent en medium.
+ */
+export const SOUS_AGENTS_COMPLEXES: ReadonlySet<IdTopic> = new Set<IdTopic>(['rapports']);
 export function effortDuSousAgent(topic: IdTopic | null | undefined): 'low' | 'medium' {
   return topic && SOUS_AGENTS_COMPLEXES.has(topic) ? 'medium' : reglesCout().effort_defaut;
 }
