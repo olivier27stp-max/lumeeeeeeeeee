@@ -109,6 +109,52 @@ export async function creerTicket(admin: SupabaseClient, p: {
   return data as Ticket;
 }
 
+/** Statut à la réouverture : chez l'humain si un fil Slack existe, sinon l'assistant reprend. Pur, testé. */
+export function statutReouverture(t: Pick<Ticket, 'slack_thread_ts'>): 'open' | 'ai' {
+  return t.slack_thread_ts ? 'open' : 'ai';
+}
+
+/**
+ * Le client écrit dans une conversation fermée : on la ROUVRE (même fil Slack,
+ * même historique) plutôt que de l'obliger à en commencer une autre.
+ */
+export async function rouvrirTicket(admin: SupabaseClient, t: Ticket): Promise<Ticket> {
+  const { data, error } = await admin.from('support_tickets')
+    .update({ status: statutReouverture(t), closed_at: null, last_message_at: new Date().toISOString() })
+    .eq('id', t.id).select('*').single();
+  if (error) throw new Error(`support_tickets reopen : ${error.message}`);
+  await ajouterMessage(admin, { ticket: t, author: 'system', body: 'reopened:client' });
+  logger.info('[support] conversation rouverte par le client', { ticketId: t.id });
+  return data as Ticket;
+}
+
+/** Jours sans activité avant de fermer une conversation répondue (ou restée avec l'assistant). `SUPPORT_FERMETURE_APRES_JOURS=0` désactive ; défaut 3. */
+export function joursAvantFermeture(env: NodeJS.ProcessEnv = process.env): number {
+  if (env.SUPPORT_FERMETURE_APRES_JOURS === '0') return 0;
+  const v = Number(env.SUPPORT_FERMETURE_APRES_JOURS);
+  return Number.isFinite(v) && v >= 1 ? v : 3;
+}
+
+/**
+ * Ferme les conversations sans activité : celles où l'équipe a répondu et le
+ * client n'est pas revenu (`answered`), et celles restées avec l'assistant
+ * (`ai`). Une conversation `open` (le client attend un humain) n'est JAMAIS
+ * fermée d'office. Le client peut toujours rouvrir en écrivant.
+ */
+export async function fermerTicketsInactifs(admin: SupabaseClient, jours: number = joursAvantFermeture()): Promise<number> {
+  if (!jours) return 0;
+  const limite = new Date(Date.now() - jours * 86_400_000).toISOString();
+  const { data, error } = await admin.from('support_tickets')
+    .update({ status: 'closed', closed_at: new Date().toISOString() })
+    .in('status', ['answered', 'ai'])
+    .lt('last_message_at', limite)
+    .select('id');
+  if (error) { logger.error('[support] fermeture automatique impossible', { error: error.message }); return 0; }
+  const n = (data || []).length;
+  if (n) logger.info('[support] conversations fermées (inactives)', { n, jours });
+  return n;
+}
+
 export async function ticketDe(admin: SupabaseClient, ticketId: string, orgId: string, userId: string): Promise<Ticket | null> {
   const { data } = await admin.from('support_tickets').select('*').eq('id', ticketId).eq('org_id', orgId).eq('user_id', userId).maybeSingle();
   return (data as Ticket) || null;
