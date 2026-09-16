@@ -268,6 +268,16 @@ async function executerTourSse(opts: {
   const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null);
   const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => {
     const routeur = observation ? await observation : null;
+    // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
+    // dans ai_usage comme en mode actif, jamais un coût hors budget.
+    if (routeur && !opts.routeur && routeur.usage) {
+      void journaliserUsage(ctx.admin, {
+        orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, model: MODELE_ROUTEUR,
+        input_tokens: routeur.usage.input_tokens, output_tokens: routeur.usage.output_tokens,
+        cache_creation_input_tokens: routeur.usage.cache_creation_input_tokens, cache_read_input_tokens: routeur.usage.cache_read_input_tokens,
+        cost_cents: coutEnCents(MODELE_ROUTEUR, routeur.usage),
+      });
+    }
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
       enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
