@@ -60,6 +60,10 @@ describe('cache exact (étage 3)', () => {
     expect(tourCachable({ ...base, proposition: true })).toBe(false);
     // Écriture exécutée d'office (remember_this, mode argent) : jamais en cache.
     expect(tourCachable({ ...base, ecritureExecutee: true })).toBe(false);
+    // Un énoncé de mémoire (« retiens que… ») n'est jamais une lecture, quoi qu'ait fait le tour.
+    expect(tourCachable({ ...base, enonce: 'Retiens que je ne travaille jamais le dimanche.' })).toBe(false);
+    expect(tourCachable({ ...base, enonce: 'Oublie ça' })).toBe(false);
+    expect(tourCachable({ ...base, enonce: 'Combien de clients ai-je ?' })).toBe(true);
     expect(tourCachable({ ...base, outils: ['list_jobs', 'create_task'] })).toBe(false);
     expect(tourCachable({ ...base, texte: '  ' })).toBe(false);
     expect(tourCachable({ ...base, resultat: 'erreur' })).toBe(false);

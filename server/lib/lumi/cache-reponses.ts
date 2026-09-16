@@ -45,11 +45,15 @@ export { versionOrg, invaliderOrg } from './version-org';
 import { versionOrg } from './version-org';
 
 /** Un tour est-il cachable ? Lecture seule, texte, pas de proposition, premier message. */
-export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string; ecritureExecutee?: boolean }): boolean {
+/** Un énoncé qui demande de retenir/oublier n'est jamais une lecture : on ne le met pas en cache, quoi qu'ait fait le tour. */
+export const ENONCE_MEMOIRE = /^\s*(retiens|retiens-toi|souviens-toi|note que|oublie|n'oublie pas|remember|forget)\b/i;
+
+export function tourCachable(t: { historiqueVide: boolean; texte: string; outils: string[]; proposition: boolean; resultat: string; ecritureExecutee?: boolean; enonce?: string | null }): boolean {
   // Une écriture exécutée d'office (anodine, ou mode « argent ») n'apparaît ni
   // dans `outils` ni comme proposition : sans ce garde, « C'est noté » était
   // mis en cache et rejoué sans rien écrire (audit du 2026-09-16, A5).
   if (!t.historiqueVide || t.proposition || t.resultat !== 'ok' || t.ecritureExecutee) return false;
+  if (t.enonce && ENONCE_MEMOIRE.test(t.enonce)) return false;
   if (!t.texte.trim()) return false;
   return t.outils.every((o) => TOOLS_BY_NAME[o]?.kind === 'read');
 }

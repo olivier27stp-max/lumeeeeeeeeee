@@ -546,8 +546,11 @@ async function testQuota(H, v, resultats) {
       const r = await demander(H, 'Combien de clients ai-je ?');
       const q2 = await fetch(`${API}/api/lumi/quota`, { headers: H }).then((x) => x.json());
       l.reponse = JSON.stringify(r.erreur || r.texte).slice(0, 200); l.cout_cents = r.cout;
-      // La ligne ai_usage insérée à l'instant compte comme « dernier appel » : le ralenti refuse pendant 60 s.
-      if (r.statut !== 429 || !['ralenti', 'quota_epuise'].includes(r.erreur?.code)) l.fautes.push(`attendu 429 ralenti, reçu ${r.statut} ${JSON.stringify(r.erreur)?.slice(0, 80) || ''}`);
+      // Plafond dur (B4) : jamais de 429 — les étages déterministes répondent encore (ici l'énoncé exact « Combien de
+      // clients ai-je ? », étage 1), sinon le gabarit « en pause jusqu'au 1er ». Dans les deux cas : 0 appel au modèle.
+      const gabaritPause = /en pause jusqu'au|paused until/i.test(r.texte || '');
+      if (r.statut !== 200) l.fautes.push(`attendu 200 (étage déterministe ou gabarit), reçu ${r.statut} ${JSON.stringify(r.erreur)?.slice(0, 80) || ''}`);
+      else if (!(gabaritPause || (r.etage !== null && r.etage <= 5))) l.fautes.push(`attendu un étage sans modèle ou le gabarit de pause, reçu étage ${r.etage}`);
       if (!q2.epuise) l.fautes.push('la jauge ne dit pas « épuisé »');
       if (r.cout > 0) l.fautes.push('un appel au modèle a quand même été facturé');
     }

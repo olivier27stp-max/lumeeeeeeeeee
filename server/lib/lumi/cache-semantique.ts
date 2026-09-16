@@ -82,10 +82,13 @@ export async function embed(texte: string, fetchImpl: typeof fetch = fetch): Pro
 }
 
 /** La meilleure entrée au-dessus du seuil, pour cette portée et cette version (pur sur l'index). */
-export function meilleure(index: EntreeSemantique[], vec: number[], version: number | null): { entree: EntreeSemantique; similarite: number } | null {
+export function meilleure(index: EntreeSemantique[], vec: number[], version: number | null, ageMaxMs = Infinity, maintenant = Date.now()): { entree: EntreeSemantique; similarite: number } | null {
   let best: { entree: EntreeSemantique; similarite: number } | null = null;
   for (const e of index) {
     if (version !== null && e.version !== version) continue;
+    // Expiration PAR ENTRÉE : la clé de l'index est prolongée à chaque écriture,
+    // une vieille réponse survivait tant que l'org en mémorisait d'autres.
+    if (maintenant - e.ts > ageMaxMs) continue;
     const s = cosinus(vec, e.vec);
     if (s >= SEUIL_SIMILARITE && (!best || s > best.similarite)) best = { entree: e, similarite: s };
   }
@@ -94,7 +97,7 @@ export function meilleure(index: EntreeSemantique[], vec: number[], version: num
 
 export async function chercherSemantique(p: Portee, vec: number[], version: number | null): Promise<{ entree: EntreeSemantique; similarite: number } | null> {
   const index = (await magasin().get<EntreeSemantique[]>(cleIndex(p))) ?? [];
-  return meilleure(index, vec, version);
+  return meilleure(index, vec, version, (p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S) * 1000);
 }
 
 export async function memoriserSemantique(p: Portee, e: Omit<EntreeSemantique, 'ts'>): Promise<void> {

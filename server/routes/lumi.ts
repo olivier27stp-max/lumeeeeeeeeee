@@ -327,7 +327,7 @@ async function executerTourSse(opts: {
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition, etage: ETAGE.agent });
     void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null);
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
-    if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee })) {
+    if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee, enonce: opts.enonce })) {
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };
       void ecrireReponse(p, { texte: resultat.texte, fiches, outils });
       void (async () => {
@@ -522,6 +522,15 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
         emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: null, raccourci: r.id, etage: ETAGE.routeur });
+        // La même question, redemandée : servie par les caches (étages 3-4), sans même le routeur.
+        {
+          const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
+          void ecrireReponse(p, { texte: reponse.texte, fiches: reponse.fiches, outils: [r.tool] });
+          void (async () => {
+            const vec = vecteur ? await vecteur : null;
+            if (vec) await memoriserSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, { enonce: message, vec, texte: reponse.texte, fiches: reponse.fiches, outils: [r.tool], version: await versionOrg(p.orgId) });
+          })();
+        }
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: r.id,
