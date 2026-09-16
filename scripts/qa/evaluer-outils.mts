@@ -115,7 +115,7 @@ const CAS: Array<{ outil: string; q: string; voisins?: string[] }> = [
   { outil: 'send_agreement_sms', q: 'Texte le contrat du job 33 au client pour qu’il le signe.', voisins: ['list_job_agreements'] },
   { outil: 'list_availability', q: 'Quelles sont les disponibilités hebdomadaires de mes équipes ?' },
   { outil: 'create_availability', q: 'Ajoute une plage de disponibilité le samedi de 8 h à 12 h pour mon équipe principale.', voisins: ['list_teams', 'list_availability'] },
-  { outil: 'delete_availability', q: 'Enlève la plage du samedi matin de mon équipe principale.', voisins: ['list_availability'] },
+  { outil: 'delete_availability', q: 'Enlève la plage du samedi matin de mon équipe principale.', voisins: ['list_availability', 'list_teams'] },
   { outil: 'set_default_availability', q: 'Remets les disponibilités de mon équipe principale au lundi-vendredi 8 h à 17 h.', voisins: ['list_teams'] },
   { outil: 'reschedule_task', q: 'Mets la tâche « Rappeler Marie Tremblay » vendredi à 14 h.', voisins: ['list_tasks'] },
   { outil: 'duplicate_task', q: 'Duplique la tâche « Rappeler Marie Tremblay ».', voisins: ['list_tasks'] },
@@ -143,7 +143,7 @@ const CAS: Array<{ outil: string; q: string; voisins?: string[] }> = [
   { outil: 'mark_payroll_period_paid', q: 'Marque la paie de cette période comme payée pour le premier technicien.', voisins: ['get_team', 'get_payroll_summary'] },
   { outil: 'unmark_payroll_period_paid', q: 'Annule le « payé » sur la paie de cette période du premier technicien.', voisins: ['get_team', 'get_payroll_summary'] },
   { outil: 'update_payroll_settings', q: 'Passe mes périodes de paie aux deux semaines.' },
-  { outil: 'update_role_preset', q: 'Permets aux techniciens de voir les prix des soumissions.' },
+  { outil: 'update_role_preset', q: 'Permets aux techniciens de modifier leurs feuilles de temps.' }, // les clés financières sont interdites aux techniciens (permissions.ts) : Lumi refuse, vérifié à la passe 2
   { outil: 'set_member_permissions', q: 'Donne au premier technicien le droit de voir les rapports financiers, juste à lui.', voisins: ['get_team'] },
   { outil: 'reset_member_permissions', q: 'Remets les permissions du premier technicien à celles de son rôle.', voisins: ['get_team'] },
   // ── Messages, automatisations, réglages ──

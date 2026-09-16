@@ -1110,7 +1110,8 @@ const deleteDeal: AgentTool = {
     name: 'delete_deal',
     description:
       'Remove a card from the pipeline (soft delete, like in Lume — the user cannot undo it). With also_delete_lead: '
-      + 'true the prospect itself is deleted too. Confirm with the user first. Get the deal id from list_deals.',
+      + 'true the prospect itself is deleted too. Confirm with the user first. Get the deal id from list_deals. '
+      + 'A saved payment card (« carte enregistrée », card on file) is NOT a pipeline card → remove_card_on_file / charge_card_on_file.',
     parameters: {
       type: 'object',
       properties: {

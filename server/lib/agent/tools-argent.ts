@@ -1907,7 +1907,8 @@ const updateReminderSettingsTool: AgentTool = {
     name: 'update_reminder_settings',
     description:
       'Change the org’s automatic payment reminder settings (owner/admin): on/off, the schedule (days after due '
-      + 'date + channel) and custom texts. `schedule` REPLACES the whole schedule when provided. Only provided fields change.',
+      + 'date + channel) and custom texts. `schedule` REPLACES the whole schedule when provided. Only provided fields change. '
+      + 'If the user gives the days but no channel, keep the channel of the current schedule (get_reminder_settings) or use email: propose the card, do not ask.',
     parameters: {
       type: 'object',
       properties: {

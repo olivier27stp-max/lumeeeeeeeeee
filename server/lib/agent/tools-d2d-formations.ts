@@ -807,7 +807,7 @@ const createChallenge: AgentTool = {
     name: 'create_challenge',
     description:
       'Create a daily or weekly field-sales challenge on a metric (knocks, leads, sales, quotes_sent, callbacks) '
-      + 'with an optional target and prize, between two dates.',
+      + 'with an optional target and prize, between two dates. Without a target or prize, propose the card as an open challenge — do not ask.',
     parameters: {
       type: 'object',
       properties: {

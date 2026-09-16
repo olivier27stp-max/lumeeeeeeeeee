@@ -760,10 +760,11 @@ const listCourses: AgentTool = {
   kind: 'read',
   declaration: {
     name: 'list_courses',
-    description: 'List the training courses of the org: title, category, status.',
-    parameters: { type: 'object', properties: {} },
+    description: 'List the training courses of the org: title, category, status, course_id (for update_course, publish_course, assign_course). '
+      + 'With with_lessons: true, also the modules and lessons of each course with their ids (for update_course_lesson, create_course_lesson).',
+    parameters: { type: 'object', properties: { with_lessons: { type: 'boolean', description: 'Include modules and lessons (default false).' } } },
   },
-  handler: async (_args, ctx) => {
+  handler: async (args, ctx) => {
     const { data, error } = await ctx.client
       .from('courses')
       .select('id, title, category, status, created_at')
@@ -773,12 +774,30 @@ const listCourses: AgentTool = {
       .limit(30);
     if (error) return erreurOutil('courses', error);
     const ETAT: Record<string, string> = { draft: 'brouillon', published: 'publié', archived: 'archivé' };
+    const cours = (data || []).map((c: any) => ({
+      course_id: c.id,
+      title: c.title,
+      categorie: c.category,
+      statut: ETAT[c.status] || c.status,
+    }));
+    if (!args?.with_lessons || !cours.length) return { count: cours.length, courses: cours };
+    // Modules et leçons (RLS par cours ; pas d'org_id sur ces tables : filtrées par les cours de l'org ci-dessus).
+    const { data: modules, error: em } = await ctx.client
+      .from('course_modules').select('id, course_id, title, sort_order').in('course_id', cours.map((c) => c.course_id)).order('sort_order');
+    if (em) return erreurOutil('course_modules', em);
+    const { data: lecons, error: el } = (modules || []).length
+      ? await ctx.client.from('course_lessons').select('id, module_id, title, content_type, duration_min, sort_order').in('module_id', (modules || []).map((m: any) => m.id)).order('sort_order')
+      : { data: [] as any[], error: null };
+    if (el) return erreurOutil('course_lessons', el);
     return {
-      count: data?.length || 0,
-      courses: (data || []).map((c: any) => ({
-        title: c.title,
-        categorie: c.category,
-        statut: ETAT[c.status] || c.status,
+      count: cours.length,
+      courses: cours.map((c) => ({
+        ...c,
+        modules: (modules || []).filter((m: any) => m.course_id === c.course_id).map((m: any) => ({
+          module_id: m.id,
+          titre: m.title,
+          lecons: (lecons || []).filter((l: any) => l.module_id === m.id).map((l: any) => ({ lesson_id: l.id, titre: l.title, type: l.content_type, duree_min: l.duration_min })),
+        })),
       })),
     };
   },
