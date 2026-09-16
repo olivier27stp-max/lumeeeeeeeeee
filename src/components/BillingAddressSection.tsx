@@ -1,7 +1,6 @@
 import React from 'react';
 import { toast } from 'sonner';
 import { Receipt, Edit2, Trash2, Check, X } from 'lucide-react';
-import { cn } from '../lib/utils';
 import { getClientById, updateClient } from '../lib/clientsApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import {
@@ -161,52 +160,33 @@ export function BillingAddressSection({
   };
 
   return (
-    <div className="mt-3 rounded-lg border border-outline bg-surface-secondary p-3.5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium text-text-primary">
-            {fr ? 'Adresse de facturation identique à l’adresse de service' : 'Billing address same as service address'}
-          </p>
-          <p className="text-[11px] text-text-tertiary mt-0.5">
-            {fr ? 'Désactivez pour facturer à une adresse différente.' : 'Turn off to bill to a different address.'}
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={sameAsService}
-          aria-label={fr ? 'Adresse de facturation identique à l’adresse de service' : 'Billing address same as service address'}
+    <div className="mt-3">
+      {/* Une seule ligne au repos : la case cochée = facturer à l'adresse de service. */}
+      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={sameAsService}
           disabled={saving}
-          onClick={() => void toggle()}
-          className={cn(
-            'relative w-9 h-5 rounded-full transition-colors flex-shrink-0',
-            sameAsService ? 'bg-primary' : 'bg-surface-tertiary',
-          )}
-        >
-          <span
-            className={cn(
-              'absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
-              sameAsService ? 'translate-x-4' : 'translate-x-0',
-            )}
-          />
-        </button>
-      </div>
+          onChange={() => void toggle()}
+          className="h-4 w-4 rounded"
+          aria-label={fr ? 'Adresse de facturation identique à l’adresse de service' : 'Billing address same as service address'}
+        />
+        <span className="text-[13px] text-text-primary">
+          {fr ? 'Adresse de facturation identique à l’adresse de service' : 'Billing address same as service address'}
+        </span>
+      </label>
 
       {!sameAsService && (
-        <div className="mt-3">
-          <span className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
-            {fr ? 'Adresse de facturation' : 'Billing address'}
-          </span>
-
+        <div className="mt-2 ml-6">
           {loading ? (
-            <p className="text-[13px] text-text-tertiary mt-1">…</p>
+            <p className="text-[13px] text-text-tertiary">…</p>
           ) : editing ? (
-            <div className="mt-1 rounded-lg border border-outline bg-surface p-3 space-y-2.5">
+            <div className="rounded-lg border border-outline bg-surface p-3 space-y-2.5">
               <AddressAutocomplete
                 value={search}
                 onChange={(v) => { setSearch(v); setStructured(null); }}
                 onSelect={(a) => { setStructured(a); setSearch(a.formatted_address); }}
-                placeholder={fr ? '123 rue Principale, Ville, QC, H0H 0H0' : '123 Main St, City, QC, H0H 0H0'}
+                placeholder={fr ? 'Adresse de facturation' : 'Billing address'}
               />
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -228,7 +208,7 @@ export function BillingAddressSection({
               </div>
             </div>
           ) : billing ? (
-            <div className="mt-1 flex items-start gap-3 rounded-lg border border-outline bg-surface p-3">
+            <div className="flex items-start gap-3 rounded-lg border border-outline bg-surface-secondary p-3">
               <span className="mt-0.5 text-text-secondary">
                 <Receipt size={15} />
               </span>
@@ -244,7 +224,7 @@ export function BillingAddressSection({
                   onClick={openEditor}
                   disabled={saving}
                   className="inline-flex items-center justify-center h-6 w-6 bg-surface border border-outline rounded text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50"
-                  title={fr ? 'Modifier l’adresse de facturation' : 'Edit billing address'}
+                  title={fr ? 'Modifier' : 'Edit'}
                   aria-label={fr ? 'Modifier l’adresse de facturation' : 'Edit billing address'}
                 >
                   <Edit2 size={11} />
@@ -254,7 +234,7 @@ export function BillingAddressSection({
                   onClick={() => void remove()}
                   disabled={saving}
                   className="inline-flex items-center justify-center h-6 w-6 bg-surface border border-outline rounded text-text-secondary hover:bg-danger-light hover:text-danger transition-colors disabled:opacity-50"
-                  title={fr ? 'Retirer l’adresse de facturation' : 'Remove billing address'}
+                  title={fr ? 'Retirer' : 'Remove'}
                   aria-label={fr ? 'Retirer l’adresse de facturation' : 'Remove billing address'}
                 >
                   <Trash2 size={11} />
@@ -262,23 +242,14 @@ export function BillingAddressSection({
               </div>
             </div>
           ) : (
-            <div className="mt-1 flex items-center justify-between gap-3">
-              <p className="text-[13px] text-text-tertiary">
-                {fr ? 'Aucune adresse de facturation.' : 'No billing address yet.'}
-              </p>
-              <button
-                type="button"
-                onClick={openEditor}
-                className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
-              >
-                {fr ? 'Ajouter' : 'Add'}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={openEditor}
+              className="inline-flex items-center gap-1 h-7 px-2.5 bg-surface border border-outline rounded-md text-[12px] text-text-primary hover:bg-surface-secondary transition-colors"
+            >
+              {fr ? 'Ajouter une adresse de facturation' : 'Add billing address'}
+            </button>
           )}
-
-          <p className="text-[11px] text-text-tertiary mt-1.5">
-            {fr ? 'Cette adresse apparaîtra sur les factures.' : 'This address will appear on invoices.'}
-          </p>
         </div>
       )}
     </div>
