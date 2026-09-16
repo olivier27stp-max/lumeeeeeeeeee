@@ -33,6 +33,8 @@ import {
   type Plan, type SubscribeInput,
 } from '../lib/billingApi';
 import { validateReferralCode } from '../lib/referralsApi';
+import { createWorkspace } from '../lib/workspacesApi';
+import { WorkspacePage, pageSubtitle, pageTitle, useWorkspaceForm, type WorkspacePageId } from '../components/workspace/WorkspaceForm';
 // Stripe Checkout — payment handled via Stripe hosted page (secure, PCI compliant)
 
 // ─── Stripe redirect URL allow-list ───
@@ -53,18 +55,21 @@ const PLAN_NAMES: Record<string, string> = {
 };
 
 // ─── Step definitions ───
-type StepId = 'basic' | 'company' | 'profile' | 'revenue' | 'goals' | 'attribution' | 'optimize' | 'checkout';
-const STEPS: StepId[] = ['basic', 'company', 'profile', 'revenue', 'goals', 'attribution', 'optimize', 'checkout'];
+// Compte → workspace (entreprise*, coordonnées, préférences, avis, équipe) → paiement.
+// Les anciennes étapes Revenu / Objectifs / Attribution / Optimisation n'étaient
+// sauvegardées nulle part ; le workspace se décrit ici, AVANT le paiement.
+type StepId = 'basic' | WorkspacePageId | 'checkout';
+const STEPS: StepId[] = ['basic', 'company', 'contact', 'preferences', 'reviews', 'team', 'checkout'];
 
 // ─── Right-side panel content per step ───
 const STEP_PANELS: Record<StepId, { image: string; quote: string; quoteFr: string; author?: string }> = {
   basic:       { image: '/industries/landscaping.webp', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
   company:     { image: '/industries/landscaping.webp', quote: 'Businesses grow their revenue by 37% on average with Lume.', quoteFr: 'Les entreprises augmentent leur revenu de 37 % en moyenne avec Lume.', author: '' },
-  profile:     { image: '/industries/construction.webp', quote: 'Business owners who use Lume save 7 hours a week.', quoteFr: 'Les propriétaires d\'entreprise qui utilisent Lume économisent 7 heures par semaine.', author: '' },
-  revenue:     { image: '/industries/hvac.webp', quote: 'You can get paid 4x faster with Lume payments.', quoteFr: 'Faites-vous payer 4 fois plus vite avec les paiements Lume.', author: '' },
-  goals:       { image: '/industries/powerwash.jpg', quote: 'Lume has changed the game for us. Now we are actually starting to scale up our business.', quoteFr: 'Lume a changé la donne pour nous. On commence vraiment à faire croître notre entreprise.', author: 'Vision Lavage' },
-  attribution: { image: '/industries/roofing.webp', quote: "We're here to help your business run smoothly.", quoteFr: 'On est là pour que votre entreprise roule sans accroc.', author: '' },
-  optimize:    { image: '/industries/window.jpg', quote: 'Upgrade your plan and unlock more powerful features.', quoteFr: 'Passez à un plan supérieur et débloquez des fonctionnalités plus puissantes.', author: '' },
+  contact:     { image: '/industries/construction.webp', quote: 'Business owners who use Lume save 7 hours a week.', quoteFr: 'Les propriétaires d’entreprise qui utilisent Lume économisent 7 heures par semaine.', author: '' },
+  preferences: { image: '/industries/hvac.webp', quote: 'You can get paid 4x faster with Lume payments.', quoteFr: 'Faites-vous payer 4 fois plus vite avec les paiements Lume.', author: '' },
+  reviews:     { image: '/industries/powerwash.jpg', quote: 'Lume has changed the game for us. Now we are actually starting to scale up our business.', quoteFr: 'Lume a changé la donne pour nous. On commence vraiment à faire croître notre entreprise.', author: 'Vision Lavage' },
+  team:        { image: '/industries/roofing.webp', quote: "We're here to help your business run smoothly.", quoteFr: 'On est là pour que votre entreprise roule sans accroc.', author: '' },
+  review:      { image: '', quote: '', quoteFr: '', author: '' },
   checkout:    { image: '', quote: '', quoteFr: '', author: '' },
 };
 
@@ -137,23 +142,10 @@ export default function OnboardingFlow() {
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
 
-  // Step 2 — company
-  const [companyName, setCompanyName] = useState('');
-  const [industry, setIndustry] = useState('');
-  const [website, setWebsite] = useState('');
-
-  // Step 3 — profile
-  const [teamSize, setTeamSize] = useState('');
-  const [yearsInBusiness, setYearsInBusiness] = useState('');
-
-  // Step 4 — revenue
-  const [estimatedRevenue, setEstimatedRevenue] = useState('');
-
-  // Step 5 — goals
-  const [goal, setGoal] = useState('');
-
-  // Step 6 — attribution
-  const [heardFrom, setHeardFrom] = useState('');
+  // Étapes 2 à 6 — le workspace (brouillon en sessionStorage, partagé avec
+  // le filet post-paiement WorkspaceNew). Le nom complet vient de l'étape 1.
+  const wf = useWorkspaceForm({ language, fullName });
+  const companyName = wf.state.company_name;
 
   // Step 8 — checkout
   const [promoCode, setPromoCode] = useState('');
@@ -340,21 +332,27 @@ export default function OnboardingFlow() {
     // 1. Provision org
     try { await provisionOrg(); } catch (e) { captureClientException(e, { contexte: 'OnboardingFlow: provisionOrg (handleCheckout)' }); }
 
-    // 1b. Seed the org baseline (taxes QC + automations + service catalog).
-    // Ce chemin /checkout crée une org NUE et pose onboarding_done, ce qui
-    // court-circuite l'assistant : sans ceci l'org facturerait à 0 % de taxe
-    // et n'aurait aucune automatisation. Serveur (service_role requis),
-    // idempotent, best-effort — n'interrompt jamais le paiement.
+    // 1b. Le workspace : nom, industrie, coordonnées, préférences, avis,
+    // invitations + socle (taxes de la province, automatisations, catalogue).
+    // Serveur-autoritaire, idempotent, pose onboarding_done. Best-effort ici :
+    // en cas d'échec, le brouillon reste en sessionStorage et le filet
+    // post-paiement (WorkspaceNew) redemande ce qui manque.
     try {
-      await fetch('/api/onboarding/seed-defaults', {
-        method: 'POST', headers,
-        body: JSON.stringify({ industry: industry || null, tax_region: 'QC' }),
-      });
-    } catch (e) { captureClientException(e, { contexte: 'OnboardingFlow: seed-defaults org baseline' }); }
+      await createWorkspace(wf.buildPayload());
+      wf.clearDraft();
+    } catch (e) {
+      console.error('[onboarding] création du workspace échouée', e);
+      captureClientException(e, { contexte: 'OnboardingFlow: createWorkspace' });
+    }
 
-    // 2. Save onboarding
+    // 2. Save onboarding (profil de facturation Stripe)
     try {
-      const res = await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({ full_name: fullName, company_name: companyName, email, phone, currency }) });
+      const a = wf.state;
+      const res = await fetch('/api/billing/onboarding', { method: 'POST', headers, body: JSON.stringify({
+        full_name: fullName, company_name: companyName, email, phone: phone || a.phone || undefined, currency: a.currency || currency,
+        address: a.street1 || undefined, city: a.city || undefined, region: a.province || undefined, country: a.country || undefined, postal_code: a.postal_code || undefined,
+        industry: a.industry || undefined, company_size: a.employee_count || undefined,
+      }) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (err) {
       // Ne bloque pas le paiement, mais les infos saisies (nom, compagnie,
@@ -472,194 +470,28 @@ export default function OnboardingFlow() {
                 </div>
               )}
 
-              {/* ═══════ STEP 2: Company ═══════ */}
-              {step === 'company' && (
+              {/* ═══════ STEPS 2-6: Workspace ═══════ */}
+              {step !== 'basic' && step !== 'checkout' && (
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{isFr ? 'Votre entreprise' : 'Tell us about your business'}</h1>
-                  <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'Ces informations nous aident à personnaliser votre expérience.' : 'Understanding your business helps us tailor Lume to your needs.'}</p>
-                  <div className="space-y-4">
-                    <Field label={isFr ? "Nom de l'entreprise" : 'Company name'} required>
-                      {(id) => <input id={id} value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="ABC Landscaping" className="onb-input" />}
-                    </Field>
-                    <Field label={isFr ? 'Industrie' : 'Industry'}>
-                      {(id) => <input id={id} value={industry} onChange={e => setIndustry(e.target.value)} placeholder={isFr ? 'Ex: Aménagement paysager' : 'e.g. Landscaping'} className="onb-input" />}
-                    </Field>
-                    <Field label={isFr ? 'Site web' : 'Website'}>
-                      {(id) => <input id={id} value={website} onChange={e => setWebsite(e.target.value)} placeholder="https://..." className="onb-input" />}
-                    </Field>
-                  </div>
-                  <NavButtons onBack={goBack} onNext={goNext} disabled={!companyName.trim()} isFr={isFr} />
-                </div>
-              )}
-
-              {/* ═══════ STEP 3: Business profile ═══════ */}
-              {step === 'profile' && (
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{isFr ? 'Votre entreprise en bref' : 'Your business at a glance'}</h1>
-                  <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'On adapte les outils selon votre réalité.' : 'We use this to suggest the right tools and workflows.'}</p>
-                  <div className="space-y-6">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900 mb-3">{isFr ? "Combien de personnes dans l'équipe?" : 'How many people work at your company?'}</p>
-                      <ChipGroup options={[isFr ? 'Juste moi' : 'Just me', '2-5', '6-10', '11-19', '20+']} value={teamSize} onChange={setTeamSize} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900 mb-3">{isFr ? "Depuis combien d'années êtes-vous en affaires?" : 'How many years have you been in business?'}</p>
-                      <ChipGroup options={[isFr ? 'Moins de 1 an' : 'Less than 1 year', '1-2', '3-5', '6-10', '10+']} value={yearsInBusiness} onChange={setYearsInBusiness} />
-                    </div>
-                  </div>
-                  <NavButtons onBack={goBack} onNext={goNext} isFr={isFr} />
-                </div>
-              )}
-
-              {/* ═══════ STEP 4: Revenue ═══════ */}
-              {step === 'revenue' && (
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{isFr ? 'Estimez votre chiffre d\'affaires' : "Let's fine-tune your experience"}</h1>
-                  <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'On adapte les bons outils à votre volume.' : "What's your estimated revenue for this year?"}</p>
-                  <ChipGroup
-                    options={['$0 - $50K', '$50K - $150K', '$150K - $500K', '$500K - $1M', '$1M+', isFr ? 'Je préfère ne pas dire' : 'I prefer not to say']}
-                    value={estimatedRevenue} onChange={setEstimatedRevenue}
-                  />
-                  <NavButtons onBack={goBack} onNext={goNext} isFr={isFr} />
-                </div>
-              )}
-
-              {/* ═══════ STEP 5: Goals ═══════ */}
-              {step === 'goals' && (
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{isFr ? "Qu'est-ce qui vous amène ici?" : "What's top of mind for you?"}</h1>
-                  <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'Sélectionnez une option.' : 'Select an option to continue.'}</p>
-                  <div className="space-y-3">
-                    {[
-                      { id: 'grow', label: isFr ? 'Je veux faire croître mon entreprise' : 'I want to grow my business faster' },
-                      { id: 'organize', label: isFr ? 'Je veux être plus organisé' : 'I want to feel in control of my business' },
-                      { id: 'save', label: isFr ? 'Je veux sauver du temps' : 'I want to save time on admin work' },
-                      { id: 'explore', label: isFr ? 'Je regarde juste' : "I'm not sure yet, just exploring" },
-                    ].map(o => (
-                      <button key={o.id} onClick={() => setGoal(o.id)}
-                        className={cn('w-full text-left p-4 rounded-xl border-2 text-sm font-medium transition-all',
-                          goal === o.id ? 'border-[#1F5F4F] bg-[#1F5F4F]/5 text-gray-900' : 'border-gray-200 text-gray-600 hover:border-gray-300')}>
-                        {o.label}
-                      </button>
-                    ))}
-                  </div>
-                  <NavButtons onBack={goBack} onNext={goNext} isFr={isFr} />
-                </div>
-              )}
-
-              {/* ═══════ STEP 6: Attribution ═══════ */}
-              {step === 'attribution' && (
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{isFr ? 'Comment avez-vous entendu parler de Lume?' : "We'd love to know..."}</h1>
-                  <p className="text-sm text-gray-500 mt-2 mb-8">{isFr ? 'Merci de nous aider à nous améliorer.' : 'How did you find out about Lume?'}</p>
-                  <Field label="">
-                    <input value={heardFrom} onChange={e => setHeardFrom(e.target.value)} placeholder={isFr ? 'Ex: Google, référence, réseaux sociaux...' : 'e.g. Google, referral, social media...'} aria-label={isFr ? 'Comment avez-vous entendu parler de Lume?' : 'How did you find out about Lume?'} className="onb-input" />
-                  </Field>
-                  <NavButtons onBack={goBack} onNext={goNext} nextLabel={isFr ? 'Continuer' : 'Get Started'} isFr={isFr} />
-                </div>
-              )}
-
-              {/* ═══════ STEP 7: Plan optimization ═══════ */}
-              {step === 'optimize' && (
-                <div>
-                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{isFr ? 'Optimisez votre plan' : 'Optimize your plan'}</h1>
+                  <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{pageTitle(step, isFr)}</h1>
                   <p className="text-sm text-gray-500 mt-2 mb-8">
-                    {isFr ? 'Votre plan actuel:' : 'Your current plan:'} <strong>{PLAN_NAMES[selectedSlug] || selectedSlug}</strong>
-                    {' — '}${Math.round((plan ? (currency === 'USD' ? plan.monthly_price_usd : plan.monthly_price_cad) : 0) / 100)}/{isFr ? 'mois' : 'mo'}
+                    {pageSubtitle(step, isFr)}
+                    {step !== 'company' && <span className="text-gray-400"> · {isFr ? 'facultatif' : 'optional'}</span>}
                   </p>
-
-                  <div className="space-y-4">
-                    {/* ── Yearly savings card ── */}
-                    {plan && (() => {
-                      const monthlyPrice = (currency === 'USD' ? plan.monthly_price_usd : plan.monthly_price_cad);
-                      const yearlyTotal = (currency === 'USD' ? plan.yearly_price_usd : plan.yearly_price_cad);
-                      const yearlyMonthly = Math.round(yearlyTotal / 12);
-                      const savedPerMonth = monthlyPrice - yearlyMonthly;
-                      const savedPerYear = savedPerMonth * 12;
-                      return (
-                        <div className={cn('p-5 rounded-xl border-2 transition-all cursor-pointer',
-                          interval === 'yearly' ? 'border-[#3FAF97] bg-[#3FAF97]/5' : 'border-gray-200 hover:border-gray-300')}
-                          role="button"
-                          tabIndex={0}
-                          aria-pressed={interval === 'yearly'}
-                          onClick={() => setInterval(interval === 'yearly' ? 'monthly' : 'yearly')}
-                          onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setInterval(interval === 'yearly' ? 'monthly' : 'yearly'); } }}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center',
-                                interval === 'yearly' ? 'border-[#3FAF97] bg-[#3FAF97]' : 'border-gray-300')}>
-                                {interval === 'yearly' && <Check size={10} className="text-white" strokeWidth={3} />}
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold text-gray-900">{isFr ? 'Passer à la facturation annuelle' : 'Switch to annual billing'}</p>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                  {isFr ? `Économisez $${Math.round(savedPerYear / 100)}/an ($${Math.round(savedPerMonth / 100)}/mois)`
-                                         : `Save $${Math.round(savedPerYear / 100)}/yr ($${Math.round(savedPerMonth / 100)}/mo)`}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-gray-900">${Math.round(yearlyMonthly / 100)}<span className="text-xs font-normal text-gray-500">/{isFr ? 'mois' : 'mo'}</span></p>
-                              <p className="text-xs text-gray-400 line-through">${Math.round(monthlyPrice / 100)}/{isFr ? 'mois' : 'mo'}</p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* ── Upsell to higher plans ── */}
-                    {plans.filter(p => p.is_active && p.sort_order > (plan?.sort_order ?? 0)).sort((a, b) => a.sort_order - b.sort_order).map(p => {
-                      const pMonthly = (currency === 'USD' ? p.monthly_price_usd : p.monthly_price_cad);
-                      const currentMonthly = plan ? (currency === 'USD' ? plan.monthly_price_usd : plan.monthly_price_cad) : 0;
-                      const diff = pMonthly - currentMonthly;
-                      // Features the current plan doesn't have
-                      const currentFeatures = plan?.features || [];
-                      const extraFeatures = (p.features || []).filter((f: string) => !f.toLowerCase().startsWith('everything'));
-                      const isSelected = selectedSlug === p.slug;
-
-                      return (
-                        <div key={p.slug}
-                          className={cn('p-5 rounded-xl border-2 transition-all cursor-pointer',
-                            isSelected ? 'border-[#1F5F4F] bg-[#1F5F4F]/5' : 'border-gray-200 hover:border-gray-300')}
-                          role="button"
-                          tabIndex={0}
-                          aria-pressed={isSelected}
-                          onClick={() => setSelectedSlug(isSelected ? (planParam || 'pro') : p.slug)}
-                          onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setSelectedSlug(isSelected ? (planParam || 'pro') : p.slug); } }}>
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                              <div className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center',
-                                isSelected ? 'border-[#1F5F4F] bg-[#1F5F4F]' : 'border-gray-300')}>
-                                {isSelected && <Check size={10} className="text-white" strokeWidth={3} />}
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold text-gray-900">
-                                  {isFr ? `Passer au plan ${PLAN_NAMES[p.slug] || p.name}` : `Upgrade to ${PLAN_NAMES[p.slug] || p.name}`}
-                                </p>
-                                <p className="text-xs text-[#3FAF97] font-medium mt-0.5">
-                                  +${Math.round(diff / 100)}/{isFr ? 'mois' : 'mo'} {isFr ? 'de plus' : 'more'}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-sm font-bold text-gray-900">${Math.round(pMonthly / 100)}<span className="text-xs font-normal text-gray-500">/{isFr ? 'mois' : 'mo'}</span></p>
-                            </div>
-                          </div>
-                          {/* Extra features you unlock */}
-                          <div className="pl-8 space-y-1.5">
-                            {extraFeatures.map((f: string, i: number) => (
-                              <div key={i} className="flex items-center gap-2 text-xs text-gray-600">
-                                <Check size={12} className="text-[#3FAF97] shrink-0" strokeWidth={3} />
-                                {translatePlanFeature(f, isFr)}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <NavButtons onBack={goBack} onNext={goNext} nextLabel={isFr ? 'Continuer au paiement' : 'Continue to Checkout'} isFr={isFr} />
+                  <WorkspacePage page={step} form={wf} inputClass="onb-input" logoPath={`pending/${user?.id || 'anon'}`} />
+                  <NavButtons
+                    onBack={goBack}
+                    onNext={() => {
+                      if (step === 'company' && !wf.companyValid(false)) {
+                        toast.error(isFr ? 'Nom de l’entreprise, industrie et taille d’équipe requis' : 'Company name, industry and team size required');
+                        return;
+                      }
+                      goNext();
+                    }}
+                    onSkip={step !== 'company' ? goNext : undefined}
+                    nextLabel={step === 'team' ? (isFr ? 'Continuer au paiement' : 'Continue to Checkout') : undefined}
+                    isFr={isFr}
+                  />
                 </div>
               )}
 
@@ -1093,11 +925,12 @@ function Field({ label, required, children }: { label: string; required?: boolea
   );
 }
 
-function NavButtons({ onBack, onNext, disabled, nextLabel, isFr }: { onBack: () => void; onNext: () => void; disabled?: boolean; nextLabel?: string; isFr?: boolean }) {
+function NavButtons({ onBack, onNext, onSkip, disabled, nextLabel, isFr }: { onBack: () => void; onNext: () => void; onSkip?: () => void; disabled?: boolean; nextLabel?: string; isFr?: boolean }) {
   return (
-    <div className="flex items-center gap-3 mt-8">
+    <div className="flex items-center gap-3 mt-8 flex-wrap">
       <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-800 transition-colors flex items-center gap-1"><ArrowLeft size={14} /> {isFr ? 'Retour' : 'Back'}</button>
       <button onClick={onNext} disabled={disabled} className="onb-btn">{nextLabel || (isFr ? 'Suivant' : 'Next')} <ArrowRight size={16} /></button>
+      {onSkip && <button onClick={onSkip} className="text-sm text-gray-500 hover:text-gray-800 transition-colors">{isFr ? 'Passer' : 'Skip'}</button>}
     </div>
   );
 }
