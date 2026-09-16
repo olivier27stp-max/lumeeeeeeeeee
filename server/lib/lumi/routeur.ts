@@ -127,7 +127,7 @@ Autres formulations courantes → topic, action :
 - « trouve-moi un trou de 2 h jeudi » → planification, action null (créneau)
 - « la job de Tremblay est rendue où » → planification, action null (nom propre)
 - « mets Marc sur la job 12 » → planification, action null (écriture)
-- « optimise ma run de demain » → planification, action null
+- « optimise ma run de demain », « prépare-moi ma tournée d'aujourd'hui », « ma tournée » → planification, action null (une tournée = le trajet optimisé, pas l'agenda)
 - « c'est quoi la meilleure route pour aujourd'hui » → planification, action null
 - « combien ça m'a coûté la job 41 » → facturation, action null (rentabilité d'un job)
 - « envoie la facture à Gagnon » → facturation, action null (écriture)
