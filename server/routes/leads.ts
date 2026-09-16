@@ -472,6 +472,25 @@ router.post('/invoices/from-job', validate(invoiceFromJobSchema), async (req, re
       .maybeSingle();
     if (invoiceError) throw invoiceError;
 
+    // Une facture créée depuis une job porte exactement le même vendeur que
+    // la job. Best-effort : colonne absente (migration pending) = ignoré.
+    if (!alreadyExists) {
+      try {
+        const { data: jobRow } = await auth.client.from('jobs').select('salesperson_id').eq('id', jobId).maybeSingle();
+        const jobSalespersonId = (jobRow as any)?.salesperson_id || null;
+        if (jobSalespersonId) {
+          const { error: spErr } = await auth.client
+            .from('invoices')
+            .update({ salesperson_id: jobSalespersonId })
+            .eq('id', invoiceId)
+            .is('salesperson_id', null);
+          if (spErr) console.warn('[invoices/from-job] salesperson copy skipped:', spErr.message);
+        }
+      } catch (spErr: any) {
+        console.warn('[invoices/from-job] salesperson copy skipped:', spErr?.message);
+      }
+    }
+
     if (!alreadyExists) {
       dispatchWebhook(requestedOrgId, 'invoice.created', {
         invoice_id: invoiceId,

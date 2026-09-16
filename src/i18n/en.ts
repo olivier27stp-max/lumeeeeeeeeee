@@ -1057,6 +1057,8 @@ const en = {
     issued: 'Issued',
     paid: 'Paid',
     linkedJob: 'Linked job: open',
+    salesperson: 'Salesperson',
+    fromLinkedJob: 'from the linked job',
     lineItems: 'Line items',
     description: 'Description',
     qty: 'Qty',

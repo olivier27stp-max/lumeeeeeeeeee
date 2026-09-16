@@ -85,7 +85,7 @@ router.get('/jobs/search-for-invoice', async (req, res) => {
 
     let query = admin
       .from('jobs')
-      .select('id, title, status, total_cents, client_id, client_name, property_address, scheduled_at, created_at')
+      .select('id, title, status, total_cents, client_id, client_name, property_address, scheduled_at, created_at, salesperson_id')
       .eq('org_id', auth.orgId)
       .is('deleted_at', null)
       .in('status', ['completed', 'in_progress', 'scheduled'])

@@ -300,9 +300,12 @@ describe('audit S6 — created_at historique préservé pour jobs/soumissions/fa
     expect(rowOf('job', { title: 'T', sale_date: '2020-08-01' }).created_at).toBe('2020-08-01T12:00:00');
     expect('created_at' in rowOf('job', { title: 'T' })).toBe(false); // clé absente → DEFAULT now()
   });
-  it('soumission : created_at = created_date, facture : created_at = date d\'émission', () => {
+  it('soumission : created_at = created_date, facture : created_at = created_date (sinon date d\'émission)', () => {
     expect(rowOf('quote', { quote_number: 'Q-1', created_date: '2021-02-03' }).created_at).toBe('2021-02-03T12:00:00');
     expect(rowOf('invoice', { invoice_number: '9', total_cents: 100, issued_date: '2022-11-30' }).created_at).toBe('2022-11-30T12:00:00');
+    expect(rowOf('invoice', { invoice_number: '9', total_cents: 100, created_date: '2022-11-01', issued_date: '2022-11-30' }).created_at).toBe('2022-11-01T12:00:00');
+    // la date de création ne touche pas l'émission
+    expect(rowOf('invoice', { invoice_number: '9', total_cents: 100, created_date: '2022-11-01', issued_date: '2022-11-30' }).issued_at).toBe('2022-11-30T12:00:00');
     expect('created_at' in rowOf('invoice', { invoice_number: '9', total_cents: 100 })).toBe(false);
   });
 });
@@ -475,6 +478,15 @@ describe('P1 déclenchés — soumissions et employés historiques', async () =>
     expect(j('Marc Employe').salesperson_id).toBe('u-marc');
     expect(j('Inconnu Dupont').salesperson_id).toBeNull();
     expect(j().salesperson_id).toBeNull();
+  });
+  it('facture : le vendeur mappé devient salesperson_id, sinon null (héritage job côté CRM)', () => {
+    const inv = (salesperson?: string) => (buildEntityRow('invoice', {
+      id: 'ix', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+      normalized: { invoice_number: '9', total_cents: 100, ...(salesperson ? { salesperson } : {}) },
+      relations: { client_ref: 'Marc Tremblay' },
+    } as any, ctx) as any).row;
+    expect(inv('Marc Employe').salesperson_id).toBe('u-marc');
+    expect(inv().salesperson_id).toBeNull();
   });
 
   it('visite : le membre assigné historique mappé devient assigned_user', () => {

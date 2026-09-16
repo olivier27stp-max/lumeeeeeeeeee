@@ -877,9 +877,21 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       labelEn: 'Issued date',
       types: ['date', 'datetime', 'text'],
       synonyms: [
-        'invoice date', 'date', 'issued', 'issue date', 'issued date', 'billed date', 'created date',
-        'created', 'txn date', 'transaction date',
+        'invoice date', 'date', 'issued', 'issue date', 'issued date', 'billed date',
+        'txn date', 'transaction date',
         'date de facture', 'date de facturation', 'date d emission', 'emise le',
+      ],
+    },
+    // Date de création distincte de l'émission : une facture peut être créée
+    // (brouillon) bien avant d'être émise. Alimente invoices.created_at.
+    {
+      field: 'created_date',
+      labelFr: 'Date de création',
+      labelEn: 'Created date',
+      types: ['date', 'datetime', 'text'],
+      synonyms: [
+        'created date', 'date created', 'creation date', 'created at', 'created', 'date added',
+        'date de creation', 'cree le', 'creee le', 'date d ajout',
       ],
     },
     {
@@ -961,6 +973,19 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'job', 'job number', 'job id', 'job no', 'work order', 'work order number',
         'no de job', 'numero de job',
+      ],
+    },
+    // Vendeur assigné à la facture (migration_staff_mappings). Absent → la
+    // facture hérite du vendeur de la job liée (coalesce côté CRM).
+    {
+      field: 'salesperson',
+      labelFr: 'Vendeur',
+      labelEn: 'Salesperson',
+      types: ['name', 'text'],
+      synonyms: [
+        'salesperson', 'sales person', 'sales rep', 'rep', 'sold by', 'account manager',
+        'vendeur', 'representant', 'vendu par', 'commercial', 'conseiller',
+        'assigned to', 'assigned', 'assigne a',
       ],
     },
     {

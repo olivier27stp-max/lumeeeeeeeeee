@@ -367,6 +367,12 @@ export default function InvoiceDetails() {
             <p className="text-[13px] text-text-secondary">{`${t.invoiceDetails.due}:`} {invoice.due_date ? formatDate(invoice.due_date) : '-'}</p>
             <p className="text-[13px] text-text-secondary">{`${t.invoiceDetails.issued}:`} {invoice.issued_at ? formatDate(invoice.issued_at) : '-'}</p>
             <p className="text-[13px] text-text-secondary">{`${t.invoiceDetails.paid}:`} {invoice.paid_at ? formatDate(invoice.paid_at) : '-'}</p>
+            <p className="text-[13px] text-text-secondary">
+              {`${t.invoiceDetails.salesperson}:`} {invoice.salesperson_name || '-'}
+              {invoice.salesperson_name && !invoice.salesperson_id && invoice.job_salesperson_id ? (
+                <span className="text-text-tertiary"> ({t.invoiceDetails.fromLinkedJob})</span>
+              ) : null}
+            </p>
             {invoice.job_id ? (
               <button
                 type="button"

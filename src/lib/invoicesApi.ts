@@ -108,6 +108,13 @@ export interface InvoiceDetail {
     deleted_at: string | null;
     /** « Bill to » address frozen at creation (migration 20260915000000). */
     billing_address_snapshot?: string | null;
+    /** Vendeur assigné directement à la facture (null = celui de la job liée s'applique). */
+    salesperson_id?: string | null;
+    /** Vendeur de la job liée (repli). */
+    job_salesperson_id?: string | null;
+    /** coalesce(salesperson_id, job_salesperson_id) — ce que l'UI affiche. */
+    effective_salesperson_id?: string | null;
+    salesperson_name?: string | null;
   };
   client: {
     id: string;
@@ -415,6 +422,37 @@ export async function searchActiveClients(query: { q: string; page: number; page
   };
 }
 
+/** True when the error is the invoices.salesperson_id migration not being applied yet. */
+function isSalespersonColumnMissing(error: { message?: string } | null | undefined): boolean {
+  const message = String(error?.message || '');
+  return /salesperson_id/.test(message) && /column|schema cache/i.test(message);
+}
+
+/** Vendeur d'une job (null si la job n'en a pas ou est introuvable). */
+export async function getJobSalespersonId(jobId: string): Promise<string | null> {
+  const { data } = await supabase.from('jobs').select('salesperson_id').eq('id', jobId).maybeSingle();
+  return (data as any)?.salesperson_id || null;
+}
+
+/** Date locale (YYYY-MM-DD) d'un timestamp — pour pré-remplir un <input type="date">. */
+export function invoiceCreatedDateYMD(iso: string | null | undefined): string {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Date de création antidatable (YYYY-MM-DD, saisie locale) → timestamptz.
+ * Ancrée à midi local : jamais de décalage de jour selon le fuseau.
+ * Retourne null si la date est vide/invalide (le DEFAULT now() agit).
+ */
+export function invoiceCreatedAtFromYMD(ymd: string | null | undefined): string | null {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null;
+  const d = new Date(`${ymd}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export async function createInvoiceDraft(payload: {
   clientId: string;
   propertyId?: string | null;
@@ -422,6 +460,13 @@ export async function createInvoiceDraft(payload: {
   dueDate?: string | null;
   jobId?: string;
   invoiceNumber?: string | null;
+  /** Date de création (YYYY-MM-DD) — antidatable, comme la job. Vide = maintenant. */
+  createdDate?: string | null;
+  /**
+   * Vendeur assigné. Non fourni + jobId → copié depuis la job (une facture
+   * créée depuis une job porte exactement le même vendeur).
+   */
+  salespersonId?: string | null;
 }) {
   const rpcParams: Record<string, any> = {
     p_client_id: payload.clientId,
@@ -439,16 +484,34 @@ export async function createInvoiceDraft(payload: {
 
   // Link invoice to job and/or the selected property. The DB trigger already
   // defaults property_id (from the job, else the client's primary property);
-  // honor an explicit selection here.
-  if (invoiceId && (payload.jobId || payload.propertyId)) {
+  // honor an explicit selection here. La RPC ne connaît pas created_at : une
+  // date de création antidatée est persistée juste après l'insert.
+  const createdAt = invoiceCreatedAtFromYMD(payload.createdDate);
+  const backdated = !!createdAt && payload.createdDate !== invoiceCreatedDateYMD(null);
+  let salespersonId: string | null = payload.salespersonId || null;
+  if (!salespersonId && payload.jobId) {
+    salespersonId = await getJobSalespersonId(payload.jobId);
+  }
+  if (invoiceId && (payload.jobId || payload.propertyId || backdated || salespersonId)) {
     const link: Record<string, any> = {};
     if (payload.jobId) link.job_id = payload.jobId;
     if (payload.propertyId) link.property_id = payload.propertyId;
+    if (backdated) link.created_at = createdAt;
+    if (salespersonId) link.salesperson_id = salespersonId;
     const { error: linkErr } = await supabase
       .from('invoices')
       .update(link)
       .eq('id', invoiceId);
-    if (linkErr) throw linkErr;
+    if (linkErr && isSalespersonColumnMissing(linkErr) && link.salesperson_id) {
+      // Migration invoices.salesperson_id pas appliquée : on garde le reste du lien.
+      delete link.salesperson_id;
+      if (Object.keys(link).length > 0) {
+        const { error: retryErr } = await supabase.from('invoices').update(link).eq('id', invoiceId);
+        if (retryErr) throw retryErr;
+      }
+    } else if (linkErr) {
+      throw linkErr;
+    }
   }
 
   return {
@@ -518,11 +581,26 @@ export async function getInvoiceById(invoiceId: string): Promise<InvoiceDetail |
     .maybeSingle();
   if (clientError) throw clientError;
 
+  // Vendeur : assigné à la facture, sinon celui de la job liée (même règle
+  // que le filtre de rpc_list_invoices).
+  const directSalespersonId: string | null = (invoiceRow as any).salesperson_id || null;
+  const jobSalespersonId = invoiceRow.job_id ? await getJobSalespersonId(invoiceRow.job_id) : null;
+  const effectiveSalespersonId = directSalespersonId || jobSalespersonId;
+  let salespersonName: string | null = null;
+  if (effectiveSalespersonId) {
+    const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', effectiveSalespersonId).maybeSingle();
+    salespersonName = (profile as any)?.full_name || null;
+  }
+
   return {
     invoice: {
       id: invoiceRow.id,
       client_id: invoiceRow.client_id,
       job_id: invoiceRow.job_id || null,
+      salesperson_id: directSalespersonId,
+      job_salesperson_id: jobSalespersonId,
+      effective_salesperson_id: effectiveSalespersonId,
+      salesperson_name: salespersonName,
       client_name: clientRow ? toClientDisplayName(clientRow) : 'Unknown client',
       invoice_number: invoiceRow.invoice_number,
       status: invoiceRow.status,
@@ -688,6 +766,10 @@ export async function updateInvoiceFields(
     notes?: string | null;
     internal_notes?: string | null;
     template_id?: string | null;
+    /** Date de création (timestamptz ISO) — antidatable depuis le formulaire. */
+    created_at?: string;
+    /** Vendeur assigné (null = hérite de la job liée). */
+    salesperson_id?: string | null;
   },
   expectedVersion?: number,
 ) {
@@ -699,6 +781,13 @@ export async function updateInvoiceFields(
     .eq('org_id', orgId);
   if (expectedVersion != null) query = query.eq('version', expectedVersion);
   const { error } = await query;
+  if (error && isSalespersonColumnMissing(error) && 'salesperson_id' in fields) {
+    // Migration pas appliquée : ne bloque pas la sauvegarde du reste.
+    const { salesperson_id: _ignored, ...rest } = fields;
+    console.warn('[invoices] salesperson_id skipped (migration pending):', error.message);
+    if (Object.keys(rest).length === 0) return;
+    return updateInvoiceFields(invoiceId, rest, expectedVersion);
+  }
   if (error?.code === 'PGRST116' && expectedVersion != null) {
     throw new Error('This invoice was modified by another user. Please refresh and try again.');
   }
@@ -753,6 +842,7 @@ export async function duplicateInvoice(invoiceId: string): Promise<string> {
     clientId: detail.invoice.client_id,
     subject: detail.invoice.subject ? `${detail.invoice.subject} (Copy)` : null,
     dueDate: null,
+    salespersonId: detail.invoice.effective_salesperson_id || null,
   });
 
   // Save items to new invoice

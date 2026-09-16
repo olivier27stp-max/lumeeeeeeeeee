@@ -79,6 +79,17 @@ describe('suggestMappings — échelle de confiance', () => {
     expect(byHeader.get('Due Date')?.targetField).toBe('due_date');
     expect(byHeader.get('Amount')?.targetEntity).toBe('invoice');
   });
+
+  it('facture : Created Date → created_date, Invoice Date → issued_date (deux dates distinctes)', () => {
+    const suggestions = suggestMappings(
+      'invoices',
+      [col('Invoice #', 'id', 0), col('Invoice Date', 'date', 1), col('Created Date', 'date', 2)],
+      'invoices.csv',
+    );
+    const byHeader = new Map(suggestions.map((s) => [s.header, s]));
+    expect(byHeader.get('Invoice Date')?.targetField).toBe('issued_date');
+    expect(byHeader.get('Created Date')?.targetField).toBe('created_date');
+  });
 });
 
 describe('catalogue de champs', () => {

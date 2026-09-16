@@ -657,10 +657,13 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         paid_cents: paidCents,
         balance_cents: Math.max(0, total - paidCents),
         notes: safeStr(n.notes) || null,
+        // Vendeur mappé ; sinon null → le CRM affiche celui de la job liée.
+        salesperson_id: ctx.staffIdBySource?.get(refKey(str(n.salesperson))) ?? null,
         created_by: ctx.createdBy,
-        // created_at aligné sur la date d'émission : les rapports « par date
-        // de création » restent vrais pour l'historique migré (audit S6)
-        ...createdAtPatch(str(n.issued_date)),
+        // created_at = date de création exportée, sinon repli sur la date
+        // d'émission : les rapports « par date de création » restent vrais
+        // pour l'historique migré (audit S6)
+        ...createdAtPatch(str(n.created_date) || str(n.issued_date)),
       },
     };
   }

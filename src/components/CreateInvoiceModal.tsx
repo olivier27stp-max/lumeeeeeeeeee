@@ -15,12 +15,14 @@ import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import {
   createInvoiceDraft,
+  invoiceCreatedDateYMD,
   formatMoneyFromCents,
   InvoiceItemInput,
   saveInvoiceDraft,
   getJobLineItems,
 } from '../lib/invoicesApi';
 import { listPredefinedServices, type PredefinedService } from '../lib/servicesApi';
+import { listSalespeople } from '../lib/jobsApi';
 import { peekNextNumbers } from '../lib/numbersApi';
 import { listPropertiesByClient, type PropertyRecord } from '../lib/propertiesApi';
 import { cn } from '../lib/utils';
@@ -86,6 +88,11 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
 
   const [subject, setSubject] = useState(defaultSubject);
   const [dueDate, setDueDate] = useState('');
+  // Date de création antidatable (comme la job) : aujourd'hui par défaut.
+  const [createdDate, setCreatedDate] = useState(() => invoiceCreatedDateYMD(null));
+  // Vendeur assigné : depuis une job, exactement le même que la job.
+  const [salespersonId, setSalespersonId] = useState('');
+  const salespeopleQuery = useQuery({ queryKey: ['salespeople'], queryFn: listSalespeople, enabled: isOpen });
   // # pré-rempli avec le prochain numéro de l'org. `touched` distingue une
   // modification manuelle (envoyée + validée) du défaut auto (laissé au
   // serveur pour une attribution atomique sans course).
@@ -112,6 +119,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setDebouncedSearch('');
     setSubject(defaultSubject);
     setDueDate('');
+    setCreatedDate(invoiceCreatedDateYMD(null));
+    setSalespersonId('');
     setTaxRate('');
     setLines([buildEmptyLine()]);
     setInlineError(null);
@@ -201,6 +210,7 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
     setSelectedJob(job);
     setSelectedClient({ id: job.client_id, name: job.client_name || '', email: null });
     setSubject(job.title || defaultSubject);
+    setSalespersonId(job.salesperson_id || '');
     setDirty(true);
 
     try {
@@ -357,6 +367,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
         propertyId: propertyId || selectedJob?.property_id || null,
         subject: subject.trim() || defaultSubject,
         dueDate: dueDate || null,
+        createdDate: createdDate || null,
+        salespersonId: salespersonId || null,
         jobId: selectedJob?.id || undefined,
         invoiceNumber: invoiceNumberParam,
       });
@@ -546,8 +558,8 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                     </div>
                   )}
 
-                  {/* Subject + Invoice # + Due Date */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+                  {/* Subject + Invoice # + Created Date + Due Date */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
                     <div className="sm:col-span-2 space-y-1.5">
                       <label htmlFor={`${id}-subject`} className="text-xs font-medium text-text-secondary">{fr ? 'Sujet' : 'Subject'}</label>
                       <input id={`${id}-subject`} value={subject} onChange={(e) => setSubject(e.target.value)}
@@ -562,9 +574,30 @@ export default function CreateInvoiceModal({ isOpen, onClose, onCreated }: Creat
                         className="glass-input w-full" />
                     </div>
                     <div className="space-y-1.5">
+                      <label htmlFor={`${id}-created`} className="text-xs font-medium text-text-secondary">{fr ? 'Date de création' : 'Date of creation'}</label>
+                      <input id={`${id}-created`} type="date" value={createdDate} onChange={(e) => setCreatedDate(e.target.value)}
+                        className="glass-input w-full" />
+                    </div>
+                    <div className="space-y-1.5">
                       <label htmlFor={`${id}-due`} className="text-xs font-medium text-text-secondary">{fr ? 'Échéance' : 'Due Date'}</label>
                       <input id={`${id}-due`} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
                         className="glass-input w-full" />
+                    </div>
+                  </div>
+
+                  {/* Salesperson — depuis une job : exactement le même que la job */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                    <div className="sm:col-span-2 space-y-1.5">
+                      <label htmlFor={`${id}-salesperson`} className="text-xs font-medium text-text-secondary">{fr ? 'Vendeur' : 'Salesperson'}</label>
+                      <select id={`${id}-salesperson`} value={salespersonId} onChange={(e) => setSalespersonId(e.target.value)} className="glass-input w-full">
+                        <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
+                        {(salespeopleQuery.data || []).map((person) => (
+                          <option key={person.id} value={person.id}>{person.label}</option>
+                        ))}
+                      </select>
+                      {selectedJob && (
+                        <p className="text-[11px] text-text-muted">{fr ? 'Pré-rempli avec le vendeur de la job.' : "Pre-filled with the job's salesperson."}</p>
+                      )}
                     </div>
                   </div>
 

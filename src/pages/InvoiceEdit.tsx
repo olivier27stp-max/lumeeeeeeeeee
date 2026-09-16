@@ -12,6 +12,9 @@ import {
   getCompanySettings,
   getInvoiceById,
   getJobLineItems,
+  getJobSalespersonId,
+  invoiceCreatedAtFromYMD,
+  invoiceCreatedDateYMD,
   saveInvoiceDraft,
   updateInvoiceFields,
   searchActiveClients,
@@ -28,6 +31,7 @@ import { supabase } from '../lib/supabase';
 import { resolveTaxes, calculateTaxes, type TaxConfig } from '../lib/taxApi';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
+import { listSalespeople } from '../lib/jobsApi';
 
 // ── Line item form ──
 interface LineForm {
@@ -78,6 +82,10 @@ export default function InvoiceEdit() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [subject, setSubject] = useState('');
   const [dueDate, setDueDate] = useState('');
+  // Date de création antidatable (comme la job) : aujourd'hui par défaut.
+  const [createdDate, setCreatedDate] = useState(() => invoiceCreatedDateYMD(null));
+  // Vendeur assigné : depuis une job, exactement le même que la job.
+  const [salespersonId, setSalespersonId] = useState('');
   const [notes, setNotes] = useState('');
   const [internalNotes, setInternalNotes] = useState('');
   const [taxDollars, setTaxDollars] = useState(0);
@@ -114,6 +122,21 @@ export default function InvoiceEdit() {
     queryFn: getCompanySettings,
   });
 
+  const salespeopleQuery = useQuery({
+    queryKey: ['salespeople'],
+    queryFn: listSalespeople,
+  });
+
+  // Nouvelle facture depuis une job : le vendeur de la job est pré-sélectionné.
+  const jobSalespersonQuery = useQuery({
+    queryKey: ['jobSalesperson', prefillJobId],
+    queryFn: () => getJobSalespersonId(prefillJobId!),
+    enabled: isNew && !!prefillJobId,
+  });
+  useEffect(() => {
+    if (isNew && jobSalespersonQuery.data) setSalespersonId((prev) => prev || jobSalespersonQuery.data!);
+  }, [isNew, jobSalespersonQuery.data]);
+
   // Visual templates removed — single fixed invoice layout
 
   // Client search
@@ -142,6 +165,8 @@ export default function InvoiceEdit() {
     setClientId(invoice.client_id);
     setSubject(invoice.subject || '');
     setDueDate(invoice.due_date || '');
+    setCreatedDate(invoiceCreatedDateYMD(invoice.created_at));
+    setSalespersonId(invoice.effective_salesperson_id || '');
     setNotes((invoice as any).notes || '');
     setInternalNotes((invoice as any).internal_notes || '');
     setTaxDollars(invoice.tax_cents / 100);
@@ -259,9 +284,19 @@ export default function InvoiceEdit() {
           clientId,
           subject: subject.trim() || null,
           dueDate: dueDate || null,
+          createdDate: createdDate || null,
+          salespersonId: salespersonId || null,
         });
         id = draft.id;
         setDraftId(id);
+      } else {
+        // Facture existante : date de création / vendeur modifiés seulement s'ils ont changé.
+        const original = invoiceCreatedDateYMD(detailQuery.data?.invoice?.created_at ?? null);
+        const nextCreatedAt = invoiceCreatedAtFromYMD(createdDate);
+        const patch: { created_at?: string; salesperson_id?: string | null } = {};
+        if (nextCreatedAt && createdDate !== original) patch.created_at = nextCreatedAt;
+        if (salespersonId !== (detailQuery.data?.invoice?.salesperson_id || '')) patch.salesperson_id = salespersonId || null;
+        if (Object.keys(patch).length > 0) await updateInvoiceFields(id, patch);
       }
 
       await saveInvoiceDraft({
@@ -404,7 +439,7 @@ export default function InvoiceEdit() {
           subtotal_cents: totals.subtotal_cents,
           tax_cents: totals.tax_cents,
           paid_at: detailQuery.data?.invoice?.paid_at || null,
-          created_at: detailQuery.data?.invoice?.created_at || new Date().toISOString(),
+          created_at: invoiceCreatedAtFromYMD(createdDate) || detailQuery.data?.invoice?.created_at || new Date().toISOString(),
           updated_at: new Date().toISOString(),
           deleted_at: null,
           notes,
@@ -438,7 +473,7 @@ export default function InvoiceEdit() {
       previewTaxBreakdown,
     );
   }, [
-    clientId, clientName, clientEmail, clientPhone, subject, dueDate, notes,
+    clientId, clientName, clientEmail, clientPhone, subject, dueDate, createdDate, notes,
     lines, totals, companyQuery.data, detailQuery.data, previewTaxBreakdown,
   ]);
 
@@ -547,8 +582,8 @@ export default function InvoiceEdit() {
         {/* LEFT: Editor */}
         <div className={`flex-1 overflow-y-auto p-5 ${showPreview ? 'max-w-[55%]' : ''}`}>
           <div className="mx-auto max-w-2xl space-y-6">
-            {/* Subject & Due Date */}
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+            {/* Subject, Created Date & Due Date */}
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
               <div className="space-y-1.5 lg:col-span-2">
                 <label htmlFor={`${id}-subject`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
                   {t.invoiceEdit.subject}
@@ -558,6 +593,18 @@ export default function InvoiceEdit() {
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder={t.invoiceEdit.invoiceSubject}
+                  className="glass-input w-full"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor={`${id}-created-date`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                  {language === 'fr' ? 'Date de création' : 'Date of creation'}
+                </label>
+                <input
+                  id={`${id}-created-date`}
+                  type="date"
+                  value={createdDate}
+                  onChange={(e) => setCreatedDate(e.target.value)}
                   className="glass-input w-full"
                 />
               </div>
@@ -572,6 +619,31 @@ export default function InvoiceEdit() {
                   onChange={(e) => setDueDate(e.target.value)}
                   className="glass-input w-full"
                 />
+              </div>
+            </div>
+
+            {/* Salesperson */}
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+              <div className="space-y-1.5 lg:col-span-2">
+                <label htmlFor={`${id}-salesperson`} className="text-xs font-semibold uppercase tracking-widest text-text-secondary">
+                  {language === 'fr' ? 'Vendeur' : 'Salesperson'}
+                </label>
+                <select
+                  id={`${id}-salesperson`}
+                  value={salespersonId}
+                  onChange={(e) => setSalespersonId(e.target.value)}
+                  className="glass-input w-full"
+                >
+                  <option value="">{language === 'fr' ? 'Non assigné' : 'Unassigned'}</option>
+                  {(salespeopleQuery.data || []).map((person) => (
+                    <option key={person.id} value={person.id}>{person.label}</option>
+                  ))}
+                </select>
+                {(prefillJobId || detailQuery.data?.invoice?.job_id) && (
+                  <p className="text-[12px] text-text-tertiary">
+                    {language === 'fr' ? 'Pré-rempli avec le vendeur de la job liée.' : 'Pre-filled with the linked job\'s salesperson.'}
+                  </p>
+                )}
               </div>
             </div>
 

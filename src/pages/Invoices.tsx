@@ -110,8 +110,8 @@ const DEFAULT_INVOICE_SUBJECT_EN = 'For services rendered';
 
 // Grid template + empty-state col span for the Facturation table.
 // Columns: checkbox | Client | Invoice # | Due date | Subject | Status | Total | Balance | actions
-const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 1.4fr 200px 120px 120px 44px';
-const INVOICE_GRID_COL_COUNT = 9;
+const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 120px 1.4fr 200px 120px 120px 44px';
+const INVOICE_GRID_COL_COUNT = 10;
 
 export default function Invoices({ embedded = false, onTotalChange }: { embedded?: boolean; onTotalChange?: (total: number | null) => void } = {}) {
   const { t, language } = useTranslation();
@@ -350,12 +350,13 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
           email,
           inv.status || '',
           formatMoneyFromCents(inv.total_cents || 0),
+          inv.created_at ? new Date(inv.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
           inv.due_date ? versDate(inv.due_date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
         ];
       });
       exportToCsv(
         `factures-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['#', 'Client', 'Email', fr ? 'Statut' : 'Status', fr ? 'Montant' : 'Amount', fr ? 'Échéance' : 'Due Date'],
+        ['#', 'Client', 'Email', fr ? 'Statut' : 'Status', fr ? 'Montant' : 'Amount', fr ? 'Créée' : 'Created', fr ? 'Échéance' : 'Due Date'],
         csvRows,
       );
       toast.success(fr ? 'Export CSV terminé' : 'CSV exported');
@@ -577,7 +578,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
           <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
-            <div className="grid min-w-[860px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
+            <div className="grid min-w-[980px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
                 <input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
@@ -587,6 +588,9 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('invoice_number')} className="inline-flex items-center gap-1">{fr ? 'N° facture' : 'Invoice #'} {IconSort}</button>
+              </div>
+              <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
+                {fr ? 'Créée' : 'Created'}
               </div>
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('due_date')} className="inline-flex items-center gap-1">{fr ? 'Échéance' : 'Due Date'} {IconSort}</button>
@@ -611,6 +615,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                   <div className="py-3 pl-4 border-b border-outline/30 flex items-center"><div className="w-4 h-4 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-12 bg-surface-tertiary rounded animate-pulse" /></div>
+                  <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-28 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
@@ -680,6 +685,12 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                     {/* Invoice # */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
                       <span className="text-[14px] text-text-primary tabular-nums truncate">{row.invoice_number}</span>
+                    </div>
+                    {/* Created date */}
+                    <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>
+                      <span className="text-[14px] text-text-primary tabular-nums truncate">
+                        {row.created_at ? formatDate(row.created_at) : '—'}
+                      </span>
                     </div>
                     {/* Due date */}
                     <div className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} role="button" tabIndex={-1} onClick={click} onKeyDown={keyClick} onMouseEnter={hover}>

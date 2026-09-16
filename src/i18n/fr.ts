@@ -1056,6 +1056,8 @@ const fr: TranslationKeys = {
     issued: 'Émise',
     paid: 'Payée',
     linkedJob: 'Job lié : ouvrir',
+    salesperson: 'Vendeur',
+    fromLinkedJob: 'vendeur de la job liée',
     lineItems: 'Lignes de facture',
     description: 'Description',
     qty: 'Qté',
