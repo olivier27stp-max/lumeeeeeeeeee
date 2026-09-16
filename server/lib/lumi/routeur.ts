@@ -15,7 +15,8 @@
  * (mode 'actif', non branché : voir AGENTFORCE_GAP.md ordre 10 → 11).
  * Coût : ~600 tokens de prompt (cache 1 h) + l'énoncé, sur Haiku.
  */
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { clientAnthropic } from './llm';
 import { z } from 'zod';
 import { TOPICS, type IdTopic } from './topics';
 import { IDS_RACCOURCIS, PERIODES_AGENDA } from './raccourcis';
@@ -87,11 +88,6 @@ Actions déterministes (réponse gabarit, sans modèle) — seulement si le mess
 
 Règles : action = null dès qu'il y a un doute, une écriture (créer, envoyer, modifier, annuler), un nom propre, une ville ou une période non permise. Plusieurs sujets ou actions → topic multi, action null. confidence entre 0 et 1, honnête.`;
 
-let client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!client) client = new Anthropic();
-  return client;
-}
 
 /**
  * Classifie l'énoncé. Sortie JSON stricte via un outil unique (`classer`)
@@ -100,7 +96,7 @@ function anthropic(): Anthropic {
 export async function classifier(enonce: string): Promise<ResultatRouteur> {
   const debut = Date.now();
   try {
-    const res = await anthropic().messages.create({
+    const res = await clientAnthropic().messages.create({
       model: MODELE_ROUTEUR,
       max_tokens: 200,
       system: [{ type: 'text', text: PROMPT_ROUTEUR, cache_control: { type: 'ephemeral', ttl: '1h' } }],

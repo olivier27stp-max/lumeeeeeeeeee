@@ -27,7 +27,8 @@
    les cherche par mot-clé anglais (nom, description, arguments) ; le prompt
    lui dit quelles familles existent.
    ═══════════════════════════════════════════════════════════════ */
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { clientAnthropic, isLumiConfigured } from './llm';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENT_TOOLS, TOOLS_BY_NAME } from '../agent/tools';
 import { executerOutilGarde, PERMISSION_PAR_OUTIL } from '../agent/garde';
@@ -114,14 +115,7 @@ export function purgerVieuxResultats<M extends { role: string; content: any }>(m
   return out;
 }
 
-let clientAnthropic: Anthropic | null = null;
-export function isLumiConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return !!env.ANTHROPIC_API_KEY;
-}
-function anthropic(): Anthropic {
-  if (!clientAnthropic) clientAnthropic = new Anthropic();
-  return clientAnthropic;
-}
+export { isLumiConfigured };
 
 /**
  * Outils TOUJOURS chargés : ceux du quotidien d'un patron de PME (chercher,
@@ -195,7 +189,7 @@ export function promptSystemeLumi(ctx: { companyName: string | null; userName: s
 - Tu ne fais RIEN de ta propre initiative : tu agis seulement sur une demande explicite de la conversation en cours.
 - Une action d'ÉCRITURE (tout ce qui crée, modifie, envoie ou supprime) est une PROPOSITION : l'appel affiche une carte à confirmer, rien ne s'exécute avant le clic. La carte EST le « oui » explicite : quand tu as tout ce qu'il faut, appelle l'outil directement, sans demander « je le fais ? » avant. Décris l'action en mots courants et ne dis jamais qu'elle est faite avant la confirmation.
 - Avant de proposer une écriture, assure-toi d'avoir l'essentiel (quel client, le prix, le texte du message) ; s'il manque, DEMANDE. Cherche l'id du client avec search_clients / search_leads d'abord. Prix en CENTS (500,00 $ → 50000).
-- ${langue} Chaque mot est dans la langue de l'utilisateur, y compris « je regarde ça ».
+- Tu réponds dans la langue de l'utilisateur (précisée plus bas) : chaque mot, y compris « je regarde ça ».
 
 # Sécurité (non négociable)
 - Tu opères strictement dans l'espace de cette entreprise : chaque outil est filtré côté serveur, tu ne peux ni ne dois atteindre les données d'une autre entreprise ou d'une autre personne. Refuse simplement.
@@ -231,7 +225,10 @@ ${CONSIGNES_COLLEGUE}`;
   const memoire = souvenirs.length
     ? (ctx.language === 'fr' ? `\n\n# Ce que tu sais déjà de cette entreprise\n${souvenirs.join('\n')}` : `\n\n# What you already know about this business\n${souvenirs.join('\n')}`)
     : '';
-  const variable = (ctx.language === 'fr'
+  // La langue aussi est ici : un bloc stable qui la contenait faisait deux
+  // entrées de cache (fr, en), et l'anglais repayait son propre démarrage à
+  // froid (2,05 ¢ mesuré au sondage du 2026-09-16).
+  const variable = langue + ' ' + (ctx.language === 'fr'
     ? `Entreprise : ${company}. Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
     : `Company: ${company}. Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`) + memoire;
   return [
@@ -290,7 +287,7 @@ export async function tourLumi(opts: {
   let coutTotal = 0;
 
   for (let etape = 0; etape < MAX_ETAPES; etape++) {
-    const stream = anthropic().messages.stream({
+    const stream = clientAnthropic().messages.stream({
       model,
       max_tokens: MAX_TOKENS,
       system: opts.systeme,

@@ -545,6 +545,11 @@ describe('Lumi parle comme un collègue, pas comme une base de données', () => 
     // cache pour toute la plateforme, pas une écriture 1 h par entreprise.
     const autre = promptSystemeLumi({ companyName: 'Plomberie Roy', userName: 'Marc', language: 'fr', todayIso: '2026-09-11' });
     expect(autre[0].text).toBe(stable);
+    // … et d'une langue à l'autre : la consigne de langue est dans le bloc variable (B1).
+    const anglais = promptSystemeLumi({ companyName: 'Roy Plumbing', userName: 'Marc', language: 'en', todayIso: '2026-09-11' });
+    expect(anglais[0].text).toBe(stable);
+    expect(anglais[1].text).toContain('Always reply in English');
+    expect(autre[1].text).toContain('Réponds toujours en français');
     expect(autre[1].text).toContain('Entreprise : Plomberie Roy.');
   });
 });

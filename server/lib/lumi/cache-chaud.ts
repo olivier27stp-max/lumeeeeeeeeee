@@ -17,7 +17,8 @@
  * Le ping ne touche ni la base, ni les traces d'une org (pas d'org) : il est
  * journalisé par le logger seulement.
  */
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { clientAnthropic } from './llm';
 import { logger } from '../logger';
 import { coutEnCents, modeleLumi } from './tarifs';
 
@@ -57,7 +58,7 @@ type ClientMinimal = { messages: { create: (p: Anthropic.Messages.MessageCreateP
 
 /**
  * Un appel minimal sur le MÊME préfixe qu'un vrai tour (modèle, outils,
- * bloc stable fr, réglages de réflexion) : c'est la seule façon de
+ * bloc stable — le même pour fr et en depuis B1 —, réglages de réflexion) : c'est la seule façon de
  * rafraîchir l'entrée de cache que les vrais appels lisent.
  */
 export async function pingerCache(client: ClientMinimal, model: string = dernierModele || modeleLumi()): Promise<{ model: string; cost_cents: number; cache_lu: number; cache_ecrit: number }> {
@@ -78,8 +79,6 @@ export async function pingerCache(client: ClientMinimal, model: string = dernier
   return { model, cost_cents: coutEnCents(model, u), cache_lu: u.cache_read_input_tokens ?? 0, cache_ecrit: u.cache_creation_input_tokens ?? 0 };
 }
 
-let clientAnthropic: Anthropic | null = null;
-
 /** Vérifie toutes les 5 min ; ne fait rien tant que Lumi n'a pas servi un vrai appel. */
 export function demarrerMaintienCacheChaud(): void {
   const fenetreMs = fenetreMaintienMs();
@@ -87,8 +86,7 @@ export function demarrerMaintienCacheChaud(): void {
   const t = setInterval(async () => {
     if (!doitPinger({ dernierAppelReel, dernierPing, maintenant: Date.now(), fenetreMs })) return;
     try {
-      if (!clientAnthropic) clientAnthropic = new Anthropic();
-      const r = await pingerCache(clientAnthropic);
+      const r = await pingerCache(clientAnthropic());
       logger.info('[lumi] cache 1 h rafraîchi', r);
     } catch (e: any) {
       dernierPing = Date.now(); // pas de rafale de tentatives : on réessaie au prochain créneau

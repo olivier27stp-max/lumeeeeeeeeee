@@ -19,7 +19,8 @@
  * bas. La partie stable du prompt est mise en cache (1 h) ; le dossier, qui
  * change par client, vient après.
  */
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
+import { clientAnthropic } from '../lumi/llm';
 import { chercherAide } from '../agent/tools-aide';
 import { ARTICLES } from '../../../src/components/supportArticles';
 import { SYSTEM_PROMPT as CONNAISSANCE_PUBLIQUE } from '../agent/promptVente';
@@ -31,11 +32,6 @@ export const MODELE_SUPPORT = 'claude-sonnet-5';
 const MAX_ETAPES = 4;
 const MAX_TOKENS = 1024;
 
-let client: Anthropic | null = null;
-function anthropic(): Anthropic {
-  if (!client) client = new Anthropic();
-  return client;
-}
 export function isSupportIAConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return !!env.ANTHROPIC_API_KEY;
 }
@@ -193,7 +189,7 @@ export async function repondreSupportIA(
   const appeles: string[] = [];
 
   for (let etape = 0; etape < MAX_ETAPES; etape++) {
-    const reponse = await anthropic().messages.create({
+    const reponse = await clientAnthropic().messages.create({
       model: MODELE_SUPPORT,
       max_tokens: MAX_TOKENS,
       system,
