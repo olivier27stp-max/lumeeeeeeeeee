@@ -93,3 +93,48 @@ Lecture : sur le sondage, un tour qui va au modèle coûte 0,73 ¢ (15,4 ¢ / 21
 2. Merger la PR #403 (squash).
 3. Railway : rien d'obligatoire. Recommandé : `LUMI_ROUTEUR=observation` deux semaines (verdicts tracés dans `lumi_traces.params.routeur`), puis `actif`. Les règles de coût sont actives par défaut.
 4. Surveiller `ai_usage` (coût réel) et `lumi_traces` (part par étage, `action = plafond_*`, `budget_epuise`) la première semaine.
+
+## 7. Couverture à 100 % — soutien ET support (2026-09-16, après-midi)
+
+Demande de Rafba : « le périmètre doit être couvert sans raccourci à 100 % ».
+
+### 7.1 Ce qui a été fait
+
+- **Connaissance** : carte de l'app complétée (2FA, connexion, notifications, rentabilité, PayPal, pages reçues par les clients, portail de migration, consentement) et 6 articles de support ajoutés ; le tout indexé dans `search_help` (Lumi et le support lisent le même index).
+- **Exécution** : **240 outils** (170 nouveaux, un par action de l'interface), en 6 modules par domaine (`tools-leads`, `tools-argent`, `tools-terrain`, `tools-equipe`, `tools-reglages`, `tools-d2d-formations`) fusionnés par `outils-domaines.ts` ; chaque outil est dans exactement un topic (test), toute écriture est dans le registre (sensible / anodine / réversible / vers le client) et dans la garde de permissions.
+- **Batterie par outil** : `scripts/qa/evaluer-outils.mts` — 171 demandes naturelles (une par outil), en mode « demander » (rien n'est exécuté), verdict exact / partiel / raté ; `scripts/qa/seed-outils-staging.mts` crée une fois, par les outils de Lumi eux-mêmes, les données que ces demandes supposent.
+
+### 7.2 Mesures (staging, routeur actif, effort bas)
+
+| Passe | Changement mesuré | exact | partiel | raté | erreur | coût |
+|---|---|---|---|---|---|---|
+| 1 | 240 outils, noyau + `tool_search` | 45 | 80 | 43 | 2 | 2,45 $ |
+| 2 | + indices d'outils déterministes, garde lexical du cache, renvois | 72 | 90 | 8 | 0 | 2,00 $ |
+| 3 | + sous-agents à jeu d'outils complet (plus de `tool_search` dans le sujet) | 79 | 84 | 8 | 0 | 2,19 $ |
+| 4 | + correctifs des 8 ratés, données de seed | _voir 7.5_ | | | | |
+
+« Partiel » = Lumi a lu la bonne donnée mais n'a pas proposé l'écriture — à la passe 2, 80 des 90 partiels étaient « la donnée n'existe pas sur staging » (aucun préréglage, modèle, équipe, taxe, formation, facture récurrente…) ou « deux fiches identiques, laquelle ? » : d'où le seed.
+
+### 7.3 Ce que la batterie a trouvé (et qui n'était pas visible autrement)
+
+1. **Découverte des outils** (43 ratés de la passe 1) : à effort bas, le modèle répond « je n'ai pas d'outil » sans chercher les outils différés. `indices-outils.ts` projette les mots de la demande (FR, joual, EN → synonymes) sur les noms et descriptions et nomme les 6 meilleurs candidats dans le bloc VARIABLE (0 token d'API, cache intact) ; vérifié : les 171 énoncés nomment leur outil.
+2. **`tool_search` casse le cache du prompt système** (`ai_usage`) : les définitions chargées s'insèrent dans le bloc d'outils, AVANT le prompt système — tout ce qui suit est relu au plein tarif à chaque étape suivante (27 000 à 30 000 tokens non cachés, 6 à 7 ¢ le tour, plafond de tour atteint). Réponse : un sous-agent charge tout son topic (7 à 11 k tokens, cachés 1 h, 0,2 ¢ l'étape) ; `tool_search` ne sert plus qu'au hors-sujet ; le maintien du cache suit un préfixe par jeu d'outils (≤ 8). Entrée non cachée : 165 k tokens à la passe 2 → 32 k à la passe 3. **En prod, `LUMI_ROUTEUR=observation` ne charge aucun sous-agent** : passer à `actif` est ce qui active ce gain.
+3. **Cache sémantique** : deux questions courtes qui ne diffèrent que par le nom clé (« modèles de facture » / « modèles de soumission », « retire la carte de Gagnon » / « supprime la carte de Gagnon du pipeline ») ont un cosinus ≥ 0,92 → garde lexical (≥ 75 % des mots porteurs en commun ; le nom propre ne suffit pas).
+4. **Routeur** : « la liste de vérification du job 33 » et « prépare un contrat pour le job 33 » recevaient la fiche du job (action job-numero) → contre-exemples ; « pointe-moi » → équipe sans action.
+5. **Bugs d'app** (corrigés dans la PR) : `GET/PUT /api/field-sales/settings` sur des colonnes inexistantes ; `createGoalSchema` avec les mauvais champs.
+6. **Bugs de base** (migrations ÉCRITES, non appliquées — règle 2) :
+   - `20260916150000` : les policies d'`invitations` lisent `auth.users` → « permission denied » pour tout JWT ; Lumi ne pouvait ni lister, ni renvoyer, ni révoquer une invitation.
+   - `20260916160000` : `fusionner_clients()` échoue dès que l'absorbée a une facture émise (trigger d'immuabilité) — la route de l'app aussi.
+   - `20260916170000` : **19 tables écrites directement par ~30 outils de Lumi n'accordent aucun droit d'écriture à `authenticated`** (vérifié sur staging ET en prod : modèles de devis/facture, factures récurrentes, relances, taxes, paie, objectifs, rapports planifiés, listes de vérification, formations, terrain, demandes de formulaire). L'app n'y voit rien (routes en service_role) ; Lumi, en JWT + RLS comme l'exige le mandat, reçoit « permission denied » à l'exécution. La migration accorde les droits ET ajoute des policies restrictives portant la même clé de permission que la garde de l'outil. ❓ **À CONFIRMER par Will** : c'est un changement de posture (tables « serveur seulement ») ; l'alternative est de réécrire ces outils via les routes de l'app. Aucune écriture de Lumi n'a encore été exécutée en prod (`agent_actions` vide sur 30 jours), donc rien n'a cassé pour un client.
+   Les trois passent en transaction annulée sur staging (syntaxe et objets vérifiés, rien persisté).
+7. **Réponses correctes que la batterie comptait « raté »** : « permets aux techniciens de voir les prix » → refus justifié (clés financières interdites aux techniciens, `permissions.ts`) ; cas remplacé.
+
+### 7.4 Ce qui reste hors de portée de la batterie
+
+- `merge_clients` sur staging bloqué par le trigger (migration 160000) → les doublons Gagnon/Bouchard restent, et les cas « laquelle des deux ? » restent partiels tant qu'elle n'est pas appliquée.
+- Les écritures directes (7.3-6) ne peuvent pas être exécutées tant que la migration 170000 n'est pas appliquée : la batterie en mode « demander » vérifie la proposition (la carte), pas l'exécution. Un test d'exécution réelle de chaque outil d'écriture sur staging est la prochaine étape logique une fois les droits accordés.
+- Code mort côté UI : `recurringInvoicesApi.ts` / `invoiceTemplatesApi.ts` appellent des routes retirées (aucun écran ne les atteint) ; la fonctionnalité existe désormais par Lumi.
+
+### 7.5 Passe 4
+
+_(remplie à la fin de la passe)_
