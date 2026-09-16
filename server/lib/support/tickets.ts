@@ -263,7 +263,7 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
       try {
         const { deposerFichierSlack } = await import('../slack');
         const date = new Date().toISOString().slice(0, 10);
-        await deposerFichierSlack({ channel: parent.channel, ...dansLeFil, nom: `conversation-${(ticket.company_name || 'client').replace(/[^\w.-]+/g, '-').toLowerCase()}-${date}.txt`, titre: `Conversation complète — ${ticket.company_name || ''} (${date})`, contenu: transcriptTexte(ticket, messages) });
+        await deposerFichierSlack({ channel: parent.channel, ...dansLeFil, nom: `conversation-${(ticket.company_name || 'client').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'client'}-${date}.txt`, titre: `Conversation complète — ${ticket.company_name || ''} (${date})`, contenu: transcriptTexte(ticket, messages) });
       } catch (e: any) {
         logger.info('[support] export .txt non déposé dans Slack', { error: e?.message, indice: /missing_scope/.test(String(e?.message)) ? 'ajouter le scope files:write à l’app Slack' : undefined });
       }
