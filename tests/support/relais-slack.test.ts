@@ -32,12 +32,14 @@ const courriels: any[] = [];
 vi.mock('../../server/lib/mailer', () => ({ isMailerConfigured: () => true, sendEmail: vi.fn(async (p: any) => { courriels.push(p); return { sent: true }; }) }));
 vi.mock('../../server/lib/helpers', () => ({ resolvePublicBaseUrl: () => 'https://lumecrm.net', normalizeE164: (s: string) => s, findOrCreateConversation: async () => ({ id: 'c' }) }));
 let repliques: any[] = [];
+const accuses: Array<{ channel: string; ts: string; ok: boolean }> = [];
 vi.mock('../../server/lib/slack', () => ({
   isSlackConfigured: () => true,
   identiteBot: async () => ({ user_id: 'UBOT', bot_id: 'BBOT' }),
   nomUtilisateurSlack: async (u: string) => (u === 'URAFBA' ? 'Rafba' : 'Support'),
   texteDepuisSlack: (s: string) => s.trim(),
   lireRepliquesSlack: async () => repliques,
+  accuserLivraisonSlack: async (channel: string, ts: string, ok: boolean) => { accuses.push({ channel, ts, ok }); },
 }));
 
 import { releverReponsesSlack, cadenceReleveMs } from '../../server/lib/support/relais-slack';
@@ -58,6 +60,8 @@ describe('relevé des fils Slack', () => {
     expect(inserts[0]).toMatchObject({ ticket_id: 't1', author: 'agent', author_name: 'Rafba', body: 'Test 2', slack_ts: '3.0' });
     expect(journal.some((j) => j.table === 'support_tickets' && j.op === 'update' && (j.valeur as any).status === 'answered')).toBe(true);
     expect(courriels).toHaveLength(1);
+    // ✅ posé sur le message de Rafba dans Slack : la preuve visible que c'est rendu.
+    expect(accuses.at(-1)).toEqual({ channel: 'C1', ts: '3.0', ok: true });
   });
 
   it('une réponse déjà enregistrée (par le webhook) n’est pas relayée deux fois', async () => {
