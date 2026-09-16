@@ -21,7 +21,7 @@ import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { etatBudget, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
-import { modeleLumi } from '../lib/lumi/tarifs';
+import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
@@ -33,7 +33,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
-import { classifier, modeRouteur } from '../lib/lumi/routeur';
+import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur } from '../lib/lumi/routeur';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
@@ -231,6 +231,8 @@ async function executerTourSse(opts: {
   params?: Record<string, unknown> | null;
   /** Étages 3-4 : mémoriser la réponse si le tour est cachable (premier message, lecture seule). */
   cache?: { historiqueVide: boolean; vecteur: Promise<number[] | null> | null };
+  /** Verdict du routeur actif déjà obtenu par la route (étage 5 manqué) : tracé, sans second appel. */
+  routeur?: ResultatRouteur | null;
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -255,7 +257,7 @@ async function executerTourSse(opts: {
   opts.req.on('close', () => { ferme = true; });
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
-  const observation = modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null;
+  const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null);
   const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => {
     const routeur = observation ? await observation : null;
     void journaliserTrace(ctx.admin, {
@@ -382,14 +384,16 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // à retirer des énoncés exacts.
     const repli = origine === 'repli' || estUnRepli(message);
     const enoncePrecedent = repli ? dernierEnonceUtilisateur(historique) : null;
+    // Jamais un courriel en guise de prénom (« Bonjour will@… »).
+    const ctxRaccourci = {
+      client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
+      language: ctx.language, fuseau: ctx.fuseau,
+      prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
+    };
     const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);
     if (raccourci) {
       const debut = Date.now();
-      const reponse = await repondreRaccourci(raccourci, {
-        client: ctx.auth.client, orgId: ctx.auth.orgId, userId: ctx.auth.user.id, accessToken: ctx.accessToken,
-        language: ctx.language, fuseau: ctx.fuseau, // Jamais un courriel en guise de prénom (« Bonjour will@… »).
-        prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
-      });
+      const reponse = await repondreRaccourci(raccourci, ctxRaccourci);
       if (reponse) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
@@ -445,7 +449,46 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       }
     }
 
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
+    // Étage 5 — routeur ACTIF (LUMI_ROUTEUR=actif) : Haiku classe l'énoncé
+    // (~0,03 ¢, prompt en cache) ; une action déterministe reconnue avec assez
+    // de confiance (SEUIL_CONFIANCE) répond sans le gros modèle — 0,3 à 0,6 ¢
+    // économisés par tour reconnu. Sinon le verdict voyage dans la trace du
+    // tour (calibrage du seuil), sans second appel. Jamais après un repli ni
+    // avec une proposition en attente : le modèle doit en rendre compte.
+    let routeur: ResultatRouteur | null = null;
+    if (modeRouteur() === 'actif' && !enAttente.length && !repli) {
+      const debut = Date.now();
+      routeur = await classifier(message);
+      const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
+      if (routeur.usage) {
+        void journaliserUsage(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, model: MODELE_ROUTEUR,
+          input_tokens: routeur.usage.input_tokens, output_tokens: routeur.usage.output_tokens,
+          cache_creation_input_tokens: routeur.usage.cache_creation_input_tokens, cache_read_input_tokens: routeur.usage.cache_read_input_tokens, cost_cents: coutRouteur,
+        });
+      }
+      const r = routeur.decision === 'action' && routeur.verdict?.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
+      const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
+      if (r && reponse) {
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: reponse.texte }] }], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('tool', { type: 'tool', name: r.tool, statut: 'debut' });
+        emettreSse('tool', { type: 'tool', name: r.tool, statut: 'fin' });
+        emettreSse('text', { type: 'text', delta: reponse.texte });
+        if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: null, raccourci: r.id, etage: ETAGE.routeur });
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: r.id,
+          params: { ...(r.periode ? { periode: r.periode } : {}), ...(r.numero ? { numero: r.numero } : {}), routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
+          outils: [r.tool], resultat: 'ok', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');

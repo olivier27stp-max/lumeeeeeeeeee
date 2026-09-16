@@ -11,9 +11,13 @@
  * MODE OBSERVATION (LUMI_ROUTEUR=observation) : le routeur tourne en
  * parallèle du tour, n'agit pas, et son verdict est écrit dans la trace
  * (params.routeur) pour comparer à ce que Sonnet a réellement fait. C'est
- * ce qui calibre le seuil sur du trafic réel avant d'activer quoi que ce soit
- * (mode 'actif', non branché : voir AGENTFORCE_GAP.md ordre 10 → 11).
- * Coût : ~600 tokens de prompt (cache 1 h) + l'énoncé, sur Haiku.
+ * ce qui calibre le seuil sur du trafic réel avant d'activer quoi que ce soit.
+ * MODE ACTIF (LUMI_ROUTEUR=actif, étage 5 dans routes/lumi.ts, audit B6) :
+ * une action déterministe reconnue avec confiance ≥ SEUIL_CONFIANCE répond
+ * sans le gros modèle (raccourciDepuisAction → repondreRaccourci) ; tout le
+ * reste (doute, hors scope, multi) va au modèle avec le verdict tracé.
+ * Coût : ~600 tokens de prompt (cache 1 h) + l'énoncé, sur Haiku (~0,03 ¢),
+ * journalisé dans ai_usage.
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { clientAnthropic } from './llm';
@@ -24,9 +28,10 @@ import { logger } from '../logger';
 
 export const SEUIL_CONFIANCE = 0.85;
 export const MODELE_ROUTEUR = 'claude-haiku-4-5';
-export type ModeRouteur = 'off' | 'observation';
+export type ModeRouteur = 'off' | 'observation' | 'actif';
 
 export function modeRouteur(env: NodeJS.ProcessEnv = process.env): ModeRouteur {
+  if (env.LUMI_ROUTEUR === 'actif') return 'actif';
   return env.LUMI_ROUTEUR === 'observation' ? 'observation' : 'off';
 }
 
