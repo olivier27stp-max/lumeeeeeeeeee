@@ -122,17 +122,16 @@ Demande de Rafba : « le périmètre doit être couvert sans raccourci à 100 % 
 3. **Cache sémantique** : deux questions courtes qui ne diffèrent que par le nom clé (« modèles de facture » / « modèles de soumission », « retire la carte de Gagnon » / « supprime la carte de Gagnon du pipeline ») ont un cosinus ≥ 0,92 → garde lexical (≥ 75 % des mots porteurs en commun ; le nom propre ne suffit pas).
 4. **Routeur** : « la liste de vérification du job 33 » et « prépare un contrat pour le job 33 » recevaient la fiche du job (action job-numero) → contre-exemples ; « pointe-moi » → équipe sans action.
 5. **Bugs d'app** (corrigés dans la PR) : `GET/PUT /api/field-sales/settings` sur des colonnes inexistantes ; `createGoalSchema` avec les mauvais champs.
-6. **Bugs de base** (migrations ÉCRITES, non appliquées — règle 2) :
+6. **Bugs de base** (trois migrations, **appliquées sur staging puis en prod le 2026-09-16** sur autorisation de Rafba ; `check:broken-objects` et `check:db-coherence` sans écart sur les deux) :
    - `20260916150000` : les policies d'`invitations` lisent `auth.users` → « permission denied » pour tout JWT ; Lumi ne pouvait ni lister, ni renvoyer, ni révoquer une invitation.
    - `20260916160000` : `fusionner_clients()` échoue dès que l'absorbée a une facture émise (trigger d'immuabilité) — la route de l'app aussi.
    - `20260916170000` : **19 tables écrites directement par ~30 outils de Lumi n'accordent aucun droit d'écriture à `authenticated`** (vérifié sur staging ET en prod : modèles de devis/facture, factures récurrentes, relances, taxes, paie, objectifs, rapports planifiés, listes de vérification, formations, terrain, demandes de formulaire). L'app n'y voit rien (routes en service_role) ; Lumi, en JWT + RLS comme l'exige le mandat, reçoit « permission denied » à l'exécution. La migration accorde les droits ET ajoute des policies restrictives portant la même clé de permission que la garde de l'outil. ❓ **À CONFIRMER par Will** : c'est un changement de posture (tables « serveur seulement ») ; l'alternative est de réécrire ces outils via les routes de l'app. Aucune écriture de Lumi n'a encore été exécutée en prod (`agent_actions` vide sur 30 jours), donc rien n'a cassé pour un client.
-   Les trois passent en transaction annulée sur staging (syntaxe et objets vérifiés, rien persisté).
+   Vérifié après application : invitations lisibles en JWT, fusion des doublons Gagnon/Bouchard réussie sur staging, écritures de réglages/modèles/objectifs/listes en JWT propriétaire OK, 57 policies restrictives en prod.
 7. **Réponses correctes que la batterie comptait « raté »** : « permets aux techniciens de voir les prix » → refus justifié (clés financières interdites aux techniciens, `permissions.ts`) ; cas remplacé.
 
 ### 7.4 Ce qui reste hors de portée de la batterie
 
-- `merge_clients` sur staging bloqué par le trigger (migration 160000) → les doublons Gagnon/Bouchard restent, et les cas « laquelle des deux ? » restent partiels tant qu'elle n'est pas appliquée.
-- Les écritures directes (7.3-6) ne peuvent pas être exécutées tant que la migration 170000 n'est pas appliquée : la batterie en mode « demander » vérifie la proposition (la carte), pas l'exécution. Un test d'exécution réelle de chaque outil d'écriture sur staging est la prochaine étape logique une fois les droits accordés.
+- Migrations appliquées : les doublons sont fusionnés et le seed a créé le reste (modèles de facture, récurrente, listes, objectif, formation) ; une passe 5 de la batterie mesurerait les partiels restants. La batterie en mode « demander » vérifie la proposition (la carte), pas l'exécution : un test d'exécution réelle de chaque outil d'écriture sur staging est la prochaine étape logique.
 - Code mort côté UI : `recurringInvoicesApi.ts` / `invoiceTemplatesApi.ts` appellent des routes retirées (aucun écran ne les atteint) ; la fonctionnalité existe désormais par Lumi.
 
 ### 7.5 Passe 4 et relance ciblée

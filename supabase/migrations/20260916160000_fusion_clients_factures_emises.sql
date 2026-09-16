@@ -10,7 +10,7 @@
 -- le trigger honore UNIQUEMENT pour client_id — montants, numéro, dates et
 -- objet restent verrouillés, fusion ou pas.
 --
--- NON APPLIQUÉE : à passer sur staging puis en prod après approbation (règle 2).
+-- Appliquée sur staging puis en prod le 2026-09-16 (autorisation de Rafba), vérifiée.
 
 begin;
 

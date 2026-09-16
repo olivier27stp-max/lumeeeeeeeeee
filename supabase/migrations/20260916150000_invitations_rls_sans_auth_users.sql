@@ -9,8 +9,7 @@
 -- Correctif : le courriel vient du JWT (auth.jwt() ->> 'email'), sans toucher
 -- auth.users. Même sens, même périmètre.
 --
--- NON APPLIQUÉE : à passer sur staging puis en prod (npm run db:apply / db:apply:prod)
--- après approbation — règle 2 du mandat.
+-- Appliquée sur staging puis en prod le 2026-09-16 (autorisation de Rafba), vérifiée.
 
 begin;
 

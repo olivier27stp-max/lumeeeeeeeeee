@@ -17,10 +17,11 @@
 --      qu'un membre sans ce droit ne puisse pas écrire par PostgREST ce que
 --      la route serveur lui refuserait. service_role n'est pas concerné.
 --
--- ❓ À CONFIRMER (Will) : c'est un changement de posture — ces tables étaient
--- « serveur seulement ». L'alternative est de réécrire ces ~30 outils pour
--- passer par les routes de l'app (PATCH/DELETE à ajouter à appelInterne).
--- NON APPLIQUÉE : staging puis prod après approbation (règle 2).
+-- Changement de posture assumé (ces tables étaient « serveur seulement ») :
+-- décidé par Rafba le 2026-09-16. L'alternative aurait été de réécrire ces
+-- ~30 outils pour passer par les routes de l'app.
+-- Appliquée sur staging puis en prod le 2026-09-16 (autorisation de Rafba) : droits, 57 policies
+-- restrictives, check:broken-objects et check:db-coherence sans écart sur les deux.
 
 begin;
 
