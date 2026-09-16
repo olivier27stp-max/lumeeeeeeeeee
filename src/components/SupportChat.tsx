@@ -24,6 +24,19 @@ import {
 } from '../lib/supportApi';
 
 const SLA_KEYS: Record<SlaKey, 'sla4h' | 'sla1d' | 'sla2d'> = { '4h': 'sla4h', '1d': 'sla1d', '2d': 'sla2d' };
+
+/** « Rafba » → « R », « William Hébert » → « WH ». */
+function initiales(nom: string | null | undefined): string {
+  const mots = (nom || '').trim().split(/\s+/).filter(Boolean);
+  if (!mots.length) return 'L';
+  return (mots.length === 1 ? mots[0].slice(0, 1) : mots[0].slice(0, 1) + mots[mots.length - 1].slice(0, 1)).toUpperCase();
+}
+/** « 14:32 » aujourd'hui, « 15 sept., 14:32 » avant. */
+function heureCourte(iso: string, fr: boolean): string {
+  const d = new Date(iso);
+  const auj = new Date().toDateString() === d.toDateString();
+  return d.toLocaleString(fr ? 'fr-CA' : 'en-CA', auj ? { hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
 const POLL_MS = 8000;
 
 export default function SupportChat({ compact = false, initialTicketId }: { compact?: boolean; initialTicketId?: string | null } = {}) {
@@ -143,7 +156,7 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-[13px] font-medium text-text-primary truncate">{r.subject}</span>
-              <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0', r.status === 'closed' ? 'bg-surface-tertiary text-text-tertiary' : r.status === 'answered' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-primary/10 text-primary')}>
+              <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0', r.status === 'closed' ? 'bg-surface-tertiary text-text-tertiary' : r.status === 'answered' ? 'border border-outline text-text-secondary' : 'bg-primary/10 text-primary')}>
                 {ts[`status_${r.status}` as const]}
               </span>
             </div>
@@ -191,13 +204,21 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
         {messages.map((m) => (
           m.author === 'user' ? (
             <div key={m.id} className="ml-auto bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-2xl rounded-tr-sm px-3.5 py-3 text-[13.5px] leading-relaxed max-w-[92%] whitespace-pre-wrap">{m.body}</div>
-          ) : (
-            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap">
-              {m.author === 'agent' && (
-                <p className="text-[10.5px] font-semibold text-green-700 dark:text-green-300 mb-1 inline-flex items-center gap-1"><LifeBuoy size={11} aria-hidden="true" /> {m.authorName || ts.agentLabel}</p>
-              )}
-              {m.body}
+          ) : m.author === 'agent' ? (
+            // Réponse d'une personne de l'équipe : avatar aux initiales, nom et
+            // heure au-dessus, bulle soulignée d'un filet — sobre, pas de vert.
+            <div key={m.id} className="flex items-end gap-2 max-w-[92%]">
+              <span className="w-7 h-7 rounded-full bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-[11px] font-bold flex items-center justify-center shrink-0" aria-hidden="true">{initiales(m.authorName)}</span>
+              <div className="min-w-0">
+                <p className="text-[10.5px] text-text-tertiary mb-1 pl-1">
+                  <span className="font-semibold text-text-primary">{m.authorName || ts.agentLabel}</span>
+                  {m.authorName ? ` · ${ts.agentLabel}` : ''}{` · ${heureCourte(m.createdAt, fr)}`}
+                </p>
+                <div className="bg-surface border border-outline-subtle border-l-2 border-l-primary rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-primary shadow-sm whitespace-pre-wrap">{m.body}</div>
+              </div>
             </div>
+          ) : (
+            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap">{m.body}</div>
           )
         ))}
         {envoi && (
