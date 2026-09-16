@@ -924,6 +924,7 @@ const fr: TranslationKeys = {
     activated: 'Module activé avec succès.',
     failedActivate: 'Erreur lors de l\'activation du module.',
     adminOnly: 'Seuls les admins et propriétaires peuvent activer les modules.',
+    platformLocked: 'Ce module est désactivé pour votre espace de travail. Contactez le support Lume.',
   },
 
   // Availability

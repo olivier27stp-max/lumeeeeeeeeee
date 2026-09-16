@@ -925,6 +925,7 @@ const en = {
     activated: 'Module activated successfully.',
     failedActivate: 'Failed to activate module.',
     adminOnly: 'Only admins and owners can activate modules.',
+    platformLocked: 'This module is disabled for your workspace. Contact Lume support.',
   },
 
   // Availability

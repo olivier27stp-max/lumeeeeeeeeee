@@ -153,6 +153,9 @@ export async function fetchCurrentBilling(): Promise<{
   billing_profile: BillingProfile | null;
   restricted?: boolean;
   grace?: GraceImpaye | null;
+  /** Overrides posés par la plateforme (Creator Space) : clé includes_* →
+   *  activé/bloqué, par-dessus le forfait. */
+  feature_overrides?: Record<string, boolean>;
 }> {
   const res = await fetch(`${API_BASE}/billing/current`, {
     headers: await authHeaders(),

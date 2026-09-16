@@ -1,0 +1,71 @@
+// Catalogue des fonctionnalités qu'un administrateur plateforme peut forcer
+// (activer ou bloquer) sur un workspace depuis le Creator Space, par-dessus
+// le forfait. Une entrée = une clé de la table org_features.
+//
+// Deux familles :
+//   - « plan »   : colonnes includes_* de la table plans (le forfait décide
+//                  par défaut ; l'override plateforme prime).
+//   - « module » : modules que le tenant active lui-même (org_features) ;
+//                  l'override plateforme retire ou impose ce choix.
+//
+// Une ligne org_features portant metadata.platform_override = true est
+// réservée à la plateforme : le tenant ne peut plus la modifier via
+// PUT /api/features/:feature (voir routes/feature-flags.ts).
+
+export type PlatformFeatureKind = 'plan' | 'module';
+
+export interface PlatformFeature {
+  key: string;
+  kind: PlatformFeatureKind;
+  label: string;
+  description: string;
+}
+
+export const PLATFORM_FEATURES: readonly PlatformFeature[] = [
+  { key: 'includes_sms', kind: 'plan', label: 'SMS / Messages', description: 'Messagerie SMS avec les clients (Twilio).' },
+  { key: 'includes_ai', kind: 'plan', label: 'Lumi (IA)', description: 'Assistant IA Lumi et briefings.' },
+  { key: 'includes_d2d', kind: 'plan', label: 'Vente porte-à-porte', description: 'Vente Map, pipeline, leaderboard, commissions.' },
+  { key: 'includes_courses', kind: 'plan', label: 'Cours', description: 'Section formation / cours.' },
+  { key: 'includes_api', kind: 'plan', label: 'API', description: 'Accès API et clés d’intégration.' },
+  { key: 'includes_automations', kind: 'plan', label: 'Automations', description: 'Workflows automatisés.' },
+  { key: 'includes_marketplace', kind: 'plan', label: 'Marketplace', description: 'Intégrations et webhooks.' },
+  { key: 'includes_timesheets', kind: 'plan', label: 'Feuilles de temps', description: 'Suivi des heures des employés.' },
+  { key: 'includes_request_forms', kind: 'plan', label: 'Formulaires de demande', description: 'Formulaires publics de demande de service.' },
+  { key: 'includes_advanced_roles', kind: 'plan', label: 'Rôles avancés', description: 'Permissions personnalisées par membre.' },
+  { key: 'module_vente', kind: 'module', label: 'Module Vente (activation)', description: 'Activation du module Vente par le workspace (exige aussi le forfait D2D).' },
+];
+
+const KEYS = new Set(PLATFORM_FEATURES.map((f) => f.key));
+
+export function isPlatformFeatureKey(key: unknown): key is string {
+  return typeof key === 'string' && KEYS.has(key);
+}
+
+/** Clés de forfait (colonnes plans.includes_*) — celles que billing/current
+ *  renvoie comme feature_overrides au front. */
+export const PLAN_FEATURE_KEYS: readonly string[] = PLATFORM_FEATURES.filter((f) => f.kind === 'plan').map((f) => f.key);
+
+/** Flags dérivés côté front quand la colonne n'existe pas encore en base
+ *  (même règle que src/lib/billingApi.ts → fetchPlans). Gardés identiques ici
+ *  pour que le Creator Space affiche le vrai défaut du forfait. */
+export function planGrants(plan: Record<string, any> | null, key: string): boolean | null {
+  if (!plan) return null;
+  if (typeof plan[key] === 'boolean') return plan[key];
+  const slug = plan.slug as string | undefined;
+  switch (key) {
+    case 'includes_automations':
+    case 'includes_timesheets':
+    case 'includes_request_forms':
+      return slug !== 'starter';
+    case 'includes_marketplace':
+    case 'includes_advanced_roles':
+      return slug === 'autopilot';
+    default:
+      return false;
+  }
+}
+
+/** Vrai si la ligne org_features a été posée par la plateforme. */
+export function isPlatformOverride(metadata: unknown): boolean {
+  return !!metadata && typeof metadata === 'object' && (metadata as any).platform_override === true;
+}

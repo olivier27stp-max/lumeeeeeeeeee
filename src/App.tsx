@@ -969,7 +969,7 @@ function AuthenticatedApp({
   // Current plan — used to hide locked features from sidebar.
   // `planLoading` est indispensable : sans lui, on ne peut pas distinguer
   // « plan pas encore charge » de « plan sans cette feature ».
-  const { currentPlan, loading: planLoading } = useCurrentPlan();
+  const { currentPlan, loading: planLoading, featureOverrides } = useCurrentPlan();
 
   // Sidebar counters: pending quotes + overdue invoices
   const [pendingQuotes, setPendingQuotes] = useState(0);
@@ -1054,6 +1054,9 @@ function AuthenticatedApp({
     // (le PlanFeatureGate de la route reverifie de toute facon), et seul un
     // plan REELLEMENT charge peut masquer une entree.
     if (item.requiredPlanFlag) {
+      // Override plateforme (Creator Space) : prime sur le forfait.
+      const override = featureOverrides[item.requiredPlanFlag];
+      if (override !== undefined) return override;
       if (planLoading || !currentPlan) return true;
       return Boolean((currentPlan as any)[item.requiredPlanFlag]);
     }

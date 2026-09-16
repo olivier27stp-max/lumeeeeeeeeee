@@ -5,25 +5,30 @@
 // jamais de clé secrète, de token ni d'identifiant Stripe ici).
 
 import React, { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Loader2, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
   getCompany,
   getCompanyBilling,
   getCompanyEngagement,
+  getCompanyFeatures,
   getCompanyPermissions,
   getCompanyUsers,
+  setCompanyFeature,
+  type CompanyFeature,
+  type FeatureOverrideState,
 } from '../../lib/creatorSpaceApi';
 import EmptyState from '../../components/ui/EmptyState';
 import { EngagementBadge, ErrorState, MaskedActor, SubStatusBadge, fmtDate, fmtDateTime, fmtMoney } from './shared';
 
-type Tab = 'users' | 'billing' | 'permissions' | 'engagement';
+type Tab = 'users' | 'billing' | 'permissions' | 'features' | 'engagement';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'users', label: 'Users' },
   { id: 'billing', label: 'Billing' },
   { id: 'permissions', label: 'Permissions' },
+  { id: 'features', label: 'Features' },
   { id: 'engagement', label: 'Engagement' },
 ];
 
@@ -105,6 +110,7 @@ export default function CompanyPanel({ orgId, onClose }: { orgId: string; onClos
         {tab === 'users' && <UsersTab orgId={orgId} />}
         {tab === 'billing' && <BillingTab orgId={orgId} />}
         {tab === 'permissions' && <PermissionsTab orgId={orgId} />}
+        {tab === 'features' && <FeaturesTab orgId={orgId} />}
         {tab === 'engagement' && <EngagementTab orgId={orgId} />}
       </div>
     </aside>
@@ -271,6 +277,171 @@ function PermissionsTab({ orgId }: { orgId: string }) {
                 ))}
               </div>
             )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ── Features : activer / bloquer par-dessus le forfait ────────────────────
+// Trois états par fonctionnalité : Forfait (hérité), Activé (forcé), Bloqué.
+// Chaque changement exige une raison, journalisée côté serveur avant
+// l'écriture (creator_space_feature_override) et s'applique à tous les
+// bureaux de la compagnie.
+
+const STATE_LABEL: Record<FeatureOverrideState, string> = { inherit: 'Forfait', on: 'Activé', off: 'Bloqué' };
+
+function FeaturesTab({ orgId }: { orgId: string }) {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ['creator-space', 'company', orgId, 'features'],
+    queryFn: () => getCompanyFeatures(orgId),
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+  });
+  const [pending, setPending] = useState<{ key: string; state: FeatureOverrideState } | null>(null);
+  const [reason, setReason] = useState('');
+  const mutation = useMutation({
+    mutationFn: (p: { key: string; state: FeatureOverrideState; reason: string }) => setCompanyFeature(orgId, p.key, p.state, p.reason),
+    onSuccess: () => {
+      setPending(null);
+      setReason('');
+      qc.invalidateQueries({ queryKey: ['creator-space', 'company', orgId, 'features'] });
+    },
+  });
+
+  if (query.isLoading) return <TabLoading />;
+  if (query.isError) return <ErrorState message={(query.error as Error)?.message} onRetry={() => query.refetch()} />;
+  const d = query.data!;
+  const plans = d.features.filter((f) => f.kind === 'plan');
+  const modules = d.features.filter((f) => f.kind === 'module');
+
+  const annuler = () => { setPending(null); setReason(''); mutation.reset(); };
+  const valider = () => {
+    if (!pending || reason.trim().length < 5) return;
+    mutation.mutate({ key: pending.key, state: pending.state, reason: reason.trim() });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="text-[11.5px] text-text-tertiary space-y-0.5">
+        <p>
+          Forfait actuel : <span className="font-medium text-text-secondary">{d.plan?.name_fr || d.plan?.name || 'aucun'}</span>
+          {d.office_count > 1 && <> · s’applique aux {d.office_count} bureaux de la compagnie</>}
+        </p>
+        <p>« Forfait » = le forfait décide. « Activé » / « Bloqué » = override plateforme, prime sur le forfait. Chaque changement est journalisé.</p>
+      </div>
+
+      {pending && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
+          <p className="text-[12.5px] text-amber-900">
+            <span className="font-semibold">{d.features.find((f) => f.key === pending.key)?.label}</span> → {STATE_LABEL[pending.state]}
+          </p>
+          <input
+            type="text"
+            autoFocus
+            value={reason}
+            disabled={mutation.isPending}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') valider();
+              if (e.key === 'Escape') annuler();
+            }}
+            placeholder="Raison (journalisée, min. 5 caractères)…"
+            aria-label="Raison du changement, journalisée"
+            className="h-7 w-full px-2 rounded border border-amber-300 bg-surface text-[12px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-amber-500/40"
+          />
+          {mutation.isError && <p className="text-[11.5px] text-red-700">{(mutation.error as Error)?.message || 'Échec de la modification.'}</p>}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={annuler}
+              disabled={mutation.isPending}
+              className="h-7 px-2.5 rounded-md border border-outline bg-surface text-[12px] font-medium text-text-secondary hover:bg-surface-secondary disabled:opacity-40"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={valider}
+              disabled={mutation.isPending || reason.trim().length < 5}
+              className="h-7 px-2.5 rounded-md bg-text-primary text-surface text-[12px] font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+            >
+              {mutation.isPending && <Loader2 size={12} className="animate-spin" />}
+              Confirmer
+            </button>
+          </div>
+        </div>
+      )}
+
+      <FeatureGroup title="Fonctionnalités du forfait" features={plans} pendingKey={pending?.key ?? null} onPick={(key, state) => { setPending({ key, state }); setReason(''); mutation.reset(); }} />
+      <FeatureGroup title="Modules activés par le workspace" features={modules} pendingKey={pending?.key ?? null} onPick={(key, state) => { setPending({ key, state }); setReason(''); mutation.reset(); }} />
+    </div>
+  );
+}
+
+function FeatureGroup({ title, features, pendingKey, onPick }: {
+  title: string;
+  features: CompanyFeature[];
+  pendingKey: string | null;
+  onPick: (key: string, state: FeatureOverrideState) => void;
+}) {
+  if (!features.length) return null;
+  return (
+    <div>
+      <h3 className="text-[11px] uppercase tracking-wide text-text-tertiary font-semibold mb-1.5">{title}</h3>
+      <ul className="space-y-2">
+        {features.map((f) => (
+          <li key={f.key} className={cn('rounded-md border px-3 py-2.5', pendingKey === f.key ? 'border-amber-300' : 'border-outline')}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[13px] font-medium text-text-primary">{f.label}</span>
+                  <span
+                    className={cn(
+                      'text-[10.5px] font-semibold rounded-full border px-1.5 leading-[17px]',
+                      f.effective ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-surface-secondary text-text-tertiary border-outline',
+                    )}
+                    title={f.override === 'inherit' ? 'État hérité' : 'Override plateforme'}
+                  >
+                    {f.effective ? 'actif' : 'inactif'}
+                    {f.override !== 'inherit' && ' · forcé'}
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-text-tertiary mt-0.5">{f.description}</p>
+                <p className="text-[11px] text-text-tertiary mt-0.5">
+                  {f.kind === 'plan'
+                    ? `Forfait : ${f.inherited == null ? 'aucun forfait' : f.inherited ? 'inclus' : 'non inclus'}`
+                    : `Workspace : ${f.inherited ? 'activé' : 'non activé'}`}
+                  {f.updated_at && <> · override posé le {fmtDate(f.updated_at)}</>}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 inline-flex rounded-md border border-outline overflow-hidden" role="radiogroup" aria-label={`État de ${f.label}`}>
+              {(['inherit', 'on', 'off'] as FeatureOverrideState[]).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  role="radio"
+                  aria-checked={f.override === s}
+                  disabled={f.override === s}
+                  onClick={() => onPick(f.key, s)}
+                  className={cn(
+                    'h-7 px-2.5 text-[11.5px] font-medium transition-colors border-r border-outline last:border-r-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40',
+                    f.override === s
+                      ? s === 'off'
+                        ? 'bg-red-50 text-red-700 cursor-default'
+                        : s === 'on'
+                          ? 'bg-emerald-50 text-emerald-700 cursor-default'
+                          : 'bg-surface-secondary text-text-primary cursor-default'
+                      : 'bg-surface text-text-tertiary hover:text-text-primary hover:bg-surface-secondary',
+                  )}
+                >
+                  {STATE_LABEL[s]}
+                </button>
+              ))}
+            </div>
           </li>
         ))}
       </ul>

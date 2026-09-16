@@ -26,14 +26,20 @@ interface UsePlanFeatureReturn {
   plans: Plan[];
   /** The lowest-priced plan that includes this feature (for upsell) */
   requiredPlan: Plan | null;
+  /** Vrai quand la plateforme (Creator Space) a bloqué cette fonctionnalité
+   *  pour ce workspace : aucun changement de forfait n'y changera rien. */
+  platformBlocked: boolean;
+  /** Overrides plateforme résolus (clé → activé/bloqué). */
+  featureOverrides: Record<string, boolean>;
 }
 
 const cache: {
   plans: Plan[] | null;
   subscription: Subscription | null;
   currentPlan: Plan | null;
+  featureOverrides: Record<string, boolean>;
   fetchedAt: number;
-} = { plans: null, subscription: null, currentPlan: null, fetchedAt: 0 };
+} = { plans: null, subscription: null, currentPlan: null, featureOverrides: {}, fetchedAt: 0 };
 
 const CACHE_TTL_MS = 30_000;
 
@@ -55,7 +61,7 @@ const CACHE_TTL_MS = 30_000;
  */
 let requeteEnVol: Promise<{
   plansData: Plan[];
-  billing: { subscription: Subscription | null };
+  billing: { subscription: Subscription | null; feature_overrides?: Record<string, boolean> };
   billingFailed: boolean;
 }> | null = null;
 
@@ -91,6 +97,7 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
   const [plans, setPlans] = useState<Plan[]>(cache.plans ?? []);
   const [subscription, setSubscription] = useState<Subscription | null>(cache.subscription);
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(cache.currentPlan);
+  const [featureOverrides, setFeatureOverrides] = useState<Record<string, boolean>>(cache.featureOverrides);
   const [billingUnavailable, setBillingUnavailable] = useState(false);
 
   useEffect(() => {
@@ -99,6 +106,7 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
       setPlans(cache.plans);
       setSubscription(cache.subscription);
       setCurrentPlan(cache.currentPlan);
+      setFeatureOverrides(cache.featureOverrides);
       setLoading(false);
       return;
     }
@@ -127,14 +135,17 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
           ? (sub.plans ?? plansData.find((p) => p.id === sub.plan_id) ?? null)
           : null;
 
+        const overrides = billing.feature_overrides ?? {};
         cache.plans = plansData;
         cache.subscription = sub;
         cache.currentPlan = plan;
+        cache.featureOverrides = overrides;
         cache.fetchedAt = Date.now();
 
         setPlans(plansData);
         setSubscription(sub);
         setCurrentPlan(plan);
+        setFeatureOverrides(overrides);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -154,9 +165,15 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
   // de plan. Tant qu'on n'a pas de reponse exploitable, on laisse passer :
   // l'API reverifie les droits a chaque appel, l'affichage n'est pas la
   // frontiere de securite.
-  const hasFeature = currentPlan
-    ? Boolean((currentPlan as any)[flag])
-    : loading || billingUnavailable;
+  // Un override plateforme (Creator Space) prime sur le forfait, dans les
+  // deux sens : activé sans le forfait, ou bloqué malgré le forfait.
+  const override = featureOverrides[flag];
+  const hasFeature = override !== undefined
+    ? override
+    : currentPlan
+      ? Boolean((currentPlan as any)[flag])
+      : loading || billingUnavailable;
+  const platformBlocked = override === false;
 
   // Find cheapest plan that grants this feature (for upsell CTA)
   const requiredPlan = plans
@@ -170,6 +187,8 @@ export function usePlanFeature(flag: PlanFeatureFlag): UsePlanFeatureReturn {
     subscription,
     plans,
     requiredPlan,
+    platformBlocked,
+    featureOverrides,
   };
 }
 
@@ -178,6 +197,7 @@ export function invalidatePlanFeatureCache() {
   cache.plans = null;
   cache.subscription = null;
   cache.currentPlan = null;
+  cache.featureOverrides = {};
   cache.fetchedAt = 0;
 }
 
@@ -185,8 +205,8 @@ export function invalidatePlanFeatureCache() {
  * Returns the resolved current plan + all plans + loading state, in one hook.
  * Reuses the same 30s cache as usePlanFeature.
  */
-export function useCurrentPlan(): { currentPlan: Plan | null; plans: Plan[]; loading: boolean } {
-  // Use any flag — we only care about currentPlan / plans / loading.
-  const { currentPlan, plans, loading } = usePlanFeature('includes_sms');
-  return { currentPlan, plans, loading };
+export function useCurrentPlan(): { currentPlan: Plan | null; plans: Plan[]; loading: boolean; featureOverrides: Record<string, boolean> } {
+  // Use any flag — we only care about currentPlan / plans / loading / overrides.
+  const { currentPlan, plans, loading, featureOverrides } = usePlanFeature('includes_sms');
+  return { currentPlan, plans, loading, featureOverrides };
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, updateFeatureFlagSchema } from '../lib/validation';
+import { isPlatformOverride } from '../lib/platformFeatures';
 
 const router = Router();
 
@@ -50,6 +51,18 @@ router.put('/features/:feature', validate(updateFeatureFlagSchema), async (req, 
     const isAdmin = await isOrgAdminOrOwner(admin, auth.user.id, auth.orgId);
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only org owners/admins can toggle features' });
+    }
+
+    // Une ligne posée par la plateforme (Creator Space) est verrouillée pour
+    // le tenant : bloquée ou imposée, elle ne se renverse pas depuis le CRM.
+    const { data: existing } = await admin
+      .from('org_features')
+      .select('metadata')
+      .eq('org_id', auth.orgId)
+      .eq('feature', feature)
+      .maybeSingle();
+    if (isPlatformOverride(existing?.metadata)) {
+      return res.status(403).json({ error: 'Cette fonctionnalité est gérée par Lume pour votre espace de travail. Contactez le support.', platform_locked: true });
     }
 
     // Upsert the feature flag

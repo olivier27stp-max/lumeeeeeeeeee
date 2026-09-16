@@ -10,6 +10,8 @@ interface ModuleLockedScreenProps {
   activating?: boolean;
   /** Whether the current user can activate (admin/owner) */
   canActivate?: boolean;
+  /** Bloqué par la plateforme (Creator Space) : aucun admin ne peut l'activer */
+  platformLocked?: boolean;
 }
 
 export default function ModuleLockedScreen({
@@ -17,6 +19,7 @@ export default function ModuleLockedScreen({
   onActivate,
   activating = false,
   canActivate = true,
+  platformLocked = false,
 }: ModuleLockedScreenProps) {
   const { t } = useTranslation();
 
@@ -60,7 +63,7 @@ export default function ModuleLockedScreen({
           </button>
         ) : (
           <p className="text-xs text-text-tertiary italic">
-            {t.moduleLock.adminOnly}
+            {platformLocked ? t.moduleLock.platformLocked : t.moduleLock.adminOnly}
           </p>
         )}
       </div>

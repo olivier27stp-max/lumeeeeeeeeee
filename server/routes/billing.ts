@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { creerClientStripe } from '../lib/stripe-sdk';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEmail, companyOrgIds } from '../lib/supabase';
+import { PLAN_FEATURE_KEYS, isPlatformOverride } from '../lib/platformFeatures';
 import { getUserContext, hasPermission } from '../lib/rbac';
 import { logger } from '../lib/logger';
 
@@ -98,7 +99,7 @@ router.get('/billing/current', async (req, res) => {
     // entrees de menu protegees par un requiredPlanFlag (`if (!currentPlan)
     // return false`) : l'utilisateur ne voyait plus que les modules non
     // proteges. Joindre ici rend la resolution du plan atomique.
-    const [subRes, profileRes] = await Promise.all([
+    const [subRes, profileRes, overridesRes] = await Promise.all([
       admin
         .from('subscriptions')
         .select('*, plans:plan_id (*)')
@@ -115,7 +116,19 @@ router.get('/billing/current', async (req, res) => {
         .select('*')
         .eq('org_id', auth.orgId)
         .maybeSingle(),
+      // Overrides plateforme (Creator Space) : une ligne org_features marquée
+      // platform_override prime sur le forfait, dans les deux sens. Renvoyés
+      // ici pour que la résolution plan + override reste un seul appel.
+      admin
+        .from('org_features')
+        .select('feature, enabled, metadata')
+        .eq('org_id', auth.orgId)
+        .in('feature', PLAN_FEATURE_KEYS as string[]),
     ]);
+    const feature_overrides: Record<string, boolean> = {};
+    for (const row of (overridesRes.data ?? []) as Array<{ feature: string; enabled: boolean; metadata: unknown }>) {
+      if (isPlatformOverride(row.metadata)) feature_overrides[row.feature] = !!row.enabled;
+    }
 
     // Any member may know the org's PLAN — it gates whole app areas, and a 403
     // here made the front treat paying orgs as "no subscription" and paywall
@@ -158,10 +171,10 @@ router.get('/billing/current', async (req, res) => {
       // `grace` accompagne la version restreinte : un employé sans droit
       // financier subit la suspension comme les autres, le gate a besoin du
       // verdict pour lui aussi. Il ne révèle ni montant ni moyen de paiement.
-      return res.json({ subscription: redacted, billing_profile: null, restricted: true, grace });
+      return res.json({ subscription: redacted, billing_profile: null, restricted: true, grace, feature_overrides });
     }
 
-    return res.json({ subscription: subRes.data, billing_profile: profileRes.data, grace });
+    return res.json({ subscription: subRes.data, billing_profile: profileRes.data, grace, feature_overrides });
   } catch (err: any) {
     console.error('[billing/current]', err.message);
     return res.status(500).json({ error: 'Internal server error.' });

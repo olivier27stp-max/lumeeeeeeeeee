@@ -217,6 +217,26 @@ export interface CompanyEngagement {
   caveats: string[];
 }
 
+export type FeatureOverrideState = 'inherit' | 'on' | 'off';
+
+export interface CompanyFeature {
+  key: string;
+  kind: 'plan' | 'module';
+  label: string;
+  description: string;
+  /** Défaut hors override : forfait (plan) ou choix du tenant (module). null = aucun forfait. */
+  inherited: boolean | null;
+  override: FeatureOverrideState;
+  effective: boolean | null;
+  updated_at: string | null;
+}
+
+export interface CompanyFeatures {
+  plan: { name: string; name_fr: string; slug: string } | null;
+  office_count: number;
+  features: CompanyFeature[];
+}
+
 export interface Paginated<T> {
   data: T[];
   total: number;
@@ -278,4 +298,15 @@ export function revealActor(userId: string, reason: string): Promise<{ user_id: 
 
 export function getCompanyEngagement(orgId: string): Promise<CompanyEngagement> {
   return apiFetch(`/companies/${orgId}/engagement`);
+}
+
+export function getCompanyFeatures(orgId: string): Promise<CompanyFeatures> {
+  return apiFetch(`/companies/${orgId}/features`);
+}
+
+/** Force (on), bloque (off) ou rend au forfait (inherit) une fonctionnalité
+ *  pour tous les bureaux de la compagnie. La raison est obligatoire et
+ *  journalisée côté serveur (creator_space_feature_override) avant l'écriture. */
+export function setCompanyFeature(orgId: string, key: string, state: FeatureOverrideState, reason: string): Promise<{ ok: true; key: string; state: FeatureOverrideState; org_ids: string[] }> {
+  return apiFetch(`/companies/${orgId}/features/${key}`, { method: 'PUT', body: { state, reason } });
 }

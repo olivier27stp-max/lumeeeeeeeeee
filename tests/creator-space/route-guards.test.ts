@@ -11,6 +11,7 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 
 const routerSrc = read('server/routes/creator-space.ts');
 const auditSrc = read('server/routes/creator-space-audit.ts');
+const featuresSrc = read('server/routes/creator-space-features.ts');
 const indexSrc = read('server/index.ts');
 const appSrc = read('src/App.tsx');
 
@@ -83,12 +84,51 @@ describe('Creator Space — journal d’accès et révélation (creator-space-au
   });
 });
 
+describe('Creator Space — fonctionnalités par workspace (creator-space-features)', () => {
+  it('chaque handler est gardé par requireCreatorSpace et valide orgId + clé', () => {
+    const handlers = featuresSrc.split(/router\.(?:get|post|put|patch|delete)\(/).slice(1);
+    expect(handlers.length).toBe(2);
+    for (const h of handlers) {
+      expect(h).toContain('requireCreatorSpace(req, res)');
+      expect(h).toContain('UUID_RE.test(orgId)');
+    }
+    expect(featuresSrc).toContain('isPlatformFeatureKey(key)');
+  });
+
+  it('toute modification exige une raison journalisée AVANT l’écriture, sinon refus', () => {
+    expect(featuresSrc).toContain('reason.length < 5');
+    expect(featuresSrc).toContain('creator_space_feature_override');
+    expect(featuresSrc).toContain('Journalisation impossible — modification refusée.');
+    const log = featuresSrc.indexOf(".from('security_events').insert(");
+    const write = featuresSrc.indexOf(".from('org_features')\n        .delete()");
+    expect(log).toBeGreaterThan(-1);
+    expect(write).toBeGreaterThan(log);
+  });
+
+  it('seules tables écrites : org_features et security_events ; les lignes posées sont marquées platform_override', () => {
+    const writes = featuresSrc.match(/\.from\('([a-z_]+)'\)\s*\.(insert|update|upsert|delete)\(/g) ?? [];
+    const tables = new Set(writes.map((w) => w.match(/from\('([a-z_]+)'\)/)![1]));
+    expect(tables).toEqual(new Set(['org_features', 'security_events']));
+    expect(featuresSrc).toContain('platform_override: true');
+    // « Hériter » ne supprime que les lignes de la plateforme, jamais une
+    // activation faite par le tenant.
+    expect(featuresSrc).toContain(".eq('metadata->>platform_override', 'true')");
+  });
+
+  it('le tenant ne peut pas renverser un override plateforme (PUT /api/features)', () => {
+    const tenantSrc = read('server/routes/feature-flags.ts');
+    expect(tenantSrc).toContain('isPlatformOverride(existing?.metadata)');
+    expect(tenantSrc).toContain('platform_locked: true');
+  });
+});
+
 describe('montage serveur et surface SPA', () => {
   it('le routeur est monté avec rate limiting dédié, le journal d’accès et le routeur audit', () => {
     expect(indexSrc).toContain("app.use('/api/creator-space', creatorSpaceLimiter)");
     expect(indexSrc).toContain("app.use('/api/creator-space', creatorSpaceViewLogger())");
     expect(indexSrc).toContain("app.use('/api', creatorSpaceRouter)");
     expect(indexSrc).toContain("app.use('/api', creatorSpaceAuditRouter)");
+    expect(indexSrc).toContain("app.use('/api', creatorSpaceFeaturesRouter)");
   });
 
   it('la route SPA existe, hors nav statique ; le lien sidebar est gaté par la sonde serveur', () => {
