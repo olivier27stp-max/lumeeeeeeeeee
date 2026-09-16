@@ -64,6 +64,14 @@ const CONSIGNES_SOUS_AGENT: Partial<Record<IdTopic, { fr: string; en: string }>>
     fr: 'Pour créer ou déplacer un job, propose la carte tout de suite avec ce qui est fourni (articles vides permis) : pas de question préalable sur les articles ou les prix, l’utilisateur relit la carte.',
     en: 'To create or move a job, propose the card right away with what was given (empty items allowed): no preliminary question about items or prices, the user reviews the card.',
   },
+  facturation: {
+    fr: 'Pour une écriture (devis, facture, marquer payée, relances), appelle l’outil tout de suite avec ce qui est fourni : la carte de confirmation EST la question, ne demande pas « je le fais ? » en texte.',
+    en: 'For a write (quote, invoice, mark paid, reminders), call the tool right away with what was given: the confirmation card IS the question, do not ask "should I?" in text.',
+  },
+  communications: {
+    fr: 'Pour un texto ou un courriel, appelle send_sms / send_email tout de suite avec le texte complet : la carte montre le message exact et le destinataire, c’est elle qui demande le OK.',
+    en: 'For a text or an email, call send_sms / send_email right away with the full text: the card shows the exact message and recipient, it is what asks for the OK.',
+  },
 };
 
 /**
