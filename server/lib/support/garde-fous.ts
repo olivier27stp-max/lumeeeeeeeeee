@@ -30,6 +30,18 @@ export async function reponsesModeleAujourdhui(admin: SupabaseClient, orgId: str
   }
 }
 
+/** Réponses du modèle sur le chat PUBLIC du site (toutes IP) dans les 24 dernières heures. Ne lève jamais (0 en cas d'erreur). */
+export async function reponsesPubliquesAujourdhui(admin: SupabaseClient): Promise<number> {
+  try {
+    const depuis = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { count, error } = await admin.from('lumi_traces').select('id', { count: 'exact', head: true }).eq('canal', 'public').eq('etage', 6).gte('created_at', depuis);
+    if (error) return 0;
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function texteAuPlafond(langue: 'fr' | 'en'): string {
   return langue === 'fr'
     ? "J'ai beaucoup répondu pour votre entreprise aujourd'hui, alors je passe en mode économe jusqu'à demain. Les questions classiques ci-dessous ont une réponse immédiate ; si la vôtre n'y est pas, dites-moi « je veux parler à quelqu'un » et l'équipe prend le relais."

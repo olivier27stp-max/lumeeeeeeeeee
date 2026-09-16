@@ -1,0 +1,55 @@
+/**
+ * Sous-agents de Lumi (audit B7) — un topic du routeur = un jeu d'outils.
+ * ─────────────────────────────────────────────────────────────────────
+ * Quand le routeur (étage 5, LUMI_ROUTEUR=actif) classe le premier message
+ * dans un topic avec assez de confiance mais sans action déterministe, le
+ * tour part au modèle avec SEULEMENT les outils de ce topic chargés (plus
+ * les transverses : mémoire, aide, fiche d'entreprise) au lieu des 15 outils
+ * du quotidien — et les autres restent découvrables par tool_search. Mesuré :
+ * le bloc d'outils pesait 2 478 tokens relus à chaque échantillonnage ;
+ * un topic en charge 800 à 1 400. Le préfixe est cache par topic (7 entrées,
+ * partagées par toutes les orgs). Le bloc système stable ne change PAS : le
+ * sujet du tour est ajouté au bloc variable (pas de nouvelle empreinte).
+ *
+ * Aucun topic reconnu (routeur off, doute, multi, hors scope) → jeu de base.
+ */
+import { TOPICS, type IdTopic } from './topics';
+import { TOOLS_BY_NAME } from '../agent/tools';
+import { SEUIL_CONFIANCE, type ResultatRouteur } from './routeur';
+
+/** Chargés avec tout sous-agent : mémoire de Lumi, aide sur Lume, fiche d'entreprise. */
+export const OUTILS_TRANSVERSES: readonly string[] = ['recall_notes', 'remember_this', 'forget_note', 'search_help', 'get_company_info'];
+
+/** Topics qui ne définissent pas un sous-agent (pas de jeu d'outils propre). */
+const SANS_SOUS_AGENT: ReadonlySet<string> = new Set(['hors_scope', 'multi']);
+
+export function estSousAgent(topic: string | null | undefined): topic is IdTopic {
+  if (!topic || SANS_SOUS_AGENT.has(topic)) return false;
+  const t = TOPICS.find((x) => x.id === topic);
+  return !!t && t.outils.length > 0;
+}
+
+/** Outils chargés pour un sous-agent : ceux du topic + les transverses, seulement s'ils existent. Ordre stable (cache). */
+export function outilsDuSousAgent(topic: IdTopic): string[] {
+  const t = TOPICS.find((x) => x.id === topic);
+  const noms = [...(t?.outils ?? []), ...OUTILS_TRANSVERSES];
+  const vus = new Set<string>();
+  return noms.filter((n) => TOOLS_BY_NAME[n] && !vus.has(n) && vus.add(n));
+}
+
+/** Le sous-agent à charger d'après le verdict du routeur : topic sûr, sans action déterministe. */
+export function sousAgentDepuisVerdict(r: ResultatRouteur | null | undefined): IdTopic | null {
+  const v = r?.verdict;
+  if (!v || r.statut !== 'ok' || r.decision !== 'modele') return null;
+  if (v.confidence < SEUIL_CONFIANCE) return null;
+  return estSousAgent(v.topic) ? v.topic : null;
+}
+
+/** Ligne ajoutée au bloc VARIABLE du prompt (jamais au bloc stable) quand un sous-agent est chargé. */
+export function focusDuSousAgent(topic: IdTopic, langue: 'fr' | 'en'): string {
+  const t = TOPICS.find((x) => x.id === topic);
+  const sujet = t?.description ?? topic;
+  return langue === 'fr'
+    ? `Sujet de ce tour : ${sujet} Les outils de ce sujet sont chargés ; si la demande en sort, cherche l'outil avec tool_search_tool_regex.`
+    : `Topic of this turn: ${sujet} This topic's tools are loaded; if the request goes beyond it, look the tool up with tool_search_tool_regex.`;
+}

@@ -79,7 +79,8 @@ describe('paliers de budget (le client n est jamais à sec)', () => {
     expect(palierBudget(4000, 4000)).toBe('epuise');
     expect(palierBudget(0, 500)).toBe('normal'); // pas de plafond → pas de pente
     // La pente joue AVANT tout refus : modèle moins cher, réflexion et historique réduits, puis étapes bornées.
-    expect(reglagesPourPalier('normal', 'claude-sonnet-5')).toMatchObject({ model: 'claude-sonnet-5', effort: 'medium', historique_messages: 60, max_etapes: 8, modele_autorise: true });
+    // Effort bas par défaut (règle stricte, LUMI_EFFORT=medium pour revenir) : la réflexion étendue est réservée aux sous-agents complexes.
+    expect(reglagesPourPalier('normal', 'claude-sonnet-5')).toMatchObject({ model: 'claude-sonnet-5', effort: 'low', historique_messages: 60, max_etapes: 8, modele_autorise: true });
     expect(reglagesPourPalier('econome', 'claude-sonnet-5')).toMatchObject({ model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 8 });
     expect(reglagesPourPalier('restreint', 'claude-sonnet-5')).toMatchObject({ model: 'claude-haiku-4-5', effort: 'low', max_etapes: 2 });
     expect(reglagesPourPalier('epuise', 'claude-sonnet-5')).toMatchObject({ max_etapes: 0, modele_autorise: false });
@@ -224,7 +225,7 @@ describe('orchestrateur', () => {
     const charges = params.tools.filter((t: any) => !t.defer_loading && !t.type);
     expect(charges[charges.length - 1].cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
     expect(params.thinking).toEqual({ type: 'adaptive' });
-    expect(params.output_config).toEqual({ effort: 'medium' });
+    expect(params.output_config).toEqual({ effort: 'low' }); // effort bas par défaut (règle stricte, regles-cout.ts)
   });
 
   it('outil de LECTURE : exécuté avec les gardes, résultat renvoyé au modèle, second appel', async () => {

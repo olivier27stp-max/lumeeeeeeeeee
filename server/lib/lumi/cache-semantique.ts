@@ -47,10 +47,12 @@ export interface EntreeSemantique {
   ts: number;
 }
 
-export type Portee = { genre: 'tenant'; orgId: string; userId: string } | { genre: 'public' };
+export type Portee = { genre: 'tenant'; orgId: string; userId: string } | { genre: 'public' } | { genre: 'global'; espace: string };
 
 export function cleIndex(p: Portee): string {
-  return p.genre === 'public' ? 'lumi:sem:public' : `lumi:sem:${p.orgId}:${p.userId}`;
+  if (p.genre === 'public') return 'lumi:sem:public';
+  if (p.genre === 'global') return `lumi:sem:global:${p.espace}`;
+  return `lumi:sem:${p.orgId}:${p.userId}`;
 }
 
 export function cosinus(a: number[], b: number[]): number {
@@ -102,7 +104,7 @@ export async function memoriserSemantique(p: Portee, e: Omit<EntreeSemantique, '
   const sans = index.filter((x) => x.enonce !== enonce);
   sans.push({ ...e, enonce, ts: Date.now() });
   while (sans.length > MAX_ENTREES) sans.shift();
-  await magasin().set(cle, sans, p.genre === 'public' ? TTL_PUBLIC_S : TTL_TENANT_S);
+  await magasin().set(cle, sans, p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S);
 }
 
 /** Repli : la réponse mémorisée pour cet énoncé n'était pas la bonne. */
@@ -111,5 +113,5 @@ export async function oublierSemantique(p: Portee, enonce: string): Promise<void
   const index = (await magasin().get<EntreeSemantique[]>(cle)) ?? [];
   const n = normaliserEnonce(enonce) ?? '';
   const reste = index.filter((x) => x.enonce !== n);
-  if (reste.length !== index.length) await magasin().set(cle, reste, p.genre === 'public' ? TTL_PUBLIC_S : TTL_TENANT_S);
+  if (reste.length !== index.length) await magasin().set(cle, reste, p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S);
 }

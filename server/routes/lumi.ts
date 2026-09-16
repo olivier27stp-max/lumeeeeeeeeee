@@ -34,6 +34,9 @@ import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
 import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur } from '../lib/lumi/routeur';
+import { sousAgentDepuisVerdict, focusDuSousAgent } from '../lib/lumi/sous-agents';
+import type { IdTopic } from '../lib/lumi/topics';
+import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg } from '../lib/lumi/cache-reponses';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { journaliserTrace, normaliserEnonce, ajouterUsage, usageVide, ETAGE, ORIGINES_TRACE, type OrigineTrace, type UsageAgrege } from '../lib/lumi/traces';
@@ -213,9 +216,10 @@ async function contexteTour(req: Request, res: Response) {
     const { data } = await admin.from('org_knowledge').select('key, value').eq('org_id', auth.orgId).eq('category', 'assistant').eq('is_active', true).order('updated_at', { ascending: false }).limit(30);
     souvenirs = (data ?? []).map((n: any) => ({ key: String(n.key), value: String(n.value ?? '') }));
   } catch { /* non-fatal : Lumi peut encore les relire avec recall_notes */ }
-  const systeme = promptSystemeLumi({ companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs });
+  const promptCtx = { companyName, userName, language, todayIso: new Date().toISOString().slice(0, 10), souvenirs };
+  const systeme = promptSystemeLumi(promptCtx);
   const accessToken = (req.header('authorization') || '').replace(/^Bearer\s+/i, '') || undefined;
-  return { auth, admin, budget, systeme, language, accessToken, fuseau, userName };
+  return { auth, admin, budget, systeme, promptCtx, language, accessToken, fuseau, userName };
 }
 
 async function executerTourSse(opts: {
@@ -233,6 +237,8 @@ async function executerTourSse(opts: {
   cache?: { historiqueVide: boolean; vecteur: Promise<number[] | null> | null };
   /** Verdict du routeur actif déjà obtenu par la route (étage 5 manqué) : tracé, sans second appel. */
   routeur?: ResultatRouteur | null;
+  /** Sous-agent (topic sûr du routeur) : seuls ses outils sont chargés, le sujet est ajouté au bloc variable (B7). */
+  sousAgent?: IdTopic | null;
 }) {
   const { res, ctx, conversationId } = opts;
   const emettreSse = ouvrirSse(res);
@@ -263,11 +269,11 @@ async function executerTourSse(opts: {
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
       enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
-      params: { ...(opts.params ?? {}), ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}) },
+      params: { ...(opts.params ?? {}), ...(opts.sousAgent ? { sous_agent: opts.sousAgent } : {}), ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}) },
       outils, resultat, model, promptVersion: VERSION_PROMPT, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
     });
     // Escalade humaine : le modèle a refusé ou n'a pas pu finir.
-    if (erreurModele === 'refusal' || erreurModele === 'trop_d_etapes') {
+    if (erreurModele === 'refusal' || erreurModele === 'trop_d_etapes' || erreurModele === 'plafond_tour') {
       void escalader(ctx.admin, {
         orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, motif: erreurModele === 'refusal' ? 'refus_modele' : 'trop_d_etapes', fr: ctx.language === 'fr',
         detail: erreurModele === 'refusal'
@@ -288,7 +294,8 @@ async function executerTourSse(opts: {
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
-      systeme: ctx.systeme,
+      systeme: opts.sousAgent ? promptSystemeLumi({ ...ctx.promptCtx, focus: focusDuSousAgent(opts.sousAgent, ctx.language) }) : ctx.systeme,
+      sousAgent: opts.sousAgent ?? null,
       reglages,
       budget: {
         reserver: (cents) => reserverBudget(ctx.admin, ctx.auth.orgId, cents),
@@ -324,6 +331,11 @@ async function executerTourSse(opts: {
       void (async () => {
         const vec = opts.cache?.vecteur ? await opts.cache.vecteur : null;
         if (vec) await memoriserSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches, outils, version: await versionOrg(p.orgId) });
+        // Réponse d'aide pure (seul search_help a servi, aucun nom d'org ni de personne dedans) → cache global 24 h.
+        const nomsSensibles = [ctx.promptCtx.companyName, ctx.promptCtx.userName].filter((x): x is string => !!x && x.length > 2);
+        if (vec && outils.length > 0 && outils.every((o) => o === 'search_help') && !nomsSensibles.some((n) => resultat.texte.toLowerCase().includes(n.toLowerCase()))) {
+          await memoriserSemantique({ genre: 'global', espace: 'aide' }, { enonce: opts.enonce!, vec, texte: resultat.texte, fiches: [], outils, version: 0 });
+        }
       })();
     }
   } catch (err: any) {
@@ -417,6 +429,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (repli && enoncePrecedent) {
       void retirerReponse({ orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: enoncePrecedent });
       void oublierSemantique({ genre: 'tenant', orgId: ctx.auth.orgId, userId: ctx.auth.user.id }, enoncePrecedent);
+      void oublierSemantique({ genre: 'global', espace: 'aide' }, enoncePrecedent);
     }
     // Étages 3 (exact) et 4 (sémantique) : premier message d'une conversation seulement,
     // jamais après un repli ni avec une proposition en attente.
@@ -431,6 +444,10 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         const vec = await vecteur;
         const s = vec ? await chercherSemantique({ genre: 'tenant', orgId: p.orgId, userId: p.userId }, vec, await versionOrg(p.orgId)) : null;
         if (s) { hit = s.entree; etage = ETAGE.cacheSemantique; }
+        // Cache d'AIDE partagé par toutes les orgs (B8) : « comment je fais X dans
+        // Lume » répondu une fois pour tout le monde (aucune donnée d'org dedans).
+        const g = !s && vec ? await chercherSemantique({ genre: 'global', espace: 'aide' }, vec, null) : null;
+        if (g) { hit = g.entree; etage = ETAGE.cacheSemantique; }
       }
       if (hit) {
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
@@ -444,6 +461,28 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: message, etage, action: etage === ETAGE.cacheReponse ? 'cache-exact' : 'cache-semantique', outils: hit.outils, resultat: 'ok',
           model: null, promptVersion: VERSION_PROMPT, usage: usageVide(), costCents: etage === ETAGE.cacheReponse ? 0 : null, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
+    // Règle stricte : une conversation qui a déjà coûté plus que le plafond ne
+    // repasse plus par le modèle (gabarit, 0 token) ; les étages 0-4 ci-dessus
+    // ont déjà eu leur chance. Vérifié seulement quand l'historique est long.
+    if (historique.length >= 10) {
+      const { data: lignes } = await ctx.admin.from('ai_usage').select('cost_cents').eq('conversation_id', conversationId!);
+      const depense = ((lignes ?? []) as Array<{ cost_cents: number | string }>).reduce((s, l) => s + Number(l.cost_cents ?? 0), 0);
+      if (depense >= reglesCout().plafond_cout_conversation_cents) {
+        const debut = Date.now();
+        const texte = messagePlafondConversation(ctx.language);
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('text', { type: 'text', delta: texte });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, etage: ETAGE.interface });
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.interface, action: 'plafond_conversation', params: { depense_cents: Math.round(depense * 100) / 100 },
+          outils: [], resultat: 'refus', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
       }
@@ -491,7 +530,9 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       }
     }
 
-    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
+    // B7 : un topic sûr sans action déterministe → le modèle part avec les outils de ce sous-agent seulement.
+    const sousAgent = sousAgentDepuisVerdict(routeur);
+    await executerTourSse({ req, res, ctx, conversationId: conversationId!, historique, nouveauxAvant: nouveaux, origine: repli ? 'repli' : origine, enonce: message, routeur, sousAgent, ...(repli ? { action: 'repli', params: { candidat_retrait: normaliserEnonce(enoncePrecedent) } } : {}), cache: { historiqueVide: premierMessage, vecteur } });
   } catch (error: any) {
     if (res.headersSent) return res.end();
     return sendSafeError(res, error, 'Lumi failed to respond.', '[lumi/chat]');

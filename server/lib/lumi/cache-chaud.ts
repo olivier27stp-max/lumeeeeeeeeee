@@ -29,11 +29,14 @@ const CADENCE_VERIFICATION_MS = 5 * 60_000;
 let dernierAppelReel = 0;
 let dernierPing = 0;
 let dernierModele = '';
+/** Le préfixe (système + outils) du dernier vrai appel : c'est LUI qu'on rafraîchit, pas un préfixe théorique. */
+let dernierPrefixe: { systeme: Anthropic.Messages.TextBlockParam[]; outils: Anthropic.Messages.ToolUnion[] } | null = null;
 
 /** À appeler à chaque appel réel au modèle : c'est ce qui arme le maintien. */
-export function signalerAppelLumi(model: string): void {
+export function signalerAppelLumi(model: string, prefixe?: { systeme: Anthropic.Messages.TextBlockParam[]; outils: Anthropic.Messages.ToolUnion[] }): void {
   dernierAppelReel = Date.now();
   dernierModele = model;
+  if (prefixe) dernierPrefixe = prefixe;
 }
 
 /** Fenêtre après le dernier appel réel pendant laquelle on garde le cache chaud. 0 = désactivé. */
@@ -63,13 +66,16 @@ type ClientMinimal = { messages: { create: (p: Anthropic.Messages.MessageCreateP
  */
 export async function pingerCache(client: ClientMinimal, model: string = dernierModele || modeleLumi()): Promise<{ model: string; cost_cents: number; cache_lu: number; cache_ecrit: number }> {
   const { outilsClaude, promptSystemeLumi, parametresReflexion } = await import('./orchestrateur');
-  const systeme = promptSystemeLumi({ companyName: null, userName: null, language: 'fr', todayIso: new Date().toISOString().slice(0, 10) });
-  const reflexion = parametresReflexion(model, 'medium');
+  const { reglesCout } = await import('./regles-cout');
+  // Seul le bloc stable (1 h) compte : on le prend tel quel du dernier appel ; le bloc variable est jetable.
+  const systeme = dernierPrefixe ? [dernierPrefixe.systeme[0]] : [promptSystemeLumi({ companyName: null, userName: null, language: 'fr', todayIso: new Date().toISOString().slice(0, 10) })[0]];
+  const outils = dernierPrefixe ? dernierPrefixe.outils : outilsClaude();
+  const reflexion = parametresReflexion(model, reglesCout().effort_defaut);
   const reponse = await client.messages.create({
     model,
     max_tokens: 16,
     system: systeme,
-    tools: outilsClaude(),
+    tools: outils,
     messages: [{ role: 'user', content: 'ping' }],
     ...(reflexion.thinking ? { thinking: reflexion.thinking } : {}),
     ...(reflexion.output_config ? { output_config: reflexion.output_config } : {}),

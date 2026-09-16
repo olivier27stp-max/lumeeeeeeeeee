@@ -23,6 +23,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { companyOrgIds } from '../supabase';
 import { coutEnCents } from './tarifs';
+import { reglesCout } from './regles-cout';
 
 export type Palier = 'normal' | 'econome' | 'restreint' | 'epuise';
 
@@ -35,6 +36,9 @@ export interface EtatBudget {
   epuise: boolean;
   /** Réservations en cours (appels en vol) : comptées dans le palier, pas dans depense_cents. */
   reserve_cents: number;
+  /** Garde-fou journalier (règle stricte) : dépense depuis minuit (Montréal) et sa borne (part du plafond mensuel). */
+  depense_jour_cents: number;
+  plafond_jour_cents: number;
   /** Palier de consommation du mois (voir l'en-tête). Le plafond en dollars est un garde-fou interne. */
   palier: Palier;
 }
@@ -65,7 +69,7 @@ export interface ReglagesPalier {
 /** Réglages imposés par le palier : la pente joue avant tout refus. */
 export function reglagesPourPalier(palier: Palier, modeleNormal: string): ReglagesPalier {
   switch (palier) {
-    case 'normal': return { model: modeleNormal, effort: 'medium', historique_messages: 60, max_etapes: 8, modele_autorise: true };
+    case 'normal': return { model: modeleNormal, effort: reglesCout().effort_defaut, historique_messages: 60, max_etapes: 8, modele_autorise: true };
     case 'econome': return { model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 8, modele_autorise: true };
     case 'restreint': return { model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 2, modele_autorise: true };
     case 'epuise': return { model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 0, modele_autorise: false };
@@ -163,17 +167,34 @@ export async function etatBudget(admin: SupabaseClient, orgId: string): Promise<
       for (const l of (data ?? []) as Array<{ reserved_cents: number | string }>) reserve += Number(l.reserved_cents ?? 0);
     } catch { reserve = 0; }
   }
+  // Garde-fou journalier : ≥ part_budget_par_jour du plafond mensuel brûlée
+  // depuis minuit → palier restreint jusqu'à demain (un script ne vide plus le
+  // mois en un jour). Table/colonne absentes ou erreur → 0 (jamais bloquant).
+  let depenseJour = 0;
+  const plafondJour = budget > 0 ? Math.round(budget * reglesCout().part_budget_par_jour * 100) / 100 : 0;
+  if (includes && budget > 0) {
+    try {
+      const jour = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Montreal', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const minuit = new Date(`${jour}T00:00:00-04:00`); // heure avancée ; l'écart d'une heure l'hiver est sans conséquence (borne, pas facture)
+      const { data } = await admin.from('ai_usage').select('cost_cents').in('org_id', orgIds).gte('created_at', minuit.toISOString());
+      for (const l of (data ?? []) as Array<{ cost_cents: number | string }>) depenseJour += Number(l.cost_cents ?? 0);
+    } catch { depenseJour = 0; }
+  }
   const engage = depense + reserve;
   const reste = Math.max(0, budget - engage);
+  const palierMois: Palier = includes ? palierBudget(budget, engage) : 'normal';
+  const palier: Palier = palierMois === 'epuise' ? 'epuise' : (plafondJour > 0 && depenseJour >= plafondJour ? 'restreint' : palierMois);
   return {
     plan_slug: plan?.slug ?? null,
     includes_ai: includes,
     budget_cents: budget,
     depense_cents: Math.round(depense * 100) / 100,
     reserve_cents: Math.round(reserve * 100) / 100,
+    depense_jour_cents: Math.round(depenseJour * 100) / 100,
+    plafond_jour_cents: plafondJour,
     reste_cents: Math.round(reste * 100) / 100,
     epuise: includes && engage >= budget,
-    palier: includes ? palierBudget(budget, engage) : 'normal',
+    palier,
   };
 }
 

@@ -38,13 +38,17 @@ import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { estimationCoutAppel, type Reservation } from './budget';
 import { serialiserResultat } from './compress';
+import { reglesCout } from './regles-cout';
+import { outilsDuSousAgent } from './sous-agents';
+import type { IdTopic } from './topics';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
 import { ECRITURES_ANODINES } from '../agent/registre';
 
 const MAX_ETAPES = 8;
-const MAX_TOKENS = 4096;
+/** Sortie par appel (réflexion incluse) : règle stricte, voir regles-cout.ts. */
+const MAX_TOKENS = reglesCout().max_tokens_sortie;
 /** Réflexion et effort selon le modèle : Sonnet/Opus 5 = adaptatif + effort ; Haiku 4.5 = rien (non supporté). */
 export function parametresReflexion(model: string, effort: 'low' | 'medium'): Pick<Anthropic.Messages.MessageStreamParams, 'thinking' | 'output_config'> {
   if (/haiku/i.test(model)) return {};
@@ -145,14 +149,17 @@ export const OUTIL_RECHERCHE: Anthropic.Messages.ToolSearchToolRegex20251119 = {
  * [recherche, outils de base (le dernier porte le point de cache), outils différés].
  * Un outil différé ne peut pas porter cache_control (400 de l'API).
  */
-export function outilsClaude(): Anthropic.Messages.ToolUnion[] {
+export function outilsClaude(sousAgent: IdTopic | null = null): Anthropic.Messages.ToolUnion[] {
   const defs: Anthropic.Messages.Tool[] = AGENT_TOOLS.map((t) => ({
     name: t.declaration.name,
     description: t.declaration.description,
     input_schema: (t.declaration.parameters ?? { type: 'object', properties: {} }) as Anthropic.Messages.Tool['input_schema'],
   }));
-  const base = defs.filter((d) => OUTILS_DE_BASE.has(d.name));
-  const differes = defs.filter((d) => !OUTILS_DE_BASE.has(d.name)).map((d) => ({ ...d, defer_loading: true }));
+  // Sous-agent (B7) : le jeu d'outils du topic remplace le jeu de base ; même
+  // ordre stable que AGENT_TOOLS, donc un préfixe en cache par topic.
+  const charges: ReadonlySet<string> = sousAgent ? new Set(outilsDuSousAgent(sousAgent)) : OUTILS_DE_BASE;
+  const base = defs.filter((d) => charges.has(d.name));
+  const differes = defs.filter((d) => !charges.has(d.name)).map((d) => ({ ...d, defer_loading: true }));
   const dernier = base[base.length - 1];
   if (dernier) dernier.cache_control = CACHE_1H;
   return [OUTIL_RECHERCHE, ...base, ...differes];
@@ -170,7 +177,7 @@ export interface Souvenir { key: string; value: string }
  */
 export { ECRITURES_ANODINES } from '../agent/registre';
 
-export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[] }): Anthropic.Messages.TextBlockParam[] {
+export function promptSystemeLumi(ctx: { companyName: string | null; userName: string | null; language: 'fr' | 'en'; todayIso: string; souvenirs?: Souvenir[]; focus?: string | null }): Anthropic.Messages.TextBlockParam[] {
   // Partie STABLE (sans date, nom ni entreprise) → cache. La partie variable suit.
   // Le nom de l'entreprise est dans la partie VARIABLE : mesuré en prod le
   // 2026-09-16, un préfixe qui le contenait était mis en cache PAR org, et
@@ -232,7 +239,8 @@ ${CONSIGNES_COLLEGUE}`;
   // froid (2,05 ¢ mesuré au sondage du 2026-09-16).
   const variable = langue + ' ' + (ctx.language === 'fr'
     ? `Entreprise : ${company}. Aujourd'hui : ${ctx.todayIso}.${ctx.userName ? ` Tu parles à ${ctx.userName}.` : ''}`
-    : `Company: ${company}. Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`) + memoire;
+    : `Company: ${company}. Today is ${ctx.todayIso}.${ctx.userName ? ` You are talking to ${ctx.userName}.` : ''}`) + memoire
+    + (ctx.focus ? `\n\n${ctx.focus}` : '');
   return [
     { type: 'text', text: stable, cache_control: CACHE_1H },
     { type: 'text', text: variable },
@@ -282,14 +290,16 @@ export async function tourLumi(opts: {
    * `plafond: true`. Absent (tests, scripts) = pas de plafond.
    */
   budget?: { reserver: (cents: number) => Promise<Reservation>; regler: (id: string | null, cents: number) => Promise<void> };
+  /** Sous-agent (topic du routeur) : seuls ses outils sont chargés (B7). null = jeu de base. */
+  sousAgent?: IdTopic | null;
   /** Outils d'écriture que l'utilisateur a choisi de ne plus confirmer (« toujours confirmer »). */
   autorisations?: ReadonlySet<string>;
   /** Écritures encore permises d'office dans cette conversation (plafond, voir execution.ts). Absent = pas de plafond. */
   ecrituresRestantes?: number;
 }): Promise<ResultatTour> {
   const model = opts.reglages?.model ?? modeleLumi();
-  const effort = opts.reglages?.effort ?? 'medium';
-  const outils = outilsClaude();
+  const effort = opts.reglages?.effort ?? reglesCout().effort_defaut;
+  const outils = outilsClaude(opts.sousAgent ?? null);
   const messages: Anthropic.Messages.MessageParam[] = [...opts.historique];
   const nouveaux: Anthropic.Messages.MessageParam[] = [];
   const espaceRefs = `${opts.orgId}:${opts.userId}`;
@@ -300,6 +310,12 @@ export async function tourLumi(opts: {
   if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
 
   for (let etape = 0; etape < maxEtapes; etape++) {
+    // Règle stricte : un tour qui a déjà coûté plus que le plafond s'arrête ici
+    // (l'historique est cohérent : le dernier message porte les tool_result).
+    if (coutTotal >= reglesCout().plafond_cout_tour_cents) {
+      opts.emettre({ type: 'error', message: 'plafond_tour' });
+      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
+    }
     // Plafond dur : le coût maximal de l'appel est réservé AVANT de l'envoyer
     // (verrou en base) ; `capped` = rien ne part, la route sert le gabarit.
     const reservation = opts.budget
@@ -322,7 +338,7 @@ export async function tourLumi(opts: {
     });
     stream.on('text', (delta) => { texteTotal += delta; opts.emettre({ type: 'text', delta }); });
     const reponse = await stream.finalMessage();
-    signalerAppelLumi(model); // arme le maintien du cache 1 h (cache-chaud.ts)
+    signalerAppelLumi(model, { systeme: opts.systeme, outils }); // arme le maintien du cache 1 h sur CE préfixe (cache-chaud.ts)
 
     const cout = coutEnCents(model, reponse.usage);
     coutTotal += cout;
