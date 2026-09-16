@@ -68,26 +68,29 @@ vi.mock('../server/lib/supabase', () => ({
 }));
 
 describe('paliers de budget (le client n est jamais à sec)', () => {
-  it('normal sous 60 %, économe à partir de 60 %, ralenti à 100 %', async () => {
+  it('normal sous 70 %, économe à 70 %, restreint à 90 %, épuisé à 100 %', async () => {
     const { palierBudget, reglagesPourPalier } = await import('../server/lib/lumi/budget');
     expect(palierBudget(4000, 0)).toBe('normal');
-    expect(palierBudget(4000, 2399)).toBe('normal');
-    expect(palierBudget(4000, 2400)).toBe('econome');
-    expect(palierBudget(4000, 3999)).toBe('econome');
-    expect(palierBudget(4000, 4000)).toBe('ralenti');
+    expect(palierBudget(4000, 2799)).toBe('normal');
+    expect(palierBudget(4000, 2800)).toBe('econome');
+    expect(palierBudget(4000, 3599)).toBe('econome');
+    expect(palierBudget(4000, 3600)).toBe('restreint');
+    expect(palierBudget(4000, 3999)).toBe('restreint');
+    expect(palierBudget(4000, 4000)).toBe('epuise');
     expect(palierBudget(0, 500)).toBe('normal'); // pas de plafond → pas de pente
-    // La pente joue AVANT tout refus : modèle moins cher, réflexion réduite.
-    expect(reglagesPourPalier('normal', 'claude-sonnet-5')).toEqual({ model: 'claude-sonnet-5', effort: 'medium' });
-    expect(reglagesPourPalier('econome', 'claude-sonnet-5')).toEqual({ model: 'claude-haiku-4-5', effort: 'low' });
-    expect(reglagesPourPalier('ralenti', 'claude-sonnet-5')).toEqual({ model: 'claude-haiku-4-5', effort: 'low' });
+    // La pente joue AVANT tout refus : modèle moins cher, réflexion et historique réduits, puis étapes bornées.
+    expect(reglagesPourPalier('normal', 'claude-sonnet-5')).toMatchObject({ model: 'claude-sonnet-5', effort: 'medium', historique_messages: 60, max_etapes: 8, modele_autorise: true });
+    expect(reglagesPourPalier('econome', 'claude-sonnet-5')).toMatchObject({ model: 'claude-haiku-4-5', effort: 'low', historique_messages: 6, max_etapes: 8 });
+    expect(reglagesPourPalier('restreint', 'claude-sonnet-5')).toMatchObject({ model: 'claude-haiku-4-5', effort: 'low', max_etapes: 2 });
+    expect(reglagesPourPalier('epuise', 'claude-sonnet-5')).toMatchObject({ max_etapes: 0, modele_autorise: false });
   });
 
   it('etatBudget expose le palier ; à plafond atteint, epuise reste vrai (garde-fou interne)', async () => {
     const { etatBudget } = await import('../server/lib/lumi/budget');
-    const eco = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 2500 }) as any, 'org-1');
+    const eco = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 2900 }) as any, 'org-1');
     expect(eco.palier).toBe('econome');
     const plein = await etatBudget(adminFactice({ slug: 'pro', includes_ai: true, ai_monthly_budget_cents: 4000 }, { 'org-1': 4000 }) as any, 'org-1');
-    expect(plein).toMatchObject({ palier: 'ralenti', epuise: true });
+    expect(plein).toMatchObject({ palier: 'epuise', epuise: true });
   });
 
   it('le tour utilise le modèle et l effort du palier', async () => {
@@ -99,6 +102,29 @@ describe('paliers de budget (le client n est jamais à sec)', () => {
     // Haiku n'accepte pas l'effort : il n'est pas envoyé (voir parametresReflexion).
     expect(instantanes[0].output_config).toBeUndefined();
     expect(journal[0].model).toBe('claude-haiku-4-5');
+  });
+
+  it('plafond dur : réservation refusée → rien ne part au modèle, le tour rend plafond', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    const avant = instantanes.length;
+    const reservations: number[] = [];
+    const r = await tourLumi({ ...baseTour([], []), budget: { reserver: async (c) => { reservations.push(c); return { id: null, statut: 'capped' }; }, regler: async () => {} } });
+    expect(r.plafond).toBe(true);
+    expect(instantanes.length).toBe(avant);       // aucun appel API
+    expect(reservations[0]).toBeGreaterThan(0);   // le coût maximal a bien été estimé
+    // Palier épuisé : 0 étape → plafond sans même réserver.
+    const r2 = await tourLumi({ ...baseTour([], []), reglages: { model: 'claude-haiku-4-5', effort: 'low', max_etapes: 0 } });
+    expect(r2.plafond).toBe(true);
+    expect(instantanes.length).toBe(avant);
+  });
+
+  it('réservation acceptée → réglée au coût réel après l appel', async () => {
+    const { tourLumi } = await import('../server/lib/lumi/orchestrateur');
+    reponses.push({ content: [{ type: 'text', text: 'Ok.' }], stop_reason: 'end_turn', usage });
+    const regles: Array<[string | null, number]> = [];
+    const r = await tourLumi({ ...baseTour([], []), budget: { reserver: async () => ({ id: 'res-1', statut: 'ok' }), regler: async (id, c) => { regles.push([id, c]); } } });
+    expect(r.plafond).toBeUndefined();
+    expect(regles).toEqual([['res-1', r.cost_cents]]);
   });
 });
 

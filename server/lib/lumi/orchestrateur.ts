@@ -36,6 +36,7 @@ import { masquerIds, demasquerIds } from '../agent/refs';
 import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
+import { estimationCoutAppel, type Reservation } from './budget';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
@@ -259,6 +260,8 @@ export interface ResultatTour {
   proposition: { tool_use_id: string; tool: string; args: Record<string, any>; groupe?: Array<{ tool_use_id: string; tool: string; args: Record<string, any> }> } | null;
   texte: string;
   cost_cents: number;
+  /** Plafond du budget atteint : l'étape n'a pas été envoyée au modèle (la route sert le message gabarit). */
+  plafond?: boolean;
 }
 
 export async function tourLumi(opts: {
@@ -270,8 +273,14 @@ export async function tourLumi(opts: {
   historique: Anthropic.Messages.MessageParam[];
   emettre: (e: EvenementLumi) => void;
   journaliser: (u: UsageTokens, model: string, cost_cents: number) => Promise<void>;
-  /** Réglages imposés par le palier de budget (mode économe : Haiku, effort bas). */
-  reglages?: { model: string; effort: 'low' | 'medium' };
+  /** Réglages imposés par le palier de budget (économe : Haiku, effort bas ; restreint : 2 étapes ; épuisé : 0). */
+  reglages?: { model: string; effort: 'low' | 'medium'; max_etapes?: number };
+  /**
+   * Plafond dur : avant chaque appel, le coût maximal est réservé ; après,
+   * réglé au coût réel. `capped` → l'étape n'est pas envoyée, le tour rend
+   * `plafond: true`. Absent (tests, scripts) = pas de plafond.
+   */
+  budget?: { reserver: (cents: number) => Promise<Reservation>; regler: (id: string | null, cents: number) => Promise<void> };
   /** Outils d'écriture que l'utilisateur a choisi de ne plus confirmer (« toujours confirmer »). */
   autorisations?: ReadonlySet<string>;
   /** Écritures encore permises d'office dans cette conversation (plafond, voir execution.ts). Absent = pas de plafond. */
@@ -286,7 +295,18 @@ export async function tourLumi(opts: {
   let texteTotal = '';
   let coutTotal = 0;
 
-  for (let etape = 0; etape < MAX_ETAPES; etape++) {
+  const maxEtapes = Math.min(MAX_ETAPES, Math.max(0, opts.reglages?.max_etapes ?? MAX_ETAPES));
+  if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
+
+  for (let etape = 0; etape < maxEtapes; etape++) {
+    // Plafond dur : le coût maximal de l'appel est réservé AVANT de l'envoyer
+    // (verrou en base) ; `capped` = rien ne part, la route sert le gabarit.
+    const reservation = opts.budget
+      ? await opts.budget.reserver(estimationCoutAppel(model, JSON.stringify(messages).length + opts.systeme.reduce((n, b) => n + b.text.length, 0), MAX_TOKENS))
+      : null;
+    if (reservation?.statut === 'capped') {
+      return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
+    }
     const stream = clientAnthropic().messages.stream({
       model,
       max_tokens: MAX_TOKENS,
@@ -306,6 +326,7 @@ export async function tourLumi(opts: {
     const cout = coutEnCents(model, reponse.usage);
     coutTotal += cout;
     await opts.journaliser(reponse.usage, model, cout);
+    if (reservation && opts.budget) await opts.budget.regler(reservation.id, cout);
     opts.emettre({ type: 'usage', model, usage: reponse.usage, cost_cents: cout });
 
     const assistant: Anthropic.Messages.MessageParam = { role: 'assistant', content: reponse.content };

@@ -20,7 +20,7 @@ import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
-import { etatBudget, journaliserUsage, reglagesPourPalier, attenteRalenti, alerterSiSeuilFranchi } from '../lib/lumi/budget';
+import { etatBudget, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
 import { modeleLumi } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { redisRateLimit } from '../lib/rate-limiter';
@@ -28,7 +28,7 @@ import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
 import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definirMode, MODES_LUMI, PLAFOND_ECRITURES_PAR_CONVERSATION, compterEcritures, type ModeLumi, type ReçuExecution } from '../lib/lumi/execution';
 import { getUserContext } from '../lib/rbac';
-import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi } from '../lib/lumi/orchestrateur';
+import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
@@ -104,7 +104,7 @@ function ouvrirSse(res: Response) {
 }
 
 // ── Historique ──────────────────────────────────────────────────
-async function chargerHistorique(conversationId: string, cleRefs?: string): Promise<Msg[]> {
+async function chargerHistorique(conversationId: string, cleRefs?: string, max = MAX_MESSAGES_HISTORIQUE): Promise<Msg[]> {
   const { data, error } = await getServiceClient()
     .from('lumi_messages')
     .select('role, content, refs, created_at')
@@ -115,10 +115,10 @@ async function chargerHistorique(conversationId: string, cleRefs?: string): Prom
   // redémarrage du serveur n'efface plus ce que l'assistant sait désigner.
   if (cleRefs) for (const m of data ?? []) if ((m as any).refs) restaurerRefs(cleRefs, (m as any).refs);
   let msgs = (data ?? []).map((m: any) => ({ role: m.role, content: m.content }) as Msg);
-  if (msgs.length > MAX_MESSAGES_HISTORIQUE) {
+  if (msgs.length > max) {
     // On coupe à une frontière de message utilisateur TEXTE (jamais entre un
     // tool_use et son tool_result, sinon l'API refuse la conversation).
-    let i = msgs.length - MAX_MESSAGES_HISTORIQUE;
+    let i = msgs.length - max;
     while (i < msgs.length && !(msgs[i].role === 'user' && typeof msgs[i].content === 'string')) i++;
     msgs = msgs.slice(i);
   }
@@ -189,16 +189,9 @@ async function contexteTour(req: Request, res: Response) {
     res.status(403).json({ error: 'Lumi is not included in this plan.', code: 'plan_sans_lumi', budget });
     return null;
   }
-  // Plafond atteint : Lumi ralentit au lieu de mourir — un tour par minute
-  // (sur Haiku, effort bas) jusqu'au 1er. Le client n'est jamais à sec.
-  if (budget.palier === 'ralenti') {
-    const attente = await attenteRalenti(admin, auth.orgId);
-    if (attente > 0) {
-      res.setHeader('Retry-After', String(attente));
-      res.status(429).json({ error: 'Lumi is slowed down this month.', code: 'ralenti', retry_after_s: attente, budget });
-      return null;
-    }
-  }
+  // Plafond atteint (palier « epuise ») : rien n'est refusé ici. Les étages
+  // déterministes (raccourcis, caches) répondent encore ; l'appel au modèle
+  // est bloqué par la réservation dans executerTourSse (message gabarit).
   // Alerte à l'exploitant au passage à 60 % (une fois par org et par mois).
   void alerterSiSeuilFranchi(admin, auth.orgId, budget, async (subject, text) => {
     const to = process.env.LUMI_ALERT_EMAIL || process.env.SECURITY_ALERT_EMAIL;
@@ -286,13 +279,19 @@ async function executerTourSse(opts: {
     for (const recu of opts.execute ?? []) if (!ferme) emettreSse('executed', recu);
     const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
     if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant, cleRefs);
-    const resultat = await tourLumi({
+    const reglages = reglagesPourPalier(ctx.budget.palier, modeleLumi());
+    // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
+    const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
       orgId: ctx.auth.orgId,
       userId: ctx.auth.user.id,
       accessToken: ctx.accessToken,
       systeme: ctx.systeme,
-      reglages: reglagesPourPalier(ctx.budget.palier, modeleLumi()),
+      reglages,
+      budget: {
+        reserver: (cents) => reserverBudget(ctx.admin, ctx.auth.orgId, cents),
+        regler: (id, cents) => reglerBudget(ctx.admin, id, cents),
+      },
       autorisations: await autorisationsDe(ctx.admin, ctx.auth.orgId, ctx.auth.user.id, Object.keys(TOOLS_BY_NAME).filter((n) => TOOLS_BY_NAME[n]?.kind === 'write')),
       ecrituresRestantes: Math.max(0, PLAFOND_ECRITURES_PAR_CONVERSATION - compterEcritures([...opts.historique, ...opts.nouveauxAvant])),
       historique: [...opts.historique, ...opts.nouveauxAvant],
@@ -304,12 +303,20 @@ async function executerTourSse(opts: {
         cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
       }),
     });
+    if (resultat.plafond) {
+      // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
+      // message gabarit (0 token), les actions rapides restent servies.
+      const texte = messagePause(ctx.language);
+      if (!ferme) emettreSse('text', { type: 'text', delta: texte });
+      resultat.nouveauxMessages.push({ role: 'assistant', content: [{ type: 'text', text: texte }] });
+      resultat.texte = resultat.texte ? `${resultat.texte}\n\n${texte}` : texte;
+    }
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition, etage: ETAGE.agent });
-    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.proposition?.tool ?? null);
+    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null);
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
-    if (opts.cache && opts.enonce && !erreurModele && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee })) {
+    if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee })) {
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };
       void ecrireReponse(p, { texte: resultat.texte, fiches, outils });
       void (async () => {
@@ -347,7 +354,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (conversationId) {
       const { data: conv } = await ctx.admin.from('lumi_conversations').select('id').eq('id', conversationId).eq('org_id', ctx.auth.orgId).eq('user_id', ctx.auth.user.id).maybeSingle();
       if (!conv) return res.status(404).json({ error: 'Conversation not found.' });
-      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`);
+      // Fenêtre d'historique selon le palier de budget (60 messages ; 6 en économe/restreint).
+      historique = await chargerHistorique(conversationId, `${ctx.auth.orgId}:${ctx.auth.user.id}`, reglagesPourPalier(ctx.budget.palier, modeleLumi()).historique_messages);
     } else {
       const { data: conv, error } = await ctx.admin.from('lumi_conversations')
         .insert({ org_id: ctx.auth.orgId, user_id: ctx.auth.user.id, title: message.slice(0, 80) })
