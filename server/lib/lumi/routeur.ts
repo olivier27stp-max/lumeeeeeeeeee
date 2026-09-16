@@ -110,6 +110,7 @@ Exemples (québécois oral, fautes incluses) :
 - « où est mon équipe », « ma gang est où là », « ils sont rendus où » → planification, ou-equipe
 - « mes soumissions en attente », « les devis pas répondus », « quelles soumissions attendent » → facturation, devis-attente
 - « montre-moi le job 33 », « job numéro 33 », « la job #33 » → planification, job-numero, numero 33
+- « c'est quoi la liste de vérification du job 33 », « y a-tu un contrat sur le job 33 », « prépare un contrat pour le job 33 », « facture le job 33 » → topic du sujet, action null (job-numero SEULEMENT quand on veut voir le job et rien d'autre ; un numéro dans une autre demande n'est pas job-numero)
 - « combien j'ai facturé ce mois-ci », « mes revenus du mois », « ça donne quoi ce mois-ci » → facturation, revenu-mois
 - « relance mes retards », « envoie un texto à Tremblay », « crée une job chez Gagnon » → topic du sujet, action null (écriture)
 - « parle-moi de Marie Tremblay », « les factures de Gagnon », « c'est quoi le numéro de Lapointe » → topic du sujet, action null (nom propre)

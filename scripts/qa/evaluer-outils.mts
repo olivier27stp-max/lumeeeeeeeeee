@@ -124,9 +124,9 @@ const CAS: Array<{ outil: string; q: string; voisins?: string[] }> = [
   // ── Équipe, heures, paie ──
   { outil: 'list_teams', q: 'Quelles équipes (crews) j’ai ?' },
   { outil: 'list_invitations', q: 'Quelles invitations d’équipe sont encore en attente ?' },
-  { outil: 'invite_member', q: 'Invite marc.tremblay@exemple.ca comme technicien.' },
-  { outil: 'resend_invitation', q: 'Renvoie l’invitation à marc.tremblay@exemple.ca.', voisins: ['list_invitations'] },
-  { outil: 'revoke_invitation', q: 'Annule l’invitation envoyée à marc.tremblay@exemple.ca.', voisins: ['list_invitations'] },
+  { outil: 'invite_member', q: 'Invite marc.tremblay@example.com comme technicien.' },
+  { outil: 'resend_invitation', q: 'Renvoie l’invitation à marc.tremblay@example.com.', voisins: ['list_invitations'] },
+  { outil: 'revoke_invitation', q: 'Annule l’invitation envoyée à marc.tremblay@example.com.', voisins: ['list_invitations'] },
   { outil: 'update_member_role', q: 'Passe le premier technicien de mon équipe au rôle admin.', voisins: ['get_team'] },
   { outil: 'remove_member', q: 'Suspends l’accès du premier technicien de mon équipe.', voisins: ['get_team'] },
   { outil: 'reactivate_member', q: 'Réactive l’accès du membre suspendu.', voisins: ['get_team'] },
