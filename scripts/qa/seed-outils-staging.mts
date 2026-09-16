@@ -124,7 +124,7 @@ if (coursId) {
 
 // ── Terrain : une maison, un territoire ──
 await siAbsent('list_houses', { query: 'Principale' }, '123 rue Principale', 'create_house', { address: '123 rue Principale', lat: 45.5017, lng: -73.5673, status: 'no_answer' });
-await siAbsent('list_territories', {}, 'Vieux-Longueuil', 'create_territory', { name: 'Vieux-Longueuil', polygon: [{ lat: 45.531, lng: -73.515 }, { lat: 45.539, lng: -73.515 }, { lat: 45.539, lng: -73.505 }, { lat: 45.531, lng: -73.505 }] });
+await siAbsent('list_territories', {}, 'Vieux-Longueuil', 'create_territory', { name: 'Vieux-Longueuil', polygon: [[-73.515, 45.531], [-73.515, 45.539], [-73.505, 45.539], [-73.505, 45.531]] });
 
 // ── Job 33 : une liste de vérification et une récurrence (la batterie les lit, coche, arrête) ──
 const job33 = objets(await lire('list_jobs', { query: '33', limit: 5 }), '33').find((o) => String(o.number ?? o.numero ?? '') === '33' || contient(o, 'Lavage de vitres'))?.id as string | undefined;
