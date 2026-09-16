@@ -84,6 +84,7 @@ const CAS: Array<{ outil: string; q: string; voisins?: string[] }> = [
   { outil: 'refund_payment', q: 'Rembourse le dernier paiement par carte de Sophie Bouchard.', voisins: ['list_payments'] },
   { outil: 'charge_card_on_file', q: 'Charge la carte enregistrée de Jean-Pierre Gagnon pour le solde de la facture INV-000004.', voisins: ['list_invoices'] },
   { outil: 'remove_card_on_file', q: 'Retire la carte enregistrée de Jean-Pierre Gagnon.', voisins: ['search_clients'] },
+  { outil: 'get_reminder_settings', q: 'C’est quoi mes relances de paiement automatiques en ce moment ?' },
   { outil: 'update_reminder_settings', q: 'Change mes relances de paiement automatiques : à 3, 10 et 20 jours après l’échéance.' },
   { outil: 'list_payments', q: 'Montre-moi les paiements reçus ce mois-ci.' },
   // ── Jobs, calendrier ──

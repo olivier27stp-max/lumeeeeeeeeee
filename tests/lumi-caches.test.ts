@@ -24,6 +24,10 @@ describe('garde lexical du cache sémantique', () => {
     expect(lexicalementProche('Montre-moi mes modèles de facture.', 'montre moi mes modeles de soumission avec les prix')).toBe(false);
     expect(lexicalementProche('mes modèles de soumission', 'montre moi mes modeles de soumission avec les prix')).toBe(true);
     expect(lexicalementProche('ai-je des jobs en retard', 'est ce que j ai des jobs en retard')).toBe(true);
+    expect(lexicalementProche('Peux-tu me montrer mes factures impayées ?', 'mes factures impayees')).toBe(true);
+    // Le nom propre ne doit pas suffire : deux actions différentes sur la même personne.
+    expect(lexicalementProche('Enlève la carte enregistrée de Jean-Pierre Gagnon.', 'supprime la carte de jean pierre gagnon du pipeline')).toBe(false);
+    expect(lexicalementProche('Montre-moi les paiements reçus ce mois-ci.', 'combien j ai encaisse ce mois ci')).toBe(false);
     // Sans énoncé fourni, meilleure() ne filtre pas (appelants anciens).
     const e = { enonce: 'mes modeles de soumission', vec: [1, 0], texte: 'x', fiches: [], outils: [], version: 0, ts: Date.now() };
     expect(meilleure([e], [1, 0], null)).not.toBeNull();

@@ -83,7 +83,7 @@ export async function embed(texte: string, fetchImpl: typeof fetch = fetch): Pro
 
 /** La meilleure entrée au-dessus du seuil, pour cette portée et cette version (pur sur l'index). */
 /** Mots creux d'une question (verbes de demande, déterminants) : ils ne distinguent rien. */
-const MOTS_CREUX: ReadonlySet<string> = new Set(['montre', 'montrer', 'voir', 'liste', 'lister', 'dis', 'donne', 'quoi', 'quel', 'quels', 'quelle', 'quelles', 'combien', 'comment', 'avec', 'pour', 'dans', 'tous', 'toutes', 'mes', 'mon', 'les', 'des', 'une', 'pas', 'que', 'qui', 'est', 'sont', 'jai', 'moi', 'show', 'list', 'what', 'which', 'the', 'and', 'all']);
+const MOTS_CREUX: ReadonlySet<string> = new Set(['montre', 'montrer', 'voir', 'liste', 'lister', 'dis', 'donne', 'quoi', 'quel', 'quels', 'quelle', 'quelles', 'combien', 'comment', 'avec', 'pour', 'dans', 'tous', 'toutes', 'mes', 'mon', 'les', 'des', 'une', 'pas', 'que', 'qui', 'est', 'sont', 'jai', 'moi', 'peux', 'peut', 'veux', 'faut', 'pourrais', 'stp', 'svp', 'plait', 'chez', 'encore', 'actuellement', 'presentement', 'show', 'list', 'what', 'which', 'the', 'and', 'all', 'can', 'you', 'please', 'have']);
 /** Mots porteurs d'un énoncé normalisé (≥ 3 lettres, hors mots creux), pour le garde lexical. */
 function motsPorteurs(enonce: string): Set<string> {
   return new Set((normaliserEnonce(enonce) ?? '').split(/\s+/).filter((m) => m.length >= 3 && !MOTS_CREUX.has(m)));
@@ -93,10 +93,13 @@ function motsPorteurs(enonce: string): Set<string> {
  * Garde lexical : deux questions courtes qui ne diffèrent que par le nom clé
  * (« mes modèles de soumission » / « mes modèles de facture ») ont un cosinus
  * ≥ 0,92 et recevaient la même réponse (batterie du 2026-09-16). En plus du
- * cosinus, il faut que ≥ 60 % des mots porteurs de la question soient dans
- * l'énoncé mémorisé. Sans énoncé fourni (appelants anciens) : pas de garde.
+ * cosinus, il faut que ≥ 75 % des mots porteurs de la question soient dans
+ * l'énoncé mémorisé (60 % laissait passer « enlève la carte enregistrée de
+ * Gagnon » ← « supprime la carte de Gagnon du pipeline » : le nom propre
+ * pèse trop). Un cache raté coûte 1 ¢ ; une fausse réponse coûte la
+ * confiance. Sans énoncé fourni (appelants anciens) : pas de garde.
  */
-export const PART_MOTS_COMMUNS_MIN = 0.6;
+export const PART_MOTS_COMMUNS_MIN = 0.75;
 export function lexicalementProche(enonce: string, memorise: string): boolean {
   const a = motsPorteurs(enonce);
   if (a.size === 0) return true;

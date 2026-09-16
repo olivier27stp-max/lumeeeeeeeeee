@@ -1875,6 +1875,31 @@ const removeCardOnFileTool: AgentTool = {
 
 const CANAUX_RAPPEL = ['email', 'sms', 'both'];
 
+const getReminderSettingsTool: AgentTool = {
+  kind: 'read',
+  declaration: {
+    name: 'get_reminder_settings',
+    description: 'The org’s automatic payment reminder settings (Settings → Payments): on/off, the schedule (days after due date + channel email/sms/both) and whether custom texts are set. To change them → update_reminder_settings.',
+    parameters: { type: 'object', properties: {} },
+  },
+  handler: async (_args, ctx) => {
+    const { data, error } = await ctx.client
+      .from('reminder_settings')
+      .select('enabled, schedule, custom_email_subject, custom_email_body, custom_sms_body')
+      .eq('org_id', ctx.orgId)
+      .maybeSingle();
+    if (error) return erreurOutil('reminder_settings', error);
+    // Sans ligne (écran jamais ouvert) : les valeurs par défaut de la base.
+    const schedule = Array.isArray(data?.schedule) ? data!.schedule : [{ days_after_due: 1, channel: 'email' }, { days_after_due: 7, channel: 'email' }, { days_after_due: 14, channel: 'both' }, { days_after_due: 30, channel: 'both' }];
+    return {
+      enabled: data ? Boolean(data.enabled) : true,
+      schedule: schedule.map((e: any) => ({ jours_apres_echeance: e.days_after_due, canal: e.channel })),
+      textes_personnalises: { courriel: Boolean(data?.custom_email_subject || data?.custom_email_body), texto: Boolean(data?.custom_sms_body) },
+      note: data ? null : 'Réglages par défaut (jamais modifiés).',
+    };
+  },
+};
+
 const updateReminderSettingsTool: AgentTool = {
   kind: 'write',
   needsIdentity: true,
@@ -2037,7 +2062,7 @@ export const OUTILS_ARGENT: AgentTool[] = [
   listInvoiceTemplatesTool, createInvoiceTemplateTool, updateInvoiceTemplateTool, deleteInvoiceTemplateTool,
   // Paiements
   createPaymentRequestTool, resendPaymentRequestTool, refundPaymentTool, chargeCardOnFileTool, removeCardOnFileTool,
-  updateReminderSettingsTool, listPaymentsTool,
+  getReminderSettingsTool, updateReminderSettingsTool, listPaymentsTool,
 ];
 
 const A = (a: Partial<{ sensible: boolean; reversible: boolean; vers_client: boolean }>) =>
@@ -2130,6 +2155,7 @@ export const PERMISSIONS_ARGENT: Record<string, { cle: PermissionKey; capacite: 
   remove_card_on_file:       { cle: 'clients.update',     capacite: 'la modification des clients (carte au dossier)' },
   update_reminder_settings:  { cle: 'settings.update',    capacite: 'les réglages de rappels de paiement' },
   list_payments:             { cle: 'payments.read',      capacite: 'la consultation des paiements' },
+  get_reminder_settings:     { cle: 'settings.read',      capacite: 'les réglages de rappels de paiement' },
 };
 
 /** Topic de chaque outil (à fusionner dans TOPICS) : tout ce module relève de « facturation ». */

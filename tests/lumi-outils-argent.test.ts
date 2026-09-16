@@ -95,8 +95,8 @@ describe('manifestes : outils, registre, permissions, topics', () => {
   const noms = OUTILS_ARGENT.map((t) => t.declaration.name);
   const ecritures = OUTILS_ARGENT.filter((t) => t.kind === 'write').map((t) => t.declaration.name);
 
-  it('37 outils aux noms uniques, tous avec handler, description en anglais', () => {
-    expect(noms.length).toBe(37);
+  it('38 outils aux noms uniques, tous avec handler, description en anglais', () => {
+    expect(noms.length).toBe(38);
     expect(new Set(noms).size).toBe(noms.length);
     for (const t of OUTILS_ARGENT) {
       expect(typeof t.handler, t.declaration.name).toBe('function');
