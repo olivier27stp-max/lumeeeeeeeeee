@@ -37,6 +37,7 @@ import { CONSIGNES_COLLEGUE } from '../agent/consignesCollegue';
 import type { Rapport } from '../agent/tools-rapports';
 import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { estimationCoutAppel, type Reservation } from './budget';
+import { serialiserResultat } from './compress';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
@@ -396,7 +397,8 @@ export async function tourLumi(opts: {
           const fiches = fichesDuResultat(appel.name, args, r.result);
           if (fiches.length) opts.emettre({ type: 'fiches', fiches });
           const masque = masquerIds(espaceRefs, r.result);
-          resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: JSON.stringify(masque ?? null).slice(0, 60_000) });
+          // Compacté (vides retirés, listes en table) : −35 à −45 % de tokens sur une liste, sans perte (compress.ts).
+          resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: serialiserResultat(masque) });
         }
       } catch (err: any) {
         // Jamais le texte brut d'une erreur (internes de la base) au modèle.
