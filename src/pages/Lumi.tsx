@@ -18,6 +18,7 @@ import PageHeader from '../components/ui/PageHeader';
 import { useTranslation } from '../i18n';
 import { cn } from '../lib/utils';
 import { confirmer } from '../components/ui/ConfirmDialog';
+import { supabase } from '../lib/supabase';
 import {
   chargerConversationLumi, deciderPropositionLumi, envoyerMessageLumi, listerConversationsLumi, quotaLumi, supprimerConversationLumi,
   listerAutorisationsLumi, definirAutorisationLumi, modeLumi, definirModeLumi, executerActionLumi, type ModeLumi, type OrigineMessageLumi, type SuggestionLumi,
@@ -249,6 +250,11 @@ export default function Lumi() {
   const [budget, setBudget] = useState<BudgetLumi | null>(null);
   /** Total tokens/coût de la conversation chargée depuis l'historique (ai_usage). */
   const [usageConversation, setUsageConversation] = useState<UsageLumi | null>(null);
+  /** Compte interne (@lume-test.ca : bots d'évaluation, équipe Lume) : voit modèle et tokens. Un client ne voit que le coût. */
+  const [interne, setInterne] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setInterne(/@lume-test\.ca$/i.test(data.user?.email || ''))).catch(() => setInterne(false));
+  }, []);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
   const idRef = useRef(1);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -574,7 +580,9 @@ export default function Lumi() {
             {fmtDollars(budget.depense_cents)} / {fmtDollars(budget.budget_cents)}
             {usageConversation && conversationId && (
               <span className="ml-2 text-text-tertiary" title={fr ? 'Cette conversation (historique) : tokens entrés → sortis, coût' : 'This conversation (history): tokens in → out, cost'}>
-                · {fmtTokens(usageConversation.input_tokens, fr)} → {fmtTokens(usageConversation.output_tokens, fr)} tokens · {fmtDollars(usageConversation.cost_cents)}
+                {interne
+                  ? `· ${fmtTokens(usageConversation.input_tokens, fr)} → ${fmtTokens(usageConversation.output_tokens, fr)} tokens · ${fmtDollars(usageConversation.cost_cents)}`
+                  : `· ${fr ? 'cette conversation' : 'this conversation'} ${fmtDollars(usageConversation.cost_cents)}`}
               </span>
             )}
           </span>
@@ -722,7 +730,9 @@ export default function Lumi() {
                         </span>
                         {!reflechit && m.usage && (
                           <span className="text-[11px] font-normal text-text-tertiary" title={fr ? `${m.usage.appels} appel(s) au modèle · ${fmtTokens(m.usage.cache_read_input_tokens, fr)} tokens lus en cache` : `${m.usage.appels} model call(s) · ${fmtTokens(m.usage.cache_read_input_tokens, fr)} cached tokens read`}>
-                            · {nomModele(m.usage.model)} · {fmtTokens(m.usage.input_tokens, fr)} → {fmtTokens(m.usage.output_tokens, fr)} tokens · {fmtDollars(m.usage.cost_cents)}
+                            {interne
+                              ? `· ${nomModele(m.usage.model)} · ${fmtTokens(m.usage.input_tokens, fr)} → ${fmtTokens(m.usage.output_tokens, fr)} tokens · ${fmtDollars(m.usage.cost_cents)}`
+                              : `· ${fmtDollars(m.usage.cost_cents)}`}
                           </span>
                         )}
                         {etapes.length > 0 && <ChevronDown size={12} className="lumi-chev text-text-tertiary" />}
