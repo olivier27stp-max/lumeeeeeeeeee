@@ -14,7 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { logger } from '../logger';
-import { isSlackConfigured, identiteBot, nomUtilisateurSlack, texteDepuisSlack, lireRepliquesSlack } from '../slack';
+import { isSlackConfigured, identiteBot, nomUtilisateurSlack, texteDepuisSlack, lireRepliquesSlack, accuserLivraisonSlack } from '../slack';
 import { ajouterMessage, notifierClientReponse, type Ticket } from './tickets';
 
 export interface EvenementMessageSlack {
@@ -63,6 +63,8 @@ export async function relayerReponseSlack(e: EvenementMessageSlack, ticketConnu?
   await admin.from('support_tickets').update({ status: 'answered' }).eq('id', t.id).neq('status', 'closed');
   await notifierClientReponse(admin, t, corps, auteur);
   logger.info('[support/relais] réponse relayée au client', { ticketId: t.id, auteur });
+  // ✅ sur le message dans Slack : c'est comme ça qu'on SAIT que c'est rendu au client.
+  if (e.channel && e.ts) await accuserLivraisonSlack(e.channel, e.ts, true, `Livré à ${t.user_name || 'le client'} (dans l’app + courriel)`);
   return 'relayed';
 }
 

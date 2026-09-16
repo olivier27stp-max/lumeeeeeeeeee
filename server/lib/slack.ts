@@ -114,6 +114,29 @@ export async function deposerFichierSlack(p: { channel: string; thread_ts?: stri
   await appel('files.completeUploadExternal', { files: [{ id: u.file_id, title: p.titre }], channel_id: p.channel, ...(p.thread_ts ? { thread_ts: p.thread_ts } : {}) });
 }
 
+/** Réaction sur un message (scope reactions:write). Lève sinon. */
+export async function reagirSlack(channel: string, timestamp: string, emoji: string): Promise<void> {
+  try { await appel('reactions.add', { channel, timestamp, name: emoji }); } catch (e: any) { if (!/already_reacted/.test(String(e?.message))) throw e; }
+}
+
+/**
+ * Accusé de livraison sur un message écrit par l'équipe : ✅ (ou ❌) en
+ * réaction ; sans le scope reactions:write, une courte réponse dans le fil du
+ * message à la place. Best-effort, jamais bloquant.
+ */
+export async function accuserLivraisonSlack(channel: string, ts: string, ok: boolean, detail: string): Promise<void> {
+  try {
+    await reagirSlack(channel, ts, ok ? 'white_check_mark' : 'x');
+    if (!ok) await envoyerMessageSlack({ channel, thread_ts: ts, text: `:x: ${detail}` });
+  } catch (e: any) {
+    if (/missing_scope/.test(String(e?.message))) {
+      try { await envoyerMessageSlack({ channel, thread_ts: ts, text: `${ok ? ':white_check_mark:' : ':x:'} ${detail}` }); } catch { /* rien à faire : l'accusé est un confort */ }
+      return;
+    }
+    logger.warn('[slack] accusé de livraison impossible', { channel, ts, error: e?.message });
+  }
+}
+
 export async function archiverCanalSlack(channel: string): Promise<void> {
   try { await appel('conversations.archive', { channel }); } catch (e: any) { if (!/already_archived|is_archived/.test(String(e?.message))) throw e; }
 }

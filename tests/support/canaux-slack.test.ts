@@ -47,7 +47,7 @@ const client: any = {
   },
 };
 
-const slack = { crees: [] as string[], invites: [] as any[], sujets: [] as any[], postes: [] as any[], historique: [] as any[], membres: ['URAFBA', 'UBOT', 'UGROK'], archives: [] as string[], desarchives: [] as string[] };
+const slack = { crees: [] as string[], invites: [] as any[], sujets: [] as any[], postes: [] as any[], historique: [] as any[], membres: ['URAFBA', 'UBOT', 'UGROK'], archives: [] as string[], desarchives: [] as string[], accuses: [] as any[] };
 vi.mock('../../server/lib/slack', () => ({
   canalSupport: () => 'CSUPPORT',
   identiteBot: async () => ({ user_id: 'UBOT', bot_id: 'BBOT' }),
@@ -57,6 +57,7 @@ vi.mock('../../server/lib/slack', () => ({
   definirSujetCanal: async (channel: string, topic: string) => { slack.sujets.push({ channel, topic }); },
   envoyerMessageSlack: async (p: any) => { slack.postes.push(p); return { ts: '9.9', channel: p.channel }; },
   lireHistoriqueSlack: async () => slack.historique,
+  accuserLivraisonSlack: async (channel: string, ts: string, ok: boolean) => { slack.accuses.push({ channel, ts, ok }); },
   archiverCanalSlack: async (c: string) => { slack.archives.push(c); },
   desarchiverCanalSlack: async (c: string) => { slack.desarchives.push(c); },
   echapperSlack: (s: string) => s,

@@ -42,7 +42,7 @@ vi.mock('../../server/lib/mailer', () => ({ isMailerConfigured: () => true, send
 vi.mock('../../server/lib/helpers', () => ({ resolvePublicBaseUrl: () => 'https://lumecrm.net', normalizeE164: (s: string) => s, findOrCreateConversation: async () => ({ id: 'c' }) }));
 vi.mock('../../server/lib/slack', async (orig) => {
   const reel = await (orig as () => Promise<typeof import('../../server/lib/slack')>)();
-  return { ...reel, identiteBot: async () => ({ user_id: 'UBOT', bot_id: 'BBOT' }), nomUtilisateurSlack: async (u: string) => (u === 'URAFBA' ? 'Rafba' : 'Support') };
+  return { ...reel, identiteBot: async () => ({ user_id: 'UBOT', bot_id: 'BBOT' }), nomUtilisateurSlack: async (u: string) => (u === 'URAFBA' ? 'Rafba' : 'Support'), accuserLivraisonSlack: async () => {} };
 });
 
 import { verifierSignatureSlack } from '../../server/lib/slack';

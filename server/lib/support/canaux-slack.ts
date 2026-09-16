@@ -21,7 +21,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../logger';
 import {
   canalSupport, creerCanalSlack, inviterDansCanal, membresDuCanal, definirSujetCanal, envoyerMessageSlack, lireHistoriqueSlack, identiteBot, echapperSlack,
-  archiverCanalSlack, desarchiverCanalSlack,
+  archiverCanalSlack, desarchiverCanalSlack, accuserLivraisonSlack,
 } from '../slack';
 import { ajouterMessage, type Ticket } from './tickets';
 
@@ -175,7 +175,7 @@ export async function messagesCanauxClients(admin: SupabaseClient): Promise<Arra
         if (m.subtype && m.subtype !== 'bot_message' && m.subtype !== 'file_share') continue; // joined, topic, edits…
         if (!m.text || !m.text.trim()) continue;
         const ticket = await ticketPourMessageCanal(admin, c.org_id, m.text.split('\n')[0]);
-        if (!ticket) continue;
+        if (!ticket) { await accuserLivraisonSlack(c.channel_id, m.ts, false, 'Non livré : ce client n’a encore jamais écrit au support, je ne sais pas à qui l’envoyer.'); continue; }
         sortie.push({ canal: c, ticket, message: m });
       }
       if (dernierTs !== (c.last_seen_ts || '0')) {
