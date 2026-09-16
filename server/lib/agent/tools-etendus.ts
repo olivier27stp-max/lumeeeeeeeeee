@@ -746,6 +746,7 @@ const listServices: AgentTool = {
     return {
       count: data?.length || 0,
       services: (data || []).map((s: any) => ({
+        service_id: s.id, // pour update_service / archive_service (la batterie : « je ne retrouve pas d'identifiant »)
         nom: s.name,
         description: s.description || null,
         prix_cents: Math.round(Number(s.default_price_cents) || 0),

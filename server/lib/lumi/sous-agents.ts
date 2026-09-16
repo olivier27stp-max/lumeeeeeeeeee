@@ -101,8 +101,12 @@ export function focusDuSousAgent(topic: IdTopic, langue: 'fr' | 'en'): string {
   const t = TOPICS.find((x) => x.id === topic);
   const sujet = t?.description ?? topic;
   const consigne = CONSIGNES_SOUS_AGENT[topic]?.[langue];
+  // Batterie du 2026-09-16 (passe 4) : 13 « je confirme ? » en texte au lieu de la carte, dans TOUS les sujets.
+  const carte = langue === 'fr'
+    ? " Toute écriture demandée clairement : appelle l'outil tout de suite avec ce qui est fourni — la carte de confirmation EST la question, ne demande jamais « je confirme ? » ou « je le fais ? » en texte."
+    : ' Any clearly requested write: call the tool right away with what was given — the confirmation card IS the question, never ask "shall I?" in text.';
   return (langue === 'fr'
     ? `Sujet de ce tour : ${sujet} Les outils de ce sujet sont chargés ; si la demande en sort, cherche l'outil avec tool_search_tool_regex.`
     : `Topic of this turn: ${sujet} This topic's tools are loaded; if the request goes beyond it, look the tool up with tool_search_tool_regex.`)
-    + (consigne ? ` ${consigne}` : '');
+    + carte + (consigne ? ` ${consigne}` : '');
 }

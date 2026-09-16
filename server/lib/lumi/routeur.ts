@@ -112,6 +112,9 @@ Exemples (québécois oral, fautes incluses) :
 - « montre-moi le job 33 », « job numéro 33 », « la job #33 » → planification, job-numero, numero 33
 - « c'est quoi la liste de vérification du job 33 », « y a-tu un contrat sur le job 33 », « prépare un contrat pour le job 33 », « facture le job 33 » → topic du sujet, action null (job-numero SEULEMENT quand on veut voir le job et rien d'autre ; un numéro dans une autre demande n'est pas job-numero)
 - « combien j'ai facturé ce mois-ci », « mes revenus du mois », « ça donne quoi ce mois-ci » → facturation, revenu-mois
+- « montre-moi les paiements reçus ce mois-ci », « la liste des paiements », « qui a payé cette semaine » → facturation, action null (une LISTE, pas le total)
+- « quelles équipes (crews) j'ai », « mes équipes », « les groupes de mon équipe » → equipe, action null (les équipes nommées, pas la liste des membres)
+- « retire la carte enregistrée de Gagnon », « sa carte de crédit au dossier », « charge sa carte » → facturation, action null (carte de paiement, pas le pipeline)
 - « relance mes retards », « envoie un texto à Tremblay », « crée une job chez Gagnon » → topic du sujet, action null (écriture)
 - « parle-moi de Marie Tremblay », « les factures de Gagnon », « c'est quoi le numéro de Lapointe » → topic du sujet, action null (nom propre)
 - « mes revenus vs le mois passé », « pourquoi c'est plus bas que juillet » → facturation, action null (comparaison)
