@@ -58,7 +58,7 @@ Lecture : sur le sondage, un tour qui va au modèle coûte 0,73 ¢ (15,4 ¢ / 21
 | Latence p50 N0 | < 400 ms | 0,5 à 1,0 s mesuré (l'API distante de staging pèse ; à remesurer en prod) |
 | Latence p50 N2 (routeur → gabarit) | < 2,5 s | 2,0 à 2,1 s |
 | Client lourd 600 conv./mois sur le plan 150 $ | ≤ 10 $ CAD | 7 à 9 $ CAD au sondage ; plafond dur garanti par B3/B4 |
-| Dépassement de budget en concurrence | 0 | Réservation atomique (RPC + verrou) ; **le test à 50 requêtes parallèles exige la migration appliquée sur staging** — non exécuté ici (règle 2) |
+| Dépassement de budget en concurrence | 0 | **Testé sur staging après application de la migration** : 50 réservations parallèles de 200 ¢ sur 6 124 ¢ restants → exactement 30 acceptées, 20 refusées (`capped`), 0 erreur, 729 ms ; agrégat revenu à 0 après règlement |
 | Features §6 couvertes | 100 % ou reporté | Voir §5 |
 | Gabarits FR et EN par intention N0 | 100 % | 11 intentions, fr + en (`raccourcis.ts`) |
 
@@ -83,14 +83,13 @@ Lecture : sur le sondage, un tour qui va au modèle coûte 0,73 ¢ (15,4 ¢ / 21
 
 - **B10 profil `lumi_accueil`** (IA face aux clients finaux) : non fait. C'est une nouvelle surface produit, tournée vers l'extérieur (SMS/formulaire de vrais clients), avec des choix à trancher (canaux, identité d'agent, validation par l'équipe) : pas une décision d'agent autonome. Le moteur est prêt à l'accueillir (jeu d'outils par profil = même mécanisme que les sous-agents).
 - **B11 proactif** : les déclencheurs manquants (devis sans réponse, job terminé non facturé, visite de demain non assignée) touchent le moteur d'automatisations et son interface (`Automations.tsx`, presets, i18n) ; brouillons nocturnes via Batch = nouvelle fonctionnalité avec écran d'approbation. Hors coût, reporté.
-- **Test de concurrence (50 réservations parallèles)** : à lancer dès que la migration B3 est appliquée sur staging (`scripts/qa/` à écrire, 1 h).
 - **Prompt stable (4 018 tokens)** : toujours relu à chaque échantillonnage ; le raccourcir de moitié vaudrait encore 10-15 % sur les tours modèle, mais exige une passe d'éval par variante.
 - **Support (`ia.ts`)** : prompt de 32 000 caractères en 4 variantes de cache ; l'indexer dans `search_help` au lieu de l'inclure vaudrait ~4 000 tokens par appel, volume faible (coût Lume, pas client).
 - **Gemini** (transcription, embeddings) : coût non tarifé (`cost_cents` NULL) ; à tarifer quand les prix seront confirmés.
 
 ## 6. Pour mettre en prod (Will)
 
-1. `npm run db:apply -- supabase/migrations/20260916120000_lumi_budget_reservations.sql` (staging) → tests → `npm run db:apply:prod -- …`.
+1. Migration : **appliquée sur staging le 2026-09-16** (lien Postgres direct, une transaction ; `check:db-coherence` ✅, `check:schema-refs` : seul l'écart préexistant `migration_field_mappings.admin_flag`). **Prod : à faire** — le jeton `SUPABASE_ACCESS_TOKEN` de `.env.local` est expiré (401 sur l'API de gestion et sur le MCP) ; régénérer un jeton (Supabase → Account → Access Tokens), le mettre dans `.env.local`, puis `npm run db:apply:prod -- supabase/migrations/20260916120000_lumi_budget_reservations.sql`.
 2. Merger la PR #403 (squash).
 3. Railway : rien d'obligatoire. Recommandé : `LUMI_ROUTEUR=observation` deux semaines (verdicts tracés dans `lumi_traces.params.routeur`), puis `actif`. Les règles de coût sont actives par défaut.
 4. Surveiller `ai_usage` (coût réel) et `lumi_traces` (part par étage, `action = plafond_*`, `budget_epuise`) la première semaine.
