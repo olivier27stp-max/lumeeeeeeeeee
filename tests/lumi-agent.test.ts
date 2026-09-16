@@ -536,9 +536,16 @@ describe('Lumi parle comme un collègue, pas comme une base de données', () => 
     ]) expect(stable).toContain(regle);
     // Dans Lumi l'utilisateur est déjà connecté : pas de consigne de reconnexion OAuth.
     expect(stable).not.toContain('session_a_reconnecter');
-    // La partie variable (date, prénom) reste hors cache.
+    // La partie variable (date, prénom, entreprise) reste hors cache.
     expect(stable).not.toContain('2026-09-10');
     expect(blocs[1].text).toContain('2026-09-10');
+    expect(stable).not.toContain('Coquin lavage');
+    expect(blocs[1].text).toContain('Entreprise : Coquin lavage.');
+    // Le bloc stable est IDENTIQUE d'une org à l'autre : un seul préfixe en
+    // cache pour toute la plateforme, pas une écriture 1 h par entreprise.
+    const autre = promptSystemeLumi({ companyName: 'Plomberie Roy', userName: 'Marc', language: 'fr', todayIso: '2026-09-11' });
+    expect(autre[0].text).toBe(stable);
+    expect(autre[1].text).toContain('Entreprise : Plomberie Roy.');
   });
 });
 
