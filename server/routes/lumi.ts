@@ -33,8 +33,8 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
-import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur } from '../lib/lumi/routeur';
-import { sousAgentDepuisVerdict, focusDuSousAgent } from '../lib/lumi/sous-agents';
+import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
+import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent } from '../lib/lumi/sous-agents';
 import type { IdTopic } from '../lib/lumi/topics';
 import { reglesCout, messagePlafondConversation } from '../lib/lumi/regles-cout';
 import { lireReponse, ecrireReponse, retirerReponse, tourCachable, versionOrg, enonceCachable } from '../lib/lumi/cache-reponses';
@@ -86,6 +86,23 @@ function estUnRepli(message: string): boolean {
 function dernierEnonceUtilisateur(msgs: Msg[]): string | null {
   for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === 'user' && typeof msgs[i].content === 'string') return msgs[i].content as string;
   return null;
+}
+/** Dernier texte de Lumi (blocs texte du dernier message assistant), pour le routeur. */
+function dernierTexteAssistant(msgs: Msg[]): string | null {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.role !== 'assistant') continue;
+    if (typeof m.content === 'string') return m.content;
+    const t = m.content.filter((b: any) => b.type === 'text').map((b: any) => String(b.text)).join(' ').trim();
+    return t || null;
+  }
+  return null;
+}
+/** L'échange précédent, s'il existe, pour que le routeur classe une suite de conversation. */
+function contexteRouteur(msgs: Msg[]): ContexteRouteur | null {
+  const utilisateur = dernierEnonceUtilisateur(msgs);
+  const lumi = dernierTexteAssistant(msgs);
+  return utilisateur && lumi ? { utilisateur, lumi } : null;
 }
 
 // Au-delà, on résume plutôt que de renvoyer 200 messages au modèle.
@@ -265,7 +282,7 @@ async function executerTourSse(opts: {
   opts.req.on('close', () => { ferme = true; });
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
-  const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null);
+  const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
   const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => {
     const routeur = observation ? await observation : null;
     // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
@@ -300,6 +317,8 @@ async function executerTourSse(opts: {
     const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
     if (opts.nouveauxAvant.length) await sauverMessages(conversationId, ctx.auth.orgId, opts.nouveauxAvant, cleRefs);
     const reglages = reglagesPourPalier(ctx.budget.palier, modeleLumi());
+    // Qualité : les sujets qui raisonnent (rapports, analyse financière) gardent une réflexion medium, hors palier dégradé.
+    if (opts.sousAgent && ctx.budget.palier === 'normal') reglages.effort = effortDuSousAgent(opts.sousAgent);
     // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
     const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
@@ -511,9 +530,12 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     // client était routé vers TOUS les retards (sondage du 2026-09-16).
     // Jamais après un repli ni avec une proposition en attente.
     let routeur: ResultatRouteur | null = null;
-    if (modeRouteur() === 'actif' && premierMessage) {
+    if (modeRouteur() === 'actif' && !enAttente.length && !repli) {
       const debut = Date.now();
-      routeur = await classifier(message);
+      // Suite de conversation : le routeur voit l'échange précédent (tronqué) et
+      // n'agit que si le message se suffit (changement de période) — un « il »
+      // ou « le pire » reste au modèle complet, qui a tout le contexte.
+      routeur = await classifier(message, contexteRouteur(historique));
       const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
       if (routeur.usage) {
         void journaliserUsage(ctx.admin, {
@@ -533,8 +555,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         emettreSse('text', { type: 'text', delta: reponse.texte });
         if (reponse.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: reponse.fiches });
         emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: null, raccourci: r.id, etage: ETAGE.routeur });
-        // La même question, redemandée : servie par les caches (étages 3-4), sans même le routeur.
-        {
+        // La même question, redemandée : servie par les caches (étages 3-4), sans même le routeur. Premier message seulement.
+        if (premierMessage) {
           const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: message };
           void ecrireReponse(p, { texte: reponse.texte, fiches: reponse.fiches, outils: [r.tool] });
           void (async () => {

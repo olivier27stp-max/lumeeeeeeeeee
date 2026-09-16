@@ -16,6 +16,7 @@
 import { TOPICS, type IdTopic } from './topics';
 import { TOOLS_BY_NAME } from '../agent/tools';
 import { SEUIL_CONFIANCE, type ResultatRouteur } from './routeur';
+import { reglesCout } from './regles-cout';
 
 /** Chargés avec tout sous-agent : mémoire de Lumi, aide sur Lume, fiche d'entreprise. */
 export const OUTILS_TRANSVERSES: readonly string[] = ['recall_notes', 'remember_this', 'forget_note', 'search_help', 'get_company_info'];
@@ -64,6 +65,12 @@ const CONSIGNES_SOUS_AGENT: Partial<Record<IdTopic, { fr: string; en: string }>>
     en: 'To create or move a job, propose the card right away with what was given (empty items allowed): no preliminary question about items or prices, the user reviews the card.',
   },
 };
+
+/** Sujets qui raisonnent vraiment (rapports, analyse financière) : réflexion medium ; les autres suivent la règle stricte (low). */
+export const SOUS_AGENTS_COMPLEXES: ReadonlySet<IdTopic> = new Set<IdTopic>(['rapports', 'facturation']);
+export function effortDuSousAgent(topic: IdTopic | null | undefined): 'low' | 'medium' {
+  return topic && SOUS_AGENTS_COMPLEXES.has(topic) ? 'medium' : reglesCout().effort_defaut;
+}
 
 export function focusDuSousAgent(topic: IdTopic, langue: 'fr' | 'en'): string {
   const t = TOPICS.find((x) => x.id === topic);

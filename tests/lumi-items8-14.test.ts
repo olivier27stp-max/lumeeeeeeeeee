@@ -79,12 +79,11 @@ describe('item 10 — routeur', () => {
     expect(modeRouteur({ LUMI_ROUTEUR: 'oui' })).toBe('off');
     const route = lu('server/routes/lumi.ts');
     // Observation : classifie en parallèle sans agir ; un verdict déjà obtenu par l'étage 5 n'est pas redemandé.
-    expect(route).toContain("opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce) : null)");
+    expect(route).toContain("opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null)");
     // Actif (étage 5) : seulement une action déterministe validée (raccourciDepuisAction, jamais une action devinée), jamais avec une proposition en attente ni après un repli.
-    // … et seulement au PREMIER message (premierMessage = historique vide, sans proposition en attente, pas un repli) :
-    // un « il » de suite de conversation n'est pas visible du routeur.
-    expect(route).toContain("if (modeRouteur() === 'actif' && premierMessage)");
-    expect(route).toContain("const premierMessage = historique.length === 0 && !enAttente.length && !repli;");
+    // … aussi sur une suite de conversation, avec l'échange précédent en contexte (le prompt impose action null sur un « il », « le pire »…).
+    expect(route).toContain("if (modeRouteur() === 'actif' && !enAttente.length && !repli)");
+    expect(route).toContain("routeur = await classifier(message, contexteRouteur(historique));");
     expect(route).toContain("routeur.decision === 'action' && routeur.verdict?.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null");
     // Le coût du routeur est journalisé dans ai_usage (il compte dans le budget de l'org).
     expect(route).toMatch(/journaliserUsage\(ctx\.admin, \{\s*orgId: ctx\.auth\.orgId, userId: ctx\.auth\.user\.id, conversationId, model: MODELE_ROUTEUR/);

@@ -94,6 +94,7 @@ Actions déterministes (réponse gabarit, sans modèle) — seulement si le mess
 - job-numero (params.numero) : montrer le job numéro N
 
 Règles : action = null dès qu'il y a un doute, une écriture (créer, envoyer, modifier, annuler), un nom propre, une ville ou une période non permise. Plusieurs sujets ou actions → topic multi, action null. confidence entre 0 et 1, honnête.
+Suites de conversation : quand un échange précédent est fourni et que le message s'y rapporte (« il », « elle », « ça », « lui », « le pire », « lequel », « la plus vieille », « et pour… »), action null — le modèle complet a le contexte, pas toi. Seule exception : un simple changement de période après une question d'agenda (« pis cette semaine ? », « et demain ? », « et aujourd'hui ? ») reste agenda avec la nouvelle période.
 
 Exemples (québécois oral, fautes incluses) :
 - « cb jai de job dmain », « chu tu occupé demain matin ? », « c'est quoi mon horaire demain » → planification, agenda, periode demain
@@ -117,6 +118,10 @@ Exemples (québécois oral, fautes incluses) :
 - « mon paiement Lume a échoué », « comment j'envoie une facture » → facturation, action null (mode d'emploi)
 - « c'est quoi la capitale de l'Australie », « écris-moi un poème » → hors_scope
 - « mon horaire de demain pis mes factures en retard » → multi, action null
+- après « c'est quoi mon horaire demain » : « pis cette semaine ? » → planification, agenda, periode semaine ; « et aujourd'hui ? » → planification, agenda, periode aujourdhui
+- après une liste de factures en retard : « c'est qui le pire ? », « laquelle traîne depuis le plus longtemps ? » → facturation, action null (se rapporte à la liste)
+- après une fiche client : « il a-tu des factures pas payées ? », « son numéro ? » → topic du sujet, action null (« il » = ce client)
+- après « comment j'envoie une facture » : « et pour la marquer payée ? » → facturation, action null (mode d'emploi, suite)
 
 Énoncés déjà reconnus tels quels par le code (mêmes actions, à reconnaître aussi reformulés) :
 ${ENONCES_EXACTS.map(([e, a]) => `- « ${e} » → ${a.id}${a.periode ? `, periode ${a.periode}` : ''}`).join('\n')}
@@ -186,7 +191,17 @@ chu = je suis ; c'est tu / j'ai tu / y'a tu = est-ce que ; pis = puis, et ; faqu
  * Classifie l'énoncé. Sortie JSON stricte via un outil unique (`classer`)
  * dont le schéma reflète verdictSchema ; forcée par tool_choice.
  */
-export async function classifier(enonce: string): Promise<ResultatRouteur> {
+/** L'échange précédent, tronqué, pour classer une suite de conversation (« pis cette semaine ? »). */
+export interface ContexteRouteur { utilisateur: string; lumi: string }
+
+/** Message envoyé au routeur : l'énoncé seul, ou précédé de l'échange précédent (pur, testé). */
+export function messageRouteur(enonce: string, contexte?: ContexteRouteur | null): string {
+  const e = enonce.slice(0, 1000);
+  if (!contexte) return e;
+  return `Échange précédent — utilisateur : « ${contexte.utilisateur.slice(0, 300)} » ; Lumi : « ${contexte.lumi.slice(0, 400)} »\n\nMessage à classer : « ${e} »`;
+}
+
+export async function classifier(enonce: string, contexte?: ContexteRouteur | null): Promise<ResultatRouteur> {
   const debut = Date.now();
   try {
     const res = await clientAnthropic().messages.create({
@@ -209,7 +224,7 @@ export async function classifier(enonce: string): Promise<ResultatRouteur> {
         },
       }],
       tool_choice: { type: 'tool', name: 'classer' },
-      messages: [{ role: 'user', content: enonce.slice(0, 1000) }],
+      messages: [{ role: 'user', content: messageRouteur(enonce, contexte) }],
     });
     const appel = res.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use');
     const verdict = validerVerdict(appel?.input ?? null);
