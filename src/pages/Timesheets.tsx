@@ -25,6 +25,7 @@ import { useGpsTracker } from '../hooks/useGpsTracker';
 import TechnicianTimesheetTable from '../components/timesheets/TechnicianTimesheetTable';
 import TeamScheduleGrid from '../components/timesheets/TeamScheduleGrid';
 import { usePermissions } from '../hooks/usePermissions';
+import PayrollSummaryCard from '../components/payroll/PayrollSummaryCard';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -725,6 +726,12 @@ export default function Timesheets() {
 
       {hubTab === 'feuilles' && (
         <>
+          {/* Ma paie : un tech (ou un rep) n'a accès ni à Paramètres > Paie ni,
+              pour un tech, à Commissions. C'est donc ici qu'il voit ses heures
+              × taux et ce qui s'en vient sur sa prochaine paie, selon son mode
+              de paie (fiche Équipe). Les gestionnaires ont déjà la page Paie. */}
+          {!canManageSchedule && <PayrollSummaryCard />}
+
           {/* To review */}
           {toReview.length > 0 && (
             <div className="rounded-2xl bg-surface-card border border-border shadow-card">

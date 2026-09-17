@@ -13,7 +13,7 @@
 
 **Généré le 2026-09-17 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
-## 1. Tables (231)
+## 1. Tables (232)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
@@ -171,6 +171,7 @@
 | `payment_providers` | ✅ | ✅ | 4 | 0 |
 | `payment_requests` | ✅ | ✅ | 4 | 4 |
 | `payment_requirements` | ✅ | ✅ | 3 | 2 |
+| `payment_settings` | ✅ | ✅ | 2 | ? |
 | `payments` | ✅ | ✅ | 4 | 3 |
 | `payroll_adjustments` | ✅ | ✅ | 1 | ? |
 | `payroll_payments` | ✅ | ✅ | 1 | ? |
@@ -2323,6 +2324,7 @@
 - `decided_at` timestamp with time zone
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `admin_flag` text
 
 ### `migration_file_columns`
 
@@ -2703,6 +2705,19 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
+### `payment_settings`
+
+- `org_id` uuid NOT NULL
+- `quote_payments_enabled` boolean NOT NULL DEFAULT true
+- `invoice_payments_enabled` boolean NOT NULL DEFAULT true
+- `tips_enabled` boolean NOT NULL DEFAULT false
+- `wallets_enabled` boolean NOT NULL DEFAULT true
+- `require_payment_method_default` boolean NOT NULL DEFAULT false
+- `notify_owner_email` boolean NOT NULL DEFAULT true
+- `updated_by` uuid
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
 ### `payments`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
@@ -2733,6 +2748,7 @@
 - `stripe_fee_amount` integer
 - `net_amount` integer
 - `failure_reason` text
+- `tip_cents` integer NOT NULL DEFAULT 0
 
 ### `payroll_adjustments`
 
@@ -3967,7 +3983,7 @@
 - `outcome` text
 - `summary` jsonb NOT NULL DEFAULT '{}'::jsonb
 
-## 3. Policies RLS (633)
+## 3. Policies RLS (635)
 
 
 ### `a2p_registrations`
@@ -5404,6 +5420,14 @@
 - **payment_requirements_update** — UPDATE, PERMISSIVE, roles={public}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
+### `payment_settings`
+
+- **payment_settings_select_org** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **payment_settings_service** — ALL, PERMISSIVE, roles={service_role}
+  - USING: `true`
+  - WITH CHECK: `true`
+
 ### `payments`
 
 - **payments_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
@@ -6472,7 +6496,7 @@ l'audit. Lire le corps réel avec :
 - `v_revenue_analytics` — security_invoker=true
 - `v_schedule_calendar` — security_invoker=true
 
-## 6. Contraintes (1192)
+## 6. Contraintes (1196)
 
 
 ### `a2p_registrations`
@@ -7507,6 +7531,7 @@ CASE
 
 ### `migration_field_mappings`
 
+- `migration_field_mappings_admin_flag_check` — CHECK (((admin_flag IS NULL) OR (admin_flag = ANY (ARRAY['red'::text, 'amber'::text, 'green'::text, 'blue'::text, 'purple'::text]))))
 - `migration_field_mappings_column_id_fkey` — FOREIGN KEY (column_id) REFERENCES migration_file_columns(id) ON DELETE CASCADE
 - `migration_field_mappings_column_id_key` — UNIQUE (column_id)
 - `migration_field_mappings_confidence_check` — CHECK (((confidence >= 0) AND (confidence <= 100)))
@@ -7705,6 +7730,11 @@ CASE
 - `payment_requirements_requirement_type_check` — CHECK ((requirement_type = ANY (ARRAY['deposit'::text, 'full_payment'::text, 'payment_method_on_file'::text])))
 - `payment_requirements_status_check` — CHECK ((status = ANY (ARRAY['pending'::text, 'authorized'::text, 'paid'::text, 'waived'::text, 'failed'::text, 'not_applicable'::text])))
 
+### `payment_settings`
+
+- `payment_settings_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `payment_settings_pkey` — PRIMARY KEY (org_id)
+
 ### `payments`
 
 - `payments_amount_cents_check` — CHECK ((amount_cents >= 0))
@@ -7727,6 +7757,7 @@ CASE
 - `payments_provider_check` — CHECK ((provider = ANY (ARRAY['stripe'::text, 'paypal'::text, 'manual'::text])))
 - `payments_status_check` — CHECK ((status = ANY (ARRAY['succeeded'::text, 'pending'::text, 'failed'::text, 'refunded'::text])))
 - `payments_stripe_fee_nonneg` — CHECK (((stripe_fee_amount IS NULL) OR (stripe_fee_amount >= 0)))
+- `payments_tip_cents_non_negatif` — CHECK ((tip_cents >= 0))
 
 ### `payroll_adjustments`
 
@@ -8374,7 +8405,7 @@ CASE
 
 - `webhook_receipts_pkey` — PRIMARY KEY (id)
 
-## 7. Triggers (237)
+## 7. Triggers (238)
 
 - `a2p_registrations` → **trg_a2p_registrations_updated_at** (`set_updated_at()`)
 - `activity_notes` → **trg_ac_track_activity_notes** (`ac_track_activity_notes()`)
@@ -8531,6 +8562,7 @@ CASE
 - `payment_requests` → **trg_payment_requests_updated_at** (`set_payment_requests_updated_at()`)
 - `payment_requirements` → **set_payment_requirements_updated_at** (`set_updated_at()`)
 - `payment_requirements` → **trg_ac_track_card_saved** (`ac_track_card_saved()`)
+- `payment_settings` → **trg_payment_settings_set_updated_at** (`set_updated_at()`)
 - `payments` → **trg_ac_track_payments** (`ac_track_payments()`)
 - `payments` → **trg_payment_to_invoice_paid** (`trg_payment_to_invoice_paid()`)
 - `payments` → **trg_payments_enforce_scope** (`crm_enforce_scope()`)
