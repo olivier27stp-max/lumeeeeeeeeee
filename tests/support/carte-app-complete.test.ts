@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { CARTE_APP } from '../../server/lib/support/carte-app';
+import { CARTE_APP, indexCarteApp } from '../../server/lib/support/carte-app';
 
 const EXCLUES = new Set([
   '/', '/privacy', '/terms', '/subprocessors', '/pricing', '/checkout', '/checkout/success',
@@ -35,8 +35,9 @@ describe('carte de l’app du support', () => {
     const manquantes = [...routesApp(), ...routesParametres()].filter((p) => !CARTE_APP.includes(base(p)) && !CARTE_APP.includes(p));
     expect(manquantes, `écrans absents de carte-app.ts : ${manquantes.join(', ')}`).toEqual([]);
   });
-  it('reste un texte borné, en cache : moins de 16 000 caractères (≈ 6 000 tokens, lus au dixième du prix)', () => {
-    expect(CARTE_APP.length).toBeLessThan(16_000);
+  it('reste un texte borné : la carte est indexée par search_help (plus dans le prompt depuis #412), seul son index entre dans le prompt', () => {
+    expect(CARTE_APP.length).toBeLessThan(24_000);
+    expect(indexCarteApp().length).toBeLessThan(4_000);
     expect(CARTE_APP).toContain('/tasks');
   });
 });

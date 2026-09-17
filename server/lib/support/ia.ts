@@ -34,7 +34,8 @@ import { indexCarteApp } from './carte-app';
 import { coutEnCents } from '../lumi/tarifs';
 import { logger } from '../logger';
 
-export const MODELE_SUPPORT = 'claude-sonnet-5';
+/** Sonnet 5 par défaut ; LUMI_SUPPORT_MODELE permet de mesurer un autre modèle (Haiku) avec scripts/qa/evaluer-support-qualite.mts. */
+export const MODELE_SUPPORT = process.env.LUMI_SUPPORT_MODELE || 'claude-sonnet-5';
 const MAX_ETAPES = 4;
 const MAX_TOKENS = 1024;
 
