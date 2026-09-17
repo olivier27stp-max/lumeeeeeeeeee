@@ -5,6 +5,7 @@ import { validate } from '../lib/validation';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
+import { rendreCourrielLume, echapper, type LigneDetail } from '../lib/courriels/gabarit';
 
 const router = Router();
 
@@ -44,8 +45,96 @@ const bookDemoSchema = z.object({
   path: ['company_name'],
 });
 
-const escape = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+/** Libellés lisibles des secteurs, pour les courriels. */
+const SECTEUR_LABEL: Record<typeof INDUSTRY_VALUES[number], string> = {
+  landscaping: 'Aménagement paysager',
+  snow_removal: 'Déneigement',
+  residential_cleaning: 'Ménage résidentiel',
+  commercial_cleaning: 'Entretien commercial',
+  plumbing: 'Plomberie',
+  electrical: 'Électricité',
+  roofing: 'Toiture',
+  hvac: 'CVC',
+  window_cleaning: 'Lavage de vitres',
+  other: 'Autre',
+};
+
+export interface DemandeDemo {
+  reference: string;
+  full_name: string;
+  company_name: string;
+  email: string;
+  phone: string;
+  industry: typeof INDUSTRY_VALUES[number];
+  employee_count?: string | null;
+  source?: string | null;
+  availability?: string | null;
+  message?: string | null;
+  referral_code?: string | null;
+}
+
+/**
+ * Alerte à l'exploitant : « [ref] Nouveau lead Lume — … ». Interne (sans
+ * signature), les champs du lead en lignes, le message en contenu libre.
+ * Pur — aperçu : scripts/qa/courriels-exemples/abonnement.mts.
+ */
+export function courrielNouveauLead(d: DemandeDemo, meta: { recuLe: string; ip: string | null; ua: string }): { sujet: string; html: string } {
+  const secteur = SECTEUR_LABEL[d.industry] || d.industry;
+  const lignes: LigneDetail[] = [
+    { libelle: 'Référence', valeur: d.reference },
+    { libelle: 'Reçu le', valeur: meta.recuLe },
+    { libelle: 'Nom', valeur: d.full_name, fort: true },
+    { libelle: 'Entreprise', valeur: d.company_name, fort: true },
+    { libelle: 'Téléphone', valeur: d.phone, fort: true },
+    { libelle: 'Courriel', valeur: d.email },
+    { libelle: 'Secteur', valeur: secteur },
+    { libelle: 'Taille de l’équipe', valeur: d.employee_count || '—' },
+    { libelle: 'Disponibilités', valeur: d.availability || '—' },
+    { libelle: 'Source', valeur: d.source || '—' },
+    { libelle: 'Parrainage', valeur: d.referral_code || '—' },
+  ];
+  return {
+    sujet: `[${d.reference}] Nouveau lead Lume — ${d.company_name} (${d.industry})`,
+    html: rendreCourrielLume({
+      langue: 'fr',
+      preheader: `${d.full_name} · ${d.phone} · ${secteur}`,
+      titre: `Nouveau lead — ${d.company_name}`,
+      intro: 'Action requise : appeler le prospect. Réponse promise dans les 24 h.',
+      lignes,
+      corpsHtml: d.message
+        ? `<p style="margin:0 0 6px;font-weight:600;">Message du prospect</p><p style="margin:0 0 14px;white-space:pre-wrap;">${echapper(d.message)}</p>`
+        : null,
+      bouton: { texte: 'Appeler le prospect', url: `tel:${d.phone.replace(/[^0-9+]/g, '')}` },
+      note: `Pour répondre par écrit, utilise « Répondre » : le courriel du prospect est en réponse. IP ${meta.ip || '—'} · ${meta.ua.slice(0, 80) || '—'}`,
+      signature: null,
+    }),
+  };
+}
+
+/** Confirmation au visiteur : « Merci pour ta demande de démo Lume ». Pur. */
+export function courrielDemandeDemo(d: Pick<DemandeDemo, 'reference' | 'full_name' | 'company_name' | 'industry'>, ownerEmail: string): { sujet: string; html: string } {
+  const prenom = d.full_name.split(' ')[0] || '';
+  const secteur = SECTEUR_LABEL[d.industry] || d.industry;
+  return {
+    sujet: 'Merci pour ta demande de démo Lume',
+    html: rendreCourrielLume({
+      langue: 'fr',
+      preheader: `On te contacte d’ici 24 h pour planifier ta démo (${d.reference}).`,
+      titre: 'Merci pour ta demande de démo',
+      salutation: `Bonjour ${prenom},`.replace(' ,', ','),
+      intro: `On a bien reçu ta demande de démo pour ${d.company_name}. On te contacte d’ici 24 h pour planifier une session adaptée à ton industrie.`,
+      lignes: [
+        { libelle: 'Référence', valeur: d.reference, fort: true },
+        { libelle: 'Entreprise', valeur: d.company_name },
+        { libelle: 'Secteur', valeur: secteur },
+        { libelle: 'Durée de la démo', valeur: '20 à 30 min' },
+      ],
+      corpsHtml: '<p style="margin:0 0 14px;">Au programme : une démo personnalisée, adaptée à ton industrie, et des réponses à toutes tes questions. Sans engagement.</p>',
+      note: `Garde ta référence si tu veux nous écrire au sujet de cette demande. Si c’est urgent, écris-nous à ${ownerEmail}.`,
+      supportEmail: ownerEmail,
+    }),
+  };
+}
 
 function extractClientIp(req: Request): string | null {
   const fwd = req.headers['x-forwarded-for'];
@@ -128,46 +217,20 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
       dateStyle: 'long',
       timeStyle: 'short',
     });
-    const messageBlock = body.message
-      ? `<div style="margin:20px 0;padding:16px;border-left:3px solid #3FAF97;background:#f6fbf9">
-           <p style="margin:0 0 6px;font-weight:600;color:#1F5F4F">Message du prospect</p>
-           <p style="margin:0;white-space:pre-wrap;color:#1a1a1a">${escape(body.message)}</p>
-         </div>`
-      : '';
-
-    const adminHtml = `
-      <div style="font-family:-apple-system,system-ui,sans-serif;max-width:600px;color:#1a1a1a">
-        <div style="background:#1F5F4F;color:white;padding:20px 24px;border-radius:8px 8px 0 0">
-          <p style="margin:0;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;opacity:.85">Nouveau lead — Plateforme Lume</p>
-          <h1 style="margin:8px 0 0;font-size:22px">${escape(company_name)}</h1>
-          <p style="margin:6px 0 0;font-size:13px;opacity:.85">Réf. <strong>${reference}</strong> · Reçu le ${escape(submittedAt)}</p>
-        </div>
-
-        <div style="background:#FFF7E6;border:1px solid #FFD580;padding:14px 18px;font-size:14px">
-          <p style="margin:0;color:#5C3A00"><strong>📞 Action requise — appeler le prospect</strong></p>
-          <p style="margin:6px 0 0;color:#5C3A00">Réponse promise dans les 24 h.</p>
-        </div>
-
-        <table style="border-collapse:collapse;width:100%;margin-top:0;font-size:14px;border:1px solid #e5e7eb;border-top:none">
-          <tr><td style="padding:10px 14px;background:#fafafa;width:140px;font-weight:600">Nom</td><td style="padding:10px 14px">${escape(body.full_name)}</td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Entreprise</td><td style="padding:10px 14px">${escape(company_name)}</td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Téléphone</td><td style="padding:10px 14px"><a href="tel:${escape(body.phone)}" style="color:#1F5F4F;text-decoration:none;font-weight:600">${escape(body.phone)}</a></td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Email</td><td style="padding:10px 14px"><a href="mailto:${escape(body.email)}" style="color:#1F5F4F">${escape(body.email)}</a></td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Secteur</td><td style="padding:10px 14px">${escape(industry)}</td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Taille équipe</td><td style="padding:10px 14px">${escape(body.employee_count || '—')}</td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Disponibilités</td><td style="padding:10px 14px">${escape(body.availability || '—')}</td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Source</td><td style="padding:10px 14px">${escape(body.source || '—')}</td></tr>
-          <tr><td style="padding:10px 14px;background:#fafafa;font-weight:600">Parrainage (referral)</td><td style="padding:10px 14px">${escape(body.referral_code || '—')}</td></tr>
-        </table>
-
-        ${messageBlock}
-
-        <p style="margin-top:24px;font-size:12px;color:#6b7280;text-align:center">
-          Référence: <strong>${reference}</strong> · IP: ${escape(ip || '—')} · UA: ${escape(ua.slice(0, 80))}<br/>
-          Pour répondre directement au prospect, utilise simplement « Répondre » dans ton client mail.
-        </p>
-      </div>
-    `;
+    const demande: DemandeDemo = {
+      reference,
+      full_name: body.full_name,
+      company_name,
+      email: body.email,
+      phone: body.phone,
+      industry,
+      employee_count: body.employee_count,
+      source: body.source,
+      availability: body.availability,
+      message: body.message,
+      referral_code: body.referral_code,
+    };
+    const alerte = courrielNouveauLead(demande, { recuLe: submittedAt, ip, ua });
 
     // Attendu et vérifié : l'appel partait sans `await`, avec un `.catch()`
     // inopérant puisque `sendEmail` ne lève jamais. Un échec était donc
@@ -175,37 +238,19 @@ router.post('/public/book-demo', validate(bookDemoSchema), async (req, res) => {
     const adminMail = await sendEmail({
       to: ownerEmail,
       replyTo: body.email,
-      subject: `[${reference}] Nouveau lead Lume — ${company_name} (${industry})`,
-      html: adminHtml,
+      subject: alerte.sujet,
+      html: alerte.html,
     });
     if (!adminMail.sent) {
       console.error('[public/book-demo] notification au propriétaire non envoyée:', adminMail.error, { reference });
     }
 
     // ── Prospect confirmation email ────────────────────────
-    const prospectHtml = `
-      <div style="font-family:system-ui,sans-serif;font-size:14px;color:#1a1a1a;max-width:560px">
-        <h2 style="color:#1F5F4F;margin-bottom:12px">Merci pour ta demande de démo Lume</h2>
-        <p>Bonjour ${escape(body.full_name.split(' ')[0] || '')},</p>
-        <p>Nous avons bien reçu ta demande de démo pour <strong>${escape(company_name)}</strong>. Notre équipe te contactera sous <strong>24 h</strong> pour planifier une session adaptée à ton industrie.</p>
-        <p style="margin:16px 0 8px"><strong>À quoi t'attendre :</strong></p>
-        <ul style="padding-left:18px;line-height:1.6;margin-top:0">
-          <li>Une démo personnalisée de 20-30 min</li>
-          <li>Adaptée à ton industrie (${escape(industry)})</li>
-          <li>Réponses à toutes tes questions, sans engagement</li>
-        </ul>
-        <div style="margin-top:18px;padding:12px 14px;background:#f6fbf9;border-left:3px solid #3FAF97;font-size:13px">
-          <strong>Ta référence :</strong> ${reference}<br/>
-          <span style="color:#555">Conserve-la si tu veux nous écrire au sujet de cette demande.</span>
-        </div>
-        <p style="margin-top:20px;color:#555">Si c'est urgent, écris-nous à ${escape(ownerEmail)}.</p>
-        <p style="margin-top:24px">— L'équipe Lume CRM</p>
-      </div>
-    `;
+    const confirmation = courrielDemandeDemo(demande, ownerEmail);
     const prospectMail = await sendEmail({
       to: body.email,
-      subject: 'Merci pour ta demande de démo Lume',
-      html: prospectHtml,
+      subject: confirmation.sujet,
+      html: confirmation.html,
     });
     if (!prospectMail.sent) {
       console.error('[public/book-demo] confirmation au prospect non envoyée:', prospectMail.error, { reference });

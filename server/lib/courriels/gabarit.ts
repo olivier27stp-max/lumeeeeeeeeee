@@ -149,7 +149,7 @@ function blocLignes(lignes: LigneDetail[]): string {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">${rows}</table>`;
 }
 
-function blocBouton(b: NonNullable<CourrielClient['bouton']>, couleur: string, langue: Langue): string {
+function blocBouton(b: NonNullable<CourrielClient['bouton']>, couleur: string, langue: Langue, tu = false): string {
   const url = echapper(b.url);
   return `
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px auto 14px;">
@@ -157,7 +157,7 @@ function blocBouton(b: NonNullable<CourrielClient['bouton']>, couleur: string, l
 <a href="${url}" style="display:inline-block;padding:14px 36px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;font-family:${POLICE};">${echapper(b.texte)}</a>
 </td></tr>
 </table>
-<p style="margin:0 0 20px;font-size:12px;color:${GRIS_PALE};text-align:center;">${langue === 'fr' ? 'Le bouton ne fonctionne pas ? Copiez ce lien :' : 'Button not working? Copy this link:'}<br/><a href="${url}" style="color:${GRIS_DOUX};word-break:break-all;">${url}</a></p>`;
+<p style="margin:0 0 20px;font-size:12px;color:${GRIS_PALE};text-align:center;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ? Copie ce lien :' : 'Le bouton ne fonctionne pas ? Copiez ce lien :') : 'Button not working? Copy this link:'}<br/><a href="${url}" style="color:${GRIS_DOUX};word-break:break-all;">${url}</a></p>`;
 }
 
 function coquille(p: { langue: Langue; titreDocument: string; preheader?: string | null; couleur: string; enTeteHtml: string; corpsHtml: string; piedHtml: string }): string {
@@ -186,7 +186,7 @@ ${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size
 </html>`;
 }
 
-function corpsCommun(c: { langue: Langue; titre?: string | null; salutation?: string | null; intro?: string | null; montant?: CourrielClient['montant']; lignes?: LigneDetail[] | null; bouton?: CourrielClient['bouton']; corpsHtml?: string | null; note?: string | null; signature?: string | null }, couleur: string): string {
+function corpsCommun(c: { langue: Langue; titre?: string | null; salutation?: string | null; intro?: string | null; montant?: CourrielClient['montant']; lignes?: LigneDetail[] | null; bouton?: CourrielClient['bouton']; corpsHtml?: string | null; note?: string | null; signature?: string | null }, couleur: string, tu = false): string {
   return `
 ${c.titre ? `<h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;font-weight:700;color:#111827;">${echapper(c.titre)}</h1>` : ''}
 ${c.salutation ? `<p style="margin:0 0 10px;font-size:15px;color:${GRIS_TEXTE};">${echapper(c.salutation)}</p>` : ''}
@@ -194,7 +194,7 @@ ${c.intro ? `<p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:${G
 ${c.montant ? blocMontant(c.montant) : ''}
 ${c.lignes?.length ? blocLignes(c.lignes) : ''}
 ${c.corpsHtml ? `<div style="font-size:15px;line-height:1.55;color:${GRIS_TEXTE};margin:0 0 20px;">${c.corpsHtml}</div>` : ''}
-${c.bouton ? blocBouton(c.bouton, couleur, c.langue) : ''}
+${c.bouton ? blocBouton(c.bouton, couleur, c.langue, tu) : ''}
 ${c.note ? `<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:${GRIS_DOUX};">${echapper(c.note)}</p>` : ''}
 ${c.signature ? `<p style="margin:0;font-size:15px;color:${GRIS_TEXTE};">${echapper(c.signature)}</p>` : ''}`;
 }
@@ -222,14 +222,14 @@ ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">$
   });
 }
 
-/** Ce que Lume envoie à ses abonnés : marque Lume, noir sur blanc. */
+/** Ce que Lume envoie à ses abonnés : marque Lume, noir sur blanc, TUTOIEMENT (c'est la voix de Lume envers ses abonnés ; les entreprises vouvoient leurs clients). */
 export function rendreCourrielLume(c: CourrielLume): string {
   const support = c.supportEmail || 'support@lumecrm.net';
   const enTete = `<img src="${LOGO_LUME_URL}" alt="Lume" style="height:36px;display:inline-block;"/>`;
   const pied = `
-<p style="margin:0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${c.langue === 'fr' ? 'Une question ? Répondez à ce courriel ou écrivez-nous à' : 'Questions? Reply to this email or write to'} <a href="mailto:${echapper(support)}" style="color:${GRIS_DOUX};">${echapper(support)}</a>.</p>
+<p style="margin:0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${c.langue === 'fr' ? 'Une question ? Réponds à ce courriel ou écris-nous à' : 'Questions? Reply to this email or write to'} <a href="mailto:${echapper(support)}" style="color:${GRIS_DOUX};">${echapper(support)}</a>.</p>
 <p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">Lume CRM &nbsp;&middot;&nbsp; <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;">lumecrm.net</a></p>`;
-  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, couleur: COULEUR_LUME, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team') : c.signature }, COULEUR_LUME), piedHtml: pied });
+  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, couleur: COULEUR_LUME, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team') : c.signature }, COULEUR_LUME, true), piedHtml: pied });
 }
 
 /** Les mots qui reviennent dans tous les courriels client, dans les deux langues. */

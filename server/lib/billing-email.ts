@@ -9,7 +9,8 @@
 
 import { getServiceClient } from './supabase';
 import { sendEmail, isMailerConfigured } from './mailer';
-import { renderPaymentReceiptEmail, type ReceiptTemplateData } from './email-templates/payment-receipt';
+import { renderPaymentReceiptEmail, sujetRecuAbonnement, type ReceiptTemplateData } from './email-templates/payment-receipt';
+import { montant, dateLisible } from './courriels/gabarit';
 import { logger } from './logger';
 
 export interface SendReceiptParams {
@@ -80,29 +81,20 @@ export async function sendPaymentReceipt(params: SendReceiptParams): Promise<{
       return { sent: false, skipped: true, error: 'SMTP not configured' };
     }
 
-    // ── 3. Build template data ──
-    const formatCurrency = (cents: number, cur: string) => {
-      const amount = (cents / 100).toFixed(2);
-      const symbol = cur === 'USD' ? '$' : cur === 'CAD' ? 'CA$' : `${cur} `;
-      return `${symbol}${amount}`;
-    };
-
+    // ── 3. Build template data (voix Lume : français, montants fr-CA) ──
+    const devise = (params.currency || 'CAD').toUpperCase();
     const subtotal = params.taxes ? params.amountCents - params.taxes : params.amountCents;
     const templateData: ReceiptTemplateData = {
-      companyName: params.companyName || 'Your company',
+      companyName: params.companyName || 'ton entreprise',
       planName: params.planName,
-      billingPeriod: params.interval === 'yearly' ? 'Yearly' : 'Monthly',
-      amountPaid: formatCurrency(subtotal, params.currency),
-      currency: params.currency,
-      taxes: params.taxes ? formatCurrency(params.taxes, params.currency) : null,
-      total: formatCurrency(params.amountCents, params.currency),
-      paymentDate: params.paymentDate.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }),
+      billingPeriod: params.interval === 'yearly' ? 'Annuel' : 'Mensuel',
+      amountPaid: montant(subtotal, devise, 'fr'),
+      currency: devise,
+      taxes: params.taxes ? montant(params.taxes, devise, 'fr') : null,
+      total: montant(params.amountCents, devise, 'fr'),
+      paymentDate: dateLisible(params.paymentDate.toISOString(), 'fr'),
       billingEmail: params.recipientEmail,
-      transactionId: params.stripePaymentIntentId || params.stripeCheckoutSessionId || 'N/A',
+      transactionId: params.stripePaymentIntentId || params.stripeCheckoutSessionId || '—',
       dashboardUrl: params.dashboardUrl,
       billingUrl: params.billingUrl,
     };
@@ -112,7 +104,7 @@ export async function sendPaymentReceipt(params: SendReceiptParams): Promise<{
     // ── 4. Send email ──
     const result = await sendEmail({
       to: params.recipientEmail,
-      subject: `Payment confirmed — Lume ${params.planName}`,
+      subject: sujetRecuAbonnement(params.planName),
       html,
     });
 

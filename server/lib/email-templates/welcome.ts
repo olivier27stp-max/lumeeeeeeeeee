@@ -1,6 +1,9 @@
 /**
- * Courriel de bienvenue — envoyé une fois, après confirmation de l'adresse.
+ * Courriels du parcours « compte » : confirmation d'adresse, bienvenue après
+ * confirmation, bienvenue après paiement. Rendus par le gabarit commun (voix
+ * Lume, server/lib/courriels/gabarit.ts) — aucun HTML maison ici.
  *
+ * Bienvenue — envoyé une fois, après confirmation de l'adresse.
  * POURQUOI : après avoir cliqué le lien de vérification, le client arrivait
  * dans un espace vide sans rien recevoir. C'est pourtant le moment où il a le
  * plus besoin d'être guidé, et le seul où on est certain qu'il lit ses
@@ -10,18 +13,37 @@
  * utile entraîne l'habitude de ne plus les ouvrir, et le jour où on envoie
  * quelque chose d'important il passe à la trappe. Celui-ci dit quoi faire.
  *
- * Le logo est chargé depuis le domaine canonique. La plupart des clients de
- * messagerie masquent les images distantes tant que le destinataire ne clique
- * pas « afficher les images » : le texte doit donc rester compréhensible sans
- * lui — c'est le cas, l'objet et la première ligne suffisent.
+ * La plupart des clients de messagerie masquent les images distantes tant que
+ * le destinataire ne clique pas « afficher les images » : le texte doit donc
+ * rester compréhensible sans le logo — c'est le cas, l'objet et la première
+ * ligne suffisent.
  */
+import { rendreCourrielLume, echapper } from '../courriels/gabarit';
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function salut(name: string): string {
+  return name ? `Salut ${name},` : 'Salut,';
+}
+
+export interface VerificationEmailData {
+  /** Prénom du destinataire ; vide si inconnu. */
+  name: string;
+  /** Lien complet de confirmation (/verify-email?token=…). */
+  verifyUrl: string;
+  /** Durée de validité, en heures, pour l'afficher au client. */
+  expiresInHours: number;
+}
+
+/** Confirmation d'inscription : le seul bouton active l'espace de travail. */
+export function renderVerificationEmail(data: VerificationEmailData): string {
+  return rendreCourrielLume({
+    langue: 'fr',
+    preheader: 'Un clic pour confirmer ton adresse et activer ton espace de travail.',
+    titre: 'Confirme ton compte',
+    salutation: salut(data.name),
+    intro: 'Merci d’avoir créé ton compte. Clique sur le bouton pour confirmer ton adresse courriel et activer ton espace de travail.',
+    bouton: { texte: 'Confirmer mon compte', url: data.verifyUrl },
+    note: `Ce lien expire dans ${data.expiresInHours} heures. Si tu n’as pas créé de compte, ignore simplement ce courriel.`,
+  });
 }
 
 export interface WelcomeEmailData {
@@ -33,51 +55,59 @@ export interface WelcomeEmailData {
   supportEmail: string;
 }
 
+const ETAPES: ReadonlyArray<{ titre: string; texte: string }> = [
+  { titre: 'Importe tes clients.', texte: 'Depuis la page Clients, un fichier CSV suffit : le nom et un moyen de contact par ligne.' },
+  { titre: 'Complète les infos de ton entreprise.', texte: 'Logo, adresse et couleur apparaissent sur tes soumissions et tes factures.' },
+  { titre: 'Envoie ta première soumission.', texte: 'C’est le meilleur moyen de voir le parcours complet, jusqu’au paiement en ligne.' },
+];
+
+/** Les trois étapes, numérotées — le seul contenu libre du courriel, entièrement échappé. */
+function etapesHtml(): string {
+  return ETAPES.map((e, i) => `
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"${i ? ' style="border-top:1px solid #e5e7eb;"' : ''}>
+<tr>
+<td width="30" valign="top" style="padding:12px 0;"><div style="width:20px;height:20px;border-radius:50%;background:#111827;color:#ffffff;font-size:11px;font-weight:700;line-height:20px;text-align:center;">${i + 1}</div></td>
+<td style="padding:12px 0;font-size:14px;line-height:1.55;color:#374151;"><strong style="color:#111827;">${echapper(e.titre)}</strong> ${echapper(e.texte)}</td>
+</tr>
+</table>`).join('');
+}
+
 export function renderWelcomeEmail(data: WelcomeEmailData): string {
-  const logoUrl = 'https://lumecrm.net/lume-logo-v2.png';
   const app = data.appUrl.replace(/\/$/, '');
-  const salutation = data.name ? `Salut <strong>${escapeHtml(data.name)}</strong>,` : 'Salut,';
+  return rendreCourrielLume({
+    langue: 'fr',
+    preheader: 'Ton espace est prêt. Trois choses à faire en premier — compte une quinzaine de minutes.',
+    titre: 'Bienvenue dans Lume',
+    salutation: salut(data.name),
+    intro: 'Ton compte est confirmé et ton espace de travail est prêt. Voici les trois choses à faire en premier — compte une quinzaine de minutes.',
+    corpsHtml: etapesHtml(),
+    bouton: { texte: 'Ouvrir mon espace', url: app },
+    note: 'Une question ? Réponds simplement à ce courriel — c’est une vraie personne qui lit. Tu peux aussi utiliser le bouton d’aide, en bas à droite dans l’application.',
+    supportEmail: data.supportEmail || null,
+  });
+}
 
-  const etape = (n: number, titre: string, texte: string) => `
-    <tr>
-      <td style="padding:13px 0;border-bottom:1px solid #eceef1;vertical-align:top;width:30px;">
-        <div style="width:19px;height:19px;border-radius:50%;background:#111;color:#fff;font-size:11px;font-weight:700;line-height:19px;text-align:center;">${n}</div>
-      </td>
-      <td style="padding:13px 0;border-bottom:1px solid #eceef1;font-size:13.5px;color:#555;line-height:1.55;">
-        <strong style="color:#16181d;">${titre}</strong> ${texte}
-      </td>
-    </tr>`;
+export interface CheckoutWelcomeEmailData {
+  /** Nom du forfait payé (« Pro », « Croissance »…). */
+  planName: string;
+  /** Lien durable vers la page de configuration (/checkout/success?session_id=…). */
+  setupUrl: string;
+}
 
-  return `<!DOCTYPE html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#ffffff;">
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;max-width:500px;margin:0 auto;padding:40px 20px;">
-
-    <img src="${logoUrl}" alt="Lume" style="height:34px;width:auto;display:block;margin:0 0 26px;" />
-
-    <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 14px;">${salutation}</p>
-
-    <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 14px;">
-      Ton compte est confirmé et ton espace de travail est prêt. Voici les trois
-      choses à faire en premier — compte une quinzaine de minutes.
-    </p>
-
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:22px 0 4px;border-top:1px solid #eceef1;">
-      ${etape(1, 'Importe tes clients.', 'Depuis la page Clients, un fichier CSV suffit : le nom et un moyen de contact par ligne.')}
-      ${etape(2, "Complète les infos de ton entreprise.", 'Logo, adresse et couleur apparaissent sur tes devis et factures.')}
-      ${etape(3, 'Envoie ta première soumission.', "C'est le meilleur moyen de voir le parcours complet, jusqu'au paiement en ligne.")}
-    </table>
-
-    <a href="${escapeHtml(app)}" style="display:inline-block;margin-top:26px;padding:14px 32px;background:#111;color:#ffffff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;letter-spacing:0.5px;">
-      Ouvrir mon espace
-    </a>
-
-    <p style="font-size:12px;color:#999;margin-top:30px;line-height:1.6;">
-      Une question ? Réponds simplement à ce courriel — c'est une vraie personne
-      qui lit. Tu peux aussi utiliser le bouton d'aide, en bas à droite dans
-      l'application.
-    </p>
-
-  </div>
-</body></html>`;
+/**
+ * Après paiement d'un lien de checkout, pour un compte qui n'a pas encore de
+ * mot de passe : un lien durable vers la page de configuration, au cas où
+ * l'onglet a été fermé.
+ */
+export function renderCheckoutWelcomeEmail(data: CheckoutWelcomeEmailData): string {
+  return rendreCourrielLume({
+    langue: 'fr',
+    preheader: `Ton abonnement ${data.planName} est actif. Une dernière étape : configure ton compte.`,
+    titre: 'Paiement confirmé — configure ton compte',
+    salutation: 'Salut,',
+    intro: `Ton abonnement ${data.planName} est actif. Il te reste une étape : créer ton mot de passe et remplir les infos de ton entreprise pour commencer à travailler.`,
+    lignes: [{ libelle: 'Forfait', valeur: data.planName, fort: true }],
+    bouton: { texte: 'Configurer mon compte', url: data.setupUrl },
+    note: 'Garde ce courriel : le lien te ramène à la configuration si tu as fermé l’onglet.',
+  });
 }

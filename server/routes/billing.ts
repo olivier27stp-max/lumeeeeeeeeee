@@ -587,11 +587,9 @@ router.post('/billing/subscribe', validate(subscribeSchema), async (req, res) =>
                 const { data: referrerUser } = await admin.auth.admin.getUserById(referral.referrer_user_id);
                 const referrerEmail = referrerUser?.user?.email;
                 if (referrerEmail) {
-                  await sendEmail({
-                    to: referrerEmail,
-                    subject: '🎁 You earned a free month — your referral subscribed!',
-                    html: `<h2>Your referral just subscribed</h2><p>Great news — someone you referred to Lume CRM just signed up for a paid plan, so <strong>your next month is on us</strong>. We've already extended your billing period by 30 days.</p><p>Keep sharing your link to stack more free months.</p>`,
-                  });
+                  const { courrielMoisGratuit } = await import('../lib/referral-rewards');
+                  const courriel = courrielMoisGratuit({ mode: 'prolongation' });
+                  await sendEmail({ to: referrerEmail, subject: courriel.sujet, html: courriel.html });
                 }
               }
             } catch (err) { console.error('[billing] referrer reward email failed:', err); }

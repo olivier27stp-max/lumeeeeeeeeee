@@ -3,7 +3,7 @@
  *
  *   node --env-file=.env.local --import tsx scripts/qa/apercu-courriels.mts                → qa-captures/courriel-*.png + .html
  *   node --env-file=.env.local --import tsx scripts/qa/apercu-courriels.mts --envoyer x@y  → les envoie aussi à x@y (Resend/SMTP local)
- *   --seulement mot                                                                    → un sous-ensemble (nom contenant le mot)
+ *   --seulement mot / --sauf mot                                                       → un sous-ensemble (nom contenant / ne contenant pas le mot)
  *
  * Données d'exemple (entreprise « Vision Lavage », client « Rafba ») : aucune
  * base, aucune écriture. Les vrais envois (facture, soumission…) passent par
@@ -27,7 +27,8 @@ for (const f of readdirSync(dossierExemples).filter((x) => x.endsWith('.mts')).s
   for (const e of mod.EXEMPLES || []) COURRIELS.push(e);
 }
 const seulement = (() => { const i = process.argv.indexOf('--seulement'); return i >= 0 ? process.argv[i + 1] : null; })();
-const RETENUS = seulement ? COURRIELS.filter((c) => c.nom.includes(seulement)) : COURRIELS;
+const sauf = (() => { const i = process.argv.indexOf('--sauf'); return i >= 0 ? process.argv[i + 1] : null; })();
+const RETENUS = COURRIELS.filter((c) => (!seulement || c.nom.includes(seulement)) && (!sauf || !c.nom.includes(sauf)));
 
 const dossier = resolve('qa-captures');
 mkdirSync(dossier, { recursive: true });
