@@ -28,6 +28,26 @@ export interface EvenementMessageSlack {
   thread_ts?: string;
 }
 
+/**
+ * Note interne : un message du fil qui parle à l'ÉQUIPE, pas au client — il ne
+ * doit jamais lui être relayé (vu le 2026-09-17 : une relance de suivi
+ * « Relance 36h+ — toujours ouvert, pas de réponse produit… À faire : répondre
+ * dans ce fil… puis on close » est partie telle quelle à l'abonné).
+ * Deux façons de marquer une note interne :
+ *  - explicite : commencer par 🔒, « [interne] », « interne : », « note interne », « // » ou « #interne » ;
+ *  - reconnue : les gabarits de suivi (« Relance 36h+ », « À faire : », « puis on close »,
+ *    « pas de réponse produit », « Compte : à enrichir », « Sent using »).
+ * Pur, testable.
+ */
+export function estNoteInterne(texte: string): boolean {
+  const t = texte.trim();
+  if (!t) return false;
+  if (/^(?:🔒|\[interne\]|interne\s*:|note interne\b|\/\/|#interne\b|\[internal\]|internal\s*:)/i.test(t)) return true;
+  if (/^relance\s+\d+\s*[hj]\+?\b/i.test(t)) return true;
+  const marqueurs = [/\bà faire\s*:/i, /\bpuis on close\b/i, /\bon close\b/i, /pas de réponse produit/i, /compte\s*:\s*à enrichir/i, /\bsent using\b/i, /\btoujours ouvert\b.*\b(?:relance|réponse)/i];
+  return marqueurs.filter((m) => m.test(t)).length >= 1 && (/\brelance\b|\bà faire\b|\bclose\b|sent using/i.test(t));
+}
+
 /** Ce message est-il une réponse humaine (ou d'un autre bot) dans un fil de ticket ? Pur, testable. */
 export function estReponseDansUnFil(e: EvenementMessageSlack, bot: { user_id: string; bot_id: string | null }): boolean {
   if (e.type !== 'message') return false;
@@ -58,6 +78,12 @@ export async function relayerReponseSlack(e: EvenementMessageSlack, ticketConnu?
   const auteur = e.user ? await nomUtilisateurSlack(e.user) : 'Support';
   const corps = texteDepuisSlack(e.text || '');
   if (!corps) return 'ignored:empty';
+  // Une note interne reste dans Slack : marquée 🔒 dans le fil pour que l'équipe voie qu'elle n'est pas partie.
+  if (estNoteInterne(corps)) {
+    logger.info('[support/relais] note interne non relayée', { ticketId: t.id });
+    if (e.channel && e.ts) await accuserLivraisonSlack(e.channel, e.ts, false, 'Note interne : pas envoyée au client (commence par 🔒 ou [interne] pour être sûr).');
+    return 'ignored:internal-note';
+  }
   const m = await ajouterMessage(admin, { ticket: t, author: 'agent', body: corps, authorName: auteur, slackTs: e.ts });
   if (!m) return 'ignored:duplicate'; // déjà enregistré (rejeu Slack, ou l'autre chemin)
   await admin.from('support_tickets').update({ status: 'answered' }).eq('id', t.id).neq('status', 'closed');
