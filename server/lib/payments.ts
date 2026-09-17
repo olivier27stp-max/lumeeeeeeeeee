@@ -895,6 +895,48 @@ export async function findExistingPaymentByIdentifiers(admin: SupabaseClient, in
 // ici. L'ancien createInvoicePaidNotification échouait de toute façon en
 // silence (colonnes ref_id/metadata inexistantes dans notifications).
 
+/**
+ * Auteur d'un paiement écrit SANS session (webhook Stripe / PayPal, service
+ * role). Le trigger `crm_enforce_scope` exige alors un `created_by`
+ * explicite (« created_by is required when no auth context »), et sans lui
+ * l'insertion échoue : le webhook répond 500, Stripe rejoue trois jours,
+ * la facture reste due. Découvert le 2026-09-17 par un paiement de bout en
+ * bout sur staging — la prod n'avait encore reçu aucun paiement en ligne.
+ *
+ * Ordre : l'auteur de la facture, sinon un propriétaire actif de l'org,
+ * sinon n'importe quel membre actif. Jamais d'insertion muette.
+ */
+export async function resoudreCreateurPaiementSysteme(
+  admin: SupabaseClient,
+  orgId: string,
+  invoiceId?: string | null,
+): Promise<string> {
+  if (invoiceId) {
+    const { data: inv } = await admin.from('invoices').select('created_by').eq('id', invoiceId).eq('org_id', orgId).maybeSingle();
+    if (inv?.created_by) return String(inv.created_by);
+  }
+  const { data: owner } = await admin
+    .from('memberships')
+    .select('user_id')
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+    .eq('role', 'owner')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (owner?.user_id) return String(owner.user_id);
+  const { data: membre } = await admin
+    .from('memberships')
+    .select('user_id')
+    .eq('org_id', orgId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (membre?.user_id) return String(membre.user_id);
+  throw new Error(`Aucun membre actif pour l'org ${orgId} : impossible d'attribuer le paiement.`);
+}
+
 export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput) {
   const admin = getServiceClient();
   const existing = await findExistingPaymentByIdentifiers(admin, input);
@@ -924,8 +966,10 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
     return { id: existing.id, inserted: false };
   }
 
+  const createdBy = await resoudreCreateurPaiementSysteme(admin, input.org_id, input.invoice_id);
   const insertPayload = {
     org_id: input.org_id,
+    created_by: createdBy,
     client_id: input.client_id || null,
     invoice_id: input.invoice_id || null,
     job_id: input.job_id || null,
