@@ -64,7 +64,7 @@ describe('détection', () => {
     for (const m of [
       'Texte à Tremblay qu’on arrive dans 10 minutes',
       'Fais-moi une soumission pour un lavage de vitres à 150 $',
-      'Déplace le job 33 à jeudi prochain 9 h',
+      'Déplace le job 33 au 12 octobre 9 h',      // date non simple → modèle
       'Envoie la facture de Gagnon',            // pas de numéro : deux Gagnon possibles
       'Marque le job terminé',                   // pas de numéro
       'Pourquoi mon mois est plus bas que juillet ?',

@@ -28,9 +28,23 @@ const CAS: Array<[string, 'texte' | 'carte' | 'execution']> = [
   ['Marque le job 33 terminé', 'carte'], ['Assigne le job 33 à Antoine', 'carte'], ['Ajoute une note sur le job 33 : test des actions directes', 'carte'],
   ['Envoie la facture INV-000006', 'carte'], ['Invite exec.direct@example.com comme technicien', 'carte'],
   ['Crée une tâche : vérifier les actions directes demain', 'carte'], ['Désactive l’automatisation Rappel', 'carte'],
+  // Deuxième vague
+  ['Merci !', 'texte'], ['ok', 'texte'], ['Salut', 'texte'],
+  ['Ajoute un client Exec Directe, 514-555-0177, exec.directe@example.com, 9 rue Exec, Laval', 'carte'],
+  ['Nouveau prospect : Exec Prospectdirect, 514-555-0178', 'carte'],
+  ['Crée une job chez Julie Fortin demain 9 h : lavage de vitres', 'carte'],
+  ['Ajoute une note sur Julie Fortin : préfère les rendez-vous le matin', 'carte'],
+  ['Texte à Julie Fortin : on arrive dans 10 minutes', 'carte'],
+  ['les jobs de Gagnon', 'texte'], ['le solde de Gagnon', 'texte'], ['les devis de Gagnon', 'texte'],
+  ['Reporte le job 33 à demain 9 h', 'carte'],
+  ['Relance mes retards', 'carte'],
+  ['combien j’ai encaissé cette année', 'texte'],
 ];
+const SEULEMENT = process.argv.includes('--seulement') ? process.argv[process.argv.indexOf('--seulement') + 1].split('|') : null;
 let ok = 0;
 for (const [message, attendu] of CAS) {
+  if (SEULEMENT && !SEULEMENT.some((x) => message.includes(x))) continue;
+  await new Promise((r) => setTimeout(r, 2500)); // limiteur global de l'API : jamais deux requêtes dans la même seconde
   const r = await fetch(`${API}/api/lumi/chat`, { method: 'POST', headers: H, body: JSON.stringify({ message }) });
   const brut = await r.text();
   const evts = brut.split('\n').filter((x) => x.startsWith('data:')).map((x) => { try { return JSON.parse(x.slice(5)); } catch { return null; } }).filter(Boolean);

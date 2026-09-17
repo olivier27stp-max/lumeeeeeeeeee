@@ -479,8 +479,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
         const emettreSse = ouvrirSse(res);
         if (rep.genre === 'texte') {
-          emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'debut' });
-          emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'fin' });
+          if (directe.tool) { emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'debut' }); emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'fin' }); }
           if (rep.recu) emettreSse('executed', { type: 'executed', ...rep.recu });
           emettreSse('text', { type: 'text', delta: rep.texte });
           if (rep.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: rep.fiches });
@@ -492,7 +491,7 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: directe.id, params: directe.cible ? { cible: directe.cible } : undefined,
-          outils: [directe.tool], resultat: rep.genre === 'carte' ? 'proposition' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+          outils: directe.tool ? [directe.tool] : [], resultat: rep.genre === 'carte' ? 'proposition' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
       }
