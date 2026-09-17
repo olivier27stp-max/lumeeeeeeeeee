@@ -212,8 +212,8 @@ export async function repondreSupportIA(
       system,
       tools: definitions,
       messages: [...messages], // copie : le tableau continue d'évoluer pendant la boucle
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low' },
+      // Réflexion adaptative à effort bas : Claude 4.6+ seulement (Haiku 4.5 répond 400 « adaptive thinking is not supported »).
+      ...(/haiku-4-5|sonnet-4-5|opus-4-5/.test(MODELE_SUPPORT) ? {} : { thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const } }),
     });
     coutCents += coutEnCents(MODELE_SUPPORT, reponse.usage);
 
