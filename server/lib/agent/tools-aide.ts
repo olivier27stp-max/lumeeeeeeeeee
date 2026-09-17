@@ -98,8 +98,8 @@ export function passagesCarteApp(carte: string = CARTE_APP): Passage[] {
     const m = /^([^:(]+?)\s*(\(([^)]*)\))?\s*:\s*(.+)$/.exec(ligne);
     if (!m) continue;
     const titre = m[1].trim();
-    // La route est le premier « /… » de la parenthèse (« Paramètres → Avis clients, /settings/reviews ») ; sinon la page Support.
-    const route = /\/[a-z0-9\-/:]+/i.exec(m[3] ?? '')?.[0] ?? '';
+    // La route est le premier « /… » de la parenthèse (« Paramètres → Avis clients, /settings/reviews »), sinon le premier du texte (« Replanifier une job : dans le Calendrier (/calendar)… ») ; sinon la page Support.
+    const route = /\/[a-z0-9\-/:]+/i.exec(m[3] ?? '')?.[0] ?? (titre === 'Vocabulaire' ? '' : /\/[a-z0-9\-/:]+/i.exec(m[4])?.[0] ?? '');
     const page = route.startsWith('/') ? route : '/settings/support';
     parent = { page, titre };
     // Poids 3 comme un titre de page : un écran nommé bat un passage marketing sur un mot commun.
@@ -112,7 +112,7 @@ export function passagesCarteApp(carte: string = CARTE_APP): Passage[] {
 export function passagesArticles(articles: Article[] = ARTICLES): Passage[] {
   return articles.map((a) => ({
     page: a.path ?? '/settings/support', slug: `article:${a.id}`, titre: a.q_fr, texte: a.a_fr, poids: 2,
-    mots: mots(`${a.q_fr} ${a.q_en} ${a.a_fr} ${a.a_en} ${a.tags}`),
+    mots: mots(`${a.q_fr} ${a.q_en} ${a.a_fr} ${a.a_en} ${a.tags}`), motsTitre: mots(`${a.q_fr} ${a.q_en}`),
   }));
 }
 
@@ -141,10 +141,10 @@ function index(): Passage[] {
   for (const f of FONCTIONS) {
     const page = `/fonctions/${f.slug}`;
     const titre = f.title.fr;
-    out.push({ page, slug: f.slug, titre, texte: f.lead.fr, poids: 3, mots: mots(`${bi(f.title)} ${bi(f.lead)}`) });
-    for (const p of f.points) out.push({ page, slug: f.slug, titre: `${titre} — ${p.t.fr}`, texte: p.d.fr, poids: 2, mots: mots(`${bi(p.t)} ${bi(p.d)}`) });
-    for (const s of f.steps) out.push({ page, slug: f.slug, titre: `${titre} — ${s.t.fr}`, texte: s.d.fr, poids: 1, mots: mots(`${bi(s.t)} ${bi(s.d)}`) });
-    for (const q of f.faq) out.push({ page, slug: f.slug, titre: `${titre} — ${q.q.fr}`, texte: q.a.fr, poids: 2, mots: mots(`${bi(q.q)} ${bi(q.a)}`) });
+    out.push({ page, slug: f.slug, titre, texte: f.lead.fr, poids: 3, mots: mots(`${bi(f.title)} ${bi(f.lead)}`), motsTitre: mots(bi(f.title)) });
+    for (const p of f.points) out.push({ page, slug: f.slug, titre: `${titre} — ${p.t.fr}`, texte: p.d.fr, poids: 2, mots: mots(`${bi(p.t)} ${bi(p.d)}`), motsTitre: mots(bi(p.t)) });
+    for (const s of f.steps) out.push({ page, slug: f.slug, titre: `${titre} — ${s.t.fr}`, texte: s.d.fr, poids: 1, mots: mots(`${bi(s.t)} ${bi(s.d)}`), motsTitre: mots(bi(s.t)) });
+    for (const q of f.faq) out.push({ page, slug: f.slug, titre: `${titre} — ${q.q.fr}`, texte: q.a.fr, poids: 2, mots: mots(`${bi(q.q)} ${bi(q.a)}`), motsTitre: mots(bi(q.q)) });
   }
   out.push(...passagesCarteApp(), ...passagesArticles(), ...passagesSavoir());
   INDEX = out;
