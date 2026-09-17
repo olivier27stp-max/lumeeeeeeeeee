@@ -65,6 +65,28 @@ export function planGrants(plan: Record<string, any> | null, key: string): boole
   }
 }
 
+// ── Quota de bureaux par workspace ─────────────────────────────────────────
+// Les bureaux ne sont plus vendus par forfait (included_offices / extra_offices
+// ne servent plus) : chaque workspace a droit à UN bureau, et seule la
+// plateforme (Creator Space) peut en accorder davantage. Le quota vit dans
+// org_features { feature: 'office_quota', metadata.quota }, posé sur tous les
+// bureaux du company_group.
+export const OFFICE_QUOTA_KEY = 'office_quota';
+export const DEFAULT_OFFICE_QUOTA = 1;
+export const MAX_OFFICE_QUOTA = 50;
+
+/** Quota effectif d'une compagnie à partir de ses lignes org_features
+ *  (n'importe quel bureau du groupe) : le plus grand quota plateforme, sinon 1. */
+export function resolveOfficeQuota(rows: Array<{ feature: string; enabled?: boolean; metadata: unknown }> | null | undefined): number {
+  let quota = DEFAULT_OFFICE_QUOTA;
+  for (const r of rows ?? []) {
+    if (r.feature !== OFFICE_QUOTA_KEY || !isPlatformOverride(r.metadata)) continue;
+    const q = Number((r.metadata as any).quota);
+    if (Number.isInteger(q) && q > quota) quota = Math.min(q, MAX_OFFICE_QUOTA);
+  }
+  return quota;
+}
+
 /** Vrai si la ligne org_features a été posée par la plateforme. */
 export function isPlatformOverride(metadata: unknown): boolean {
   return !!metadata && typeof metadata === 'object' && (metadata as any).platform_override === true;

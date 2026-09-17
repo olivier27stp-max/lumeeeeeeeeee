@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Check, CreditCard, Loader2, MapPin, Plus, Users } from 'lucide-react';
+import { Building2, Check, Loader2, MapPin, Plus, Users } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useCompany } from '../../contexts/CompanyContext';
 import { useTranslation } from '../../i18n';
@@ -90,35 +90,23 @@ export default function OfficesSettings() {
               : 'Each office keeps its own clients, jobs and settings.'}
           </p>
         </div>
-        {isOwner && (
-          data.can_create ? (
-            <button
-              type="button"
-              onClick={() => navigate('/offices/new')}
-              className="glass-button-primary inline-flex items-center gap-2 shrink-0"
-            >
-              <Plus size={14} />
-              {fr ? 'Nouveau bureau' : 'New office'}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => navigate('/settings/billing')}
-              className="glass-button inline-flex items-center gap-2 shrink-0"
-              title={fr ? 'Limite du forfait atteinte' : 'Plan limit reached'}
-            >
-              <CreditCard size={14} />
-              {fr ? 'Ajouter un bureau au forfait' : 'Add an office to the plan'}
-            </button>
-          )
+        {isOwner && data.can_create && (
+          <button
+            type="button"
+            onClick={() => navigate('/offices/new')}
+            className="glass-button-primary inline-flex items-center gap-2 shrink-0"
+          >
+            <Plus size={14} />
+            {fr ? 'Nouveau bureau' : 'New office'}
+          </button>
         )}
       </div>
 
       {atLimit && isOwner && (
-        <p className="text-[12px] text-amber-600 font-medium">
+        <p className="text-[12px] text-text-tertiary">
           {fr
-            ? `Votre forfait inclut ${data.capacity} bureau${data.capacity > 1 ? 'x' : ''}. Ajoutez-en un depuis Forfait & facturation pour en créer un nouveau.`
-            : `Your plan includes ${data.capacity} office${data.capacity > 1 ? 's' : ''}. Add one from Plan & billing to create another.`}
+            ? `Votre espace de travail a droit à ${data.capacity} bureau${data.capacity > 1 ? 'x' : ''}. Contactez le support Lume pour en ajouter un.`
+            : `Your workspace is allowed ${data.capacity} office${data.capacity > 1 ? 's' : ''}. Contact Lume support to add one.`}
         </p>
       )}
 

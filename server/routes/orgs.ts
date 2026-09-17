@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../lib/validation';
 import { requireAuthedClient, getServiceClient, companyOrgIds } from '../lib/supabase';
+import { DEFAULT_OFFICE_QUOTA, OFFICE_QUOTA_KEY, resolveOfficeQuota } from '../lib/platformFeatures';
 import { ensureAutomationPresets } from '../lib/automationPresetSeeder';
 import { copyOfficeSettings, NO_INHERIT, type InheritOptions } from '../lib/office-inheritance';
 import {
@@ -46,25 +47,22 @@ const createOfficeSchema = z.object({
 // ─── Helpers ─────────────────────────────────────────────────────
 
 /**
- * Capacité de bureaux de la compagnie : included_offices du plan actif +
- * extra_offices achetés. La sub est cherchée sur N'IMPORTE QUEL bureau de
- * la compagnie (les bureaux secondaires n'ont pas de ligne subscriptions).
- * Sans abonnement actif : 1 bureau, comme le gate de sièges.
+ * Capacité de bureaux de la compagnie : quota posé par la plateforme
+ * (org_features 'office_quota', n'importe quel bureau du groupe), 1 par
+ * défaut. Ne dépend plus du forfait depuis 2026-09-17.
  */
 export async function getOfficeCapacity(admin: ReturnType<typeof getServiceClient>, officeIds: string[]): Promise<number> {
-  if (officeIds.length === 0) return 1;
-  const { data: sub } = await admin
-    .from('subscriptions')
-    .select('plan_id, extra_offices')
+  // Depuis 2026-09-17 les bureaux ne dépendent plus du forfait ni d'un achat
+  // du tenant : 1 bureau par workspace, davantage seulement si la plateforme
+  // (Creator Space → Features) a posé un quota. Le forfait et l'abonnement ne
+  // sont plus consultés ici.
+  if (officeIds.length === 0) return DEFAULT_OFFICE_QUOTA;
+  const { data: rows } = await admin
+    .from('org_features')
+    .select('feature, enabled, metadata')
     .in('org_id', officeIds)
-    .in('status', ['active', 'trialing'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  const { data: plan } = sub?.plan_id
-    ? await admin.from('plans').select('included_offices').eq('id', sub.plan_id).maybeSingle()
-    : { data: null };
-  return (plan?.included_offices ?? 1) + (sub?.extra_offices ?? 0);
+    .eq('feature', OFFICE_QUOTA_KEY);
+  return resolveOfficeQuota(rows);
 }
 
 async function callerRole(admin: ReturnType<typeof getServiceClient>, userId: string, orgId: string): Promise<string | null> {
@@ -196,7 +194,8 @@ router.get('/orgs/offices/grantable-members', async (req, res) => {
 // ─── POST /orgs/create-office ────────────────────────────────────
 // Crée un nouvel office (= org) dans la même compagnie que l'org courant.
 // Réservé au propriétaire. Le créateur devient owner du nouvel office.
-// Bloqué quand la compagnie a déjà atteint included_offices + extra_offices.
+// Bloqué quand la compagnie a déjà atteint son quota de bureaux (1 par défaut,
+// relevé uniquement par la plateforme depuis le Creator Space).
 // Optionnel : coordonnées, héritage de réglages du bureau actif, accès
 // immédiat pour d'autres owners/admins du bureau actif.
 router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res) => {
@@ -223,7 +222,7 @@ router.post('/orgs/create-office', validate(createOfficeSchema), async (req, res
 
     if (used >= capacity) {
       return res.status(403).json({
-        error: `Office limit reached (${capacity} included in your plan). Add extra offices from Billing settings to create more.`,
+        error: `Office limit reached (${capacity} for this workspace). Contact Lume support to add an office.`,
         code: 'office_limit_reached',
         capacity,
         used,

@@ -87,12 +87,15 @@ describe('Creator Space — journal d’accès et révélation (creator-space-au
 describe('Creator Space — fonctionnalités par workspace (creator-space-features)', () => {
   it('chaque handler est gardé par requireCreatorSpace et valide orgId + clé', () => {
     const handlers = featuresSrc.split(/router\.(?:get|post|put|patch|delete)\(/).slice(1);
-    expect(handlers.length).toBe(2);
+    expect(handlers.length).toBe(3);
     for (const h of handlers) {
       expect(h).toContain('requireCreatorSpace(req, res)');
       expect(h).toContain('UUID_RE.test(orgId)');
     }
     expect(featuresSrc).toContain('isPlatformFeatureKey(key)');
+    // Quota de bureaux : borné, raison journalisée avant l'écriture.
+    expect(featuresSrc).toContain('quota > MAX_OFFICE_QUOTA');
+    expect(featuresSrc).toContain('creator_space_office_quota');
   });
 
   it('toute modification exige une raison journalisée AVANT l’écriture, sinon refus', () => {
@@ -113,6 +116,15 @@ describe('Creator Space — fonctionnalités par workspace (creator-space-featur
     // « Hériter » ne supprime que les lignes de la plateforme, jamais une
     // activation faite par le tenant.
     expect(featuresSrc).toContain(".eq('metadata->>platform_override', 'true')");
+  });
+
+  it("les bureaux ne sont plus vendus par forfait : la capacité vient du quota plateforme, plus de /billing/offices", () => {
+    const orgsSrc = read('server/routes/orgs.ts');
+    const guard = orgsSrc.slice(orgsSrc.indexOf('async function getOfficeCapacity'), orgsSrc.indexOf('async function callerRole'));
+    expect(guard).toContain('resolveOfficeQuota(');
+    expect(guard).not.toMatch(/included_offices|extra_offices/);
+    const billingSrc = read('server/routes/billing.ts');
+    expect(billingSrc).not.toMatch(/router\.(get|post)\('\/billing\/offices'/);
   });
 
   it('le tenant ne peut pas renverser un override plateforme (PUT /api/features)', () => {

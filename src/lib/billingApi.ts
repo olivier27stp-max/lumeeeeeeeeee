@@ -269,30 +269,8 @@ export async function setExtraSeats(count: number): Promise<{ message: string; e
   return res.json();
 }
 
-export interface OfficeUsage {
-  included: number;
-  /** Bureaux réels de la compagnie (orgs dont le owner est propriétaire). */
-  used: number;
-  extras_charged: number;
-  extra_price_cents: number;
-  currency: string;
-}
-
-export async function fetchOfficeUsage(): Promise<OfficeUsage> {
-  const res = await fetch(`${API_BASE}/billing/offices`, { headers: await authHeaders() });
-  if (!res.ok) throw new Error((await res.json()).error || 'Failed to load office usage.');
-  return res.json();
-}
-
-export async function setExtraOffices(count: number): Promise<{ message: string; extra_offices?: number; no_change?: boolean; no_stripe?: boolean }> {
-  const res = await fetch(`${API_BASE}/billing/offices`, {
-    method: 'POST',
-    headers: await authHeaders(),
-    body: JSON.stringify({ extra_offices: count }),
-  });
-  if (!res.ok) throw new Error((await res.json()).error || 'Failed to update extra offices.');
-  return res.json();
-}
+// Bureaux : plus vendus par forfait (2026-09-17) — quota par workspace posé
+// par la plateforme (Creator Space). Voir officesApi.listOffices (capacity).
 
 export async function cancelScheduledChange(): Promise<{ message: string }> {
   const res = await fetch(`${API_BASE}/billing/cancel-scheduled-change`, {

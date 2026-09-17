@@ -33,16 +33,14 @@ interface Plan {
   stage: Bi;
   users: Bi;
   extraUserPrice: Bi;
-  offices: Bi;
-  extraOfficePrice?: Bi;
   /** Prix par devise (source : table `plans` en prod, colonnes *_cad / *_usd). */
-  prices: Record<'CAD' | 'USD', { monthly: number; annualFullYr: number; annualFirstYr: number; extraUser: number; extraOffice: number }>;
+  prices: Record<'CAD' | 'USD', { monthly: number; annualFullYr: number; annualFirstYr: number; extraUser: number }>;
   badge?: Bi;
   desc: Bi;
   cta: Bi;
   featured: boolean;
-  /** Utilisateurs et bureaux inclus (chiffres, pour le calcul du trouveur). */
-  seats: { users: number; offices: number };
+  /** Utilisateurs inclus (chiffre, pour le calcul du trouveur). */
+  seats: { users: number };
   /** Titre de la liste courte : « Inclus » / « Tout Minimum, plus ». */
   inherits: Bi;
   /** Six lignes qui résument le forfait sur sa carte. */
@@ -56,16 +54,14 @@ const PLANS: Plan[] = [
     stage: { en: 'Getting started', fr: 'Je démarre' },
     users: { en: 'Includes 3 users', fr: '3 utilisateurs inclus' },
     extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
-    offices: { en: '1 office', fr: '1 bureau' },
-    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
-    prices: { CAD: { monthly: 150, annualFullYr: 1530, annualFirstYr: 1300, extraUser: 35, extraOffice: 100 }, USD: { monthly: 110, annualFullYr: 1122, annualFirstYr: 954, extraUser: 35, extraOffice: 100 } },
+    prices: { CAD: { monthly: 150, annualFullYr: 1530, annualFirstYr: 1300, extraUser: 35 }, USD: { monthly: 110, annualFullYr: 1122, annualFirstYr: 954, extraUser: 35 } },
     desc: {
       en: 'Everything you need to run the business solo or with a small crew.',
       fr: 'Tout ce qu\'il faut pour rouler votre entreprise seul ou avec une petite équipe.',
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: false,
-    seats: { users: 3, offices: 1 },
+    seats: { users: 3 },
     inherits: { en: 'Included', fr: 'Inclus' },
     highlights: [
       { en: 'Clients, quotes, e-signatures & contracts', fr: 'Clients, soumissions, signatures et contrats' },
@@ -82,9 +78,7 @@ const PLANS: Plan[] = [
     stage: { en: 'I have a team', fr: 'J\'ai une équipe' },
     users: { en: 'Includes 10 users', fr: '10 utilisateurs inclus' },
     extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
-    offices: { en: '2 offices', fr: '2 bureaux' },
-    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
-    prices: { CAD: { monthly: 340, annualFullYr: 3468, annualFirstYr: 2948, extraUser: 30, extraOffice: 100 }, USD: { monthly: 250, annualFullYr: 2550, annualFirstYr: 2168, extraUser: 30, extraOffice: 100 } },
+    prices: { CAD: { monthly: 340, annualFullYr: 3468, annualFirstYr: 2948, extraUser: 30 }, USD: { monthly: 250, annualFullYr: 2550, annualFirstYr: 2168, extraUser: 30 } },
     badge: { en: 'Most Popular', fr: 'Le plus populaire' },
     desc: {
       en: 'For growing teams — stop being the dispatcher and let the system run the day.',
@@ -92,7 +86,7 @@ const PLANS: Plan[] = [
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: true,
-    seats: { users: 10, offices: 2 },
+    seats: { users: 10 },
     inherits: { en: 'Everything in Minimum, plus', fr: 'Tout Minimum, plus' },
     highlights: [
       { en: 'Two-way SMS & batch messaging', fr: 'Textos bidirectionnels et messages groupés' },
@@ -109,16 +103,14 @@ const PLANS: Plan[] = [
     stage: { en: 'Runs without me', fr: 'Ça roule sans moi' },
     users: { en: 'Includes 20 users', fr: '20 utilisateurs inclus' },
     extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
-    offices: { en: '5 offices', fr: '5 bureaux' },
-    extraOfficePrice: { en: '+{x}/extra office', fr: '+{x}/bureau suppl.' },
-    prices: { CAD: { monthly: 495, annualFullYr: 5049, annualFirstYr: 4292, extraUser: 25, extraOffice: 100 }, USD: { monthly: 360, annualFullYr: 3672, annualFirstYr: 3121, extraUser: 25, extraOffice: 100 } },
+    prices: { CAD: { monthly: 495, annualFullYr: 5049, annualFirstYr: 4292, extraUser: 25 }, USD: { monthly: 360, annualFullYr: 3672, annualFirstYr: 3121, extraUser: 25 } },
     desc: {
       en: 'For businesses that grow without the owner — AI, sales teams and full control.',
       fr: 'Pour les entreprises qui grandissent sans le propriétaire — IA, équipes de vente et contrôle complet.',
     },
     cta: { en: 'Book a demo', fr: 'Réserver une démo' },
     featured: false,
-    seats: { users: 20, offices: 5 },
+    seats: { users: 20 },
     inherits: { en: 'Everything in Scale, plus', fr: 'Tout Scale, plus' },
     highlights: [
       { en: 'Lumi on the phone and by text, unlimited', fr: 'Lumi au téléphone et par texte, illimité' },
@@ -318,12 +310,10 @@ const COPY = {
     billedAnnually: (firstYr: string, fullYr: string) => `${firstYr} billed for year one, then ${fullYr}/yr`,
     mostPopular: 'Most popular',
     recommended: 'Recommended for you',
-    seats: (u: number, o: number) => `${u} users · ${o} ${o > 1 ? 'offices' : 'office'} included`,
-    seatExtras: (u: string, o: string) => `+${u} per extra user · +${o} per office`,
+    seats: (u: number) => `${u} users included`,
+    seatExtras: (u: string) => `+${u} per extra user`,
     extrasUser: 'Extra user:',
     extrasUserTail: 'per month depending on the plan',
-    extrasOffice: 'Extra office:',
-    extrasOfficeTail: 'per month',
     extrasCurrency: (cur: string) => `Prices in ${cur}, taxes extra`,
     cornerTitle: 'Every plan includes',
     cornerPoints: ['Guided onboarding with our team', 'Cancel anytime on monthly billing', 'Support in French and English'],
@@ -332,22 +322,19 @@ const COPY = {
     finderLead: 'Tell us the size of the team and what Lume should do for you. The recommended plan and its real price for your team are computed on the right.',
     usersLabel: 'People using Lume',
     usersHint: 'office and field',
-    officesLabel: 'Offices or branches',
-    officesHint: 'distinct addresses',
     less: 'Less',
     more: 'More',
     nFeatures: (n: number) => `${n} features`,
     because: 'Because of:',
-    becauseSeats: (u: number, o: number, cheaper: string) => `your team (${u} ${u > 1 ? 'people' : 'person'}, ${o} ${o > 1 ? 'offices' : 'office'}) is more than ${cheaper} includes`,
+    becauseSeats: (u: number, cheaper: string) => `your team (${u} ${u > 1 ? 'people' : 'person'}) is more than ${cheaper} includes`,
     tooManyUsers: (u: number, inc: number) => `${u} people, ${inc} included`,
-    tooManyOffices: (o: number, inc: number) => `${o} offices, ${inc} included`,
     withExtras: 'With extras:',
     verdictKicker: 'The plan you need',
-    verdictLine: (n: number, u: number, o: number) => n > 0 ? `Covers your ${n} need${n > 1 ? 's' : ''}, ${u} ${u > 1 ? 'people' : 'person'} and ${o} ${o > 1 ? 'offices' : 'office'}.` : `For ${u} ${u > 1 ? 'people' : 'person'} and ${o} ${o > 1 ? 'offices' : 'office'}. Check features to refine.`,
+    verdictLine: (n: number, u: number) => n > 0 ? `Covers your ${n} need${n > 1 ? 's' : ''} and ${u} ${u > 1 ? 'people' : 'person'}.` : `For ${u} ${u > 1 ? 'people' : 'person'}. Check features to refine.`,
     coverage: (c: number, n: number) => `${c} / ${n} of your needs`,
     missing: 'Missing:',
     gotoCompare: 'See your needs in the full comparison ↓',
-    finderNote: 'Monthly prices. The recommended plan is the cheapest one that includes every feature you checked and your whole team. Beyond what Autopilot includes, users and offices are added to the price.',
+    finderNote: 'Monthly prices. The recommended plan is the cheapest one that includes every feature you checked and your whole team. Beyond what Autopilot includes, users are added to the price.',
     detailKicker: 'In detail',
     detailTitle: 'Everything each plan includes.',
     compareSummary: 'See the full comparison of all features',
@@ -372,12 +359,10 @@ const COPY = {
     billedAnnually: (firstYr: string, fullYr: string) => `${firstYr} facturés la première année, puis ${fullYr}/an`,
     mostPopular: 'Le plus choisi',
     recommended: 'Recommandé pour vous',
-    seats: (u: number, o: number) => `${u} utilisateurs · ${o} bureau${o > 1 ? 'x' : ''} inclus`,
-    seatExtras: (u: string, o: string) => `+${u} par utilisateur supplémentaire · +${o} par bureau`,
+    seats: (u: number) => `${u} utilisateurs inclus`,
+    seatExtras: (u: string) => `+${u} par utilisateur supplémentaire`,
     extrasUser: 'Utilisateur supplémentaire :',
     extrasUserTail: 'par mois selon le forfait',
-    extrasOffice: 'Bureau supplémentaire :',
-    extrasOfficeTail: 'par mois',
     extrasCurrency: (cur: string) => `Prix en ${cur}, taxes en sus`,
     cornerTitle: 'Tous les forfaits incluent',
     cornerPoints: ['Une intégration guidée avec notre équipe', 'Annulation en tout temps en mensuel', 'Un soutien en français et en anglais'],
@@ -386,22 +371,19 @@ const COPY = {
     finderLead: 'Dites la taille de l\'équipe et ce que Lume doit faire pour vous. Le forfait recommandé et son vrai prix pour votre équipe se calculent à droite.',
     usersLabel: 'Personnes qui utilisent Lume',
     usersHint: 'bureau et terrain',
-    officesLabel: 'Bureaux ou succursales',
-    officesHint: 'adresses distinctes',
     less: 'Moins',
     more: 'Plus',
     nFeatures: (n: number) => `${n} fonctions`,
     because: 'Parce que :',
-    becauseSeats: (u: number, o: number, cheaper: string) => `votre équipe (${u} personne${u > 1 ? 's' : ''}, ${o} bureau${o > 1 ? 'x' : ''}) dépasse ce que ${cheaper} inclut`,
+    becauseSeats: (u: number, cheaper: string) => `votre équipe (${u} personne${u > 1 ? 's' : ''}) dépasse ce que ${cheaper} inclut`,
     tooManyUsers: (u: number, inc: number) => `${u} personnes, ${inc} incluses`,
-    tooManyOffices: (o: number, inc: number) => `${o} bureaux, ${inc} inclus`,
     withExtras: 'Avec suppléments :',
     verdictKicker: 'Le forfait qu\'il vous faut',
-    verdictLine: (n: number, u: number, o: number) => n > 0 ? `Couvre vos ${n} besoin${n > 1 ? 's' : ''}, ${u} personne${u > 1 ? 's' : ''} et ${o} bureau${o > 1 ? 'x' : ''}.` : `Pour ${u} personne${u > 1 ? 's' : ''} et ${o} bureau${o > 1 ? 'x' : ''}. Cochez des fonctions pour préciser.`,
+    verdictLine: (n: number, u: number) => n > 0 ? `Couvre vos ${n} besoin${n > 1 ? 's' : ''} et ${u} personne${u > 1 ? 's' : ''}.` : `Pour ${u} personne${u > 1 ? 's' : ''}. Cochez des fonctions pour préciser.`,
     coverage: (c: number, n: number) => `${c} / ${n} de vos besoins`,
     missing: 'Manque :',
     gotoCompare: 'Voir vos besoins dans la comparaison complète ↓',
-    finderNote: 'Prix mensuels. Le forfait recommandé est le moins cher qui inclut chaque fonction cochée et toute votre équipe. Au-delà de ce qu\'Autopilot inclut, utilisateurs et bureaux s\'ajoutent au prix.',
+    finderNote: 'Prix mensuels. Le forfait recommandé est le moins cher qui inclut chaque fonction cochée et toute votre équipe. Au-delà de ce qu\'Autopilot inclut, les utilisateurs s\'ajoutent au prix.',
     detailKicker: 'Dans le détail',
     detailTitle: 'Tout ce que chaque forfait comprend.',
     compareSummary: 'Voir la comparaison complète de toutes les fonctions',
@@ -426,7 +408,6 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
   const [annual, setAnnual] = useState(true);
   const [demoOpen, setDemoOpen] = useState(false);
   const [users, setUsers] = useState(6);
-  const [offices, setOffices] = useState(1);
   const [needs, setNeeds] = useState<Set<string>>(() => new Set(DEFAULT_NEEDS));
   const [compareOpen, setCompareOpen] = useState(false);
   const compareRef = useRef<HTMLDetailsElement>(null);
@@ -441,12 +422,12 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
 
   // ── Trouveur ──
   const priceFor = (plan: Plan) =>
-    pr(plan).monthly + Math.max(0, users - plan.seats.users) * pr(plan).extraUser + Math.max(0, offices - plan.seats.offices) * pr(plan).extraOffice;
+    pr(plan).monthly + Math.max(0, users - plan.seats.users) * pr(plan).extraUser;
   const { rec, wantedRows, coverage, why } = useMemo(() => {
     const list = [...needs].map(k => NEED_BY_KEY[k]).filter(Boolean);
     const coverage = PLANS.map((_, i) => list.filter(n => n.plan <= i));
     const coversAll = (i: number) => coverage[i].length === list.length;
-    const fits = (i: number) => users <= PLANS[i].seats.users && offices <= PLANS[i].seats.offices;
+    const fits = (i: number) => users <= PLANS[i].seats.users;
     // Le moins cher qui couvre toutes les fonctions cochées ET inclut l'équipe ;
     // au-delà des inclus d'Autopilot, Autopilot avec suppléments.
     let rec = PLANS.findIndex((_, i) => coversAll(i) && fits(i));
@@ -457,7 +438,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
     const cheaperCovers = PLANS.findIndex((_, i) => coversAll(i));
     const bySeats = cheaperCovers >= 0 && cheaperCovers < rec;
     return { rec, wantedRows: new Set(list.flatMap(n => n.rows)), coverage, why: { byFeature, bySeats } };
-  }, [needs, users, offices]);
+  }, [needs, users]);
   const toggleNeed = (k: string) => setNeeds(prev => { const s = new Set(prev); if (s.has(k)) s.delete(k); else s.add(k); return s; });
   const gotoCompare = () => {
     setCompareOpen(true);
@@ -506,7 +487,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                   <span className="per">{c.perMonth}</span>
                 </div>
                 <div className="pr-bill">{annual ? c.billedAnnually(money(p.annualFirstYr), money(p.annualFullYr)) : c.billedMonthly}</div>
-                <div className="pr-seats">{c.seats(plan.seats.users, plan.seats.offices)}<small>{c.seatExtras(money(p.extraUser), money(p.extraOffice))}</small></div>
+                <div className="pr-seats">{c.seats(plan.seats.users)}<small>{c.seatExtras(money(p.extraUser))}</small></div>
                 <div className="pr-inh">{plan.inherits[language]}</div>
                 <ul>
                   {plan.highlights.map(h => <li key={h.en}><Check label={c.included} /><span>{h[language]}</span></li>)}
@@ -518,7 +499,6 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
         </div>
         <div className="pr-extras">
           <span>{c.extrasUser} {PLANS.map((p, i) => <b key={p.slug}>{i > 0 && <span className="sep"> · </span>}{money(pr(p).extraUser)}</b>)} {c.extrasUserTail}</span>
-          <span>{c.extrasOffice} <b>{money(pr(PLANS[0]).extraOffice)}</b> {c.extrasOfficeTail}</span>
           <span>{c.extrasCurrency(currency)}</span>
         </div>
         <div className="pr-every">
@@ -543,14 +523,6 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
                   <button type="button" aria-label={c.more} onClick={() => setUsers(u => Math.min(60, u + 1))}>+</button>
                 </span>
               </div>
-              <div className="pr-num">
-                <label htmlFor="pr-offices">{c.officesLabel}<small>{c.officesHint}</small></label>
-                <span className="pr-stepper">
-                  <button type="button" aria-label={c.less} onClick={() => setOffices(o => Math.max(1, o - 1))}>−</button>
-                  <output id="pr-offices">{offices}</output>
-                  <button type="button" aria-label={c.more} onClick={() => setOffices(o => Math.min(12, o + 1))}>+</button>
-                </span>
-              </div>
             </div>
             {NEEDS.map(g => (
               <div key={g.title.en}>
@@ -567,13 +539,13 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
             <div className="pr-verdict">
               <div className="k">{c.verdictKicker}</div>
               <h3>{PLANS[rec].name}<small>{money(priceFor(PLANS[rec]))} {c.perMonth}</small></h3>
-              <p>{c.verdictLine(needs.size, users, offices)} {PLANS[rec].stage[language]}.</p>
+              <p>{c.verdictLine(needs.size, users)} {PLANS[rec].stage[language]}.</p>
               {(why.byFeature.length > 0 || why.bySeats) && (
                 <p className="why">
                   {c.because}{' '}
                   {why.byFeature.map((n, j) => <span key={n.key}>{j > 0 && ', '}<b>{n.label[language]}</b></span>)}
                   {why.byFeature.length > 0 && why.bySeats && ' · '}
-                  {why.bySeats && <b>{c.becauseSeats(users, offices, PLANS[rec - 1].name)}</b>}
+                  {why.bySeats && <b>{c.becauseSeats(users, PLANS[rec - 1].name)}</b>}
                 </p>
               )}
             </div>
@@ -582,13 +554,12 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
               const pct = needs.size ? Math.round((coverage[i].length / needs.size) * 100) : 0;
               const seatMiss: string[] = [];
               if (users > plan.seats.users) seatMiss.push(c.tooManyUsers(users, plan.seats.users));
-              if (offices > plan.seats.offices) seatMiss.push(c.tooManyOffices(offices, plan.seats.offices));
               const isLast = i === PLANS.length - 1;
               return (
                 <div key={plan.slug} className={`pr-pl${i === rec ? ' rec' : ''}`}>
                   <div className="n">{plan.name}{i === rec && <em>{c.recommended}</em>}</div>
                   <div className="pr">{money(priceFor(plan))}<small> {c.perMonth}</small></div>
-                  <div className="cov"><b>{c.coverage(coverage[i].length, needs.size)}</b> · {c.seats(plan.seats.users, plan.seats.offices)}</div>
+                  <div className="cov"><b>{c.coverage(coverage[i].length, needs.size)}</b> · {c.seats(plan.seats.users)}</div>
                   {(miss.length > 0 || (seatMiss.length > 0 && !isLast)) && (
                     <div className="miss">{c.missing} {miss.map((n, j) => <span key={n.key}>{j > 0 && ', '}<s>{n.label[language]}</s></span>)}{miss.length > 0 && seatMiss.length > 0 && !isLast && ', '}{!isLast && seatMiss.map((m, j) => <span key={m}>{j > 0 && ', '}<s>{m}</s></span>)}</div>
                   )}

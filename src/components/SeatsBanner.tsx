@@ -12,7 +12,7 @@ interface SeatsBannerProps {
 
 /**
  * Seat usage + self-serve extra-seat purchase for the billing page.
- * Mirrors OfficesManager: a stepper lets an admin buy (or drop) extra seats
+ * A stepper lets an admin buy (or drop) extra seats
  * at any time — not only once the org is already over its limit. Billing goes
  * through POST /billing/seats (immediate Stripe proration when the sub is
  * linked; DB-only fallback otherwise).

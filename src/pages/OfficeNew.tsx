@@ -4,11 +4,12 @@
  * Même chrome que Nouveau client (en-tête + pied de page, une boîte blanche).
  * Seul le nom est obligatoire ; coordonnées, héritage des réglages du bureau
  * actif et accès immédiat pour d'autres owners/admins sont facultatifs.
- * Réservé au propriétaire ; bloqué à la limite de bureaux du forfait.
+ * Réservé au propriétaire ; bloqué au quota de bureaux du workspace (1 par
+ * défaut, relevé par Lume seulement).
  */
 import React, { useEffect, useId, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, CreditCard, Loader2, Plus, X } from 'lucide-react';
+import { Building2, Loader2, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import AddressAutocomplete, { type StructuredAddress } from '../components/AddressAutocomplete';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
@@ -168,7 +169,7 @@ export default function OfficeNew() {
     } catch (err: any) {
       if (err?.code === 'office_limit_reached') {
         setInlineError(fr
-          ? `Limite de bureaux atteinte — votre forfait en inclut ${err.capacity}. Ajoutez un bureau depuis Forfait & facturation.`
+          ? `Limite de bureaux atteinte — votre espace de travail a droit à ${err.capacity}. Contactez le support Lume pour en ajouter un.`
           : err.message);
       } else {
         setInlineError(err?.message || (fr ? 'Échec de la création.' : 'Failed to create office.'));
@@ -216,16 +217,12 @@ export default function OfficeNew() {
             </div>
           )}
           {isOwner && atLimit && listing && (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-center justify-between gap-3">
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
               <p className="text-[13px] text-amber-700">
                 {fr
-                  ? `Votre forfait inclut ${listing.capacity} bureau${listing.capacity > 1 ? 'x' : ''} (${listing.used} utilisé${listing.used > 1 ? 's' : ''}).`
-                  : `Your plan includes ${listing.capacity} office${listing.capacity > 1 ? 's' : ''} (${listing.used} used).`}
+                  ? `Votre espace de travail a droit à ${listing.capacity} bureau${listing.capacity > 1 ? 'x' : ''} (${listing.used} utilisé${listing.used > 1 ? 's' : ''}). Contactez le support Lume pour en ajouter un.`
+                  : `Your workspace is allowed ${listing.capacity} office${listing.capacity > 1 ? 's' : ''} (${listing.used} used). Contact Lume support to add one.`}
               </p>
-              <button type="button" onClick={() => navigate('/settings/billing')} className="glass-button inline-flex items-center gap-2 shrink-0">
-                <CreditCard size={14} />
-                {fr ? 'Ajouter un bureau' : 'Add an office'}
-              </button>
             </div>
           )}
 

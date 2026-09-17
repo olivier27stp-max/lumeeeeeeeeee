@@ -16,6 +16,7 @@ import {
   getCompanyPermissions,
   getCompanyUsers,
   setCompanyFeature,
+  setCompanyOfficeQuota,
   type CompanyFeature,
   type FeatureOverrideState,
 } from '../../lib/creatorSpaceApi';
@@ -209,7 +210,6 @@ function BillingTab({ orgId }: { orgId: string }) {
           {c.cancel_at_period_end && <Row k="Annulation" v={`prévue le ${fmtDate(c.current_period_end)}`} />}
           {c.canceled_at && <Row k="Annulé le" v={fmtDate(c.canceled_at)} />}
           <Row k="Sièges" v={`${c.plan?.seats_included ?? '—'} inclus${c.extra_seats ? ` + ${c.extra_seats} extra` : ''}`} />
-          <Row k="Bureaux" v={`${c.plan?.included_offices ?? '—'} inclus${c.extra_offices ? ` + ${c.extra_offices} extra` : ''}`} />
           <Row k="Client depuis" v={fmtDate(c.created_at)} />
         </dl>
       </div>
@@ -300,14 +300,19 @@ function FeaturesTab({ orgId }: { orgId: string }) {
     staleTime: 15_000,
     refetchOnWindowFocus: false,
   });
-  const [pending, setPending] = useState<{ key: string; state: FeatureOverrideState } | null>(null);
+  type Pending = { type: 'feature'; key: string; state: FeatureOverrideState } | { type: 'quota'; quota: number };
+  const [pending, setPending] = useState<Pending | null>(null);
   const [reason, setReason] = useState('');
   const mutation = useMutation({
-    mutationFn: (p: { key: string; state: FeatureOverrideState; reason: string }) => setCompanyFeature(orgId, p.key, p.state, p.reason),
+    mutationFn: async (p: Pending & { reason: string }): Promise<unknown> =>
+      p.type === 'quota'
+        ? setCompanyOfficeQuota(orgId, p.quota, p.reason)
+        : setCompanyFeature(orgId, p.key, p.state, p.reason),
     onSuccess: () => {
       setPending(null);
       setReason('');
       qc.invalidateQueries({ queryKey: ['creator-space', 'company', orgId, 'features'] });
+      qc.invalidateQueries({ queryKey: ['creator-space', 'companies'] });
     },
   });
 
@@ -320,8 +325,11 @@ function FeaturesTab({ orgId }: { orgId: string }) {
   const annuler = () => { setPending(null); setReason(''); mutation.reset(); };
   const valider = () => {
     if (!pending || reason.trim().length < 5) return;
-    mutation.mutate({ key: pending.key, state: pending.state, reason: reason.trim() });
+    mutation.mutate({ ...pending, reason: reason.trim() });
   };
+  const pick = (p: Pending) => { setPending(p); setReason(''); mutation.reset(); };
+  const pendingKey = pending?.type === 'feature' ? pending.key : null;
+  const o = d.offices;
 
   return (
     <div className="space-y-4">
@@ -336,7 +344,11 @@ function FeaturesTab({ orgId }: { orgId: string }) {
       {pending && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
           <p className="text-[12.5px] text-amber-900">
-            <span className="font-semibold">{d.features.find((f) => f.key === pending.key)?.label}</span> → {STATE_LABEL[pending.state]}
+            {pending.type === 'quota' ? (
+              <><span className="font-semibold">Bureaux autorisés</span> → {pending.quota}</>
+            ) : (
+              <><span className="font-semibold">{d.features.find((f) => f.key === pending.key)?.label}</span> → {STATE_LABEL[pending.state]}</>
+            )}
           </p>
           <input
             type="text"
@@ -375,8 +387,62 @@ function FeaturesTab({ orgId }: { orgId: string }) {
         </div>
       )}
 
-      <FeatureGroup title="Fonctionnalités du forfait" features={plans} pendingKey={pending?.key ?? null} onPick={(key, state) => { setPending({ key, state }); setReason(''); mutation.reset(); }} />
-      <FeatureGroup title="Modules activés par le workspace" features={modules} pendingKey={pending?.key ?? null} onPick={(key, state) => { setPending({ key, state }); setReason(''); mutation.reset(); }} />
+      {/* Bureaux : quota par workspace (1 par défaut, jamais vendu par forfait) */}
+      <div>
+        <h3 className="text-[11px] uppercase tracking-wide text-text-tertiary font-semibold mb-1.5">Bureaux</h3>
+        <div className={cn('rounded-md border px-3 py-2.5', pending?.type === 'quota' ? 'border-amber-300' : 'border-outline')}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-text-primary">
+                {o.used} / {o.quota} bureau{o.quota > 1 ? 'x' : ''} autorisé{o.quota > 1 ? 's' : ''}
+                {o.quota !== o.default_quota && <span className="ml-1.5 text-[10.5px] font-semibold text-text-tertiary uppercase tracking-wide">forcé</span>}
+              </p>
+              <p className="text-[11.5px] text-text-tertiary mt-0.5">
+                {o.default_quota} par défaut · abaisser sous les bureaux existants n’en supprime aucun, le workspace ne peut plus en créer.
+                {o.updated_at && <> · quota posé le {fmtDate(o.updated_at)}</>}
+              </p>
+            </div>
+            <div className="inline-flex items-center rounded-md border border-outline overflow-hidden shrink-0" role="group" aria-label="Quota de bureaux">
+              <button
+                type="button"
+                aria-label="Enlever un bureau autorisé"
+                disabled={o.quota <= 1 || mutation.isPending}
+                onClick={() => pick({ type: 'quota', quota: o.quota - 1 })}
+                className="h-7 w-8 text-[14px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40"
+              >
+                −
+              </button>
+              <span className="h-7 min-w-[32px] px-1 inline-flex items-center justify-center text-[13px] font-semibold text-text-primary border-x border-outline tabular-nums">{o.quota}</span>
+              <button
+                type="button"
+                aria-label="Ajouter un bureau autorisé"
+                disabled={o.quota >= o.max_quota || mutation.isPending}
+                onClick={() => pick({ type: 'quota', quota: o.quota + 1 })}
+                className="h-7 w-8 text-[14px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          {o.list.length > 0 && (
+            <ul className="mt-2 space-y-1 border-t border-outline/60 pt-2">
+              {o.list.map((b, i) => (
+                <li key={b.id} className={cn('flex items-center justify-between gap-2 text-[12px]', i >= o.quota && 'text-amber-700')}>
+                  <span className="truncate">
+                    {b.name}
+                    {b.is_current && <span className="ml-1.5 text-[10.5px] text-text-tertiary uppercase tracking-wide">ce bureau</span>}
+                    {i >= o.quota && <span className="ml-1.5 text-[10.5px] uppercase tracking-wide">hors quota</span>}
+                  </span>
+                  <span className="shrink-0 text-text-tertiary">{fmtDate(b.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <FeatureGroup title="Fonctionnalités du forfait" features={plans} pendingKey={pendingKey} onPick={(key, state) => pick({ type: 'feature', key, state })} />
+      <FeatureGroup title="Modules activés par le workspace" features={modules} pendingKey={pendingKey} onPick={(key, state) => pick({ type: 'feature', key, state })} />
     </div>
   );
 }
