@@ -7,7 +7,7 @@
 // Le serveur re-vérifie de toute façon chaque requête. Périmètre limité aux
 // projets de migration.
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -339,11 +339,12 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
 
 // ── Détail ───────────────────────────────────────────────────────────────
 
-type Tab = 'resume' | 'files' | 'mappings' | 'issues' | 'duplicates' | 'imports' | 'audit' | 'messages';
+type Tab = 'resume' | 'files' | 'mappings' | 'bot' | 'issues' | 'duplicates' | 'imports' | 'audit' | 'messages';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'resume', label: 'Résumé' },
   { id: 'files', label: 'Fichiers' },
   { id: 'mappings', label: 'Correspondances' },
+  { id: 'bot', label: 'Rapport du bot' },
   { id: 'issues', label: 'Problèmes' },
   { id: 'duplicates', label: 'Doublons' },
   { id: 'imports', label: 'Imports' },
@@ -399,11 +400,15 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
             {t.id === 'issues' && d.issues.filter((i: any) => !i.resolved_at).length > 0 && (
               <span className="ml-1.5 text-amber-700 font-bold">{d.issues.filter((i: any) => !i.resolved_at).length}</span>
             )}
+            {t.id === 'bot' && aFaireBot(m.bot_dernier_rapport) > 0 && (
+              <span className="ml-1.5 text-amber-700 font-bold">{aFaireBot(m.bot_dernier_rapport)}</span>
+            )}
           </button>
         ))}
       </div>
 
-      {tab === 'resume' && <ResumeTab d={d} onChanged={refresh} />}
+      {tab === 'resume' && <ResumeTab d={d} onChanged={refresh} onOuvrirOnglet={setTab} />}
+      {tab === 'bot' && <RapportBotTab d={d} onOuvrirOnglet={setTab} />}
       {tab === 'files' && <FilesTab d={d} onChanged={refresh} />}
       {tab === 'mappings' && <MappingsTab d={d} onChanged={refresh} />}
       {tab === 'issues' && <IssuesTab d={d} onChanged={refresh} />}
@@ -614,46 +619,220 @@ function StaffCard({ migrationId }: { migrationId: string }) {
   );
 }
 
-/** L'audit d'une passe : corrections faites, alertes des gardes, à trancher, manques dans Lume — et le texte à coller à Claude Code. */
-function AuditBot({ audit }: { audit: AuditBotMigration }) {
-  const [ouvert, setOuvert] = useState(false);
-  const copier = async () => {
-    try { await navigator.clipboard.writeText(audit.texte_pour_claude); toast.success('Audit copié : collez-le à Claude Code avec « applique l\'audit »'); }
-    catch (err) { captureClientException(err, { where: 'AuditBot.copier' }); toast.error('Copie impossible : sélectionnez le texte ci-dessous'); setOuvert(true); }
-  };
-  const n = audit.corrections.length + audit.alertes.length + audit.a_verifier.length + audit.manques.length;
-  const Bloc = ({ titre, items, vide }: { titre: string; items: string[]; vide: string }) => (
-    <div>
-      <p className="text-[12px] font-semibold text-text-primary">{titre} <span className="text-text-tertiary font-normal">({items.length})</span></p>
-      {items.length ? <ul className="mt-1 space-y-0.5 text-[12px] text-text-secondary list-disc pl-4">{items.map((t, i) => <li key={i}>{t}</li>)}</ul> : <p className="text-[12px] text-text-tertiary">{vide}</p>}
+/** Nombre d'éléments qui attendent quelqu'un (à trancher + manques) dans le dernier rapport du bot — badge de l'onglet. */
+function aFaireBot(rapport: any): number {
+  const a = (rapport as RapportBotMigration | null)?.audit;
+  return a ? a.a_verifier.length + a.manques.length : 0;
+}
+
+async function copierTextePourClaude(texte: string, ouvrirTexte: () => void): Promise<void> {
+  try { await navigator.clipboard.writeText(texte); toast.success('Audit copié : collez-le à Claude Code avec « applique l\'audit »'); }
+  catch (err) { captureClientException(err, { where: 'copierTextePourClaude' }); toast.error('Copie impossible : sélectionnez le texte affiché'); ouvrirTexte(); }
+}
+
+/** Résumé compact dans la carte Bot : 4 compteurs + accès au rapport complet. */
+function ResumeAuditBot({ audit, onOuvrir }: { audit: AuditBotMigration; onOuvrir: () => void }) {
+  const tuiles: Array<{ n: number; label: string; ton: string }> = [
+    { n: audit.a_verifier.length, label: 'à trancher par vous', ton: audit.a_verifier.length ? 'text-amber-700' : 'text-text-tertiary' },
+    { n: audit.manques.length, label: 'manques pour Claude', ton: audit.manques.length ? 'text-violet-700' : 'text-text-tertiary' },
+    { n: audit.corrections.length, label: 'corrections faites', ton: audit.corrections.length ? 'text-emerald-700' : 'text-text-tertiary' },
+    { n: audit.alertes.length, label: 'alertes', ton: audit.alertes.length ? 'text-red-700' : 'text-text-tertiary' },
+  ];
+  return (
+    <div className="mt-3 flex items-center gap-4 flex-wrap">
+      <div className="flex items-center gap-4 flex-wrap">
+        {tuiles.map((t) => (
+          <div key={t.label} className="flex items-baseline gap-1.5"><span className={`text-[20px] font-bold leading-none ${t.ton}`}>{t.n}</span><span className="text-[12px] text-text-secondary">{t.label}</span></div>
+        ))}
+      </div>
+      <div className="flex-1" />
+      <button type="button" onClick={onOuvrir} className="h-8 px-3 rounded-md text-[12.5px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad]">Voir le rapport</button>
     </div>
   );
+}
+
+/** Regroupe des lignes par fichier, dans l'ordre d'apparition. */
+function parFichier<T extends { fichier: string }>(items: T[]): Array<{ fichier: string; items: T[] }> {
+  const groupes = new Map<string, T[]>();
+  for (const it of items) groupes.set(it.fichier, [...(groupes.get(it.fichier) ?? []), it]);
+  return [...groupes.entries()].map(([fichier, items]) => ({ fichier, items }));
+}
+
+function SectionRapport({ id, titre, sousTitre, n, ton, vide, enfants, action }: { id: string; titre: string; sousTitre: string; n: number; ton: string; vide: string; enfants: ReactNode; action?: ReactNode }) {
   return (
-    <div className="mt-4 rounded-lg border border-outline bg-surface-secondary/40 p-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[13px] font-bold text-text-primary">Audit de la passe{audit.modele ? <span className="text-text-tertiary font-normal"> · {audit.modele}</span> : null}</p>
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setOuvert((v) => !v)} className="h-8 px-3 rounded-md text-[12.5px] border border-outline bg-surface-card text-text-secondary hover:bg-surface-secondary">{ouvert ? 'Masquer le texte' : 'Voir le texte'}</button>
-          <button type="button" onClick={copier} disabled={!audit.texte_pour_claude} className="h-8 px-3 rounded-md text-[12.5px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad] disabled:opacity-50">Copier pour Claude</button>
+    <section id={id} className="section-card p-5 scroll-mt-4" aria-labelledby={`${id}-titre`}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h3 id={`${id}-titre`} className="text-[15px] font-bold text-text-primary flex items-center gap-2">
+            <span className={`inline-flex items-center justify-center min-w-[26px] h-[26px] px-1.5 rounded-full text-[12.5px] font-bold ${ton}`}>{n}</span>
+            {titre}
+          </h3>
+          <p className="text-[12.5px] text-text-secondary mt-0.5">{sousTitre}</p>
         </div>
+        {action}
       </div>
-      {n === 0 && audit.fichiers.length === 0 ? <p className="mt-2 text-[12px] text-text-tertiary">Rien à signaler dans cette passe.</p> : (
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Bloc titre="Corrections faites" vide="Aucune." items={audit.corrections.map((c) => `${c.fichier} · « ${c.colonne} » : ${c.avant ?? 'rien'} → ${c.apres ?? 'ne pas importer'} — ${c.pourquoi}`)} />
-          <Bloc titre="Alertes des gardes" vide="Aucune." items={audit.alertes.map((a) => `${a.fichier} · « ${a.colonne} » : ${a.message}`)} />
-          <Bloc titre="À trancher par vous" vide="Rien." items={audit.a_verifier.map((v) => `${v.fichier} · « ${v.colonne} » : ${v.actuel ?? 'ne pas importer'}${v.candidats.length ? ` (candidats : ${v.candidats.join(' / ')})` : ''} — ${v.pourquoi}`)} />
-          <Bloc titre="Manques dans Lume (pour Claude)" vide="Aucun." items={audit.manques.map((m) => `${m.fichier} · « ${m.colonne} » → ${m.proposition} : ${m.besoin}`)} />
+      <div className="mt-3">{n === 0 ? <p className="text-[13px] text-text-tertiary">{vide}</p> : enfants}</div>
+    </section>
+  );
+}
+
+/** Tableau groupé par fichier : le nom du fichier est un sous-en-tête, les colonnes restent lisibles à l'horizontale (overflow). */
+function TableRapport<T extends { fichier: string }>({ items, colonnes }: { items: T[]; colonnes: Array<{ titre: string; largeur?: string; rendu: (it: T) => ReactNode }> }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-outline">
+      <table className="w-full text-[12.5px]">
+        <thead className="bg-surface-secondary/60 text-text-secondary">
+          <tr>{colonnes.map((c) => <th key={c.titre} scope="col" className={`text-left font-semibold px-3 py-2 ${c.largeur ?? ''}`}>{c.titre}</th>)}</tr>
+        </thead>
+        {parFichier(items).map((g) => (
+          <tbody key={g.fichier}>
+            <tr className="bg-surface-secondary/30"><th scope="rowgroup" colSpan={colonnes.length} className="text-left px-3 py-1.5 text-[12px] font-semibold text-text-primary">📄 {g.fichier}</th></tr>
+            {g.items.map((it, i) => (
+              <tr key={i} className="border-t border-outline/40 align-top hover:bg-surface-secondary/20">
+                {colonnes.map((c) => <td key={c.titre} className="px-3 py-2 text-text-secondary">{c.rendu(it)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        ))}
+      </table>
+    </div>
+  );
+}
+
+const Champ = ({ v }: { v: string | null }) => (v ? <span className="inline-block px-1.5 py-0.5 rounded bg-surface-secondary text-text-primary font-medium whitespace-nowrap">{v}</span> : <span className="text-text-tertiary italic">ne pas importer</span>);
+const Colonne = ({ v }: { v: string }) => <span className="font-medium text-text-primary">« {v} »</span>;
+
+/** Onglet « Rapport du bot » : la dernière passe, organisée par ce qu'il reste à faire. */
+function RapportBotTab({ d, onOuvrirOnglet }: { d: any; onOuvrirOnglet: (t: Tab) => void }) {
+  const m = d.migration;
+  const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+  const [texteOuvert, setTexteOuvert] = useState(false);
+  const [journalOuvert, setJournalOuvert] = useState(false);
+  if (!rapport) {
+    return <div className="section-card p-6 text-[13px] text-text-secondary">Aucune passe du bot pour l'instant. Cliquez « Confier au bot » dans la barre d'actions : le rapport apparaîtra ici, organisé par ce qu'il vous reste à faire.</div>;
+  }
+  if (rapport.en_cours) {
+    return <div className="section-card p-6 text-[13px] text-text-secondary">Une passe est en cours ({rapport.etape_courante ?? 'démarrage'}). Suivez-la en direct dans l'onglet Résumé ; le rapport s'affichera ici à la fin.</div>;
+  }
+  const a = rapport.audit;
+  if (!a) {
+    return <div className="section-card p-6 text-[13px] text-text-secondary">Ce rapport date d'avant la mise à jour du bot (pas d'audit détaillé). Relancez « Confier au bot » pour obtenir le rapport organisé.</div>;
+  }
+  const duree = Math.max(0, Math.round((new Date(rapport.fin).getTime() - new Date(rapport.debut).getTime()) / 1000));
+  const aFaire: string[] = [];
+  if (a.a_verifier.length) aFaire.push(`Tranchez ${a.a_verifier.length} colonne${a.a_verifier.length > 1 ? 's' : ''} dans Correspondances.`);
+  if (a.manques.length) aFaire.push(`Copiez le rapport pour Claude : ${a.manques.length} manque${a.manques.length > 1 ? 's' : ''} à construire dans Lume.`);
+  if (!aFaire.length) aFaire.push('Rien à trancher : le bot a tout réglé de son côté. Suite : import test, puis approbation.');
+  const tuiles: Array<{ id: string; n: number; label: string; ton: string }> = [
+    { id: 'rb-trancher', n: a.a_verifier.length, label: 'À trancher par vous', ton: 'bg-amber-100 text-amber-800' },
+    { id: 'rb-manques', n: a.manques.length, label: 'Manques pour Claude', ton: 'bg-violet-100 text-violet-800' },
+    { id: 'rb-corrections', n: a.corrections.length, label: 'Corrections faites', ton: 'bg-emerald-100 text-emerald-800' },
+    { id: 'rb-alertes', n: a.alertes.length, label: 'Alertes des gardes', ton: 'bg-red-100 text-red-800' },
+    { id: 'rb-journal', n: rapport.decisions.length, label: 'Décisions (journal)', ton: 'bg-surface-secondary text-text-primary' },
+  ];
+  const aller = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return (
+    <div className="space-y-4">
+      <div className="section-card p-5">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-[17px] font-bold text-text-primary">Rapport de la dernière passe</h2>
+            <p className="text-[12.5px] text-text-secondary mt-0.5">
+              {new Date(rapport.fin).toLocaleString('fr-CA')} · {rapport.declencheur === 'cron' ? 'automatique' : 'lancée à la main'} · {duree} s · {a.modele ?? 'sans appel modèle'}{rapport.cout_cents != null ? ` · ${rapport.cout_cents.toFixed(1)} ¢` : ''} · statut {rapport.statut_avant} → {rapport.statut_apres}
+            </p>
+            <p className="text-[12.5px] text-text-secondary mt-0.5">Arrêt : {rapport.arret || '—'}</p>
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setTexteOuvert((v) => !v)} className="h-9 px-3.5 rounded-md text-[13px] border border-outline bg-surface-card text-text-secondary hover:bg-surface-secondary">{texteOuvert ? 'Masquer le texte' : 'Voir le texte'}</button>
+            <button type="button" onClick={() => copierTextePourClaude(a.texte_pour_claude, () => setTexteOuvert(true))} disabled={!a.texte_pour_claude} className="h-9 px-3.5 rounded-md text-[13px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad] disabled:opacity-50">Copier pour Claude</button>
+          </div>
         </div>
-      )}
-      {ouvert && (
-        <textarea readOnly aria-label="Audit à coller à Claude Code" value={audit.texte_pour_claude} className="mt-3 w-full h-64 p-2 text-[12px] font-mono rounded-md border border-outline bg-surface-card text-text-primary" />
-      )}
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3">
+          <p className="text-[12.5px] font-semibold text-amber-900">Quoi faire maintenant</p>
+          <ol className="mt-1 list-decimal pl-5 text-[13px] text-amber-950 space-y-0.5">{aFaire.map((t, i) => <li key={i}>{t}</li>)}</ol>
+        </div>
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {tuiles.map((t) => (
+            <button key={t.id} type="button" onClick={() => aller(t.id)} className="text-left rounded-lg border border-outline bg-surface-card p-3 hover:bg-surface-secondary/50 transition-colors">
+              <span className={`inline-flex items-center justify-center min-w-[30px] h-[30px] px-2 rounded-full text-[14px] font-bold ${t.ton}`}>{t.n}</span>
+              <p className="mt-1.5 text-[12.5px] text-text-secondary leading-tight">{t.label}</p>
+            </button>
+          ))}
+        </div>
+        {texteOuvert && <textarea readOnly aria-label="Audit à coller à Claude Code" value={a.texte_pour_claude} className="mt-4 w-full h-72 p-3 text-[12px] font-mono rounded-md border border-outline bg-surface-card text-text-primary" />}
+      </div>
+
+      <SectionRapport id="rb-trancher" titre="À trancher par vous" sousTitre="Le bot n'a pas osé décider : la proposition du moteur reste en place, à confirmer ou corriger." n={a.a_verifier.length} ton="bg-amber-100 text-amber-800"
+        vide="Rien : toutes les colonnes ont été tranchées."
+        action={a.a_verifier.length ? <button type="button" onClick={() => onOuvrirOnglet('mappings')} className="h-9 px-3.5 rounded-md text-[13px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad]">Ouvrir Correspondances</button> : undefined}
+        enfants={<TableRapport items={a.a_verifier} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Champ actuel', largeur: 'w-[16%]', rendu: (v) => <Champ v={v.actuel} /> },
+          { titre: 'Candidats', largeur: 'w-[18%]', rendu: (v) => v.candidats.length ? v.candidats.join(' / ') : <span className="text-text-tertiary">—</span> },
+          { titre: 'Pourquoi le bot hésite', rendu: (v) => v.pourquoi },
+        ]} />} />
+
+      <SectionRapport id="rb-manques" titre="Manques dans Lume" sousTitre="Données utiles sans champ Lume : à construire dans l'importeur. Copiez le rapport pour Claude, il s'en charge." n={a.manques.length} ton="bg-violet-100 text-violet-800"
+        vide="Aucun : Lume a un champ pour tout ce que contiennent vos fichiers."
+        action={a.manques.length ? <button type="button" onClick={() => copierTextePourClaude(a.texte_pour_claude, () => setTexteOuvert(true))} className="h-9 px-3.5 rounded-md text-[13px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad]">Copier pour Claude</button> : undefined}
+        enfants={<TableRapport items={a.manques} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Entité', largeur: 'w-[10%]', rendu: (v) => ENTITY_LABELS_FR[v.entite] ?? v.entite },
+          { titre: 'Champ proposé', largeur: 'w-[18%]', rendu: (v) => <Champ v={v.proposition} /> },
+          { titre: 'Ce que l\'importeur devrait en faire', rendu: (v) => v.besoin },
+        ]} />} />
+
+      <SectionRapport id="rb-corrections" titre="Corrections faites par le bot" sousTitre="Déjà appliquées dans Correspondances. Vérifiez d'un coup d'œil, rien à faire sauf désaccord." n={a.corrections.length} ton="bg-emerald-100 text-emerald-800"
+        vide="Aucune : les propositions du moteur étaient bonnes."
+        enfants={<TableRapport items={a.corrections} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Avant', largeur: 'w-[16%]', rendu: (v) => <Champ v={v.avant} /> },
+          { titre: 'Après', largeur: 'w-[16%]', rendu: (v) => <Champ v={v.apres} /> },
+          { titre: 'Pourquoi', rendu: (v) => v.pourquoi },
+        ]} />} />
+
+      <SectionRapport id="rb-alertes" titre="Alertes des gardes" sousTitre="Pièges attrapés sans modèle (écrasement, type incompatible, tags, champs personnalisés…) et points à surveiller au dry-run." n={a.alertes.length} ton="bg-red-100 text-red-800"
+        vide="Aucune alerte."
+        enfants={<TableRapport items={a.alertes} colonnes={[
+          { titre: 'Colonne', largeur: 'w-[22%]', rendu: (v) => <Colonne v={v.colonne} /> },
+          { titre: 'Problème', rendu: (v) => v.message },
+          { titre: 'Ce qui a été fait', largeur: 'w-[26%]', rendu: (v) => v.action },
+        ]} />} />
+
+      <section className="section-card p-5" aria-labelledby="rb-fichiers-titre">
+        <h3 id="rb-fichiers-titre" className="text-[15px] font-bold text-text-primary">Fichiers examinés</h3>
+        {a.fichiers.length === 0 ? <p className="mt-2 text-[13px] text-text-tertiary">Aucun fichier examiné dans cette passe.</p> : (
+          <ul className="mt-2 divide-y divide-outline/40">
+            {a.fichiers.map((f, i) => (
+              <li key={i} className="py-2 flex items-start gap-3 flex-wrap text-[13px]">
+                <span className="font-medium text-text-primary">📄 {f.nom}</span>
+                <span className="text-text-tertiary">→ {f.entite ? (ENTITY_LABELS_FR[f.entite] ?? f.entite) : 'aucune entité (non importé)'}</span>
+                {f.nature && <span className="basis-full text-text-secondary">{f.nature}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section id="rb-journal" className="section-card p-5 scroll-mt-4" aria-labelledby="rb-journal-titre">
+        <div className="flex items-center justify-between gap-3">
+          <h3 id="rb-journal-titre" className="text-[15px] font-bold text-text-primary">Journal des décisions <span className="text-text-tertiary font-normal">({rapport.decisions.length})</span></h3>
+          <button type="button" onClick={() => setJournalOuvert((v) => !v)} className="h-8 px-3 rounded-md text-[12.5px] border border-outline bg-surface-card text-text-secondary hover:bg-surface-secondary">{journalOuvert ? 'Replier' : 'Déplier'}</button>
+        </div>
+        {journalOuvert && (
+          <ul className="mt-3 space-y-1 text-[12.5px]">
+            {rapport.decisions.map((dcs, i) => (
+              <li key={i} className="flex gap-2"><span className="text-text-tertiary w-32 shrink-0">{dcs.etape}</span><span className="text-text-secondary">{dcs.cible} — <span className="text-text-primary">{dcs.decision}</span>{dcs.detail ? ` (${dcs.detail})` : ''}</span></li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
 
 /** Le bot de migration : actif ou non, dernière passe, ses décisions. L'approbation et l'import final restent humains. */
-function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
+function CarteBot({ m, onChanged, onOuvrirOnglet }: { m: any; onChanged: () => void; onOuvrirOnglet: (t: Tab) => void }) {
   const [live, setLive] = useState<RapportBotMigration | null>(null);
   const rapport = (live ?? m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
   const [busy, setBusy] = useState(false);
@@ -743,7 +922,7 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
               ))}
             </ul>
           )}
-          {rapport.audit && <AuditBot audit={rapport.audit} />}
+          {rapport.audit && <ResumeAuditBot audit={rapport.audit} onOuvrir={() => onOuvrirOnglet('bot')} />}
         </div>
       ) : !rapport ? (
         <p className="mt-3 text-[12.5px] text-text-tertiary">Aucune passe encore. « Confier au bot » lance une passe maintenant ; « Activer » le fait revenir tout seul.</p>
@@ -752,7 +931,7 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
   );
 }
 
-function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
+function ResumeTab({ d, onChanged, onOuvrirOnglet }: { d: any; onChanged: () => void; onOuvrirOnglet: (t: Tab) => void }) {
   const m = d.migration;
   const [ttl, setTtl] = useState(48);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
@@ -761,7 +940,7 @@ function ResumeTab({ d, onChanged }: { d: any; onChanged: () => void }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <CarteBot m={m} onChanged={onChanged} />
+      <CarteBot m={m} onChanged={onChanged} onOuvrirOnglet={onOuvrirOnglet} />
       <div className="section-card p-5">
         <h3 className="text-[14px] font-bold text-text-primary mb-3">Invitation</h3>
         {activeInv ? (
