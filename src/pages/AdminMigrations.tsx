@@ -21,7 +21,7 @@ import { type AuditBotMigration,
   generateInvitation, revokeInvitation, extendInvitation, decideMapping, resolveIssue,
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
   rollbackMigration, closeMigration, sendAdminMessage, getMigrationAudit, getFileDownloadUrl,
-  reanalyzeFile, rejectFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
+  reanalyzeFile, rejectFile, deleteFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
   type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
@@ -889,6 +889,22 @@ function FileAdminRow({ f, cell, migrationId, onChanged }: { f: any; cell: strin
             Rejeter
           </button>
         )}
+        <button
+          type="button"
+          className="underline text-red-600 font-semibold"
+          onClick={async () => {
+            if (!window.confirm(`Supprimer définitivement "${f.original_name}" et ses correspondances ? Cette action est irréversible.`)) return;
+            try {
+              await deleteFile(migrationId, f.id);
+              toast.success('Fichier supprimé');
+              onChanged();
+            } catch (err: any) {
+              toast.error(err?.message ?? 'Erreur');
+            }
+          }}
+        >
+          Supprimer
+        </button>
       </div>
     </>
   );

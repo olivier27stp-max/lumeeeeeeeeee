@@ -120,6 +120,10 @@ export function rejectFile(id: string, fileId: string): Promise<{ ok: boolean }>
   return apiFetch(`/migrations/${id}/files/${fileId}/reject`, { method: 'POST', body: JSON.stringify({}) });
 }
 
+export function deleteFile(id: string, fileId: string): Promise<{ ok: boolean }> {
+  return apiFetch(`/migrations/${id}/files/${fileId}`, { method: 'DELETE' });
+}
+
 export function reanalyzeFile(id: string, fileId: string): Promise<{ ok: boolean }> {
   return apiFetch(`/migrations/${id}/files/${fileId}/reanalyze`, { method: 'POST', body: JSON.stringify({}) });
 }

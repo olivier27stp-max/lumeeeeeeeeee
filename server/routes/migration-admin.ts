@@ -470,6 +470,47 @@ router.post('/migration-admin/migrations/:id/files/:fileId/reject', async (req, 
   }
 });
 
+// Suppression définitive d'un fichier en double (nettoie colonnes/correspondances/staging via cascade DB).
+router.delete('/migration-admin/migrations/:id/files/:fileId', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+
+    const { data: file, error: fileErr } = await admin
+      .from('migration_files')
+      .select('id, original_name, storage_path')
+      .eq('id', req.params.fileId)
+      .eq('migration_id', migration.id)
+      .maybeSingle();
+    if (fileErr) throw fileErr;
+    if (!file) return res.status(404).json({ error: 'Fichier introuvable.' });
+
+    const { count: importedCount, error: importedErr } = await admin
+      .from('migration_staging_records')
+      .select('id', { count: 'exact', head: true })
+      .eq('file_id', file.id)
+      .in('status', ['imported', 'merged']);
+    if (importedErr) throw importedErr;
+    if ((importedCount ?? 0) > 0) {
+      return res.status(409).json({ error: 'Fichier déjà importé dans des données actives — impossible à supprimer (utiliser le rollback).' });
+    }
+
+    const { error: deleteErr } = await admin.from('migration_files').delete().eq('id', file.id);
+    if (deleteErr) throw deleteErr;
+
+    const { error: storageErr } = await admin.storage.from(MIGRATION_BUCKET).remove([file.storage_path]);
+    if (storageErr) console.error('[migration-admin] storage removal failed:', storageErr);
+
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'file.deleted', actorId: auth.user.id, actorRole: 'platform_admin', target: `file:${file.id}`, meta: { original_name: file.original_name } });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Suppression du fichier impossible.', '[migration-admin]');
+  }
+});
+
 router.post('/migration-admin/migrations/:id/files/:fileId/reanalyze', async (req, res) => {
   try {
     const auth = await requirePlatformAdmin(req, res);
