@@ -112,6 +112,10 @@ export interface RapportBot {
   arret: string;
   cout_cents: number | null;
   audit: AuditBot;
+  /** Suivi en direct (la console lit bot_dernier_rapport toutes les 3 s pendant la passe). */
+  en_cours?: boolean;
+  etape_courante?: string | null;
+  progression?: { fichiers_faits: number; fichiers_total: number } | null;
 }
 export function auditVide(): AuditBot {
   return { fichiers: [], corrections: [], alertes: [], a_verifier: [], manques: [], modele: null, texte_pour_claude: '' };
@@ -444,6 +448,21 @@ async function lireMigration(admin: Admin, id: string): Promise<MigrationRow | n
   return data ?? null;
 }
 
+/**
+ * Suivi en direct : le rapport partiel est écrit dans data_migrations.bot_dernier_rapport
+ * (au plus une fois par 1,5 s, sauf `force`), la console l'affiche pendant la passe.
+ * Ne lève jamais ; bot_derniere_execution n'est posé qu'à la fin (attendreFinBot).
+ */
+const dernierePublication = new Map<string, number>();
+async function publierProgression(admin: Admin, rapport: RapportBot, etape: string | null, force = false): Promise<void> {
+  if (etape !== null) rapport.etape_courante = etape;
+  const t = Date.now();
+  if (!force && t - (dernierePublication.get(rapport.migration_id) ?? 0) < 1500) return;
+  dernierePublication.set(rapport.migration_id, t);
+  const { error } = await admin.from('data_migrations').update({ bot_dernier_rapport: { ...rapport, en_cours: true } as unknown as Record<string, unknown> }).eq('id', rapport.migration_id);
+  if (error) logger.error('[migration-bot] progression non publiée', { error: error.message, migrationId: rapport.migration_id });
+}
+
 async function poserStatut(admin: Admin, m: MigrationRow, to: string, rapport: RapportBot): Promise<boolean> {
   if (m.status === to) return true;
   if (!canTransition(m.status, to as any)) return false;
@@ -464,6 +483,7 @@ async function messagePortail(admin: Admin, m: MigrationRow, acteur: ActeurMigra
 async function audit(admin: Admin, m: MigrationRow, acteur: ActeurMigration, action: string, target: string | null, meta: Record<string, unknown>, rapport: RapportBot, decision: DecisionBot): Promise<void> {
   rapport.decisions.push(decision);
   await logMigrationAudit(admin, { migrationId: m.id, action, actorId: acteur.id, actorRole: 'assistant', target, meta });
+  await publierProgression(admin, rapport, null);
 }
 
 /** Étape 1 : réponses du client aux questions du bot (colonnes, doublons). */
@@ -543,7 +563,11 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
   let confirmees = 0, questions = 0, conservees = 0, changements = 0; // changements = ce qui modifie le résultat d'un import (corrections, colonnes retirées, colonnes « à vérifier » enfin tranchées)
   const { data: ouvertes } = await admin.from('migration_issues').select('details_masked').eq('migration_id', m.id).eq('type', TYPE_QUESTION_COLONNE).is('resolved_at', null);
   const dejaDemandes = new Set((ouvertes ?? []).map((i: any) => String(i.details_masked?.mapping_id ?? '')));
-  for (const f of files ?? []) {
+  const total = (files ?? []).length;
+  rapport.progression = { fichiers_faits: 0, fichiers_total: total };
+  for (const [index, f] of (files ?? []).entries()) {
+    rapport.progression = { fichiers_faits: index, fichiers_total: total };
+    await publierProgression(admin, rapport, `Correspondances : lecture de « ${f.original_name} » (${index + 1}/${total})`, true);
     const cat = f.category_detected as MigrationCategory | null;
     const entity = entityForCategory(cat);
     const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence, target_field, decided_role, reason').eq('file_id', f.id);
@@ -576,7 +600,9 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
       const mp = mapParCol.get(c.id);
       return mp && mp.target_field && (mp.status === 'confirmed' || mp.status === 'corrected') ? [{ position: c.position as number, field: mp.target_field as string }] : [];
     });
+    await publierProgression(admin, rapport, `Correspondances : « ${f.original_name} » (${index + 1}/${total}) — ${colonnes.filter((c) => c.aDecider).length} colonne(s) soumises au modèle, réponse en cours (≈ 1 min)`, true);
     const { verdicts: bruts, manques, nature, modele, cost_cents } = await proposerMappings(admin, m, { fileName: f.original_name, entity, sourceCrm: m.source_crm, colonnes });
+    await publierProgression(admin, rapport, `Correspondances : « ${f.original_name} » (${index + 1}/${total}) — verdicts reçus, application des gardes et des décisions`, true);
     if (cost_cents !== null) rapport.cout_cents = (rapport.cout_cents ?? 0) + cost_cents;
     if (modele) rapport.audit.modele = modele;
     const gardes = appliquerGardes({ fichier: f.original_name, entity, colonnes, verdicts: bruts, champs, fixes });
@@ -629,6 +655,7 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
       if (issue) questions += 1;
     }
   }
+  rapport.progression = { fichiers_faits: total, fichiers_total: total };
   return { confirmees, questions, conservees, changements };
 }
 
@@ -788,6 +815,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   if (!m0) { rapport.arret = 'migration introuvable'; rapport.fin = new Date().toISOString(); return rapport; }
   const m = m0;
   const mode = modeBot(m);
+  await publierProgression(admin, rapport, `Démarrage de la passe (statut ${m.status}, mode ${mode})`, true);
   // Doublons tranchés depuis le dernier dry-run : un import test frais s'impose avant d'approuver, une seule fois.
   let doublonsDepuisTest = 0;
   try {
@@ -797,6 +825,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
         const { data: files } = await admin.from('migration_files').select('id, parse_status').eq('migration_id', m.id).eq('kind', 'data').is('deleted_at', null).neq('security_status', 'rejected');
         const aAnalyser = (files ?? []).filter((f) => f.parse_status === 'pending' || f.parse_status === 'failed');
         if (aAnalyser.length) {
+          await publierProgression(admin, rapport, `Analyse de ${aAnalyser.length} fichier(s)`, true);
           await poserStatut(admin, m, 'parsing', rapport);
           for (const f of aAnalyser) await analyzeMigrationFile(admin, m, f.id);
           await audit(admin, m, acteur, 'bot.analyse', null, { fichiers: aAnalyser.length }, rapport, { etape: 'analyse', cible: 'fichiers', decision: `${aAnalyser.length} fichier${aAnalyser.length > 1 ? 's' : ''} analysé${aAnalyser.length > 1 ? 's' : ''}` });
@@ -813,6 +842,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
         const ouvertes = await questionsOuvertes(admin, m);
         const { count: aVerifier } = await admin.from('migration_field_mappings').select('id', { count: 'exact', head: true }).eq('migration_id', m.id).eq('status', 'needs_review');
         if ((aVerifier ?? 0) === 0 && ouvertes.length === 0) {
+          await publierProgression(admin, rapport, 'Import test (dry-run) en cours', true);
           const r = await lancerImportTest(admin, m, acteur);
           if (!r) { rapport.arret = `import test impossible depuis ${m.status}`; break; }
           rapport.decisions.push({ etape: 'import test', cible: 'dry-run', decision: `${r.report.totals.wouldCreate} à créer, ${r.report.totals.wouldMerge} à fusionner, ${r.report.totals.blockingErrors} erreur${r.report.totals.blockingErrors > 1 ? 's' : ''} bloquante${r.report.totals.blockingErrors > 1 ? 's' : ''}` });
@@ -840,6 +870,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
           rapport.decisions.push({ etape: 'correspondances', cible: 'import test', decision: `${revue.changements} correspondance${revue.changements > 1 ? 's' : ''} changée${revue.changements > 1 ? 's' : ''} : nouvel import test` });
           if (await poserStatut(admin, m, 'ready_for_test', rapport)) continue;
         }
+        await publierProgression(admin, rapport, 'Doublons et rejets du dernier import test', true);
         const { decides, questions } = await traiterDoublons(admin, m, acteur, rapport, mode);
         doublonsDepuisTest += decides;
         rapport.questions_posees += questions;
@@ -878,6 +909,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
         break;
       }
       if (s === 'ready_for_test') {
+        await publierProgression(admin, rapport, 'Import test (dry-run) en cours', true);
         const r = await lancerImportTest(admin, m, acteur);
         if (!r) { rapport.arret = 'import test impossible'; break; }
         rapport.decisions.push({ etape: 'import test', cible: 'dry-run', decision: `${r.report.totals.wouldCreate} à créer, ${r.report.totals.blockingErrors} erreur(s) bloquante(s)` });
@@ -904,6 +936,9 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   rapport.fin = new Date().toISOString();
   rapport.statut_apres = (await lireMigration(admin, migrationId))?.status ?? m.status;
   rapport.audit.texte_pour_claude = construireTextePourClaude(rapport, m);
+  rapport.en_cours = false;
+  rapport.etape_courante = null;
+  dernierePublication.delete(migrationId);
   await admin.from('data_migrations').update({ bot_derniere_execution: rapport.fin, bot_dernier_rapport: rapport as unknown as Record<string, unknown> }).eq('id', migrationId);
   await touchMigrationActivity(admin, migrationId);
   await logMigrationAudit(admin, { migrationId, action: 'bot.passe', actorId: opts.acteurId, actorRole: 'assistant', meta: { declencheur: opts.declencheur, decisions: rapport.decisions.length, arret: rapport.arret, statut: `${rapport.statut_avant} → ${rapport.statut_apres}`, cout_cents: rapport.cout_cents } });

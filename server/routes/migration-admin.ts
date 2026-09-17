@@ -782,6 +782,21 @@ router.post('/migration-admin/migrations/:id/request-approval', async (req, res)
   }
 });
 
+// ── Bot de migration : rapport (partiel pendant la passe) ────────────
+router.get('/migration-admin/migrations/:id/bot', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const { data, error } = await admin.from('data_migrations').select('bot_dernier_rapport, bot_derniere_execution').eq('id', req.params.id).is('deleted_at', null).maybeSingle();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'Migration introuvable.' });
+    return res.json({ rapport: data.bot_dernier_rapport ?? null, derniere_execution: data.bot_derniere_execution ?? null });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Rapport du bot indisponible.', '[migration-admin]');
+  }
+});
+
 // ── Bot de migration : une passe « lorsque demandé » ─────────────────
 router.post('/migration-admin/migrations/:id/bot', async (req, res) => {
   try {

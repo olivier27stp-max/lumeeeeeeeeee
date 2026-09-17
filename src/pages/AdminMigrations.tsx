@@ -7,7 +7,7 @@
 // Le serveur re-vérifie de toute façon chaque requête. Périmètre limité aux
 // projets de migration.
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -25,7 +25,7 @@ import { type AuditBotMigration,
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
   type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
-import { lancerBotMigration, attendreFinBot, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
+import { lancerBotMigration, attendreFinBot, getRapportBot, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -654,8 +654,32 @@ function AuditBot({ audit }: { audit: AuditBotMigration }) {
 
 /** Le bot de migration : actif ou non, dernière passe, ses décisions. L'approbation et l'import final restent humains. */
 function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
-  const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+  const [live, setLive] = useState<RapportBotMigration | null>(null);
+  const rapport = (live ?? m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
   const [busy, setBusy] = useState(false);
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  // Suivi en direct : tant qu'une passe est en cours, relire le rapport partiel toutes les 3 s ; à la fin, recharger la fiche.
+  useEffect(() => {
+    let arret = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = async () => {
+      if (arret) return;
+      try {
+        const { rapport: r } = await getRapportBot(m.id);
+        if (arret) return;
+        setLive(r);
+        setMaintenant(Date.now());
+        if (r?.en_cours) timer = setTimeout(tick, 3000);
+        else if (live?.en_cours) onChanged();
+      } catch (err) {
+        captureClientException(err, { where: 'CarteBot.suivi' });
+        if (!arret) timer = setTimeout(tick, 6000);
+      }
+    };
+    timer = setTimeout(tick, (m.bot_dernier_rapport as RapportBotMigration | null)?.en_cours ? 0 : 3000);
+    return () => { arret = true; if (timer) clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- relance à chaque changement de fiche ; `live` est lu, pas suivi
+  }, [m.id, m.bot_derniere_execution]);
   const autonome = m.bot_mode !== 'client';
   const basculer = async () => {
     setBusy(true);
@@ -686,7 +710,27 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
           {m.bot_actif ? 'Actif — mettre en pause' : 'Activer le bot (toutes les 10 min)'}
         </button>
       </div>
-      {rapport ? (
+      {rapport?.en_cours && (
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3" role="status" aria-live="polite">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5" aria-hidden="true"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600" /></span>
+            <p className="text-[13px] font-semibold text-emerald-900">Bot en cours — {Math.max(0, Math.round((maintenant - new Date(rapport.debut).getTime()) / 1000))} s</p>
+          </div>
+          <p className="mt-1 text-[12.5px] text-emerald-900/90">{rapport.etape_courante ?? 'Démarrage…'}</p>
+          {rapport.progression && rapport.progression.fichiers_total > 0 && (
+            <div className="mt-2">
+              <div className="h-1.5 w-full rounded-full bg-emerald-100 overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.round((rapport.progression.fichiers_faits / rapport.progression.fichiers_total) * 100)}%` }} /></div>
+              <p className="mt-1 text-[11.5px] text-emerald-900/80">{rapport.progression.fichiers_faits} / {rapport.progression.fichiers_total} fichiers</p>
+            </div>
+          )}
+          {rapport.decisions.length > 0 && (
+            <ul className="mt-2 space-y-0.5 max-h-40 overflow-auto text-[12px] text-emerald-950/90">
+              {rapport.decisions.slice(-8).map((d, i) => <li key={`${rapport.decisions.length}-${i}`}>· {d.etape} — {d.cible} : {d.decision}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+      {rapport && !rapport.en_cours ? (
         <div className="mt-3">
           <p className="text-[12.5px] text-text-secondary">
             Dernière passe {new Date(rapport.fin).toLocaleString('fr-CA')} ({rapport.declencheur}) : {rapport.statut_avant} → {rapport.statut_apres} · {rapport.decisions.length} décision{rapport.decisions.length > 1 ? 's' : ''} · {rapport.arret}
@@ -701,9 +745,9 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
           )}
           {rapport.audit && <AuditBot audit={rapport.audit} />}
         </div>
-      ) : (
+      ) : !rapport ? (
         <p className="mt-3 text-[12.5px] text-text-tertiary">Aucune passe encore. « Confier au bot » lance une passe maintenant ; « Activer » le fait revenir tout seul.</p>
-      )}
+      ) : null}
     </div>
   );
 }

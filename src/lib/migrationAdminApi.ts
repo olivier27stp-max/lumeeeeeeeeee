@@ -228,15 +228,18 @@ export function saveMappingTemplate(id: string, name: string): Promise<{ ok: boo
 export function lancerBotMigration(id: string): Promise<{ started: true; depuis: string }> {
   return apiFetch(`/migrations/${id}/bot`, { method: 'POST' });
 }
+/** Rapport du bot, partiel pendant une passe (en_cours, etape_courante, progression) : lecture légère pour le suivi en direct. */
+export function getRapportBot(id: string): Promise<{ rapport: RapportBotMigration | null; derniere_execution: string | null }> {
+  return apiFetch(`/migrations/${id}/bot`);
+}
 /** Attend la fin d'une passe lancée par lancerBotMigration : suit bot_derniere_execution (toutes les 5 s, 20 min max). */
 export async function attendreFinBot(id: string, depuis: string, opts: { intervalleMs?: number; maxMs?: number } = {}): Promise<RapportBotMigration | null> {
   const intervalle = opts.intervalleMs ?? 5000;
   const limite = Date.now() + (opts.maxMs ?? 20 * 60 * 1000);
   while (Date.now() < limite) {
     await new Promise((r) => setTimeout(r, intervalle));
-    const d = await getMigrationDetail(id);
-    const m = d?.migration;
-    if (m?.bot_derniere_execution && m.bot_derniere_execution >= depuis) return (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+    const { rapport, derniere_execution } = await getRapportBot(id);
+    if (derniere_execution && derniere_execution >= depuis) return rapport;
   }
   return null;
 }
@@ -256,6 +259,10 @@ export interface RapportBotMigration {
   statut_avant: string; statut_apres: string; decisions: DecisionBotMigration[]; questions_posees: number; arret: string; cout_cents: number | null;
   /** Absent sur les rapports d'avant 2026-09-17. */
   audit?: AuditBotMigration;
+  /** Vrai pendant la passe : le rapport est partiel et se met à jour. */
+  en_cours?: boolean;
+  etape_courante?: string | null;
+  progression?: { fichiers_faits: number; fichiers_total: number } | null;
 }
 /** Le cron reprend la migration tout seul tant que c'est vrai. */
 export function definirBotActif(id: string, actif: boolean): Promise<any> {
