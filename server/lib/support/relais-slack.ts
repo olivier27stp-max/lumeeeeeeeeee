@@ -48,13 +48,26 @@ export function estNoteInterne(texte: string): boolean {
   return marqueurs.filter((m) => m.test(t)).length >= 1 && (/\brelance\b|\bà faire\b|\bclose\b|sent using/i.test(t));
 }
 
-/** Ce message est-il une réponse humaine (ou d'un autre bot) dans un fil de ticket ? Pur, testable. */
-export function estReponseDansUnFil(e: EvenementMessageSlack, bot: { user_id: string; bot_id: string | null }): boolean {
+/**
+ * Bots tiers dont les réponses de fil sont relayées au client (agents Grok…),
+ * par leur bot_id Slack, séparés par des virgules : SLACK_BOTS_RELAYES.
+ * Tout autre bot ou workflow Slack (relances de suivi, rappels, intégrations)
+ * parle à l'équipe, jamais au client — c'est un workflow qui a fait fuir une
+ * relance interne le 2026-09-17.
+ */
+export function botsRelayes(env: NodeJS.ProcessEnv = process.env): ReadonlySet<string> {
+  return new Set(String(env.SLACK_BOTS_RELAYES || '').split(',').map((x) => x.trim()).filter(Boolean));
+}
+
+/** Ce message est-il une réponse humaine (ou d'un bot tiers autorisé) dans un fil de ticket ? Pur, testable. */
+export function estReponseDansUnFil(e: EvenementMessageSlack, bot: { user_id: string; bot_id: string | null }, autorises: ReadonlySet<string> = botsRelayes()): boolean {
   if (e.type !== 'message') return false;
   if (!e.thread_ts || !e.ts || e.thread_ts === e.ts) return false; // pas un message de fil, ou le parent lui-même
   if (e.subtype && e.subtype !== 'bot_message' && e.subtype !== 'file_share' && e.subtype !== 'thread_broadcast') return false; // édité, supprimé, joined…
   if (e.user && e.user === bot.user_id) return false;
   if (e.bot_id && bot.bot_id && e.bot_id === bot.bot_id) return false;
+  // Un bot ou un workflow Slack : relayé seulement s'il est nommément autorisé.
+  if (e.bot_id || e.subtype === 'bot_message') { if (!e.bot_id || !autorises.has(e.bot_id)) return false; }
   return !!(e.text && e.text.trim());
 }
 
