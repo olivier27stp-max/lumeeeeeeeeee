@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
+import { Link } from 'react-router-dom';
 import { useTranslation } from '../../i18n';
 import {
   getPeriodSummary,
@@ -311,6 +312,16 @@ export default function PayrollPage() {
                     <span className="truncate">
                       <span className="text-[13px] font-semibold text-text-primary">{row.name}</span>
                       {row.role && <span className="ml-1.5 text-[10px] text-text-tertiary">{row.role}</span>}
+                      {row.commission_plan_missing && (
+                        <Link
+                          to="/commissions"
+                          onClick={(e) => e.stopPropagation()}
+                          className="ml-1.5 inline-flex items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-200 dark:bg-amber-900/40 dark:text-amber-200"
+                          title={fr ? 'Ce membre est payé à commission mais aucun plan ne lui est assigné et il n’y a pas de plan par défaut : aucune commission ne sera calculée.' : 'This member is paid on commission but has no assigned plan and there is no default plan: no commission will be calculated.'}
+                        >
+                          {fr ? 'Aucun plan de commission' : 'No commission plan'}
+                        </Link>
+                      )}
                     </span>
                   </span>
                   <span className="hidden md:block text-right text-[13px] tabular-nums text-text-secondary">{row.hours.toFixed(2)}</span>

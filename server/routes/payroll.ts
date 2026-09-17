@@ -148,6 +148,9 @@ type PayrollRow = {
   adjustments_cents: number;
   total_cents: number;
   payment: PayrollPayment | null;
+  /** Mode « commission » ou « horaire + commission » sans plan assigné ni
+   *  plan par défaut : le moteur ne créera JAMAIS de commission pour lui. */
+  commission_plan_missing: boolean;
 };
 
 async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
@@ -157,12 +160,27 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
 
   const { data: members, error: mErr } = await sc
     .from('team_members')
-    .select('user_id, first_name, last_name, role, status, hourly_rate_cents, labour_cost_hourly')
+    .select('user_id, first_name, last_name, role, status, hourly_rate_cents, labour_cost_hourly, compensation_mode')
     .eq('org_id', orgId)
     .not('user_id', 'is', null);
   if (mErr) throw new Error(mErr.message);
   const active = (members || []).filter((m: any) => m.status !== 'inactive');
   const userIds = active.map((m: any) => m.user_id);
+
+  // Qui a un plan de commission ? Même résolution que le moteur
+  // (commission-engine.generateCommissionsForInvoice) : règle assignée au
+  // membre, sinon plan par défaut de l'org. Sans l'un ni l'autre, un rep
+  // « à commission » ne touche rien, en silence — on le montre sur la paie.
+  const [{ data: regles, error: rErr }, { data: reglages, error: sErr }] = await Promise.all([
+    sc.from('fs_commission_rules').select('id, assigned_user_ids').eq('org_id', orgId).eq('is_active', true).is('deleted_at', null),
+    sc.from('commission_settings').select('default_rule_id').eq('org_id', orgId).maybeSingle(),
+  ]);
+  if (rErr) throw new Error(rErr.message);
+  if (sErr) throw new Error(sErr.message);
+  const reglesActives = (regles || []) as Array<{ id: string; assigned_user_ids: string[] | null }>;
+  const planParDefaut = !!reglages?.default_rule_id && reglesActives.some((r) => r.id === reglages.default_rule_id);
+  const aUnPlan = (userId: string) =>
+    planParDefaut || reglesActives.some((r) => Array.isArray(r.assigned_user_ids) && r.assigned_user_ids.includes(userId));
 
   // Une lecture en échec renverrait `data: null` sans lever : les heures et les
   // commissions tomberaient à zéro et la paie serait sous-évaluée en silence.
@@ -240,6 +258,7 @@ async function buildPeriodRows(sc: any, orgId: string, ref?: string) {
       adjustments_cents: adjustmentsCents,
       total_cents: grossCents + commissionCents + adjustmentsCents,
       payment,
+      commission_plan_missing: (m.compensation_mode === 'commission' || m.compensation_mode === 'both') && !aUnPlan(m.user_id),
     };
   });
 

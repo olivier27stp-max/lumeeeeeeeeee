@@ -84,6 +84,8 @@ export interface PayrollRow {
   adjustments_cents: number;
   total_cents: number;
   payment: { user_id: string; total_cents: number; paid_at: string; note: string | null } | null;
+  /** Rep à commission sans plan assigné ni plan par défaut : rien ne sera généré. */
+  commission_plan_missing?: boolean;
 }
 
 export interface PeriodSummary {
