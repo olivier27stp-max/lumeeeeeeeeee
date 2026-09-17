@@ -116,7 +116,7 @@ router.get('/invoices/public/:token', async (req, res) => {
       getCompanyBranding(
         admin,
         invoice.org_id,
-        'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color, social_links',
+        'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color, social_links, default_language',
       ),
       admin
         .from('invoice_items')
@@ -166,7 +166,7 @@ router.get('/invoices/public/:token', async (req, res) => {
       invoice: { ...publique, tax_lines: taxLines },
       items: itemsRes.data ?? [],
       client: clientRes.data ?? null,
-      company: company ?? null,
+      company: company ? { ...company, language: (company as { default_language?: string }).default_language === 'en' ? 'en' : 'fr' } : null,
       pay_token: payTokenActif,
     });
   } catch (err: any) {

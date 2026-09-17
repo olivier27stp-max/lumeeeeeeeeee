@@ -29,7 +29,13 @@ function messageLisible(brut: unknown, isFr: boolean, repli: string): string {
 }
 
 // ── Language detection (public page — no auth context) ──
-const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+// Langue de la page : celle de l'ENTREPRISE dès que l'API l'a dite (un client d'une entreprise
+// francophone voit du français même sur un navigateur anglais) ; en attendant, celle du navigateur.
+// Variable de module lue au rendu : `suivreLangueEntreprise` la fixe AVANT le setState qui rerend.
+let isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+function suivreLangueEntreprise(langue: string | null | undefined) {
+  if (langue === 'fr' || langue === 'en') isFr = langue === 'fr';
+}
 
 function formatMoney(cents: number, currency = 'CAD') {
   return new Intl.NumberFormat(isFr ? 'fr-CA' : 'en-US', {
@@ -59,6 +65,7 @@ export default function PublicPayment() {
     async function load() {
       try {
         const data = await fetchPublicPaymentData(token!);
+        suivreLangueEntreprise(data.business?.language);
         setPaymentData(data);
 
         // If already paid, or online payments switched off by the business,
