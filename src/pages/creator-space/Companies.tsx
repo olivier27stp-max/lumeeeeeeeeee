@@ -1,11 +1,13 @@
-// Creator Space — Companies : liste des compagnies + recherche (nom,
-// identifiant, propriétaire, courriel) + panneau de détails à droite
-// (?org=<uuid> dans l'URL, ce qui permet « Open New Tab » avec contexte).
+// Creator Space — Companies : un rang par WORKSPACE (company_group), ses
+// bureaux (orgs) en sous-couche dépliable ; recherche (nom, identifiant,
+// propriétaire, courriel) + panneau de détails à droite (?org=<uuid> dans
+// l'URL, ce qui permet « Open New Tab » avec contexte). Cliquer le workspace
+// ouvre son bureau principal ; cliquer un bureau ouvre ce bureau.
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { Building2, Search } from 'lucide-react';
+import { Building2, ChevronRight, Search } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { listCompanies } from '../../lib/creatorSpaceApi';
 import { TableSkeleton } from '../../components/ui/Skeleton';
@@ -28,6 +30,22 @@ export default function Companies() {
   });
 
   const rows = query.data?.data ?? [];
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Un bureau secondaire sélectionné (lien partagé, Open New Tab) déplie son
+  // workspace pour rester visible.
+  useEffect(() => {
+    if (!selectedOrg) return;
+    const parent = rows.find((r) => r.id !== selectedOrg && r.offices.some((o) => o.id === selectedOrg));
+    if (parent) setExpanded((prev) => (prev.has(parent.id) ? prev : new Set(prev).add(parent.id)));
+  }, [selectedOrg, rows]);
 
   const select = (orgId: string | null) => {
     const next = new URLSearchParams(searchParams);
@@ -76,41 +94,95 @@ export default function Companies() {
           <div className="rounded-lg border border-outline bg-surface-card overflow-hidden">
             <div className="overflow-x-auto">
             <div className="min-w-[640px]">
-            <div className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1.5fr)_90px_110px_90px] gap-3 px-4 py-2.5 border-b border-outline text-[11px] uppercase tracking-wide text-text-tertiary font-semibold">
-              <span>Compagnie</span>
-              <span>Propriétaire</span>
-              <span className="text-right">Membres</span>
-              <span>Forfait</span>
-              <span>Créée le</span>
+            <div className="grid grid-cols-[28px_1fr] gap-3 px-4 py-2.5 border-b border-outline text-[11px] uppercase tracking-wide text-text-tertiary font-semibold">
+              <span />
+              <div className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1.5fr)_90px_110px_90px] gap-3">
+                <span>Workspace</span>
+                <span>Propriétaire</span>
+                <span className="text-right">Membres</span>
+                <span>Forfait</span>
+                <span>Créé le</span>
+              </div>
             </div>
             <ul>
-              {rows.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => select(c.id)}
-                    className={cn(
-                      'w-full grid grid-cols-[minmax(180px,2fr)_minmax(120px,1.5fr)_90px_110px_90px] gap-3 items-center px-4 py-3 text-left text-[13px] border-b border-outline transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40',
-                      selectedOrg === c.id ? 'bg-surface-secondary' : 'hover:bg-surface-secondary/50',
+              {rows.map((c) => {
+                const open = expanded.has(c.id);
+                const ownsSelected = selectedOrg === c.id || c.offices.some((o) => o.id === selectedOrg);
+                return (
+                  <li key={c.id} className="border-b border-outline">
+                    <div
+                      className={cn(
+                        'grid grid-cols-[28px_1fr] gap-3 items-center px-4 text-[13px] transition-colors',
+                        ownsSelected ? 'bg-surface-secondary' : 'hover:bg-surface-secondary/50',
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggle(c.id)}
+                        aria-expanded={open}
+                        aria-label={open ? `Replier les bureaux de ${c.name}` : `Déplier les bureaux de ${c.name}`}
+                        className="h-7 w-7 -ml-1 flex items-center justify-center rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                      >
+                        <ChevronRight size={14} className={cn('transition-transform', open && 'rotate-90')} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => select(c.id)}
+                        className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1.5fr)_90px_110px_90px] gap-3 items-center py-3 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40"
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-medium text-text-primary truncate">{c.name}</span>
+                          <span className="block text-[11px] text-text-tertiary truncate">
+                            {c.offices.length} bureau{c.offices.length > 1 ? 'x' : ''}
+                            <span className="font-mono"> · {c.company_group_id ?? c.id}</span>
+                          </span>
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-text-secondary truncate">{c.owner_name ?? '—'}</span>
+                          {c.contact_email && <span className="block text-[11.5px] text-text-tertiary truncate">{c.contact_email}</span>}
+                        </span>
+                        <span className="text-right text-text-secondary">{c.member_count}</span>
+                        <span className="min-w-0">
+                          <SubStatusBadge status={c.subscription_status} />
+                          {c.plan_name && <span className="block text-[11px] text-text-tertiary truncate mt-0.5">{c.plan_name}</span>}
+                        </span>
+                        <span className="text-text-tertiary whitespace-nowrap text-[12.5px]">{fmtDate(c.created_at)}</span>
+                      </button>
+                    </div>
+                    {open && (
+                      <ul className="bg-surface/60 border-t border-outline/60" aria-label={`Bureaux de ${c.name}`}>
+                        {c.offices.map((o) => (
+                          <li key={o.id}>
+                            <button
+                              type="button"
+                              onClick={() => select(o.id)}
+                              className={cn(
+                                'w-full grid grid-cols-[28px_1fr] gap-3 items-center px-4 py-2 text-left text-[12.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40',
+                                selectedOrg === o.id ? 'bg-surface-secondary' : 'hover:bg-surface-secondary/50',
+                              )}
+                            >
+                              <span className="flex justify-center"><span className="h-1.5 w-1.5 rounded-full bg-text-tertiary/60" /></span>
+                              <span className="grid grid-cols-[minmax(180px,2fr)_minmax(120px,1.5fr)_90px_110px_90px] gap-3 items-center">
+                              <span className="min-w-0 pl-2 border-l-2 border-outline">
+                                <span className="block text-text-primary truncate">
+                                  {o.name}
+                                  {o.is_primary && <span className="ml-1.5 text-[10.5px] font-semibold text-text-tertiary uppercase tracking-wide">principal</span>}
+                                </span>
+                                <span className="block text-[11px] text-text-tertiary font-mono truncate">{o.id}</span>
+                              </span>
+                              <span className="text-text-tertiary text-[12px]">Bureau</span>
+                              <span className="text-right text-text-secondary">{o.member_count}</span>
+                              <span />
+                              <span className="text-text-tertiary whitespace-nowrap text-[12px]">{fmtDate(o.created_at)}</span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  >
-                    <span className="min-w-0">
-                      <span className="block font-medium text-text-primary truncate">{c.name}</span>
-                      <span className="block text-[11px] text-text-tertiary font-mono truncate">{c.id}</span>
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-text-secondary truncate">{c.owner_name ?? '—'}</span>
-                      {c.contact_email && <span className="block text-[11.5px] text-text-tertiary truncate">{c.contact_email}</span>}
-                    </span>
-                    <span className="text-right text-text-secondary">{c.member_count}</span>
-                    <span className="min-w-0">
-                      <SubStatusBadge status={c.subscription_status} />
-                      {c.plan_name && <span className="block text-[11px] text-text-tertiary truncate mt-0.5">{c.plan_name}</span>}
-                    </span>
-                    <span className="text-text-tertiary whitespace-nowrap text-[12.5px]">{fmtDate(c.created_at)}</span>
-                  </button>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
             </div>
             </div>

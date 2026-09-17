@@ -106,6 +106,21 @@ export interface WorkspaceEngagement {
   engagement: EngagementLevel;
 }
 
+/** Un bureau (org) d'un workspace. */
+export interface CompanyOffice {
+  id: string;
+  name: string;
+  org_name: string;
+  member_count: number;
+  created_at: string;
+  /** Bureau porteur de l'abonnement (sinon le plus ancien) — celui que le
+   *  panneau ouvre quand on clique le workspace. */
+  is_primary: boolean;
+}
+
+/** Un WORKSPACE (company_group ; une org sans groupe = son propre workspace).
+ *  `id` = bureau principal ; `member_count` = utilisateurs distincts tous
+ *  bureaux confondus. */
 export interface CompanyListItem {
   id: string;
   name: string;
@@ -120,6 +135,7 @@ export interface CompanyListItem {
   subscription_status: string | null;
   plan_name: string | null;
   plan_slug: string | null;
+  offices: CompanyOffice[];
 }
 
 export interface SafeSubscription {
