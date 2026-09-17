@@ -9,7 +9,7 @@
 
 import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { localToUtcIso, normalizeAddressKey } from './normalize';
+import { localToUtcIso, normalizeAddressKey, normalizeDigits } from './normalize';
 import { sanitizeCellForDisplay } from './masks';
 import type {
   DryRunReport,
@@ -172,7 +172,7 @@ async function loadDuplicateDecisions(admin: SupabaseClient, migrationId: string
 }
 
 /** Clés de référence sous lesquelles une ligne peut être retrouvée par ses enfants. */
-function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
+export function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   const n = rec.normalized ?? {};
   const r = rec.relations ?? {};
   const keys: string[] = [];
@@ -186,6 +186,10 @@ function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     push(str(n.email));
     const name = fullNameOf(n);
     if (name) keys.push(name);
+    // Téléphone (10 derniers chiffres) : clé de rattachement pour les documents
+    // qui ne portent que le numéro du client. Partagé par 2 clients → retiré.
+    const phone = phoneKey(str(n.phone));
+    if (phone) keys.push(phone);
   } else if (entity === 'property') {
     const addr = normalizeAddressKey(str(n.address));
     if (addr) keys.push(addr);
@@ -199,18 +203,25 @@ function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   return Array.from(new Set(keys));
 }
 
-/** Rattachement client avec repli : identifiant/nom (client_ref) → courriel → nom complet.
+/** Rattachement client avec repli : identifiant/nom (client_ref) → courriel → nom complet → téléphone.
  *  Chaque clé passe par le même index (id externe, courriel, nom complet des
  *  clients importés) ; une clé ambiguë (homonymes) y est absente → orphelin. */
 function resolveClientId(ctx: BuildContext, r: Record<string, string>): string | null {
   return lookupRef(ctx.clientIdByRef, r.client_ref)
     ?? lookupRef(ctx.clientIdByRef, r.client_email_ref)
-    ?? lookupRef(ctx.clientIdByRef, r.client_name_ref);
+    ?? lookupRef(ctx.clientIdByRef, r.client_name_ref)
+    ?? lookupRef(ctx.clientIdByRef, r.client_phone_ref, phoneKey);
+}
+
+/** Clé téléphone : 10 derniers chiffres, préfixée pour ne jamais croiser un id externe numérique. */
+function phoneKey(v: string): string {
+  const digits = normalizeDigits(v);
+  return digits.length >= 7 ? `tel:${digits.slice(-10)}` : '';
 }
 
 /** Valeur brute de référence client (affichage / clé de doublon interne). */
 function clientRefValue(r: Record<string, string>): string {
-  return str(r.client_ref) || str(r.client_email_ref) || str(r.client_name_ref);
+  return str(r.client_ref) || str(r.client_email_ref) || str(r.client_name_ref) || str(r.client_phone_ref);
 }
 
 function lookupRef(map: Map<string, string>, raw: string | undefined, extra?: (v: string) => string): string | null {

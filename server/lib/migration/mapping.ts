@@ -344,6 +344,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
+      ],
+    },
+    {
       field: 'notes',
       labelFr: 'Notes',
       labelEn: 'Notes',
@@ -432,6 +442,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
         'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
       ],
     },
     {
@@ -614,6 +634,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
+      ],
+    },
+    {
       field: 'created_date',
       labelFr: 'Date de création',
       labelEn: 'Created date',
@@ -716,6 +746,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
         'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
       ],
     },
     {
@@ -1076,6 +1116,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
+      ],
+    },
+    {
       field: 'job_ref',
       labelFr: 'Job associée',
       labelEn: 'Job reference',
@@ -1261,6 +1311,16 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
         'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
+      field: 'client_phone_ref',
+      labelFr: 'Téléphone du client (rattachement)',
+      labelEn: 'Client phone (reference)',
+      types: ['phone', 'number', 'text'],
+      synonyms: [
+        'client phone', 'customer phone', 'client phone number', 'customer phone number', 'phone', 'phone number',
+        'telephone du client', 'telephone', 'tel', 'no de telephone',
       ],
     },
     {

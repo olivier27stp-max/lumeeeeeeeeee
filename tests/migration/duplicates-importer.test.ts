@@ -591,3 +591,25 @@ describe('rattachement client avec repli — id/nom, puis courriel, puis nom com
     expect(res.row.client_name).toBe('marc@ex.com');
   });
 });
+
+describe('rattachement client par téléphone (repli final)', async () => {
+  const { buildEntityRow, refKeysOf } = await import('../../server/lib/migration/importer');
+  it('les clés d\'un client incluent ses 10 derniers chiffres de téléphone', () => {
+    const keys = refKeysOf('client', {
+      id: 'c', row_number: 1, entity_type: 'client', external_id: null, status: 'ready',
+      normalized: { first_name: 'Marc', last_name: 'Tremblay', phone: '(438) 340-0627' }, relations: {},
+    } as any);
+    expect(keys).toContain('tel:4383400627');
+  });
+  it('facture avec téléphone seul → client trouvé, formats différents', () => {
+    const ctx = {
+      migration: { org_id: 'org-1' }, createdBy: 'u',
+      clientIdByRef: new Map([['tel:4383400627', 'c-tel']]), propertyIdByRef: new Map(), jobIdByRef: new Map(),
+    } as any;
+    const inv = buildEntityRow('invoice', {
+      id: 'i', row_number: 1, entity_type: 'invoice', external_id: null, status: 'ready',
+      normalized: { invoice_number: '1', total_cents: 100 }, relations: { client_phone_ref: '+1 438-340-0627' },
+    } as any, ctx) as any;
+    expect(inv.row.client_id).toBe('c-tel');
+  });
+});
