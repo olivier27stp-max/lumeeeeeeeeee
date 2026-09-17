@@ -8,6 +8,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { fetchPublicPaymentData, createPublicPaymentIntent, setPublicTip } from '../lib/connectApi';
 import type { PublicPaymentData, CreatePublicPaymentIntentResponse } from '../lib/connectApi';
 import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import RangeeLogos from '../components/payments/LogosPaiement';
 
 /**
  * Les erreurs du serveur sont en anglais uniquement. Sur une page que le
@@ -489,6 +490,7 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand,
         <ShieldCheck size={12} />
         <span>{isFr ? 'Sécurisé par Stripe. Vos informations de carte sont chiffrées.' : 'Secured by Stripe. Your card details are encrypted.'}</span>
       </div>
+      <RangeeLogos wallets={walletsEnabled} className="justify-center" />
     </form>
   );
 }
