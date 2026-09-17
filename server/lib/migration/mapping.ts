@@ -324,6 +324,26 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
       field: 'notes',
       labelFr: 'Notes',
       labelEn: 'Notes',
@@ -392,6 +412,26 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'customer', 'client', 'customer name', 'client name', 'customer id', 'client id',
         'account', 'parent customer', 'contact', 'contact name',
         'nom du client', 'no client', 'numero de client', 'client associe',
+      ],
+    },
+    {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
       ],
     },
     {
@@ -554,6 +594,26 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
       field: 'created_date',
       labelFr: 'Date de création',
       labelEn: 'Created date',
@@ -636,6 +696,26 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'customer', 'client', 'customer name', 'client name', 'customer id', 'client id', 'contact',
         'nom du client', 'no client', 'numero de client',
+      ],
+    },
+    {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
       ],
     },
     {
@@ -976,6 +1056,26 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
+      ],
+    },
+    {
       field: 'job_ref',
       labelFr: 'Job associée',
       labelEn: 'Job reference',
@@ -1141,6 +1241,26 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'customer', 'client', 'customer name', 'client name', 'customer id', 'client id',
         'nom du client', 'no client', 'numero de client',
+      ],
+    },
+    {
+      field: 'client_email_ref',
+      labelFr: 'Courriel du client (rattachement)',
+      labelEn: 'Client email (reference)',
+      types: ['email', 'text'],
+      synonyms: [
+        'client email', 'customer email', 'client e-mail', 'customer e-mail', 'email', 'e-mail', 'email address',
+        'courriel du client', 'courriel', 'email du client', 'adresse courriel',
+      ],
+    },
+    {
+      field: 'client_name_ref',
+      labelFr: 'Nom du client (rattachement)',
+      labelEn: 'Client name (reference)',
+      types: ['name', 'text'],
+      synonyms: [
+        'client full name', 'customer full name', 'display name', 'client display name', 'customer display name',
+        'nom complet du client', 'nom affiche du client',
       ],
     },
     {

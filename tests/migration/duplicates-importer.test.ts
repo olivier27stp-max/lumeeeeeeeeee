@@ -554,3 +554,40 @@ describe('facture — rabais (discount_cents, soustrait avant taxes)', async () 
     expect(row.discount_cents).toBe(0);
   });
 });
+
+describe('rattachement client avec repli — id/nom, puis courriel, puis nom complet', async () => {
+  const { buildEntityRow } = await import('../../server/lib/migration/importer');
+  const ctx = {
+    migration: { org_id: 'org-1' }, createdBy: 'u',
+    clientIdByRef: new Map([['j-102', 'c-id'], ['marc@ex.com', 'c-mail'], ['marc tremblay', 'c-name']]),
+    propertyIdByRef: new Map(), jobIdByRef: new Map(),
+  } as any;
+  const quote = (relations: Record<string, string>) => buildEntityRow('quote', {
+    id: 'q', row_number: 1, entity_type: 'quote', external_id: null, status: 'ready',
+    normalized: { quote_number: 'Q-9', total_cents: 100 }, relations,
+  } as any, ctx) as any;
+
+  it('courriel seul → client trouvé', () => {
+    expect(quote({ client_email_ref: 'Marc@Ex.com' }).row.client_id).toBe('c-mail');
+  });
+  it('nom complet seul → client trouvé', () => {
+    expect(quote({ client_name_ref: 'Marc Tremblay' }).row.client_id).toBe('c-name');
+  });
+  it('identifiant prioritaire sur courriel et nom', () => {
+    expect(quote({ client_ref: 'J-102', client_email_ref: 'marc@ex.com', client_name_ref: 'Marc Tremblay' }).row.client_id).toBe('c-id');
+  });
+  it('identifiant inconnu → repli sur le courriel', () => {
+    expect(quote({ client_ref: 'J-999', client_email_ref: 'marc@ex.com' }).row.client_id).toBe('c-mail');
+  });
+  it('aucune clé connue → orphelin', () => {
+    expect(quote({ client_email_ref: 'nobody@ex.com' }).ok).toBe(false);
+  });
+  it('job : client_name affiché prend le repli', () => {
+    const res = buildEntityRow('job', {
+      id: 'j', row_number: 1, entity_type: 'job', external_id: null, status: 'ready',
+      normalized: { job_number: '5', title: 'T' }, relations: { client_email_ref: 'marc@ex.com' },
+    } as any, ctx) as any;
+    expect(res.row.client_id).toBe('c-mail');
+    expect(res.row.client_name).toBe('marc@ex.com');
+  });
+});

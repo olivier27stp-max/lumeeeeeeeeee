@@ -199,6 +199,20 @@ function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   return Array.from(new Set(keys));
 }
 
+/** Rattachement client avec repli : identifiant/nom (client_ref) → courriel → nom complet.
+ *  Chaque clé passe par le même index (id externe, courriel, nom complet des
+ *  clients importés) ; une clé ambiguë (homonymes) y est absente → orphelin. */
+function resolveClientId(ctx: BuildContext, r: Record<string, string>): string | null {
+  return lookupRef(ctx.clientIdByRef, r.client_ref)
+    ?? lookupRef(ctx.clientIdByRef, r.client_email_ref)
+    ?? lookupRef(ctx.clientIdByRef, r.client_name_ref);
+}
+
+/** Valeur brute de référence client (affichage / clé de doublon interne). */
+function clientRefValue(r: Record<string, string>): string {
+  return str(r.client_ref) || str(r.client_email_ref) || str(r.client_name_ref);
+}
+
 function lookupRef(map: Map<string, string>, raw: string | undefined, extra?: (v: string) => string): string | null {
   if (!raw) return null;
   const direct = map.get(refKey(raw));
@@ -240,7 +254,7 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     // Une seule adresse de facturation active par client (index unique) : deux
     // lignes pour le même client = même dossier, la première gagne. Deux
     // clients facturés à la même adresse restent DISTINCTS (pas de clé adresse).
-    const client = refKey(str((rec.relations ?? {}).client_ref));
+    const client = refKey(clientRefValue((rec.relations ?? {}) as Record<string, string>));
     if (client) keys.push(`bc:${client}`);
   } else if (entity === 'job') {
     const num = refKey(str(n.job_number));
@@ -470,7 +484,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   if (entity === 'property') {
     const address = str(n.address);
     if (!address) return { ok: false, reason: 'invalid' };
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    const clientId = resolveClientId(ctx, r);
     if (!clientId) return { ok: false, reason: 'orphan' };
     return {
       ok: true,
@@ -492,7 +506,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   if (entity === 'billing_property') {
     const address = str(n.address);
     if (!address) return { ok: false, reason: 'invalid' };
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    const clientId = resolveClientId(ctx, r);
     if (!clientId) return { ok: false, reason: 'orphan' };
     // Le trigger trg_properties_billing_mirror (20260915000000) reflète cette
     // ligne dans clients.billing_address et passe billing_same_as_service à
@@ -516,7 +530,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'job') {
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    const clientId = resolveClientId(ctx, r);
     if (!clientId) return { ok: false, reason: 'orphan' };
     const propertyId = r.property_ref
       ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
@@ -531,7 +545,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        client_name: safeStr(r.client_ref) || null, // colonne héritée affichée par le calendrier
+        client_name: safeStr(clientRefValue(r)) || null, // colonne héritée affichée par le calendrier
         property_id: propertyId,
         title,
         description: safeStr(n.description) || null,
@@ -556,7 +570,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'quote') {
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    const clientId = resolveClientId(ctx, r);
     if (!clientId) return { ok: false, reason: 'orphan' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     const subtotal = num(n.subtotal_cents);
@@ -621,7 +635,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'invoice') {
-    const clientId = lookupRef(ctx.clientIdByRef, r.client_ref);
+    const clientId = resolveClientId(ctx, r);
     if (!clientId) return { ok: false, reason: 'orphan' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     let subtotal = num(n.subtotal_cents);

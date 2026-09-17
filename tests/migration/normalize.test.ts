@@ -238,3 +238,13 @@ describe('taxes — taux et composée', () => {
     expect(rec.problems).toEqual([]);
   });
 });
+
+describe('relations de repli client (courriel / nom complet)', async () => {
+  const { normalizeRow } = await import('../../server/lib/migration/normalize');
+  it('client_email_ref et client_name_ref sont des relations, pas des champs', () => {
+    const res = normalizeRow('quote', { 'Client email': 'Marc@Ex.com', 'Display name': 'Marc Tremblay' }, { 'Client email': 'client_email_ref', 'Display name': 'client_name_ref' });
+    expect(res.relations.client_email_ref).toBe('Marc@Ex.com');
+    expect(res.relations.client_name_ref).toBe('Marc Tremblay');
+    expect(res.normalized.client_email_ref).toBeUndefined();
+  });
+});

@@ -125,3 +125,20 @@ describe('trous de catalogue attrapés au round 8b', () => {
     expect(s.confidence).toBeGreaterThanOrEqual(90);
   });
 });
+
+describe('champs de rattachement client de repli', () => {
+  it('présents sur soumissions, jobs, factures, propriétés et adresses de facturation', () => {
+    for (const e of ['quote', 'job', 'invoice', 'property', 'billing_property'] as const) {
+      const fields = FIELD_CATALOG[e].map((f) => f.field);
+      expect(fields).toEqual(expect.arrayContaining(['client_ref', 'client_email_ref', 'client_name_ref']));
+    }
+  });
+  it('« Client email » sur un fichier de soumissions → client_email_ref', () => {
+    const [s] = suggestMappings('quotes', [col('Client email', 'email')], 'quotes.csv');
+    expect(s.targetField).toBe('client_email_ref');
+  });
+  it('« Customer Name » reste sur client_ref', () => {
+    const [s] = suggestMappings('quotes', [col('Customer Name', 'name')], 'quotes.csv');
+    expect(s.targetField).toBe('client_ref');
+  });
+});
