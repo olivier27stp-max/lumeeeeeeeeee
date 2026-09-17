@@ -157,3 +157,9 @@ Six bugs trouvés par cette batterie et corrigés (commit 048474ae) :
 6. les étapes canoniques du pipeline sortaient en anglais brut (« new prospect »).
 
 Leçons : l'anti double-clic (`executerIdempotent`) renvoie « déjà fait » pour des arguments identiques — un scénario de test doit varier ses noms à chaque passe ; et une batterie qui exécute vraiment trouve ce qu'une batterie de propositions ne voit pas (droits, colonnes NOT NULL, tables différentes pour lire et écrire).
+
+### 7.7 Sujets plus légers et actions à 0 ¢ (2026-09-17, PR #407)
+
+- **Deux sujets de plus** (devis, terrain) : le bloc d'outils de facturation passait 16 972 tokens à chaque étape, equipe 15 017. Après : devis 6 541, facturation 11 483, equipe 8 049, terrain 8 249 (tokenizer Sonnet 5). Descriptions de paramètres redondantes retirées au vol (−2 à −3 %). Validation : `qa:lumi` 81/82 (le seul échec était la vérification de la note dans l'ancienne table), batterie des outils **132 exact · 35 partiel · 4 raté · 0 erreur, 1,74 $** (meilleur score et meilleur coût).
+- **Actions directes à 0 ¢** (`actions-directes.ts`, étage 2 bis) : fiches par numéro ou nom unique, 20 listes de réglages, écritures qui ne touchent que l'utilisateur (pointage, pause, mémoire, notifications) exécutées avec reçu, et cartes préparées par le code pour les écritures sans ambiguïté (job N, facture N, devis N, invitation, tâche, automatisation par nom unique). Essai de bout en bout sur staging : 21 phrases sur 22 servies à 0 ¢, la 22e est une ambiguïté (« l'automatisation Rappel » : plusieurs correspondent) rendue au modèle, comme prévu ; une carte préparée par le code se confirme et s'exécute par `/lumi/execute` sans changement d'interface.
+- Ce que ça change pour l'usage réel : les demandes conversationnelles restent au modèle, mais le pointage quotidien, les listes de réglages et les commandes courtes par numéro ne coûtent plus rien.
