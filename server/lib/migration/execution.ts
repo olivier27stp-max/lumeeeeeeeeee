@@ -9,8 +9,34 @@ import { canTransition } from './state-machine';
 import { logMigrationAudit } from './audit';
 import { prepareStaging } from './pipeline';
 import { findDuplicatesForEntity } from './duplicates';
-import { runDryRun } from './importer';
-import type { MigrationRow, TargetEntity, DryRunReport } from './types';
+import { runDryRun, ENTITY_LABELS_FR } from './importer';
+import type { MigrationRow, TargetEntity, DryRunReport, OnProgression } from './types';
+
+/**
+ * Publieur de progression d'un lot : écrit totals.progress sur le lot tant
+ * qu'il est « running » (au plus une fois par `intervalleMs`, sauf changement
+ * d'étape), sans jamais bloquer ni faire échouer l'import. La console relit
+ * la fiche toutes les quelques secondes et affiche la carte « en cours ».
+ */
+export function creerPublieurProgression(admin: SupabaseClient, batchId: string, intervalleMs = 1500): OnProgression {
+  let derniere = 0;
+  let derniereEtape = '';
+  return (p) => {
+    const t = Date.now();
+    if (p.etape === derniereEtape && t - derniere < intervalleMs) return;
+    derniere = t;
+    derniereEtape = p.etape;
+    void Promise.resolve(
+      admin
+        .from('migration_import_batches')
+        .update({ totals: { progress: { ...p, updated_at: new Date().toISOString() } } })
+        .eq('id', batchId)
+        .eq('status', 'running'),
+    ).then(({ error }) => {
+      if (error) console.error('[migration-execution] progression non publiée:', error.message);
+    }).catch((err: unknown) => console.error('[migration-execution] progression non publiée:', err));
+  };
+}
 
 export type ActeurMigration = { id: string | null; role: 'platform_admin' | 'assistant' | 'system' };
 
@@ -71,7 +97,9 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
     .single();
   if (batchErr) throw batchErr;
   await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.test.start', actorId: acteur.id, actorRole: acteur.role, target: `batch:${batch.id}` });
+  const publier = creerPublieurProgression(admin, batch.id);
   try {
+    publier({ etape: 'Préparation des lignes (normalisation des fichiers)', entity: null, processed: 0, total: 0, entites_faites: 0, entites_total: 0 });
     await prepareStaging(admin, migration);
     // Même liste que main (fb3a0342) : les taxes importées sont dédoublonnées contre les taxes actives.
     const entities: TargetEntity[] = ['tax_config', 'client', 'property', 'billing_property', 'job', 'quote', 'invoice'];
@@ -83,6 +111,7 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
         .eq('entity_type', entity)
         .in('status', ['ready', 'duplicate'])
         .limit(20000);
+      publier({ etape: `Recherche de doublons — ${ENTITY_LABELS_FR[entity] ?? entity}`, entity, processed: 0, total: records?.length ?? 0, entites_faites: entities.indexOf(entity), entites_total: entities.length });
       if (!records || records.length === 0) continue;
       const matches = await findDuplicatesForEntity(admin, migration.org_id, entity, records as any);
       if (matches.length === 0) continue;
@@ -115,7 +144,7 @@ export async function lancerImportTest(admin: SupabaseClient, migration: Migrati
         }
       }
     }
-    const report = await runDryRun(admin, migration);
+    const report = await runDryRun(admin, migration, publier);
     const { error: doneErr } = await admin
       .from('migration_import_batches')
       .update({ status: 'completed', totals: report as unknown as Record<string, unknown>, finished_at: new Date().toISOString() })

@@ -361,7 +361,7 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
     queryFn: () => getMigrationDetail(id),
     refetchInterval: (query) => {
       const status = (query.state.data as any)?.migration?.status;
-      return ['parsing', 'testing', 'importing', 'post_import_validation'].includes(status) ? 4000 : false;
+      return ['parsing', 'testing', 'importing', 'post_import_validation'].includes(status) ? 2500 : false;
     },
     refetchOnWindowFocus: false,
   });
@@ -388,6 +388,8 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <p className="text-[12px] text-text-tertiary mb-4">
         ID {m.id} · créée le {new Date(m.created_at).toLocaleDateString('fr-CA')} · dernière activité {new Date(m.last_activity_at).toLocaleString('fr-CA')}
       </p>
+
+      <CarteImportEnCours d={d} />
 
       <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-secondary/60 border border-outline w-fit mb-5 flex-wrap">
         {TABS.map((t) => (
@@ -417,6 +419,58 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
       {tab === 'imports' && <ImportsTab d={d} />}
       {tab === 'audit' && <AuditTab id={m.id} />}
       {tab === 'messages' && <MessagesTab d={d} onChanged={refresh} />}
+    </div>
+  );
+}
+
+function formatDuree(secondes: number): string {
+  if (secondes < 60) return `${secondes} s`;
+  return `${Math.floor(secondes / 60)} min ${String(secondes % 60).padStart(2, '0')} s`;
+}
+
+/** Suivi en direct d'un import test ou final : étape courante, lignes faites,
+ *  types de données faits, durée. Lit totals.progress du lot « running »
+ *  (relu toutes les 2,5 s par la fiche) ; le chrono tourne localement. */
+function CarteImportEnCours({ d }: { d: any }) {
+  const m = d.migration;
+  const lot = (d.batches ?? []).find((b: any) => b.status === 'running') ?? null;
+  const actif = !!lot || ['testing', 'importing', 'post_import_validation'].includes(m.status);
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  useEffect(() => {
+    if (!actif) return;
+    const t = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [actif]);
+  if (!actif) return null;
+  const p = lot?.totals?.progress ?? null;
+  const debut = lot?.started_at ? new Date(lot.started_at).getTime() : null;
+  const secondes = debut ? Math.max(0, Math.round((maintenant - debut) / 1000)) : null;
+  const titre = m.status === 'post_import_validation'
+    ? 'Validation après import'
+    : (lot?.kind === 'final' || m.status === 'importing') ? 'Import final en cours' : 'Import test en cours';
+  const pctEntites = p && p.entites_total > 0 ? Math.round((p.entites_faites / p.entites_total) * 100) : null;
+  const pctLignes = p && p.total > 0 ? Math.min(100, Math.round((p.processed / p.total) * 100)) : null;
+  const depuisMaj = p?.updated_at ? Math.max(0, Math.round((maintenant - new Date(p.updated_at).getTime()) / 1000)) : null;
+  return (
+    <div className="mb-5 rounded-lg border border-blue-200 bg-blue-50/60 p-4" role="status" aria-live="polite">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="relative flex h-2.5 w-2.5" aria-hidden="true"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600" /></span>
+        <p className="text-[13px] font-semibold text-blue-900">{titre}{secondes !== null && ` — ${formatDuree(secondes)}`}</p>
+        <span className="text-[11.5px] text-blue-900/60">{depuisMaj !== null ? `dernier signe de vie il y a ${depuisMaj} s` : 'la fiche se rafraîchit toute seule'}</span>
+      </div>
+      <p className="mt-1 text-[12.5px] text-blue-900/90">{p?.etape ?? 'Démarrage…'}</p>
+      {pctEntites !== null && (
+        <div className="mt-2">
+          <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden"><div className="h-full bg-blue-500 transition-all" style={{ width: `${pctEntites}%` }} /></div>
+          <p className="mt-1 text-[11.5px] text-blue-900/80">{p.entites_faites} / {p.entites_total} types de données faits</p>
+        </div>
+      )}
+      {pctLignes !== null && (
+        <div className="mt-2">
+          <div className="h-1.5 w-full rounded-full bg-blue-100 overflow-hidden"><div className="h-full bg-blue-400 transition-all" style={{ width: `${pctLignes}%` }} /></div>
+          <p className="mt-1 text-[11.5px] text-blue-900/80">{p.processed} / {p.total} lignes dans cette étape</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -1545,6 +1599,9 @@ function ImportsTab({ d }: { d: any }) {
             <span className="text-[11px] text-text-tertiary">{new Date(b.started_at).toLocaleString('fr-CA')}</span>
             <span className="text-[10px] text-text-tertiary">lot {b.id.slice(0, 8)}</span>
           </div>
+          {b.status === 'running' && b.totals?.progress?.etape && (
+            <p className="text-[12px] text-blue-900/90 mb-1">En cours : {b.totals.progress.etape}{b.totals.progress.total > 0 ? ` (${b.totals.progress.processed} / ${b.totals.progress.total} lignes)` : ''}</p>
+          )}
           {b.totals?.byEntity && (
             <div className="border border-outline rounded-md overflow-hidden mt-1 max-w-[560px]">
               <div className="grid text-[12px]" style={{ gridTemplateColumns: '1.2fr 1fr 1fr 1fr 1fr' }}>

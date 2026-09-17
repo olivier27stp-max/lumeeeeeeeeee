@@ -15,11 +15,20 @@ import type {
   DryRunReport,
   EntityCounts,
   MigrationRow,
+  OnProgression,
   PostImportValidation,
   TargetEntity,
 } from './types';
 
 // Taxes en premier : les services (taxable) et les documents s'y réfèrent.
+/** Libellés FR des entités pour la progression affichée dans la console. */
+export const ENTITY_LABELS_FR: Record<string, string> = {
+  tax_config: 'Taxes', service: 'Produits et services', client: 'Clients', property: 'Propriétés',
+  billing_property: 'Adresses de facturation', job: 'Jobs', quote: 'Soumissions', visit: 'Visites',
+  invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
+};
+const PROGRESSION_PAS = 250; // lignes entre deux publications de progression
+
 export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice'];
 
 /** Table active cible. `property` et `billing_property` partagent `properties`
@@ -770,7 +779,7 @@ async function loadStaffMap(admin: SupabaseClient, migrationId: string): Promise
 // ---------------------------------------------------------------------------
 // Dry-run — aucune écriture dans les tables actives
 
-export async function runDryRun(admin: SupabaseClient, migration: MigrationRow): Promise<DryRunReport> {
+export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, onProgression?: OnProgression): Promise<DryRunReport> {
   const decisions = await loadDuplicateDecisions(admin, migration.id);
   const staffIdBySource = await loadStaffMap(admin, migration.id);
   const entities = entitiesForMigration(migration);
@@ -803,6 +812,9 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
       .eq('status', 'error');
     counts.errors = errCount ?? 0;
     sourceRows += rows.length + counts.errors;
+    const etapeEntite = { etape: `Import test — ${ENTITY_LABELS_FR[entity] ?? entity}`, entity, total: rows.length, entites_faites: entities.indexOf(entity), entites_total: entities.length };
+    onProgression?.({ ...etapeEntite, processed: 0 });
+    let lignesFaites = 0;
 
     const intra = planIntraDedupe(entity, rows);
     for (const k of intra.ambiguousKeys) allAmbiguousKeys.push(`${entity}:${k}`);
@@ -811,6 +823,8 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow):
       entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
 
     for (const rec of rows) {
+      lignesFaites += 1;
+      if (lignesFaites % PROGRESSION_PAS === 0) onProgression?.({ ...etapeEntite, processed: lignesFaites });
       const decision = decisions.get(rec.id);
       const sourceStatus = str((rec.normalized ?? {}).status);
       if (sourceStatus && !statusRecognized(entity, sourceStatus)) {
@@ -1106,6 +1120,7 @@ export async function runFinalImport(
   migration: MigrationRow,
   batchId: string,
   actorId: string,
+  onProgression?: OnProgression,
 ): Promise<DryRunReport> {
   const decisions = await loadDuplicateDecisions(admin, migration.id);
   const staffIdBySource = await loadStaffMap(admin, migration.id);
@@ -1151,6 +1166,10 @@ export async function runFinalImport(
     byEntity[entity] = counts;
     const rows = await loadStaging(admin, migration.id, entity, ['ready', 'duplicate', 'orphan', 'imported', 'merged']);
     sourceRows += rows.length;
+    const libelle = ENTITY_LABELS_FR[entity] ?? entity;
+    const etapeEntite = { entity, total: rows.length, entites_faites: entities.indexOf(entity), entites_total: entities.length };
+    onProgression?.({ ...etapeEntite, etape: `Préparation — ${libelle}`, processed: 0 });
+    let lignesFaites = 0;
 
     const toInsert: { rec: StagingRow; row: Record<string, unknown>; id: string }[] = [];
     const importRecords: ImportRecordRow[] = [];
@@ -1178,6 +1197,8 @@ export async function runFinalImport(
     };
 
     for (const rec of rows) {
+      lignesFaites += 1;
+      if (lignesFaites % PROGRESSION_PAS === 0) onProgression?.({ ...etapeEntite, etape: `Préparation — ${libelle}`, processed: lignesFaites });
       // Reprise : déjà traité lors d'un passage précédent.
       const prior = already.get(`${rec.id}|${table}`);
       if (prior) {
@@ -1246,7 +1267,7 @@ export async function runFinalImport(
       // Écrasé par le rapport final à la complétion.
       const { error: hbErr } = await admin
         .from('migration_import_batches')
-        .update({ totals: { progress: { entity, processed: i, total: toInsert.length } } })
+        .update({ totals: { progress: { ...etapeEntite, etape: `Écriture — ${libelle}`, processed: i, total: toInsert.length, updated_at: new Date().toISOString() } } })
         .eq('id', batchId)
         .eq('status', 'running');
       if (hbErr) console.error('[migration-importer] heartbeat failed:', hbErr.message);

@@ -35,6 +35,7 @@ import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/m
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
+import { creerPublieurProgression } from '../lib/migration/execution';
 import { logger } from '../lib/logger';
 import { executerBotMigration } from '../lib/migration/bot';
 import { buildRejectsCsv } from '../lib/migration/rejects';
@@ -954,7 +955,7 @@ router.post('/migration-admin/migrations/:id/final-import', validate(migrationFi
 
     void (async () => {
       try {
-        const report = await runFinalImport(admin, migration, batch.id, auth.user.id);
+        const report = await runFinalImport(admin, migration, batch.id, auth.user.id, creerPublieurProgression(admin, batch.id));
         await admin
           .from('migration_import_batches')
           .update({ status: 'completed', totals: report as unknown as Record<string, unknown>, finished_at: new Date().toISOString() })

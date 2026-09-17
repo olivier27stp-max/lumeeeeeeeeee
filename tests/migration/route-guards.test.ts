@@ -333,7 +333,9 @@ describe('audit sections 6-14 — garde-fous ajoutés', () => {
   it('S7 — watchdog zombie branché au boot (10 min, advisory lock) et heartbeat par lot', () => {
     expect(indexSrc).toContain("withAdvisoryLock('migration-recovery'");
     expect(indexSrc).toContain('recoverZombieMigrations');
-    expect(importerSrc2).toContain('progress: { entity, processed: i, total: toInsert.length }');
+    // Heartbeat enrichi (étape + types de données) : même colonne totals.progress, même filtre running.
+    expect(importerSrc2).toContain("etape: `Écriture — ${libelle}`, processed: i, total: toInsert.length");
+    expect(importerSrc2).toContain(".eq('status', 'running')");
   });
 
   it('S10 — l\'effacement DSR purge aussi les traces de migration (staging + previous_values)', () => {
