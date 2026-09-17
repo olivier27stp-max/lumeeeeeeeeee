@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   User,
   Shield,
   CreditCard,
@@ -92,6 +93,7 @@ export function useSettingsNav(): NavGroup[] {
     {
       heading: isFr ? 'Plus' : 'More',
       items: [
+        { path: '/settings/reports', label: isFr ? 'Rapports' : 'Reports', icon: BarChart3 },
         { path: '/settings/archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
         { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
         { path: '/settings/api', label: isFr ? 'API & MCP' : 'API & MCP', icon: Plug },

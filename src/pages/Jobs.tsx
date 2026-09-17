@@ -32,11 +32,11 @@ import {
 import { AnimatePresence, motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { exportReportToFile } from '../lib/reportsApi';
 import TeamsManagerModal from '../components/TeamsManagerModal';
 import { useJobModalController } from '../contexts/JobModalController';
 import { cn, formatCurrency, formatDate } from '../lib/utils';
 import {
-  exportJobsCsv,
   getJobs,
   getJobsKpis,
   getJobTypes,
@@ -465,14 +465,21 @@ export default function Jobs() {
 
   const handleExportCsv = async () => {
     try {
-      const csv = await exportJobsCsv({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery });
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `jobs-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      // Même logique que Réglages → Rapports → Jobs : filtres courants,
+      // toutes les lignes, plafond explicite (plus de troncature à 2000).
+      const normalized = statusFilter === 'All' ? '' : statusFilter.trim().toLowerCase().replace(/\s+/g, '_');
+      const derived = normalized === 'unscheduled' ? 'action_required'
+        : (normalized === 'completed' || normalized === 'cancelled') ? 'archived' : normalized;
+      await exportReportToFile('jobs', {
+        lang: fr ? 'fr' : 'en',
+        filters: {
+          status: derived,
+          job_type: jobTypeFilter === 'All' ? '' : jobTypeFilter,
+          salesperson: salespersonFilter === 'All' ? '' : salespersonFilter,
+          tag: tagFilter === 'All' ? '' : tagFilter,
+          q: debouncedQuery,
+        },
+      });
       setShowMoreActions(false);
     } catch (err: any) {
       toast.error(err.message || t.jobs.failedExport);

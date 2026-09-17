@@ -72,6 +72,8 @@ const OfficeNew = React.lazy(() => import('./pages/OfficeNew'));
 const ArchivesPanel = React.lazy(() => import('./components/ArchivesPanel'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
 const PayrollPage = React.lazy(() => import('./pages/settings/PayrollPage'));
+const ReportsCatalog = React.lazy(() => import('./pages/settings/ReportsCatalog'));
+const ReportView = React.lazy(() => import('./pages/settings/ReportView'));
 const ApiMcpSettings = React.lazy(() => import('./pages/settings/ApiMcpSettings'));
 const OAuthConsent = React.lazy(() => import('./pages/OAuthConsent'));
 const Auth = React.lazy(() => import('./pages/Auth'));
@@ -1578,6 +1580,10 @@ function AuthenticatedApp({
                       <Route path="team" element={<Gated permission="team.read"><ManageTeam /></Gated>} />
                       <Route path="roles" element={<Gated permission="users.update_role"><SettingsRoles /></Gated>} />
                       <Route path="payroll" element={<Gated permission="settings.read"><PayrollPage /></Gated>} />
+                      {/* Rapports : tableaux filtrables + export CSV complet. Le serveur
+                          revérifie financial.view_reports / financial.export_data. */}
+                      <Route path="reports" element={<Gated permission="financial.view_reports"><ReportsCatalog /></Gated>} />
+                      <Route path="reports/:reportId" element={<Gated permission="financial.view_reports"><ReportView /></Gated>} />
                       <Route path="location" element={<Gated permission="settings.read"><LocationSettings /></Gated>} />
                       <Route path="archives" element={<Gated permission="settings.read"><div className="max-w-2xl"><ArchivesPanel /></div></Gated>} />
                       <Route path="marketplace" element={<Gated permission="integrations.read"><PlanFeatureGate flag="includes_marketplace"><AppMarketplace /></PlanFeatureGate></Gated>} />

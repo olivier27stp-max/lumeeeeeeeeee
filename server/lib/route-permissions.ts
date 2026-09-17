@@ -280,6 +280,12 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/security/sessions': 'settings.read',
   'POST /api/security/sessions/invalidate-all': 'settings.update',
   'GET /api/security/export-log': 'financial.export_data',
+
+  // ── Rapports (Réglages → Rapports) ──
+  'GET /api/reports/catalogue': 'financial.view_reports',
+  'GET /api/reports/definition': 'financial.view_reports',
+  'GET /api/reports/rows': 'financial.view_reports',
+  'GET /api/reports/export.csv': 'financial.export_data',
   'POST /api/security/check-password': 'settings.read',
 
   // ── Audit Log ──

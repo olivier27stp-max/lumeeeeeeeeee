@@ -11,6 +11,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '../lib/utils';
 import { exportToCsv } from '../lib/exportCsv';
+import { exportReportToFile } from '../lib/reportsApi';
+import { localYmd } from '../lib/reportFormat';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import { supabase } from '../lib/supabase';
@@ -550,7 +552,29 @@ export default function Timesheets() {
   const deleteEntry = async (id: string) => { const orgId = await getCurrentOrgIdOrThrow(); const { error } = await supabase.from('time_entries').delete().eq('id', id).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Entrée supprimée' : 'Entry deleted'); loadData(); loadMySession(); };
   const saveEdit = async () => { if (!editingId) return; const orgId = await getCurrentOrgIdOrThrow(); const { error } = await supabase.from('time_entries').update({ punch_in: editPunchIn, punch_out: editPunchOut || null }).eq('id', editingId).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Modifié' : 'Updated'); setEditingId(null); loadData(); };
   const saveNote = async () => { if (!noteId) return; const orgId = await getCurrentOrgIdOrThrow(); const { error } = await supabase.from('time_entries').update({ notes: noteText }).eq('id', noteId).eq('org_id', orgId); if (error) { toast.error(error.message); return; } toast.success(fr ? 'Note sauvegardée' : 'Note saved'); setNoteId(null); loadData(); };
-  const handleExport = async (ids?: string[]) => { const pool = ids ? entries.filter(e => ids.includes(e.id)) : viewEntries; exportToCsv(`timesheet-${new Date().toISOString().slice(0, 10)}.csv`, ['Employee', 'Date', 'Punch In', 'Punch Out', 'Breaks', 'Work Duration', 'Issue'], pool.map(e => [e.employee_name, e.date, e.punch_in, e.punch_out || '', formatH(calcBreak(e)), formatH(calcWork(e)), detectIssue(e, false)])); };
+  const handleExport = async (ids?: string[]) => {
+    if (ids) {
+      // Sélection manuelle : export local des lignes cochées.
+      const pool = entries.filter(e => ids.includes(e.id));
+      exportToCsv(`timesheet-${new Date().toISOString().slice(0, 10)}.csv`, ['Employee', 'Date', 'Punch In', 'Punch Out', 'Breaks', 'Work Duration', 'Issue'], pool.map(e => [e.employee_name, e.date, e.punch_in, e.punch_out || '', formatH(calcBreak(e)), formatH(calcWork(e)), detectIssue(e, false)]));
+      return;
+    }
+    // Vue complète : même logique que Réglages → Rapports → Feuilles de temps
+    // (période de la vue, employé et équipe sélectionnés, toutes les lignes).
+    let from: string; let to: string;
+    if (viewMode === 'day') { from = to = currentDate.toISOString().slice(0, 10); }
+    else if (viewMode === 'week') { const w = getWeekDates(currentDate); from = w[0]; to = w[6]; }
+    else { const y = currentDate.getFullYear(), mo = currentDate.getMonth(); from = localYmd(new Date(y, mo, 1)); to = localYmd(new Date(y, mo + 1, 0)); }
+    try {
+      const rows = await exportReportToFile('timesheets', {
+        from, to, lang: fr ? 'fr' : 'en',
+        filters: { employee: selectedEmployee === 'all' ? '' : selectedEmployee, team: selectedTeamId === 'all' ? '' : selectedTeamId },
+      });
+      toast.success(fr ? `CSV exporté (${rows} lignes)` : `CSV exported (${rows} rows)`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : (fr ? "Échec de l'export" : 'Export failed'));
+    }
+  };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PUNCH TIMER (continued — state + loadMySession declared above)

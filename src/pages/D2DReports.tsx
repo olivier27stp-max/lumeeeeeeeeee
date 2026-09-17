@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { StatCard } from '../components/d2d/stat-card';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/d2d/card';
 import { Button } from '../components/d2d/button';
@@ -17,7 +18,6 @@ import {
   Target,
   Calendar,
   Download,
-  Filter,
   ChevronDown,
   MapPin,
   Loader2,
@@ -229,14 +229,15 @@ export default function D2DReports() {
               {periodLabels[p]}
             </Button>
           ))}
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <Filter className="h-3 w-3" />
-            {fr ? 'Filtres' : 'Filters'}
-          </Button>
-          <Button variant="outline" size="sm" className="gap-1.5">
+          {/* L'export vit dans Réglages → Rapports → Activité terrain (tableau
+              filtrable par rep et période, CSV complet). */}
+          <Link
+            to="/settings/reports/field-activity"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-outline bg-surface text-xs font-medium text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors focus-visible:ring-1 focus-visible:ring-[#94a3b8]"
+          >
             <Download className="h-3 w-3" />
             {fr ? 'Exporter' : 'Export'}
-          </Button>
+          </Link>
         </div>
       </div>
 

@@ -27,7 +27,8 @@ export type ExportType =
   | 'marketing_list'    // liste de diffusion vers un tiers (Mailchimp…)
   | 'accounting'        // export comptable (QuickBooks…)
   | 'payouts'           // versements fournisseur de paiement
-  | 'payroll';          // paie
+  | 'payroll'           // paie
+  | 'report';           // rapport (Réglages → Rapports), entity_type = id du rapport
 
 export interface DataExportLogParams {
   orgId: string;

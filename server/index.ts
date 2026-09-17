@@ -89,6 +89,7 @@ import fieldSalesRouter from './routes/field-sales';
 import leaderboardRouter from './routes/leaderboard';
 import commissionsRouter from './routes/commissions';
 import payrollRouter from './routes/payroll';
+import reportsRouter from './routes/reports';
 import gamificationRouter from './routes/gamification';
 import fieldSessionsRouter from './routes/field-sessions';
 import authRouter from './routes/auth';
@@ -823,6 +824,7 @@ app.use('/api/field-sales', fieldSalesRouter);
 app.use('/api', leaderboardRouter);
 app.use('/api', commissionsRouter);
 app.use('/api', payrollRouter);
+app.use('/api', reportsRouter);
 app.use('/api', gamificationRouter);
 app.use('/api', fieldSessionsRouter);
 

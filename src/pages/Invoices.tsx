@@ -37,7 +37,7 @@ import {
   deleteInvoice,
 } from '../lib/invoicesApi';
 import { cn, formatDate } from '../lib/utils';
-import { exportToCsv } from '../lib/exportCsv';
+import { exportReportToFile } from '../lib/reportsApi';
 import { useTranslation } from '../i18n';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { supabase } from '../lib/supabase';
@@ -334,34 +334,20 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
 
   const handleExportCsv = async () => {
     try {
-      const exportParams: Record<string, unknown> = {
-        p_status: status === 'all' ? 'all' : status,
-        p_range: 'all', p_sort: 'due_date_desc',
-        p_limit: 10000, p_offset: 0, p_q: q || null, p_from: null, p_to: null, p_org: null,
-      };
-      if (salesperson !== 'All') exportParams.p_salesperson = salesperson;
-      const { data, error: fetchErr } = await supabase.rpc('rpc_list_invoices', exportParams);
-      if (fetchErr) throw fetchErr;
-      const csvRows = (data || []).map((inv: any) => {
-        const email = clientMap[inv.client_id]?.email || '';
-        return [
-          inv.invoice_number || '',
-          inv.client_name || '',
-          email,
-          inv.status || '',
-          formatMoneyFromCents(inv.total_cents || 0),
-          inv.created_at ? new Date(inv.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
-          inv.due_date ? versDate(inv.due_date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
-        ];
+      // Même logique que Réglages → Rapports → Factures : le serveur applique
+      // les filtres courants et renvoie TOUTES les lignes (plafond explicite).
+      const rows = await exportReportToFile('invoices', {
+        lang: fr ? 'fr' : 'en',
+        filters: {
+          status: status === 'all' ? '' : status,
+          salesperson: salesperson === 'All' ? '' : salesperson,
+          q: q || '',
+        },
       });
-      exportToCsv(
-        `factures-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['#', 'Client', 'Email', fr ? 'Statut' : 'Status', fr ? 'Montant' : 'Amount', fr ? 'Créée' : 'Created', fr ? 'Échéance' : 'Due Date'],
-        csvRows,
-      );
-      toast.success(fr ? 'Export CSV terminé' : 'CSV exported');
-    } catch (err: any) {
-      toast.error(err?.message || (fr ? 'Échec de l\'export' : 'Export failed'));
+      toast.success(fr ? `Export CSV terminé (${rows} lignes)` : `CSV exported (${rows} rows)`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      toast.error(message || (fr ? 'Échec de l\'export' : 'Export failed'));
     }
   };
 
