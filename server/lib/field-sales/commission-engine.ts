@@ -14,6 +14,34 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { companyOrgIds } from '../supabase';
 
 /**
+ * Un membre est payé à commission OU à l'heure (fiche Équipe,
+ * team_members.compensation_mode). Un membre « à l'heure » ne touche jamais
+ * de commission, même si l'org a un plan par défaut — sinon un admin payé
+ * 50 $/h qui crée un job empoche 10 % en plus, en silence. Sans fiche (cas
+ * limite : compte sans team_members), on laisse passer comme avant.
+ */
+export async function membrePayeACommission(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('compensation_mode')
+    .eq('org_id', orgId)
+    .eq('user_id', userId)
+    .neq('status', 'inactive')
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error(`[commissions] lecture du mode de paie impossible (org ${orgId}, membre ${userId}):`, error.message);
+    return true;
+  }
+  if (!data) return true;
+  return data.compensation_mode === 'commission' || data.compensation_mode === 'both';
+}
+
+/**
  * Borne haute d'une plage sur une colonne timestamptz. Une date seule
  * ('2026-09-30') est interprétée par Postgres comme minuit → un `.lte` exclut
  * toutes les entrées de CE jour-là. On étend à la fin de journée pour inclure
@@ -165,6 +193,7 @@ export async function projectCommissionForJob(
   // 2. Rep = job salesperson, else its creator
   const repUserId: string | null = job.salesperson_id || job.created_by || null;
   if (!repUserId) return { created: 0, skipped: 'no_rep' };
+  if (!(await membrePayeACommission(supabase, orgId, repUserId))) return { created: 0, skipped: 'hourly_member' };
 
   // 3. Skip if any entry already exists for this job (avoid duplicates)
   const { data: dup, error: dupErr } = await supabase
@@ -344,6 +373,7 @@ export async function generateCommissionsForInvoice(
     repUserId = j?.salesperson_id || j?.created_by || null;
   }
   if (!repUserId) return { created: 0, skipped: 'no_rep' };
+  if (!(await membrePayeACommission(supabase, orgId, repUserId))) return { created: 0, skipped: 'hourly_member' };
 
   // 4. Find rule: assigned_user_ids contains rep → else default rule from settings
   const { data: rules, error: rulesErr } = await supabase.from('fs_commission_rules')
