@@ -14,6 +14,7 @@ import { CheckCircle, CreditCard, FileText, Printer } from 'lucide-react';
 import { captureClientException } from '../lib/sentry';
 import { versDate } from '../lib/dateSeule';
 import { fetchPublicInvoice, type PublicInvoiceData, type PublicInvoiceCompany } from '../lib/invoicesPublicApi';
+import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
 
 const LUME_LOGO_URL = '/lume-logo.png';
 const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
@@ -283,7 +284,8 @@ export default function InvoiceView() {
           )}
         </div>
 
-        <p className="mt-8 text-center text-[11px] text-[#bbb] no-print">
+        <ReseauxSociauxPied liens={company?.social_links} className="flex items-center justify-center gap-4 mt-8 no-print" />
+        <p className="mt-3 text-center text-[11px] text-[#bbb] no-print">
           {isFr ? 'Facture générée avec Lume' : 'Invoice generated with Lume'}
         </p>
       </div>

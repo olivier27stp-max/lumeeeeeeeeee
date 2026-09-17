@@ -7,6 +7,8 @@ import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import AgreementDocument, { type AgreementDocData } from '../components/agreements/AgreementDocument';
 import { resolveBrand, readableOn } from '../lib/brandColor';
+import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import type { SocialLinks } from '../lib/socialLinks';
 
 interface PublicAgreementData {
   agreement: {
@@ -30,6 +32,8 @@ interface PublicAgreementData {
     tax_lines: string[];
     /** Accent choisi par l'entreprise. null = encre noire. */
     brand_color?: string | null;
+    /** Réseaux sociaux — icônes au pied de la page. */
+    social_links?: SocialLinks | null;
   };
   client: { name: string | null; email: string | null; phone: string | null };
   doc: {
@@ -866,7 +870,8 @@ export default function ContractView() {
           </div>
         )}
 
-        <p className="text-center text-[11px] text-[#bbb] mt-6 no-print">
+        <ReseauxSociauxPied liens={data.company.social_links} className="flex items-center justify-center gap-4 mt-6 no-print" />
+        <p className="text-center text-[11px] text-[#bbb] mt-3 no-print">
           {data.company.name} &mdash; {fr ? 'Propulsé par Lume' : 'Powered by Lume'}
         </p>
       </div>

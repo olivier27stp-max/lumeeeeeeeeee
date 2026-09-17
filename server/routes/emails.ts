@@ -12,6 +12,8 @@ import {
 import { eventBus } from '../lib/eventBus';
 import { isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { getCompanyBranding } from '../lib/companyBranding';
+import { lireLiensSociaux, RESEAU_LABEL, RESEAUX, type SocialLinks } from '../lib/socialLinks';
 
 const router = Router();
 
@@ -52,16 +54,20 @@ export interface CompanyInfo {
   company_address?: string | null;
   company_logo_url?: string | null;
   tax_registration_lines?: string[];
+  /** Réseaux sociaux — liens texte au bas du courriel. */
+  social_links?: SocialLinks;
 }
 
 export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
   try {
     const serviceClient = getServiceClient();
-    const { data } = await serviceClient
-      .from('company_settings')
-      .select('company_name, email, phone, street1, city, province, postal_code, logo_url')
-      .eq('org_id', orgId)
-      .maybeSingle();
+    // Tolère un schéma en retard sur le code (colonne récente absente) :
+    // sans cela, un seul champ inconnu vidait TOUT le branding du courriel.
+    const data = await getCompanyBranding(
+      serviceClient,
+      orgId,
+      'company_name, email, phone, street1, city, province, postal_code, logo_url, social_links',
+    );
     if (!data) return {};
     const address = [data.street1, data.city, data.province, data.postal_code].filter(Boolean).join(', ') || null;
 
@@ -86,10 +92,22 @@ export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
       company_address: address,
       company_logo_url: data.logo_url || null,
       tax_registration_lines: taxLines,
+      social_links: lireLiensSociaux(data.social_links),
     };
   } catch {
     return {};
   }
+}
+
+/** Liens texte « Facebook · Instagram · … » — les icônes-images sont
+ *  bloquées par la plupart des clients courriel, le texte passe partout. */
+function socialLinksHtml(liens: SocialLinks | undefined): string {
+  const propres = lireLiensSociaux(liens);
+  const items = RESEAUX.filter((r) => propres[r]).map((r) =>
+    `<a href="${propres[r]}" style="color:#6b7280;text-decoration:none;font-weight:600;">${RESEAU_LABEL[r]}</a>`,
+  );
+  if (items.length === 0) return '';
+  return `<p style="margin:8px 0 0;font-size:12px;color:#9ca3af;">${items.join(' &nbsp;&middot;&nbsp; ')}</p>`;
 }
 
 export function buildEmailLayout(company: CompanyInfo, bodyHtml: string) {
@@ -133,6 +151,7 @@ ${bodyHtml}
 Sent via <strong>LUME</strong>${company.company_name ? ` on behalf of ${company.company_name}` : ''}
 </p>
 ${company.company_phone ? `<p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">${company.company_phone}</p>` : ''}
+${socialLinksHtml(company.social_links)}
 ${(company.tax_registration_lines || []).length > 0 ? `<p style="margin:6px 0 0;font-size:11px;color:#b0b0b0;">${company.tax_registration_lines!.join(' &middot; ')}</p>` : ''}
 </td>
 </tr>

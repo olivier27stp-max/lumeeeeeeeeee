@@ -115,7 +115,7 @@ router.get('/invoices/public/:token', async (req, res) => {
       getCompanyBranding(
         admin,
         invoice.org_id,
-        'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color',
+        'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color, social_links',
       ),
       admin
         .from('invoice_items')

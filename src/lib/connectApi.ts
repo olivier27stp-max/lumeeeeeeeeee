@@ -1,3 +1,4 @@
+import type { SocialLinks } from './socialLinks';
 import { supabase } from './supabase';
 import { deviceTokenHeader } from './deviceToken';
 import type { ConnectedAccount, PaymentRequest } from '../types';
@@ -144,6 +145,8 @@ export interface PublicPaymentData {
     phone: string | null;
     /** Couleur de marque de l'org — renvoyée par server/routes/public-pay.ts. */
     brand_color?: string | null;
+    /** Réseaux sociaux — icônes au pied de la page. */
+    social_links?: SocialLinks | null;
   } | null;
 }
 

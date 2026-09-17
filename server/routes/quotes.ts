@@ -15,6 +15,7 @@ import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
+import { lireLiensSociaux } from '../lib/socialLinks';
 import { estEchue } from '../lib/date-seule';
 
 const router = Router();
@@ -774,7 +775,7 @@ router.get('/quotes/public/:token', async (req, res) => {
     const companyData = await getCompanyBranding(
       admin,
       quote.org_id,
-      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color',
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, country, brand_color, social_links',
     );
 
     // Line items
@@ -888,6 +889,7 @@ router.get('/quotes/public/:token', async (req, res) => {
         country: companyData?.country || null,
         // Accent des documents client. null = encre noire, le défaut.
         brand_color: companyData?.brand_color || null,
+        social_links: lireLiensSociaux(companyData?.social_links),
       },
       client, lead,
       items: (items || []).map((i: any) => ({

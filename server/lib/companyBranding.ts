@@ -14,7 +14,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 
 /** Colonnes ajoutées après coup — retirées si la base ne les a pas encore. */
-const COLONNES_RECENTES = ['brand_color'];
+const COLONNES_RECENTES = ['brand_color', 'social_links'];
 
 /**
  * Lit company_settings en tolérant un schéma en retard sur le code.
