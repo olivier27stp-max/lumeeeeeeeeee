@@ -537,7 +537,19 @@ export default function PaymentSettings() {
 
         {connecte && admin && <VersementsSection />}
 
-        {connecte && <ReglagesSection admin={admin} />}
+        {/* Toujours visibles, même avant l'activation Stripe : les choix sont
+            enregistrés dès maintenant et s'appliquent au premier paiement.
+            Vérifié en prod le 2026-09-17 : une org en cours d'onboarding ne
+            voyait aucun réglage, la page semblait inchangée. */}
+        <ReglagesSection admin={admin} />
+
+        {!connecte && (
+          <p className="text-xs text-text-tertiary -mt-3 px-1">
+            {language === 'fr'
+              ? 'Ces réglages prendront effet dès que Lume Payments sera activé. Le solde, les versements et les litiges apparaîtront ici à ce moment.'
+              : 'These settings take effect as soon as Lume Payments is active. Balance, payouts and disputes will appear here at that point.'}
+          </p>
+        )}
 
         <section className="section-card p-5 space-y-3">
           <h3 className="text-[14px] font-semibold text-text-primary">
