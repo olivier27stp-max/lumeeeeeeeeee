@@ -9,7 +9,7 @@
 -- Règle du projet (secdef moindre privilège) : révoquer anon et authenticated
 -- NOMMÉMENT — revoke à PUBLIC ne suffit pas avec les defaults Supabase.
 --
--- NON APPLIQUÉE : staging puis prod après approbation.
+-- Appliquée sur staging puis en prod le 2026-09-17 (autorisation de Rafba), vérifiée : anon et authenticated ne peuvent plus l'exécuter.
 
 begin;
 
