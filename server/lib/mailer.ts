@@ -4,11 +4,18 @@ import { logger } from './logger';
 import { getServiceClient } from './supabase';
 import { htmlVersTextePourEnvoi } from './courriels/texte';
 import { planifierPremiereReprise, TABLE_REPRISES } from './courriels/reprises';
+import { reglagesSmtpSes, sesConfigure, messageIdSes } from './courriels/ses';
 
 /**
  * Centralized email sender.
  *
- * Deux fournisseurs, choisis par l'environnement :
+ * Trois fournisseurs, choisis par l'environnement (voir `fournisseurCourriel`) :
+ *
+ *   COURRIEL_FOURNISSEUR=ses → Amazon SES par SMTP (courriels/ses.ts). Le
+ *     moins cher à gros volume (~0,10 $ US / 1 000). Attention : SES démarre
+ *     en bac à sable (200/jour) tant qu'Amazon n'a pas accordé la
+ *     « production access ». Rebonds et suivi arrivent par SNS sur
+ *     POST /api/webhooks/ses.
  *
  *   RESEND_API_KEY présent → API Resend (https://resend.com), domaine
  *     lumecrm.net avec SPF / DKIM / DMARC, webhooks de rebond captés par
@@ -26,12 +33,29 @@ import { planifierPremiereReprise, TABLE_REPRISES } from './courriels/reprises';
  * les relances sautent une adresse qui a rebondi.
  *
  * Env :
+ *   COURRIEL_FOURNISSEUR — ses | resend | smtp (sinon : automatique)
+ *   SES_SMTP_USER / SES_SMTP_PASS / SES_REGION — Amazon SES
  *   RESEND_API_KEY — active Resend
  *   EMAIL_FROM     — expéditeur par défaut (ex. "Lume CRM <factures@lumecrm.net>")
  *   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS — repli SMTP
  */
 
 let transporter: nodemailer.Transporter | null = null;
+let transporteurSes: nodemailer.Transporter | null = null;
+
+/**
+ * Transport SES : le SMTP d'Amazon, pas un SDK. Séparé du transport SMTP
+ * générique pour que les deux puissent coexister (SES en principal, Gmail en
+ * repli local) sans se marcher dessus.
+ */
+function getTransporteurSes(): nodemailer.Transporter {
+  if (transporteurSes) return transporteurSes;
+  const reglages = reglagesSmtpSes();
+  if (!reglages) throw new Error('SES demandé mais SES_SMTP_USER / SES_SMTP_PASS manquent.');
+  transporteurSes = nodemailer.createTransport({ ...reglages, pool: true, maxConnections: 5, maxMessages: 100 });
+  logger.info('[mailer] transport SES prêt', { host: reglages.host });
+  return transporteurSes;
+}
 
 function getTransporter(): nodemailer.Transporter {
   if (transporter) return transporter;
@@ -56,9 +80,27 @@ function getTransporter(): nodemailer.Transporter {
   return transporter;
 }
 
-export type FournisseurCourriel = 'resend' | 'smtp';
+export type FournisseurCourriel = 'ses' | 'resend' | 'smtp';
 
+/**
+ * Qui envoie. `COURRIEL_FOURNISSEUR` tranche (ses | resend | smtp) ; sinon
+ * l'ordre naturel : SES s'il est configuré, sinon Resend, sinon SMTP.
+ *
+ * Pourquoi une variable plutôt qu'une simple présence de clés : SES démarre
+ * en bac à sable (200 courriels/jour). Tant qu'Amazon n'a pas accordé la
+ * « production access », on veut pouvoir tout préparer — identifiants en
+ * place, envois de test — SANS que la production bascule. Le jour J, une
+ * variable sur Railway suffit, sans redéploiement de code.
+ *
+ * Un fournisseur demandé mais non configuré est ignoré : mieux vaut envoyer
+ * par l'ancien chemin que ne pas envoyer du tout.
+ */
 export function fournisseurCourriel(env: NodeJS.ProcessEnv = process.env): FournisseurCourriel {
+  const demande = String(env.COURRIEL_FOURNISSEUR || '').trim().toLowerCase();
+  if (demande === 'ses' && sesConfigure(env)) return 'ses';
+  if (demande === 'resend' && env.RESEND_API_KEY) return 'resend';
+  if (demande === 'smtp') return 'smtp';
+  if (sesConfigure(env)) return 'ses';
   return env.RESEND_API_KEY ? 'resend' : 'smtp';
 }
 
@@ -222,7 +264,8 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       });
       messageId = id;
     } else {
-      const transport = getTransporter();
+      // SES et SMTP partagent nodemailer ; seul le transport diffère.
+      const transport = provider === 'ses' ? getTransporteurSes() : getTransporter();
       const info = await transport.sendMail({
         from,
         to: destinataires.join(', '),
@@ -232,7 +275,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         text,
         ...(params.headers ? { headers: params.headers } : {}),
       });
-      messageId = info.messageId;
+      // SES : on range l'identifiant sous la forme que citeront ses notifications
+      // de rebond (sans chevrons ni domaine), sinon aucun rebond ne retrouverait sa ligne.
+      messageId = provider === 'ses' ? messageIdSes(info.messageId) : info.messageId;
     }
 
     // Une ligne par destinataire réel (pas l'adresse de redirection QA).
