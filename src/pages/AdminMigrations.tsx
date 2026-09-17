@@ -1116,7 +1116,8 @@ function FileAdminRow({ f, cell, migrationId, onChanged }: { f: any; cell: strin
           type="button"
           className="underline text-red-600 font-semibold"
           onClick={async () => {
-            if (!window.confirm(`Supprimer définitivement "${f.original_name}" et ses correspondances ? Cette action est irréversible.`)) return;
+            const ok = await confirmer({ title: 'Supprimer le fichier', message: `Supprimer définitivement « ${f.original_name} » et ses correspondances ? Cette action est irréversible.`, confirmLabel: 'Supprimer', danger: true });
+            if (!ok) return;
             try {
               await deleteFile(migrationId, f.id);
               toast.success('Fichier supprimé');
