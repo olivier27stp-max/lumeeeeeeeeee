@@ -205,6 +205,65 @@ async function loadDuplicateDecisions(admin: SupabaseClient, migrationId: string
   return map;
 }
 
+/** Clés de rattachement d'un client DÉJÀ dans le CRM (courriel, nom complet,
+ *  téléphone) : mêmes clés que refKeysOf('client'), pour qu'un fichier de jobs,
+ *  visites ou factures importé APRÈS les clients (migration complémentaire, ou
+ *  CRM déjà rempli) retrouve ses clients au lieu de tout rejeter en orphelins. */
+export function existingClientRefKeys(c: { email?: string | null; first_name?: string | null; last_name?: string | null; company?: string | null; phone?: string | null }): string[] {
+  const keys: string[] = [];
+  const email = refKey(str(c.email));
+  if (email) keys.push(email);
+  const name = fullNameOf({ first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' });
+  if (name) keys.push(name);
+  const phone = phoneKey(str(c.phone));
+  if (phone) keys.push(phone);
+  return Array.from(new Set(keys));
+}
+
+/** Amorce clientIdByRef / jobIdByRef avec les dossiers actifs du bureau. Une clé
+ *  portée par deux dossiers distincts (homonymes) est retirée : jamais devinée.
+ *  Les dossiers importés dans la même passe passent ensuite par registerRefs,
+ *  qui garde la clé si elle pointe déjà vers le même id (fusion) et la retire sinon. */
+async function seedExistingRefs(admin: SupabaseClient, orgId: string, ctx: BuildContext): Promise<void> {
+  const seed = (map: Map<string, string>, key: string, id: string, ambiguous: Set<string>) => {
+    if (!key || ambiguous.has(key)) return;
+    const existing = map.get(key);
+    if (existing === undefined) map.set(key, id);
+    else if (existing !== id) { map.delete(key); ambiguous.add(key); }
+  };
+  const ambiguousClients = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('clients')
+      .select('id, email, first_name, last_name, company, phone')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] existing clients seed failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const c of data as { id: string; email: string | null; first_name: string | null; last_name: string | null; company: string | null; phone: string | null }[]) {
+      for (const k of existingClientRefKeys(c)) seed(ctx.clientIdByRef, k, c.id, ambiguousClients);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+  const ambiguousJobs = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('jobs')
+      .select('id, job_number')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] existing jobs seed failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const j of data as { id: string; job_number: number | string | null }[]) {
+      const k = j.job_number === null || j.job_number === undefined ? '' : refKey(String(j.job_number));
+      seed(ctx.jobIdByRef, k, j.id, ambiguousJobs);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
+}
+
 /** Clés de référence sous lesquelles une ligne peut être retrouvée par ses enfants. */
 export function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   const n = rec.normalized ?? {};
@@ -808,6 +867,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
     propertyIdByRef: new Map(),
     jobIdByRef: new Map(),
   };
+  await seedExistingRefs(admin, migration.org_id, ctx);
 
   let intraMerged = 0;
   const allAmbiguousKeys: string[] = [];
@@ -1165,6 +1225,11 @@ export async function runFinalImport(
     jobIdByRef: new Map(),
     staffIdBySource,
   };
+  await seedExistingRefs(admin, migration.org_id, ctx);
+  // Clients qui reçoivent une job ou une facture dans cette passe : un client
+  // facturé n'est pas un prospect (règle Lume « client sans job = prospect »,
+  // mais l'export peut ne pas contenir les jobs).
+  const clientsAActiver = new Set<string>();
 
   const byEntity: Partial<Record<TargetEntity, EntityCounts>> = {};
   const notes: string[] = [];
@@ -1294,6 +1359,7 @@ export async function runFinalImport(
           importedIds.push(c.rec.id);
           importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: c.rec.id, entity_table: table, entity_id: c.id, action: 'created' });
           registerRefs(c.rec, c.id);
+          if ((entity === 'job' || entity === 'invoice') && typeof c.row.client_id === 'string') clientsAActiver.add(c.row.client_id);
           if (entity === 'invoice') {
             const total = num(c.row.total_cents);
             if (total !== null) revenueCents += total;
@@ -1317,6 +1383,7 @@ export async function runFinalImport(
           importedIds.push(c.rec.id);
           importRecords.push({ batch_id: batchId, migration_id: migration.id, staging_record_id: c.rec.id, entity_table: table, entity_id: c.id, action: 'created' });
           registerRefs(c.rec, c.id);
+          if ((entity === 'job' || entity === 'invoice') && typeof c.row.client_id === 'string') clientsAActiver.add(c.row.client_id);
           if (entity === 'invoice') {
             const total = num(c.row.total_cents);
             if (total !== null) revenueCents += total;
@@ -1368,6 +1435,24 @@ export async function runFinalImport(
   }
 
   if (orphans > 0) notes.push(`${orphans} ligne(s) exclues faute de relation (dossiers orphelins).`);
+
+  // Prospect → actif pour les clients qui ont reçu une job ou une facture.
+  // 'inactive' (archivé) n'est jamais touché ; le trigger des jobs ne rétrograde
+  // un client qu'à un événement job, donc l'activation par facture tient.
+  const aActiver = Array.from(clientsAActiver);
+  let actives = 0;
+  for (let i = 0; i < aActiver.length; i += CHUNK) {
+    const { data, error } = await admin
+      .from('clients')
+      .update({ status: 'active' })
+      .eq('org_id', migration.org_id)
+      .eq('status', 'lead')
+      .in('id', aActiver.slice(i, i + CHUNK))
+      .select('id');
+    if (error) console.error('[migration-importer] client activation failed:', error.message);
+    else actives += (data ?? []).length;
+  }
+  if (actives > 0) notes.push(`${actives} client(s) passés de prospect à actif (job ou facture importée).`);
 
   const totals = {
     sourceRows,
