@@ -30,6 +30,7 @@ import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definir
 import { getUserContext } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, OUTILS_DE_BASE, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
+import { detecterActionDirecte, repondreActionDirecte } from '../lib/lumi/actions-directes';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
@@ -459,6 +460,39 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: raccourci.etage ?? ETAGE.raccourci, action: raccourci.id, params: raccourci.periode ? { periode: raccourci.periode } : raccourci.numero ? { numero: raccourci.numero } : null,
           outils: [raccourci.tool], resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
+    // Étage 2 bis — actions directes (actions-directes.ts, 2026-09-17) : fiches par
+    // numéro, listes de réglages, écritures qui ne touchent que l'utilisateur
+    // (pointage, pause, mémoire), et cartes préparées par le code (job 33
+    // terminé, envoie la facture 4, invite marc@… comme technicien). 0 token.
+    // Au moindre doute la fonction rend null et le modèle prend le relais.
+    const directe = enAttente.length || repli ? null : detecterActionDirecte(message);
+    if (directe) {
+      const debut = Date.now();
+      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date() });
+      if (rep) {
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        if (rep.genre === 'texte') {
+          emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'debut' });
+          emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'fin' });
+          if (rep.recu) emettreSse('executed', { type: 'executed', ...rep.recu });
+          emettreSse('text', { type: 'text', delta: rep.texte });
+          if (rep.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: rep.fiches });
+          emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: directe.id, etage: ETAGE.raccourci });
+        } else {
+          emettreSse('proposal', { type: 'proposal', tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args, capacite: rep.capacite, apercu: rep.apercu });
+          emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: directe.id, etage: ETAGE.raccourci });
+        }
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: directe.id, params: directe.cible ? { cible: directe.cible } : undefined,
+          outils: [directe.tool], resultat: rep.genre === 'carte' ? 'proposition' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         return res.end();
       }
