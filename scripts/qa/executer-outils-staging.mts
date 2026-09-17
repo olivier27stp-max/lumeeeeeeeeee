@@ -210,7 +210,7 @@ await ex('revert_invoice_to_draft', () => S.facture2 && { invoice_id: S.facture2
 await ex('void_invoice', () => S.factureJob && { invoice_id: S.factureJob });
 await ex('delete_invoice', () => S.facture2 && { invoice_id: S.facture2 });
 exclu('send_invoice', 'envoi réel au client'); exclu('send_payment_reminders', 'envoi réel au client');
-exclu('create_payment_request', 'lien de paiement Stripe réel'); exclu('resend_payment_request', 'envoi réel');
+exclu('create_payment_request', 'lien de paiement Stripe réel'); exclu('resend_payment_request', 'renvoi réel d’un lien de paiement au client (courriel ou texto)');
 exclu('charge_card_on_file', 'prélèvement réel'); exclu('refund_payment', 'remboursement réel'); exclu('remove_card_on_file', 'carte Stripe réelle');
 await ex('create_recurring_invoice', () => S.client && { client_id: S.client, subject: suffixer('Exec récurrente'), items: [{ description: 'Entretien', qty: 1, unit_price_cents: 5000 }], frequency: 'monthly', start_date: jour(10) }, (r) => { S.recurrente = trouver(r, null, 'schedule_id', 'id'); });
 if (!S.recurrente) S.recurrente = trouver(await lire('list_recurring_invoices'), suffixer('Exec récurrente'), 'schedule_id', 'id');

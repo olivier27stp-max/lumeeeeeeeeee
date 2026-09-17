@@ -3,6 +3,8 @@
 # déterministe) tourne chaque semaine et à la demande. Chaque passe coûte de
 # l'inférence (≈ 0,60 $ sur Sonnet 5) : hebdomadaire, pas à chaque push.
 #
+# Depuis le 2026-09-17, la même passe exécute aussi RÉELLEMENT chaque outil
+# d'écriture sur staging (0 $) et rejoue les 171 demandes d'outils (≈ 2 $).
 # Elle ÉCHOUE si le taux d'erreur dépasse SEUIL_ERREUR_PCT : c'est le filet
 # qui dit si une consigne, un outil ou un modèle a dégradé Lumi. Le rapport
 # JSON complet est joint à l'exécution (artefact).
@@ -104,6 +106,59 @@ jobs:
             if (r.taux_erreur_pct > seuil) { console.error(`::error::Lumi dégradé : ${r.taux_erreur_pct} % d’erreurs > ${seuil} %`); process.exit(1); }
           '
 
+      # Fiabilité (2026-09-17) : chaque outil d'écriture est EXÉCUTÉ sur staging
+      # (JWT + RLS, mêmes routes), sans LLM — 0 $. Une erreur = échec du job.
+      - name: Seed de l'org QA (idempotent)
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          PORT: 3012
+          VITE_SUPABASE_URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.LUMI_EVAL_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LUMI_EVAL_SERVICE_ROLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ secrets.LUMI_EVAL_PROJECT_REF }}
+        run: npx tsx scripts/qa/seed-outils-staging.mts
+
+      - name: Exécution réelle de chaque outil d'écriture
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          PORT: 3012
+          VITE_SUPABASE_URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.LUMI_EVAL_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LUMI_EVAL_SERVICE_ROLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ secrets.LUMI_EVAL_PROJECT_REF }}
+        run: |
+          set +e
+          npx tsx scripts/qa/executer-outils-staging.mts --sortie qa-execution.json
+          code=$?
+          set -e
+          node -e '
+            const r = require("./qa-execution.json");
+            console.log(`Exécution : ${r.bilan.ok} ok · ${r.bilan.erreur} erreur · ${r.bilan.exclu} exclu · ${r.bilan.non_couvert} non couvert`);
+            for (const x of r.resultats.filter((x) => x.verdict === "erreur")) console.error(`::error::${x.outil} : ${x.detail}`);
+            if (r.bilan.erreur > 0) process.exit(1);
+          '
+
+      # Les 171 demandes naturelles (une par outil) : proposition attendue. ≈ 2 $ la passe, hebdomadaire.
+      - name: Batterie des outils (propositions)
+        if: steps.secrets.outputs.ok == 'true'
+        env:
+          QA_API_URL: http://localhost:3012
+          VITE_SUPABASE_URL: ${{ secrets.LUMI_EVAL_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.LUMI_EVAL_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.LUMI_EVAL_SERVICE_ROLE_KEY }}
+          SUPABASE_PROJECT_REF: ${{ secrets.LUMI_EVAL_PROJECT_REF }}
+        run: |
+          set +e
+          npx tsx scripts/qa/evaluer-outils.mts --sortie qa-outils.json
+          set -e
+          node -e '
+            const r = require("./qa-outils.json");
+            const b = r.bilan;
+            console.log(`Outils : ${b.exact} exact · ${b.partiel} partiel · ${b.rate} raté · ${b.erreur} erreur / ${b.total} · ${(b.cout_cents/100).toFixed(2)} $`);
+            const part = (b.rate + b.erreur) / b.total * 100;
+            if (part > 5) { console.error(`::error::Batterie des outils dégradée : ${part.toFixed(1)} % de ratés/erreurs (> 5 %)`); process.exit(1); }
+          '
+
       - name: Rapport
         if: always() && steps.secrets.outputs.ok == 'true'
         uses: actions/upload-artifact@v4
@@ -111,5 +166,7 @@ jobs:
           name: lumi-evaluation-${{ github.run_id }}
           path: |
             qa-lumi-evaluation.json
+            qa-execution.json
+            qa-outils.json
             api.log
           retention-days: 90
