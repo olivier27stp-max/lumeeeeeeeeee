@@ -23,6 +23,18 @@ export function normalizeHeader(h: string): string {
 
 // ── Catalogue des champs cibles ──
 
+const ADDRESS_LINE2_DEF: FieldDef = {
+  field: 'address_line2',
+  labelFr: "Complément d'adresse",
+  labelEn: 'Address line 2',
+  types: ['address', 'text'],
+  synonyms: [
+    'street 2', 'street2', 'address 2', 'address2', 'address line 2', 'address line2', 'line 2',
+    'service street 2', 'apt', 'apartment', 'suite', 'unit', 'unit number', 'apt suite',
+    'complement d adresse', 'adresse 2', 'ligne 2', 'appartement', 'app', 'local', 'bureau', 'suite bureau',
+  ],
+};
+
 export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
   // Noms de taxes (tax_configs) : TPS, TVQ, HST… Le taux est un pourcentage
   // (9.975), jamais une fraction — convention de TAX_PRESETS.
@@ -181,6 +193,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'adresse', 'rue', 'adresse de facturation', 'adresse postale', 'no civique et rue',
       ],
     },
+    ADDRESS_LINE2_DEF,
     {
       field: 'city',
       labelFr: 'Ville',
@@ -243,6 +256,28 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'statut', 'statut du client', 'etape', 'etat du client', 'type de client', 'customer type',
       ],
     },
+    // Statut d'arrivée : booléens Jobber « Lead (as of …) » / « Archived ».
+    // Un client prospect arrive en 'lead', un client archivé en 'inactive'.
+    {
+      field: 'is_lead',
+      labelFr: 'Prospect (oui/non)',
+      labelEn: 'Is lead (yes/no)',
+      types: ['boolean', 'status', 'text'],
+      synonyms: [
+        'lead', 'is lead', 'lead as of', 'prospect', 'is prospect', 'lead yes no', 'is a lead',
+        'prospect oui non', 'est un prospect', 'est prospect',
+      ],
+    },
+    {
+      field: 'archived',
+      labelFr: 'Archivé (oui/non)',
+      labelEn: 'Archived (yes/no)',
+      types: ['boolean', 'status', 'text'],
+      synonyms: [
+        'archived', 'is archived', 'archive', 'inactive', 'is inactive', 'archived yes no',
+        'archive oui non', 'archivé', 'inactif', 'est archive',
+      ],
+    },
     {
       field: 'external_id',
       labelFr: 'Identifiant externe',
@@ -283,6 +318,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'adresse de facturation', 'adresse facturation', 'adresse postale', 'facturer a', 'adresse', 'rue',
       ],
     },
+    ADDRESS_LINE2_DEF,
     {
       field: 'city',
       labelFr: 'Ville',
@@ -375,6 +411,7 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
         'adresse', 'rue', 'adresse de service', 'adresse de la propriete', 'adresse du site', 'emplacement',
       ],
     },
+    ADDRESS_LINE2_DEF,
     {
       field: 'city',
       labelFr: 'Ville',
@@ -1012,6 +1049,19 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       synonyms: [
         'created date', 'date created', 'creation date', 'created at', 'created', 'date added',
         'date de creation', 'cree le', 'creee le', 'date d ajout',
+      ],
+    },
+    // Date de paiement exportée (« Marked paid date ») : posée sur les factures
+    // soldées seulement — le trigger l'efface tant qu'un solde reste.
+    {
+      field: 'paid_date',
+      labelFr: 'Date de paiement',
+      labelEn: 'Paid date',
+      types: ['date', 'datetime', 'text'],
+      synonyms: [
+        'paid date', 'date paid', 'marked paid date', 'marked paid', 'paid on', 'paid at', 'payment date',
+        'date of payment', 'settled date', 'date de paiement', 'paye le', 'payé le', 'payee le', 'date de reglement',
+        'reglee le', 'réglée le',
       ],
     },
     {

@@ -30,7 +30,7 @@ const ENTITY_ICONS: Record<string, LucideIcon> = {
 };
 
 const CLIENT_REFS = ['client_ref', 'client_email_ref', 'client_name_ref', 'client_phone_ref'];
-const ADDRESS = ['address', 'city', 'province', 'postal_code', 'country'];
+const ADDRESS = ['address', 'address_line2', 'city', 'province', 'postal_code', 'country'];
 
 // Regroupement visuel des champs existants ; un champ absent d'ici tombe dans « Autres ».
 const FIELD_GROUPS: Record<string, { label: string; fields: string[] }[]> = {
@@ -38,7 +38,7 @@ const FIELD_GROUPS: Record<string, { label: string; fields: string[] }[]> = {
     { label: 'Identité', fields: ['first_name', 'last_name', 'full_name', 'company'] },
     { label: 'Coordonnées', fields: ['email', 'phone', 'phone_secondary'] },
     { label: 'Adresse', fields: ADDRESS },
-    { label: 'Informations', fields: ['status', 'lead_source', 'notes', 'external_id', 'created_date'] },
+    { label: 'Informations', fields: ['status', 'is_lead', 'archived', 'lead_source', 'notes', 'external_id', 'created_date'] },
   ],
   property: [
     { label: 'Adresse', fields: ADDRESS },
@@ -72,7 +72,7 @@ const FIELD_GROUPS: Record<string, { label: string; fields: string[] }[]> = {
   ],
   invoice: [
     { label: 'Facture', fields: ['invoice_number', 'status', 'salesperson', 'notes', 'external_id'] },
-    { label: 'Dates', fields: ['issued_date', 'created_date', 'due_date'] },
+    { label: 'Dates', fields: ['issued_date', 'created_date', 'due_date', 'paid_date'] },
     { label: 'Montants', fields: ['subtotal', 'tax', 'total', 'discount', 'paid_amount', 'balance'] },
     { label: 'Rattachement', fields: [...CLIENT_REFS, 'job_ref'] },
   ],

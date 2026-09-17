@@ -301,11 +301,14 @@ export interface NormalizedRecord {
 }
 
 const MONEY_FIELDS = new Set(['total', 'subtotal', 'tax', 'discount', 'price', 'cost', 'amount', 'paid_amount', 'balance', 'unit_price', 'line_total']);
-const DATE_FIELDS = new Set(['created_date', 'sale_date', 'start_date', 'end_date', 'issued_date', 'due_date', 'valid_until', 'date']);
+const DATE_FIELDS = new Set(['created_date', 'sale_date', 'start_date', 'end_date', 'issued_date', 'due_date', 'paid_date', 'valid_until', 'date']);
 const DATETIME_FIELDS = new Set(['start_at', 'end_at']);
 const RELATION_FIELDS = new Set(['client_ref', 'client_email_ref', 'client_name_ref', 'client_phone_ref', 'property_ref', 'job_ref', 'invoice_ref']);
 const PERCENT_FIELDS = new Set(['rate']);
 const BOOLEAN_FIELDS = new Set(['is_compound']);
+// Drapeaux client : « Lead (as of …) », « Archived » — oui/non ou mot de statut.
+const FLAG_FIELDS = new Set(['is_lead', 'archived']);
+const ADDRESS_ENTITIES = new Set(['client', 'property', 'billing_property']);
 
 /** « 9,975 % », « 9.975 », « 0.09975 » (fraction) → pourcentage 9.975 ; null si illisible. */
 export function parsePercent(v: string): number | null {
@@ -325,6 +328,118 @@ export function parseBooleanFlexible(v: string): boolean | null {
   if (['1', 'true', 'yes', 'y', 'oui', 'o', 'x', 'vrai', 'compound', 'composee', 'composée'].includes(s)) return true;
   if (['0', 'false', 'no', 'n', 'non', 'faux', ''].includes(s)) return false;
   return null;
+}
+
+/** Drapeau souple : oui/non d'abord, puis mot de statut (« Lead », « prospect »,
+ *  « Archived », « inactif » = oui ; « Active », « client » = non) ; null si illisible. */
+export function parseFlagFlexible(v: string): boolean | null {
+  const b = parseBooleanFlexible(v);
+  if (b !== null) return b;
+  const s = v.trim().toLowerCase();
+  if (/(lead|prospect|archiv|inactiv|closed|ferm)/.test(s)) return true;
+  if (/(activ|client|customer|current|ouvert|open)/.test(s)) return false;
+  return null;
+}
+
+// Adresse sur UNE ligne (« 123 rue X, Montréal, QC H1H 1H1 » ou sans virgules
+// « 5300 7e Rang Wotton QC J1A 1B2 ») : export Jobber « Client Contact Info ».
+const PROVINCES: Record<string, string> = {
+  qc: 'QC', quebec: 'QC', 'province de quebec': 'QC',
+  on: 'ON', ontario: 'ON',
+  nb: 'NB', 'new brunswick': 'NB', 'nouveau brunswick': 'NB',
+  ns: 'NS', 'nova scotia': 'NS', 'nouvelle ecosse': 'NS',
+  pe: 'PE', pei: 'PE', 'prince edward island': 'PE', 'ile du prince edouard': 'PE',
+  nl: 'NL', newfoundland: 'NL', 'newfoundland and labrador': 'NL', 'terre neuve': 'NL',
+  mb: 'MB', manitoba: 'MB',
+  sk: 'SK', saskatchewan: 'SK',
+  ab: 'AB', alberta: 'AB',
+  bc: 'BC', 'british columbia': 'BC', 'colombie britannique': 'BC',
+  yt: 'YT', yukon: 'YT', nt: 'NT', 'northwest territories': 'NT', nu: 'NU', nunavut: 'NU',
+};
+const PROVINCE_BY_POSTAL_PREFIX: Record<string, string> = {
+  A: 'NL', B: 'NS', C: 'PE', E: 'NB', G: 'QC', H: 'QC', J: 'QC', K: 'ON', L: 'ON', M: 'ON', N: 'ON', P: 'ON',
+  R: 'MB', S: 'SK', T: 'AB', V: 'BC', X: 'NT', Y: 'YT',
+};
+const RE_CA_POSTAL_END = /([A-Za-z]\d[A-Za-z])\s?(\d[A-Za-z]\d)\s*$/;
+const RE_US_ZIP_END = /(\d{5}(?:-\d{4})?)\s*$/;
+const RE_COUNTRY_END = /[\s,]+(canada|ca|usa|us|united states|etats[ -]unis|états[ -]unis)\.?\s*$/i;
+
+function stripAccents(v: string): string {
+  return v.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+function trimSeparators(v: string): string {
+  return v.replace(/^[\s,;]+|[\s,;]+$/g, '');
+}
+
+export interface SplitAddress {
+  address: string;
+  city: string | null;
+  province: string | null;
+  postal_code: string | null;
+  country: string | null;
+}
+
+/**
+ * Découpe une adresse sur une ligne en rue / ville / province / code postal.
+ * Prudent : sans code postal reconnu en fin de ligne, on ne découpe pas
+ * (null) — la ligne entière reste dans « address », ce qui s'affiche juste.
+ * Province : mot(s) de fin reconnus, sinon déduite du code postal canadien.
+ * Ville : dernier segment avant la province s'il y a des virgules, sinon
+ * dernier mot (villes composées = tirets au Québec).
+ */
+export function splitOneLineAddress(line: string): SplitAddress | null {
+  let rest = trimSeparators(stripInvisible(line));
+  if (!rest) return null;
+  let country: string | null = null;
+  const mCountry = rest.match(RE_COUNTRY_END);
+  if (mCountry) {
+    country = /^(ca|canada)$/i.test(mCountry[1]) ? 'CA' : 'US';
+    rest = trimSeparators(rest.slice(0, mCountry.index));
+  }
+  let postal: string | null = null;
+  let province: string | null = null;
+  const mCa = rest.match(RE_CA_POSTAL_END);
+  if (mCa) {
+    postal = normalizePostalCode(`${mCa[1]}${mCa[2]}`);
+    rest = trimSeparators(rest.slice(0, mCa.index));
+    province = PROVINCE_BY_POSTAL_PREFIX[postal[0]] ?? null;
+    country = country ?? 'CA';
+  } else {
+    const mUs = rest.match(RE_US_ZIP_END);
+    if (!mUs || mUs.index === 0) return null;
+    postal = mUs[1];
+    rest = trimSeparators(rest.slice(0, mUs.index));
+    country = country ?? 'US';
+  }
+  // Province écrite en fin de ligne (1 à 3 mots) : prime sur la déduction.
+  const words = rest.split(/\s+/);
+  for (let n = Math.min(3, words.length - 1); n >= 1; n--) {
+    const tail = stripAccents(words.slice(-n).join(' ')).toLowerCase().replace(/[.,]/g, '');
+    const code = PROVINCES[tail];
+    if (code) {
+      province = code;
+      rest = trimSeparators(words.slice(0, -n).join(' '));
+      break;
+    }
+  }
+  if (!rest) return null;
+  let city: string | null = null;
+  let address = rest;
+  if (rest.includes(',')) {
+    const segments = rest.split(',').map((x) => x.trim()).filter(Boolean);
+    if (segments.length >= 2) {
+      city = segments[segments.length - 1];
+      address = segments.slice(0, -1).join(', ');
+    }
+  } else {
+    const tokens = rest.split(/\s+/);
+    if (tokens.length >= 3) {
+      city = tokens[tokens.length - 1];
+      address = tokens.slice(0, -1).join(' ');
+    }
+  }
+  if (!province && !city) return null;
+  return { address, city, province, postal_code: postal, country };
 }
 
 /**
@@ -382,6 +497,12 @@ export function normalizeRow(
     }
     if (entity === 'tax_config' && BOOLEAN_FIELDS.has(field)) {
       const b = parseBooleanFlexible(value);
+      if (b === null) problems.push(`invalid_boolean:${field}`);
+      else normalized[field] = b;
+      continue;
+    }
+    if (entity === 'client' && FLAG_FIELDS.has(field)) {
+      const b = parseFlagFlexible(value);
       if (b === null) problems.push(`invalid_boolean:${field}`);
       else normalized[field] = b;
       continue;
@@ -451,6 +572,20 @@ export function normalizeRow(
         normalized.last_name = parts.pop();
         normalized.first_name = parts.join(' ');
       }
+    }
+  }
+
+  // Adresse sur une ligne (Jobber « Billing address ») : découpée quand ville,
+  // province et code postal ne sont pas fournis par ailleurs.
+  if (ADDRESS_ENTITIES.has(entity) && typeof normalized.address === 'string'
+    && !normalized.city && !normalized.province && !normalized.postal_code) {
+    const parts = splitOneLineAddress(normalized.address);
+    if (parts) {
+      normalized.address = parts.address;
+      if (parts.city) normalized.city = parts.city;
+      if (parts.province) normalized.province = parts.province;
+      if (parts.postal_code) normalized.postal_code = parts.postal_code;
+      if (parts.country && !normalized.country) normalized.country = parts.country;
     }
   }
 

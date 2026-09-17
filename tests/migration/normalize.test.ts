@@ -248,3 +248,83 @@ describe('relations de repli client (courriel / nom complet)', async () => {
     expect(res.normalized.client_email_ref).toBeUndefined();
   });
 });
+
+// ── Manques comblés (rapport du bot, export Jobber 2026-09) ──
+
+import { parseFlagFlexible, splitOneLineAddress } from '../../server/lib/migration/normalize';
+
+describe('parseFlagFlexible — « Lead (as of …) », « Archived »', () => {
+  it('oui/non et mots de statut', () => {
+    expect(parseFlagFlexible('Yes')).toBe(true);
+    expect(parseFlagFlexible('No')).toBe(false);
+    expect(parseFlagFlexible('Lead')).toBe(true);
+    expect(parseFlagFlexible('Archived')).toBe(true);
+    expect(parseFlagFlexible('Inactive')).toBe(true);
+    expect(parseFlagFlexible('Active')).toBe(false);
+    expect(parseFlagFlexible('Client')).toBe(false);
+    expect(parseFlagFlexible('peut-être')).toBeNull();
+  });
+});
+
+describe('splitOneLineAddress — adresse de facturation sur une ligne', () => {
+  it('avec virgules, province écrite', () => {
+    expect(splitOneLineAddress('123 rue Saint-Denis, Montréal, QC H2X 3K5')).toEqual({
+      address: '123 rue Saint-Denis', city: 'Montréal', province: 'QC', postal_code: 'H2X 3K5', country: 'CA',
+    });
+  });
+  it('sans virgules (export Jobber) : dernier mot = ville, province déduite du code postal', () => {
+    expect(splitOneLineAddress('5300 7e Rang Wotton J1A 1B2')).toEqual({
+      address: '5300 7e Rang', city: 'Wotton', province: 'QC', postal_code: 'J1A 1B2', country: 'CA',
+    });
+    expect(splitOneLineAddress('1100 Avenue du Parc Montréal Québec H2W 4A3')).toEqual({
+      address: '1100 Avenue du Parc', city: 'Montréal', province: 'QC', postal_code: 'H2W 4A3', country: 'CA',
+    });
+  });
+  it('pays en fin de ligne retiré, province sur deux mots', () => {
+    expect(splitOneLineAddress('10 King St, Toronto, Ontario M5H 1A1, Canada')).toEqual({
+      address: '10 King St', city: 'Toronto', province: 'ON', postal_code: 'M5H 1A1', country: 'CA',
+    });
+  });
+  it('sans code postal en fin de ligne : pas de découpage', () => {
+    expect(splitOneLineAddress('123 rue Saint-Denis')).toBeNull();
+    expect(splitOneLineAddress('123 rue Saint-Denis, Montréal')).toBeNull();
+    expect(splitOneLineAddress('')).toBeNull();
+  });
+});
+
+describe('normalizeRow — prospect, archivé, complément, date de paiement, adresse sur une ligne', () => {
+  it('client : « Lead » / « Archived » deviennent des booléens, Street 2 reste séparé', () => {
+    const { normalized, problems } = normalizeRow('client', {
+      'Lead (as of 2026-09-15 15:07)': 'Yes', Archived: 'No', 'Service Street 1': '123 rue X', 'Service Street 2': 'app. 4',
+    }, { 'Lead (as of 2026-09-15 15:07)': 'is_lead', Archived: 'archived', 'Service Street 1': 'address', 'Service Street 2': 'address_line2' });
+    expect(problems).toEqual([]);
+    expect(normalized.is_lead).toBe(true);
+    expect(normalized.archived).toBe(false);
+    expect(normalized.address).toBe('123 rue X');
+    expect(normalized.address_line2).toBe('app. 4');
+  });
+  it('client : drapeau illisible → problème, pas de valeur', () => {
+    const { normalized, problems } = normalizeRow('client', { Archived: 'bof' }, { Archived: 'archived' });
+    expect(problems).toContain('invalid_boolean:archived');
+    expect(normalized.archived).toBeUndefined();
+  });
+  it('facture : « Marked paid date » → paid_date (date)', () => {
+    const { normalized } = normalizeRow('invoice', { 'Marked paid date': '09/03/2026' }, { 'Marked paid date': 'paid_date' });
+    expect(normalized.paid_date).toBe('2026-09-03');
+  });
+  it('adresse de facturation sur une ligne → découpée quand rien d\'autre n\'est mappé', () => {
+    const { normalized } = normalizeRow('billing_property',
+      { 'Billing address': '222 De La Salle Drummondville QC J2C 1A1', Email: 'a@b.ca' },
+      { 'Billing address': 'address', Email: 'client_email_ref' });
+    expect(normalized.address).toBe('222 De La Salle');
+    expect(normalized.city).toBe('Drummondville');
+    expect(normalized.province).toBe('QC');
+    expect(normalized.postal_code).toBe('J2C 1A1');
+  });
+  it('adresse sur une ligne NON découpée quand la ville est mappée à côté', () => {
+    const { normalized } = normalizeRow('client',
+      { Address: '222 De La Salle Drummondville QC J2C 1A1', City: 'Drummondville' },
+      { Address: 'address', City: 'city' });
+    expect(normalized.address).toBe('222 De La Salle Drummondville QC J2C 1A1');
+  });
+});

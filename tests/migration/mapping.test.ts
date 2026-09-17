@@ -142,3 +142,39 @@ describe('champs de rattachement client de repli', () => {
     expect(s.targetField).toBe('client_ref');
   });
 });
+
+describe('manques comblés (rapport du bot, export Jobber 2026-09)', () => {
+  it('« Service Street 2 » d\'un client → address_line2, jamais address', () => {
+    const [s] = suggestMappings('clients', [col('Service Street 2', 'address')], 'clients.csv');
+    expect(s.targetField).toBe('address_line2');
+  });
+  it('« Service Street 1 » reste sur address', () => {
+    const [s] = suggestMappings('clients', [col('Service Street 1', 'address')], 'clients.csv');
+    expect(s.targetField).toBe('address');
+  });
+  it('« Archived » (oui/non) → archived ; « Lead (as of …) » → is_lead', () => {
+    const [a] = suggestMappings('clients', [col('Archived', 'boolean')], 'clients.csv');
+    expect(a.targetField).toBe('archived');
+    const [l] = suggestMappings('clients', [col('Lead (as of 2026-09-15 15:07)', 'boolean')], 'clients.csv');
+    expect(l.targetField).toBe('is_lead');
+  });
+  it('« Lead source » reste sur lead_source', () => {
+    const [s] = suggestMappings('clients', [col('Lead source', 'text')], 'clients.csv');
+    expect(s.targetField).toBe('lead_source');
+  });
+  it('« Marked paid date » d\'une facture → paid_date, pas issued_date', () => {
+    const [s] = suggestMappings('invoices', [col('Marked paid date', 'date')], 'invoices.csv');
+    expect(s.targetField).toBe('paid_date');
+    const [i] = suggestMappings('invoices', [col('Issued date', 'date')], 'invoices.csv');
+    expect(i.targetField).toBe('issued_date');
+  });
+  it('« Billing address » d\'un fichier adresses de facturation → address', () => {
+    const [s] = suggestMappings('billing_addresses', [col('Billing address', 'address')], 'billing.csv');
+    expect(s.targetField).toBe('address');
+  });
+  it('address_line2 présent sur client, propriété et adresse de facturation', () => {
+    for (const e of ['client', 'property', 'billing_property'] as const) {
+      expect(FIELD_CATALOG[e].map((f) => f.field)).toContain('address_line2');
+    }
+  });
+});

@@ -277,7 +277,9 @@ describe('audit S3 — colonnes non mappées rattachées aux notes, statuts inco
     expect(statusRecognized('invoice', 'Payée')).toBe(true);
     expect(statusRecognized('job', 'Zombie-Status-42')).toBe(false);
     expect(statusRecognized('quote', 'bizarre-42')).toBe(false);
-    expect(statusRecognized('client', 'peu importe')).toBe(true); // entité sans statut mappé
+    expect(statusRecognized('client', 'Active')).toBe(true); // statut client désormais interprété (prospect / archivé)
+    expect(statusRecognized('client', 'peu importe')).toBe(false);
+    expect(statusRecognized('tax_config', 'peu importe')).toBe(true); // entité sans statut mappé
   });
 });
 

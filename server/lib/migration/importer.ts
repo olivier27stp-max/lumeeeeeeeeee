@@ -107,6 +107,31 @@ function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+/** Rue + complément (« app. 4 », « local 200 ») sur une seule ligne : les
+ *  tables n'ont pas de 2e ligne d'adresse. Un complément qui répète la ville
+ *  (export Jobber où « Street 2 » porte la ville) ou déjà contenu dans la rue
+ *  est ignoré. Jamais utilisé pour une clé (address seule reste la clé). */
+export function composeAddress(n: Record<string, unknown>): string {
+  const address = safeStr(n.address);
+  const line2 = safeStr(n.address_line2);
+  if (!line2) return address;
+  if (!address) return line2;
+  const city = safeStr(n.city);
+  if (city && refKey(line2) === refKey(city)) return address;
+  if (refKey(address).includes(refKey(line2))) return address;
+  return `${address}, ${line2}`;
+}
+
+// Contrainte prod clients_status_check : active | lead | inactive.
+// 'inactive' = archivage manuel (le trigger des jobs ne le recalcule jamais) ;
+// 'lead' = prospect (repassé 'active' par le trigger dès qu'une job existe).
+export function clientStatusOf(n: Record<string, unknown>): 'active' | 'lead' | 'inactive' {
+  const status = str(n.status).toLowerCase();
+  if (n.archived === true || /(archiv|inactiv|closed|ferm)/.test(status)) return 'inactive';
+  if (n.is_lead === true || /(lead|prospect)/.test(status)) return 'lead';
+  return 'active';
+}
+
 function refKey(v: string): string {
   return v.trim().toLowerCase();
 }
@@ -364,6 +389,7 @@ function mapVisitStatus(source: string): string {
 // dry-run (audit S3 : une valeur inconnue tombait sur le défaut en silence).
 const BENIGN_DEFAULT_RE = /(sched|plan|book|open|activ|new|nouveau|upcoming|venir|pending|attente|confirm)/;
 const RECOGNIZED_STATUS_RES: Partial<Record<TargetEntity, RegExp[]>> = {
+  client: [/(lead|prospect)/, /(archiv|inactiv|closed|ferm)/, /(activ|client|customer|current)/],
   job: [/(complet|done|closed|term|ferm|finish)/, /(cancel|annul)/, /(progress|en cours)/, /draft|brouillon/, BENIGN_DEFAULT_RE],
   invoice: [/(paid|pay[ée]e?)/, /partial/, /draft|brouillon/, /(sent|envoy|due|overdue|retard|unpaid|impay)/, BENIGN_DEFAULT_RE],
   quote: [/(convert)/, /(approv|accept|won|sign)/, /(chang|revis)/, /(sent|await|open|pending|envoy)/, /(archiv|declin|lost|refus|expir|cancel|annul)/, /draft|brouillon/],
@@ -477,13 +503,14 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         company: safeStr(n.company) || null,
         email: str(n.email) || null,
         phone: str(n.phone) || null,
-        address: safeStr(n.address) || null,
+        address: composeAddress(n) || null,
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
         notes: joinNotes(safeStr(n.notes), unmappedNotesBlock(n)),
         lead_source: safeStr(n.lead_source) || null,
-        status: 'active',
+        // Prospect / archivé : d'après « Lead », « Archived » ou un statut texte.
+        status: clientStatusOf(n),
         created_by: ctx.createdBy,
         // date d'origine préservée (fidélité historique) — clé ABSENTE sinon,
         // pour laisser agir le DEFAULT now() (jamais de null explicite)
@@ -502,7 +529,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        address: safeStr(n.address),
+        address: composeAddress(n),
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
@@ -527,7 +554,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        address: safeStr(n.address),
+        address: composeAddress(n),
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
@@ -695,6 +722,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         notes: safeStr(n.notes) || null,
         // Vendeur mappé ; sinon null → le CRM affiche celui de la job liée.
         salesperson_id: ctx.staffIdBySource?.get(refKey(str(n.salesperson))) ?? null,
+        // Date de paiement exportée : le trigger ne pose now() que si paid_at
+        // est null et l'efface tant qu'un solde reste — donc factures soldées seulement.
+        ...(status === 'paid' && str(n.paid_date) ? { paid_at: `${str(n.paid_date)}T12:00:00` } : {}),
         created_by: ctx.createdBy,
         // created_at = date de création exportée, sinon repli sur la date
         // d'émission : les rapports « par date de création » restent vrais

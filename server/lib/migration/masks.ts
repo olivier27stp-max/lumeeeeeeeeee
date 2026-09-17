@@ -108,6 +108,7 @@ const FIELD_MASKERS: Record<string, (v: string) => string> = {
   salesperson: maskName,
   assigned_to: maskName,
   address: maskAddress,
+  address_line2: maskAddress,
   postal_code: maskPostalCode,
   notes: maskGeneric,
   description: maskGeneric,
