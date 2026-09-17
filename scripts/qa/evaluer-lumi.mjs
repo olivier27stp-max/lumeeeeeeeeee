@@ -484,11 +484,11 @@ async function testsExecution(H, v, resultats) {
     if (p3.proposition?.tool === 'add_note') {
       const c3 = await decider(H, p3.conversation_id, p3.proposition.tool_use_id, 'confirm');
       // Lumi reformule la note (le marqueur saute souvent) : on cherche par client, sur les dernières minutes.
-      const { data: n } = await admin.from('activity_notes').select('id, entity_id, actor_id').eq('org_id', v.orgId).eq('entity_id', v.clientUnique.id).gte('created_at', new Date(Date.now() - 5 * 60_000).toISOString()).ilike('body', '%matin%');
+      const { data: n } = await admin.from('specific_notes').select('id, entity_id, created_by').eq('org_id', v.orgId).eq('entity_id', v.clientUnique.id).gte('created_at', new Date(Date.now() - 5 * 60_000).toISOString()).ilike('body', '%matin%');
       const f = [];
       if (!n?.length) f.push('la note n\'est pas en base');
-      else { if (n[0].entity_id !== v.clientUnique.id) f.push('la note est sur le mauvais client'); if (n[0].actor_id !== v.userId) f.push('la note n\'est pas signée par l\'utilisateur'); }
-      if (n?.length) await admin.from('activity_notes').delete().in('id', n.map((x) => x.id));
+      else { if (n[0].entity_id !== v.clientUnique.id) f.push('la note est sur le mauvais client'); if (n[0].created_by !== v.userId) f.push('la note n\'est pas signée par l\'utilisateur'); }
+      if (n?.length) await admin.from('specific_notes').delete().in('id', n.map((x) => x.id));
       noter('exec-note-client', p3.texte.slice(0, 60), c3, f.concat(fautesPresentation(c3)));
     } else noter('exec-note-client', 'Ajoute une note…', p3, [`pas de proposition add_note (${p3.proposition?.tool || 'aucune'})`]);
   }
