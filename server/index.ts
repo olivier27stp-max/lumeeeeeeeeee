@@ -105,6 +105,7 @@ import migrationPortalRouter from './routes/migration-portal';
 import creatorSpaceRouter from './routes/creator-space';
 import creatorSpaceAuditRouter, { creatorSpaceViewLogger } from './routes/creator-space-audit';
 import creatorSpaceFeaturesRouter from './routes/creator-space-features';
+import creatorSpaceNotesRouter from './routes/creator-space-notes';
 
 // Security engine
 import { applySecurityMiddleware, runSecurityMaintenance, slidingRateLimit, userKey } from './lib/security';
@@ -857,6 +858,8 @@ app.use('/api', creatorSpaceAuditRouter);
 // Fonctionnalités par workspace (activer / bloquer par-dessus le forfait) :
 // seules écritures du Creator Space avec reveal-actor, chacune journalisée.
 app.use('/api', creatorSpaceFeaturesRouter);
+// Notes internes par workspace : table dédiée, jamais visible du tenant.
+app.use('/api', creatorSpaceNotesRouter);
 const migrationPortalLimiter = rateLimit({ windowMs: 60_000, max: 120, keyFn: (req) => `migportal:${userKey(req)}` });
 app.use('/api/migration-portal', migrationPortalLimiter);
 // Anti force-brute sur la résolution du jeton : limite serrée par IP (Redis si dispo).

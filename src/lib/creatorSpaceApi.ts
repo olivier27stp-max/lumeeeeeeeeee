@@ -323,6 +323,30 @@ export function revealActor(userId: string, reason: string): Promise<{ user_id: 
   return apiFetch('/reveal-actor', { method: 'POST', body: { user_id: userId, reason } });
 }
 
+// ── Notes internes par workspace ────────────────────────────────────────
+export interface CompanyNote {
+  id: string;
+  org_id: string;
+  author_id: string;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+  /** L'utilisateur courant est l'auteur : peut la retirer. */
+  can_delete: boolean;
+}
+
+export function getCompanyNotes(orgId: string): Promise<{ data: CompanyNote[] }> {
+  return apiFetch(`/companies/${orgId}/notes`);
+}
+
+export function addCompanyNote(orgId: string, body: string): Promise<CompanyNote> {
+  return apiFetch(`/companies/${orgId}/notes`, { method: 'POST', body: { body } });
+}
+
+export function deleteCompanyNote(orgId: string, noteId: string): Promise<{ ok: true }> {
+  return apiFetch(`/companies/${orgId}/notes/${noteId}`, { method: 'DELETE' });
+}
+
 export function getCompanyEngagement(orgId: string): Promise<CompanyEngagement> {
   return apiFetch(`/companies/${orgId}/engagement`);
 }

@@ -6,13 +6,17 @@
 
 import React, { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Loader2, X } from 'lucide-react';
+import { Check, Copy, Loader2, Trash2, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { confirmer } from '../../components/ui/ConfirmDialog';
 import {
+  addCompanyNote,
+  deleteCompanyNote,
   getCompany,
   getCompanyBilling,
   getCompanyEngagement,
   getCompanyFeatures,
+  getCompanyNotes,
   getCompanyPermissions,
   getCompanyUsers,
   setCompanyFeature,
@@ -23,13 +27,14 @@ import {
 import EmptyState from '../../components/ui/EmptyState';
 import { EngagementBadge, ErrorState, MaskedActor, SubStatusBadge, fmtDate, fmtDateTime, fmtMoney } from './shared';
 
-type Tab = 'users' | 'billing' | 'permissions' | 'features' | 'engagement';
+type Tab = 'users' | 'billing' | 'permissions' | 'features' | 'notes' | 'engagement';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'users', label: 'Users' },
   { id: 'billing', label: 'Billing' },
   { id: 'permissions', label: 'Permissions' },
   { id: 'features', label: 'Features' },
+  { id: 'notes', label: 'Notes' },
   { id: 'engagement', label: 'Engagement' },
 ];
 
@@ -112,6 +117,7 @@ export default function CompanyPanel({ orgId, onClose }: { orgId: string; onClos
         {tab === 'billing' && <BillingTab orgId={orgId} />}
         {tab === 'permissions' && <PermissionsTab orgId={orgId} />}
         {tab === 'features' && <FeaturesTab orgId={orgId} />}
+        {tab === 'notes' && <NotesTab orgId={orgId} />}
         {tab === 'engagement' && <EngagementTab orgId={orgId} />}
       </div>
     </aside>
@@ -511,6 +517,109 @@ function FeatureGroup({ title, features, pendingKey, onPick }: {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// ── Notes : communication d'équipe interne sur le workspace ───────────────
+// Table dédiée, jamais la table tenant `notes` : le client ne voit jamais
+// ces notes. Pas de raison à saisir (contrairement aux overrides de
+// Features) — c'est une note libre, pas un changement d'état du compte.
+
+function NotesTab({ orgId }: { orgId: string }) {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ['creator-space', 'company', orgId, 'notes'],
+    queryFn: () => getCompanyNotes(orgId),
+    staleTime: 15_000,
+    refetchOnWindowFocus: false,
+  });
+  const [draft, setDraft] = useState('');
+  const addMutation = useMutation({
+    mutationFn: (body: string) => addCompanyNote(orgId, body),
+    onSuccess: () => {
+      setDraft('');
+      qc.invalidateQueries({ queryKey: ['creator-space', 'company', orgId, 'notes'] });
+    },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (noteId: string) => deleteCompanyNote(orgId, noteId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['creator-space', 'company', orgId, 'notes'] }),
+  });
+
+  const submit = () => {
+    const body = draft.trim();
+    if (!body || addMutation.isPending) return;
+    addMutation.mutate(body);
+  };
+
+  if (query.isLoading) return <TabLoading />;
+  if (query.isError) return <ErrorState message={(query.error as Error)?.message} onRetry={() => query.refetch()} />;
+  const notes = query.data?.data ?? [];
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[11.5px] text-text-tertiary">Notes internes à l’équipe plateforme — jamais visibles par ce client.</p>
+
+      <div className="space-y-2">
+        <textarea
+          value={draft}
+          disabled={addMutation.isPending}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit();
+          }}
+          placeholder="Ajouter une note (Cmd/Ctrl+Entrée pour envoyer)…"
+          aria-label="Nouvelle note"
+          rows={3}
+          maxLength={4000}
+          className="w-full px-3 py-2 rounded-md border border-outline bg-surface text-[13px] text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
+        />
+        {addMutation.isError && <p className="text-[11.5px] text-red-700">{(addMutation.error as Error)?.message || 'Échec de l’ajout.'}</p>}
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!draft.trim() || addMutation.isPending}
+            className="h-7 px-3 rounded-md bg-text-primary text-surface text-[12px] font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+          >
+            {addMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+            Ajouter
+          </button>
+        </div>
+      </div>
+
+      {notes.length === 0 ? (
+        <EmptyState title="Aucune note" description="Aucune note interne pour ce workspace pour l’instant." />
+      ) : (
+        <ul className="space-y-2.5">
+          {notes.map((n) => (
+            <li key={n.id} className="rounded-md border border-outline px-3 py-2.5">
+              <p className="text-[13px] text-text-primary whitespace-pre-wrap break-words">{n.body}</p>
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <p className="text-[11px] text-text-tertiary">
+                  {n.author_name ?? 'Équipe Lume'} · {fmtDateTime(n.created_at)}
+                </p>
+                {n.can_delete && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!(await confirmer({ message: 'Retirer cette note ?', danger: true }))) return;
+                      deleteMutation.mutate(n.id);
+                    }}
+                    disabled={deleteMutation.isPending}
+                    aria-label="Retirer cette note"
+                    title="Retirer cette note"
+                    className="shrink-0 text-text-tertiary hover:text-red-600 disabled:opacity-40 focus-visible:outline-none"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

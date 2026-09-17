@@ -12,6 +12,7 @@ const read = (p: string) => readFileSync(resolve(root, p), 'utf8');
 const routerSrc = read('server/routes/creator-space.ts');
 const auditSrc = read('server/routes/creator-space-audit.ts');
 const featuresSrc = read('server/routes/creator-space-features.ts');
+const notesSrc = read('server/routes/creator-space-notes.ts');
 const indexSrc = read('server/index.ts');
 const appSrc = read('src/App.tsx');
 
@@ -134,6 +135,29 @@ describe('Creator Space — fonctionnalités par workspace (creator-space-featur
   });
 });
 
+describe('Creator Space — notes internes par workspace (creator-space-notes)', () => {
+  it('chaque handler est gardé par requireCreatorSpace et valide les identifiants', () => {
+    const handlers = notesSrc.split(/router\.(?:get|post|put|patch|delete)\(/).slice(1);
+    expect(handlers.length).toBe(3);
+    for (const h of handlers) {
+      expect(h).toContain('requireCreatorSpace(req, res)');
+      expect(h).toContain('UUID_RE.test(orgId)');
+    }
+  });
+
+  it('une note ne se retire que si author_id = l’appelant (jamais la note d’un autre admin)', () => {
+    const del = notesSrc.slice(notesSrc.indexOf("router.delete("));
+    expect(del).toContain(".eq('author_id', auth.user.id)");
+  });
+
+  it("jamais la table tenant `notes` : seule creator_space_notes est écrite ici", () => {
+    expect(notesSrc).not.toMatch(/\.from\('notes'\)/);
+    const writes = notesSrc.match(/\.from\('([a-z_]+)'\)\s*\.(insert|update|upsert|delete)\(/g) ?? [];
+    const tables = new Set(writes.map((w) => w.match(/from\('([a-z_]+)'\)/)![1]));
+    expect(tables).toEqual(new Set(['creator_space_notes']));
+  });
+});
+
 describe('montage serveur et surface SPA', () => {
   it('le routeur est monté avec rate limiting dédié, le journal d’accès et le routeur audit', () => {
     expect(indexSrc).toContain("app.use('/api/creator-space', creatorSpaceLimiter)");
@@ -141,6 +165,7 @@ describe('montage serveur et surface SPA', () => {
     expect(indexSrc).toContain("app.use('/api', creatorSpaceRouter)");
     expect(indexSrc).toContain("app.use('/api', creatorSpaceAuditRouter)");
     expect(indexSrc).toContain("app.use('/api', creatorSpaceFeaturesRouter)");
+    expect(indexSrc).toContain("app.use('/api', creatorSpaceNotesRouter)");
   });
 
   it('la route SPA existe, hors nav statique ; le lien sidebar est gaté par la sonde serveur', () => {

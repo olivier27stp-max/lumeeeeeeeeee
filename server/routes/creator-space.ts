@@ -102,7 +102,10 @@ async function loadOrgDirectory(admin: Admin) {
   return { orgs: rows, displayNameById: new Map<string, string>(rows.map((o: any) => [o.id, o.display_name])) };
 }
 
-async function loadActorNames(admin: Admin, userIds: string[]): Promise<Map<string, string>> {
+/** Exportée pour creator-space-notes.ts : résout les noms des auteurs de
+ *  notes plateforme (les ~2 comptes platformAdminIds — pas de masquage Loi 25
+ *  à leur sujet, contrairement aux acteurs d'un tenant). */
+export async function loadActorNames(admin: Admin, userIds: string[]): Promise<Map<string, string>> {
   const ids = Array.from(new Set(userIds.filter(Boolean)));
   if (!ids.length) return new Map();
   const [{ data: profiles }, { data: members }] = await Promise.all([
