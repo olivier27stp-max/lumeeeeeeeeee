@@ -370,10 +370,16 @@ export const STATUT_ROLE: Record<string, string> = {
   sales_rep: 'représentant', technician: 'technicien', manager: 'gestionnaire',
 };
 export const STATUT_LEAD: Record<string, string> = {
+  // Étapes canoniques du pipeline (leadsApi.ts) d'abord — « new_prospect » sortait brut en « new prospect ».
+  new_prospect: 'nouveau prospect', no_response: 'sans réponse', quote_sent: 'devis envoyé',
   new: 'nouveau', contacted: 'contacté', qualified: 'qualifié',
   proposal: 'proposition envoyée', won: 'gagné', closed_won: 'gagné',
   lost: 'perdu', closed_lost: 'perdu', unqualified: 'non qualifié',
 };
+/** Clé d'un souvenir (remember_this / forget_note) : minuscule, tirets, 80 caractères. */
+export function cleSouvenir(brut: string): string {
+  return String(brut).toLowerCase().replace(/[^a-z0-9à-ÿ-]+/g, '-').slice(0, 80);
+}
 export const STATUT_CLIENT: Record<string, string> = {
   active: 'client actif', inactive: 'inactif', lead: 'prospect',
   prospect: 'prospect', archived: 'archivé',
@@ -2096,8 +2102,7 @@ const rememberThis: AgentTool = {
       // (server/routes/org-knowledge.ts) : la fiche est visible et
       // modifiable dans l'application, pas enfermée chez l'agent.
       const admin = getServiceClient();
-      const cle = champRequis(args.key, 'La clé du souvenir')
-        .toLowerCase().replace(/[^a-z0-9à-ÿ-]+/g, '-').slice(0, 80);
+      const cle = cleSouvenir(champRequis(args.key, 'La clé du souvenir'));
       const { error } = await admin
         .from('org_knowledge')
         .upsert({
@@ -2124,7 +2129,9 @@ const forgetNote: AgentTool = {
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'forget_note', args, async () => {
       const admin = getServiceClient();
-      const cle = champRequis(args.key, 'La clé de la note').toLowerCase().slice(0, 80);
+      // Même normalisation que remember_this : « exec_test » y devient « exec-test »
+      // et forget_note ne le retrouvait pas (batterie d'exécution du 2026-09-17).
+      const cle = cleSouvenir(champRequis(args.key, 'La clé de la note'));
       const { data, error } = await admin.from('org_knowledge')
         .update({ is_active: false })
         .eq('org_id', ctx.orgId).eq('category', 'assistant').eq('key', cle)
@@ -2903,22 +2910,24 @@ const addNoteTool: AgentTool = {
     executerIdempotent(ctx, 'add_note', args, async () => {
       const type = String(args.entity_type);
       if (!['client', 'job'].includes(type)) throw new Error("entity_type : 'client' ou 'job'.");
-      // Même insertion que la route activity-notes : la note porte l'auteur
-      // réel (actor_id) — le fil d'activité de l'app dit QUI a écrit quoi.
-      const admin = getServiceClient();
-      const { data, error } = await admin
-        .from('activity_notes')
+      // L'onglet Notes de la fiche (specific_notes), là où list_notes, update_note
+      // et delete_note lisent — la note écrite dans activity_notes (fil d'activité)
+      // était invisible dans l'onglet (batterie d'exécution du 2026-09-17).
+      // Même insertion que src/lib/specificNotesApi.ts, à l'identité (RLS).
+      const { data, error } = await ctx.client
+        .from('specific_notes')
         .insert({
           org_id: ctx.orgId,
           entity_type: type,
           entity_id: champRequis(args.entity_id, "L'élément à annoter"),
-          body: champRequis(args.note, 'La note').slice(0, 4000),
-          actor_id: ctx.userId,
+          text: champRequis(args.note, 'La note').slice(0, 4000),
+          files: [],
+          created_by: ctx.userId,
         })
         .select('id, created_at')
         .single();
       if (error) throw error;
-      return { added: true, at: data.created_at };
+      return { added: true, note_id: data.id, at: data.created_at };
     }),
 };
 

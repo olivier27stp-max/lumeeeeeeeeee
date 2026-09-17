@@ -195,8 +195,12 @@ const searchLeads: AgentTool = {
     const term = String(args.query || '').trim();
     if (term) {
       const t = term.replace(/[%,()]/g, ' ');
-      q = q.or(
-        `first_name.ilike.%${t}%,last_name.ilike.%${t}%,company.ilike.%${t}%,email.ilike.%${t}%,phone.ilike.%${t}%`,
+      // « Julie Fortin » cherché d'un bloc dans first_name OU last_name → 0 résultat
+      // (batterie d'exécution du 2026-09-17). Même découpage que search_clients :
+      // chaque mot doit se trouver dans un des champs.
+      const mots = t.replace(/[%,()]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5);
+      for (const mot of mots) q = q.or(
+        `first_name.ilike.%${mot}%,last_name.ilike.%${mot}%,company.ilike.%${mot}%,email.ilike.%${mot}%,phone.ilike.%${mot}%`,
       );
     }
     const { data, error, count } = await q;
@@ -326,12 +330,20 @@ const getJob: AgentTool = {
     if (!data) return { error: 'Job not found.' };
     // Le job complet inclut ses lignes d'items — sans elles, « c'est quoi le
     // détail du job » ne sait répondre que le total.
+    // Les visites du job avec leur identifiant : « facture la visite d'hier »
+    // (create_invoice_for_visit) n'avait aucun moyen de le trouver.
+    const { data: visites } = await ctx.client
+      .from('schedule_events')
+      .select('id, start_at, end_at, status')
+      .eq('job_id', (data as any).id)
+      .order('start_at', { ascending: true })
+      .limit(50);
     const { data: items } = await ctx.client
       .from('job_line_items')
       .select('name, qty, unit_price_cents, total_cents, included')
       .eq('job_id', (data as any).id)
       .is('deleted_at', null);
-    return { ...data, line_items: items || [] };
+    return { ...data, line_items: items || [], visits: (visites || []).map((v: any) => ({ visit_id: v.id, start_at: v.start_at, end_at: v.end_at, status: v.status })) };
   },
 };
 
