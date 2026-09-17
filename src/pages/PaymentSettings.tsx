@@ -9,6 +9,7 @@ import ConnectOnboarding from '../components/ConnectOnboarding';
 import SmsStepUp from '../components/auth/SmsStepUp';
 import { confirmer } from '../components/ui/ConfirmDialog';
 import { usePermissions } from '../hooks/usePermissions';
+import RangeeLogos from '../components/payments/LogosPaiement';
 import { getSmsStatus, type SmsStatus } from '../lib/mfaSmsApi';
 import {
   getAccountStatus,
@@ -146,8 +147,6 @@ function CartePortailClient({ ctl, admin }: { ctl: ReglagesCtl; admin: boolean }
   const fr = language === 'fr';
   const s = ctl.s;
   const toutCoupe = !!s && !s.quote_payments_enabled && !s.invoice_payments_enabled;
-  const moyens = fr ? 'Cartes de crédit ou débit' : 'Credit or debit cards';
-  const portefeuilles = s?.wallets_enabled ? ', Apple Pay, Google Pay' : '';
 
   return (
     <Carte
@@ -164,11 +163,15 @@ function CartePortailClient({ ctl, admin }: { ctl: ReglagesCtl; admin: boolean }
         <Ligne titre={fr ? 'Paiement des devis' : 'Quote payments'} description={fr ? 'Le client paie son dépôt en ligne en acceptant le devis.' : 'Let clients pay deposits online when viewing quotes.'}>
           <Bascule ctl={ctl} cle="quote_payments_enabled" label={fr ? 'Paiement des devis' : 'Quote payments'} admin={admin} />
         </Ligne>
-        <Ligne retrait icone={<CreditCard size={16} />} titre={fr ? 'Paiements par carte' : 'Card payments'} description={`${moyens}${portefeuilles}`} />
+        <Ligne retrait icone={<CreditCard size={16} />} titre={fr ? 'Paiements par carte' : 'Card payments'}>
+          <RangeeLogos wallets={s?.wallets_enabled !== false} className="justify-end !flex-nowrap" />
+        </Ligne>
         <Ligne titre={fr ? 'Paiement des factures' : 'Invoice payments'} description={fr ? 'Le client paie sa facture en ligne par le lien de paiement.' : 'Let clients pay online when viewing invoices.'}>
           <Bascule ctl={ctl} cle="invoice_payments_enabled" label={fr ? 'Paiement des factures' : 'Invoice payments'} admin={admin} />
         </Ligne>
-        <Ligne retrait icone={<CreditCard size={16} />} titre={fr ? 'Paiements par carte' : 'Card payments'} description={`${moyens}${portefeuilles}`} />
+        <Ligne retrait icone={<CreditCard size={16} />} titre={fr ? 'Paiements par carte' : 'Card payments'}>
+          <RangeeLogos wallets={s?.wallets_enabled !== false} className="justify-end !flex-nowrap" />
+        </Ligne>
       </div>
 
       <SousTitre>{fr ? 'Réglages avancés' : 'Advanced settings'}</SousTitre>
@@ -355,11 +358,7 @@ function ColonneVersements({ connecte, admin }: { connecte: boolean; admin: bool
             <span className="text-text-secondary">{fr ? 'Cartes de crédit / débit' : 'Credit / Debit cards'}</span>
             <span className="font-semibold text-text-primary">2,9 % + 30 ¢</span>
           </div>
-          <ul className="flex flex-wrap gap-1.5 mt-3" aria-label={fr ? 'Moyens de paiement acceptés' : 'Accepted payment methods'}>
-            {['VISA', 'Mastercard', 'AMEX', 'Apple Pay', 'Google Pay'].map((m) => (
-              <li key={m} className="rounded border border-outline bg-surface-secondary px-1.5 py-0.5 text-[10.5px] font-bold tracking-wide text-text-secondary">{m}</li>
-            ))}
-          </ul>
+          <RangeeLogos className="mt-3" />
           <p className="text-[11.5px] text-text-tertiary mt-3">{fr ? 'Aucun frais mensuel. Vous payez seulement quand vous êtes payé.' : 'No monthly fees. You only pay when you get paid.'}</p>
         </div>
       </Carte>

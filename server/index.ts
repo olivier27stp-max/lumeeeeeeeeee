@@ -677,6 +677,22 @@ app.get('/.well-known/oauth-protected-resource/api/mcp', (_req, res) => {
   try { res.json(protectedResourceMetadata()); }
   catch { res.status(503).json({ error: 'PUBLIC_BASE_URL non configuré.' }); }
 });
+// Apple Pay (Lume Payments) : Apple vérifie que le domaine nous appartient en
+// lisant ce fichier, fourni par Stripe et identique pour tous ses marchands
+// (https://stripe.com/files/apple-pay/apple-developer-merchantid-domain-association).
+// Sans lui, le bouton Apple Pay n'apparaît jamais sur la page de paiement,
+// même après l'ajout du domaine dans le dashboard Stripe. express.static
+// ignore les dossiers pointés (.well-known), d'où la route explicite.
+// Constaté le 2026-09-17 : le chemin renvoyait index.html.
+const FICHIER_APPLE_PAY = path.resolve(__dirname, 'assets', 'apple-developer-merchantid-domain-association');
+app.get('/.well-known/apple-developer-merchantid-domain-association', (_req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type('text/plain');
+  res.sendFile(FICHIER_APPLE_PAY, (err) => {
+    if (err && !res.headersSent) res.status(404).type('text/plain').send('Not found');
+  });
+});
+
 // L'échange de jeton est public par nature (le client n'a pas encore de
 // session) mais reste une cible de force brute : limité par IP.
 app.use('/api/oauth', rateLimit({ windowMs: 60_000, max: 30 }), oauthRouter);
