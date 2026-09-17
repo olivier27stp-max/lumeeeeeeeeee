@@ -5,7 +5,7 @@
 import { rendreCourrielClient, rendreCourrielLume, montant, dateLisible, MOTS, type Marque } from '../../../server/lib/courriels/gabarit';
 export interface Exemple { nom: string; sujet: string; html: string; de?: string }
 
-const marque: Marque = {
+export const MARQUE_VISION: Marque = {
   nom: 'Vision Lavage', logoUrl: null, couleur: '#0f766e', email: 'info@visionlavage.ca', telephone: '514 555-0199',
   adresse: '12 rue Principale, Laval (Québec) H7L 1A1', siteWeb: 'visionlavage.ca',
   liensSociaux: { facebook: 'https://facebook.com/visionlavage', instagram: 'https://instagram.com/visionlavage' },
@@ -15,7 +15,9 @@ const fr = MOTS.fr;
 const lien = 'https://lumecrm.net/invoice/exemple';
 const m = (c: number) => montant(c, 'CAD', 'fr');
 
-export const EXEMPLES: Exemple[] = [
+/** Les mêmes exemples, aux couleurs d'une VRAIE entreprise (scripts/qa/apercu-courriel-reel.mts). */
+export function exemplesPour(marque: Marque): Exemple[] {
+  return [
   { nom: 'facture', sujet: `Facture 40 — ${m(48750)} — Vision Lavage`, html: rendreCourrielClient({
     langue: 'fr', marque, preheader: `Facture 40 — ${m(48750)} — Échéance ${dateLisible('2026-10-01', 'fr')}`,
     titre: 'Votre facture 40', salutation: fr.bonjour('Rafba'), intro: 'Voici votre facture. Vous pouvez la consulter et la payer en ligne en un clic.',
@@ -58,5 +60,7 @@ export const EXEMPLES: Exemple[] = [
     bouton: { texte: 'Voir la facture', url: 'https://lumecrm.net/invoices/1' },
     note: 'Vous recevez ce courriel parce que « Être avisé de chaque paiement par courriel » est activé dans Paramètres → Lume Payments.',
   }) },
-];
+  ];
+}
 
+export const EXEMPLES: Exemple[] = exemplesPour(MARQUE_VISION);

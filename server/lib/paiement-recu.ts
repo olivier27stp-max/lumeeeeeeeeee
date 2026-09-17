@@ -100,6 +100,8 @@ export async function notifierPaiementRecu(p: PaiementRecuParams): Promise<void>
       subject: sujet,
       html,
       suivi: { orgId: p.orgId, entityType: p.genre === 'deposit' ? 'quote' : 'invoice', entityId: null },
+      // Envoi de fond (webhook de paiement) : un échec transitoire part dans la file de reprise.
+      reessayer: true,
     });
   } catch (err: any) {
     console.error('[paiement-recu] courriel au propriétaire non envoyé:', err?.message);

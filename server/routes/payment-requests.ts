@@ -15,7 +15,7 @@ import {
 } from '../lib/stripe-connect';
 import { validate, createPaymentRequestSchema } from '../lib/validation';
 import { getPaymentSettings } from '../lib/payment-settings';
-import { getCompanySettings, senderFor, marqueDepuis, langueEntreprise, type CompanyInfo as CompanyInfoCourriel } from './emails';
+import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise, type CompanyInfo as CompanyInfoCourriel } from './emails';
 import { rendreCourrielClient, montant as montantLisible, MOTS, type Langue } from '../lib/courriels/gabarit';
 
 const router = Router();
@@ -120,8 +120,8 @@ async function sendPaymentEmail(params: {
   const amountFormatted = montantLisible(params.amountCents, params.currency, langue);
 
   const result = await sendEmail({
-    // Expéditeur au nom de l'entreprise, réponses vers sa boîte (comme la facture).
-    ...senderFor(company),
+    // Expéditeur au nom de l'entreprise (son domaine s'il est vérifié), réponses vers sa boîte (comme la facture).
+    ...(await senderForOrg(params.orgId, company)),
     to: params.clientEmail,
     subject: langue === 'fr' ? `Paiement demandé — ${amountFormatted} — facture ${params.invoiceNumber}` : `Payment requested — ${amountFormatted} — invoice ${params.invoiceNumber}`,
     suivi: { orgId: params.orgId, entityType: 'payment_request', entityId: params.invoiceId ?? null },

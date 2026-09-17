@@ -38,6 +38,7 @@ import invoicesPublicRouter from './routes/invoices-public';
 import agreementsRouter from './routes/agreements';
 import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
+import emailDeliveriesRouter from './routes/email-deliveries';
 import integrationsRouter from './routes/integrations';
 import emailAccountsRouter from './routes/email-accounts';
 import surveysRouter from './routes/surveys';
@@ -47,6 +48,7 @@ import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
 import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
+import sendingDomainsRouter from './routes/sending-domains';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
 import unsubscribeRouter from './routes/unsubscribe';
@@ -753,6 +755,7 @@ app.use('/api', paymentsRouter);
 app.use('/api', notificationsRouter);
 app.use('/api', messagesRouter);
 app.use('/api', emailsRouter);
+app.use('/api', emailDeliveriesRouter);
 app.use('/api', integrationsRouter);
 app.use('/api', emailAccountsRouter);
 app.use('/api', emailTemplatesRouter);
@@ -761,6 +764,8 @@ app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
 app.use('/api', portalRouter);
 app.use('/api', connectRouter);
+// Domaine d'envoi propre à l'entreprise (Resend Domains) — owner/admin, sous son propre préfixe.
+app.use('/api/sending-domain', sendingDomainsRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
 // Désinscription courriel — publique, authentifiée par le jeton de l'URL.
@@ -1386,6 +1391,14 @@ app.listen(port, '0.0.0.0', () => {
     Promise.all([import('./lib/support/resume-quotidien'), import('./lib/supabase')]).then(([{ demarrerResumeQuotidien }, { getServiceClient: serviceClient }]) => {
       demarrerResumeQuotidien(serviceClient);
     }).catch((e: any) => captureCronFailure('support-resume-startup', e));
+    // File de reprise des courriels de fond (sendEmail({ reessayer: true })) : 5 min / 30 min / 3 h, puis abandon signalé à l'exploitant.
+    Promise.all([import('./lib/courriels/reprises'), import('./lib/supabase')]).then(([{ demarrerReprisesCourriels }, { getServiceClient: serviceClient }]) => {
+      demarrerReprisesCourriels(serviceClient);
+    }).catch((e: any) => captureCronFailure('email-retry-startup', e));
+    // Santé des courriels (8 h Montréal) : taux de rebond > 2 % sur 24 h (≥ 20 envois) → un courriel à l'exploitant.
+    Promise.all([import('./lib/courriels/sante'), import('./lib/supabase')]).then(([{ demarrerSanteCourriels }, { getServiceClient: serviceClient }]) => {
+      demarrerSanteCourriels(serviceClient);
+    }).catch((e: any) => captureCronFailure('courriels-sante-startup', e));
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));

@@ -122,6 +122,8 @@ async function envoyer(p: EnvoiParams): Promise<{ sent: boolean; skipped: boolea
       replyTo: supportEmail,
       subject: p.sujet,
       html: p.html,
+      // Envoi de fond (webhook Stripe) : un échec transitoire part dans la file de reprise.
+      reessayer: true,
     });
 
     // L'erreur est LUE : cette ligne est la garde d'idempotence. Si l'insertion
@@ -279,6 +281,7 @@ export async function sendChurnAlert(params: {
       to: supportEmail,
       subject: courriel.sujet,
       html: courriel.html,
+      reessayer: true,
     });
   } catch (err: any) {
     // Purement informatif : ne doit jamais perturber le flux d'annulation.

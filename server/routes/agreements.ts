@@ -4,7 +4,7 @@ import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supab
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { resolvePublicBaseUrl } from '../lib/helpers';
 import { sendSafeError } from '../lib/error-handler';
-import { getCompanySettings, senderFor, marqueDepuis, langueEntreprise } from './emails';
+import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise } from './emails';
 import { rendreCourrielClient, MOTS } from '../lib/courriels/gabarit';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
@@ -932,7 +932,7 @@ router.post('/emails/send-agreement', async (req, res) => {
     });
 
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
       subject: `${m.contrat} ${number}${company.company_name ? ` — ${company.company_name}` : ''}`,
       html,

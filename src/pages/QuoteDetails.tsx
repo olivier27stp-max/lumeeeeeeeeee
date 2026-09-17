@@ -4,6 +4,8 @@
 
 import React, { useState, useEffect } from 'react';
 import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
+import EmailTrackingLine, { CLE_REQUETE_ENVOIS } from '../components/EmailTrackingLine';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, MoreHorizontal, Mail, MessageSquare, Briefcase, Copy,
@@ -50,6 +52,7 @@ export default function QuoteDetails() {
   const navigate = useNavigate();
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
+  const queryClient = useQueryClient();
   const { permissions } = usePermissions();
   const canMeasure = hasPermission(permissions, 'quotes.update');
   const [detail, setDetail] = useState<QuoteDetail | null>(null);
@@ -308,7 +311,7 @@ export default function QuoteDetails() {
                     const target = entityEmail || '';
                     if (!target) return;
                     if (!(await confirmer({ message: isFr ? `Envoyer la soumission à ${target}?` : `Send quote to ${target}?` }))) return;
-                    act(async () => { await sendQuoteEmail(quote.id); toast.success(isFr ? 'Courriel envoyé' : 'Email sent'); loadQuote(); });
+                    act(async () => { await sendQuoteEmail(quote.id); toast.success(isFr ? 'Courriel envoyé' : 'Email sent'); queryClient.invalidateQueries({ queryKey: [CLE_REQUETE_ENVOIS, 'quote', quote.id] }); loadQuote(); });
                   }}
                     disabled={!entityEmail || busy} className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 disabled:opacity-40 text-text-primary">
                     <Mail size={14} /> {isFr ? 'Courriel' : 'Email'}</button>
@@ -408,6 +411,8 @@ export default function QuoteDetails() {
             </div>
             {/* Courriel non livré (rebond capté par le webhook) — audit QA n°8 */}
             <EmailDeliveryBadge entityType="quote" entityId={quote.id} />
+            {/* « Envoyé le … · Vu le … · Lien cliqué » — suivi Resend (plan courriels pro) */}
+            <EmailTrackingLine entityType="quote" entityId={quote.id} />
           </div>
 
           {/* Plan de service — calendrier des visites (visible aussi par le client) */}

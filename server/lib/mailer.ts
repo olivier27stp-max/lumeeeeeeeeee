@@ -2,6 +2,8 @@ import nodemailer from 'nodemailer';
 import { redirigerEmail } from './qa-redirect';
 import { logger } from './logger';
 import { getServiceClient } from './supabase';
+import { htmlVersTextePourEnvoi } from './courriels/texte';
+import { planifierPremiereReprise, TABLE_REPRISES } from './courriels/reprises';
 
 /**
  * Centralized email sender.
@@ -74,6 +76,12 @@ export interface SendEmailParams {
   subject: string;
   html: string;
   /**
+   * Partie texte (multipart/alternative). Absente, elle est dérivée du HTML
+   * par `htmlVersTextePourEnvoi` : un courriel HTML seul est un signal de
+   * pourriel pour Gmail et Outlook.
+   */
+  text?: string;
+  /**
    * En-têtes SMTP additionnels.
    *
    * Nécessaire pour `List-Unsubscribe` / `List-Unsubscribe-Post` : sans eux,
@@ -83,17 +91,27 @@ export interface SendEmailParams {
   headers?: Record<string, string>;
   /** Journalise l'envoi dans email_deliveries (badge « non livré », relances). */
   suivi?: SuiviCourriel;
+  /**
+   * Opt-in, envois de FOND seulement (cron, webhook, notification) : un échec
+   * met le courriel dans `email_retry_queue`, repris par
+   * `demarrerReprisesCourriels` (5 min / 30 min / 3 h, puis abandon signalé).
+   * Jamais sur un envoi déclenché par un clic : l'utilisateur réessaie
+   * lui-même, une file créerait des doublons.
+   */
+  reessayer?: boolean;
 }
 
 export interface SendEmailResult {
   sent: boolean;
   messageId?: string;
   error?: string;
+  /** L'envoi a échoué mais attend dans la file de reprise. */
+  enFile?: boolean;
 }
 
 const RESEND_API = 'https://api.resend.com/emails';
 
-async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: string; subject: string; html: string; headers?: Record<string, string> }): Promise<{ id: string }> {
+async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: string; subject: string; html: string; text: string; headers?: Record<string, string> }): Promise<{ id: string }> {
   const res = await fetch(RESEND_API, {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -103,6 +121,7 @@ async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: strin
       ...(p.replyTo ? { reply_to: p.replyTo } : {}),
       subject: p.subject,
       html: p.html,
+      text: p.text,
       ...(p.headers ? { headers: p.headers } : {}),
     }),
   });
@@ -139,11 +158,46 @@ async function journaliserEnvoi(entree: {
 }
 
 /**
+ * Un envoi raté marqué `reessayer` entre dans la file de reprise. Retourne
+ * vrai si la ligne est écrite ; l'échec d'écriture est journalisé (le courriel
+ * est alors vraiment perdu, comme avant la file).
+ */
+async function mettreEnFile(params: SendEmailParams, from: string, text: string, erreur: string): Promise<boolean> {
+  try {
+    const { error } = await getServiceClient().from(TABLE_REPRISES).insert({
+      org_id: params.suivi?.orgId ?? null,
+      from_addr: from,
+      to_emails: Array.isArray(params.to) ? params.to : [params.to],
+      reply_to: params.replyTo ?? null,
+      subject: params.subject,
+      html: params.html,
+      text,
+      headers: params.headers ?? null,
+      suivi: params.suivi ?? null,
+      last_error: erreur.slice(0, 1000),
+      ...planifierPremiereReprise(new Date()),
+    });
+    if (error) {
+      logger.error('[mailer] courriel raté non mis en file', { error: error.message, subject: params.subject });
+      return false;
+    }
+    logger.warn('[mailer] courriel raté mis en file de reprise', { subject: params.subject, orgId: params.suivi?.orgId ?? null });
+    return true;
+  } catch (err: any) {
+    logger.error('[mailer] courriel raté non mis en file', { error: err?.message || String(err), subject: params.subject });
+    return false;
+  }
+}
+
+/**
  * Send an email — Resend si configuré, sinon SMTP.
  * Drop-in replacement for Resend's `resend.emails.send()`.
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const defaultFrom = process.env.EMAIL_FROM || `Lume CRM <${process.env.SMTP_USER}>`;
+  const from = params.from || defaultFrom;
+  // Toujours une partie texte : dérivée du HTML si l'appelant n'en fournit pas.
+  const text = params.text || htmlVersTextePourEnvoi(params.html);
 
   // Mode QA : quand QA_REDIRECT_EMAIL est défini, tout courriel part vers cette
   // adresse et le destinataire d'origine passe dans l'objet. Passe-plat sinon.
@@ -158,22 +212,24 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     let messageId: string;
     if (provider === 'resend') {
       const { id } = await envoyerViaResend({
-        from: params.from || defaultFrom,
+        from,
         to: destinataires,
         replyTo: params.replyTo,
         subject: qa.subject,
         html: params.html,
+        text,
         headers: params.headers,
       });
       messageId = id;
     } else {
       const transport = getTransporter();
       const info = await transport.sendMail({
-        from: params.from || defaultFrom,
+        from,
         to: destinataires.join(', '),
         replyTo: params.replyTo,
         subject: qa.subject,
         html: params.html,
+        text,
         ...(params.headers ? { headers: params.headers } : {}),
       });
       messageId = info.messageId;
@@ -204,6 +260,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         subject: params.subject,
       });
     } catch { /* no-op */ }
+    if (params.reessayer && await mettreEnFile(params, from, text, String(err?.message || err))) {
+      return { sent: false, error: err.message, enFile: true };
+    }
     return { sent: false, error: err.message };
   }
 }

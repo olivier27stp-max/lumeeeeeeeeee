@@ -155,6 +155,12 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/connect/refresh-onboarding-link': 'settings.update',
   'GET /api/connect/account-status': 'financial.view_payments',
 
+  // ── Domaine d'envoi propre à l'entreprise (courriels depuis facturation@sondomaine) ──
+  'GET /api/sending-domain': 'settings.read',
+  'POST /api/sending-domain': 'settings.update',
+  'POST /api/sending-domain/verify': 'settings.update',
+  'DELETE /api/sending-domain': 'settings.update',
+
   // ── Commissions ── (financial: reports)
   'GET /api/commissions': 'financial.view_reports',
   'POST /api/commissions/calculate': 'financial.view_reports',

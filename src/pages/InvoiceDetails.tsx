@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import EmailDeliveryBadge from '../components/EmailDeliveryBadge';
+import EmailTrackingLine, { CLE_REQUETE_ENVOIS } from '../components/EmailTrackingLine';
 import {
   ArrowLeft, Eye, EyeOff, Copy, Link2, Check, Download, RefreshCw, Send,
   Pencil, Ban, CopyPlus, CheckCircle2, MoreHorizontal, ReceiptText,
@@ -103,6 +104,7 @@ export default function InvoiceDetails() {
     queryClient.invalidateQueries({ queryKey: ['invoiceDetails', invoiceId] });
     queryClient.invalidateQueries({ queryKey: ['invoicesKpis30d'] });
     queryClient.invalidateQueries({ queryKey: ['invoicesTable'] });
+    queryClient.invalidateQueries({ queryKey: [CLE_REQUETE_ENVOIS, 'invoice', invoiceId] });
   }
 
   async function handleSendInvoice() {
@@ -387,6 +389,8 @@ export default function InvoiceDetails() {
 
         {/* Courriel non livré (rebond capté par le webhook) — audit QA n°8 */}
         {invoice.status !== 'draft' && <EmailDeliveryBadge entityType="invoice" entityId={invoice.id} />}
+        {/* « Envoyé le … · Vu le … · Lien cliqué » — suivi Resend (plan courriels pro) */}
+        {invoice.status !== 'draft' && <EmailTrackingLine entityType="invoice" entityId={invoice.id} />}
 
         {/* View Tracking */}
         {invoice.status !== 'draft' && (

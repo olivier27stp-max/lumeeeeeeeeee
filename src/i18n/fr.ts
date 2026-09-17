@@ -1107,6 +1107,17 @@ const fr: TranslationKeys = {
 
   },
 
+  // Ligne « Envoyé le … · Vu le … · Lien cliqué » sous une facture / soumission (suivi Resend)
+  suiviCourriel: {
+    envoyeLe: 'Envoyé le',
+    vuLe: 'Vu le',
+    a: 'à',
+    lienClique: 'Lien cliqué',
+    nonLivre: 'Non livré',
+    plainte: 'Signalé comme pourriel',
+    pasEncoreOuvert: 'Pas encore ouvert',
+  },
+
   // Modale demande de paiement
   requestPaymentModal: {
     title: 'Demander un paiement',
@@ -2316,6 +2327,38 @@ const fr: TranslationKeys = {
     street1: 'Rue 1',
     street2: 'Rue 2',
     theme: 'Thème',
+    // Envoyer depuis mon adresse (domaine d'envoi propre, Resend)
+    sendingDomainTitle: 'Envoyer depuis mon adresse',
+    sendingDomainIntro: 'Vos factures, devis et contrats partent aujourd\'hui de noreply@lumecrm.net au nom de votre entreprise. Ajoutez votre domaine pour qu\'ils partent de votre propre adresse.',
+    sendingDomainLabel: 'Domaine',
+    sendingDomainPlaceholder: 'monentreprise.ca',
+    sendingDomainActivate: 'Activer',
+    sendingDomainActivating: 'Activation…',
+    sendingDomainNotConfigured: 'Le fournisseur de courriels n\'est pas configuré sur ce serveur.',
+    sendingDomainPendingTitle: 'Ajoutez ces enregistrements chez votre hébergeur DNS',
+    sendingDomainPendingHelp: 'Copiez chaque ligne dans la zone DNS de votre domaine (GoDaddy, Cloudflare, OVH…), puis cliquez sur Vérifier. La propagation prend parfois jusqu\'à 48 h.',
+    sendingDomainColType: 'Type',
+    sendingDomainColName: 'Nom',
+    sendingDomainColValue: 'Valeur',
+    sendingDomainCopy: 'Copier',
+    sendingDomainCopied: 'Copié',
+    sendingDomainCopyFailed: 'Impossible de copier — sélectionnez le texte à la main.',
+    sendingDomainVerify: 'Vérifier',
+    sendingDomainVerifying: 'Vérification…',
+    sendingDomainStatusPending: 'En attente de vérification',
+    sendingDomainStatusVerified: 'Vérifié',
+    sendingDomainStatusFailed: 'Échec — enregistrements introuvables',
+    sendingDomainStillPending: 'Pas encore détecté. Vérifiez les enregistrements et réessayez dans quelques minutes.',
+    sendingDomainVerifiedToast: 'Domaine vérifié : vos courriels partent de votre adresse.',
+    sendingDomainVerifiedText: 'Vos courriels partent de {address}',
+    sendingDomainVerifiedHelp: 'Les réponses de vos clients arrivent toujours à votre adresse courriel d\'entreprise.',
+    sendingDomainLastChecked: 'Dernière vérification',
+    sendingDomainRemove: 'Retirer',
+    sendingDomainRemoveConfirm: 'Retirer ce domaine ? Vos courriels repartiront de noreply@lumecrm.net au nom de votre entreprise.',
+    sendingDomainRemoved: 'Domaine retiré.',
+    sendingDomainAdded: 'Domaine ajouté. Ajoutez les enregistrements DNS ci-dessous.',
+    sendingDomainLoadFailed: 'Impossible de charger le domaine d\'envoi.',
+    sendingDomainError: 'Erreur',
     websiteUrl: 'Site web',
   },
 

@@ -147,6 +147,9 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
     to: report.recipient_email,
     subject: `Ton rapport ${libelleFrequence(report.frequency)} — ${data.orgName}`,
     html,
+    // Envoi de fond (cron) : last_sent_at est posé juste après, un échec
+    // transitoire ne doit donc pas perdre le rapport — il part dans la file de reprise.
+    reessayer: true,
   });
 
   // Update last_sent_at

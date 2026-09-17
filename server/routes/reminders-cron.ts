@@ -23,7 +23,7 @@ import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { sendEmail, isMailerConfigured, adresseInjoignable } from '../lib/mailer';
-import { getCompanySettings, senderFor, marqueDepuis, langueEntreprise } from './emails';
+import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise } from './emails';
 import { rendreCourrielClient, dateLisible, MOTS } from '../lib/courriels/gabarit';
 import { logger } from '../lib/logger';
 import { sendSmsIfConfigured, applyTemplate, isSmsOptedOut } from '../lib/notificationHelpers';
@@ -264,7 +264,8 @@ router.post('/cron/payment-reminders', async (req, res) => {
                 // Le texte du rappel porte déjà sa signature (« Merci, {company_name} ») : pas de deuxième.
                 signature: null,
               });
-              const result = await sendEmail({ ...senderFor(societe), to: toEmail, subject, html, suivi: { orgId, entityType: 'reminder', entityId: inv.id } });
+              // Envoi de fond : un échec transitoire part dans la file de reprise plutôt que d'être perdu.
+              const result = await sendEmail({ ...(await senderForOrg(orgId, societe)), to: toEmail, subject, html, suivi: { orgId, entityType: 'reminder', entityId: inv.id }, reessayer: true });
               const emailChannel = channel === 'email' ? 'email' : 'both';
               if (channel === 'both') {
                 // For 'both', defer logging until SMS attempted (single row with channel='both').

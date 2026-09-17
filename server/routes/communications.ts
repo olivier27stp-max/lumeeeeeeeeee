@@ -17,7 +17,7 @@ import { requireRole } from '../lib/rbac';
 import { validate, sendSmsSchema } from '../lib/validation';
 import { sanitizeText, sanitizeHtml, sanitizeMessageContent, stripCRLF, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
-import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
+import { getCompanySettings, buildEmailLayout, senderForOrg } from './emails';
 
 const router = Router();
 
@@ -177,7 +177,7 @@ router.post('/communications/send-email', async (req, res) => {
     // Voix ENTREPRISE : « De : {Entreprise} », réponses vers l'auteur (ou la
     // boîte de l'entreprise), contenu libre enveloppé dans le gabarit commun.
     const company = await getCompanySettings(orgId);
-    const expediteur = senderFor(company);
+    const expediteur = await senderForOrg(orgId, company);
     const senderReplyTo = reply_to || user.email || expediteur.replyTo || undefined;
 
     // Sanitize subject (strip CRLF to prevent email header injection) and body

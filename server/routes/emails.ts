@@ -12,8 +12,10 @@ import {
 import { eventBus } from '../lib/eventBus';
 import { isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { logger } from '../lib/logger';
 import { getCompanyBranding } from '../lib/companyBranding';
 import { lireLiensSociaux, type SocialLinks } from '../lib/socialLinks';
+import { expediteurDe } from '../lib/courriels/domaines';
 import { rendreCourrielClient, montant as montantLisible, dateLisible, langueDe, MOTS, type Marque, type Langue } from '../lib/courriels/gabarit';
 
 const router = Router();
@@ -151,6 +153,27 @@ export function senderFor(company: CompanyInfo): { from: string; replyTo?: strin
     from: `${name} <${baseAddr}>`,
     replyTo: company.company_email || undefined,
   };
+}
+
+/**
+ * Expéditeur d'une org (2026-09-17) : si elle a fait vérifier SON domaine
+ * (Paramètres entreprise → « Envoyer depuis mon adresse », table
+ * org_sending_domains via Resend), le courriel part de
+ * « {Entreprise} <facturation@sondomaine.ca> » ; sinon senderFor() tel quel
+ * (adresse vérifiée de la plateforme, Reply-To vers l'entreprise). Le Reply-To
+ * ne change pas dans les deux cas. La consultation du domaine est en cache
+ * 5 min par org (server/lib/courriels/domaines.ts) et n'échoue jamais :
+ * toute erreur retombe sur l'expéditeur de la plateforme.
+ */
+export async function senderForOrg(orgId: string, company: CompanyInfo): Promise<{ from: string; replyTo?: string }> {
+  const plateforme = senderFor(company);
+  try {
+    const propre = await expediteurDe(getServiceClient(), orgId, company);
+    return propre ? { from: propre.from, replyTo: plateforme.replyTo } : plateforme;
+  } catch (err: any) {
+    logger.error('[emails/senderForOrg] domaine propre illisible, expéditeur plateforme', { orgId, error: err?.message || String(err) });
+    return plateforme;
+  }
 }
 
 // ── POST /api/emails/send-invoice ──
@@ -301,7 +324,7 @@ ${viewUrl ? `
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
       subject: emailSubject,
       html: htmlStructure ?? buildEmailLayout(company, bodyHtml),
@@ -436,7 +459,7 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
       subject: `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
       html,
@@ -530,7 +553,7 @@ router.post('/emails/send-mobile-quote', async (req, res) => {
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
       subject: `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
       html,
@@ -572,7 +595,7 @@ router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, 
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(auth.orgId, company)),
       to,
       subject: sanitizeHtml(subject),
       html: buildEmailLayout(company, sanitizeHtml(html)),

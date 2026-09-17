@@ -430,6 +430,8 @@ export async function notifierClientReponse(admin: SupabaseClient, ticket: Ticke
         note: langue === 'fr' ? 'Tu peux aussi répondre directement à ce courriel.' : 'You can also reply directly to this email.',
         supportEmail,
       }),
+      // Envoi de fond (réponse relayée depuis Slack) : un échec transitoire part dans la file de reprise.
+      reessayer: true,
     });
   }
 }

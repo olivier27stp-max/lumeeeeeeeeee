@@ -34,7 +34,10 @@ function chaine(table: string) {
   c.then = (resolve: any) => resolve({ data: table === 'email_deliveries' ? lectures.livraisons : [], error: null });
   return c;
 }
-const admin = { from: vi.fn((table: string) => chaine(table)) };
+// `rpc` : le webhook enregistre le suivi (ouverture / clic) par la fonction
+// email_deliveries_enregistrer_suivi — un compteur atomique, pas un select+update.
+const rpc = vi.fn(async () => ({ data: null, error: null }));
+const admin = { from: vi.fn((table: string) => chaine(table)), rpc };
 
 vi.mock('../server/lib/supabase', () => ({ getServiceClient: () => admin }));
 vi.mock('../server/lib/qa-redirect', () => ({ redirigerEmail: (to: any, subject: string) => ({ redirige: false, to, subject }) }));
@@ -131,11 +134,23 @@ describe('POST /api/webhooks/email', () => {
   });
 
   it('un événement inconnu est accusé sans écriture', async () => {
-    const corps = JSON.stringify({ type: 'email.opened', data: { email_id: 'em_9' } });
+    // « email.opened » n'est plus inconnu depuis le suivi d'ouverture (2026-09-17) :
+    // on prend un type que Resend n'envoie pas pour vérifier la porte fermée.
+    const corps = JSON.stringify({ type: 'email.inventé', data: { email_id: 'em_9' } });
     const r = await poster(corps, signer(corps));
     expect(r.status).toBe(200);
     expect(r.json.ignored).toBe(true);
     expect(ecritures).toEqual([]);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('une ouverture passe par le compteur atomique, sans écriture directe', async () => {
+    const corps = JSON.stringify({ type: 'email.opened', data: { email_id: 'em_9', created_at: '2026-09-17T14:12:00Z' } });
+    const r = await poster(corps, signer(corps));
+    expect(r.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith('email_deliveries_enregistrer_suivi', expect.objectContaining({ p_email_id: 'em_9', p_evenement: 'opened' }));
+    // Seul l'accusé de réception du webhook est écrit : jamais un update direct d'email_deliveries.
+    expect(ecritures.map((e) => e.table)).toEqual(['webhook_receipts']);
   });
 });
 
