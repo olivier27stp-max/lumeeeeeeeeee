@@ -914,6 +914,7 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
       // later status-only event never wipes a value already stored.
       if (input.card_last4) updatePayload.card_last4 = input.card_last4;
       if (input.card_brand) updatePayload.card_brand = input.card_brand;
+      if (typeof input.tip_cents === 'number') updatePayload.tip_cents = Math.max(0, Math.round(input.tip_cents));
       const { error: updateError } = await admin
         .from('payments')
         .update(updatePayload)
@@ -937,6 +938,7 @@ export async function insertOrUpdatePaymentIdempotent(input: PaymentInsertInput)
     card_last4: input.card_last4 || null,
     card_brand: input.card_brand || null,
     amount_cents: Math.max(0, Math.round(input.amount_cents || 0)),
+    tip_cents: Math.max(0, Math.round(input.tip_cents || 0)),
     currency: (input.currency || 'CAD').toUpperCase(),
     payment_date: input.payment_date || new Date().toISOString(),
   };

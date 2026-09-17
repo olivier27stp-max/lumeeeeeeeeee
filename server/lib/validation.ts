@@ -205,6 +205,23 @@ export const createConnectedAccountSchema = z.object({
   country: z.string().length(2).optional().default('CA'),
 });
 
+// Réglages Lume Payments — booléens seulement, clés inconnues refusées.
+export const paymentSettingsPatchSchema = z.object({
+  orgId: optionalOrgId,
+  quote_payments_enabled: z.boolean().optional(),
+  invoice_payments_enabled: z.boolean().optional(),
+  tips_enabled: z.boolean().optional(),
+  wallets_enabled: z.boolean().optional(),
+  require_payment_method_default: z.boolean().optional(),
+  notify_owner_email: z.boolean().optional(),
+}).strict();
+
+// Pourboire choisi par le payeur sur la page publique (entier en cents ;
+// le plafond réel — solde et 1 000 $ — est appliqué côté route).
+export const publicTipSchema = z.object({
+  tip_cents: z.number().int().min(0).max(100_000),
+});
+
 export const createPaymentRequestSchema = z.object({
   invoiceId: z.string().trim().min(1, 'Missing invoiceId.'),
   orgId: optionalOrgId,

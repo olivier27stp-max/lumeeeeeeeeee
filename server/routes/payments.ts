@@ -67,6 +67,8 @@ import { logSecurityEvent, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
 import { logDataExport } from '../lib/data-export-log';
 import { logger } from '../lib/logger';
+import { repartirMontantRecu } from '../lib/payment-settings';
+import { notifierPaiementRecu, notifierLitigeOuvert } from '../lib/paiement-recu';
 
 const router = Router();
 
@@ -186,6 +188,13 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             }
           }
 
+          // Pourboire (page publique, metadata.tip_cents) : encaissé avec le
+          // paiement mais jamais appliqué au solde de la facture.
+          const { factureCents, pourboireCents } = repartirMontantRecu(
+            intent.amount_received || intent.amount || 0,
+            (intent.metadata as any)?.tip_cents,
+          );
+
           await insertOrUpdatePaymentIdempotent({
             org_id: metadata.orgId,
             invoice_id: metadata.invoiceId,
@@ -198,7 +207,8 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             method: intent.payment_method_types?.[0] === 'card' ? 'card' : null,
             card_last4: cardLast4,
             card_brand: cardBrand,
-            amount_cents: Math.max(0, Math.round(intent.amount_received || intent.amount || 0)),
+            amount_cents: factureCents,
+            tip_cents: pourboireCents,
             currency: String(intent.currency || 'CAD').toUpperCase(),
             payment_date: new Date((intent.created || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
           });
@@ -236,9 +246,10 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
             }
           }
 
-          // Update invoice paid_cents and status
+          // Update invoice paid_cents and status — la part facture seulement,
+          // le pourboire ne réduit pas le solde dû.
           const admin = getServiceClient();
-          const amountPaid = Math.max(0, Math.round(intent.amount_received || intent.amount || 0));
+          const amountPaid = factureCents;
 
           const { data: applied, error: applyErr } = await admin.rpc('apply_invoice_payment', {
             p_invoice_id: metadata.invoiceId,
@@ -262,6 +273,27 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
               amount_cents: amountPaid,
               currency: String(intent.currency || 'CAD').toUpperCase(),
             }).catch((err) => console.error('[webhooks] payment.received failed:', err?.message));
+
+            // Courriel « paiement reçu » à l'entreprise (réglage notify_owner_email).
+            // Best-effort, jamais bloquant pour le webhook.
+            void (async () => {
+              const [{ data: inv }, { data: cli }] = await Promise.all([
+                admin.from('invoices').select('invoice_number').eq('id', metadata.invoiceId).maybeSingle(),
+                metadata.clientId
+                  ? admin.from('clients').select('first_name, last_name').eq('id', metadata.clientId).maybeSingle()
+                  : Promise.resolve({ data: null as { first_name?: string | null; last_name?: string | null } | null }),
+              ]);
+              await notifierPaiementRecu({
+                orgId: metadata.orgId as string,
+                genre: 'invoice',
+                amountCents: amountPaid,
+                tipCents: pourboireCents,
+                currency: String(intent.currency || 'CAD').toUpperCase(),
+                reference: String(inv?.invoice_number || metadata.invoiceId),
+                clientName: cli ? [cli.first_name, cli.last_name].filter(Boolean).join(' ') : null,
+                lienInterne: `/invoices/${metadata.invoiceId}`,
+              });
+            })().catch((err) => console.error('[webhook] courriel paiement reçu:', err?.message));
 
             if (newStatus === 'paid') {
               dispatchWebhook(metadata.orgId, 'invoice.paid', {
@@ -340,6 +372,15 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
                   amount_cents: Number(intent.amount_received || intent.amount || 0),
                   provider: 'stripe',
                 },
+              });
+              // Courriel « dépôt reçu » à l'entreprise (réglage notify_owner_email).
+              void notifierPaiementRecu({
+                orgId: q.org_id,
+                genre: 'deposit',
+                amountCents: Number(intent.amount_received || intent.amount || 0),
+                currency: String(intent.currency || 'CAD').toUpperCase(),
+                reference: String(q.quote_number || quoteId),
+                lienInterne: `/quotes/${quoteId}`,
               });
             }
           } catch (emitErr: any) {
@@ -762,18 +803,63 @@ export const stripeWebhookHandler: import('express').RequestHandler = async (req
         // Best-effort: surface on the corresponding payment row so the org sees it.
         if (chargeId) {
           const admin = getServiceClient();
-          await admin
+          // La ligne est retrouvée par la charge OU par le PaymentIntent : les
+          // destination charges n'ont pas toujours stripe_charge_id renseigné.
+          const piId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id;
+          let q = admin
             .from('payments')
             .update({
               // CHECK de payments.status : failed | pending | refunded | succeeded.
               // 'disputed' n'en fait pas partie — le litige n'etait jamais
-              // consigne. Le motif reste tracable via failure_reason.
+              // consigne. Le motif reste tracable via failure_reason
+              // ('dispute:…' = ouvert ; 'dispute_won:' / 'dispute_lost:' à la clôture).
               status: 'failed',
               failure_reason: `dispute:${dispute.reason || 'unknown'}`,
               updated_at: new Date().toISOString(),
             })
+            .eq('provider', 'stripe');
+          q = piId ? q.or(`stripe_charge_id.eq.${chargeId},provider_payment_id.eq.${piId}`) : q.eq('stripe_charge_id', chargeId);
+          const { data: touchees } = await q.select('id, org_id');
+
+          // Notification in-app + push à l'org concernée (un seul paiement normalement).
+          const ligne = Array.isArray(touchees) ? touchees[0] : null;
+          const orgLitige = ligne?.org_id || String((dispute as any)?.metadata?.org_id || '').trim() || null;
+          if (orgLitige) {
+            await notifierLitigeOuvert({
+              orgId: orgLitige,
+              amountCents: Number(dispute.amount || 0),
+              currency: String(dispute.currency || 'CAD').toUpperCase(),
+              reason: dispute.reason || null,
+              paymentId: ligne?.id || null,
+            });
+          }
+        }
+      }
+
+      // ── charge.dispute.closed — gagné : le paiement redevient 'succeeded' ;
+      //    perdu : reste 'failed'. Dans les deux cas le motif quitte le
+      //    préfixe 'dispute:' (= litige ouvert) pour ne plus compter comme tel.
+      if (event.type === 'charge.dispute.closed') {
+        const dispute = event.data.object as Stripe.Dispute;
+        const chargeId = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id;
+        const piId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id;
+        if (chargeId || piId) {
+          const admin = getServiceClient();
+          const gagne = dispute.status === 'won' || dispute.status === 'warning_closed';
+          let q = admin
+            .from('payments')
+            .update({
+              status: gagne ? 'succeeded' : 'failed',
+              failure_reason: `${gagne ? 'dispute_won' : 'dispute_lost'}:${dispute.reason || 'unknown'}`,
+              updated_at: new Date().toISOString(),
+            })
             .eq('provider', 'stripe')
-            .eq('stripe_charge_id', chargeId);
+            .like('failure_reason', 'dispute:%');
+          q = chargeId && piId
+            ? q.or(`stripe_charge_id.eq.${chargeId},provider_payment_id.eq.${piId}`)
+            : chargeId ? q.eq('stripe_charge_id', chargeId) : q.eq('provider_payment_id', piId as string);
+          const { error: closeErr } = await q;
+          if (closeErr) console.error('[webhook] dispute.closed update failed:', closeErr.message);
         }
       }
 

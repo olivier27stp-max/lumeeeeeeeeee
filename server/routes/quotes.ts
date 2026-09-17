@@ -10,6 +10,7 @@ import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { parseOrgId, resolvePublicBaseUrl } from '../lib/helpers';
 import { eventBus } from '../lib/eventBus';
 import { getConnectedAccount, createDestinationPaymentIntent, getPlatformStripe } from '../lib/stripe-connect';
+import { getPaymentSettings } from '../lib/payment-settings';
 import { decryptSecret } from '../lib/crypto';
 import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
@@ -860,9 +861,18 @@ router.get('/quotes/public/:token', async (req, res) => {
     }
 
     // Ventilation TPS / TVQ… (applied_taxes, sinon taxes résolues pour le client).
-    const taxLines = await documentTaxLines(admin, 'quote', quote);
+    const [taxLines, reglagesPaiement] = await Promise.all([
+      documentTaxLines(admin, 'quote', quote),
+      getPaymentSettings(quote.org_id),
+    ]);
 
     return res.json({
+      // La page publique n'affiche le paiement du dépôt en ligne que si
+      // l'entreprise l'a laissé actif ; le serveur refuse de toute façon.
+      payments: {
+        quote_payments_enabled: reglagesPaiement.quote_payments_enabled,
+        wallets_enabled: reglagesPaiement.wallets_enabled,
+      },
       quote: {
         id: quote.id, quote_number: quote.quote_number, title: quote.title, status: quote.status,
         valid_until: quote.valid_until, created_at: quote.created_at,
@@ -1112,6 +1122,12 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
     if (quote.status !== 'approved') return res.status(400).json({ error: 'Quote must be approved first.' });
     if (!quote.deposit_required || quote.deposit_status === 'paid') {
       return res.status(400).json({ error: 'No deposit payment required.' });
+    }
+
+    // Interrupteur « paiement des devis en ligne » (réglages Lume Payments).
+    const reglagesPaiement = await getPaymentSettings(quote.org_id);
+    if (!reglagesPaiement.quote_payments_enabled) {
+      return res.status(403).json({ error: 'Online deposit payments are currently disabled for this business.' });
     }
 
     // Calculate deposit amount (server-side, never trust client)

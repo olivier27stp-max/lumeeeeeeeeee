@@ -94,6 +94,96 @@ export async function createDashboardLoginLink(orgId: string) {
   return { url: link.url };
 }
 
+// ── Aperçu des versements (affiché dans l'app, sans passer par le dashboard) ──
+
+export interface PayoutsOverview {
+  currency: string;
+  available_cents: number;
+  pending_cents: number;
+  next_payout: { amount_cents: number; arrival_date: string; status: string } | null;
+  recent_payouts: Array<{ id: string; amount_cents: number; arrival_date: string; status: string; method: string }>;
+  bank: { kind: 'bank_account' | 'card'; label: string; last4: string } | null;
+  payout_schedule: { interval: string; delay_days: number | null } | null;
+  instant_payouts_available: boolean;
+  disputes: { open_count: number };
+}
+
+/**
+ * Solde, prochain versement, compte de dépôt et disponibilité des versements
+ * instantanés, lus chez Stripe sur le compte connecté. Les litiges viennent
+ * de NOTRE table payments : les charges étant des destination charges, le
+ * litige vit sur le compte plateforme et le webhook le pose sur la ligne de
+ * paiement (failure_reason 'dispute:…', effacé à la clôture).
+ *
+ * Lecture seule : aucun versement n'est déclenché d'ici. Les versements
+ * instantanés se lancent dans le dashboard Express (lien one-shot).
+ */
+export async function getPayoutsOverview(orgId: string): Promise<PayoutsOverview | null> {
+  const stripe = getPlatformStripe();
+  const account = await getConnectedAccount(orgId);
+  if (!account) return null;
+  const opts = { stripeAccount: account.stripe_account_id as string };
+
+  const [balance, payouts, stripeAccount, litiges] = await Promise.all([
+    stripe.balance.retrieve({}, opts),
+    stripe.payouts.list({ limit: 10 }, opts),
+    stripe.accounts.retrieve(account.stripe_account_id, { expand: ['external_accounts'] }),
+    getServiceClient()
+      .from('payments')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .eq('provider', 'stripe')
+      .like('failure_reason', 'dispute:%')
+      .is('deleted_at', null),
+  ]);
+
+  const currency = String(account.default_currency || 'CAD').toUpperCase();
+  const cur = currency.toLowerCase();
+  const somme = (lignes: Array<{ amount: number; currency: string }>) =>
+    lignes.filter((l) => l.currency === cur).reduce((acc, l) => acc + l.amount, 0);
+
+  const iso = (unix: number) => new Date(unix * 1000).toISOString();
+  const enRoute = payouts.data
+    .filter((p) => p.status === 'pending' || p.status === 'in_transit')
+    .sort((a, b) => a.arrival_date - b.arrival_date);
+  const prochain = enRoute[0]
+    ? { amount_cents: enRoute[0].amount, arrival_date: iso(enRoute[0].arrival_date), status: enRoute[0].status }
+    : null;
+
+  const externe = stripeAccount.external_accounts?.data?.[0] as Stripe.BankAccount | Stripe.Card | undefined;
+  let bank: PayoutsOverview['bank'] = null;
+  let instant = false;
+  if (externe) {
+    if (externe.object === 'bank_account') {
+      bank = { kind: 'bank_account', label: externe.bank_name || 'Bank account', last4: externe.last4 || '' };
+      instant = Array.isArray(externe.available_payout_methods) && externe.available_payout_methods.includes('instant');
+    } else if (externe.object === 'card') {
+      bank = { kind: 'card', label: externe.brand || 'Debit card', last4: externe.last4 || '' };
+      instant = Array.isArray(externe.available_payout_methods) && externe.available_payout_methods.includes('instant');
+    }
+  }
+
+  const schedule = stripeAccount.settings?.payouts?.schedule;
+
+  return {
+    currency,
+    available_cents: somme(balance.available),
+    pending_cents: somme(balance.pending),
+    next_payout: prochain,
+    recent_payouts: payouts.data.slice(0, 5).map((p) => ({
+      id: p.id,
+      amount_cents: p.amount,
+      arrival_date: iso(p.arrival_date),
+      status: p.status,
+      method: p.method,
+    })),
+    bank,
+    payout_schedule: schedule ? { interval: schedule.interval, delay_days: schedule.delay_days ?? null } : null,
+    instant_payouts_available: instant,
+    disputes: { open_count: litiges.count ?? 0 },
+  };
+}
+
 export async function refreshAccountStatus(orgId: string) {
   const stripe = getPlatformStripe();
   const admin = getServiceClient();
