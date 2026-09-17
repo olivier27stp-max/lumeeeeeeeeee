@@ -217,12 +217,18 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
 
     // Atomic lock: mark this payment request as "processing" to prevent concurrent PI creation.
     // If another request is already processing, this update will match 0 rows.
+    // Le lien naît en « pending » puis passe en « sent » dès l'envoi
+    // (payment-requests/create) : le verrou doit accepter les DEUX. Avec
+    // « pending » seul, chaque première tentative répondait 409 « déjà en
+    // traitement » — aucun paiement par lien n'avait jamais abouti en prod
+    // (trouvé le 2026-09-17 en payant une facture test).
     const admin = getServiceClient();
+    const statutAvant = paymentRequest.status;
     const { data: lockResult, error: lockErr } = await admin
       .from('payment_requests')
       .update({ status: 'processing' })
       .eq('id', paymentRequest.id)
-      .eq('status', 'pending')
+      .in('status', ['pending', 'sent'])
       .is('stripe_payment_intent_id', null)
       .select('id')
       .maybeSingle();
@@ -247,7 +253,7 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
     // Cross-org safety: verify invoice belongs to the same org
     if (invoice.org_id !== paymentRequest.org_id) {
       // Revert lock
-      await admin.from('payment_requests').update({ status: 'pending' }).eq('id', paymentRequest.id);
+      await admin.from('payment_requests').update({ status: statutAvant }).eq('id', paymentRequest.id);
       return res.status(403).json({ error: 'Payment request mismatch.' });
     }
 
@@ -255,22 +261,29 @@ router.post('/pay/:publicToken/create-payment-intent', async (req, res) => {
     const currency = String(invoice.currency || paymentRequest.currency || 'CAD');
 
     // Create destination charge PaymentIntent
-    const result = await createDestinationPaymentIntent({
-      amountCents,
-      currency,
-      connectedAccountId: connectedAccount.stripe_account_id,
-      metadata: {
-        org_id: paymentRequest.org_id,
-        invoice_id: paymentRequest.invoice_id,
-        payment_request_id: paymentRequest.id,
-        client_id: invoice.client_id || '',
-        public_token: publicToken,
-        tip_cents: '0',
-      },
-    });
+    let result: Awaited<ReturnType<typeof createDestinationPaymentIntent>>;
+    try {
+      result = await createDestinationPaymentIntent({
+        amountCents,
+        currency,
+        connectedAccountId: connectedAccount.stripe_account_id,
+        metadata: {
+          org_id: paymentRequest.org_id,
+          invoice_id: paymentRequest.invoice_id,
+          payment_request_id: paymentRequest.id,
+          client_id: invoice.client_id || '',
+          public_token: publicToken,
+          tip_cents: '0',
+        },
+      });
+    } catch (e) {
+      // Stripe a refusé : on rend le lien à son état d'avant, sinon il reste « processing » sans intent → 409 pour toujours.
+      await admin.from('payment_requests').update({ status: statutAvant }).eq('id', paymentRequest.id);
+      throw e;
+    }
 
-    // Store PI id on the payment request
-    await updatePaymentRequestStatus(paymentRequest.id, paymentRequest.status as any, {
+    // Store PI id on the payment request (et retour au statut d'avant le verrou)
+    await updatePaymentRequestStatus(paymentRequest.id, statutAvant as any, {
       stripe_payment_intent_id: result.paymentIntentId,
     });
 
