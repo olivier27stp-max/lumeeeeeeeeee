@@ -23,7 +23,8 @@ const CATALOG: FieldCatalog = {
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
-let onChange: ReturnType<typeof vi.fn>;
+type OnChange = (entity: string | null, field: string | null) => void;
+let onChange: ReturnType<typeof vi.fn<OnChange>>;
 
 function render(props: Partial<React.ComponentProps<typeof FieldTargetPicker>> = {}) {
   act(() => {
@@ -64,7 +65,7 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
-  onChange = vi.fn();
+  onChange = vi.fn<OnChange>();
 });
 
 afterEach(() => {

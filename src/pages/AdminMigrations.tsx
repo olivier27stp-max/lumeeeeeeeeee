@@ -27,7 +27,7 @@ import { type AuditBotMigration,
 } from '../lib/migrationAdminApi';
 import { lancerBotMigration, attendreFinBot, getRapportBot, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
-import FieldTargetPicker, { type FieldCatalog } from '../components/migration/FieldTargetPicker';
+import FieldTargetPicker, { ENTITY_LABELS_FR, type FieldCatalog } from '../components/migration/FieldTargetPicker';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
