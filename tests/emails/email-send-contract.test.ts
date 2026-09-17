@@ -107,10 +107,12 @@ describe('invariants — à ne casser sous aucun prétexte', () => {
     expect(iface).toContain('company_email');
     expect(iface).toContain('company_phone');
 
+    // 2026-09-17 : le courriel de paiement passe par getCompanySettings + le gabarit commun
+    // (server/lib/courriels/gabarit.ts) : le téléphone vient de company_phone, comme la facture.
     const pr = read('server/routes/payment-requests.ts');
-    expect(pr).toMatch(/interface CompanyInfo/);
-    // L'incompatibilité est réelle et doit rester visible tant qu'elle existe.
-    expect(pr).toContain('params.company.phone');
+    expect(pr).toContain('const company = await getCompanySettings(params.orgId);');
+    expect(pr).toContain('marque: marqueDepuis(params.company)');
+    expect(pr).not.toContain('params.company.phone');
   });
 
   it('getCompanySettings n’échoue jamais : un org sans settings retourne {}', () => {
