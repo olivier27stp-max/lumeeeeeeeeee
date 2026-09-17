@@ -36,6 +36,8 @@ export interface SupportMessage {
   authorName: string | null;
   body: string;
   createdAt: string;
+  /** 👍 / 👎 donné sur une réponse de Lumi. */
+  avis?: 'bon' | 'mauvais' | null;
 }
 export interface SupportTicket {
   id: string;
@@ -93,6 +95,11 @@ export async function chatSupport(input: { ticketId?: string; message: string; h
 
 export async function sendSupportMessage(ticketId: string, message: string): Promise<{ ticket: SupportTicket }> {
   return appel<{ ticket: SupportTicket }>(`/api/support/${ticketId}/messages`, { method: 'POST', body: JSON.stringify({ message }) });
+}
+
+/** 👍 / 👎 sur une réponse de Lumi. Un 👎 fait oublier la réponse mémorisée. */
+export async function noterReponseSupport(ticketId: string, messageId: string, avis: 'bon' | 'mauvais'): Promise<{ ok: true }> {
+  return appel(`/api/support/${ticketId}/messages/${messageId}/avis`, { method: 'POST', body: JSON.stringify({ avis }) });
 }
 
 export async function escalateSupportTicket(ticketId: string, reason?: string): Promise<{ ticket: SupportTicket; slaKey: SlaKey; sla: string }> {

@@ -271,6 +271,10 @@ export const supportMessageSchema = z.object({
 export const supportEscalateSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 });
+/** 👍 / 👎 du client sur une réponse de Lumi. */
+export const supportAvisSchema = z.object({
+  avis: z.enum(['bon', 'mauvais']),
+});
 
 // ─── Invoice Templates ──────────────────────────────────────────────────────
 

@@ -29,9 +29,12 @@ describe('résumé quotidien', () => {
       { ticket_id: 't1', author: 'client', body: 'Comment je supprime une tâche ?', created_at: '2026-09-16T14:00:00Z' },
       { ticket_id: 't1', author: 'lumi', body: 'Ouvre la tâche, menu ⋯ en haut à droite, puis « Supprimer ». Pour un job, Jobs → le job → Archiver.', created_at: '2026-09-16T14:05:00Z' },
       { ticket_id: 't2', author: 'client', body: 'J’ai deux factures identiques', created_at: '2026-09-16T15:00:00Z' },
+      { ticket_id: 't3', author: 'user', body: 'Comment je change mon logo ?', created_at: '2026-09-16T15:50:00Z' },
+      { ticket_id: 't3', author: 'ai', body: 'Paramètres → Paramètres entreprise (/settings/company).', created_at: '2026-09-16T15:51:00Z', avis: 'mauvais' },
     ];
     const texte = composerResume('2026-09-16', '2026-09-17T04:00:00.000Z', [base, escalade, fermee], messages)!;
-    expect(texte.startsWith('*Support — Mercredi 16 septembre* : 3 conversations · 1 réglée par Lumi · 1 escaladée · 1 fermée')).toBe(true);
+    expect(texte.startsWith('*Support — Mercredi 16 septembre* : 3 conversations · 1 réglée par Lumi · 1 escaladée · 1 fermée · 1 👎')).toBe(true);
+    expect(texte).toContain('· 2 messages · fermée · 👎 1');
     expect(texte).toContain('• *Coquin lavage* · William Hébert · « Supprimer des tâches » · 2 messages · réglée par Lumi');
     expect(texte).toContain('↳ client : « Comment je supprime une tâche ? »');
     expect(texte).toContain('↳ Lumi : « Ouvre la tâche, menu ⋯');

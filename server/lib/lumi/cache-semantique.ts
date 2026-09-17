@@ -138,6 +138,11 @@ export async function memoriserSemantique(p: Portee, e: Omit<EntreeSemantique, '
   await magasin().set(cle, sans, p.genre === 'tenant' ? TTL_TENANT_S : TTL_PUBLIC_S);
 }
 
+/** Tout oublier dans une portée (l'équipe vient d'apprendre quelque chose à Lumi : les réponses mémorisées avant sont suspectes). */
+export async function viderSemantique(p: Portee): Promise<void> {
+  await magasin().del(cleIndex(p));
+}
+
 /** Repli : la réponse mémorisée pour cet énoncé n'était pas la bonne. */
 export async function oublierSemantique(p: Portee, enonce: string): Promise<void> {
   const cle = cleIndex(p);

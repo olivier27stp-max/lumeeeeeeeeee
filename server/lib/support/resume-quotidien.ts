@@ -38,7 +38,7 @@ export interface TicketResume {
   slack_channel_id: string | null;
   slack_thread_ts: string | null;
 }
-export interface MessageResume { ticket_id: string; author: string; body: string; created_at: string }
+export interface MessageResume { ticket_id: string; author: string; body: string; created_at: string; avis?: string | null }
 
 /** La veille, dans le fuseau : son libellé et ses bornes ISO UTC [debut, fin). */
 export function bornesVeille(maintenant: Date, fuseau = FUSEAU_SUPPORT): { jour: string; debut: string; fin: string } {
@@ -73,14 +73,16 @@ export function composerResume(jour: string, fin: string, tickets: TicketResume[
   const sorts = tickets.map((t) => sortDuTicket(t, fin));
   const n = (s: string) => sorts.filter((x) => x === s).length;
   const lignes: string[] = [];
-  lignes.push(`*${enTeteResume(jour)}* : ${tickets.length} conversation${tickets.length > 1 ? 's' : ''} · ${n('lumi')} réglée${n('lumi') > 1 ? 's' : ''} par Lumi · ${n('escalade')} escaladée${n('escalade') > 1 ? 's' : ''} · ${n('fermee')} fermée${n('fermee') > 1 ? 's' : ''}`);
+  const mauvais = messages.filter((m) => m.avis === 'mauvais').length;
+  lignes.push(`*${enTeteResume(jour)}* : ${tickets.length} conversation${tickets.length > 1 ? 's' : ''} · ${n('lumi')} réglée${n('lumi') > 1 ? 's' : ''} par Lumi · ${n('escalade')} escaladée${n('escalade') > 1 ? 's' : ''} · ${n('fermee')} fermée${n('fermee') > 1 ? 's' : ''}${mauvais ? ` · ${mauvais} 👎` : ''}`);
   const tri = [...tickets].sort((a, b) => (a.last_message_at < b.last_message_at ? 1 : -1));
   for (const t of tri.slice(0, MAX_LIGNES)) {
     const msgs = (parTicket.get(t.id) ?? []).slice().sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
     const sort = sortDuTicket(t, fin);
     const etiquette = sort === 'lumi' ? 'réglée par Lumi' : sort === 'escalade' ? 'escaladée' : 'fermée';
     const lien = lienFil(t);
-    lignes.push(`• *${t.company_name || 'Entreprise inconnue'}* · ${t.user_name || 'utilisateur'} · « ${extrait(t.subject)} » · ${msgs.length} message${msgs.length > 1 ? 's' : ''} · ${etiquette}${lien ? ` · <${lien}|fil>` : ''}`);
+    const avis = `${msgs.some((m) => m.avis === 'bon') ? ` · 👍 ${msgs.filter((m) => m.avis === 'bon').length}` : ''}${msgs.some((m) => m.avis === 'mauvais') ? ` · 👎 ${msgs.filter((m) => m.avis === 'mauvais').length}` : ''}`;
+    lignes.push(`• *${t.company_name || 'Entreprise inconnue'}* · ${t.user_name || 'utilisateur'} · « ${extrait(t.subject)} » · ${msgs.length} message${msgs.length > 1 ? 's' : ''} · ${etiquette}${avis}${lien ? ` · <${lien}|fil>` : ''}`);
     if (sort === 'lumi') {
       const client = msgs.find((m) => m.author === 'client' || m.author === 'user');
       const lumi = [...msgs].reverse().find((m) => m.author === 'lumi' || m.author === 'ai' || m.author === 'assistant');
@@ -121,8 +123,9 @@ export async function envoyerResumeQuotidien(admin: SupabaseClient, maintenant =
     if (!tickets?.length) return 'rien';
     const { data: messages, error: e2 } = await admin
       .from('support_messages')
-      .select('ticket_id, author, body, created_at')
+      .select('ticket_id, author, body, created_at, avis')
       .in('ticket_id', tickets.map((t: any) => t.id))
+      .neq('author', 'system')
       .order('created_at', { ascending: true }).limit(2000);
     if (e2) throw e2;
     const texte = composerResume(jour, fin, tickets as TicketResume[], (messages ?? []) as MessageResume[]);

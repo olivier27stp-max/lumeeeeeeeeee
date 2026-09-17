@@ -14,7 +14,7 @@
  */
 import { Router, type Request, type Response } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { validate, supportRequestSchema, supportChatSchema, supportMessageSchema, supportEscalateSchema } from '../lib/validation';
+import { validate, supportRequestSchema, supportChatSchema, supportMessageSchema, supportEscalateSchema, supportAvisSchema } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
@@ -26,7 +26,7 @@ import { dossierClient } from '../lib/support/dossier';
 import { reponseFaqPour } from '../lib/support/faq';
 import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
 import { journaliserTrace } from '../lib/lumi/traces';
-import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cache-semantique';
+import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
 import { versionOrg } from '../lib/lumi/version-org';
 import { PLAFOND_MODELE_PAR_JOUR, reponsesModeleAujourdhui, texteAuPlafond, PORTEE_CACHE_SUPPORT, PORTEE_CACHE_SUPPORT_GLOBALE, outilsDeDoc, reponseGenerique } from '../lib/support/garde-fous';
 import {
@@ -44,7 +44,7 @@ function vue(t: Ticket, messages: MessageTicket[] = []) {
   return {
     id: t.id, subject: t.subject, category: t.category, status: t.status, priority: t.priority, slaKey: t.sla_key,
     createdAt: t.created_at, lastMessageAt: t.last_message_at, escalatedAt: t.escalated_at, closedAt: t.closed_at,
-    messages: messages.filter((m) => m.author !== 'system').map((m) => ({ id: m.id, author: m.author, authorName: m.author_name, body: m.body, createdAt: m.created_at })),
+    messages: messages.filter((m) => m.author !== 'system').map((m) => ({ id: m.id, author: m.author, authorName: m.author_name, body: m.body, createdAt: m.created_at, avis: m.avis ?? null })),
   };
 }
 
@@ -209,6 +209,36 @@ router.post('/support/:id/escalate', validate(supportEscalateSchema), async (req
     return res.json({ ticket: vue(r.ticket, await messagesDuTicket(admin, ticket.id)), slaKey: ctx.slaKey, sla: slaTexte(ctx.slaKey, ctx.langue) });
   } catch (err: any) {
     return sendSafeError(res, err, 'Could not escalate.', '[support/escalate]');
+  }
+});
+
+// ── 👍 / 👎 sur une réponse de Lumi ──────────────────────────
+// Un 👎 fait oublier la réponse mémorisée pour cette question (entreprise et
+// partagée) : la prochaine fois, Lumi repasse par le modèle. Compté dans le
+// résumé quotidien Slack.
+router.post('/support/:id/messages/:mid/avis', validate(supportAvisSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const ticket = await ticketDe(admin, String(req.params.id), auth.orgId, auth.user.id);
+    if (!ticket) return res.status(404).json({ error: 'Conversation not found.' });
+    const { avis } = req.body as { avis: 'bon' | 'mauvais' };
+    const { data: m } = await admin.from('support_messages').select('id, author, created_at').eq('id', String(req.params.mid)).eq('ticket_id', ticket.id).maybeSingle();
+    if (!m || m.author !== 'ai') return res.status(404).json({ error: 'Message not found.' });
+    const { error } = await admin.from('support_messages').update({ avis }).eq('id', m.id);
+    if (error) throw new Error(error.message);
+    if (avis === 'mauvais') {
+      const { data: q } = await admin.from('support_messages').select('body').eq('ticket_id', ticket.id).eq('author', 'user').lt('created_at', m.created_at).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (q?.body) {
+        const ctx = await contexteOrg(admin, auth.orgId, auth.user);
+        await Promise.all([oublierSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), q.body), oublierSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), q.body)]);
+      }
+    }
+    void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: 'texte', enonce: `avis:${avis}`, etage: 0, action: `avis:${avis}`, resultat: 'ok', model: null, costCents: 0, dureeMs: 0 });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Could not save your feedback.', '[support/avis]');
   }
 });
 

@@ -55,6 +55,8 @@ export interface MessageTicket {
   author_name: string | null;
   body: string;
   created_at: string;
+  /** 👍 / 👎 du client sur une réponse de Lumi. */
+  avis?: 'bon' | 'mauvais' | null;
 }
 
 export interface ContexteOrg {
@@ -161,7 +163,7 @@ export async function ticketDe(admin: SupabaseClient, ticketId: string, orgId: s
 }
 
 export async function messagesDuTicket(admin: SupabaseClient, ticketId: string): Promise<MessageTicket[]> {
-  const { data, error } = await admin.from('support_messages').select('id, ticket_id, author, author_name, body, created_at').eq('ticket_id', ticketId).order('created_at', { ascending: true }).limit(200);
+  const { data, error } = await admin.from('support_messages').select('id, ticket_id, author, author_name, body, created_at, avis').eq('ticket_id', ticketId).order('created_at', { ascending: true }).limit(200);
   if (error) throw new Error(`support_messages select : ${error.message}`);
   return (data || []) as MessageTicket[];
 }

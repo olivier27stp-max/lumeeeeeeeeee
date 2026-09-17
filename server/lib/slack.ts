@@ -154,7 +154,7 @@ export async function lireHistoriqueSlack(channel: string, oldest?: string, limi
 }
 
 /** Répliques d'un fil (sans le parent), pour le relevé périodique. */
-export interface RepliqueSlack { ts: string; user?: string; bot_id?: string; subtype?: string; text?: string }
+export interface RepliqueSlack { ts: string; user?: string; bot_id?: string; subtype?: string; text?: string; reactions?: Array<{ name: string; count?: number }> }
 export async function lireRepliquesSlack(channel: string, threadTs: string, limite = 100): Promise<RepliqueSlack[]> {
   const r = await appel<{ messages?: RepliqueSlack[] }>('conversations.replies', null, { channel, ts: threadTs, limit: String(limite) });
   return (r.messages || []).filter((m) => m.ts !== threadTs);

@@ -11,20 +11,20 @@
 > **Régénérer avec** `scripts/gen-schema-snapshot.mjs` après tout changement
 > structurel. Un référentiel périmé est pire qu'aucun référentiel.
 
-**Généré le 2026-09-16 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
+**Généré le 2026-09-17 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
-## 1. Tables (230)
+## 1. Tables (231)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
 | `a2p_registrations` | ✅ | ✅ | 1 | 0 |
-| `active_sessions` | ✅ | ✅ | 2 | 159 |
+| `active_sessions` | ✅ | ✅ | 2 | 188 |
 | `activity_log` | ✅ | ✅ | 2 | 910 |
 | `activity_notes` | ✅ | ✅ | 3 | 1 |
 | `agent_actions` | ✅ | ✅ | 2 | 6 |
 | `agent_messages` | ✅ | ✅ | 1 | 16 |
 | `ai_reservations` | ✅ | ✅ | 1 | ? |
-| `ai_usage` | ✅ | ✅ | 2 | 52 |
+| `ai_usage` | ✅ | ✅ | 2 | 109 |
 | `ai_usage_monthly` | ✅ | ✅ | 2 | ? |
 | `alert_rules` | ✅ | ✅ | 3 | 4 |
 | `api_keys` | ✅ | ✅ | 4 | 0 |
@@ -131,34 +131,34 @@
 | `login_history` | ✅ | ✅ | 4 | 155 |
 | `lumi_autorisations` | ✅ | ✅ | 2 | ? |
 | `lumi_briefings` | ✅ | ✅ | 2 | ? |
-| `lumi_conversations` | ✅ | ✅ | 2 | 34 |
+| `lumi_conversations` | ✅ | ✅ | 2 | 43 |
 | `lumi_messages` | ✅ | ✅ | 2 | 165 |
-| `lumi_traces` | ✅ | ❌ | 1 | ? |
+| `lumi_traces` | ✅ | ❌ | 1 | 51 |
 | `memberships` | ✅ | ✅ | 5 | 41 |
 | `messages` | ✅ | ✅ | 4 | 134 |
 | `mfa_phone` | ✅ | ✅ | 1 | 1 |
 | `mfa_sms_challenges` | ✅ | ✅ | 1 | ? |
 | `mfa_trusted_devices` | ✅ | ✅ | 1 | 1 |
 | `migration_approvals` | ✅ | ✅ | 1 | ? |
-| `migration_audit_logs` | ✅ | ✅ | 1 | 63 |
+| `migration_audit_logs` | ✅ | ✅ | 1 | 197 |
 | `migration_duplicate_candidates` | ✅ | ✅ | 1 | ? |
-| `migration_field_mappings` | ✅ | ✅ | 1 | 166 |
-| `migration_file_columns` | ✅ | ✅ | 1 | 206 |
+| `migration_field_mappings` | ✅ | ✅ | 1 | 137 |
+| `migration_file_columns` | ✅ | ✅ | 1 | 137 |
 | `migration_files` | ✅ | ✅ | 1 | 5 |
 | `migration_import_batches` | ✅ | ✅ | 1 | 0 |
 | `migration_import_records` | ✅ | ✅ | 1 | 0 |
 | `migration_invitations` | ✅ | ✅ | 1 | 0 |
-| `migration_issues` | ✅ | ✅ | 1 | 68 |
+| `migration_issues` | ✅ | ✅ | 1 | 113 |
 | `migration_mapping_templates` | ✅ | ✅ | 1 | 1 |
 | `migration_messages` | ✅ | ✅ | 1 | ? |
 | `migration_staff_mappings` | ✅ | ✅ | 1 | ? |
-| `migration_staging_records` | ✅ | ✅ | 1 | 3549 |
+| `migration_staging_records` | ✅ | ✅ | 1 | 3482 |
 | `note_history` | ✅ | ✅ | 2 | 0 |
 | `notes` | ✅ | ✅ | 4 | 0 |
 | `notifications` | ✅ | ✅ | 4 | 602 |
 | `oauth_authorization_codes` | ✅ | ✅ | 1 | ? |
 | `oauth_clients` | ✅ | ✅ | 1 | ? |
-| `oauth_tokens` | ✅ | ✅ | 3 | 159 |
+| `oauth_tokens` | ✅ | ✅ | 3 | 176 |
 | `org_billing_settings` | ✅ | ✅ | 3 | 0 |
 | `org_client_counters` | ✅ | ✅ | 1 | 2 |
 | `org_features` | ✅ | ✅ | 3 | 10 |
@@ -220,6 +220,7 @@
 | `specific_notes` | ✅ | ✅ | 4 | 6 |
 | `subscriptions` | ✅ | ✅ | 2 | 7 |
 | `support_messages` | ✅ | ✅ | 1 | ? |
+| `support_savoir` | ✅ | ✅ | 0 | ? |
 | `support_slack_channels` | ✅ | ✅ | 0 | ? |
 | `support_tickets` | ✅ | ✅ | 1 | 9 |
 | `tags` | ✅ | ✅ | 4 | 0 |
@@ -241,8 +242,8 @@
 | `time_off_requests` | ✅ | ✅ | 4 | ? |
 | `tracking_events` | ✅ | ✅ | 2 | 513 |
 | `tracking_live_locations` | ✅ | ✅ | 3 | 2 |
-| `tracking_points` | ✅ | ✅ | 2 | 5052 |
-| `tracking_sessions` | ✅ | ✅ | 3 | 218 |
+| `tracking_points` | ✅ | ✅ | 2 | 5372 |
+| `tracking_sessions` | ✅ | ✅ | 3 | 219 |
 | `webhook_deliveries` | ✅ | ✅ | 1 | 0 |
 | `webhook_endpoints` | ✅ | ✅ | 2 | 0 |
 | `webhook_events` | ✅ | ✅ | 4 | 36 |
@@ -2842,9 +2843,6 @@
 - `stripe_monthly_price_id_cad` text
 - `stripe_yearly_price_id_usd` text
 - `stripe_yearly_price_id_cad` text
-- `included_offices` integer
-- `extra_office_price_usd` integer
-- `extra_office_price_cad` integer
 - `intro_months` integer
 - `intro_price_monthly_usd` integer
 - `intro_price_monthly_cad` integer
@@ -3516,8 +3514,6 @@
 - `scheduled_at` timestamp with time zone
 - `extra_seats` integer NOT NULL DEFAULT 0
 - `stripe_seat_item_id` text
-- `extra_offices` integer NOT NULL DEFAULT 0
-- `stripe_office_item_id` text
 - `cancellation_feedback` text
 - `cancellation_comment` text
 - `past_due_since` timestamp with time zone
@@ -3533,6 +3529,19 @@
 - `slack_ts` text
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `read_by_user_at` timestamp with time zone
+- `avis` text
+
+### `support_savoir`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `question` text NOT NULL
+- `reponse` text NOT NULL
+- `auteur` text
+- `source_ticket_id` uuid
+- `slack_channel_id` text
+- `slack_ts` text
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `deleted_at` timestamp with time zone
 
 ### `support_slack_channels`
 
@@ -6177,7 +6186,7 @@ l'audit. Lire le corps réel avec :
 | `cleanup_expired_pipeline_deals()` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `cleanup_lost_pipeline_deals()` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `cleanup_rate_limits()` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `clients_auto_billing_property()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `clients_auto_billing_property()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `clients_auto_property_from_address()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `clients_before_insert_set_org()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `clients_portal_token_hash()` → trigger | non | search_path="" | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
@@ -6308,7 +6317,7 @@ l'audit. Lire le corps réel avec :
 | `pipeline_deals_sync_value_columns()` → trigger | non | search_path=public, app | service_role=X/postgres |
 | `pipeline_deals_sync_values()` → trigger | non | search_path=public | service_role=X/postgres |
 | `prevent_paid_invoice_edit()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
-| `properties_billing_mirror_to_client()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `properties_billing_mirror_to_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `property_address_line(p_address text, p_street_number text, p_street_name text, p_city text,)` → text | non | ❌ aucun | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `provision_sms_channel(p_org_id uuid, p_phone_number text, p_provider text DEFAULT 'twilio'::)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `purge_expired_portal_tokens()` → bigint | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
@@ -6463,7 +6472,7 @@ l'audit. Lire le corps réel avec :
 - `v_revenue_analytics` — security_invoker=true
 - `v_schedule_calendar` — security_invoker=true
 
-## 6. Contraintes (1188)
+## 6. Contraintes (1192)
 
 
 ### `a2p_registrations`
@@ -6710,6 +6719,7 @@ l'audit. Lire le corps réel avec :
 - `company_settings_postal_code_len` — CHECK ((length(postal_code) <= 20))
 - `company_settings_province_len` — CHECK ((length(province) <= 200))
 - `company_settings_quote_footer_text_len` — CHECK ((length(quote_footer_text) <= 20000))
+- `company_settings_social_links_objet` — CHECK ((jsonb_typeof(social_links) = 'object'::text))
 - `company_settings_street1_len` — CHECK ((length(street1) <= 500))
 - `company_settings_street2_len` — CHECK ((length(street2) <= 500))
 - `company_settings_timezone_valid` — CHECK (is_valid_timezone(timezone))
@@ -8108,9 +8118,15 @@ CASE
 ### `support_messages`
 
 - `support_messages_author_check` — CHECK ((author = ANY (ARRAY['user'::text, 'ai'::text, 'agent'::text, 'system'::text])))
+- `support_messages_avis_check` — CHECK (((avis IS NULL) OR (avis = ANY (ARRAY['bon'::text, 'mauvais'::text]))))
 - `support_messages_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `support_messages_pkey` — PRIMARY KEY (id)
 - `support_messages_ticket_id_fkey` — FOREIGN KEY (ticket_id) REFERENCES support_tickets(id) ON DELETE CASCADE
+
+### `support_savoir`
+
+- `support_savoir_pkey` — PRIMARY KEY (id)
+- `support_savoir_source_ticket_id_fkey` — FOREIGN KEY (source_ticket_id) REFERENCES support_tickets(id) ON DELETE SET NULL
 
 ### `support_slack_channels`
 

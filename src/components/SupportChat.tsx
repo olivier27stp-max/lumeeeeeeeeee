@@ -8,7 +8,8 @@
  * classique (SupportPanel), qui crée quand même un ticket.
  */
 import React, { useEffect, useId, useRef, useState, useCallback } from 'react';
-import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -19,7 +20,7 @@ import { ARTICLES } from './supportArticles';
 /** Les mêmes questions classiques que le tiroir d'aide ; un clic = réponse fixe côté serveur (étage 0), sans modèle. */
 const SUGGESTIONS_IDS = ['quote-to-invoice', 'get-paid', 'add-member', 'schedule-job', 'import-clients'];
 import {
-  chatSupport, sendSupportMessage, escalateSupportTicket, listSupportTickets, getSupportTicket,
+  chatSupport, sendSupportMessage, escalateSupportTicket, listSupportTickets, getSupportTicket, noterReponseSupport,
   type SupportTicket, type SlaKey, type SupportRequestError,
 } from '../lib/supportApi';
 
@@ -39,7 +40,38 @@ function heureCourte(iso: string, fr: boolean): string {
 }
 const POLL_MS = 8000;
 
-export default function SupportChat({ compact = false, initialTicketId }: { compact?: boolean; initialTicketId?: string | null } = {}) {
+/** Les premiers segments des routes de l'app (src/App.tsx) : une route citée par Lumi devient un lien. */
+const SEGMENTS_APP = 'day|dashboard|tasks|jobs|calendar|dispatch|clients|requests|quotes|messages|search|lumi|finances|invoices|payments|settings|commissions|timesheets|availability|courses|training|field-sales|pipeline|leaderboard|d2d-reports|d2d-dashboard|d2d-pipeline|reps|insights|automations|offices|account|apps|marketplace|leads';
+const ROUTE_RE = new RegExp(`(/(?:${SEGMENTS_APP})(?:/[A-Za-z0-9_-]+)*)(?![A-Za-z0-9_:/-])`, 'g');
+
+/**
+ * Le texte d'une réponse, avec chaque route de l'app (« /settings/team ») en
+ * lien : cliquer y va — depuis le tiroir, il se ferme d'abord. Une route avec
+ * un paramètre (« /jobs/:id ») reste du texte.
+ */
+export function TexteAvecLiens({ texte, onNavigate }: { texte: string; onNavigate?: (path: string) => void }) {
+  const morceaux: React.ReactNode[] = [];
+  let i = 0;
+  let n = 0;
+  for (const m of texte.matchAll(ROUTE_RE)) {
+    const route = m[1];
+    const debut = m.index ?? 0;
+    if (route.includes(':')) continue;
+    if (debut > i) morceaux.push(texte.slice(i, debut));
+    morceaux.push(
+      <button key={`l${n++}`} type="button" onClick={() => onNavigate?.(route)} className="underline decoration-dotted underline-offset-2 text-primary hover:decoration-solid font-medium">
+        {route}
+      </button>,
+    );
+    i = debut + route.length;
+  }
+  if (i < texte.length) morceaux.push(texte.slice(i));
+  return <>{morceaux}</>;
+}
+
+export default function SupportChat({ compact = false, initialTicketId, onNavigate }: { compact?: boolean; initialTicketId?: string | null; onNavigate?: (path: string) => void } = {}) {
+  const navigate = useNavigate();
+  const allerA = useCallback((path: string) => { if (onNavigate) onNavigate(path); else navigate(path); }, [onNavigate, navigate]);
   const { t, language } = useTranslation();
   const ts = t.support;
   const fr = language === 'fr';
@@ -136,6 +168,20 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
     }
   }
 
+  // 👍 / 👎 sur une réponse de Lumi : enregistré tout de suite, l'état local suit ; un 👎 invite à préciser ou à demander l'équipe.
+  async function noter(messageId: string, avis: 'bon' | 'mauvais') {
+    if (!ticket) return;
+    const avant = ticket;
+    setTicket({ ...ticket, messages: ticket.messages.map((m) => (m.id === messageId ? { ...m, avis } : m)) });
+    try {
+      await noterReponseSupport(ticket.id, messageId, avis);
+      if (avis === 'mauvais') toast.message(ts.feedbackBad);
+    } catch (e) {
+      setTicket(avant);
+      captureClientException(e, { module: 'support', action: 'avis' });
+    }
+  }
+
   if (fallbackForm) return <SupportPanel bare />;
 
 
@@ -213,11 +259,27 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
                   <span className="font-semibold text-text-primary">{m.authorName || ts.agentLabel}</span>
                   {m.authorName ? ` · ${ts.agentLabel}` : ''}{` · ${heureCourte(m.createdAt, fr)}`}
                 </p>
-                <div className="bg-surface border border-outline-subtle border-l-2 border-l-primary rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-primary shadow-sm whitespace-pre-wrap">{m.body}</div>
+                <div className="bg-surface border border-outline-subtle border-l-2 border-l-primary rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-primary shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
               </div>
             </div>
           ) : (
-            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap">{m.body}</div>
+            <div key={m.id} className="max-w-[92%]">
+              <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
+              {/* 👍 / 👎 : un geste, pas un formulaire. Visible tant que la réponse n'est pas notée ; ensuite, seul le choix reste. */}
+              <div className="flex items-center gap-1 mt-1 pl-1" aria-label={ts.feedbackQuestion}>
+                {(!m.avis || m.avis === 'bon') && (
+                  <button type="button" onClick={() => noter(m.id, 'bon')} disabled={!!m.avis} aria-label={ts.helpful} aria-pressed={m.avis === 'bon'} className={cn('p-1 rounded-full text-text-tertiary hover:text-primary hover:bg-surface-secondary', m.avis === 'bon' && 'text-primary')}>
+                    <ThumbsUp size={13} aria-hidden="true" />
+                  </button>
+                )}
+                {(!m.avis || m.avis === 'mauvais') && (
+                  <button type="button" onClick={() => noter(m.id, 'mauvais')} disabled={!!m.avis} aria-label={ts.notHelpful} aria-pressed={m.avis === 'mauvais'} className={cn('p-1 rounded-full text-text-tertiary hover:text-danger hover:bg-surface-secondary', m.avis === 'mauvais' && 'text-danger')}>
+                    <ThumbsDown size={13} aria-hidden="true" />
+                  </button>
+                )}
+                {m.avis && <span className="text-[10.5px] text-text-tertiary">{m.avis === 'bon' ? ts.feedbackThanks : ts.feedbackBad}</span>}
+              </div>
+            </div>
           )
         ))}
         {envoi && (
