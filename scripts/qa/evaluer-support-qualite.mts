@@ -46,6 +46,7 @@ const { repondreSupportIA, MODELE_SUPPORT } = await import('../../server/lib/sup
 const { dossierClient } = await import('../../server/lib/support/dossier');
 const { contexteOrg, slaTexte } = await import('../../server/lib/support/tickets');
 const { chercherAide } = await import('../../server/lib/agent/tools-aide');
+const { indexCarteApp } = await import('../../server/lib/support/carte-app');
 const { clientAnthropic } = await import('../../server/lib/lumi/llm');
 const { coutEnCents } = await import('../../server/lib/lumi/tarifs');
 
@@ -83,7 +84,7 @@ const CAS: Cas[] = [
   { id: 'devis-depot', question: "je veux demander un dépot de 30% sur mes soumissions, c'est où", attendu: { route: /\/quotes/, mots: /dépôt/i, transfert: false } },
   { id: 'messages-texto', question: "comment j'envoie un texto a un client", attendu: { route: /\/messages/, mots: /Nouveau message/, transfert: false } },
   // ── Argent ──
-  { id: 'factures-creer', question: 'comment je fais une facture', attendu: { route: /\/invoices\/new|\/finances/, mots: /Nouvelle facture/, transfert: false } },
+  { id: 'factures-creer', question: 'comment je fais une facture', attendu: { route: /\/invoices\/new|\/finances|\/quotes/, mots: /Nouvelle facture|Convertir en facture/, transfert: false } },
   { id: 'factures-payee', question: "mon client m'a payé cash, comment je marque sa facture payée", attendu: { route: /\/finances|\/invoices/, mots: /Marquer payée/, transfert: false } },
   { id: 'finances-paiements', question: "c'est où que je vois tous les paiements que j'ai recus ce mois-ci", attendu: { route: /\/finances/, mots: /Paiements/, transfert: false } },
   { id: 'finances-versements', question: "c'est où que je vois quand l'argent rentre dans mon compte de banque", attendu: { route: /\/finances/, mots: /Versements/, transfert: false } },
@@ -117,11 +118,13 @@ const CAS: Cas[] = [
   { id: 'bureaux-nouveau', question: "j'ouvre une 2e succursale, comment j'ajoute un bureau", attendu: { route: /\/settings\/offices/, mots: /Nouveau bureau/, transfert: false } },
   { id: 'produits-service', question: "comment j'ajoute un service avec son prix", attendu: { route: /\/settings\/products/, mots: /Nouveau service/, transfert: false } },
   { id: 'automatisations-pause', question: 'comment je mets en pause une automatisation qui envoie trop de courriels', attendu: { route: /\/automations/, mots: /Désactiver|interrupteur/i, transfert: false } },
-  { id: 'avis-google', question: 'comment je demande un avis google apres une job', attendu: { route: /\/settings\/reviews/, mots: /Demander un avis/, transfert: false } },
-  { id: 'formulaire-site', question: 'comment je mets le formulaire de demande sur mon site web', attendu: { route: /\/settings\/request-form/, mots: /Copier ce code/, transfert: false } },
+  // Le dossier QA dit « avis Google configurés » : Lumi peut répondre depuis le dossier (automatique à la fin de la job) sans citer l'interrupteur.
+  { id: 'avis-google', question: 'comment je demande un avis google apres une job', attendu: { route: /\/settings\/reviews/, mots: /avis/i, transfert: false } },
+  { id: 'formulaire-site', question: 'comment je mets le formulaire de demande sur mon site web', attendu: { route: /\/settings\/request-form/, mots: /code/i, transfert: false } },
   { id: 'securite-2fa', question: "c'est quoi le code qr qu'il me demande quand j'invite quelqu'un", attendu: { mots: /Google Authenticator|6 chiffres|QR/i, transfert: false } },
   { id: 'connexion-mdp', question: "j'ai oublié mon mot de passe pis je rentre pu", attendu: { route: /\/auth|\/reset-password/, mots: /Mot de passe oublié/, transfert: false } },
-  { id: 'pages-clients-devis', question: "mon client recoit quoi quand j'envoie une soumission", attendu: { route: /\/quote\//, mots: /approuver/i, transfert: false } },
+  // Les pages reçues par le client n'ont pas de route dans l'app : on attend le mécanisme (téléphone, sans compte, approuver/signer), pas une route.
+  { id: 'pages-clients-devis', question: "mon client recoit quoi quand j'envoie une soumission", attendu: { mots: /approuver|signer|téléphone|sans (avoir à créer de )?compte/i, transfert: false } },
   // ── Hors « comment faire » ──
   { id: 'hors-bug', question: "quand j'ouvre le calendrier ça charge sans arret pis ça affiche rien", attendu: { transfert: true } },
   { id: 'hors-humain', question: 'je veux parler à une vraie personne svp', attendu: { transfert: true } },
@@ -143,19 +146,28 @@ type NoteJuge = 'exact' | 'partiel' | 'faux';
 interface Jugement { note: NoteJuge | 'illisible'; raison: string; coutCents: number }
 
 async function juger(question: string, reponse: string, transfere: boolean): Promise<Jugement> {
-  const extraits = chercherAide(question, 3).map((p) => `— ${p.titre} (${p.page}) : ${p.extrait}`).join('\n');
-  const system = `Tu notes la réponse d'un assistant de support pour un CRM. Voici la vérité (extraits de la carte de l'app) :
+  // La vérité du juge : l'index des écrans (toutes les routes existantes), les passages de la QUESTION et ceux de la RÉPONSE
+  // (ce que Lumi cite est vérifié, pas seulement ce que la question évoque — premier passage : 4 « faux » sur 6 étaient un juge aveugle).
+  const vus = new Set<string>();
+  const extraits = [...chercherAide(question, 5), ...chercherAide(reponse, 4)]
+    .filter((p) => { const k = `${p.page}|${p.titre}`; if (vus.has(k)) return false; vus.add(k); return true; })
+    .map((p) => `— ${p.titre} (${p.page}) : ${p.extrait}`).join('\n');
+  const system = `Tu notes la réponse d'un assistant de support pour un CRM (Lume). Voici la vérité.
+ÉCRANS ET ROUTES DE L'APP (tous existent) :
+${indexCarteApp()}
+EXTRAITS DE LA CARTE (boutons exacts) :
 ${extraits || '(aucun extrait)'}
-Réponds UNIQUEMENT en JSON : {"note": "exact"|"partiel"|"faux", "raison": "…"} . exact = le chemin et les boutons cités existent et répondent ; partiel = bonne page mais détail manquant ou flou ; faux = bouton ou page inventé, ou réponse à côté.`;
+Ce qui vient du dossier du client (son forfait, ses réglages déjà activés, le délai de réponse de l'équipe en heures ouvrables) est vrai aussi. Une réponse qui transfère un bug, une demande d'humain ou une question d'argent à l'équipe est exacte.
+Réponds UNIQUEMENT en JSON, sans balise de code, raison en une phrase de 25 mots au plus : {"note": "exact"|"partiel"|"faux", "raison": "…"} . exact = le chemin et les boutons cités existent et répondent ; partiel = bonne page mais détail manquant ou flou ; faux = bouton ou page inventé, ou réponse à côté.`;
   const r = await clientAnthropic().messages.create({
     model: MODELE_JUGE,
-    max_tokens: 200,
+    max_tokens: 300,
     system,
     messages: [{ role: 'user', content: `Question du client : ${question}\nRéponse de l'assistant : ${reponse}\nTransfert à l'équipe : ${transfere ? 'oui' : 'non'}` }],
   });
   const coutCents = coutEnCents(TARIF_JUGE, r.usage);
   const texte = r.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
-  const brut = /\{[\s\S]*\}/.exec(texte)?.[0];
+  const brut = /\{[\s\S]*?\}/.exec(texte.replace(/```(?:json)?/g, ''))?.[0];
   try {
     const j = JSON.parse(brut ?? '') as { note?: unknown; raison?: unknown };
     const note = typeof j.note === 'string' && ['exact', 'partiel', 'faux'].includes(j.note) ? (j.note as NoteJuge) : 'illisible';
