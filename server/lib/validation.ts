@@ -264,9 +264,12 @@ export const supportChatSchema = z.object({
   origine: z.enum(['texte', 'suggestion']).optional(),
   /** Route courante de l'app (ex. /jobs/123) — chemin seulement, jamais de query. */
   page: z.string().trim().max(200).regex(/^\/[A-Za-z0-9/_-]*$/).optional(),
+  /** Chemins de captures déjà téléversées (POST /support/captures), vérifiés sous l'org côté serveur. */
+  captures: z.array(z.object({ chemin: z.string().max(200), nom: z.string().max(120).optional() })).max(3).optional(),
 });
 export const supportMessageSchema = z.object({
   message: z.string().trim().min(1, 'Write a message.').max(5000),
+  captures: z.array(z.object({ chemin: z.string().max(200), nom: z.string().max(120).optional() })).max(3).optional(),
 });
 export const supportEscalateSchema = z.object({
   reason: z.string().trim().max(300).optional(),
