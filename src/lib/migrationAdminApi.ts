@@ -225,9 +225,21 @@ export function lancerBotMigration(id: string): Promise<RapportBotMigration> {
   return apiFetch(`/migrations/${id}/bot`, { method: 'POST' });
 }
 export interface DecisionBotMigration { etape: string; cible: string; decision: string; detail?: string }
+export interface AuditBotMigration {
+  fichiers: Array<{ nom: string; entite: string | null; nature: string | null }>;
+  corrections: Array<{ fichier: string; colonne: string; avant: string | null; apres: string | null; pourquoi: string }>;
+  alertes: Array<{ fichier: string; colonne: string; message: string; action: string }>;
+  a_verifier: Array<{ fichier: string; colonne: string; actuel: string | null; candidats: string[]; pourquoi: string }>;
+  manques: Array<{ fichier: string; colonne: string; entite: string; proposition: string; besoin: string }>;
+  modele: string | null;
+  /** Markdown prêt à coller dans Claude Code (« applique l'audit »). */
+  texte_pour_claude: string;
+}
 export interface RapportBotMigration {
   migration_id: string; declencheur: 'manuel' | 'cron'; debut: string; fin: string;
   statut_avant: string; statut_apres: string; decisions: DecisionBotMigration[]; questions_posees: number; arret: string; cout_cents: number | null;
+  /** Absent sur les rapports d'avant 2026-09-17. */
+  audit?: AuditBotMigration;
 }
 /** Le cron reprend la migration tout seul tant que c'est vrai. */
 export function definirBotActif(id: string, actif: boolean): Promise<any> {

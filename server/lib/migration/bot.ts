@@ -44,6 +44,8 @@ import { z } from 'zod';
 import { logMigrationAudit, touchMigrationActivity } from './audit';
 import { analyzeMigrationFile } from './pipeline';
 import { FIELD_CATALOG, entityForCategory, normalizeHeader } from './mapping';
+import { REGLES_LUME, semantiquePour } from './connaissances-bot';
+import { appliquerGardes, type AlerteBot } from './gardes-bot';
 import { canTransition } from './state-machine';
 import { lancerImportTest, demanderApprobation, type ActeurMigration } from './execution';
 import type { MigrationRow, MigrationCategory, TargetEntity, DryRunReport, FieldDef } from './types';
@@ -63,13 +65,38 @@ export type ModeBot = 'client' | 'autonome';
 /** En mode autonome, l'admin est (re)prévenu au plus une fois par ce délai. */
 export const RAPPEL_ADMIN_HEURES = 72;
 export const TYPE_NOTIFICATION_ADMIN = 'migration_bot';
-const MODELE = process.env.LUMI_MODEL_MIGRATION || 'claude-sonnet-5';
+/** Le modèle le plus proche de Claude Code (Fable 5.1), puis repli si le compte n'y a pas accès (400/404). Surcharge : LUMI_MODEL_MIGRATION. */
+/** Profondeur de raisonnement par fichier (≈ 50 s et 25 ¢ par fichier en « high » sur Fable 5.1). Surcharge : LUMI_EFFORT_MIGRATION. */
+const EFFORT_BOT = (['low', 'medium', 'high', 'xhigh', 'max'] as const).find((e) => e === process.env.LUMI_EFFORT_MIGRATION) ?? 'high';
+export const MODELES_BOT: string[] = [...new Set([process.env.LUMI_MODEL_MIGRATION || 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5'])];
 
 export interface DecisionBot {
   etape: string;
   cible: string;
   decision: string;
   detail?: string;
+}
+/** Donnée utile pour laquelle Lume n'a aucun champ : à construire (par Claude Code). */
+export interface ManqueBot {
+  fichier: string;
+  colonne: string;
+  entite: string;
+  /** Nom de champ proposé (snake_case) ou catégorie à importer. */
+  proposition: string;
+  /** Ce que l'importeur devrait en faire. */
+  besoin: string;
+}
+export interface CorrectionBot { fichier: string; colonne: string; avant: string | null; apres: string | null; pourquoi: string }
+export interface AVerifierBot { fichier: string; colonne: string; actuel: string | null; candidats: string[]; pourquoi: string }
+/** Audit d'une passe : ce qui a été corrigé, ce qui reste à un humain, ce qui manque à Lume — et le texte à coller à Claude Code. */
+export interface AuditBot {
+  fichiers: Array<{ nom: string; entite: string | null; nature: string | null }>;
+  corrections: CorrectionBot[];
+  alertes: AlerteBot[];
+  a_verifier: AVerifierBot[];
+  manques: ManqueBot[];
+  modele: string | null;
+  texte_pour_claude: string;
 }
 export interface RapportBot {
   migration_id: string;
@@ -82,6 +109,10 @@ export interface RapportBot {
   questions_posees: number;
   arret: string;
   cout_cents: number | null;
+  audit: AuditBot;
+}
+export function auditVide(): AuditBot {
+  return { fichiers: [], corrections: [], alertes: [], a_verifier: [], manques: [], modele: null, texte_pour_claude: '' };
 }
 
 type Admin = SupabaseClient;
@@ -104,8 +135,60 @@ export const verdictColonneSchema = z.object({
   confidence: z.number().min(0).max(1),
   raison: z.string().optional().default('').transform((s) => s.slice(0, 200)),
   candidats: z.array(z.string()).optional().default([]).transform((a) => a.slice(0, 3)),
+  alerte: z.string().nullable().optional().transform((v) => (v ? v.slice(0, 240) : undefined)),
 });
-export type VerdictColonne = z.infer<typeof verdictColonneSchema>;
+export interface VerdictColonne {
+  position: number;
+  field: string | null;
+  confidence: number;
+  raison: string;
+  candidats: string[];
+  /** Pourquoi la correspondance serait dangereuse (garde ou modèle) : la colonne va aux notes. */
+  alerte?: string;
+}
+
+const manqueSchema = z.object({
+  colonne: z.string().min(1).max(120),
+  proposition: z.string().min(1).max(80),
+  besoin: z.string().min(1).max(400),
+});
+/** Manques déclarés par le modèle (colonnes utiles sans champ Lume) — forme validée, jamais un champ inventé dans « field ». */
+export function validerManques(brut: unknown, fichier: string, entite: string): ManqueBot[] {
+  const liste = (brut as any)?.manques;
+  if (!Array.isArray(liste)) return [];
+  const out: ManqueBot[] = [];
+  for (const item of liste.slice(0, 20)) {
+    const r = manqueSchema.safeParse(item);
+    if (r.success) out.push({ fichier, entite, colonne: r.data.colonne, proposition: r.data.proposition, besoin: r.data.besoin });
+  }
+  return out;
+}
+
+/** Nature du fichier déclarée par le modèle (ex. « rapport d'utilisation, pas un catalogue »), courte. */
+export function validerNature(brut: unknown): string | null {
+  const n = (brut as any)?.nature_fichier;
+  return typeof n === 'string' && n.trim() ? n.trim().slice(0, 200) : null;
+}
+
+export type ChoixColonne = 'confirmer' | 'corriger' | 'conserver' | 'demander' | 'laisser';
+/**
+ * Décision pour UNE colonne à partir du verdict (après gardes) et de l'état
+ * actuel de la correspondance :
+ *  - alerte sans champ (garde ou modèle) → conserver dans les notes, jamais demandé au client ;
+ *  - ≥ 0,90 → confirmer si c'est déjà le champ proposé, sinon corriger ;
+ *  - moteur et modèle d'accord (≥ 0,70) sur une colonne « suggested » → confirmer ;
+ *  - incertain : « needs_review » → conserver (autonome) ou demander (client) ;
+ *    « suggested » → laisser la proposition du moteur, à vérifier par un humain.
+ */
+export function deciderColonne(p: { statut: string; actuel: string | null; verdict: VerdictColonne; mode: ModeBot }): ChoixColonne {
+  const v = p.verdict;
+  // Alerte SANS champ = correspondance refusée (garde ou modèle) → notes. Une alerte avec un champ est informative (ex. « en-tête au pluriel ») : la colonne est importée, l'audit la signale.
+  if (v.alerte && !v.field) return 'conserver';
+  if (v.field && v.confidence >= SEUIL_CONFIRMATION) return v.field === p.actuel ? 'confirmer' : 'corriger';
+  if (v.field && v.field === p.actuel && p.statut === 'suggested' && v.confidence >= 0.7) return 'confirmer';
+  if (p.statut === 'suggested') return 'laisser';
+  return p.mode === 'autonome' ? 'conserver' : 'demander';
+}
 
 /** Valide les verdicts du modèle contre le catalogue : un champ inconnu devient null, confiance 0. */
 export function validerVerdicts(brut: unknown, champs: FieldDef[]): VerdictColonne[] {
@@ -122,10 +205,12 @@ export function validerVerdicts(brut: unknown, champs: FieldDef[]): VerdictColon
     if (!r.success) continue;
     const v = r.data;
     out.push({
-      ...v,
+      position: v.position,
       field: v.field && connus.has(v.field) ? v.field : null,
       confidence: v.field && connus.has(v.field) ? v.confidence : 0,
+      raison: v.raison,
       candidats: v.candidats.filter((c) => connus.has(c)).slice(0, 3),
+      ...(v.alerte ? { alerte: v.alerte } : {}),
     });
   }
   return out;
@@ -187,70 +272,167 @@ export function interpreterReponseColonne(reponse: string, candidats: Array<{ fi
 
 // ── Modèle : un appel par fichier ─────────────────────────────────
 
+export interface ColonneModele {
+  position: number;
+  header: string;
+  detected_type: string | null;
+  samples: unknown[];
+  /** État actuel : « à décider », « proposé : <champ> », « fixé par un humain : <champ> », « ignoré ». */
+  etat: string;
+  aDecider: boolean;
+}
+
+const OUTIL_PROPOSER = 'proposer';
+
+function outilProposer(): Anthropic.Messages.Tool {
+  return {
+    name: OUTIL_PROPOSER,
+    description: 'Les correspondances proposées, une par colonne à décider, plus la nature du fichier et les manques de Lume.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        nature_fichier: { type: 'string', description: 'Une phrase : ce que contient réellement ce fichier (catalogue, rapport d\'utilisation, export de fiches…).' },
+        colonnes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              position: { type: 'integer' },
+              field: { type: ['string', 'null'], description: 'Un champ du catalogue, ou null pour « ne pas importer ».' },
+              confidence: { type: 'number' },
+              raison: { type: 'string' },
+              candidats: { type: 'array', items: { type: 'string' } },
+              alerte: { type: ['string', 'null'], description: 'Pourquoi la correspondance proposée par le moteur serait dangereuse (écrasement, type, TTC…) ; null sinon.' },
+            },
+            required: ['position', 'field', 'confidence', 'raison', 'candidats', 'alerte'],
+            additionalProperties: false,
+          },
+        },
+        manques: {
+          type: 'array',
+          description: 'Colonnes utiles pour lesquelles Lume n\'a aucun champ.',
+          items: {
+            type: 'object',
+            properties: {
+              colonne: { type: 'string' },
+              proposition: { type: 'string', description: 'Nom de champ proposé (snake_case) ou catégorie à importer.' },
+              besoin: { type: 'string', description: 'Ce que l\'importeur devrait en faire.' },
+            },
+            required: ['colonne', 'proposition', 'besoin'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['nature_fichier', 'colonnes', 'manques'],
+      additionalProperties: false,
+    },
+  };
+}
 
 export async function proposerMappings(admin: Admin, migration: MigrationRow, p: {
   fileName: string; entity: TargetEntity; sourceCrm: string;
-  colonnes: Array<{ position: number; header: string; detected_type: string | null; samples: unknown[] }>;
-}): Promise<{ verdicts: VerdictColonne[]; cost_cents: number | null }> {
+  colonnes: ColonneModele[];
+}): Promise<{ verdicts: VerdictColonne[]; manques: ManqueBot[]; nature: string | null; modele: string | null; cost_cents: number | null }> {
   const champs = FIELD_CATALOG[p.entity] ?? [];
-  if (!process.env.ANTHROPIC_API_KEY || champs.length === 0 || p.colonnes.length === 0) return { verdicts: [], cost_cents: null };
+  const vide = { verdicts: [] as VerdictColonne[], manques: [] as ManqueBot[], nature: null, modele: null, cost_cents: null };
+  if (!process.env.ANTHROPIC_API_KEY || champs.length === 0 || !p.colonnes.some((c) => c.aDecider)) return vide;
   const catalogue = champs.map((c) => `- ${c.field} (${c.labelFr}; types : ${c.types.join('/')})`).join('\n');
-  const colonnes = p.colonnes.map((c) => `#${c.position} « ${c.header} » type=${c.detected_type ?? '?'} exemples=${JSON.stringify(c.samples.slice(0, 5))}`).join('\n');
+  const colonnes = p.colonnes.map((c) => `#${c.position} « ${c.header} » type=${c.detected_type ?? '?'} exemples=${JSON.stringify(c.samples.slice(0, 5))} · ${c.etat}`).join('\n');
+  const aDecider = p.colonnes.filter((c) => c.aDecider).map((c) => `#${c.position}`).join(', ');
   const debut = Date.now();
-  try {
-    const res = await clientAnthropic().messages.create({
-      model: MODELE,
-      max_tokens: 2000,
-      system: [{
-        type: 'text',
-        cache_control: { type: 'ephemeral', ttl: '1h' },
-        text: `Tu fais correspondre les colonnes d'un export CSV d'un ancien CRM (entreprise de services au Québec) aux champs de Lume. Les exemples sont MASQUÉS (formes, pas les valeurs). Règles : un champ du catalogue ou null, jamais un champ inventé ; confidence honnête entre 0 et 1 (0,9+ seulement si l'en-tête ET les exemples concordent) ; en cas de doute, null avec jusqu'à 3 candidats du catalogue ; une même cible ne va pas à deux colonnes sauf champs répétables (phone / phone_secondary, address / city). Entité cible : ${p.entity}. CRM source : ${p.sourceCrm}.\n\nCatalogue :\n${catalogue}`,
-      }],
-      tools: [{
-        name: 'proposer',
-        description: 'Les correspondances proposées, une par colonne.',
-        input_schema: {
-          type: 'object',
-          properties: {
-            colonnes: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  position: { type: 'integer' },
-                  field: { type: ['string', 'null'] },
-                  confidence: { type: 'number' },
-                  raison: { type: 'string' },
-                  candidats: { type: 'array', items: { type: 'string' } },
-                },
-                required: ['position', 'field', 'confidence'],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: ['colonnes'],
-          additionalProperties: false,
-        },
-      }],
-      tool_choice: { type: 'tool', name: 'proposer' },
-      messages: [{ role: 'user', content: `Fichier « ${p.fileName} ». Colonnes :\n${colonnes}` }],
-    });
-    const appel = res.content.find((b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use');
-    const verdicts = validerVerdicts(appel?.input ?? null, champs);
-    // Un verdict qui ne passe pas le schéma est jeté (jamais une action devinée) ; on garde une trace pour comprendre.
-    if (!verdicts.length) logger.warn('[migration-bot] verdicts refusés par le schéma', { migrationId: migration.id, fichier: p.fileName, brut: JSON.stringify(appel?.input ?? null).slice(0, 600) });
-    const cout = coutEnCents(res.model, res.usage as any);
-    void journaliserTrace(admin, {
-      orgId: migration.org_id, userId: null, canal: 'migration', origine: 'api', enonce: `mapping ${p.fileName}`, etage: 6,
-      action: 'bot_mapping', params: { fichier: p.fileName, entite: p.entity, colonnes: p.colonnes.length }, outils: [], resultat: verdicts.length ? 'ok' : 'erreur',
-      model: res.model, usage: { input_tokens: res.usage.input_tokens, cache_5m: 0, cache_1h: res.usage.cache_creation_input_tokens ?? 0, cache_lu: res.usage.cache_read_input_tokens ?? 0, output_tokens: res.usage.output_tokens },
-      costCents: cout, dureeMs: Date.now() - debut,
-    });
-    return { verdicts, cost_cents: cout };
-  } catch (err: any) {
-    logger.error('[migration-bot] proposition de mappings ratée', { error: err?.message || String(err), migrationId: migration.id });
-    return { verdicts: [], cost_cents: null };
+  // Le prompt système est STABLE (cache 1 h) : règles + sémantique de l'entité + catalogue. Rien de variable avant le point de cache.
+  const systeme = `Tu es le bot de migration de Lume CRM (entreprises de services au Québec). Tu fais correspondre les colonnes d'un export CSV d'un ancien CRM aux champs de Lume, avec la rigueur d'un développeur qui connaît l'importeur. Les exemples sont MASQUÉS (formes, pas les valeurs).
+
+${REGLES_LUME}
+
+SÉMANTIQUE DE L'ENTITÉ CIBLE (${p.entity})
+${semantiquePour(p.entity)}
+
+CATALOGUE (seuls champs permis dans « field ») :
+${catalogue}
+
+RÉPONSE : appelle l'outil « ${OUTIL_PROPOSER} » exactement une fois, avec un verdict par colonne « à décider » (les colonnes fixées par un humain sont montrées pour le contexte : ne les redonne pas, mais tiens-en compte pour ne pas viser un champ déjà pris). Une même cible ne va jamais à deux colonnes. Quand la proposition actuelle du moteur est dangereuse, mets field=null et explique dans « alerte ». Déclare les « manques ». Pas de texte hors de l'outil.`;
+  const messages: Anthropic.Messages.MessageParam[] = [{ role: 'user', content: `Fichier « ${p.fileName} » (CRM source : ${p.sourceCrm}). Colonnes à décider : ${aDecider}.\nToutes les colonnes du fichier, dans l'ordre :\n${colonnes}` }];
+  let derniereErreur: string | null = null;
+  for (const modele of MODELES_BOT) {
+    try {
+      const res = await clientAnthropic().beta.messages.create({
+        model: modele,
+        max_tokens: 16000,
+        // Refus de sécurité côté serveur → repli automatique sur un autre modèle dans le même appel.
+        betas: ['server-side-fallback-2026-07-01'],
+        fallbacks: 'default',
+        output_config: { effort: EFFORT_BOT },
+        system: [{ type: 'text', cache_control: { type: 'ephemeral', ttl: '1h' }, text: systeme }],
+        tools: [outilProposer() as Anthropic.Beta.Messages.BetaTool],
+        tool_choice: { type: 'auto' },
+        messages: messages as Anthropic.Beta.Messages.BetaMessageParam[],
+      });
+      if (res.stop_reason === 'refusal') { derniereErreur = `refus du modèle ${modele}`; continue; }
+      const appel = res.content.find((b): b is Anthropic.Beta.Messages.BetaToolUseBlock => b.type === 'tool_use' && b.name === OUTIL_PROPOSER);
+      const brut = appel?.input ?? null;
+      const verdicts = validerVerdicts(brut, champs);
+      if (!verdicts.length) logger.warn('[migration-bot] verdicts refusés par le schéma', { migrationId: migration.id, fichier: p.fileName, modele, brut: JSON.stringify(brut).slice(0, 600) });
+      const cout = coutEnCents(res.model, res.usage as any);
+      void journaliserTrace(admin, {
+        orgId: migration.org_id, userId: null, canal: 'migration', origine: 'api', enonce: `mapping ${p.fileName}`, etage: 6,
+        action: 'bot_mapping', params: { fichier: p.fileName, entite: p.entity, colonnes: p.colonnes.length }, outils: [], resultat: verdicts.length ? 'ok' : 'erreur',
+        model: res.model, usage: { input_tokens: res.usage.input_tokens, cache_5m: 0, cache_1h: res.usage.cache_creation_input_tokens ?? 0, cache_lu: res.usage.cache_read_input_tokens ?? 0, output_tokens: res.usage.output_tokens },
+        costCents: cout, dureeMs: Date.now() - debut,
+      });
+      return { verdicts, manques: validerManques(brut, p.fileName, p.entity), nature: validerNature(brut), modele: res.model, cost_cents: cout };
+    } catch (err: any) {
+      derniereErreur = err?.message || String(err);
+      const statut = Number(err?.status ?? 0);
+      // Modèle non disponible pour ce compte (400 rétention/accès, 404 inconnu) → modèle suivant ; toute autre erreur = arrêt.
+      if (statut === 400 || statut === 404) { logger.warn('[migration-bot] modèle indisponible, repli', { modele, statut, error: derniereErreur }); continue; }
+      break;
+    }
   }
+  logger.error('[migration-bot] proposition de mappings ratée', { error: derniereErreur, migrationId: migration.id, fichier: p.fileName });
+  return vide;
+}
+
+// ── Audit : texte à coller à Claude Code ──────────────────────────
+
+/**
+ * Le rapport d'une passe, en markdown prêt à coller dans Claude Code :
+ * Claude y lit ce que le bot a fait, ce qu'un humain doit trancher, et ce
+ * qui manque à Lume (champs / catégories à construire). Pur, sans PII :
+ * seuls des en-têtes de colonnes, des noms de fichiers et des libellés.
+ */
+export function construireTextePourClaude(r: RapportBot, m: Pick<MigrationRow, 'id' | 'source_crm' | 'org_id'>): string {
+  const a = r.audit;
+  const L: string[] = [];
+  L.push(`# Audit du bot de migration — ${m.source_crm} — migration ${m.id}`);
+  L.push(`Passe du ${r.fin.slice(0, 16).replace('T', ' ')} (${r.declencheur}), modèle ${a.modele ?? 'aucun appel'}, statut ${r.statut_avant} → ${r.statut_apres}. Arrêt : ${r.arret || '—'}.`);
+  L.push('');
+  L.push('## 1. Fichiers');
+  if (!a.fichiers.length) L.push('Aucun fichier examiné dans cette passe.');
+  for (const f of a.fichiers) L.push(`- ${f.nom} → entité ${f.entite ?? 'aucune'}${f.nature ? ` — ${f.nature}` : ''}`);
+  L.push('');
+  L.push('## 2. Corrections appliquées par le bot (déjà faites dans Correspondances)');
+  if (!a.corrections.length) L.push('Aucune.');
+  for (const c of a.corrections) L.push(`- ${c.fichier} · « ${c.colonne} » : ${c.avant ?? 'rien'} → ${c.apres ?? 'ne pas importer'} — ${c.pourquoi}`);
+  L.push('');
+  L.push('## 3. Alertes des gardes (mises à « ne pas importer », valeur conservée dans les notes)');
+  if (!a.alertes.length) L.push('Aucune.');
+  for (const al of a.alertes) L.push(`- ${al.fichier} · « ${al.colonne} » : ${al.message} → ${al.action}`);
+  L.push('');
+  L.push('## 4. À trancher par un humain (laissées telles quelles)');
+  if (!a.a_verifier.length) L.push('Rien.');
+  for (const v of a.a_verifier) L.push(`- ${v.fichier} · « ${v.colonne} » : actuellement ${v.actuel ?? 'ne pas importer'}${v.candidats.length ? ` ; candidats : ${v.candidats.join(' / ')}` : ''} — ${v.pourquoi}`);
+  L.push('');
+  L.push('## 5. Manques dans Lume (à construire dans l\'importeur)');
+  if (!a.manques.length) L.push('Aucun.');
+  for (const mq of a.manques) L.push(`- ${mq.fichier} · « ${mq.colonne} » (entité ${mq.entite}) : proposer « ${mq.proposition} » — ${mq.besoin}`);
+  L.push('');
+  L.push('## 6. Comment procéder');
+  L.push('1. Dans /admin/migrations › Correspondances, vérifier les lignes de la section 4 et confirmer ou corriger.');
+  L.push('2. Coller ce texte à Claude Code avec : « applique l\'audit ». Pour chaque manque de la section 5, Claude ajoute le champ au catalogue (server/lib/migration/mapping.ts), la normalisation (normalize.ts), l\'écriture dans buildEntityRow (importer.ts), les synonymes de détection et les tests, puis pousse sur main.');
+  L.push('3. Une fois déployé, relancer « Confier au bot » : les nouveaux champs sont proposés automatiquement, puis l\'import test.');
+  return L.join('\n');
 }
 
 // ── Le bot ────────────────────────────────────────────────────────
@@ -347,53 +529,92 @@ async function appliquerGabarits(admin: Admin, m: MigrationRow, acteur: ActeurMi
   return applique;
 }
 
-/** Étape 3 : un appel modèle par fichier pour les colonnes encore à vérifier. */
+/**
+ * Étape 3 : un appel modèle par fichier, sur TOUTES les colonnes non tranchées
+ * par un humain (« suggested » comme « needs_review ») — le moteur se trompe
+ * aussi à 85 %. Le modèle voit le fichier entier (colonnes fixées incluses)
+ * pour repérer les doublons de cible ; les gardes tranchent ce qui est
+ * toujours faux ; l'audit garde la trace de chaque changement.
+ */
 async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot, mode: ModeBot): Promise<{ confirmees: number; questions: number; conservees: number }> {
   const { data: files } = await admin.from('migration_files').select('id, original_name, category_detected').eq('migration_id', m.id).eq('kind', 'data').is('deleted_at', null).eq('parse_status', 'parsed');
   let confirmees = 0, questions = 0, conservees = 0;
+  const { data: ouvertes } = await admin.from('migration_issues').select('details_masked').eq('migration_id', m.id).eq('type', TYPE_QUESTION_COLONNE).is('resolved_at', null);
+  const dejaDemandes = new Set((ouvertes ?? []).map((i: any) => String(i.details_masked?.mapping_id ?? '')));
   for (const f of files ?? []) {
-    const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence').eq('file_id', f.id).eq('status', 'needs_review');
-    if (!maps?.length) continue;
-    // Déjà une question ouverte pour cette colonne → on attend le client, pas de nouvel appel.
-    const { data: ouvertes } = await admin.from('migration_issues').select('details_masked').eq('migration_id', m.id).eq('type', TYPE_QUESTION_COLONNE).is('resolved_at', null);
-    const dejaDemandes = new Set((ouvertes ?? []).map((i: any) => String(i.details_masked?.mapping_id ?? '')));
-    const aTraiter = maps.filter((mp) => !dejaDemandes.has(mp.id));
-    if (!aTraiter.length) continue;
     const cat = f.category_detected as MigrationCategory | null;
     const entity = entityForCategory(cat);
-    if (!entity) continue;
-    const { data: cols } = await admin.from('migration_file_columns').select('id, position, header, detected_type, samples_masked').eq('file_id', f.id);
-    const colonnes = aTraiter.map((mp) => cols?.find((c) => c.id === mp.column_id)).filter(Boolean).map((c: any) => ({ position: c.position, header: c.header, detected_type: c.detected_type, samples: Array.isArray(c.samples_masked) ? c.samples_masked : [] }));
-    const { verdicts, cost_cents } = await proposerMappings(admin, m, { fileName: f.original_name, entity, sourceCrm: m.source_crm, colonnes });
-    if (cost_cents !== null) rapport.cout_cents = (rapport.cout_cents ?? 0) + cost_cents;
+    const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence, target_field, decided_role').eq('file_id', f.id);
+    const { data: cols } = await admin.from('migration_file_columns').select('id, position, header, detected_type, samples_masked').eq('file_id', f.id).order('position', { ascending: true });
+    if (!entity) {
+      // Catégorie sans entité cible (lignes, paiements, notes…) : rien à mapper, mais un manque à déclarer.
+      rapport.audit.fichiers.push({ nom: f.original_name, entite: null, nature: 'catégorie non importée en v1' });
+      rapport.audit.manques.push({ fichier: f.original_name, colonne: '(fichier entier)', entite: cat ?? 'inconnue', proposition: `import de la catégorie « ${cat ?? '?'} »`, besoin: 'Ce fichier est classé mais aucune entité Lume ne le reçoit : à construire dans l\'importeur (IMPORT_ORDER + TABLE_BY_ENTITY + buildEntityRow).' });
+      continue;
+    }
     const champs = FIELD_CATALOG[entity] ?? [];
+    const libelle = (field: string | null | undefined) => (field ? champs.find((c) => c.field === field)?.labelFr ?? field : null);
+    const aTraiter = (maps ?? []).filter((mp) => (mp.status === 'needs_review' || mp.status === 'suggested') && !dejaDemandes.has(mp.id));
+    if (!aTraiter.length || !cols?.length) continue;
+    const mapParCol = new Map((maps ?? []).map((mp) => [mp.column_id, mp]));
+    const colonnes: ColonneModele[] = cols.map((c: any) => {
+      const mp = mapParCol.get(c.id);
+      const decider = !!mp && aTraiter.some((x) => x.id === mp.id);
+      const etat = !mp ? 'ignoré' : decider
+        ? (mp.target_field ? `à décider (le moteur propose : ${mp.target_field}, ${mp.confidence} %)` : 'à décider (le moteur ne propose rien)')
+        : mp.status === 'rejected' ? 'fixé : ne pas importer' : `fixé par un humain : ${mp.target_field ?? '—'}`;
+      return { position: c.position, header: c.header, detected_type: c.detected_type, samples: Array.isArray(c.samples_masked) ? c.samples_masked : [], etat, aDecider: decider };
+    });
+    const fixes = cols.flatMap((c: any) => {
+      const mp = mapParCol.get(c.id);
+      return mp && mp.target_field && (mp.status === 'confirmed' || mp.status === 'corrected') ? [{ position: c.position as number, field: mp.target_field as string }] : [];
+    });
+    const { verdicts: bruts, manques, nature, modele, cost_cents } = await proposerMappings(admin, m, { fileName: f.original_name, entity, sourceCrm: m.source_crm, colonnes });
+    if (cost_cents !== null) rapport.cout_cents = (rapport.cout_cents ?? 0) + cost_cents;
+    if (modele) rapport.audit.modele = modele;
+    const gardes = appliquerGardes({ fichier: f.original_name, entity, colonnes, verdicts: bruts, champs, fixes });
+    const { alertes, nature: natureGarde } = gardes;
+    const verdicts: VerdictColonne[] = gardes.verdicts.map((v) => ({ position: v.position, field: v.field, confidence: v.confidence, raison: v.raison ?? '', candidats: v.candidats ?? [], ...(v.alerte ? { alerte: v.alerte } : {}) }));
+    rapport.audit.fichiers.push({ nom: f.original_name, entite: entity, nature: natureGarde ?? nature });
+    rapport.audit.alertes.push(...alertes);
+    rapport.audit.manques.push(...manques);
     for (const v of verdicts) {
-      const col: any = cols?.find((c) => c.position === v.position);
+      const col: any = cols.find((c: any) => c.position === v.position);
       const mp = col ? aTraiter.find((x) => x.column_id === col.id) : null;
       if (!col || !mp) continue;
-      const choix = deciderMapping(v, mode);
-      if (choix === 'confirmer') {
-        await admin.from('migration_field_mappings').update({ target_entity: entity, target_field: v.field, status: 'confirmed', confidence: Math.round(v.confidence * 100), reason: `bot : ${v.raison}`.slice(0, 200), decided_by: null, decided_role: 'assistant', decided_at: new Date().toISOString() }).eq('id', mp.id);
-        await audit(admin, m, acteur, 'bot.mapping.confirme', `mapping:${mp.id}`, { field: v.field, confidence: v.confidence }, rapport, { etape: 'correspondances', cible: `${f.original_name} · ${col.header}`, decision: `→ ${v.field} (${Math.round(v.confidence * 100)} %)`, detail: v.raison });
+      const actuel = (mp.target_field as string | null) ?? null;
+      const choix = deciderColonne({ statut: mp.status, actuel, verdict: v, mode });
+      const cible = `${f.original_name} · ${col.header}`;
+      if (choix === 'confirmer' || choix === 'corriger') {
+        await admin.from('migration_field_mappings').update({ target_entity: entity, target_field: v.field, status: choix === 'corriger' ? 'corrected' : 'confirmed', confidence: Math.round(v.confidence * 100), reason: `bot : ${v.raison}`.slice(0, 200), decided_by: null, decided_role: 'assistant', decided_at: new Date().toISOString() }).eq('id', mp.id);
+        await audit(admin, m, acteur, choix === 'corriger' ? 'bot.mapping.corrige' : 'bot.mapping.confirme', `mapping:${mp.id}`, { field: v.field, avant: actuel, confidence: v.confidence }, rapport, { etape: 'correspondances', cible, decision: `${choix === 'corriger' ? `${libelle(actuel) ?? '—'} → ` : '→ '}${libelle(v.field)} (${Math.round(v.confidence * 100)} %)`, detail: v.raison });
+        if (choix === 'corriger') rapport.audit.corrections.push({ fichier: f.original_name, colonne: col.header, avant: libelle(actuel), apres: libelle(v.field), pourquoi: v.alerte ?? v.raison });
+        else if (v.alerte) rapport.audit.alertes.push({ fichier: f.original_name, colonne: col.header, message: v.alerte, action: `importée vers « ${libelle(v.field)} » quand même : à surveiller au dry-run` });
         confirmees += 1;
         continue;
       }
       const candidats = [...(v.field ? [v.field] : []), ...v.candidats].filter((x, i, a) => a.indexOf(x) === i).slice(0, 3)
-        .map((field) => ({ field, label: champs.find((c) => c.field === field)?.labelFr ?? field }));
-      if (choix === 'conserver') {
-        await conserverColonne(admin, m, acteur, rapport, { mappingId: mp.id, columnId: col.id, header: col.header, fichier: f.original_name, candidats, exemples: (col.samples_masked ?? []).slice(0, 3), raison: v.raison, confidence: v.confidence });
-        conservees += 1;
-      } else {
-        const options = [...candidats.map((c) => c.label), OPTION_IGNORER];
-        const { data: issue } = await admin.from('migration_issues').insert({
-          migration_id: m.id, type: TYPE_QUESTION_COLONNE, severity: 'warning', column_id: col.id, client_visible: true,
-          title: `Que contient la colonne « ${col.header} » du fichier ${f.original_name} ?`,
-          details_masked: { mapping_id: mp.id, column_id: col.id, header: col.header, candidats, exemples: (col.samples_masked ?? []).slice(0, 3) },
-          options,
-        }).select('id').single();
-        await audit(admin, m, acteur, 'bot.mapping.question', `mapping:${mp.id}`, { candidats: candidats.map((c) => c.field), confidence: v.confidence }, rapport, { etape: 'correspondances', cible: `${f.original_name} · ${col.header}`, decision: 'question au client', detail: candidats.map((c) => c.label).join(' / ') || 'aucun candidat' });
-        if (issue) questions += 1;
+        .map((field) => ({ field, label: libelle(field) ?? field }));
+      if (choix === 'laisser') {
+        rapport.audit.a_verifier.push({ fichier: f.original_name, colonne: col.header, actuel: libelle(actuel), candidats: candidats.map((c) => c.label), pourquoi: v.raison || 'le modèle n\'est pas assez sûr pour trancher' });
+        continue;
       }
+      if (choix === 'conserver') {
+        const pourquoi = v.alerte ?? v.raison;
+        await conserverColonne(admin, m, acteur, rapport, { mappingId: mp.id, columnId: col.id, header: col.header, fichier: f.original_name, candidats, exemples: (col.samples_masked ?? []).slice(0, 3), raison: pourquoi, confidence: v.confidence });
+        if (actuel) rapport.audit.corrections.push({ fichier: f.original_name, colonne: col.header, avant: libelle(actuel), apres: null, pourquoi });
+        conservees += 1;
+        continue;
+      }
+      const options = [...candidats.map((c) => c.label), OPTION_IGNORER];
+      const { data: issue } = await admin.from('migration_issues').insert({
+        migration_id: m.id, type: TYPE_QUESTION_COLONNE, severity: 'warning', column_id: col.id, client_visible: true,
+        title: `Que contient la colonne « ${col.header} » du fichier ${f.original_name} ?`,
+        details_masked: { mapping_id: mp.id, column_id: col.id, header: col.header, candidats, exemples: (col.samples_masked ?? []).slice(0, 3) },
+        options,
+      }).select('id').single();
+      await audit(admin, m, acteur, 'bot.mapping.question', `mapping:${mp.id}`, { candidats: candidats.map((c) => c.field), confidence: v.confidence }, rapport, { etape: 'correspondances', cible, decision: 'question au client', detail: candidats.map((c) => c.label).join(' / ') || 'aucun candidat' });
+      if (issue) questions += 1;
     }
   }
   return { confirmees, questions, conservees };
@@ -551,7 +772,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   const acteur: ActeurMigration = { id: opts.acteurId, role: 'assistant' };
   const debut = new Date().toISOString();
   const m0 = await lireMigration(admin, migrationId);
-  const rapport: RapportBot = { migration_id: migrationId, declencheur: opts.declencheur, debut, fin: debut, statut_avant: m0?.status ?? 'inconnue', statut_apres: m0?.status ?? 'inconnue', decisions: [], questions_posees: 0, arret: '', cout_cents: null };
+  const rapport: RapportBot = { migration_id: migrationId, declencheur: opts.declencheur, debut, fin: debut, statut_avant: m0?.status ?? 'inconnue', statut_apres: m0?.status ?? 'inconnue', decisions: [], questions_posees: 0, arret: '', cout_cents: null, audit: auditVide() };
   if (!m0) { rapport.arret = 'migration introuvable'; rapport.fin = new Date().toISOString(); return rapport; }
   const m = m0;
   const mode = modeBot(m);
@@ -662,6 +883,7 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   }
   rapport.fin = new Date().toISOString();
   rapport.statut_apres = (await lireMigration(admin, migrationId))?.status ?? m.status;
+  rapport.audit.texte_pour_claude = construireTextePourClaude(rapport, m);
   await admin.from('data_migrations').update({ bot_derniere_execution: rapport.fin, bot_dernier_rapport: rapport as unknown as Record<string, unknown> }).eq('id', migrationId);
   await touchMigrationActivity(admin, migrationId);
   await logMigrationAudit(admin, { migrationId, action: 'bot.passe', actorId: opts.acteurId, actorRole: 'assistant', meta: { declencheur: opts.declencheur, decisions: rapport.decisions.length, arret: rapport.arret, statut: `${rapport.statut_avant} → ${rapport.statut_apres}`, cout_cents: rapport.cout_cents } });

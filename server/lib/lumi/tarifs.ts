@@ -16,6 +16,7 @@ export interface TarifModele {
 }
 
 export const TARIFS: Record<string, TarifModele> = {
+  'claude-fable-5-1': { input: 10, output: 50, cacheRead: 1,   cacheWrite: 20 },
   'claude-opus-5':   { input: 5,  output: 25, cacheRead: 0.5,  cacheWrite: 10 },
   'claude-sonnet-5': { input: 2,  output: 10, cacheRead: 0.2,  cacheWrite: 4 },
   'claude-haiku-4-5': { input: 1, output: 5,  cacheRead: 0.1,  cacheWrite: 2 },

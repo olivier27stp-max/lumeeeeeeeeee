@@ -11,11 +11,12 @@ import { useId, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { captureClientException } from '../lib/sentry';
 import {
   ArrowLeft, Copy, Flag, Loader2, Plus, RefreshCw, Search, ShieldCheck, Database,
 } from 'lucide-react';
 import { useTranslation } from '../i18n';
-import {
+import { type AuditBotMigration,
   checkPlatformAdmin, listMigrations, createMigration, getMigrationDetail, setMigrationStatus,
   generateInvitation, revokeInvitation, extendInvitation, decideMapping, resolveIssue,
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
@@ -607,6 +608,44 @@ function StaffCard({ migrationId }: { migrationId: string }) {
   );
 }
 
+/** L'audit d'une passe : corrections faites, alertes des gardes, à trancher, manques dans Lume — et le texte à coller à Claude Code. */
+function AuditBot({ audit }: { audit: AuditBotMigration }) {
+  const [ouvert, setOuvert] = useState(false);
+  const copier = async () => {
+    try { await navigator.clipboard.writeText(audit.texte_pour_claude); toast.success('Audit copié : collez-le à Claude Code avec « applique l\'audit »'); }
+    catch (err) { captureClientException(err, { where: 'AuditBot.copier' }); toast.error('Copie impossible : sélectionnez le texte ci-dessous'); setOuvert(true); }
+  };
+  const n = audit.corrections.length + audit.alertes.length + audit.a_verifier.length + audit.manques.length;
+  const Bloc = ({ titre, items, vide }: { titre: string; items: string[]; vide: string }) => (
+    <div>
+      <p className="text-[12px] font-semibold text-text-primary">{titre} <span className="text-text-tertiary font-normal">({items.length})</span></p>
+      {items.length ? <ul className="mt-1 space-y-0.5 text-[12px] text-text-secondary list-disc pl-4">{items.map((t, i) => <li key={i}>{t}</li>)}</ul> : <p className="text-[12px] text-text-tertiary">{vide}</p>}
+    </div>
+  );
+  return (
+    <div className="mt-4 rounded-lg border border-outline bg-surface-secondary/40 p-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-[13px] font-bold text-text-primary">Audit de la passe{audit.modele ? <span className="text-text-tertiary font-normal"> · {audit.modele}</span> : null}</p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setOuvert((v) => !v)} className="h-8 px-3 rounded-md text-[12.5px] border border-outline bg-surface-card text-text-secondary hover:bg-surface-secondary">{ouvert ? 'Masquer le texte' : 'Voir le texte'}</button>
+          <button type="button" onClick={copier} disabled={!audit.texte_pour_claude} className="h-8 px-3 rounded-md text-[12.5px] font-medium bg-[#d8d0c2] text-black hover:bg-[#cabfad] disabled:opacity-50">Copier pour Claude</button>
+        </div>
+      </div>
+      {n === 0 && audit.fichiers.length === 0 ? <p className="mt-2 text-[12px] text-text-tertiary">Rien à signaler dans cette passe.</p> : (
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Bloc titre="Corrections faites" vide="Aucune." items={audit.corrections.map((c) => `${c.fichier} · « ${c.colonne} » : ${c.avant ?? 'rien'} → ${c.apres ?? 'ne pas importer'} — ${c.pourquoi}`)} />
+          <Bloc titre="Alertes des gardes" vide="Aucune." items={audit.alertes.map((a) => `${a.fichier} · « ${a.colonne} » : ${a.message}`)} />
+          <Bloc titre="À trancher par vous" vide="Rien." items={audit.a_verifier.map((v) => `${v.fichier} · « ${v.colonne} » : ${v.actuel ?? 'ne pas importer'}${v.candidats.length ? ` (candidats : ${v.candidats.join(' / ')})` : ''} — ${v.pourquoi}`)} />
+          <Bloc titre="Manques dans Lume (pour Claude)" vide="Aucun." items={audit.manques.map((m) => `${m.fichier} · « ${m.colonne} » → ${m.proposition} : ${m.besoin}`)} />
+        </div>
+      )}
+      {ouvert && (
+        <textarea readOnly aria-label="Audit à coller à Claude Code" value={audit.texte_pour_claude} className="mt-3 w-full h-64 p-2 text-[12px] font-mono rounded-md border border-outline bg-surface-card text-text-primary" />
+      )}
+    </div>
+  );
+}
+
 /** Le bot de migration : actif ou non, dernière passe, ses décisions. L'approbation et l'import final restent humains. */
 function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
   const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
@@ -654,6 +693,7 @@ function CarteBot({ m, onChanged }: { m: any; onChanged: () => void }) {
               ))}
             </ul>
           )}
+          {rapport.audit && <AuditBot audit={rapport.audit} />}
         </div>
       ) : (
         <p className="mt-3 text-[12.5px] text-text-tertiary">Aucune passe encore. « Confier au bot » lance une passe maintenant ; « Activer » le fait revenir tout seul.</p>
