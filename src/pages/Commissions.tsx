@@ -521,7 +521,13 @@ function RatesPanel() {
                       </div>
                     </td>
                     <td className="px-5 py-2.5 text-right text-sm font-semibold text-text-primary tabular-nums">
-                      {planRateLabel(plan, isFr)}
+                      {plan
+                        ? planRateLabel(plan, isFr)
+                        : planParDefautValide
+                          ? `${planRateLabel(rules.find((r) => r.id === defaultRuleId), isFr)} ${isFr ? '(par défaut)' : '(default)'}`
+                          : mode === 'hourly'
+                            ? <span className="font-normal text-text-muted">{isFr ? 'Aucune commission' : 'No commission'}</span>
+                            : <span className="text-amber-700 dark:text-amber-300">{isFr ? 'Aucun plan' : 'No plan'}</span>}
                     </td>
                   </tr>
                 );
