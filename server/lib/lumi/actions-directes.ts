@@ -217,6 +217,94 @@ function detecterExtension(s: string, brut: string, mots: string[]): ActionDirec
   return null;
 }
 
+/**
+ * Une extraction du routeur (Haiku, 0,15 ¢) devient la MÊME action qu'un motif
+ * strict : mêmes résolutions (client unique, doublon, date simple), même carte.
+ * Pur : null si les champs obligatoires du genre manquent.
+ */
+type ChampsExtraction = { genre: string; client?: string; prenom?: string; nom?: string; telephone?: string; courriel?: string; adresse?: string; ville?: string; quand?: string; heure?: string; titre?: string; sujet?: string; texte?: string; numero?: string };
+
+/** Les mots d'un champ (≥ 3 lettres, sans accents) sont-ils tous dans le message ? Un champ vide passe. */
+function vientDuMessage(champ: string | undefined, message: string, tolerance = 0): boolean {
+  if (!champ) return true;
+  const mots = normaliser(champ).filter((m) => m.length >= 3);
+  if (!mots.length) return true;
+  const dans = new Set(normaliser(message));
+  const manquants = mots.filter((m) => !dans.has(m));
+  return manquants.length <= tolerance;
+}
+
+/**
+ * Fidélité : rien d'extrait ne doit être inventé ni réécrit. Un texte dicté est
+ * repris mot pour mot ; un nom, un client, un titre, une adresse viennent du
+ * message. Un placeholder (« <UNKNOWN> », « inconnu ») ou une réécriture
+ * (« qu'on arrive » → « on arrive ») rend l'extraction au modèle.
+ */
+export function extractionFidele(e: ChampsExtraction, message: string): boolean {
+  const champs = [e.client, e.prenom, e.nom, e.telephone, e.courriel, e.adresse, e.ville, e.sujet, e.texte, e.titre];
+  if (champs.some((c) => c && /<|>|unknown|inconnu|n\/a|\?\?/i.test(c))) return false;
+  if (!vientDuMessage(e.client, message) || !vientDuMessage(e.prenom, message) || !vientDuMessage(e.nom, message)) return false;
+  if (!vientDuMessage(e.adresse, message) || !vientDuMessage(e.ville, message)) return false;
+  if (e.telephone && !normaliser(message).join('').includes(normaliser(e.telephone).join(''))) return false;
+  if (e.courriel && !message.toLowerCase().includes(e.courriel.toLowerCase())) return false;
+  // Message au client (texto, courriel) : les mots exacts, dictés après « : », entre guillemets ou après « mot pour mot ».
+  // « texte à Linda qu'on arrive » contient « on arrive » mais n'est pas dicté : réécrit par Haiku → modèle.
+  if (e.genre === 'texto' || e.genre === 'courriel') {
+    if (!e.texte) return false;
+    const dicte = /(?:mot pour mot|textuellement|exactement)\s*[:,]?\s*(.+)$/i.exec(message) ?? /[:«"“]\s*(.+?)\s*[»"”]?\s*$/.exec(message);
+    if (!dicte) return false;
+    const segment = normaliser(dicte[1]).join(' ');
+    const voulu = normaliser(e.sujet && e.genre === 'courriel' ? `${e.sujet} ${e.texte}` : e.texte).join(' ');
+    if (segment !== voulu && segment !== normaliser(e.texte).join(' ')) return false;
+  }
+  // Note interne : les mots viennent du message (l'ordre et les mots creux ne comptent pas).
+  if (e.genre === 'note_client' && !vientDuMessage(e.texte, message)) return false;
+  if (e.sujet && !vientDuMessage(e.sujet, message)) return false;
+  // Titre : Haiku peut normaliser (« commander du sel » ← « rappelle-moi de commander du sel ») ; un mot d'écart toléré.
+  if (e.titre && !vientDuMessage(e.titre, message, 1)) return false;
+  return true;
+}
+
+export function actionDepuisExtraction(e: ChampsExtraction, message?: string): ActionDirecte | null {
+  if (message !== undefined && !extractionFidele(e, message)) return null;
+  const nomClient = e.client?.trim();
+  switch (e.genre) {
+    case 'job_chez':
+      if (!nomClient || nomClient.split(/\s+/).length < 1) return null;
+      return { id: 'job-chez', genre: 'carte', tool: 'create_job', args: { title: e.titre?.trim() || 'Job' }, cible: { nom: nomClient, quand: e.quand, heure: e.heure } };
+    case 'client':
+    case 'prospect': {
+      if (!e.prenom || !e.nom) return null;
+      const args: Record<string, any> = { first_name: e.prenom.trim(), last_name: e.nom.trim() };
+      if (e.telephone) args.phone = e.telephone.trim();
+      if (e.courriel) args.email = e.courriel.trim().toLowerCase();
+      if (e.adresse) args.address = e.adresse.trim();
+      if (e.ville) args.city = e.ville.trim();
+      return { id: e.genre === 'client' ? 'client-cree' : 'prospect-cree', genre: 'carte', tool: e.genre === 'client' ? 'create_client' : 'create_lead', args, cible: { nom: `${args.first_name} ${args.last_name}` } };
+    }
+    case 'texto':
+      if (!nomClient || !e.texte) return null;
+      return { id: 'sms-dicte', genre: 'carte', tool: 'send_sms', args: { message_text: e.texte.trim() }, cible: { nom: nomClient } };
+    case 'courriel':
+      if (!nomClient || !e.texte) return null;
+      return { id: 'courriel-dicte', genre: 'carte', tool: 'send_email', args: { subject: e.sujet?.trim() || (e.texte.length > 60 ? e.texte.slice(0, 57).trim() + '…' : e.texte.trim()), message: e.texte.trim() }, cible: { nom: nomClient } };
+    case 'note_client':
+      if (!nomClient || !e.texte) return null;
+      return { id: 'client-note', genre: 'carte', tool: 'add_note', args: { entity_type: 'client', note: e.texte.trim() }, cible: { nom: nomClient } };
+    case 'tache': {
+      if (!e.titre) return null;
+      const q = e.quand ? normaliser(e.quand).join(' ') : '';
+      const texteQuand = /^demain$/.test(q) ? 'demain' : /^(?:aujourd hui|aujourdhui)$/.test(q) ? 'aujourdhui' : undefined;
+      return { id: 'tache-cree', genre: 'carte', tool: 'create_task', args: { title: e.titre.trim().charAt(0).toUpperCase() + e.titre.trim().slice(1) }, cible: { texte: texteQuand } };
+    }
+    case 'report_job':
+      if (!e.numero || !e.quand) return null;
+      return { id: 'job-report', genre: 'carte', tool: 'reschedule_job', args: {}, cible: { numero: e.numero, quand: e.quand, heure: e.heure } };
+    default:
+      return null;
+  }
+}
+
 /** Le message entier correspond-il à une action directe ? Pur, sans base. */
 export function detecterActionDirecte(message: string): ActionDirecte | null {
   const mots = normaliser(message);

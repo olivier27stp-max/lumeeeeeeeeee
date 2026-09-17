@@ -37,6 +37,34 @@ export function modeRouteur(env: NodeJS.ProcessEnv = process.env): ModeRouteur {
 
 const IDS_TOPICS = TOPICS.map((t) => t.id) as [IdTopic, ...IdTopic[]];
 
+/**
+ * Extraction (2026-09-17) : pour UNE écriture simple et complète, Haiku sort
+ * les champs (client, date, heure, titre, texte dicté…) et le CODE bâtit la
+ * carte (actions-directes.ts) — 0,15 ¢ au lieu d'un tour de Sonnet à 1 ¢.
+ * Rien n'est inventé : un champ absent reste absent, et la carte est
+ * confirmée par l'utilisateur comme toutes les autres.
+ */
+export const GENRES_EXTRACTION = ['job_chez', 'client', 'prospect', 'texto', 'courriel', 'note_client', 'tache', 'report_job'] as const;
+export type GenreExtraction = (typeof GENRES_EXTRACTION)[number];
+const texte = z.string().trim().min(1).max(600);
+export const extractionSchema = z.object({
+  genre: z.enum(GENRES_EXTRACTION),
+  client: texte.optional(),
+  prenom: texte.optional(),
+  nom: texte.optional(),
+  telephone: texte.optional(),
+  courriel: texte.optional(),
+  adresse: texte.optional(),
+  ville: texte.optional(),
+  quand: texte.optional(),
+  heure: texte.optional(),
+  titre: texte.optional(),
+  sujet: texte.optional(),
+  texte: z.string().trim().min(1).max(2000).optional(),
+  numero: z.string().regex(/^\d{1,7}$/).optional(),
+}).strict();
+export type Extraction = z.infer<typeof extractionSchema>;
+
 export const verdictSchema = z.object({
   topic: z.enum(IDS_TOPICS),
   action: z.enum(IDS_RACCOURCIS as unknown as [string, ...string[]]).nullable(),
@@ -46,6 +74,7 @@ export const verdictSchema = z.object({
     limit: z.number().int().min(1).max(25).optional(),
   }).strict().default({}),
   confidence: z.number().min(0).max(1),
+  extraction: extractionSchema.nullable().optional(),
 });
 export type Verdict = z.infer<typeof verdictSchema>;
 
@@ -189,6 +218,15 @@ English phrasings (same rules) :
 - "tell me about Marie Tremblay" → clients, action null (nom propre)
 - "late jobs", "jobs behind schedule" → planification, action null (des jobs, pas des factures)
 
+Extraction (champ « extraction », sinon null) — SEULEMENT quand le message est UNE écriture simple dont tous les éléments sont dans la phrase, sans rien deviner ni reformuler :
+- job_chez : « fais-moi une job chez Linda Tremblay jeudi matin pour les vitres » → client « Linda Tremblay », quand « jeudi », heure « 9 » (matin = 9, midi = 12, après-midi = 13, soir = 18 ; sinon l'heure dite), titre « vitres » ; « peux-tu me planifier une job pour Gagnon demain après-midi » → client « Gagnon », quand « demain », heure « 13 » (une formule polie ne change rien) ; sans date → quand absent, la job reste à planifier
+- client / prospect : « ajoute Linda Tremblay comme cliente, son cell c'est 514-555-0199 » → prenom, nom, telephone (courriel, adresse, ville s'ils sont dits)
+- texto / courriel : SEULEMENT si les mots exacts du message sont dictés (« texte à Linda : on arrive », « dis-lui mot pour mot … », guillemets). « texte à Linda qu'on arrive » demande de rédiger → pas d'extraction.
+- note_client : « note sur Linda Tremblay : préfère le matin » → client, texte
+- tache : « rappelle-moi de commander du sel demain », « note de rappeler le fournisseur » → titre « Commander du sel », quand « demain » — c'est une CRÉATION : action null, jamais l'action taches (qui liste)
+- report_job : « déplace la job 34 à lundi 13 h » → numero « 34 », quand « lundi », heure « 13 »
+quand ∈ aujourd'hui | demain | après-demain | lundi…dimanche (+ « prochain ») seulement ; une date chiffrée, « la semaine prochaine », « en octobre » → pas d'extraction. Deux demandes dans la phrase, un nom incomplet pour une création, un doute → pas d'extraction. L'extraction n'est jamais une raison de mettre une action : action reste null.
+
 Paramètres : periode ∈ aujourdhui | demain | semaine (lundi à dimanche de la semaine en cours) — tout autre jour ou intervalle → action null ; numero = les chiffres du job, sans « # » ; limit = nombre demandé (1 à 25), 5 par défaut.
 
 Glossaire québécois oral (pour bien classer, jamais pour répondre) :
@@ -214,7 +252,7 @@ export async function classifier(enonce: string, contexte?: ContexteRouteur | nu
   try {
     const res = await clientAnthropic().messages.create({
       model: MODELE_ROUTEUR,
-      max_tokens: 200,
+      max_tokens: 400,
       system: [{ type: 'text', text: PROMPT_ROUTEUR, cache_control: { type: 'ephemeral', ttl: '1h' } }],
       tools: [{
         name: 'classer',
@@ -226,8 +264,19 @@ export async function classifier(enonce: string, contexte?: ContexteRouteur | nu
             action: { type: ['string', 'null'], enum: [...IDS_RACCOURCIS, null] },
             params: { type: 'object', properties: { periode: { type: 'string', enum: [...PERIODES_AGENDA] }, numero: { type: 'string' }, limit: { type: 'integer' } }, additionalProperties: false },
             confidence: { type: 'number' },
+            extraction: {
+              type: ['object', 'null'],
+              properties: {
+                genre: { type: 'string', enum: [...GENRES_EXTRACTION] },
+                client: { type: 'string' }, prenom: { type: 'string' }, nom: { type: 'string' }, telephone: { type: 'string' }, courriel: { type: 'string' },
+                adresse: { type: 'string' }, ville: { type: 'string' }, quand: { type: 'string' }, heure: { type: 'string' }, titre: { type: 'string' },
+                sujet: { type: 'string' }, texte: { type: 'string' }, numero: { type: 'string' },
+              },
+              required: ['genre'],
+              additionalProperties: false,
+            },
           },
-          required: ['topic', 'action', 'params', 'confidence'],
+          required: ['topic', 'action', 'params', 'confidence', 'extraction'],
           additionalProperties: false,
         },
       }],
