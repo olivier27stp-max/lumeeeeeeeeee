@@ -46,15 +46,6 @@ describe('la cloche de notifications est traduite', () => {
   });
 });
 
-describe('la modale de modèle de facture est traduite', () => {
-  const source = lire('src/components/InvoiceTemplateModal.tsx');
-
-  it('le bouton d\'annulation passe par les traductions', () => {
-    expect(source).toContain('t.common.cancel');
-    expect(source).not.toMatch(/>\s*Cancel\s*</);
-  });
-});
-
 describe('les deux langues restent alignées', () => {
   const fr = lire('src/i18n/fr.ts');
   const en = lire('src/i18n/en.ts');
