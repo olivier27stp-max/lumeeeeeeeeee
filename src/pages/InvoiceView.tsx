@@ -17,7 +17,12 @@ import { fetchPublicInvoice, type PublicInvoiceData, type PublicInvoiceCompany }
 import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
 
 const LUME_LOGO_URL = '/lume-logo.png';
-const isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+// Langue de la page : celle de l'ENTREPRISE dès que l'API l'a dite ; en attendant, celle du navigateur.
+// Variable de module lue au rendu, fixée AVANT le setState qui rerend.
+let isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
+function suivreLangueEntreprise(langue: string | null | undefined) {
+  if (langue === 'fr' || langue === 'en') isFr = langue === 'fr';
+}
 
 function fmtMoney(cents: number, currency = 'CAD'): string {
   return new Intl.NumberFormat(isFr ? 'fr-CA' : 'en-CA', { style: 'currency', currency }).format((cents || 0) / 100);
@@ -56,6 +61,7 @@ export default function InvoiceView() {
       try {
         const d = await fetchPublicInvoice(token);
         if (annule) return;
+        suivreLangueEntreprise(d.company?.language);
         setData(d);
         setEtat('view');
         document.title = `${isFr ? 'Facture' : 'Invoice'} #${d.invoice.invoice_number}${d.company?.company_name ? ` — ${d.company.company_name}` : ''}`;
