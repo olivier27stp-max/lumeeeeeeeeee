@@ -247,3 +247,17 @@ describe('manques, nature et texte pour Claude', () => {
     expect(REGLES_LUME).not.toMatch(/\d{4}-\d{2}-\d{2}/);
   });
 });
+
+describe('relecture après import test', () => {
+  it('le bot relit les correspondances au statut test_review et refait le dry-run si ça change (source)', () => {
+    const src = lu('server/lib/migration/bot.ts');
+    const bloc = src.slice(src.indexOf("if (s === 'test_review')"), src.indexOf("if (s === 'ready_for_test')"));
+    expect(bloc).toContain('proposerParModele(admin, m, acteur, rapport, mode)');
+    expect(bloc).toContain("poserStatut(admin, m, 'ready_for_test', rapport)");
+  });
+  it('une proposition relue sans verdict est marquée et jamais re-soumise au modèle', () => {
+    const src = lu('server/lib/migration/bot.ts');
+    expect(src).toContain('PREFIXE_A_VERIFIER');
+    expect(src).toContain("!dejaRelues.includes(mp)");
+  });
+});

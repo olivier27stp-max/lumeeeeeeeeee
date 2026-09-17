@@ -220,9 +220,21 @@ export function saveMappingTemplate(id: string, name: string): Promise<{ ok: boo
   return apiFetch(`/migrations/${id}/save-template`, { method: 'POST', body: JSON.stringify({ name }) });
 }
 
-/** Le bot fait une passe maintenant (analyse, correspondances, doublons, import test, questions) et renvoie ce qu'il a décidé. */
-export function lancerBotMigration(id: string): Promise<RapportBotMigration> {
+/** Lance une passe du bot en arrière-plan (plusieurs minutes possibles) ; `depuis` sert à reconnaître la fin de passe. */
+export function lancerBotMigration(id: string): Promise<{ started: true; depuis: string }> {
   return apiFetch(`/migrations/${id}/bot`, { method: 'POST' });
+}
+/** Attend la fin d'une passe lancée par lancerBotMigration : suit bot_derniere_execution (toutes les 5 s, 20 min max). */
+export async function attendreFinBot(id: string, depuis: string, opts: { intervalleMs?: number; maxMs?: number } = {}): Promise<RapportBotMigration | null> {
+  const intervalle = opts.intervalleMs ?? 5000;
+  const limite = Date.now() + (opts.maxMs ?? 20 * 60 * 1000);
+  while (Date.now() < limite) {
+    await new Promise((r) => setTimeout(r, intervalle));
+    const d = await getMigrationDetail(id);
+    const m = d?.migration;
+    if (m?.bot_derniere_execution && m.bot_derniere_execution >= depuis) return (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+  }
+  return null;
 }
 export interface DecisionBotMigration { etape: string; cible: string; decision: string; detail?: string }
 export interface AuditBotMigration {

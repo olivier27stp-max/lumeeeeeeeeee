@@ -25,7 +25,7 @@ import { type AuditBotMigration,
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
   type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
-import { lancerBotMigration, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
+import { lancerBotMigration, attendreFinBot, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -435,7 +435,13 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
-        <button type="button" className={primary} onClick={() => act(async () => { const r = await lancerBotMigration(m.id); toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`); }, 'Passe du bot terminée')}>Confier au bot</button>
+        <button type="button" className={primary} onClick={() => act(async () => {
+          const { depuis } = await lancerBotMigration(m.id);
+          toast.message('Passe du bot lancée : comptez environ 1 minute par fichier. La carte Bot (Résumé) se met à jour à la fin.');
+          const r = await attendreFinBot(m.id, depuis);
+          if (!r) throw new Error('La passe du bot dépasse 20 minutes : rafraîchissez la page plus tard, le rapport apparaîtra dans la carte Bot.');
+          toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`);
+        }, 'Passe du bot terminée')}>Confier au bot</button>
       )}
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client'].includes(m.status) && (
         <button type="button" className={subtle} onClick={() => act(() => startAnalysis(m.id), 'Analyse relancée')}>Relancer l'analyse</button>

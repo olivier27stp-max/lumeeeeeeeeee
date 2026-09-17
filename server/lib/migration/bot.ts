@@ -60,6 +60,8 @@ export const SEUIL_GABARIT = 0.8;
 export const MAX_PASSES = 6;
 export const TYPE_QUESTION_COLONNE = 'bot_colonne';
 export const TYPE_QUESTION_DOUBLON = 'bot_doublon';
+/** Préfixe de `reason` d'une proposition du moteur que le bot a relue sans oser trancher : relistée dans l'audit, jamais re-soumise au modèle. */
+export const PREFIXE_A_VERIFIER = 'bot (à vérifier) : ';
 export const OPTION_IGNORER = 'Ignorer cette colonne';
 export type ModeBot = 'client' | 'autonome';
 /** En mode autonome, l'admin est (re)prévenu au plus une fois par ce délai. */
@@ -536,15 +538,15 @@ async function appliquerGabarits(admin: Admin, m: MigrationRow, acteur: ActeurMi
  * pour repérer les doublons de cible ; les gardes tranchent ce qui est
  * toujours faux ; l'audit garde la trace de chaque changement.
  */
-async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot, mode: ModeBot): Promise<{ confirmees: number; questions: number; conservees: number }> {
+async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMigration, rapport: RapportBot, mode: ModeBot): Promise<{ confirmees: number; questions: number; conservees: number; changements: number }> {
   const { data: files } = await admin.from('migration_files').select('id, original_name, category_detected').eq('migration_id', m.id).eq('kind', 'data').is('deleted_at', null).eq('parse_status', 'parsed');
-  let confirmees = 0, questions = 0, conservees = 0;
+  let confirmees = 0, questions = 0, conservees = 0, changements = 0; // changements = ce qui modifie le résultat d'un import (corrections, colonnes retirées, colonnes « à vérifier » enfin tranchées)
   const { data: ouvertes } = await admin.from('migration_issues').select('details_masked').eq('migration_id', m.id).eq('type', TYPE_QUESTION_COLONNE).is('resolved_at', null);
   const dejaDemandes = new Set((ouvertes ?? []).map((i: any) => String(i.details_masked?.mapping_id ?? '')));
   for (const f of files ?? []) {
     const cat = f.category_detected as MigrationCategory | null;
     const entity = entityForCategory(cat);
-    const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence, target_field, decided_role').eq('file_id', f.id);
+    const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence, target_field, decided_role, reason').eq('file_id', f.id);
     const { data: cols } = await admin.from('migration_file_columns').select('id, position, header, detected_type, samples_masked').eq('file_id', f.id).order('position', { ascending: true });
     if (!entity) {
       // Catégorie sans entité cible (lignes, paiements, notes…) : rien à mapper, mais un manque à déclarer.
@@ -554,7 +556,12 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
     }
     const champs = FIELD_CATALOG[entity] ?? [];
     const libelle = (field: string | null | undefined) => (field ? champs.find((c) => c.field === field)?.labelFr ?? field : null);
-    const aTraiter = (maps ?? []).filter((mp) => (mp.status === 'needs_review' || mp.status === 'suggested') && !dejaDemandes.has(mp.id));
+    const dejaRelues = (maps ?? []).filter((mp) => mp.status === 'suggested' && String(mp.reason ?? '').startsWith(PREFIXE_A_VERIFIER));
+    for (const mp of dejaRelues) {
+      const col: any = cols?.find((c: any) => c.id === mp.column_id);
+      if (col) rapport.audit.a_verifier.push({ fichier: f.original_name, colonne: col.header, actuel: libelle(mp.target_field as string | null), candidats: [], pourquoi: String(mp.reason).slice(PREFIXE_A_VERIFIER.length) });
+    }
+    const aTraiter = (maps ?? []).filter((mp) => (mp.status === 'needs_review' || mp.status === 'suggested') && !dejaDemandes.has(mp.id) && !dejaRelues.includes(mp));
     if (!aTraiter.length || !cols?.length) continue;
     const mapParCol = new Map((maps ?? []).map((mp) => [mp.column_id, mp]));
     const colonnes: ColonneModele[] = cols.map((c: any) => {
@@ -590,19 +597,24 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
         await audit(admin, m, acteur, choix === 'corriger' ? 'bot.mapping.corrige' : 'bot.mapping.confirme', `mapping:${mp.id}`, { field: v.field, avant: actuel, confidence: v.confidence }, rapport, { etape: 'correspondances', cible, decision: `${choix === 'corriger' ? `${libelle(actuel) ?? '—'} → ` : '→ '}${libelle(v.field)} (${Math.round(v.confidence * 100)} %)`, detail: v.raison });
         if (choix === 'corriger') rapport.audit.corrections.push({ fichier: f.original_name, colonne: col.header, avant: libelle(actuel), apres: libelle(v.field), pourquoi: v.alerte ?? v.raison });
         else if (v.alerte) rapport.audit.alertes.push({ fichier: f.original_name, colonne: col.header, message: v.alerte, action: `importée vers « ${libelle(v.field)} » quand même : à surveiller au dry-run` });
+        if (choix === 'corriger' || mp.status === 'needs_review') changements += 1;
         confirmees += 1;
         continue;
       }
       const candidats = [...(v.field ? [v.field] : []), ...v.candidats].filter((x, i, a) => a.indexOf(x) === i).slice(0, 3)
         .map((field) => ({ field, label: libelle(field) ?? field }));
       if (choix === 'laisser') {
-        rapport.audit.a_verifier.push({ fichier: f.original_name, colonne: col.header, actuel: libelle(actuel), candidats: candidats.map((c) => c.label), pourquoi: v.raison || 'le modèle n\'est pas assez sûr pour trancher' });
+        const pourquoi = v.raison || 'le modèle n\'est pas assez sûr pour trancher';
+        // Marquée relue : relistée à chaque audit sans nouvel appel modèle ; la proposition du moteur reste active.
+        await admin.from('migration_field_mappings').update({ reason: `${PREFIXE_A_VERIFIER}${pourquoi}`.slice(0, 200) }).eq('id', mp.id);
+        rapport.audit.a_verifier.push({ fichier: f.original_name, colonne: col.header, actuel: libelle(actuel), candidats: candidats.map((c) => c.label), pourquoi });
         continue;
       }
       if (choix === 'conserver') {
         const pourquoi = v.alerte ?? v.raison;
         await conserverColonne(admin, m, acteur, rapport, { mappingId: mp.id, columnId: col.id, header: col.header, fichier: f.original_name, candidats, exemples: (col.samples_masked ?? []).slice(0, 3), raison: pourquoi, confidence: v.confidence });
         if (actuel) rapport.audit.corrections.push({ fichier: f.original_name, colonne: col.header, avant: libelle(actuel), apres: null, pourquoi });
+        if (actuel || mp.status === 'needs_review') changements += 1;
         conservees += 1;
         continue;
       }
@@ -617,7 +629,7 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
       if (issue) questions += 1;
     }
   }
-  return { confirmees, questions, conservees };
+  return { confirmees, questions, conservees, changements };
 }
 
 /**
@@ -820,6 +832,14 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
       if (s === 'test_review') {
         await appliquerReponses(admin, m, acteur, rapport);
         if (mode === 'autonome') await resoudreQuestionsAutonome(admin, m, acteur, rapport);
+        // Les correspondances se relisent AUSSI après un import test (le moteur se trompe à 85 %,
+        // et le catalogue évolue) : si quelque chose change, le dry-run est refait avant de juger.
+        const revue = await proposerParModele(admin, m, acteur, rapport, mode);
+        rapport.questions_posees += revue.questions;
+        if (revue.changements > 0) {
+          rapport.decisions.push({ etape: 'correspondances', cible: 'import test', decision: `${revue.changements} correspondance${revue.changements > 1 ? 's' : ''} changée${revue.changements > 1 ? 's' : ''} : nouvel import test` });
+          if (await poserStatut(admin, m, 'ready_for_test', rapport)) continue;
+        }
         const { decides, questions } = await traiterDoublons(admin, m, acteur, rapport, mode);
         doublonsDepuisTest += decides;
         rapport.questions_posees += questions;

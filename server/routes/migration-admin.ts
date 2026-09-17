@@ -35,6 +35,7 @@ import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/m
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
+import { logger } from '../lib/logger';
 import { executerBotMigration } from '../lib/migration/bot';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
@@ -748,8 +749,16 @@ router.post('/migration-admin/migrations/:id/bot', async (req, res) => {
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
-    const rapport = await executerBotMigration(admin, migration.id, { acteurId: auth.user.id, declencheur: 'manuel' });
-    return res.json(rapport);
+    // Une passe peut durer plusieurs minutes (≈ 50 s par fichier sur Fable 5.1) : par défaut elle tourne
+    // en arrière-plan et la console suit `bot_derniere_execution` ; `?sync=1` (banc d'essai) attend le rapport.
+    if (req.query.sync === '1') {
+      const rapport = await executerBotMigration(admin, migration.id, { acteurId: auth.user.id, declencheur: 'manuel' });
+      return res.json(rapport);
+    }
+    const depuis = new Date().toISOString();
+    void executerBotMigration(admin, migration.id, { acteurId: auth.user.id, declencheur: 'manuel' })
+      .catch((err: unknown) => logger.error('[migration-admin] passe du bot en arrière-plan échouée', { error: err instanceof Error ? err.message : String(err), migrationId: migration.id }));
+    return res.status(202).json({ started: true, depuis });
   } catch (err: any) {
     return sendSafeError(res, err, 'Passe du bot impossible.', '[migration-admin]');
   }
