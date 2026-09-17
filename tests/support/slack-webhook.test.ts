@@ -105,7 +105,11 @@ describe('estReponseDansUnFil', () => {
   const bot = { user_id: 'UBOT', bot_id: 'BBOT' };
   it('garde une réponse humaine dans un fil, et celle d’un AUTRE bot (Grok…)', () => {
     expect(estReponseDansUnFil({ type: 'message', channel: 'C1', user: 'URAFBA', text: 'Salut', ts: '2.0', thread_ts: '1.0' }, bot)).toBe(true);
-    expect(estReponseDansUnFil({ type: 'message', subtype: 'bot_message', bot_id: 'BGROK', text: 'Bonjour', ts: '2.0', thread_ts: '1.0' }, bot)).toBe(true);
+    // Un bot tiers n'est relayé que s'il est nommément autorisé (SLACK_BOTS_RELAYES) ; un workflow Slack ne l'est jamais.
+    expect(estReponseDansUnFil({ type: 'message', subtype: 'bot_message', bot_id: 'BGROK', text: 'Bonjour', ts: '2.0', thread_ts: '1.0' }, bot, new Set(['BGROK']))).toBe(true);
+    expect(estReponseDansUnFil({ type: 'message', subtype: 'bot_message', bot_id: 'BGROK', text: 'Bonjour', ts: '2.0', thread_ts: '1.0' }, bot, new Set())).toBe(false);
+    expect(estReponseDansUnFil({ type: 'message', subtype: 'bot_message', bot_id: 'BWORKFLOW', text: 'Relance 36h+ — toujours ouvert', ts: '2.0', thread_ts: '1.0' }, bot, new Set(['BGROK']))).toBe(false);
+    expect(estReponseDansUnFil({ type: 'message', subtype: 'bot_message', text: 'Rappel automatique', ts: '2.0', thread_ts: '1.0' }, bot, new Set(['BGROK']))).toBe(false);
   });
   it('ignore notre propre bot, le parent du fil, les messages hors fil, les éditions/suppressions, le vide', () => {
     expect(estReponseDansUnFil({ type: 'message', user: 'UBOT', text: 'x', ts: '2.0', thread_ts: '1.0' }, bot)).toBe(false);
