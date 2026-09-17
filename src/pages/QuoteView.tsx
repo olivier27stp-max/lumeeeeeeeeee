@@ -1,6 +1,8 @@
 import React, { useEffect, useId, useState, useRef } from 'react';
 import { captureClientException } from '../lib/sentry';
 import { resolveBrand, readableOn } from '../lib/brandColor';
+import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import type { SocialLinks } from '../lib/socialLinks';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
 import { formatQuoteMoney } from '../lib/quotesApi';
@@ -25,6 +27,8 @@ interface CompanyBranding {
   country: string | null;
   /** Accent choisi par l'entreprise. null = encre noire. */
   brand_color?: string | null;
+  /** Réseaux sociaux — icônes au pied de la page. */
+  social_links?: SocialLinks | null;
 }
 
 interface QuoteData {
@@ -1180,7 +1184,8 @@ export default function QuoteView() {
         </div>
 
         {/* ── Footer ── */}
-        <p className="text-center text-[11px] text-[#bbb] mt-6 no-print">
+        <ReseauxSociauxPied liens={company.social_links} className="flex items-center justify-center gap-4 mt-6 no-print" />
+        <p className="text-center text-[11px] text-[#bbb] mt-3 no-print">
           {company.company_name} &mdash; {isFr ? 'Propulsé par Lume' : 'Powered by Lume'}
         </p>
       </div>

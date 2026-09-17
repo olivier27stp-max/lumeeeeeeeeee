@@ -10,6 +10,7 @@ import {
 } from '../lib/stripe-connect';
 import { getPlatformStripe } from '../lib/stripe-connect';
 import { getCompanyBranding } from '../lib/companyBranding';
+import { lireLiensSociaux } from '../lib/socialLinks';
 
 const router = Router();
 
@@ -93,7 +94,7 @@ router.get('/pay/:publicToken', async (req, res) => {
     const orgSettings = await getCompanyBranding(
       admin,
       paymentRequest.org_id,
-      'company_name, logo_url, email, phone, brand_color',
+      'company_name, logo_url, email, phone, brand_color, social_links',
     );
 
     // Use the actual current balance, not the original request amount
@@ -122,6 +123,7 @@ router.get('/pay/:publicToken', async (req, res) => {
         brand_color: orgSettings?.brand_color || null,
         email: orgSettings?.email || null,
         phone: orgSettings?.phone || null,
+        social_links: lireLiensSociaux(orgSettings?.social_links),
       },
     });
   } catch (error: any) {

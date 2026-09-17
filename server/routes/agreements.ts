@@ -17,6 +17,7 @@ import {
 import { createDepositIntent, verifyDepositIntent, DepositPaymentError } from '../lib/depositPayments';
 import { eventBus } from '../lib/eventBus';
 import { getCompanyBranding } from '../lib/companyBranding';
+import { lireLiensSociaux } from '../lib/socialLinks';
 
 const router = Router();
 
@@ -263,7 +264,7 @@ router.get('/agreements/public/:token', async (req, res) => {
     const companyData = await getCompanyBranding(
       admin,
       agreement.org_id,
-      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, brand_color',
+      'company_name, logo_url, phone, email, website, street1, city, province, postal_code, brand_color, social_links',
     );
     let taxRegistrationLines: string[] = [];
     try {
@@ -366,6 +367,7 @@ router.get('/agreements/public/:token', async (req, res) => {
         tax_lines: taxRegistrationLines,
         // Accent des documents client. null = encre noire, le défaut.
         brand_color: companyData?.brand_color || null,
+        social_links: lireLiensSociaux(companyData?.social_links),
       },
       client,
       doc,

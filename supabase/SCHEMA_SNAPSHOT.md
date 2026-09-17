@@ -798,6 +798,7 @@
 - `review_survey_question` text
 - `review_low_rating_message` text
 - `review_thank_you_message` text
+- `social_links` jsonb NOT NULL DEFAULT '{}'::jsonb
 
 ### `connected_accounts`
 

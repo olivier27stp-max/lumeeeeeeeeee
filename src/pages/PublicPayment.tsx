@@ -7,6 +7,7 @@ import type { Stripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { fetchPublicPaymentData, createPublicPaymentIntent } from '../lib/connectApi';
 import type { PublicPaymentData, CreatePublicPaymentIntentResponse } from '../lib/connectApi';
+import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
 
 /**
  * Les erreurs du serveur sont en anglais uniquement. Sur une page que le
@@ -357,7 +358,7 @@ function CheckoutForm({ amountCents, currency, publicToken, businessName, brand 
 
 function PublicPageShell({ children, business }: {
   children: React.ReactNode;
-  business?: { name: string | null; logo_url: string | null; email: string | null; phone: string | null; brand_color?: string | null } | null;
+  business?: PublicPaymentData['business'];
 }) {
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 flex flex-col">
@@ -388,6 +389,7 @@ function PublicPageShell({ children, business }: {
       <footer className="border-t border-neutral-200 dark:border-neutral-700 bg-surface-card dark:bg-neutral-800 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between text-xs text-neutral-400">
           <span>{isFr ? 'Propulsé par Lume' : 'Powered by Lume'}</span>
+          <ReseauxSociauxPied liens={business?.social_links} className="flex items-center gap-3" />
           {business?.email && <a href={`mailto:${business.email}`} className="hover:underline">{business.email}</a>}
         </div>
       </footer>
