@@ -10,21 +10,27 @@
  * Il est AU COURANT DE TOUT ce qui concerne ce client : le dossier
  * (support/dossier.ts — forfait, réglages, volumes, paiements, migration,
  * demandes passées, actions de Lumi) entre dans le prompt à chaque tour.
- * Il répond à partir (1) de la FAQ, (2) de la doc (search_help), (3) du
- * dossier. Il n'écrit rien dans le compte, sauf démarrer une migration
- * quand le client le demande (start_migration : réversible, auditée) — et
- * TRANSFÈRE à un humain dès que la demande dépasse ce cadre.
+ * Il répond à partir (1) de search_help (la doc, les réponses de la FAQ et
+ * la carte de l'app : boutons exacts de chaque écran), (2) de l'index des
+ * écrans, (3) du dossier. Il n'écrit rien dans le compte, sauf démarrer une
+ * migration quand le client le demande (start_migration : réversible,
+ * auditée) — et TRANSFÈRE à un humain dès que la demande dépasse ce cadre.
  *
  * Coût pour Lume (pas pour l'org) : Sonnet 5, réflexion adaptative à effort
  * bas. La partie stable du prompt est mise en cache (1 h) ; le dossier, qui
- * change par client, vient après.
+ * change par client, vient après. Depuis le 2026-09-17 la carte complète et
+ * les réponses de la FAQ ne sont plus dans le prompt (11 500 → ~3 000
+ * tokens) : à notre volume le cache est presque toujours froid, et c'est la
+ * réécriture du prompt qui coûtait. Le modèle va les chercher par search_help
+ * quand il en a besoin (un « comment faire » = un appel d'outil de plus, sur
+ * un prompt quatre fois plus court).
  */
 import type Anthropic from '@anthropic-ai/sdk';
 import { clientAnthropic } from '../lumi/llm';
 import { chercherAide } from '../agent/tools-aide';
 import { ARTICLES } from '../../../src/components/supportArticles';
 import { SYSTEM_PROMPT as CONNAISSANCE_PUBLIQUE } from '../agent/promptVente';
-import { CARTE_APP } from './carte-app';
+import { indexCarteApp } from './carte-app';
 import { coutEnCents } from '../lumi/tarifs';
 import { logger } from '../logger';
 
@@ -70,11 +76,12 @@ export interface ReponseSupportIA {
   outils: string[];
 }
 
-function faqTexte(langue: 'fr' | 'en'): string {
-  return ARTICLES.map((a) => `- ${langue === 'fr' ? a.q_fr : a.q_en}\n  ${langue === 'fr' ? a.a_fr : a.a_en}${a.path ? ` (page : ${a.path})` : ''}`).join('\n');
+/** Les SUJETS de la FAQ (les réponses viennent par search_help, qui les indexe). */
+function faqSujets(langue: 'fr' | 'en'): string {
+  return ARTICLES.map((a) => (langue === 'fr' ? a.q_fr : a.q_en)).join(' · ');
 }
 
-/** Partie STABLE du prompt (mise en cache) : identité, règles, FAQ. */
+/** Partie STABLE du prompt (mise en cache) : identité, règles, index des écrans, sujets de la FAQ. */
 function promptStable(langue: 'fr' | 'en', surface: SurfaceSupport, outils: OutilsSupport): string {
   if (surface === 'public') {
     return `${CONNAISSANCE_PUBLIQUE}
@@ -90,9 +97,9 @@ Answer in ${langue === 'fr' ? 'French (Québec, vouvoiement, plain words)' : 'En
 
 You know this client: their account file (« DOSSIER ») is below. Use it to answer directly what concerns THEIR account — plan, renewal date, whether setup, payments or Google reviews are configured, how many clients/jobs they have, where their data migration stands, what they already asked support, what Lumi (the in-app assistant) did recently. Never guess a fact that is not in the dossier, the FAQ, or a tool result. Never mention or invent another client's data.
 
-You answer from (1) the FAQ below, (2) the APP MAP below (routes and the exact buttons of Lume), (3) what the search_help tool returns, (4) the DOSSIER${outils.statutMigration ? ', (5) get_migration_status' : ''}. Never invent a feature, a price or a setting.
+You answer from (1) what the search_help tool returns — it holds the product documentation, the FAQ answers and the APP MAP (the exact buttons and menus of every screen): call it BEFORE answering any "how do I…" or "where is…" question, with the user's words, (2) the APP MAP index below (which screens exist and their route), (3) the DOSSIER${outils.statutMigration ? ', (4) get_migration_status' : ''}. Never invent a feature, a price, a button or a setting: a path you give must come from search_help or from the index.
 
-HOW-TO QUESTIONS ARE YOURS, NOT THE TEAM'S. A "how do I…" question (delete, edit, archive, find, change, send, set up…) NEVER goes to the team by itself. If the FAQ, the APP MAP or search_help cover it, give the path. If they do not cover it exactly, give the closest path you know from the APP MAP, say in one short clause what you are not sure of, and ask ONE clarifying question if the word is ambiguous (in Lume, « tâches » are to-dos in the Tasks page, « travaux » / « jobs » are the scheduled work). End with: « Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe. » Only if the user then says it did not help, or asks for the team, call transfer_to_human.
+HOW-TO QUESTIONS ARE YOURS, NOT THE TEAM'S. A "how do I…" question (delete, edit, archive, find, change, send, set up…) NEVER goes to the team by itself. Call search_help, then give the path it returns. If it does not cover the question exactly, give the closest screen from the APP MAP index, say in one short clause what you are not sure of, and ask ONE clarifying question if the word is ambiguous (in Lume, « tâches » are to-dos in the Tasks page, « travaux » / « jobs » are the scheduled work). End with: « Si ça ne règle pas votre cas, dites-le-moi et je passe la question à l'équipe. » Only if the user then says it did not help, or asks for the team, call transfer_to_human.
 ${outils.demarrerMigration ? `
 If the client wants to bring their data from another CRM (Jobber, Housecall Pro, ServiceTitan, GoHighLevel, QuickBooks, spreadsheets…), call start_migration ONCE with the source. It is safe and reversible: it creates the migration in autonomous mode and returns the portal link. Tell the client the ONLY thing they have to do: open the link and drop their export files (CSV/Excel). Everything else (matching columns, duplicates, test import, approval) is done by Lume — they will not be asked questions. If a migration already exists (see DOSSIER), do not start another one: give its status instead.
 ` : ''}
@@ -103,11 +110,10 @@ Call transfer_to_human — after one short sentence telling the user you are pas
 - the user asks the team to DO something in their account for them (import, fix, delete in bulk, reconfigure).
 Do NOT transfer for a how-to question, a question the DOSSIER answers, or a question outside Lume (for those, say kindly that it is outside Lume and stop). A human replies within the delay given below. Never promise anything else on behalf of the team.
 
-APP MAP (routes and exact French labels, verified in the code):
-${CARTE_APP}
+APP MAP index (screens and routes, verified in the code; the exact buttons of each screen come from search_help):
+${indexCarteApp()}
 
-FAQ:
-${faqTexte(langue)}`;
+FAQ topics (search_help returns their answer): ${faqSujets(langue)}`;
 }
 
 /** Partie VARIABLE du prompt : la personne, l'entreprise, le délai, le dossier. */
@@ -125,7 +131,7 @@ function outilsPour(surface: SurfaceSupport, outils: OutilsSupport): Anthropic.M
   const liste: Anthropic.Messages.Tool[] = [
     {
       name: 'search_help',
-      description: 'Searches the Lume product documentation for how-to questions and returns the closest passages with their page. Use it before answering any "how do I…" question that the FAQ does not cover.',
+      description: 'Searches the Lume product documentation, the FAQ answers and the app map (routes, menus and exact buttons of every screen) and returns the closest passages with their page. Call it before answering any "how do I…" or "where is…" question, with the user\'s words.',
       input_schema: { type: 'object', properties: { query: { type: 'string', description: 'The question, in the user\'s words.' } }, required: ['query'] },
     },
   ];
