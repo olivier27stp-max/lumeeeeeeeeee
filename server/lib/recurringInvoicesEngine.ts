@@ -69,12 +69,26 @@ export async function runOneSchedule(
     0,
   );
 
+  // invoices.created_by est NOT NULL : sans auteur, CHAQUE échéance échouait
+  // (« null value in column created_by », batterie d'exécution du 2026-09-17).
+  // L'auteur = le propriétaire de l'org (à défaut, son premier membre actif).
+  const { data: proprietaire } = await svc
+    .from('memberships')
+    .select('user_id, role')
+    .eq('org_id', schedule.org_id)
+    .eq('status', 'active')
+    .order('role', { ascending: true }) // admin < owner < … : on préfère owner ci-dessous
+    .limit(20);
+  const auteur = (proprietaire || []).find((m: any) => m.role === 'owner')?.user_id ?? proprietaire?.[0]?.user_id ?? null;
+  if (!auteur) throw new Error(`Aucun membre actif dans l'org ${schedule.org_id} pour signer la facture récurrente.`);
+
   // Create invoice
   const { data: invoice, error: invErr } = await svc
     .from('invoices')
     .insert({
       org_id: schedule.org_id,
       client_id: schedule.client_id,
+      created_by: auteur,
       invoice_number: invoiceNumber,
       status: 'draft',
       subject: schedule.subject,
