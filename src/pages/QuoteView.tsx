@@ -62,6 +62,8 @@ interface QuoteData {
     service_plan?: { year: number; visits: Array<{ month: number; date: string }> } | null;
   };
   images?: string[];
+  /** Réglages Lume Payments de l'entreprise (server/routes/quotes.ts, GET public). */
+  payments?: { quote_payments_enabled: boolean; wallets_enabled: boolean };
   company: CompanyBranding;
   client: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
   lead: { first_name: string; last_name: string; company: string | null; email: string | null; phone: string | null } | null;
@@ -115,7 +117,7 @@ function buildCompanyAddress(c: CompanyBranding): string | null {
 // Stripe Deposit Payment Form
 // ══════════════════════════════════════════════════════════════
 
-function DepositPaymentForm({ brand, onSuccess, onError }: { brand: string; onSuccess: () => Promise<void> | void; onError: (msg: string) => void }) {
+function DepositPaymentForm({ brand, wallets = true, onSuccess, onError }: { brand: string; wallets?: boolean; onSuccess: () => Promise<void> | void; onError: (msg: string) => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -144,7 +146,7 @@ function DepositPaymentForm({ brand, onSuccess, onError }: { brand: string; onSu
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+      <PaymentElement options={{ wallets: { applePay: wallets ? 'auto' : 'never', googlePay: wallets ? 'auto' : 'never' } }} />
       <button
         type="submit"
         disabled={processing || !stripe || !elements}
@@ -220,8 +222,12 @@ export default function QuoteView() {
       setData(result);
 
       if (quote.status === 'approved') {
-        // Check if deposit is pending - auto-load payment
-        if (quote.deposit_required && quote.deposit_status === 'pending' && Number(quote.deposit_value || 0) > 0) {
+        // Check if deposit is pending - auto-load payment. Si l'entreprise a
+        // coupé le paiement des devis en ligne, le devis est simplement
+        // accepté : le dépôt sera perçu autrement (le serveur refuse de
+        // toute façon la création du PaymentIntent).
+        const paiementEnLigne = result?.payments?.quote_payments_enabled !== false;
+        if (paiementEnLigne && quote.deposit_required && quote.deposit_status === 'pending' && Number(quote.deposit_value || 0) > 0) {
           setViewState('deposit_payment');
           setTimeout(() => loadDepositIntent().catch((err) => {
             console.error('[QuoteView] Deposit intent failed:', err);
@@ -374,8 +380,9 @@ export default function QuoteView() {
       const result = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((result as any)?.error || (isFr ? 'Échec de l’acceptation de la soumission' : 'Failed to accept quote'));
 
-      // If deposit is required, transition to payment step
-      if (data.quote.deposit_required && data.quote.deposit_value > 0) {
+      // If deposit is required, transition to payment step (only when the
+      // business still accepts online quote payments)
+      if (data.payments?.quote_payments_enabled !== false && data.quote.deposit_required && data.quote.deposit_value > 0) {
         setViewState('deposit_payment');
         // Load the payment intent immediately
         await loadDepositIntent();
@@ -1142,6 +1149,7 @@ export default function QuoteView() {
                       >
                         <DepositPaymentForm
                           brand={brand}
+                          wallets={data.payments?.wallets_enabled !== false}
                           onSuccess={async () => {
                             if (depositIntentData.payment_intent_id) {
                               await confirmDepositPayment(depositIntentData.payment_intent_id);

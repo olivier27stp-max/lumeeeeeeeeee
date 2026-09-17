@@ -20,6 +20,7 @@ import { Router } from 'express';
 import { getServiceClient } from '../lib/supabase';
 import { documentTaxLines } from '../lib/taxResolve';
 import { getCompanyBranding } from '../lib/companyBranding';
+import { getPaymentSettings } from '../lib/payment-settings';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 
 const router = Router();
@@ -144,7 +145,12 @@ router.get('/invoices/public/:token', async (req, res) => {
     ]);
 
     const payReq = payReqRes.data as { public_token: string; expires_at: string | null } | null;
-    const payTokenActif = payReq && (!payReq.expires_at || new Date(payReq.expires_at) > new Date())
+    // Bouton « Payer » seulement si le lien est actif ET que l'entreprise
+    // accepte encore le paiement des factures en ligne (réglages Lume Payments).
+    const reglagesPaiement = payReq ? await getPaymentSettings(invoice.org_id) : null;
+    const payTokenActif = payReq
+      && reglagesPaiement?.invoice_payments_enabled
+      && (!payReq.expires_at || new Date(payReq.expires_at) > new Date())
       ? payReq.public_token
       : null;
 

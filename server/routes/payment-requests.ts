@@ -14,8 +14,12 @@ import {
   updatePaymentRequestStatus,
 } from '../lib/stripe-connect';
 import { validate, createPaymentRequestSchema } from '../lib/validation';
+import { getPaymentSettings } from '../lib/payment-settings';
 
 const router = Router();
+
+const ERREUR_PAIEMENTS_DESACTIVES =
+  'Online invoice payments are disabled in Lume Payments settings. Enable them to send a payment link.';
 
 // ── Helpers ──
 
@@ -235,6 +239,12 @@ router.post('/payment-requests/create', validate(createPaymentRequestSchema), as
     const balanceCents = Number(invoice.balance_cents || 0);
     if (balanceCents <= 0) return res.status(400).json({ error: 'Invoice has no balance to pay.' });
 
+    // Interrupteur « paiement des factures en ligne » (réglages Lume Payments).
+    const reglages = await getPaymentSettings(orgId);
+    if (!reglages.invoice_payments_enabled) {
+      return res.status(400).json({ error: ERREUR_PAIEMENTS_DESACTIVES, code: 'payments_disabled' });
+    }
+
     // Verify connected account exists and is ready
     const account = await getConnectedAccount(orgId);
     if (!account || !account.charges_enabled) {
@@ -316,6 +326,11 @@ router.post('/payment-requests/resend', async (req, res) => {
     if (!invoiceId) return res.status(400).json({ error: 'Missing invoiceId.' });
 
     const sendVia = String(req.body?.sendVia || 'link_only').toLowerCase();
+
+    const reglages = await getPaymentSettings(orgId);
+    if (!reglages.invoice_payments_enabled) {
+      return res.status(400).json({ error: ERREUR_PAIEMENTS_DESACTIVES, code: 'payments_disabled' });
+    }
 
     const requests = await getPaymentRequestsByInvoice(orgId, invoiceId);
     const active = requests.find((r: any) => r.status === 'sent' || r.status === 'pending');

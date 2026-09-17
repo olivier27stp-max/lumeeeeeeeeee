@@ -7,11 +7,69 @@ import {
   createDashboardLoginLink,
   refreshAccountStatus,
   getConnectedAccount,
+  getPayoutsOverview,
 } from '../lib/stripe-connect';
-import { validate, createConnectedAccountSchema } from '../lib/validation';
+import { getPaymentSettings, updatePaymentSettings, nettoyerPatch } from '../lib/payment-settings';
+import { validate, createConnectedAccountSchema, paymentSettingsPatchSchema } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 
 const router = Router();
+
+// ── Réglages Lume Payments (interrupteurs devis/factures, pourboires…) ──
+
+router.get('/connect/settings', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const orgId = parseOrgId(req.query.orgId) || auth.orgId;
+    const member = await isOrgMember(auth.client, auth.user.id, orgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden for this organization.' });
+
+    const settings = await getPaymentSettings(orgId);
+    return res.json({ settings });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to load payment settings.', '[connect/settings]');
+  }
+});
+
+router.patch('/connect/settings', validate(paymentSettingsPatchSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const orgId = parseOrgId(req.body?.orgId) || auth.orgId;
+    const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, orgId);
+    if (!canManage) return res.status(403).json({ error: 'Only owner/admin can change payment settings.' });
+
+    const patch = nettoyerPatch(req.body);
+    if (Object.keys(patch).length === 0) return res.status(400).json({ error: 'Nothing to update.' });
+
+    const settings = await updatePaymentSettings(orgId, patch, auth.user.id);
+    return res.json({ settings });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to update payment settings.', '[connect/settings]');
+  }
+});
+
+// ── Aperçu des versements (solde, prochain versement, banque, litiges) ──
+
+router.get('/connect/payouts-overview', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const orgId = parseOrgId(req.query.orgId) || auth.orgId;
+    const canManage = await isOrgAdminOrOwner(auth.client, auth.user.id, orgId);
+    if (!canManage) return res.status(403).json({ error: 'Only owner/admin can view payouts.' });
+
+    const overview = await getPayoutsOverview(orgId);
+    if (!overview) return res.status(404).json({ error: 'No connected account.' });
+    return res.json({ overview });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to load payouts overview.', '[connect/payouts-overview]');
+  }
+});
 
 // ── Create connected account ──
 

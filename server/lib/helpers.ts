@@ -51,6 +51,8 @@ export interface PaymentInsertInput {
   card_last4?: string | null;
   card_brand?: string | null;
   amount_cents: number;
+  /** Pourboire encaissé en plus d'amount_cents (jamais appliqué à la facture). */
+  tip_cents?: number;
   currency: string;
   payment_date?: string;
 }

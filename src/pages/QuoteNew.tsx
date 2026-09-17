@@ -14,6 +14,7 @@ import {
   type QuoteLineItemInput, type QuoteSectionInput, type QuoteServicePlan,
 } from '../lib/quotesApi';
 import { getCompanySettings } from '../lib/invoicesApi';
+import { getPaymentSettings } from '../lib/connectApi';
 import { peekNextNumbers } from '../lib/numbersApi';
 import { supabase } from '../lib/supabase';
 import { createLeadScoped } from '../lib/leadsApi';
@@ -210,6 +211,17 @@ export default function QuoteNew() {
   const [depositType, setDepositType] = useState<'percentage' | 'fixed'>('percentage');
   const [depositValue, setDepositValue] = useState('');
   const [requirePaymentMethod, setRequirePaymentMethod] = useState(false);
+
+  // Valeur par défaut « carte au dossier exigée » (Réglages → Lume Payments).
+  // Appliquée une seule fois au chargement ; l'utilisateur reste libre de
+  // décocher. Échec silencieux acceptable : c'est un pré-remplissage.
+  useEffect(() => {
+    let actif = true;
+    getPaymentSettings()
+      .then((s) => { if (actif && s.require_payment_method_default) setRequirePaymentMethod(true); })
+      .catch((err: any) => console.warn('[QuoteNew] réglages Lume Payments non lus :', err?.message));
+    return () => { actif = false; };
+  }, []);
 
   // ── Divers ──
   const [saving, setSaving] = useState(false);
