@@ -12,7 +12,8 @@
  * Le serveur est la seule autorité sur l'org, l'utilisateur, le forfait et la
  * priorité. Les réponses humaines arrivent par routes/webhooks-slack.ts.
  */
-import { Router, type Request, type Response } from 'express';
+import { Router, raw, type Request, type Response } from 'express';
+import { typeImage, televerserCapture, verifierChemins, piecesDepuisChemins, lireCaptureBase64, liensPieces, pieceJointeSlack, TAILLE_MAX_OCTETS, LIEN_CLIENT_S, LIEN_EQUIPE_S, type Piece } from '../lib/support/captures';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { validate, supportRequestSchema, supportChatSchema, supportMessageSchema, supportEscalateSchema, supportAvisSchema } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
@@ -40,12 +41,19 @@ const router = Router();
 // n'y arrive jamais, un script oui.
 const limiteChat = redisRateLimit({ preset: 'lumi', keyFn: (req) => `support:${userKey(req)}` });
 
-function vue(t: Ticket, messages: MessageTicket[] = []) {
+type MessageVue = MessageTicket & { liens?: Array<{ nom: string; url: string }> };
+function vue(t: Ticket, messages: MessageVue[] = []) {
   return {
     id: t.id, subject: t.subject, category: t.category, status: t.status, priority: t.priority, slaKey: t.sla_key,
     createdAt: t.created_at, lastMessageAt: t.last_message_at, escalatedAt: t.escalated_at, closedAt: t.closed_at,
-    messages: messages.filter((m) => m.author !== 'system').map((m) => ({ id: m.id, author: m.author, authorName: m.author_name, body: m.body, createdAt: m.created_at, avis: m.avis ?? null })),
+    messages: messages.filter((m) => m.author !== 'system').map((m) => ({ id: m.id, author: m.author, authorName: m.author_name, body: m.body, createdAt: m.created_at, avis: m.avis ?? null, pieces: m.liens ?? [] })),
   };
+}
+
+/** Les messages du ticket avec, pour les captures du client, un lien signé 1 h (relu par le client lui-même). */
+async function messagesPourVue(admin: ReturnType<typeof getServiceClient>, ticketId: string): Promise<MessageVue[]> {
+  const messages = await messagesDuTicket(admin, ticketId);
+  return Promise.all(messages.map(async (m) => (m.pieces?.length ? { ...m, liens: await liensPieces(admin, m.pieces, LIEN_CLIENT_S) } : m)));
 }
 
 async function marquerLu(admin: ReturnType<typeof getServiceClient>, ticketId: string) {
@@ -57,8 +65,12 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
   try {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
-    const { ticketId, message, humain, origine, page } = req.body as { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion'; page?: string };
+    const { ticketId, message, humain, origine, page, captures } = req.body as { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion'; page?: string; captures?: Array<{ chemin: string; nom?: string }> };
     const admin = getServiceClient();
+    // Captures : chemins déjà téléversés par POST /support/captures, forcément sous l'org du client.
+    const chemins = captures?.length ? verifierChemins(auth.orgId, captures) : [];
+    if (chemins === null) return res.status(400).json({ error: 'Invalid captures.' });
+    const pieces: Piece[] = chemins.length ? await piecesDepuisChemins(admin, chemins) : [];
 
     if (!isSupportIAConfigured() && !humain) {
       return res.status(503).json({ error: 'Support assistant is not configured.', code: 'ai_unconfigured', supportEmail });
@@ -72,16 +84,18 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     if (!ticket) {
       ticket = await creerTicket(admin, { orgId: auth.orgId, userId: auth.user.id, subject: message.split('\n')[0].slice(0, 120), ctx, status: 'ai' });
     }
-    await ajouterMessage(admin, { ticket, author: 'user', body: message, authorName: ctx.userName });
+    await ajouterMessage(admin, { ticket, author: 'user', body: message, authorName: ctx.userName, pieces });
+    // Pour l'équipe (Slack) : le texte du client suivi des liens signés 7 jours vers ses captures.
+    const messagePourEquipe = pieces.length ? `${message}${pieceJointeSlack(await liensPieces(admin, pieces, LIEN_EQUIPE_S))}` : message;
 
     // Ticket déjà chez un humain : le message part dans son canal, mais Lumi répond quand même aux
     // questions banales (sinon chaque question suivante remplit le support). Exception : un humain
     // a écrit il y a moins de 30 min — la conversation est vivante, on ne parle pas par-dessus lui.
     const chezHumain = ticket.status === 'open' || ticket.status === 'answered';
     if (chezHumain) {
-      await relayerMessageClient(admin, ticket, ctx, message);
+      await relayerMessageClient(admin, ticket, ctx, messagePourEquipe);
       if (humain || await humainActifRecemment(admin, ticket.id)) {
-        return res.json({ ticket: vue(ticket, await messagesDuTicket(admin, ticket.id)), reply: null, escalated: true, slaKey: ticket.sla_key, sla: slaTexte(ticket.sla_key || '2d', ctx.langue) });
+        return res.json({ ticket: vue(ticket, await messagesPourVue(admin, ticket.id)), reply: null, escalated: true, slaKey: ticket.sla_key, sla: slaTexte(ticket.sla_key || '2d', ctx.langue) });
       }
     }
 
@@ -96,7 +110,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
       if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
       void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 0, action: `faq:${fixe.id}`, resultat: 'ok', model: null, costCents: 0, dureeMs: 0 });
     } else if (!humain) {
-      const historique = (await messagesDuTicket(admin, ticket.id))
+      const historique = (await messagesPourVue(admin, ticket.id))
         .filter((m) => (m.author === 'user' || m.author === 'ai'))
         .slice(0, -1) // le message courant est passé à part
         .map((m) => ({ role: m.author === 'user' ? 'user' as const : 'assistant' as const, content: m.body }));
@@ -124,8 +138,9 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
       } else try {
         // Le même Lumi partout : il connaît le compte (dossier) et peut suivre ou démarrer une migration.
         const dossier = await dossierClient(admin, auth.orgId, auth.user.id);
+        const images = (await Promise.all(pieces.map((p) => lireCaptureBase64(admin, p)))).filter((i): i is NonNullable<typeof i> => !!i);
         const r = await repondreSupportIA(
-          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte, page: page ?? null },
+          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte, page: page ?? null, images },
           historique, message,
           {
             statutMigration: () => statutMigrationPour(admin, auth.orgId),
@@ -140,7 +155,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
         // Mémoriser : seulement une réponse sans transfert ni outil autre que la doc (un « comment faire »), jamais une réponse liée à l'état du moment.
         // Pour l'entreprise toujours ; pour toutes les entreprises si elle ne parle pas de ce compte (reponseGenerique).
-        if (vecteur && !transferer && outilsDeDoc(r.outils) && !page) {
+        if (vecteur && !transferer && outilsDeDoc(r.outils) && !page && !pieces.length) {
           void memoriserSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: version ?? 0 });
           if (reponseGenerique(reply, r.outils, ctx)) void memoriserSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: 0 });
         }
@@ -158,7 +173,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
       ticket = r.ticket;
     }
     return res.json({
-      ticket: vue(ticket, await messagesDuTicket(admin, ticket.id)),
+      ticket: vue(ticket, await messagesPourVue(admin, ticket.id)),
       reply, escalated: transferer || chezHumain,
       slaKey: ctx.slaKey, sla: slaTexte(ctx.slaKey, ctx.langue),
     });
@@ -177,19 +192,44 @@ router.post('/support/:id/messages', limiteChat, validate(supportMessageSchema),
     if (!ticket) return res.status(404).json({ error: 'Conversation not found.' });
     if (ticket.status === 'closed') ticket = await rouvrirTicket(admin, ticket);
     const ctx = await contexteOrg(admin, auth.orgId, auth.user);
-    const { message } = req.body as { message: string };
-    await ajouterMessage(admin, { ticket, author: 'user', body: message, authorName: ctx.userName });
+    const { message, captures } = req.body as { message: string; captures?: Array<{ chemin: string; nom?: string }> };
+    const chemins = captures?.length ? verifierChemins(auth.orgId, captures) : [];
+    if (chemins === null) return res.status(400).json({ error: 'Invalid captures.' });
+    const pieces: Piece[] = chemins.length ? await piecesDepuisChemins(admin, chemins) : [];
+    await ajouterMessage(admin, { ticket, author: 'user', body: message, authorName: ctx.userName, pieces });
+    const messagePourEquipe = pieces.length ? `${message}${pieceJointeSlack(await liensPieces(admin, pieces, LIEN_EQUIPE_S))}` : message;
     if (ticket.status === 'ai') {
       // Pas encore chez un humain : on y va (le client a écrit hors de la boucle IA).
       await escaladerTicket(admin, ticket, ctx, 'Message du client');
     } else {
-      await relayerMessageClient(admin, ticket, ctx, message);
+      await relayerMessageClient(admin, ticket, ctx, messagePourEquipe);
       if (ticket.status === 'answered') await admin.from('support_tickets').update({ status: 'open' }).eq('id', ticket.id);
     }
     const apres = await ticketDe(admin, ticket.id, auth.orgId, auth.user.id);
-    return res.json({ ticket: vue(apres || ticket, await messagesDuTicket(admin, ticket.id)) });
+    return res.json({ ticket: vue(apres || ticket, await messagesPourVue(admin, ticket.id)) });
   } catch (err: any) {
     return sendSafeError(res, err, 'Could not send your message.', '[support/messages]');
+  }
+});
+
+// ── Capture d'écran ──────────────────────────────────────────
+// Corps brut image/* (≤ 6 Mo, réduit à 1 600 px par le navigateur), nom dans
+// x-capture-nom (encodé). Rangée sous <org>/<user>/ dans le bucket privé ;
+// le chemin revient au client, qui le joint à son prochain message.
+router.post('/support/captures', limiteChat, raw({ type: 'image/*', limit: TAILLE_MAX_OCTETS }), async (req: Request, res: Response) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const type = typeImage(req.headers['content-type']);
+    if (!type) return res.status(415).json({ error: 'Images only (jpeg, png, webp, gif).' });
+    const octets = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!octets || !octets.length) return res.status(400).json({ error: 'Empty image.' });
+    let nom: string | undefined;
+    try { nom = decodeURIComponent(String(req.headers['x-capture-nom'] || '')); } catch { nom = undefined; }
+    const piece = await televerserCapture(getServiceClient(), { orgId: auth.orgId, userId: auth.user.id, type, nom, octets });
+    return res.json({ capture: piece });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Could not upload the screenshot.', '[support/captures]');
   }
 });
 
@@ -206,7 +246,7 @@ router.post('/support/:id/escalate', validate(supportEscalateSchema), async (req
     const { reason } = req.body as { reason?: string };
     const r = await escaladerTicket(admin, ticket, ctx, reason || 'Le client a demandé à parler à un humain');
     if (!r.ok) return res.status(502).json({ error: 'Could not reach a human right now. Please email ' + supportEmail + '.', code: 'send_failed', supportEmail });
-    return res.json({ ticket: vue(r.ticket, await messagesDuTicket(admin, ticket.id)), slaKey: ctx.slaKey, sla: slaTexte(ctx.slaKey, ctx.langue) });
+    return res.json({ ticket: vue(r.ticket, await messagesPourVue(admin, ticket.id)), slaKey: ctx.slaKey, sla: slaTexte(ctx.slaKey, ctx.langue) });
   } catch (err: any) {
     return sendSafeError(res, err, 'Could not escalate.', '[support/escalate]');
   }
@@ -277,7 +317,7 @@ router.get('/support/tickets/:id', async (req, res) => {
     const admin = getServiceClient();
     const ticket = await ticketDe(admin, String(req.params.id), auth.orgId, auth.user.id);
     if (!ticket) return res.status(404).json({ error: 'Conversation not found.' });
-    const messages = await messagesDuTicket(admin, ticket.id);
+    const messages = await messagesPourVue(admin, ticket.id);
     await marquerLu(admin, ticket.id);
     return res.json({ ticket: vue(ticket, messages) });
   } catch (err: any) {

@@ -58,6 +58,7 @@
     "qa:boutons-atteignables": "node --env-file=.env.local scripts/qa/boutons-atteignables.mjs",
     "qa:rls-roles": "node --env-file=.env.local scripts/qa/verifier-rls-roles.mjs",
     "check:accessibilite": "node scripts/accessibilite-mesure.mjs --fichiers",
+    "carte:empreinte": "node scripts/carte-app-empreinte.mjs",
     "qa:tout": "node scripts/qa/tout.mjs",
     "qa:rapport": "node scripts/qa/rapport.mjs",
     "qa:campagne": "node scripts/qa/campagne.mjs",

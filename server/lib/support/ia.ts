@@ -34,7 +34,8 @@ import { indexCarteApp } from './carte-app';
 import { coutEnCents } from '../lumi/tarifs';
 import { logger } from '../logger';
 
-export const MODELE_SUPPORT = 'claude-sonnet-5';
+/** Sonnet 5 par défaut ; LUMI_SUPPORT_MODELE permet de mesurer un autre modèle (Haiku) avec scripts/qa/evaluer-support-qualite.mts. */
+export const MODELE_SUPPORT = process.env.LUMI_SUPPORT_MODELE || 'claude-sonnet-5';
 const MAX_ETAPES = 4;
 const MAX_TOKENS = 1024;
 
@@ -56,6 +57,8 @@ export interface ContexteSupport {
   dossier?: string | null;
   /** Route de l'app où le client se trouve en écrivant (ex. /jobs/123) : Lumi répond « ici », pas « depuis le menu ». */
   page?: string | null;
+  /** Captures d'écran jointes au message courant (base64), regardées par le modèle. */
+  images?: Array<{ media_type: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'; data: string }>;
 }
 
 /** Ce que l'assistant peut FAIRE, fourni par la surface (le module ne touche pas à la base lui-même). */
@@ -98,6 +101,8 @@ Answer in ${langue === 'fr' ? 'French (Québec, vouvoiement, plain words)' : 'En
 You know this client: their account file (« DOSSIER ») is below. Use it to answer directly what concerns THEIR account — plan, renewal date, whether setup, payments or Google reviews are configured, how many clients/jobs they have, where their data migration stands, what they already asked support, what Lumi (the in-app assistant) did recently. Never guess a fact that is not in the dossier, the FAQ, or a tool result. Never mention or invent another client's data.
 
 You answer from (1) what the search_help tool returns — it holds the product documentation, the FAQ answers and the APP MAP (the exact buttons and menus of every screen): call it BEFORE answering any "how do I…" or "where is…" question, with the user's words, (2) the APP MAP index below (which screens exist and their route), (3) the DOSSIER${outils.statutMigration ? ', (4) get_migration_status' : ''}. Never invent a feature, a price, a button or a setting: a path you give must come from search_help or from the index.
+
+If the client attaches a screenshot, look at it first: say in one short sentence what you see (the screen, the error text if any), then answer from it. When you transfer, put what the screenshot shows in the reason for the team.
 
 Passages titled « Réponse de l'équipe Lume — … » are answers the Lume team gave to other clients and chose to keep: they are the most up-to-date truth (a feature that is coming, a known issue, a workaround). Use them first and say the team confirmed it (« l'équipe a confirmé que … ») — without naming the other client.
 
@@ -180,9 +185,13 @@ export async function repondreSupportIA(
   outils: OutilsSupport = {},
 ): Promise<ReponseSupportIA> {
   const surface: SurfaceSupport = contexte.surface ?? 'app';
+  // Les captures du client précèdent son texte dans le dernier message (le modèle les regarde avant de lire).
+  const dernier: Anthropic.Messages.MessageParam = contexte.images?.length
+    ? { role: 'user', content: [...contexte.images.map((i) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: i.media_type, data: i.data } })), { type: 'text' as const, text: message }] }
+    : { role: 'user', content: message };
   const messages: Anthropic.Messages.MessageParam[] = [
     ...historique.slice(-12).map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user', content: message },
+    dernier,
   ];
   const system: Anthropic.Messages.TextBlockParam[] = [
     { type: 'text', text: promptStable(contexte.langue, surface, outils), cache_control: { type: 'ephemeral', ttl: '1h' } },
@@ -203,8 +212,8 @@ export async function repondreSupportIA(
       system,
       tools: definitions,
       messages: [...messages], // copie : le tableau continue d'évoluer pendant la boucle
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low' },
+      // Réflexion adaptative à effort bas : Claude 4.6+ seulement (Haiku 4.5 répond 400 « adaptive thinking is not supported »).
+      ...(/haiku-4-5|sonnet-4-5|opus-4-5/.test(MODELE_SUPPORT) ? {} : { thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const } }),
     });
     coutCents += coutEnCents(MODELE_SUPPORT, reponse.usage);
 

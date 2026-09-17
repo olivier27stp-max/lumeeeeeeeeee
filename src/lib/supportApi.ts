@@ -38,7 +38,10 @@ export interface SupportMessage {
   createdAt: string;
   /** 👍 / 👎 donné sur une réponse de Lumi. */
   avis?: 'bon' | 'mauvais' | null;
+  /** Captures jointes (lien signé 1 h). */
+  pieces?: Array<{ nom: string; url: string }>;
 }
+export interface CaptureSupport { chemin: string; nom: string; type: string; taille: number }
 export interface SupportTicket {
   id: string;
   subject: string;
@@ -89,12 +92,29 @@ export async function submitSupportRequest(input: SupportRequestInput): Promise<
 }
 
 /** Un tour avec l'assistant (ou un transfert direct à un humain avec `humain: true`). */
-export async function chatSupport(input: { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion'; page?: string }): Promise<SupportChatResult> {
+/** Téléverse une capture (image déjà réduite côté client) ; le chemin revient et se joint au prochain message. */
+export async function televerserCaptureSupport(fichier: Blob, nom: string): Promise<{ capture: CaptureSupport }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const response = await fetch('/api/support/captures', {
+    method: 'POST',
+    headers: { 'Content-Type': fichier.type || 'image/jpeg', 'x-capture-nom': encodeURIComponent(nom), Authorization: `Bearer ${session?.access_token || ''}` },
+    body: fichier,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const err = new Error(data?.error || 'Could not upload the screenshot.') as SupportRequestError;
+    err.code = data?.code; err.supportEmail = data?.supportEmail;
+    throw err;
+  }
+  return data as { capture: CaptureSupport };
+}
+
+export async function chatSupport(input: { ticketId?: string; message: string; humain?: boolean; origine?: 'texte' | 'suggestion'; page?: string; captures?: Array<{ chemin: string; nom: string }> }): Promise<SupportChatResult> {
   return appel<SupportChatResult>('/api/support/chat', { method: 'POST', body: JSON.stringify(input) });
 }
 
-export async function sendSupportMessage(ticketId: string, message: string): Promise<{ ticket: SupportTicket }> {
-  return appel<{ ticket: SupportTicket }>(`/api/support/${ticketId}/messages`, { method: 'POST', body: JSON.stringify({ message }) });
+export async function sendSupportMessage(ticketId: string, message: string, captures?: Array<{ chemin: string; nom: string }>): Promise<{ ticket: SupportTicket }> {
+  return appel<{ ticket: SupportTicket }>(`/api/support/${ticketId}/messages`, { method: 'POST', body: JSON.stringify({ message, ...(captures?.length ? { captures } : {}) }) });
 }
 
 /** 👍 / 👎 sur une réponse de Lumi. Un 👎 fait oublier la réponse mémorisée. */

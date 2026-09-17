@@ -10,6 +10,7 @@ import { sendEmail, isMailerConfigured } from '../mailer';
 import { emailFrom, supportEmail } from '../config';
 import { resolvePublicBaseUrl } from '../helpers';
 import { isSlackConfigured, canalSupport, envoyerMessageSlack, echapperSlack } from '../slack';
+import { liensPieces, pieceJointeSlack, LIEN_EQUIPE_S, type Piece } from './captures';
 import { logger } from '../logger';
 
 // Forfaits prioritaires (« Support prioritaire » sur la page des prix).
@@ -57,6 +58,8 @@ export interface MessageTicket {
   created_at: string;
   /** 👍 / 👎 du client sur une réponse de Lumi. */
   avis?: 'bon' | 'mauvais' | null;
+  /** Captures jointes par le client (bucket support-captures). */
+  pieces?: Piece[] | null;
 }
 
 export interface ContexteOrg {
@@ -163,17 +166,18 @@ export async function ticketDe(admin: SupabaseClient, ticketId: string, orgId: s
 }
 
 export async function messagesDuTicket(admin: SupabaseClient, ticketId: string): Promise<MessageTicket[]> {
-  const { data, error } = await admin.from('support_messages').select('id, ticket_id, author, author_name, body, created_at, avis').eq('ticket_id', ticketId).order('created_at', { ascending: true }).limit(200);
+  const { data, error } = await admin.from('support_messages').select('id, ticket_id, author, author_name, body, created_at, avis, pieces').eq('ticket_id', ticketId).order('created_at', { ascending: true }).limit(200);
   if (error) throw new Error(`support_messages select : ${error.message}`);
   return (data || []) as MessageTicket[];
 }
 
 export async function ajouterMessage(admin: SupabaseClient, p: {
-  ticket: Pick<Ticket, 'id' | 'org_id'>; author: MessageTicket['author']; body: string; authorName?: string | null; slackTs?: string | null;
+  ticket: Pick<Ticket, 'id' | 'org_id'>; author: MessageTicket['author']; body: string; authorName?: string | null; slackTs?: string | null; pieces?: Piece[];
 }): Promise<MessageTicket | null> {
   const { data, error } = await admin.from('support_messages').insert({
     ticket_id: p.ticket.id, org_id: p.ticket.org_id, author: p.author, author_name: p.authorName || null, body: p.body.slice(0, 10_000), slack_ts: p.slackTs || null,
-  }).select('id, ticket_id, author, author_name, body, created_at').maybeSingle();
+    ...(p.pieces?.length ? { pieces: p.pieces } : {}),
+  }).select('id, ticket_id, author, author_name, body, created_at, pieces').maybeSingle();
   if (error) {
     // Doublon Slack (même ts) : le webhook a été rejoué, on ignore.
     if (error.code === '23505') return null;
@@ -215,9 +219,10 @@ function libelleAuteur(m: MessageTicket): string {
  * de ≤ 3 500 caractères pour Slack. Rafba veut la lire en entier dans le
  * canal du client — c'est ce qui lui manquait avec l'extrait.
  */
-export function transcriptSlackComplet(messages: MessageTicket[], tailleMax = 3500): string[] {
+export function transcriptSlackComplet(messages: MessageTicket[], tailleMax = 3500, liens: Map<string, string> = new Map()): string[] {
   const visibles = messages.filter((m) => m.author !== 'system');
-  const lignes = visibles.map((m) => `*${echapperSlack(libelleAuteur(m))}* — ${echapperSlack(m.body)}`);
+  // Les captures du client : « 📎 <lien signé|nom> » sous son message (liens = chemin → url, signés par l'appelant).
+  const lignes = visibles.map((m) => `*${echapperSlack(libelleAuteur(m))}* — ${echapperSlack(m.body)}${pieceJointeSlack((m.pieces || []).filter((p) => liens.has(p.chemin)).map((p) => ({ nom: p.nom, url: liens.get(p.chemin)! })))}`);
   const morceaux: string[] = [];
   let courant = '';
   for (const l of lignes) {
@@ -304,7 +309,9 @@ export async function escaladerTicket(admin: SupabaseClient, ticket: Ticket, ctx
       // Dans le canal du client, la conversation se lit au premier niveau, en
       // entier ; dans #support (repli), elle reste sous l'en-tête, dans le fil.
       const dansLeFil = canalEntreprise ? {} : { thread_ts: parent.ts };
-      for (const morceau of transcriptSlackComplet(messages)) {
+      const liens = new Map<string, string>();
+      for (const m of messages) for (const l of await liensPieces(admin, m.pieces, LIEN_EQUIPE_S)) { const p = (m.pieces || []).find((x) => x.nom === l.nom); if (p) liens.set(p.chemin, l.url); }
+      for (const morceau of transcriptSlackComplet(messages, 3500, liens)) {
         await envoyerMessageSlack({ channel: parent.channel, ...dansLeFil, text: morceau });
       }
       // Export .txt de la même conversation (scope files:write ; sinon on s'en passe).

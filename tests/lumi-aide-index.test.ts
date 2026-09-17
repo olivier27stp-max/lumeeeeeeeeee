@@ -40,6 +40,7 @@ describe('index d aide élargi', () => {
     }
   });
   it('la carte reste sous le plafond de cache du prompt support', () => {
-    expect(CARTE_APP.length).toBeLessThan(16_000);
+    // Depuis #412 la carte n'entre plus dans le prompt (indexée par search_help) : le plafond ne protège que la taille de l'index en mémoire.
+    expect(CARTE_APP.length).toBeLessThan(24_000);
   });
 });

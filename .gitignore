@@ -46,3 +46,6 @@ qa-carte-boutons.json
 qa-rapport.md
 qa-captures/
 qa-lumi-evaluation.json
+
+# Rapports JSON des batteries de qualité du support (réponses complètes, coûts)
+scripts/qa/rapports/
