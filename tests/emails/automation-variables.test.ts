@@ -160,8 +160,10 @@ describe('détails de contenu', () => {
     // Ce bloc avait son propre résolveur, limité à {var}. Un modèle écrit avec
     // [var] — la syntaxe de tous les presets — affichait le placeholder brut
     // au client.
-    expect(actions).toContain('subject = resolveTemplate(emailTemplate.subject, templateVars)');
-    expect(actions).toContain('body = resolveTemplate(emailTemplate.body, templateVars)');
+    // (Le jeu de variables s'appelle `messageVars` depuis la refonte des
+    // avis ; le test suivait encore l'ancien nom `templateVars`.)
+    expect(actions).toContain('subject = resolveTemplate(emailTemplate.subject, messageVars)');
+    expect(actions).toContain('body = resolveTemplate(emailTemplate.body, messageVars)');
     expect(actions).toContain('...vars,');
   });
 
