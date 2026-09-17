@@ -1359,6 +1359,10 @@ app.listen(port, '0.0.0.0', () => {
     import('./lib/support/relais-slack').then(({ demarrerReleveSlack }) => {
       demarrerReleveSlack();
     }).catch((e: any) => captureCronFailure('slack-relais-startup', e));
+    // Résumé quotidien du support (7 h Montréal) dans le canal central : une ligne par conversation de la veille.
+    Promise.all([import('./lib/support/resume-quotidien'), import('./lib/supabase')]).then(([{ demarrerResumeQuotidien }, { getServiceClient: serviceClient }]) => {
+      demarrerResumeQuotidien(serviceClient);
+    }).catch((e: any) => captureCronFailure('support-resume-startup', e));
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));
