@@ -125,6 +125,7 @@ export async function envoyerResumeQuotidien(admin: SupabaseClient, maintenant =
       .from('support_messages')
       .select('ticket_id, author, body, created_at, avis')
       .in('ticket_id', tickets.map((t: any) => t.id))
+      .neq('author', 'system')
       .order('created_at', { ascending: true }).limit(2000);
     if (e2) throw e2;
     const texte = composerResume(jour, fin, tickets as TicketResume[], (messages ?? []) as MessageResume[]);

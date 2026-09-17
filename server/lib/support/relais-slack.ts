@@ -18,6 +18,19 @@ import { isSlackConfigured, identiteBot, nomUtilisateurSlack, texteDepuisSlack, 
 import { ajouterMessage, notifierClientReponse, messagesDuTicket, type Ticket } from './tickets';
 import { texteAApprendre, questionDuTicket, apprendre, accuserApprentissage, dejaAppris } from './savoir';
 
+/**
+ * Un message Slack traité sans être relayé (note interne, 📌 retenu) est
+ * quand même enregistré, comme message « system » portant son ts : le relevé
+ * périodique (toutes les 45 s) ne le revoit plus, donc pas d'accusé répété
+ * dans le fil. Invisible du client (vue() et le transcript filtrent system).
+ * N'avance pas last_message_at : ce n'est pas une activité de la conversation.
+ */
+async function marquerTraiteSlack(admin: SupabaseClient, t: Ticket, ts: string | undefined, quoi: string): Promise<void> {
+  if (!ts) return;
+  const { error } = await admin.from('support_messages').insert({ ticket_id: t.id, org_id: t.org_id, author: 'system', author_name: null, body: quoi, slack_ts: ts });
+  if (error && error.code !== '23505') logger.error('[support/relais] marquage impossible', { ticketId: t.id, error: error.message });
+}
+
 export interface EvenementMessageSlack {
   type: string;
   subtype?: string;
@@ -96,12 +109,14 @@ export async function relayerReponseSlack(e: EvenementMessageSlack, ticketConnu?
   const aApprendre = texteAApprendre(corps);
   if (aApprendre) {
     const verdict = await apprendre(admin, { question: questionDuTicket(t, await messagesDuTicket(admin, t.id)), reponse: aApprendre, auteur, ticketId: t.id, channel: e.channel, ts: e.ts });
-    if (e.channel && e.ts) await accuserApprentissage(e.channel, e.ts, verdict);
+    await marquerTraiteSlack(admin, t, e.ts, `slack:retenu:${verdict}`);
+    if (e.channel && e.ts && verdict !== 'deja') await accuserApprentissage(e.channel, e.ts, verdict);
     return `learned:${verdict}`;
   }
   // Une note interne reste dans Slack : marquée 🔒 dans le fil pour que l'équipe voie qu'elle n'est pas partie.
   if (estNoteInterne(corps)) {
     logger.info('[support/relais] note interne non relayée', { ticketId: t.id });
+    await marquerTraiteSlack(admin, t, e.ts, 'slack:note-interne');
     if (e.channel && e.ts) await accuserLivraisonSlack(e.channel, e.ts, false, 'Note interne : pas envoyée au client (commence par 🔒 ou [interne] pour être sûr).');
     return 'ignored:internal-note';
   }

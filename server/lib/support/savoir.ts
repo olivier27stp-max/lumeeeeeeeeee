@@ -99,11 +99,12 @@ export async function apprendre(admin: SupabaseClient, p: { question: string; re
   }
 }
 
-/** 🧠 sur le message retenu (ou une courte réponse sans le scope reactions:write). Best-effort. */
+/** 🧠 sur le message retenu (ou une courte réponse sans le scope reactions:write) ; ❌ + une ligne si ça a échoué ; rien pour un doublon. Best-effort, une seule fois. */
 export async function accuserApprentissage(channel: string, ts: string, verdict: 'appris' | 'deja' | 'erreur'): Promise<void> {
+  if (verdict === 'deja') return;
   const texte = verdict === 'appris'
     ? ':brain: Lumi a retenu cette réponse pour les prochains clients (elle n’est pas envoyée à celui-ci).'
-    : verdict === 'deja' ? ':brain: Déjà retenu.' : ':x: Lumi n’a pas pu retenir ça (voir les journaux).';
+    : ':x: Lumi n’a pas pu retenir ça (voir les journaux).';
   try {
     if (verdict === 'appris') { await reagirSlack(channel, ts, 'brain'); return; }
     await envoyerMessageSlack({ channel, thread_ts: ts, text: texte });

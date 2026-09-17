@@ -39,5 +39,9 @@ Compte : à enrichir (SF oct)
     expect(i).toBeGreaterThan(0);
     expect(i).toBeLessThan(src.indexOf('await ajouterMessage(admin, { ticket: t'));
     expect(src).toContain("return 'ignored:internal-note';");
+    // Marquée comme traitée (message system avec son ts) : le relevé des 45 s ne la re-signale pas dans le fil à chaque passage.
+    const marque = src.indexOf("await marquerTraiteSlack(admin, t, e.ts, 'slack:note-interne')");
+    expect(marque).toBeGreaterThan(i);
+    expect(marque).toBeLessThan(src.indexOf("return 'ignored:internal-note';"));
   });
 });

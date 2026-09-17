@@ -59,6 +59,9 @@ describe('câblage', () => {
     expect(apprend).toBeLessThan(relais.indexOf('if (estNoteInterne(corps))'));
     expect(relais).toContain("x.name === 'pushpin'");
     expect(relais).toContain("return `learned:${verdict}`");
+    // Marqué traité (message system) avant l'accusé : jamais deux 🧠 ni un message répété à chaque relevé ; un doublon reste silencieux.
+    expect(relais.indexOf('await marquerTraiteSlack(admin, t, e.ts, `slack:retenu:${verdict}`)')).toBeLessThan(relais.indexOf('await accuserApprentissage(e.channel, e.ts, verdict)'));
+    expect(readFileSync(resolve(racine, 'server', 'lib', 'support', 'savoir.ts'), 'utf8')).toContain("if (verdict === 'deja') return;");
   });
   it('un 👎 fait oublier la réponse mémorisée, entreprise et partagée, et seule une réponse de Lumi se note', () => {
     expect(route).toContain("router.post('/support/:id/messages/:mid/avis'");
