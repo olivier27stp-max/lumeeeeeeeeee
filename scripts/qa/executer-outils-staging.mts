@@ -78,6 +78,8 @@ function suffixer<T>(v: T): T {
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, suffixer(x)])) as unknown as T;
   return v;
 }
+/** Erreurs qui signifient « l'état voulu existe déjà » (une passe précédente l'a créé) : comptées ok, avec la note. */
+const DEJA: Partial<Record<string, RegExp>> = { create_rep: /already exists|existe déjà/i };
 async function ex(nom: string, args: Record<string, any> | null | (() => Record<string, any> | null), apres?: (r: any) => void): Promise<any> {
   if (SEULEMENT && !SEULEMENT.has(nom)) return null;
   const brut = typeof args === 'function' ? args() : args;
@@ -94,6 +96,7 @@ async function ex(nom: string, args: Record<string, any> | null | (() => Record<
     return r;
   } catch (e: any) {
     const msg = String(e?.message || e).slice(0, 220);
+    if (DEJA[nom]?.test(msg)) { resultats.push({ outil: nom, verdict: 'ok', detail: `déjà en place (${msg})`, duree_ms: Date.now() - debut }); console.log(`  OK   ${nom} (déjà en place)`); return null; }
     resultats.push({ outil: nom, verdict: 'erreur', detail: msg, duree_ms: Date.now() - debut });
     console.log(`  ERR  ${nom} : ${msg}`);
     return null;
@@ -173,8 +176,9 @@ await ex('create_recurrence_rule', () => S.job && { job_id: S.job, frequency: 'w
 if (!S.recurrence && S.job) S.recurrence = trouver(await lire('list_recurrence_rules'), `Exec-${R} job`, 'rule_id', 'id');
 await ex('deactivate_recurrence_rule', () => S.recurrence && { rule_id: S.recurrence });
 await ex('create_job_template', { title: 'Exec modèle de job', line_items: [{ name: 'Lavage', qty: 1, unit_price_cents: 10000 }] });
-// Sur le job issu du prospect (aucune facture encore) : un job facturé par jalons refuse une facture globale (« existe déjà »).
-await ex('create_invoice_from_job', () => (S.jobDuLead || S.job) && { job_id: S.jobDuLead || S.job }, (r) => { S.factureJob = trouver(r, null, 'invoice_id', 'id'); });
+// Un job neuf, sans jalon ni facture : un job facturé par jalons refuse une facture globale (« existe déjà »).
+await ex('create_job', () => S.client && { title: 'Exec job à facturer', client_id: S.client, line_items: [{ name: 'Lavage', qty: 1, unit_price_cents: 8000 }] }, (r) => { S.jobFacture = trouver(r, null, 'job_id', 'id'); });
+await ex('create_invoice_from_job', () => S.jobFacture && { job_id: S.jobFacture }, (r) => { S.factureJob = trouver(r, null, 'invoice_id', 'id'); });
 await ex('archive_job', () => S.job && { job_id: S.job });
 await ex('archive_job', () => S.job && { job_id: S.job, restore: true });
 
@@ -308,7 +312,8 @@ await ex('delete_goal', () => S.objectif && { goal_id: S.objectif });
 await ex('create_scheduled_report', { recipient_email: 'exec.rapport@example.com', frequency: 'weekly', day_of_week: 1 }, (r) => { S.rapport = trouver(r, null, 'report_id', 'id'); });
 if (!S.rapport) S.rapport = trouver(await lire('list_scheduled_reports'), `exec.${R}.rapport`, 'report_id', 'id');
 await ex('update_scheduled_report', () => S.rapport && { report_id: S.rapport, frequency: 'monthly', day_of_month: 2 });
-await ex('send_scheduled_report_now', () => S.rapport && { report_id: S.rapport });
+if (process.env.RESEND_API_KEY || process.env.SMTP_HOST) await ex('send_scheduled_report_now', () => S.rapport && { report_id: S.rapport });
+else exclu('send_scheduled_report_now', 'aucun fournisseur de courriel configuré dans cet environnement (RESEND_API_KEY / SMTP_HOST absents)');
 await ex('delete_scheduled_report', () => S.rapport && { report_id: S.rapport });
 
 // ── Terrain, formations ──
@@ -335,8 +340,12 @@ await ex('update_course', () => S.cours && { course_id: S.cours, description: 'E
 await ex('publish_course', () => S.cours && { course_id: S.cours, publish: true });
 await ex('assign_course', () => S.cours && S.tech && { course_id: S.cours, user_ids: [S.tech] });
 
-// ── Ménage : le client de test et son job ──
+// ── Ménage : le client de test, ses jobs, les prospects (convertis ou non) — sinon les évaluations tombent dessus ──
+if (S.jobDuLead) await ex('delete_job', { job_id: S.jobDuLead });
+if (S.clientDuLead) await ex('delete_client', { client_id: S.clientDuLead });
+if (S.lead2) await ex('delete_lead', { lead_id: S.lead2 });
 await ex('delete_job', () => S.job && { job_id: S.job });
+if (S.jobFacture) await ex('delete_job', { job_id: S.jobFacture });
 await ex('delete_client', () => S.client && { client_id: S.client });
 
 // ── Bilan ──

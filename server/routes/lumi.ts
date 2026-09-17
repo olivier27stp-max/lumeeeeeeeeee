@@ -30,10 +30,11 @@ import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definir
 import { getUserContext } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, OUTILS_DE_BASE, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
+import { detecterActionDirecte, repondreActionDirecte, actionDepuisExtraction } from '../lib/lumi/actions-directes';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
 import { escalader, motifDansResultat } from '../lib/lumi/escalade';
-import { classifier, modeRouteur, MODELE_ROUTEUR, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
+import { classifier, modeRouteur, MODELE_ROUTEUR, SEUIL_CONFIANCE, type ResultatRouteur, type ContexteRouteur } from '../lib/lumi/routeur';
 import { sousAgentDepuisVerdict, focusDuSousAgent, effortDuSousAgent, outilsDuSousAgent } from '../lib/lumi/sous-agents';
 import { indiceOutils } from '../lib/lumi/indices-outils';
 import type { IdTopic } from '../lib/lumi/topics';
@@ -464,6 +465,38 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       }
     }
 
+    // Étage 2 bis — actions directes (actions-directes.ts, 2026-09-17) : fiches par
+    // numéro, listes de réglages, écritures qui ne touchent que l'utilisateur
+    // (pointage, pause, mémoire), et cartes préparées par le code (job 33
+    // terminé, envoie la facture 4, invite marc@… comme technicien). 0 token.
+    // Au moindre doute la fonction rend null et le modèle prend le relais.
+    const directe = enAttente.length || repli ? null : detecterActionDirecte(message);
+    if (directe) {
+      const debut = Date.now();
+      const rep = await repondreActionDirecte(directe, { ...ctxRaccourci, maintenant: new Date() });
+      if (rep) {
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        if (rep.genre === 'texte') {
+          if (directe.tool) { emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'debut' }); emettreSse('tool', { type: 'tool', name: directe.tool, statut: 'fin' }); }
+          if (rep.recu) emettreSse('executed', { type: 'executed', ...rep.recu });
+          emettreSse('text', { type: 'text', delta: rep.texte });
+          if (rep.fiches.length) emettreSse('fiches', { type: 'fiches', fiches: rep.fiches });
+          emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, raccourci: directe.id, etage: ETAGE.raccourci });
+        } else {
+          emettreSse('proposal', { type: 'proposal', tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args, capacite: rep.capacite, apercu: rep.apercu });
+          emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: directe.id, etage: ETAGE.raccourci });
+        }
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.raccourci, action: directe.id, params: directe.cible ? { cible: directe.cible } : undefined,
+          outils: directe.tool ? [directe.tool] : [], resultat: rep.genre === 'carte' ? 'proposition' : 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
     // Repli : la réponse précédente n'était pas la bonne → on l'oublie dans les deux caches.
     if (repli && enoncePrecedent) {
       void retirerReponse({ orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: enoncePrecedent });
@@ -577,6 +610,30 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
           enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: r.id,
           params: { ...(r.periode ? { periode: r.periode } : {}), ...(r.numero ? { numero: r.numero } : {}), routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
           outils: [r.tool], resultat: 'ok', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
+        });
+        return res.end();
+      }
+    }
+
+    // Extraction (2026-09-17) : Haiku a lu les champs d'une écriture simple → le
+    // code bâtit la carte (mêmes résolutions et gardes que les motifs stricts).
+    // 0,15 ¢ au lieu d'un tour de Sonnet. Si la résolution rate (client
+    // introuvable ou en double, date non simple), le modèle prend le relais.
+    if (routeur?.verdict?.extraction && routeur.decision === 'modele' && routeur.verdict.confidence >= SEUIL_CONFIANCE) {
+      const debut = Date.now();
+      const a = actionDepuisExtraction(routeur.verdict.extraction, message);
+      const rep = a ? await repondreActionDirecte(a, { ...ctxRaccourci, maintenant: new Date() }) : null;
+      if (a && rep && rep.genre === 'carte') {
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, ...(rep.messages as Msg[])], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('proposal', { type: 'proposal', tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args, capacite: rep.capacite, apercu: rep.apercu });
+        const coutRouteur = routeur.usage ? coutEnCents(MODELE_ROUTEUR, routeur.usage) : 0;
+        emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: { tool_use_id: rep.tool_use_id, tool: rep.tool, args: rep.args }, raccourci: `extraction:${a.id}`, etage: ETAGE.routeur });
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: `extraction:${a.id}`, params: { extraction: routeur.verdict.extraction, routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms } },
+          outils: [a.tool], resultat: 'proposition', model: MODELE_ROUTEUR, usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(), costCents: coutRouteur, dureeMs: Date.now() - debut,
         });
         return res.end();
       }

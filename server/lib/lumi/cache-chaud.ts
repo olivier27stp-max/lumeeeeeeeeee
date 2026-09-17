@@ -39,7 +39,7 @@ let dernierPrefixe: Prefixe | null = null;
  * chaud coûte ~0,2 ¢ par ping. Chaque entrée a sa propre horloge.
  */
 const prefixes = new Map<string, { prefixe: Prefixe; dernierAppelReel: number; dernierPing: number }>();
-export const MAX_PREFIXES_CHAUDS = 8;
+export const MAX_PREFIXES_CHAUDS = 12;
 
 /** À appeler à chaque appel réel au modèle : c'est ce qui arme le maintien. `cle` = jeu d'outils (base ou topic). */
 export function signalerAppelLumi(model: string, prefixe?: Prefixe, cle = 'base'): void {

@@ -2160,6 +2160,12 @@ export const PERMISSIONS_ARGENT: Record<string, { cle: PermissionKey; capacite: 
 };
 
 /** Topic de chaque outil (à fusionner dans TOPICS) : tout ce module relève de « facturation ». */
+const OUTILS_DEVIS = new Set([
+  'update_quote', 'duplicate_quote', 'delete_quote', 'unarchive_quote', 'send_quote_sms', 'convert_quote_to_invoice',
+  'list_quote_presets', 'create_quote_preset', 'update_quote_preset', 'delete_quote_preset', 'duplicate_quote_preset',
+  'list_quote_templates', 'create_quote_template', 'update_quote_template', 'delete_quote_template',
+]);
 export const TOPICS_ARGENT: Partial<Record<IdTopic, string[]>> = {
-  facturation: OUTILS_ARGENT.map((t) => t.declaration.name),
+  devis: OUTILS_ARGENT.map((t) => t.declaration.name).filter((n) => OUTILS_DEVIS.has(n)),
+  facturation: OUTILS_ARGENT.map((t) => t.declaration.name).filter((n) => !OUTILS_DEVIS.has(n)),
 };
