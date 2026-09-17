@@ -44,6 +44,7 @@ import type { IdTopic } from './topics';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
 import { executerEcriture, type ReçuExecution } from './execution';
 import { signalerAppelLumi } from './cache-chaud';
+import { allegerSchema } from './alleger-outils';
 import { ECRITURES_ANODINES } from '../agent/registre';
 
 const MAX_ETAPES = 8;
@@ -153,7 +154,8 @@ export function outilsClaude(sousAgent: IdTopic | null = null): Anthropic.Messag
   const defs: Anthropic.Messages.Tool[] = AGENT_TOOLS.map((t) => ({
     name: t.declaration.name,
     description: t.declaration.description,
-    input_schema: (t.declaration.parameters ?? { type: 'object', properties: {} }) as Anthropic.Messages.Tool['input_schema'],
+    // Sans les descriptions de paramètres qui répètent le nom (« Job id. ») : −2 à −3 % du bloc, déterministe (alleger-outils.ts).
+    input_schema: allegerSchema(t.declaration.parameters ?? { type: 'object', properties: {} }) as Anthropic.Messages.Tool['input_schema'],
   }));
   // Sous-agent (B7) : le jeu d'outils du topic remplace le jeu de base ; même
   // ordre stable que AGENT_TOOLS, donc un préfixe en cache par topic.

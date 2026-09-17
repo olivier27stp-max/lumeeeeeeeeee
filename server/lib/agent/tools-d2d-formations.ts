@@ -20,7 +20,7 @@
    Manifestes exportés (à brancher par le registre central) :
    OUTILS_D2D_FORMATIONS, REGISTRE_D2D_FORMATIONS (attributs des écritures),
    PERMISSIONS_D2D_FORMATIONS (clé de la page Rôles par outil),
-   TOPICS_D2D_FORMATIONS (tous dans « equipe »).
+   TOPICS_D2D_FORMATIONS (tous dans « terrain »).
    ═══════════════════════════════════════════════════════════════ */
 import type { PermissionKey } from '../../../src/lib/permissions';
 import type { IdTopic } from '../lumi/topics';
@@ -1272,5 +1272,5 @@ export const PERMISSIONS_D2D_FORMATIONS: Record<string, { cle: PermissionKey; ca
 
 /** Tous dans « equipe » (porte-à-porte, formations), chacun une seule fois. */
 export const TOPICS_D2D_FORMATIONS: Partial<Record<IdTopic, string[]>> = {
-  equipe: OUTILS_D2D_FORMATIONS.map((t) => t.declaration.name),
+  terrain: OUTILS_D2D_FORMATIONS.map((t) => t.declaration.name),
 };

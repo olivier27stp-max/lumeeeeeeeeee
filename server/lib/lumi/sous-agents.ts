@@ -19,7 +19,7 @@ import { SEUIL_CONFIANCE, type ResultatRouteur } from './routeur';
 import { reglesCout } from './regles-cout';
 
 /** Chargés avec tout sous-agent : mémoire de Lumi, aide sur Lume, fiche d'entreprise. */
-export const OUTILS_TRANSVERSES: readonly string[] = ['recall_notes', 'remember_this', 'forget_note', 'search_help', 'get_company_info'];
+export const OUTILS_TRANSVERSES: readonly string[] = ['recall_notes', 'remember_this', 'forget_note', 'search_help', 'get_company_info', 'list_services'];
 
 /** Topics qui ne définissent pas un sous-agent (pas de jeu d'outils propre). */
 const SANS_SOUS_AGENT: ReadonlySet<string> = new Set(['hors_scope', 'multi']);
@@ -76,8 +76,12 @@ const CONSIGNES_SOUS_AGENT: Partial<Record<IdTopic, { fr: string; en: string }>>
     en: 'To create or move a job, propose the card right away with what was given (empty items allowed): no preliminary question about items or prices, the user reviews the card.',
   },
   facturation: {
-    fr: 'Pour une écriture (devis, facture, marquer payée, relances), appelle l’outil tout de suite avec ce qui est fourni : la carte de confirmation EST la question, ne demande pas « je le fais ? » en texte.',
-    en: 'For a write (quote, invoice, mark paid, reminders), call the tool right away with what was given: the confirmation card IS the question, do not ask "should I?" in text.',
+    fr: 'Pour une écriture (facture, marquer payée, relances), appelle l’outil tout de suite avec ce qui est fourni : la carte de confirmation EST la question, ne demande pas « je le fais ? » en texte.',
+    en: 'For a write (invoice, mark paid, reminders), call the tool right away with what was given: the confirmation card IS the question, do not ask "should I?" in text.',
+  },
+  devis: {
+    fr: 'Pour un devis, appelle create_quote tout de suite avec les articles fournis (prix du catalogue list_services si connus) : la carte de confirmation EST la question ; un préréglage (preset) ≠ un modèle (template).',
+    en: 'For a quote, call create_quote right away with the given items (catalog prices from list_services when known): the confirmation card IS the question; a preset is not a template.',
   },
   communications: {
     fr: 'Pour un texto ou un courriel, appelle send_sms / send_email tout de suite avec le texte complet : la carte montre le message exact et le destinataire, c’est elle qui demande le OK.',

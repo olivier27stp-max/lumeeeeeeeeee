@@ -177,10 +177,10 @@ describe('manifestes', () => {
     }
   });
 
-  it('tous les outils sont dans le topic « equipe », une seule fois', () => {
-    expect(Object.keys(TOPICS_D2D_FORMATIONS)).toEqual(['equipe']);
-    expect([...(TOPICS_D2D_FORMATIONS.equipe ?? [])].sort()).toEqual([...NOMS].sort());
-    expect(new Set(TOPICS_D2D_FORMATIONS.equipe).size).toBe(NOMS.length);
+  it('tous les outils sont dans le topic « terrain », une seule fois', () => {
+    expect(Object.keys(TOPICS_D2D_FORMATIONS)).toEqual(['terrain']);
+    expect([...(TOPICS_D2D_FORMATIONS.terrain ?? [])].sort()).toEqual([...NOMS].sort());
+    expect(new Set(TOPICS_D2D_FORMATIONS.terrain).size).toBe(NOMS.length);
   });
 });
 

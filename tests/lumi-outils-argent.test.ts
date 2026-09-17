@@ -126,10 +126,14 @@ describe('manifestes : outils, registre, permissions, topics', () => {
     for (const p of Object.values(PERMISSIONS_ARGENT)) expect(p.capacite.length).toBeGreaterThan(3);
   });
 
-  it('topics : tous les outils dans « facturation », une seule fois', () => {
-    expect(Object.keys(TOPICS_ARGENT)).toEqual(['facturation']);
-    expect([...(TOPICS_ARGENT.facturation || [])].sort()).toEqual([...noms].sort());
-    expect(new Set(TOPICS_ARGENT.facturation).size).toBe(noms.length);
+  it('topics : chaque outil dans « devis » OU « facturation », une seule fois (deux sujets = deux blocs d outils deux fois plus légers)', () => {
+    expect(Object.keys(TOPICS_ARGENT).sort()).toEqual(['devis', 'facturation']);
+    const tous = [...(TOPICS_ARGENT.devis || []), ...(TOPICS_ARGENT.facturation || [])];
+    expect([...tous].sort()).toEqual([...noms].sort());
+    expect(new Set(tous).size).toBe(noms.length);
+    expect(TOPICS_ARGENT.devis).toContain('update_quote');
+    expect(TOPICS_ARGENT.devis).toContain('list_quote_presets');
+    expect(TOPICS_ARGENT.facturation).toContain('update_invoice');
   });
 
   it('chaque déclaration accepte un exemple minimal conforme (sous-ensemble validerArgs)', () => {
