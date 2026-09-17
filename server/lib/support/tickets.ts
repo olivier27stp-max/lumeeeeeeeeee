@@ -205,7 +205,7 @@ function enTeteSlack(t: Ticket, ctx: ContexteOrg, motif: string): { text: string
     blocks: [
       { type: 'header', text: { type: 'plain_text', text: `${t.priority === 'priority' ? '🚨 ' : '💬 '}${t.subject.slice(0, 140)}`, emoji: true } },
       { type: 'section', fields: champs.map((f) => ({ type: 'mrkdwn', text: f })) },
-      { type: 'context', elements: [{ type: 'mrkdwn', text: `Motif : ${echapperSlack(motif)} · *Répondez dans ce fil* : le client lit la réponse dans l’app et par courriel.` }] },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: `Motif : ${echapperSlack(motif)} · *Répondez dans ce fil* : le client lit la réponse dans l’app et par courriel. 📌 devant une réponse (ou en réaction) = Lumi la retient pour les prochains clients ; 🔒 devant une note = elle reste ici.` }] },
     ],
   };
 }

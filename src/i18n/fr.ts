@@ -3749,6 +3749,7 @@ const fr: TranslationKeys = {
     agentLabel: 'Support Lume',
     youLabel: 'Vous',
     aiThinking: 'L’assistant réfléchit…',
+    aiSearching: 'Lumi cherche dans l’aide…',
     sending: 'Envoi…',
     newConversation: 'Nouvelle conversation',
     recentConversations: 'Historique',

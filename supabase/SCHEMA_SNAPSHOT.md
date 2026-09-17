@@ -3546,6 +3546,7 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `read_by_user_at` timestamp with time zone
 - `avis` text
+- `pieces` jsonb NOT NULL DEFAULT '[]'::jsonb
 
 ### `support_savoir`
 
