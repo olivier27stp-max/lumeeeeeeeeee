@@ -18,6 +18,16 @@ export interface PayPeriod {
 
 export interface CurrentPeriodResult {
   period: PayPeriod;
+  /** Mode de paie et taux (fiche Équipe) — absent sur un serveur plus ancien. */
+  pay?: {
+    team_member_id: string | null;
+    compensation_mode: 'hourly' | 'commission' | 'both';
+    hourly_rate_cents: number;
+    /** heures poinçonnées × taux horaire, en cents. */
+    gross_cents: number;
+    /** Payé à commission mais aucun plan assigné ni plan par défaut. */
+    commission_plan_missing: boolean;
+  };
   settings: Omit<PayrollSettings, 'org_id'>;
   userId: string;
   hours: number;
