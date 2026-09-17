@@ -494,7 +494,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         org_id: orgId,
         name,
         description: safeStr(n.description) || null,
-        default_price_cents: num(n.price_cents),
+        // predefined_services.default_price_cents est NOT NULL en prod : un
+        // rapport d'utilisation sans prix (Jobber « Products & Services ») → 0.
+        default_price_cents: num(n.price_cents) ?? 0,
         is_active: true,
       },
     };
@@ -542,7 +544,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
-        name: safeStr(n.name) || null,
+        // properties.name est NOT NULL en prod : sans « Property Name », l'adresse
+        // sert de nom (c'est ce qu'un utilisateur taperait).
+        name: safeStr(n.name) || safeStr(n.address),
         kind: 'service',
         is_primary: false,
         created_by: ctx.createdBy,
@@ -624,6 +628,11 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     const tax = num(n.tax_cents);
     let total = num(n.total_cents);
     if (total === null && subtotal !== null) total = subtotal + (tax ?? 0);
+    // Contrainte prod quotes_total_non_negatif : un total négatif dans l'export
+    // (rabais supérieur au sous-total, avoir) est ramené à 0, l'original gardé
+    // dans les notes plutôt que de perdre la soumission à l'INSERT.
+    const noteMontant = total !== null && total < 0 ? `Total exporté négatif (${(total / 100).toFixed(2)}) ramené à 0 à l'import.` : '';
+    if (total !== null && total < 0) total = 0;
     return {
       ok: true,
       row: {
@@ -638,7 +647,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         tax_cents: tax ?? 0,
         total_cents: total ?? 0,
         valid_until: str(n.valid_until) || null,
-        notes: safeStr(n.notes) || null,
+        notes: joinNotes(safeStr(n.notes), noteMontant),
         created_by: ctx.createdBy,
         ...createdAtPatch(str(n.created_date)),
       },
@@ -693,6 +702,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     let total = num(n.total_cents);
     if (total === null && subtotal !== null) total = subtotal - discount + (tax ?? 0);
     if (total === null) return { ok: false, reason: 'invalid' };
+    // Contrainte prod invoices_total_non_negatif : même règle que les soumissions.
+    const noteMontant = total < 0 ? `Total exporté négatif (${(total / 100).toFixed(2)}) ramené à 0 à l'import.` : '';
+    if (total < 0) total = 0;
     if (discount > 0 && subtotal !== null && total !== null) {
       // Certains CRM exportent un sous-total déjà net du rabais : on le remet
       // brut pour que Sous-total − Rabais + Taxes = Total sur la facture Lume.
@@ -728,7 +740,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         total_cents: total,
         paid_cents: paidCents,
         balance_cents: Math.max(0, total - paidCents),
-        notes: safeStr(n.notes) || null,
+        notes: joinNotes(safeStr(n.notes), noteMontant),
         // Vendeur mappé ; sinon null → le CRM affiche celui de la job liée.
         salesperson_id: ctx.staffIdBySource?.get(refKey(str(n.salesperson))) ?? null,
         // Date de paiement exportée : le trigger ne pose now() que si paid_at
@@ -1272,7 +1284,10 @@ export async function runFinalImport(
         .eq('status', 'running');
       if (hbErr) console.error('[migration-importer] heartbeat failed:', hbErr.message);
       const chunk = toInsert.slice(i, i + CHUNK);
-      const { error } = await admin.from(table).upsert(chunk.map((c) => c.row), { onConflict: 'id', ignoreDuplicates: true });
+      // defaultToNull:false — sans lui, PostgREST envoie NULL pour toute clé absente
+      // d'une rangée du lot (ex. created_at préservé sur certaines lignes seulement)
+      // et viole les NOT NULL : le lot entier retombait en retry ligne par ligne.
+      const { error } = await admin.from(table).upsert(chunk.map((c) => c.row), { onConflict: 'id', ignoreDuplicates: true, defaultToNull: false });
       if (!error) {
         for (const c of chunk) {
           counts.wouldCreate += 1;
@@ -1288,7 +1303,7 @@ export async function runFinalImport(
       }
       console.error(`[migration-importer] chunk upsert failed on ${table}, retry per row:`, error.message);
       for (const c of chunk) {
-        const { error: rowErr } = await admin.from(table).upsert([c.row], { onConflict: 'id', ignoreDuplicates: true });
+        const { error: rowErr } = await admin.from(table).upsert([c.row], { onConflict: 'id', ignoreDuplicates: true, defaultToNull: false });
         if (rowErr) {
           counts.errors += 1;
           errorIds.push(c.rec.id);

@@ -529,6 +529,15 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
           Relancer les lignes en erreur
         </button>
       )}
+      {m.status === 'failed' && (
+        // failed → ready_for_final_import (machine à états) : l'import est idempotent,
+        // la reprise ne recrée rien (migration_import_records + ids déterministes).
+        <button type="button" className={primary} onClick={() => act(async () => {
+          const r = await retryErrors(m.id);
+          await setMigrationStatus(m.id, 'ready_for_final_import');
+          toast.message(`${r.reset} ligne(s) en erreur remises en file — cliquez maintenant « Lancer l'import final » : seules les lignes manquantes seront écrites.`);
+        }, 'Prête pour la reprise de l\'import final')}>Reprendre l'import final</button>
+      )}
       <button
         type="button"
         className={subtle}
