@@ -82,6 +82,13 @@ export default function SupportChat({ compact = false, initialTicketId, onNaviga
   const [showList, setShowList] = useState(false);
   const [texte, setTexte] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  // Un « comment faire » prend deux appels (recherche dans l'aide, puis réponse) : après 3 s, on dit ce que Lumi fait.
+  const [longueAttente, setLongueAttente] = useState(false);
+  useEffect(() => {
+    if (!envoi) { setLongueAttente(false); return; }
+    const id = window.setTimeout(() => setLongueAttente(true), 3000);
+    return () => window.clearTimeout(id);
+  }, [envoi]);
   const [fallbackForm, setFallbackForm] = useState(false);
   const [charge, setCharge] = useState(true);
   // Captures en attente d'envoi (réduites à 1 600 px), avec un aperçu local.
@@ -333,7 +340,8 @@ export default function SupportChat({ compact = false, initialTicketId, onNaviga
           )
         ))}
         {envoi && (
-          <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 max-w-[60%] shadow-sm" aria-label={chezHumain ? ts.sending : ts.aiThinking}>
+          <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 max-w-[60%] shadow-sm" aria-label={chezHumain ? ts.sending : longueAttente ? ts.aiSearching : ts.aiThinking}>
+            {longueAttente && !chezHumain && <span className="block text-[11.5px] text-text-tertiary mb-1">{ts.aiSearching}</span>}
             <span className="inline-flex gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:-0.3s]" />
               <span className="w-1.5 h-1.5 rounded-full bg-text-tertiary animate-bounce [animation-delay:-0.15s]" />

@@ -3757,6 +3757,7 @@ const en = {
     agentLabel: 'Lume support',
     youLabel: 'You',
     aiThinking: 'The assistant is thinking…',
+    aiSearching: 'Lumi is searching the help…',
     sending: 'Sending…',
     newConversation: 'New conversation',
     recentConversations: 'History',
