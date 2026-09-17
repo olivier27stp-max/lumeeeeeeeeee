@@ -27,6 +27,7 @@ import { type AuditBotMigration,
 } from '../lib/migrationAdminApi';
 import { lancerBotMigration, attendreFinBot, getRapportBot, definirBotActif, definirModeBot, approuverAuNomDuClient, type RapportBotMigration } from '../lib/migrationAdminApi';
 import { confirmer } from '../components/ui/ConfirmDialog';
+import FieldTargetPicker, { type FieldCatalog } from '../components/migration/FieldTargetPicker';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Brouillon',
@@ -1175,12 +1176,24 @@ function TemplateControls({ migrationId, sourceCrm, onChanged }: { migrationId: 
 const MAPPING_STATUS_LABELS_FR: Record<string, string> = {
   suggested: 'Proposé', confirmed: 'Confirmé', corrected: 'Corrigé', rejected: 'Ignoré', needs_review: 'À vérifier',
 };
-const ENTITY_LABELS_FR: Record<string, string> = {
-  tax_config: 'Noms de taxes', client: 'Clients', property: 'Propriétés', billing_property: 'Adresses de facturation',
-  service: 'Produits et services', quote: 'Soumissions',
-  job: 'Jobs', visit: 'Visites', invoice: 'Factures', line_item: 'Lignes', payment: 'Paiements',
+// Miroir de entityForCategory (server/lib/migration/mapping.ts) : catégorie
+// détectée d'un fichier → entité ouverte par défaut dans le sélecteur.
+const CATEGORY_TO_ENTITY: Record<string, string> = {
+  taxes: 'tax_config', clients: 'client', properties: 'property', billing_addresses: 'billing_property',
+  services: 'service', quotes: 'quote', jobs: 'job', visits: 'visit', invoices: 'invoice', payments: 'payment',
 };
-type FieldCatalog = Record<string, { field: string; labelFr: string; labelEn: string }[]>;
+
+/** Entité par défaut d'un fichier : sa catégorie détectée, sinon l'entité la plus fréquente parmi ses correspondances. */
+function defaultEntityForFile(file: any, mappings: any[]): string | null {
+  const fromCategory = CATEGORY_TO_ENTITY[file?.category_detected ?? ''];
+  if (fromCategory) return fromCategory;
+  const counts = new Map<string, number>();
+  for (const mp of mappings) if (mp?.target_entity) counts.set(mp.target_entity, (counts.get(mp.target_entity) ?? 0) + 1);
+  let best: string | null = null;
+  let bestN = 0;
+  for (const [entity, n] of counts) if (n > bestN) { best = entity; bestN = n; }
+  return best;
+}
 
 function ConfidenceBadge({ value }: { value: number }) {
   const cls = value >= 90
@@ -1192,7 +1205,7 @@ function ConfidenceBadge({ value }: { value: number }) {
 }
 
 // Même tableau que le portail client (MigrationPortal › Correspondance des colonnes) :
-// une liste déroulante par colonne, alimentée par FIELD_CATALOG, « Ne pas importer » = rejet.
+// un sélecteur par colonne (FieldTargetPicker), alimenté par FIELD_CATALOG, « Ne pas importer » = rejet.
 function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   const qc = useQueryClient();
   const m = d.migration;
@@ -1272,6 +1285,7 @@ function MappingsTab({ d, onChanged }: { d: any; onChanged: () => void }) {
                     col={col}
                     mapping={mappingByColumn.get(col.id)}
                     catalog={catalog}
+                    defaultEntity={defaultEntityForFile(file, (byFile.get(file.id) ?? []).map((c) => mappingByColumn.get(c.id)))}
                     onSelect={(mp, entity, field) => {
                       if (!entity || !field) return decide(mp, { status: 'rejected', target_entity: null, target_field: null }, 'Colonne ignorée');
                       return decide(mp, { status: 'corrected', target_entity: entity, target_field: field }, 'Correspondance mise à jour');
@@ -1345,18 +1359,18 @@ function FlagPicker({ value, onChange, label }: { value: MappingFlag | null; onC
   );
 }
 
-function MappingAdminRow({ col, mapping, catalog, onSelect, onConfirm, onFlag }: {
+function MappingAdminRow({ col, mapping, catalog, defaultEntity, onSelect, onConfirm, onFlag }: {
   col: any;
   mapping?: any;
   catalog: FieldCatalog;
+  defaultEntity: string | null;
   onSelect: (mp: any, entity: string | null, field: string | null) => void;
   onConfirm: (mp: any) => void;
   onFlag: (mp: any, flag: MappingFlag | null) => void;
 }) {
   const flag = FLAG_COLORS.find((c) => c.id === mapping?.admin_flag) ?? null;
   const cell = `px-3 py-2 border-b border-outline/30 flex items-center min-w-0 text-text-primary ${flag ? flag.row : ''}`;
-  const value = mapping?.target_entity && mapping?.target_field ? `${mapping.target_entity}:${mapping.target_field}` : '';
-  const knownValue = !value || (catalog[mapping.target_entity] ?? []).some((f) => f.field === mapping.target_field);
+  const value = mapping?.target_entity && mapping?.target_field ? { entity: mapping.target_entity as string, field: mapping.target_field as string } : null;
   const canConfirm = mapping && (mapping.status === 'suggested' || mapping.status === 'needs_review') && !!mapping.target_field;
   return (
     <>
@@ -1374,29 +1388,14 @@ function MappingAdminRow({ col, mapping, catalog, onSelect, onConfirm, onFlag }:
       </div>
       <div className={cell}>
         {mapping ? (
-          <select
-            aria-label={`Champ cible pour ${col.header}`}
-            className="w-full h-8 px-2 text-[12px] bg-surface-card border border-outline rounded-md"
+          <FieldTargetPicker
+            catalog={catalog}
             value={value}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (!v) onSelect(mapping, null, null);
-              else {
-                const [entity, field] = v.split(':');
-                onSelect(mapping, entity, field);
-              }
-            }}
-          >
-            <option value="">— Ne pas importer —</option>
-            {!knownValue && <option value={value}>{ENTITY_LABELS_FR[mapping.target_entity] ?? mapping.target_entity} · {mapping.target_field}</option>}
-            {Object.entries(catalog).map(([entity, fields]) => (
-              <optgroup key={entity} label={ENTITY_LABELS_FR[entity] ?? entity}>
-                {fields.map((f) => (
-                  <option key={`${entity}:${f.field}`} value={`${entity}:${f.field}`}>{f.labelFr}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+            excluded={mapping.status === 'rejected'}
+            defaultEntity={defaultEntity}
+            columnLabel={col.header}
+            onChange={(entity, field) => onSelect(mapping, entity, field)}
+          />
         ) : (
           <span className="text-text-tertiary">—</span>
         )}
