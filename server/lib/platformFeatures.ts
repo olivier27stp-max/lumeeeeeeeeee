@@ -66,8 +66,9 @@ export function planGrants(plan: Record<string, any> | null, key: string): boole
 }
 
 // ── Quota de bureaux par workspace ─────────────────────────────────────────
-// Les bureaux ne sont plus vendus par forfait (included_offices / extra_offices
-// ne servent plus) : chaque workspace a droit à UN bureau, et seule la
+// Les bureaux ne sont plus vendus par forfait (les anciennes colonnes de
+// forfait/abonnement dédiées aux bureaux ont été supprimées, migration
+// 20260917000000) : chaque workspace a droit à UN bureau, et seule la
 // plateforme (Creator Space) peut en accorder davantage. Le quota vit dans
 // org_features { feature: 'office_quota', metadata.quota }, posé sur tous les
 // bureaux du company_group.

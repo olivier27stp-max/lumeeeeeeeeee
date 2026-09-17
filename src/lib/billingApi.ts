@@ -36,9 +36,6 @@ export interface Plan {
   seats_included?: number | null;
   extra_seat_price_usd?: number | null;
   extra_seat_price_cad?: number | null;
-  included_offices?: number | null;
-  extra_office_price_usd?: number | null;
-  extra_office_price_cad?: number | null;
   includes_sms?: boolean;
   includes_ai?: boolean;
   includes_d2d?: boolean;

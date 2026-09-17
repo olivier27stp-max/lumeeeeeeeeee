@@ -76,13 +76,12 @@ function safeSubscription(sub: any, plan: any | null) {
     canceled_at: sub.canceled_at,
     created_at: sub.created_at,
     extra_seats: sub.extra_seats ?? 0,
-    extra_offices: sub.extra_offices ?? 0,
-    plan: plan ? { name: plan.name, name_fr: plan.name_fr, slug: plan.slug, seats_included: plan.seats_included, included_offices: plan.included_offices } : null,
+    plan: plan ? { name: plan.name, name_fr: plan.name_fr, slug: plan.slug, seats_included: plan.seats_included } : null,
   };
 }
 
 async function loadPlansById(admin: Admin): Promise<Map<string, any>> {
-  const { data } = await admin.from('plans').select('id, name, name_fr, slug, seats_included, included_offices');
+  const { data } = await admin.from('plans').select('id, name, name_fr, slug, seats_included');
   return new Map((data ?? []).map((p: any) => [p.id, p]));
 }
 
@@ -488,7 +487,7 @@ router.get('/creator-space/companies/:orgId', async (req, res) => {
       admin.from('orgs').select('id, name, created_at').in('id', ids),
       admin
         .from('subscriptions')
-        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
+        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats')
         .in('org_id', ids)
         .order('created_at', { ascending: false })
         .limit(1),
@@ -595,7 +594,7 @@ router.get('/creator-space/companies/:orgId/billing', async (req, res) => {
       loadPlansById(admin),
       admin
         .from('subscriptions')
-        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats, extra_offices')
+        .select('org_id, plan_id, status, interval, currency, amount_cents, current_period_start, current_period_end, cancel_at_period_end, canceled_at, created_at, extra_seats')
         .in('org_id', ids)
         .order('created_at', { ascending: false }),
       admin

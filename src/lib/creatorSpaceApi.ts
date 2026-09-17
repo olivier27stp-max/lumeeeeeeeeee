@@ -150,8 +150,7 @@ export interface SafeSubscription {
   canceled_at: string | null;
   created_at: string;
   extra_seats: number;
-  extra_offices: number;
-  plan: { name: string; name_fr: string; slug: string; seats_included: number | null; included_offices: number | null } | null;
+  plan: { name: string; name_fr: string; slug: string; seats_included: number | null } | null;
 }
 
 export interface CompanyDetail {
