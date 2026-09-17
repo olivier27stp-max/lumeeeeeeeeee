@@ -6,9 +6,15 @@ import { getServiceClient } from './supabase';
 import { emailFrom } from './config';
 import { sendEmail, isMailerConfigured } from './mailer';
 import { logger } from './logger';
+import { resolvePublicBaseUrl } from './helpers';
+import { rendreCourrielLume, montant, dateLisible, echapper } from './courriels/gabarit';
 
-function fmtMoney(cents: number): string {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format((cents || 0) / 100);
+const fmtMoney = (cents: number): string => montant(cents, 'CAD', 'fr');
+
+export type FrequenceRapport = 'daily' | 'weekly' | 'monthly';
+const LIBELLE_FREQUENCE: Record<FrequenceRapport, string> = { daily: 'quotidien', weekly: 'hebdomadaire', monthly: 'mensuel' };
+export function libelleFrequence(f: string): string {
+  return LIBELLE_FREQUENCE[(f as FrequenceRapport)] ?? LIBELLE_FREQUENCE.weekly;
 }
 
 interface ReportData {
@@ -61,8 +67,8 @@ async function gatherReportData(orgId: string, from: string, to: string): Promis
   const highRisk = (churn || []).filter((c: any) => c.risk_level === 'high').length;
 
   return {
-    orgName: org?.name || 'Your Organization',
-    period: `${from} to ${to}`,
+    orgName: org?.name || 'Ton entreprise',
+    period: from === to ? dateLisible(from, 'fr') : `du ${dateLisible(from, 'fr')} au ${dateLisible(to, 'fr')}`,
     newLeads: Number(ov?.new_leads_count || 0),
     newJobs: Number(ov?.new_oneoff_jobs_count || 0),
     revenue: Number(ov?.revenue_cents || 0),
@@ -74,71 +80,31 @@ async function gatherReportData(orgId: string, from: string, to: string): Promis
   };
 }
 
-function buildEmailHtml(data: ReportData): string {
-  const topClientsHtml = data.topClients.length > 0
-    ? data.topClients.map((c) => `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">${c.name}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;font-weight:600">${fmtMoney(c.revenue)}</td></tr>`).join('')
-    : '<tr><td colspan="2" style="padding:12px;text-align:center;color:#999">No data</td></tr>';
-
-  return `
-<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;padding:20px">
-<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
-  <div style="background:#111;color:#fff;padding:24px 28px">
-    <h1 style="margin:0;font-size:20px">Lume CRM — Insights Report</h1>
-    <p style="margin:4px 0 0;font-size:13px;opacity:0.7">${data.orgName} | ${data.period}</p>
-  </div>
-  <div style="padding:28px">
-    <h2 style="margin:0 0 16px;font-size:16px;color:#333">Key Metrics</h2>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-      <tr>
-        <td style="padding:12px;background:#f8f9fa;border-radius:8px;text-align:center;width:25%">
-          <div style="font-size:24px;font-weight:700;color:#111">${data.newLeads}</div>
-          <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">New Leads</div>
-        </td>
-        <td style="width:8px"></td>
-        <td style="padding:12px;background:#f8f9fa;border-radius:8px;text-align:center;width:25%">
-          <div style="font-size:24px;font-weight:700;color:#111">${data.newJobs}</div>
-          <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">New Jobs</div>
-        </td>
-        <td style="width:8px"></td>
-        <td style="padding:12px;background:#f8f9fa;border-radius:8px;text-align:center;width:25%">
-          <div style="font-size:24px;font-weight:700;color:#111">${(data.conversionRate * 100).toFixed(1)}%</div>
-          <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px">Conversion</div>
-        </td>
-      </tr>
-    </table>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-      <tr>
-        <td style="padding:12px;background:#f0fdf4;border-radius:8px;text-align:center;width:33%">
-          <div style="font-size:22px;font-weight:700;color:#16a34a">${fmtMoney(data.revenue)}</div>
-          <div style="font-size:11px;color:#666;text-transform:uppercase;margin-top:4px">Revenue</div>
-        </td>
-        <td style="width:8px"></td>
-        <td style="padding:12px;background:#eff6ff;border-radius:8px;text-align:center;width:33%">
-          <div style="font-size:22px;font-weight:700;color:#2563eb">${fmtMoney(data.invoiced)}</div>
-          <div style="font-size:11px;color:#666;text-transform:uppercase;margin-top:4px">Invoiced</div>
-        </td>
-        <td style="width:8px"></td>
-        <td style="padding:12px;background:${data.outstandingBalance > 0 ? '#fef2f2' : '#f8f9fa'};border-radius:8px;text-align:center;width:33%">
-          <div style="font-size:22px;font-weight:700;color:${data.outstandingBalance > 0 ? '#dc2626' : '#111'}">${fmtMoney(data.outstandingBalance)}</div>
-          <div style="font-size:11px;color:#666;text-transform:uppercase;margin-top:4px">Outstanding</div>
-        </td>
-      </tr>
-    </table>
-
-    ${data.churnAlerts > 0 ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin-bottom:24px"><strong style="color:#dc2626">${data.churnAlerts} high-risk client${data.churnAlerts > 1 ? 's' : ''}</strong> <span style="color:#666">— Check the Churn tab in Insights for details.</span></div>` : ''}
-
-    <h2 style="margin:0 0 12px;font-size:16px;color:#333">Top Clients</h2>
-    <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-      <thead><tr><th style="padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;color:#666;border-bottom:2px solid #eee">Client</th><th style="padding:8px 12px;text-align:right;font-size:11px;text-transform:uppercase;color:#666;border-bottom:2px solid #eee">Revenue</th></tr></thead>
-      <tbody>${topClientsHtml}</tbody>
-    </table>
-
-    <p style="font-size:12px;color:#999;text-align:center;margin-top:32px">Generated by Lume CRM — <a href="#" style="color:#2563eb">Open Dashboard</a></p>
-  </div>
-</div>
-</body></html>`;
+/** Le rapport, voix Lume : les chiffres en lignes, les meilleurs clients en tableau, un bouton vers l'app. Pur, exporté pour les tests. */
+export function buildEmailHtml(data: ReportData, frequency: string, lienApp: string): string {
+  const periode = libelleFrequence(frequency);
+  const topClientsHtml = data.topClients.length
+    ? data.topClients.map((c, i) => `<tr><td style="padding:8px 0;font-size:14px;color:#374151;${i ? 'border-top:1px solid #e5e7eb;' : ''}">${echapper(c.name)}</td><td align="right" style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;${i ? 'border-top:1px solid #e5e7eb;' : ''}">${echapper(fmtMoney(c.revenue))}</td></tr>`).join('')
+    : '<tr><td style="padding:8px 0;font-size:14px;color:#9ca3af;">Aucun revenu sur la période.</td></tr>';
+  const alerteChurn = data.churnAlerts > 0
+    ? `<p style="margin:0 0 20px;padding:12px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;font-size:14px;"><strong style="color:#dc2626;">${data.churnAlerts} client${data.churnAlerts > 1 ? 's' : ''} à risque de départ</strong> — sans travaux depuis longtemps ; un appel vaut la peine.</p>`
+    : '';
+  return rendreCourrielLume({
+    langue: 'fr',
+    preheader: `${data.orgName} — ${fmtMoney(data.revenue)} de revenus, ${data.newLeads} nouveaux prospects, ${data.newJobs} nouveaux travaux`,
+    titre: `Ton rapport ${periode}`,
+    intro: `Voici où en est ${data.orgName} (${data.period}).`,
+    montant: { libelle: 'Revenus encaissés', valeur: fmtMoney(data.revenue), sous: `Facturé : ${fmtMoney(data.invoiced)}` },
+    lignes: [
+      { libelle: 'Nouveaux prospects', valeur: String(data.newLeads) },
+      { libelle: 'Nouveaux travaux', valeur: String(data.newJobs) },
+      { libelle: 'Taux de conversion', valeur: `${(data.conversionRate * 100).toFixed(1).replace('.', ',')} %` },
+      { libelle: 'Solde impayé', valeur: fmtMoney(data.outstandingBalance), fort: data.outstandingBalance > 0 },
+    ],
+    corpsHtml: `${alerteChurn}<p style="margin:0 0 6px;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#6b7280;font-weight:600;">Meilleurs clients</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${topClientsHtml}</table>`,
+    bouton: { texte: 'Ouvrir Lume', url: lienApp },
+    note: 'Tu reçois ce rapport parce qu’il est programmé dans Lume. Pour changer sa fréquence ou l’arrêter, demande-le à Lumi.',
+  });
 }
 
 export async function sendScheduledReport(reportId: string): Promise<void> {
@@ -169,14 +135,17 @@ export async function sendScheduledReport(reportId: string): Promise<void> {
   }
 
   const data = await gatherReportData(report.org_id, from, to);
-  const html = buildEmailHtml(data);
+  // Sans PUBLIC_URL (dev local), le bouton mène au site plutôt que d'échouer.
+  let base = '';
+  try { base = resolvePublicBaseUrl(); } catch { base = 'https://lumecrm.net'; }
+  const html = buildEmailHtml(data, report.frequency, `${base}/insights`);
 
   if (!isMailerConfigured()) throw new Error('SMTP not configured');
 
   await sendEmail({
     from: emailFrom,
     to: report.recipient_email,
-    subject: `Lume CRM — ${report.frequency === 'daily' ? 'Daily' : report.frequency === 'weekly' ? 'Weekly' : 'Monthly'} Insights Report`,
+    subject: `Ton rapport ${libelleFrequence(report.frequency)} — ${data.orgName}`,
     html,
   });
 

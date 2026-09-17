@@ -31,6 +31,7 @@
 import { getServiceClient } from './supabase';
 import { sendEmail, isMailerConfigured } from './mailer';
 import { logger } from './logger';
+import { rendreCourrielLume, echapper } from './courriels/gabarit';
 
 const INTERVALLE_MS = 10 * 60_000;
 const SEVERITES = ['high', 'critical'];
@@ -48,34 +49,28 @@ type Evenement = {
   details: unknown;
 };
 
-function corpsHtml(evts: Evenement[]): string {
-  const lignes = evts.map((e) => `
-    <tr>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;white-space:nowrap;">${e.created_at.slice(0, 19).replace('T', ' ')}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;font-weight:600;">${e.severity}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;">${e.event_type}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;">${e.source}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;">${
-        String(JSON.stringify(e.details ?? {})).slice(0, 180)
-      }</td>
-    </tr>`).join('');
-
-  return `
-  <div style="font-family:-apple-system,sans-serif;max-width:760px;">
-    <h2 style="font-size:16px;margin-bottom:4px;">Lume — ${evts.length} évènement(s) de sécurité</h2>
-    <p style="font-size:13px;color:#666;margin-top:0;">
-      Sévérité <strong>high</strong> ou <strong>critical</strong>, non résolus.
-      Consulter <code>security_events</code> pour le détail complet.
-    </p>
-    <table style="border-collapse:collapse;font-size:12px;width:100%;">
-      <tr style="text-align:left;background:#fafafa;">
-        <th style="padding:6px 10px;">Quand (UTC)</th><th style="padding:6px 10px;">Sévérité</th>
-        <th style="padding:6px 10px;">Type</th><th style="padding:6px 10px;">Source</th>
-        <th style="padding:6px 10px;">Détails</th>
-      </tr>
-      ${lignes}
-    </table>
-  </div>`;
+/** L'alerte à l'exploitant : voix Lume interne (pas de signature), un bloc par évènement. Pur, exporté pour les tests. */
+export function corpsHtml(evts: Evenement[]): string {
+  const blocs = evts.map((e, i) => `
+<p style="margin:0;padding:12px 0;${i ? 'border-top:1px solid #e5e7eb;' : ''}">
+<strong style="color:${e.severity === 'critical' ? '#dc2626' : '#111827'};">${echapper(e.severity)}</strong> &nbsp;·&nbsp; ${echapper(e.event_type)} &nbsp;·&nbsp; <span style="color:#6b7280;">${echapper(e.source)}</span><br/>
+<span style="font-size:12px;color:#6b7280;">${echapper(e.created_at.slice(0, 19).replace('T', ' '))} UTC${e.org_id ? ` &nbsp;·&nbsp; org ${echapper(e.org_id)}` : ''}</span><br/>
+<span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;color:#374151;word-break:break-all;">${echapper(String(JSON.stringify(e.details ?? {})).slice(0, 180))}</span>
+</p>`).join('');
+  const critiques = evts.filter((e) => e.severity === 'critical').length;
+  return rendreCourrielLume({
+    langue: 'fr',
+    preheader: `${evts.length} évènement(s) high/critical non résolus — ${evts[0]?.event_type ?? ''}`,
+    titre: `${evts.length} évènement${evts.length > 1 ? 's' : ''} de sécurité`,
+    intro: 'Sévérité high ou critical, non résolus, depuis le dernier passage. Le détail complet est dans security_events.',
+    lignes: [
+      { libelle: 'Critiques', valeur: String(critiques), fort: critiques > 0 },
+      { libelle: 'Élevés (high)', valeur: String(evts.length - critiques) },
+      { libelle: 'Le plus récent', valeur: `${evts[0]?.created_at.slice(0, 19).replace('T', ' ') ?? ''} UTC` },
+    ],
+    corpsHtml: blocs,
+    signature: null,
+  });
 }
 
 async function verifierUneFois(): Promise<void> {

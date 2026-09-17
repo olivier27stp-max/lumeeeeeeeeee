@@ -23,6 +23,7 @@ import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { etatBudget, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
 import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
+import { rendreCourrielLume, echapper } from '../lib/courriels/gabarit';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { userKey } from '../lib/security';
 import { type Fiche } from '../lib/lumi/fiches';
@@ -220,7 +221,8 @@ async function contexteTour(req: Request, res: Response) {
   void alerterSiSeuilFranchi(admin, auth.orgId, budget, async (subject, text) => {
     const to = process.env.LUMI_ALERT_EMAIL || process.env.SECURITY_ALERT_EMAIL;
     if (!to || !isMailerConfigured()) return;
-    await sendEmail({ to, subject, html: `<pre style="font:14px/1.5 system-ui;white-space:pre-wrap">${text.replace(/</g, '&lt;')}</pre>` });
+    // Alerte interne, voix Lume : le texte du budget tel quel, sans signature.
+    await sendEmail({ to, subject, html: rendreCourrielLume({ langue: 'fr', titre: 'Budget Lumi', preheader: subject, corpsHtml: echapper(text).replace(/\r?\n/g, '<br/>'), signature: null }) });
   });
   let companyName: string | null = null;
   let fuseau = 'America/Toronto';

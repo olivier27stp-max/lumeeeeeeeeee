@@ -373,7 +373,7 @@ router.post('/invitations/send', validate(inviteSchema), async (req, res) => {
       admin.from('profiles').select('full_name').eq('id', auth.user.id).maybeSingle(),
     ]);
 
-    const orgName = org?.name || 'Your organization';
+    const orgName = org?.name || 'une entreprise';
     const baseUrl = getBaseUrl();
     const inviteLink = `${baseUrl}/invite/${token}`;
 
@@ -703,7 +703,7 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
       const { sendEmail, isMailerConfigured } = await import('../lib/mailer');
       if (isMailerConfigured()) {
         const { renderInvitationEmail } = await import('../lib/email-templates/invitation');
-        const orgName = org?.name || 'an organization';
+        const orgName = org?.name || 'une entreprise';
         const rendered = renderInvitationEmail({
           orgName,
           role: invitation.role,
@@ -713,7 +713,7 @@ router.post('/invitations/resend', validate(resendInviteSchema), async (req, res
         });
         await sendEmail({
           to: invitation.email,
-          subject: `Reminder: ${rendered.subject}`,
+          subject: `Rappel : ${rendered.subject}`,
           html: rendered.html,
         });
       }
