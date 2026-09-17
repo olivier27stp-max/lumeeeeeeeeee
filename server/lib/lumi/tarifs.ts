@@ -49,7 +49,8 @@ const TARIF_PLANCHER = TARIFS['claude-opus-5'];
 
 /** Coût d'un appel en cents (décimaux). Modèle inconnu → tarif Opus 5, jamais 0. */
 export function coutEnCents(model: string, u: UsageTokens): number {
-  const t = TARIFS[model] ?? TARIF_PLANCHER;
+  // Un id daté (« claude-haiku-4-5-20251001 ») se lit sans sa date ; sinon un modèle connu passait au tarif plancher (Haiku compté 5× trop cher le 2026-09-17).
+  const t = TARIFS[model] ?? TARIFS[model.replace(/-\d{8}$/, '')] ?? TARIF_PLANCHER;
   // Sans détail (vieux journal, test), tout est compté au tarif 1 h : jamais sous-compté.
   const ecrit1h = u.cache_creation ? u.cache_creation.ephemeral_1h_input_tokens : (u.cache_creation_input_tokens ?? 0);
   const ecrit5m = u.cache_creation ? u.cache_creation.ephemeral_5m_input_tokens : 0;
