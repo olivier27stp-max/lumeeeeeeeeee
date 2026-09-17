@@ -32,14 +32,19 @@ type OverrideState = 'inherit' | 'on' | 'off';
 const router = Router();
 
 async function loadCompanyPlan(admin: ReturnType<typeof getServiceClient>, orgIds: string[]) {
-  const { data: sub } = await admin
+  // `plans:plan_id (*)` et jamais une liste de colonnes : includes_advanced_roles
+  // n'existe pas en base (flag dérivé côté front). PostgREST rejette la requête
+  // ENTIÈRE pour une seule colonne inconnue et supabase-js ne lève pas — le
+  // panneau affichait « Forfait actuel : aucun » pour toutes les compagnies.
+  const { data: sub, error } = await admin
     .from('subscriptions')
-    .select('status, plans:plan_id (name, name_fr, slug, includes_sms, includes_ai, includes_d2d, includes_courses, includes_api, includes_automations, includes_marketplace, includes_timesheets, includes_request_forms, includes_advanced_roles)')
+    .select('status, plans:plan_id (*)')
     .in('org_id', orgIds)
     .in('status', ['active', 'trialing', 'past_due'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) throw error;
   return (sub as any)?.plans ?? null;
 }
 
