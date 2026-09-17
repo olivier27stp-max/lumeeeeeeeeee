@@ -157,7 +157,7 @@ function blocBouton(b: NonNullable<CourrielClient['bouton']>, couleur: string, l
 <a href="${url}" style="display:inline-block;padding:14px 36px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;font-family:${POLICE};">${echapper(b.texte)}</a>
 </td></tr>
 </table>
-<p style="margin:0 0 20px;font-size:12px;color:${GRIS_PALE};text-align:center;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ? Copie ce lien :' : 'Le bouton ne fonctionne pas ? Copiez ce lien :') : 'Button not working? Copy this link:'}<br/><a href="${url}" style="color:${GRIS_DOUX};word-break:break-all;">${url}</a></p>`;
+${/^(tel|mailto|sms):/i.test(b.url) ? '' : `<p style="margin:0 0 20px;font-size:12px;color:${GRIS_PALE};text-align:center;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ? Copie ce lien :' : 'Le bouton ne fonctionne pas ? Copiez ce lien :') : 'Button not working? Copy this link:'}<br/><a href="${url}" style="color:${GRIS_DOUX};word-break:break-all;">${url}</a></p>`}`;
 }
 
 function coquille(p: { langue: Langue; titreDocument: string; preheader?: string | null; couleur: string; enTeteHtml: string; corpsHtml: string; piedHtml: string }): string {

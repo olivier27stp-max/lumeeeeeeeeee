@@ -37,6 +37,11 @@ describe('gabarit client', () => {
     const avecLogo = rendreCourrielClient({ langue: 'fr', marque: { ...marque, logoUrl: 'https://x/logo.png' }, titre: 'T' });
     expect(avecLogo).toContain('<img src="https://x/logo.png" alt="Vision Lavage"');
   });
+  it('un bouton téléphone ou courriel n’a pas de lien de secours (« tel:514… » sous le bouton, c’est laid)', () => {
+    const h = rendreCourrielLume({ langue: 'fr', titre: 'Nouveau lead', bouton: { texte: 'Appeler le prospect', url: 'tel:5145550100' } });
+    expect(h).toContain('href="tel:5145550100"');
+    expect(h).not.toContain('Copie ce lien');
+  });
   it('en anglais, les textes fixes suivent', () => {
     const en = rendreCourrielClient({ langue: 'en', marque, titre: 'Your invoice 40', bouton: { texte: 'View invoice', url: 'https://x' } });
     expect(en).toContain('<html lang="en">');
