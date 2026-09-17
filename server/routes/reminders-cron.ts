@@ -23,6 +23,8 @@ import crypto from 'crypto';
 import { getServiceClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { sendEmail, isMailerConfigured, adresseInjoignable } from '../lib/mailer';
+import { getCompanySettings, senderFor, marqueDepuis, langueEntreprise } from './emails';
+import { rendreCourrielClient, dateLisible, MOTS } from '../lib/courriels/gabarit';
 import { logger } from '../lib/logger';
 import { sendSmsIfConfigured, applyTemplate, isSmsOptedOut } from '../lib/notificationHelpers';
 import { twilioClient, twilioPhoneNumber } from '../lib/config';
@@ -247,7 +249,22 @@ router.post('/cron/payment-reminders', async (req, res) => {
             if ((channel === 'email' || channel === 'both') && toEmail && !adresseMorte && isMailerConfigured()) {
               const subject = applyTemplate(settings.custom_email_subject || DEFAULT_EMAIL_SUBJECT, vars);
               const body = applyTemplate(settings.custom_email_body || DEFAULT_EMAIL_BODY, vars);
-              const result = await sendEmail({ to: toEmail, subject, html: bodyToHtml(body), suivi: { orgId, entityType: 'reminder', entityId: inv.id } });
+              // Le texte du rappel (celui de l'entreprise ou le défaut) dans le gabarit commun, avec le montant en carte et le bouton payer.
+              const societe = await getCompanySettings(orgId);
+              const langueRappel = langueEntreprise(societe);
+              const html = rendreCourrielClient({
+                langue: langueRappel,
+                marque: marqueDepuis(societe),
+                preheader: `${vars.amount_due} — ${langueRappel === 'fr' ? 'facture' : 'invoice'} ${vars.invoice_number}`,
+                titre: langueRappel === 'fr' ? 'Rappel de paiement' : 'Payment reminder',
+                corpsHtml: bodyToHtml(body),
+                montant: { libelle: MOTS[langueRappel].montantDu, valeur: vars.amount_due, sous: vars.due_date ? `${MOTS[langueRappel].echeance} : ${dateLisible(vars.due_date, langueRappel)}` : null },
+                bouton: payUrl.includes('/pay/') ? { texte: MOTS[langueRappel].payer(vars.amount_due), url: payUrl } : null,
+                note: MOTS[langueRappel].question,
+                // Le texte du rappel porte déjà sa signature (« Merci, {company_name} ») : pas de deuxième.
+                signature: null,
+              });
+              const result = await sendEmail({ ...senderFor(societe), to: toEmail, subject, html, suivi: { orgId, entityType: 'reminder', entityId: inv.id } });
               const emailChannel = channel === 'email' ? 'email' : 'both';
               if (channel === 'both') {
                 // For 'both', defer logging until SMS attempted (single row with channel='both').

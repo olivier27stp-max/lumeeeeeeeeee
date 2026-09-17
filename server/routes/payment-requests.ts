@@ -15,6 +15,8 @@ import {
 } from '../lib/stripe-connect';
 import { validate, createPaymentRequestSchema } from '../lib/validation';
 import { getPaymentSettings } from '../lib/payment-settings';
+import { getCompanySettings, senderFor, marqueDepuis, langueEntreprise, type CompanyInfo as CompanyInfoCourriel } from './emails';
+import { rendreCourrielClient, montant as montantLisible, MOTS, type Langue } from '../lib/courriels/gabarit';
 
 const router = Router();
 
@@ -74,49 +76,21 @@ async function getClientContact(clientId: string | null, orgId: string) {
   }
 }
 
-function buildPaymentEmailHtml(params: {
-  company: CompanyInfo;
-  clientName: string;
-  invoiceNumber: string;
-  amountFormatted: string;
-  paymentUrl: string;
-}) {
-  const companyName = params.company.company_name || 'LUME';
-  const logoHtml = params.company.company_logo_url
-    ? `<img src="${params.company.company_logo_url}" alt="${companyName}" style="max-height:48px;max-width:200px;" />`
-    : `<span style="font-size:24px;font-weight:700;color:#1a1a2e;letter-spacing:2px;">${companyName}</span>`;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;">
-<tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-<tr><td style="padding:24px 32px;border-bottom:1px solid #e5e7eb;text-align:center;">${logoHtml}</td></tr>
-<tr><td style="padding:32px;">
-  <p style="margin:0 0 16px;font-size:16px;color:#1f2937;">Hi ${params.clientName},</p>
-  <p style="margin:0 0 24px;font-size:15px;color:#4b5563;">
-    A payment of <strong>${params.amountFormatted}</strong> is requested for invoice <strong>${params.invoiceNumber}</strong>.
-  </p>
-  <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
-    <tr><td style="background-color:#1f2937;border-radius:6px;padding:14px 32px;">
-      <a href="${params.paymentUrl}" style="color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;display:inline-block;">
-        Pay ${params.amountFormatted}
-      </a>
-    </td></tr>
-  </table>
-  <p style="margin:0;font-size:13px;color:#9ca3af;text-align:center;">
-    Or copy this link: <a href="${params.paymentUrl}" style="color:#374151;word-break:break-all;">${params.paymentUrl}</a>
-  </p>
-</td></tr>
-<tr><td style="padding:20px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
-  <p style="margin:0;font-size:12px;color:#9ca3af;">Sent via <strong>LUME</strong>${params.company.company_name ? ` on behalf of ${params.company.company_name}` : ''}</p>
-  ${params.company.phone ? `<p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">${params.company.phone}</p>` : ''}
-</td></tr>
-</table>
-</td></tr></table>
-</body></html>`;
+/** Le courriel « paiement demandé » : gabarit commun, aux couleurs de l'entreprise, dans sa langue. */
+function buildPaymentEmailHtml(params: { company: CompanyInfoCourriel; clientName: string; invoiceNumber: string; amountFormatted: string; paymentUrl: string; langue: Langue }) {
+  const m = MOTS[params.langue];
+  const fr = params.langue === 'fr';
+  return rendreCourrielClient({
+    langue: params.langue,
+    marque: marqueDepuis(params.company),
+    preheader: fr ? `${params.amountFormatted} à payer — facture ${params.invoiceNumber}` : `${params.amountFormatted} due — invoice ${params.invoiceNumber}`,
+    titre: fr ? 'Paiement demandé' : 'Payment requested',
+    salutation: m.bonjour(params.clientName),
+    intro: fr ? `Un paiement de ${params.amountFormatted} est demandé pour la facture ${params.invoiceNumber}. Vous pouvez payer en ligne, par carte, en moins d’une minute.` : `A payment of ${params.amountFormatted} is requested for invoice ${params.invoiceNumber}. You can pay online by card in under a minute.`,
+    montant: { libelle: m.montantDu, valeur: params.amountFormatted, sous: `${m.facture} ${params.invoiceNumber}` },
+    bouton: { texte: m.payer(params.amountFormatted), url: params.paymentUrl },
+    note: fr ? 'Paiement sécurisé par Stripe. Une question ? Répondez simplement à ce courriel.' : 'Payment secured by Stripe. Questions? Just reply to this email.',
+  });
 }
 
 function normalizeE164(phone: string): string {
@@ -141,13 +115,15 @@ async function sendPaymentEmail(params: {
 }) {
   if (!isMailerConfigured()) return { sent: false, reason: 'SMTP not configured' };
 
-  const company = await getCompanyInfo(params.orgId);
-  const amountFormatted = formatCurrency(params.amountCents, params.currency);
+  const company = await getCompanySettings(params.orgId);
+  const langue = langueEntreprise(company);
+  const amountFormatted = montantLisible(params.amountCents, params.currency, langue);
 
   const result = await sendEmail({
-    from: emailFrom,
+    // Expéditeur au nom de l'entreprise, réponses vers sa boîte (comme la facture).
+    ...senderFor(company),
     to: params.clientEmail,
-    subject: `Payment request — ${amountFormatted} for ${params.invoiceNumber}`,
+    subject: langue === 'fr' ? `Paiement demandé — ${amountFormatted} — facture ${params.invoiceNumber}` : `Payment requested — ${amountFormatted} — invoice ${params.invoiceNumber}`,
     suivi: { orgId: params.orgId, entityType: 'payment_request', entityId: params.invoiceId ?? null },
     html: buildPaymentEmailHtml({
       company,
@@ -155,6 +131,7 @@ async function sendPaymentEmail(params: {
       invoiceNumber: params.invoiceNumber,
       amountFormatted,
       paymentUrl: params.paymentUrl,
+      langue,
     }),
   });
 
