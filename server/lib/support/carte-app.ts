@@ -5,9 +5,38 @@
  * transférer à l'équipe. Règle : rien ici qui n'existe pas dans l'interface.
  * Couverture garantie par tests/support/carte-app-complete.test.ts : chaque
  * route de App.tsx et chaque page des Paramètres doit y être nommée.
- * Le bloc entre dans la partie STABLE du prompt (cache 1 h) : le grossir
- * coûte au dixième du prix.
+ * Depuis le 2026-09-17, la carte complète n'entre PLUS dans le prompt du
+ * support : elle est indexée par search_help (server/lib/agent/tools-aide.ts)
+ * et le modèle ne reçoit que son INDEX (indexCarteApp : les écrans et leurs
+ * routes, ~1 000 tokens au lieu de ~7 000). La grossir ne coûte donc rien
+ * par tour ; seul l'index est en cache 1 h.
  */
+/**
+ * L'index de la carte : la ligne de vocabulaire, puis par section les écrans
+ * avec leur route (« Tâches (/tasks) · Jobs (/jobs) · … »). Assez pour que
+ * le modèle sache QUELS écrans existent et où ; les boutons exacts viennent
+ * de search_help. Pur, dérivé de CARTE_APP : impossible de désynchroniser.
+ */
+export function indexCarteApp(carte: string = CARTE_APP): string {
+  const lignes = carte.split('\n');
+  const out: string[] = [lignes[0].trim()];
+  let section = '';
+  let ecrans: string[] = [];
+  const vider = () => { if (section && ecrans.length) out.push(`${section} : ${ecrans.join(' · ')}`); ecrans = []; };
+  for (const brute of lignes.slice(1)) {
+    const ligne = brute.trim();
+    if (!ligne) continue;
+    const titreSection = /^═+\s*(.+?)\s*═+$/.exec(ligne);
+    if (titreSection) { vider(); section = titreSection[1].replace(/\s*\(.*\)\s*$/, ''); continue; }
+    const m = /^([^:(]+?)\s*(\(([^)]*)\))?\s*:\s*/.exec(ligne);
+    if (!m) continue;
+    const route = /\/[a-z0-9\-/:]+/i.exec(m[3] ?? '')?.[0];
+    ecrans.push(route ? `${m[1].trim()} (${route})` : m[1].trim());
+  }
+  vider();
+  return out.join('\n');
+}
+
 export const CARTE_APP = `Vocabulaire : « tâches » = à-faire de la page Tâches (/tasks) ; « travaux » / « jobs » = travail planifié (/jobs) ; « devis » = soumission (/quotes) ; « facture » (/finances, onglet Facturation). Paramètres = menu « Paramètres » (/settings), groupé en Mon compte, Entreprise, Ventes & paiements, Communication, Équipe, Plus.
 
 ═══ TRAVAIL QUOTIDIEN ═══

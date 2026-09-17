@@ -28,7 +28,7 @@ import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migra
 import { journaliserTrace } from '../lib/lumi/traces';
 import { embed, chercherSemantique, memoriserSemantique } from '../lib/lumi/cache-semantique';
 import { versionOrg } from '../lib/lumi/version-org';
-import { PLAFOND_MODELE_PAR_JOUR, reponsesModeleAujourdhui, texteAuPlafond, PORTEE_CACHE_SUPPORT } from '../lib/support/garde-fous';
+import { PLAFOND_MODELE_PAR_JOUR, reponsesModeleAujourdhui, texteAuPlafond, PORTEE_CACHE_SUPPORT, PORTEE_CACHE_SUPPORT_GLOBALE, outilsDeDoc, reponseGenerique } from '../lib/support/garde-fous';
 import {
   contexteOrg, creerTicket, ticketDe, messagesDuTicket, ajouterMessage, escaladerTicket, relayerMessageClient, humainActifRecemment, slaTexte, rouvrirTicket,
   type Ticket, type MessageTicket,
@@ -101,12 +101,15 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         .slice(0, -1) // le message courant est passé à part
         .map((m) => ({ role: m.author === 'user' ? 'user' as const : 'assistant' as const, content: m.body }));
       const debut = Date.now();
-      // Étage 4 : même question (reformulée) déjà répondue dans cette entreprise → même réponse, 0 modèle.
-      // Seulement en début de conversation (pas de contexte à perdre) ; l'index se vide à chaque écriture de Lumi (versionOrg).
+      // Étage 4 : même question (reformulée) déjà répondue — pour TOUTES les entreprises (« comment faire » générique,
+      // par langue) ou dans cette entreprise → même réponse, 0 modèle.
+      // Seulement en début de conversation (pas de contexte à perdre) ; l'index de l'org se vide à chaque écriture de Lumi (versionOrg).
       const premierMessage = historique.length === 0;
       const vecteur = premierMessage ? await embed(message) : null;
       const version = vecteur ? await versionOrg(auth.orgId) : null;
-      const memo = vecteur ? await chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), vecteur, version, message) : null;
+      const memo = vecteur
+        ? (await chercherSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), vecteur, null, message)) ?? (await chercherSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), vecteur, version, message))
+        : null;
       // Plafond par entreprise et par jour : au-delà, réponses fixes seulement, jamais le modèle.
       const auPlafond = !memo && (await reponsesModeleAujourdhui(admin, auth.orgId)) >= PLAFOND_MODELE_PAR_JOUR;
       if (memo) {
@@ -135,8 +138,12 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
         // L'équipe voit ce que Lumi a répondu dans son canal ; elle n'a rien à faire si ça suffit.
         if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
-        // Mémoriser pour l'entreprise : seulement une réponse sans outil ni transfert (un « comment faire »), jamais une réponse liée à l'état du moment.
-        if (vecteur && !transferer && r.outils.length === 0 && !page) void memoriserSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: version ?? 0 });
+        // Mémoriser : seulement une réponse sans transfert ni outil autre que la doc (un « comment faire »), jamais une réponse liée à l'état du moment.
+        // Pour l'entreprise toujours ; pour toutes les entreprises si elle ne parle pas de ce compte (reponseGenerique).
+        if (vecteur && !transferer && outilsDeDoc(r.outils) && !page) {
+          void memoriserSemantique(PORTEE_CACHE_SUPPORT(auth.orgId), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: version ?? 0 });
+          if (reponseGenerique(reply, r.outils, ctx)) void memoriserSemantique(PORTEE_CACHE_SUPPORT_GLOBALE(ctx.langue), { enonce: message, vec: vecteur, texte: reply, fiches: [], outils: [], version: 0 });
+        }
         void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 6, action: 'app', outils: r.outils, resultat: transferer ? 'proposition' : 'ok', model: 'claude-sonnet-5', costCents: r.coutCents, dureeMs: Date.now() - debut });
       } catch (e: any) {
         // L'assistant tombe → un humain prend le relais, jamais un mur.
