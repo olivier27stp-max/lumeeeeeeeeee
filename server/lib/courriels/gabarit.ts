@@ -80,6 +80,8 @@ export interface CourrielLume {
   note?: string | null;
   /** Adresse de support au pied. */
   supportEmail?: string | null;
+  /** Phrase de signature ; défaut « — L’équipe Lume » ; null = aucune (alertes internes). */
+  signature?: string | null;
 }
 
 export const COULEUR_LUME = '#111827';
@@ -227,7 +229,7 @@ export function rendreCourrielLume(c: CourrielLume): string {
   const pied = `
 <p style="margin:0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${c.langue === 'fr' ? 'Une question ? Répondez à ce courriel ou écrivez-nous à' : 'Questions? Reply to this email or write to'} <a href="mailto:${echapper(support)}" style="color:${GRIS_DOUX};">${echapper(support)}</a>.</p>
 <p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">Lume CRM &nbsp;&middot;&nbsp; <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;">lumecrm.net</a></p>`;
-  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, couleur: COULEUR_LUME, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team' }, COULEUR_LUME), piedHtml: pied });
+  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, couleur: COULEUR_LUME, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team') : c.signature }, COULEUR_LUME), piedHtml: pied });
 }
 
 /** Les mots qui reviennent dans tous les courriels client, dans les deux langues. */
