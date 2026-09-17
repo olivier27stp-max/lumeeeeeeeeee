@@ -23,6 +23,7 @@
 
 import crypto from 'crypto';
 import { getServiceClient, companyOrgIds } from '../supabase';
+import { generateCommissionsForInvoice } from '../field-sales/commission-engine';
 import { invaliderOrg } from '../lumi/version-org';
 import { logSecurityEvent } from '../security';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../config';
@@ -2873,10 +2874,25 @@ const markInvoicePaidTool: AgentTool = {
       const { data: apres } = await admin
         .from('invoices').select('invoice_number, balance_cents, status')
         .eq('id', invoiceId).maybeSingle();
+
+      // Facture soldée → commissions du rep. Stripe les génère par webhook et
+      // le bouton « Marquer payée » de l'app via generate-for-invoice ; Lumi
+      // les oubliait : un paiement enregistré par l'assistant ne payait
+      // jamais le vendeur. « no_rule » = aucun plan configuré → on le dit.
+      let avertCommission: string | null = null;
+      if (apres?.status === 'paid') {
+        try {
+          const res = await generateCommissionsForInvoice(admin, ctx.orgId, invoiceId);
+          if (res.skipped === 'no_rule') avertCommission = 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).';
+        } catch (err: any) {
+          console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
+        }
+      }
       const avertEvt = await signalerEvenement(ctx, '/automations/events/invoice-paid', { invoiceId, clientId: inv.client_id || undefined });
+      const warning = [avertEvt, avertCommission].filter(Boolean).join(' ');
       return {
         paid: true,
-        ...(avertEvt ? { warning: avertEvt } : {}),
+        ...(warning ? { warning } : {}),
         invoice: {
           invoice_number: apres?.invoice_number || inv.invoice_number,
           statut: traduireStatut(apres?.status, STATUT_FACTURE),

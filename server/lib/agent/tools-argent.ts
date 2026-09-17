@@ -25,6 +25,7 @@ import crypto from 'crypto';
 import type { PermissionKey } from '../../../src/lib/permissions';
 import type { IdTopic } from '../lumi/topics';
 import { getServiceClient } from '../supabase';
+import { generateCommissionsForInvoice } from '../field-sales/commission-engine';
 import { runOneSchedule, type RecurringSchedule } from '../recurringInvoicesEngine';
 import type { AgentTool, ToolContext } from './tools';
 import {
@@ -1231,8 +1232,23 @@ const recordInvoicePaymentTool: AgentTool = {
       const { error: eApply } = await admin.rpc('apply_invoice_payment', { p_invoice_id: invoiceId, p_org_id: ctx.orgId, p_amount_cents: montant });
       if (eApply) throw eApply;
       const { data: apres } = await admin.from('invoices').select('invoice_number, balance_cents, status').eq('org_id', ctx.orgId).eq('id', invoiceId).maybeSingle();
+
+      // Facture soldée → commissions du rep. Stripe les génère par webhook et
+      // le bouton « Marquer payée » de l'app via generate-for-invoice ; Lumi
+      // les oubliait : un paiement enregistré par l'assistant ne payait
+      // jamais le vendeur. « no_rule » = aucun plan configuré → on le dit.
+      let avertCommission: string | null = null;
+      if (apres?.status === 'paid') {
+        try {
+          const res = await generateCommissionsForInvoice(admin, ctx.orgId, invoiceId);
+          if (res.skipped === 'no_rule') avertCommission = 'Aucune commission créée : le vendeur n’a pas de plan de commission (Réglages → Commissions).';
+        } catch (err: any) {
+          console.error(`[commissions] génération après paiement Lumi échouée (org ${ctx.orgId}, facture ${invoiceId}):`, err?.message);
+        }
+      }
       return {
         recorded: true,
+        ...(avertCommission ? { warning: avertCommission } : {}),
         invoice: { invoice_number: apres?.invoice_number || inv.invoice_number, statut: traduireStatut(apres?.status, STATUT_FACTURE) },
         amount_cents: montant,
         balance_cents: apres?.balance_cents ?? (solde - montant),
