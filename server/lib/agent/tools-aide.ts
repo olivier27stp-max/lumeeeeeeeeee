@@ -116,6 +116,23 @@ export function passagesArticles(articles: Article[] = ARTICLES): Passage[] {
   }));
 }
 
+/**
+ * Ce que l'équipe a répondu à d'autres clients et veut que Lumi ressorte
+ * (support/savoir.ts, 📌 dans Slack). Rechargé depuis la base ; l'index est
+ * reconstruit à chaque changement.
+ */
+export interface SavoirEquipe { question: string; reponse: string; auteur: string | null; date: string }
+let SAVOIR: SavoirEquipe[] = [];
+export function definirSavoir(s: SavoirEquipe[]): void { SAVOIR = s; INDEX = null; }
+export function passagesSavoir(s: SavoirEquipe[] = SAVOIR): Passage[] {
+  return s.map((x, i) => ({
+    page: '/settings/support', slug: `savoir:${i}`,
+    titre: `Réponse de l'équipe Lume — ${x.question.slice(0, 90)}`,
+    texte: `${x.reponse}${x.auteur ? ` (${x.auteur}, ${x.date.slice(0, 10)})` : ` (${x.date.slice(0, 10)})`}`,
+    poids: 3, mots: mots(`${x.question} ${x.reponse}`), motsTitre: mots(x.question),
+  }));
+}
+
 let INDEX: Passage[] | null = null;
 function index(): Passage[] {
   if (INDEX) return INDEX;
@@ -129,7 +146,7 @@ function index(): Passage[] {
     for (const s of f.steps) out.push({ page, slug: f.slug, titre: `${titre} — ${s.t.fr}`, texte: s.d.fr, poids: 1, mots: mots(`${bi(s.t)} ${bi(s.d)}`) });
     for (const q of f.faq) out.push({ page, slug: f.slug, titre: `${titre} — ${q.q.fr}`, texte: q.a.fr, poids: 2, mots: mots(`${bi(q.q)} ${bi(q.a)}`) });
   }
-  out.push(...passagesCarteApp(), ...passagesArticles());
+  out.push(...passagesCarteApp(), ...passagesArticles(), ...passagesSavoir());
   INDEX = out;
   return out;
 }

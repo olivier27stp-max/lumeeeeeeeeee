@@ -15,7 +15,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { logger } from '../logger';
 import { isSlackConfigured, identiteBot, nomUtilisateurSlack, texteDepuisSlack, lireRepliquesSlack, accuserLivraisonSlack } from '../slack';
-import { ajouterMessage, notifierClientReponse, type Ticket } from './tickets';
+import { ajouterMessage, notifierClientReponse, messagesDuTicket, type Ticket } from './tickets';
+import { texteAApprendre, questionDuTicket, apprendre, accuserApprentissage, dejaAppris } from './savoir';
 
 export interface EvenementMessageSlack {
   type: string;
@@ -42,7 +43,7 @@ export interface EvenementMessageSlack {
 export function estNoteInterne(texte: string): boolean {
   const t = texte.trim();
   if (!t) return false;
-  if (/^(?:🔒|\[interne\]|interne\s*:|note interne\b|\/\/|#interne\b|\[internal\]|internal\s*:)/i.test(t)) return true;
+  if (/^(?:🔒|\[interne\]|interne\s*:|note interne\b|\/\/|#interne\b|\[internal\]|internal\s*:|📌|:pushpin:|@?lumi[, ]+retiens)/i.test(t)) return true;
   if (/^relance\s+\d+\s*[hj]\+?\b/i.test(t)) return true;
   const marqueurs = [/\bà faire\s*:/i, /\bpuis on close\b/i, /\bon close\b/i, /pas de réponse produit/i, /compte\s*:\s*à enrichir/i, /\bsent using\b/i, /\btoujours ouvert\b.*\b(?:relance|réponse)/i];
   return marqueurs.filter((m) => m.test(t)).length >= 1 && (/\brelance\b|\bà faire\b|\bclose\b|sent using/i.test(t));
@@ -91,6 +92,13 @@ export async function relayerReponseSlack(e: EvenementMessageSlack, ticketConnu?
   const auteur = e.user ? await nomUtilisateurSlack(e.user) : 'Support';
   const corps = texteDepuisSlack(e.text || '');
   if (!corps) return 'ignored:empty';
+  // « 📌 … » / « Lumi, retiens : … » : l'équipe apprend quelque chose à Lumi — retenu, jamais envoyé au client.
+  const aApprendre = texteAApprendre(corps);
+  if (aApprendre) {
+    const verdict = await apprendre(admin, { question: questionDuTicket(t, await messagesDuTicket(admin, t.id)), reponse: aApprendre, auteur, ticketId: t.id, channel: e.channel, ts: e.ts });
+    if (e.channel && e.ts) await accuserApprentissage(e.channel, e.ts, verdict);
+    return `learned:${verdict}`;
+  }
   // Une note interne reste dans Slack : marquée 🔒 dans le fil pour que l'équipe voie qu'elle n'est pas partie.
   if (estNoteInterne(corps)) {
     logger.info('[support/relais] note interne non relayée', { ticketId: t.id });
@@ -135,6 +143,14 @@ export async function releverReponsesSlack(admin: SupabaseClient = getServiceCli
       const deja = new Set((connus || []).map((m: any) => String(m.slack_ts)));
       const repliques = await lireRepliquesSlack(t.slack_channel_id, t.slack_thread_ts);
       for (const r of repliques) {
+        // Réaction 📌 sur une réponse humaine (déjà relayée ou non) : l'équipe veut que Lumi la retienne.
+        if (r.ts && r.text && r.user && r.reactions?.some((x) => x.name === 'pushpin') && !dejaAppris(t.slack_channel_id, r.ts)) {
+          const reponse = texteDepuisSlack(r.text);
+          if (reponse && !texteAApprendre(reponse) && !estNoteInterne(reponse)) {
+            const verdict = await apprendre(admin, { question: questionDuTicket(t, await messagesDuTicket(admin, t.id)), reponse, auteur: await nomUtilisateurSlack(r.user), ticketId: t.id, channel: t.slack_channel_id, ts: r.ts });
+            await accuserApprentissage(t.slack_channel_id, r.ts, verdict);
+          }
+        }
         if (!r.ts || r.ts === t.slack_thread_ts || deja.has(r.ts)) continue;
         const verdict = await relayerReponseSlack({ type: 'message', channel: t.slack_channel_id, subtype: r.subtype, user: r.user, bot_id: r.bot_id, text: r.text, ts: r.ts, thread_ts: t.slack_thread_ts }, t);
         if (verdict === 'relayed') relayes += 1;

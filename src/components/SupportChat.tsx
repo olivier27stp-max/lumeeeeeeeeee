@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useId, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History } from 'lucide-react';
+import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -20,7 +20,7 @@ import { ARTICLES } from './supportArticles';
 /** Les mêmes questions classiques que le tiroir d'aide ; un clic = réponse fixe côté serveur (étage 0), sans modèle. */
 const SUGGESTIONS_IDS = ['quote-to-invoice', 'get-paid', 'add-member', 'schedule-job', 'import-clients'];
 import {
-  chatSupport, sendSupportMessage, escalateSupportTicket, listSupportTickets, getSupportTicket,
+  chatSupport, sendSupportMessage, escalateSupportTicket, listSupportTickets, getSupportTicket, noterReponseSupport,
   type SupportTicket, type SlaKey, type SupportRequestError,
 } from '../lib/supportApi';
 
@@ -168,6 +168,20 @@ export default function SupportChat({ compact = false, initialTicketId, onNaviga
     }
   }
 
+  // 👍 / 👎 sur une réponse de Lumi : enregistré tout de suite, l'état local suit ; un 👎 invite à préciser ou à demander l'équipe.
+  async function noter(messageId: string, avis: 'bon' | 'mauvais') {
+    if (!ticket) return;
+    const avant = ticket;
+    setTicket({ ...ticket, messages: ticket.messages.map((m) => (m.id === messageId ? { ...m, avis } : m)) });
+    try {
+      await noterReponseSupport(ticket.id, messageId, avis);
+      if (avis === 'mauvais') toast.message(ts.feedbackBad);
+    } catch (e) {
+      setTicket(avant);
+      captureClientException(e, { module: 'support', action: 'avis' });
+    }
+  }
+
   if (fallbackForm) return <SupportPanel bare />;
 
 
@@ -249,7 +263,23 @@ export default function SupportChat({ compact = false, initialTicketId, onNaviga
               </div>
             </div>
           ) : (
-            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
+            <div key={m.id} className="max-w-[92%]">
+              <div className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
+              {/* 👍 / 👎 : un geste, pas un formulaire. Visible tant que la réponse n'est pas notée ; ensuite, seul le choix reste. */}
+              <div className="flex items-center gap-1 mt-1 pl-1" aria-label={ts.feedbackQuestion}>
+                {(!m.avis || m.avis === 'bon') && (
+                  <button type="button" onClick={() => noter(m.id, 'bon')} disabled={!!m.avis} aria-label={ts.helpful} aria-pressed={m.avis === 'bon'} className={cn('p-1 rounded-full text-text-tertiary hover:text-primary hover:bg-surface-secondary', m.avis === 'bon' && 'text-primary')}>
+                    <ThumbsUp size={13} aria-hidden="true" />
+                  </button>
+                )}
+                {(!m.avis || m.avis === 'mauvais') && (
+                  <button type="button" onClick={() => noter(m.id, 'mauvais')} disabled={!!m.avis} aria-label={ts.notHelpful} aria-pressed={m.avis === 'mauvais'} className={cn('p-1 rounded-full text-text-tertiary hover:text-danger hover:bg-surface-secondary', m.avis === 'mauvais' && 'text-danger')}>
+                    <ThumbsDown size={13} aria-hidden="true" />
+                  </button>
+                )}
+                {m.avis && <span className="text-[10.5px] text-text-tertiary">{m.avis === 'bon' ? ts.feedbackThanks : ts.feedbackBad}</span>}
+              </div>
+            </div>
           )
         ))}
         {envoi && (
