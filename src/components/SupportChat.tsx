@@ -8,6 +8,7 @@
  * classique (SupportPanel), qui crée quand même un ticket.
  */
 import React, { useEffect, useId, useRef, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, Send, LifeBuoy, ArrowLeft, Plus, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -39,7 +40,38 @@ function heureCourte(iso: string, fr: boolean): string {
 }
 const POLL_MS = 8000;
 
-export default function SupportChat({ compact = false, initialTicketId }: { compact?: boolean; initialTicketId?: string | null } = {}) {
+/** Les premiers segments des routes de l'app (src/App.tsx) : une route citée par Lumi devient un lien. */
+const SEGMENTS_APP = 'day|dashboard|tasks|jobs|calendar|dispatch|clients|requests|quotes|messages|search|lumi|finances|invoices|payments|settings|commissions|timesheets|availability|courses|training|field-sales|pipeline|leaderboard|d2d-reports|d2d-dashboard|d2d-pipeline|reps|insights|automations|offices|account|apps|marketplace|leads';
+const ROUTE_RE = new RegExp(`(/(?:${SEGMENTS_APP})(?:/[A-Za-z0-9_-]+)*)(?![A-Za-z0-9_:/-])`, 'g');
+
+/**
+ * Le texte d'une réponse, avec chaque route de l'app (« /settings/team ») en
+ * lien : cliquer y va — depuis le tiroir, il se ferme d'abord. Une route avec
+ * un paramètre (« /jobs/:id ») reste du texte.
+ */
+export function TexteAvecLiens({ texte, onNavigate }: { texte: string; onNavigate?: (path: string) => void }) {
+  const morceaux: React.ReactNode[] = [];
+  let i = 0;
+  let n = 0;
+  for (const m of texte.matchAll(ROUTE_RE)) {
+    const route = m[1];
+    const debut = m.index ?? 0;
+    if (route.includes(':')) continue;
+    if (debut > i) morceaux.push(texte.slice(i, debut));
+    morceaux.push(
+      <button key={`l${n++}`} type="button" onClick={() => onNavigate?.(route)} className="underline decoration-dotted underline-offset-2 text-primary hover:decoration-solid font-medium">
+        {route}
+      </button>,
+    );
+    i = debut + route.length;
+  }
+  if (i < texte.length) morceaux.push(texte.slice(i));
+  return <>{morceaux}</>;
+}
+
+export default function SupportChat({ compact = false, initialTicketId, onNavigate }: { compact?: boolean; initialTicketId?: string | null; onNavigate?: (path: string) => void } = {}) {
+  const navigate = useNavigate();
+  const allerA = useCallback((path: string) => { if (onNavigate) onNavigate(path); else navigate(path); }, [onNavigate, navigate]);
   const { t, language } = useTranslation();
   const ts = t.support;
   const fr = language === 'fr';
@@ -213,11 +245,11 @@ export default function SupportChat({ compact = false, initialTicketId }: { comp
                   <span className="font-semibold text-text-primary">{m.authorName || ts.agentLabel}</span>
                   {m.authorName ? ` · ${ts.agentLabel}` : ''}{` · ${heureCourte(m.createdAt, fr)}`}
                 </p>
-                <div className="bg-surface border border-outline-subtle border-l-2 border-l-primary rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-primary shadow-sm whitespace-pre-wrap">{m.body}</div>
+                <div className="bg-surface border border-outline-subtle border-l-2 border-l-primary rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-primary shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
               </div>
             </div>
           ) : (
-            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap">{m.body}</div>
+            <div key={m.id} className="bg-surface border border-outline-subtle rounded-2xl rounded-tl-sm px-3.5 py-3 text-[13.5px] leading-relaxed text-text-secondary max-w-[92%] shadow-sm whitespace-pre-wrap"><TexteAvecLiens texte={m.body} onNavigate={allerA} /></div>
           )
         ))}
         {envoi && (

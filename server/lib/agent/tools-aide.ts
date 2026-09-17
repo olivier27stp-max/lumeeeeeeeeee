@@ -20,12 +20,56 @@ import { ARTICLES, type Article } from '../../../src/components/supportArticles'
 import { CARTE_APP } from '../support/carte-app';
 import { normaliser } from '../lumi/normaliser';
 
-interface Passage { page: string; slug: string; titre: string; texte: string; poids: number; mots: Set<string> }
+interface Passage { page: string; slug: string; titre: string; texte: string; poids: number; mots: Set<string>; motsTitre?: Set<string> }
 
 const VIDES = new Set(['le', 'la', 'les', 'de', 'des', 'du', 'un', 'une', 'et', 'ou', 'en', 'a', 'au', 'aux', 'ce', 'ca', 'que', 'qui', 'dans', 'sur', 'pour', 'par', 'est', 'je', 'tu', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses', 'the', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'is', 'my', 'your', 'comment', 'how', 'do', 'i', 'faire', 'fais', 'peux', 'peut', 'lume', 'avec', 'with', 'sont', 'suis', 'ont', 'ete', 'etre', 'quoi', 'where', 'what', 'are', 'can']);
 
+/**
+ * Radical grossier, en français : pluriel puis suffixes « -ation » et « -e »
+ * (« factures » → « factur », « facturation » → « factur », « géofences » →
+ * « geofenc », « équipe » → « equip »). Assez pour que le mot du client
+ * trouve celui de la doc, sans dictionnaire.
+ */
+export function radical(m: string): string {
+  let r = m;
+  if (r.length > 3 && /[sx]$/.test(r)) r = r.slice(0, -1);
+  if (r.length > 6 && /ation$/.test(r)) r = r.slice(0, -5);
+  else if (r.length > 4 && /e$/.test(r)) r = r.slice(0, -1);
+  return r;
+}
+
 function mots(s: string): Set<string> {
-  return new Set(normaliser(s).filter((m) => m.length > 2 && !VIDES.has(m)));
+  return new Set(normaliser(s).filter((m) => m.length > 2 && !VIDES.has(m)).map(radical));
+}
+
+/**
+ * Le client ne parle pas comme la doc : « effacer » pour « supprimer », « mes gars »
+ * pour l'équipe, « soumission » pour devis, « texto » pour message. À la
+ * QUESTION seulement, on ajoute les mots de la doc (l'index reste tel quel).
+ * Sonde : scripts/qa (40 questions naturelles) 32/40 → 37/40 dans le top 3.
+ */
+const SYNONYMES_QUESTION: Record<string, string[]> = {
+  effacer: ['supprimer'], efface: ['supprimer'], enlever: ['supprimer'], retirer: ['supprimer'], deleter: ['supprimer'],
+  gar: ['equipe', 'membre', 'technicien'], employe: ['membre', 'equipe'], technicien: ['membre', 'equipe'], staff: ['membre', 'equipe'],
+  soumission: ['devi'], estimation: ['devi'], estime: ['devi'],
+  texto: ['message', 'sms'], sms: ['message'],
+  password: ['passe', 'oublie'], passe: ['oublie'],
+  prix: ['service', 'produit'], tarif: ['service', 'produit'],
+  geofence: ['geofence', 'repartition'],
+  gps: ['localisation'], localiser: ['localisation'], tracker: ['localisation'],
+  csv: ['export', 'csv'], excel: ['export', 'csv'], exporter: ['export'],
+  payee: ['paiement', 'payee'], paye: ['paiement'],
+  rappel: ['rappel', 'automatisation', 'relance'], relance: ['rappel', 'automatisation'],
+  logo: ['entreprise', 'logo'],
+  courriel: ['courriel', 'email'], email: ['courriel'], mail: ['courriel'],
+  abonnement: ['forfait', 'facturation'], plan: ['forfait'],
+  photo: ['profil', 'photo'], avatar: ['profil'],
+};
+const SYNONYMES_RADICAUX = new Map(Object.entries(SYNONYMES_QUESTION).map(([k, v]) => [radical(k), v.map(radical)]));
+function motsRequete(question: string): Set<string> {
+  const q = mots(question);
+  for (const m of [...q]) for (const s of SYNONYMES_RADICAUX.get(m) ?? []) q.add(s);
+  return q;
 }
 
 /**
@@ -38,19 +82,28 @@ function mots(s: string): Set<string> {
 export function passagesCarteApp(carte: string = CARTE_APP): Passage[] {
   const out: Passage[] = [];
   let section = '';
+  let parent: { page: string; titre: string } | null = null;
   for (const brute of carte.split('\n')) {
     const ligne = brute.trim();
     if (!ligne) continue;
     const titreSection = /^═+\s*(.+?)\s*═+$/.exec(ligne);
-    if (titreSection) { section = titreSection[1]; continue; }
+    if (titreSection) { section = titreSection[1]; parent = null; continue; }
+    // Sous-puce (« - Facturation : … » sous Finances) : c'est un onglet de l'écran au-dessus, sa route est celle du parent.
+    const puce = /^-\s+([^:]+?)\s*:\s*(.+)$/.exec(ligne);
+    if (puce && parent) {
+      const titre = `${parent.titre} — ${puce[1].trim()}`;
+      out.push({ page: parent.page, slug: `carte:${parent.page}`, titre, texte: ligne.replace(/^-\s+/, ''), poids: 3, mots: mots(`${section} ${titre} ${puce[2]}`), motsTitre: mots(titre) });
+      continue;
+    }
     const m = /^([^:(]+?)\s*(\(([^)]*)\))?\s*:\s*(.+)$/.exec(ligne);
     if (!m) continue;
     const titre = m[1].trim();
     // La route est le premier « /… » de la parenthèse (« Paramètres → Avis clients, /settings/reviews ») ; sinon la page Support.
     const route = /\/[a-z0-9\-/:]+/i.exec(m[3] ?? '')?.[0] ?? '';
     const page = route.startsWith('/') ? route : '/settings/support';
+    parent = { page, titre };
     // Poids 3 comme un titre de page : un écran nommé bat un passage marketing sur un mot commun.
-    out.push({ page, slug: `carte:${page}`, titre: section ? `${section} — ${titre}` : titre, texte: ligne, poids: 3, mots: mots(`${section} ${titre} ${m[3] ?? ''} ${m[4]}`) });
+    out.push({ page, slug: `carte:${page}`, titre: section ? `${section} — ${titre}` : titre, texte: ligne, poids: 3, mots: mots(`${section} ${titre} ${m[3] ?? ''} ${m[4]}`), motsTitre: mots(`${titre} ${m[3] ?? ''}`) });
   }
   return out;
 }
@@ -83,11 +136,12 @@ function index(): Passage[] {
 
 /** Les passages les plus proches de la question (pur, testable). */
 export function chercherAide(question: string, limite = 3): Array<{ page: string; titre: string; extrait: string; score: number }> {
-  const q = mots(question);
+  const q = motsRequete(question);
   if (q.size === 0) return [];
   const scores = index().map((p) => {
     let commun = 0;
-    for (const m of q) if (p.mots.has(m)) commun += 1;
+    // Un mot de la question dans le TITRE de l'écran compte double : « créer une facture » va à Finances — Facturation, pas à la ligne Jobs qui cite « facture » en passant.
+    for (const m of q) if (p.mots.has(m)) commun += p.motsTitre?.has(m) ? 2 : 1;
     return { p, score: commun * p.poids };
   }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
   // Une page au plus deux fois : la réponse doit rester courte et citer 1 à 3 pages.
