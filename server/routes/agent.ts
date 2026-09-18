@@ -13,6 +13,7 @@ import { journaliserTrace, usageGemini } from '../lib/lumi/traces';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, agentTranscribeSchema } from '../lib/validation';
 import { isGeminiConfigured } from '../lib/agent/gemini';
+import { verifierPlafond, compterRefus } from '../lib/lumi/plafond-journalier';
 import { transcribeAudioAvecUsage, type TranscribeMimeType } from '../lib/agent/transcribe';
 
 const router = Router();
@@ -29,13 +30,24 @@ router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, re
     const authed = await requireAuthedClient(req, res);
     if (!authed) return;
     const { audio, mimeType, language } = req.body as { audio: string; mimeType: TranscribeMimeType; language?: 'fr' | 'en' };
+    // La dictée est un appel facturé dont le tarif n'est pas connu du code
+    // (Gemini absent de TARIFS) : elle compte donc dans le plafond de la
+    // source « lumi », faute de pouvoir la chiffrer à part (incident
+    // 2026-09-18 — c'était une dépense entièrement invisible en dollars).
+    if (!verifierPlafond('lumi').autorise) {
+      compterRefus('lumi');
+      return res.status(429).json({ error: 'Daily spend cap reached for transcription.', code: 'plafond_jour' });
+    }
     const debut = Date.now();
     const r = await transcribeAudioAvecUsage({ base64: audio, mimeType, language: language ?? 'fr' });
     // Trace (lumi_traces) : la dictée coûte un appel Gemini avant le tour Lumi.
     // org/user = contexte serveur ; le texte transcrit n'est pas stocké ici.
     void journaliserTrace(getServiceClient(), {
       orgId: authed.orgId, userId: authed.user.id, canal: 'transcription', origine: 'voix',
-      resultat: 'ok', model: r.model, usage: usageGemini(r.usage), costCents: null, dureeMs: Date.now() - debut,
+      // costCents null tant que le tarif Gemini n'est pas dans TARIFS : on ne
+      // devine pas un prix. Les tokens, eux, sont comptés et lisibles.
+      resultat: 'ok', model: r.model, usage: usageGemini(r.usage),
+      costCents: null, dureeMs: Date.now() - debut,
     });
     res.json({ text: r.text });
   } catch (err) {
