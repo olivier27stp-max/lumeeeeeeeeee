@@ -69,7 +69,9 @@
     "check:invariants": "node --env-file=.env.local scripts/check-invariants.mjs",
     "check:multitenant": "node --env-file=.env.local scripts/check-multitenant.mjs",
     "check:sms": "tsx server/scripts/diagnose-sms-provisioning.ts",
-    "test:parcours": "tsx --env-file=.env.local scripts/test-parcours-contrat.mjs"
+    "test:parcours": "tsx --env-file=.env.local scripts/test-parcours-contrat.mjs",
+    "qa:depense": "node --env-file=.env.local --import tsx scripts/qa/depense-llm.mts",
+    "qa:fumee": "node --env-file=.env.local --import tsx scripts/qa/fumee-cout.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.124.0",

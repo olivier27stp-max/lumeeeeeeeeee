@@ -21,6 +21,7 @@ import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { etatBudget, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
+import { verifierPlafond, ajouterDepense, compterRefus, etatPlafonds } from '../lib/lumi/plafond-journalier';
 import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { rendreCourrielLume, echapper } from '../lib/courriels/gabarit';
@@ -323,6 +324,12 @@ async function executerTourSse(opts: {
     const reglages = reglagesPourPalier(ctx.budget.palier, modeleLumi());
     // Qualité : les sujets qui raisonnent (rapports, analyse financière) gardent une réflexion medium, hors palier dégradé.
     if (opts.sousAgent && ctx.budget.palier === 'normal') reglages.effort = effortDuSousAgent(opts.sousAgent);
+    // Plafond journalier d'exploitation (incident 2026-09-18) : borne en dollars
+    // par source, indépendante du plan de l'org. C'est ce qui arrête une
+    // batterie d'évaluation partie en boucle sur un environnement de test, là
+    // où le budget mensuel par org l'autorisait à dépenser 45 $.
+    const plafondJour = verifierPlafond('lumi');
+    if (!plafondJour.autorise) { compterRefus('lumi'); reglages.modele_autorise = false; }
     // Palier épuisé : aucun appel au modèle, même si la RPC de réservation manque.
     const resultat: ResultatTour = !reglages.modele_autorise ? { nouveauxMessages: [], proposition: null, texte: '', cost_cents: 0, plafond: true } : await tourLumi({
       client: ctx.auth.client,
@@ -347,12 +354,16 @@ async function executerTourSse(opts: {
       ecrituresRestantes: Math.max(0, PLAFOND_ECRITURES_PAR_CONVERSATION - compterEcritures([...opts.historique, ...opts.nouveauxAvant])),
       historique: [...opts.historique, ...opts.nouveauxAvant],
       emettre: (e) => { if (!ferme) emettre(e); },
-      journaliser: (usage, model, cost_cents) => journaliserUsage(ctx.admin, {
-        orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, model,
-        input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
-        cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
-        cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
-      }),
+      journaliser: (usage, model, cost_cents) => {
+        // Le compteur du jour se nourrit du coût RÉEL, au même endroit que le journal.
+        ajouterDepense('lumi', cost_cents);
+        return journaliserUsage(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, model,
+          input_tokens: usage.input_tokens, output_tokens: usage.output_tokens,
+          cache_creation_input_tokens: usage.cache_creation_input_tokens ?? 0,
+          cache_read_input_tokens: usage.cache_read_input_tokens ?? 0, cost_cents,
+        });
+      },
     });
     if (resultat.plafond) {
       // Plafond dur atteint : rien n'est parti au modèle pour cette étape ;
@@ -882,7 +893,14 @@ router.get('/lumi/quota', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const budget = await etatBudget(getServiceClient(), auth.orgId);
-    return res.json({ ...budget, configured: isLumiConfigured() });
+    // Posture de coût du SERVEUR (incident 2026-09-18) : une batterie qui tape
+    // sur cette API ne choisit pas le modèle — c'est l'environnement du serveur
+    // qui décide. Elle doit pouvoir le vérifier avant de lancer 2 000 appels.
+    return res.json({
+      ...budget,
+      configured: isLumiConfigured(),
+      cout: { modele: modeleLumi(), plafonds_jour: etatPlafonds() },
+    });
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to load Lumi quota.', '[lumi/quota]');
   }

@@ -102,6 +102,28 @@ export const ARTICLES: Article[] = [
     tags: 'forfait plan abonnement annuler upgrade downgrade facturation prix',
   },
   {
+    // Question la plus répétée du support en prod (8 fois le 2026-09-18, payée
+    // au modèle à chaque fois) : la réponse ne dépend d'aucune donnée du compte.
+    id: 'billing-failed',
+    path: '/settings/billing',
+    q_fr: 'Mon paiement d\'abonnement a échoué — que faire ?',
+    q_en: 'My subscription payment failed — what now?',
+    a_fr: "Allez dans Paramètres → Forfait & facturation : tant que le paiement n'est pas réglé, un bandeau vous propose de mettre votre carte à jour. Votre compte reste utilisable pendant ce délai — corrigez la carte et le paiement est repris automatiquement, sans rien perdre.",
+    a_en: 'Go to Settings → Plan & billing: while a payment is outstanding, a banner lets you update your card. Your account keeps working in the meantime — fix the card and the payment retries automatically, with nothing lost.',
+    tags: 'paiement echoue refuse carte expiree past due abonnement facturation retard prelevement declined',
+  },
+  {
+    // « comment je parle à un humain » — 2 fois en prod, aucune réponse écrite.
+    id: 'talk-to-human',
+    q_fr: 'Comment parler à un humain de l\'équipe ?',
+    q_en: 'How do I talk to a human on the team?',
+    a_fr: "Dites-le simplement ici (« je veux parler à quelqu'un ») : je transmets la conversation à l'équipe avec tout le contexte, et une vraie personne vous répond dans ce même fil. Pas de file d'attente ni de numéro à composer.",
+    a_en: 'Just say so here (“I’d like to talk to someone”): I hand the conversation to the team with all the context, and a real person replies in this same thread. No queue, no phone number to dial.',
+    // Les mots-clés servent à une comparaison EXACTE, sans racinisation :
+    // « parle » et « parler » comptent chacun pour eux-mêmes.
+    tags: 'humain personne equipe support agent conseiller parle parler contacter contact quelqu un escalade vrai monde',
+  },
+  {
     id: 'invoice-unpaid',
     path: '/finances',
     q_fr: 'Un client n\'a pas payé sa facture — que faire ?',

@@ -25,6 +25,7 @@ import { isSlackConfigured } from '../lib/slack';
 import { isSupportIAConfigured, repondreSupportIA } from '../lib/support/ia';
 import { dossierClient } from '../lib/support/dossier';
 import { reponseFaqPour } from '../lib/support/faq';
+import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
 import { journaliserTrace } from '../lib/lumi/traces';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
@@ -102,7 +103,11 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     let reply: string | null = null;
     let transferer = !!humain;
     let motif = humain ? 'Le client a demandé à parler à un humain' : '';
-    // Étage 0 : une question classique (la FAQ, mot pour mot) a une réponse fixe — 0 appel modèle, même Lumi.
+    // Étage 0 : une question classique a une réponse fixe — 0 appel modèle.
+    // Depuis le 2026-09-18, la correspondance n'est plus seulement mot pour
+    // mot : une reformulation sans ambiguïté sur le même sujet produit la même
+    // réponse (voir server/lib/support/faq.ts). Les questions portant sur les
+    // DONNÉES de l'org en sont exclues et descendent toujours au modèle.
     const fixe = humain ? null : reponseFaqPour(message, ctx.langue);
     if (fixe) {
       reply = fixe.reponse;
@@ -126,6 +131,10 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         : null;
       // Plafond par entreprise et par jour : au-delà, réponses fixes seulement, jamais le modèle.
       const auPlafond = !memo && (await reponsesModeleAujourdhui(admin, auth.orgId)) >= PLAFOND_MODELE_PAR_JOUR;
+      // Étage 5 : le centre d'aide avant le modèle (patron de tous les CRM).
+      // Ne répond que si la recherche est franche ET sans ambiguïté ; sinon
+      // `null` et le modèle prend la suite, exactement comme avant.
+      const aide = !memo && !auPlafond ? reponseAideDirecte(message, ctx.langue, { premierMessage }) : null;
       if (memo) {
         reply = memo.entree.texte;
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
@@ -135,6 +144,13 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         reply = texteAuPlafond(ctx.langue);
         await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
         void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 0, action: 'plafond-jour', resultat: 'refus', model: null, costCents: 0, dureeMs: Date.now() - debut });
+      } else if (aide) {
+        // Étage 5 : le centre d'aide répond, comme dans tous les CRM — le
+        // modèle reste le recours, pas le réflexe. 0 token.
+        reply = aide.texte;
+        await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
+        if (chezHumain) await relayerMessageClient(admin, ticket, ctx, reply, 'lumi');
+        void journaliserTrace(admin, { orgId: auth.orgId, userId: auth.user.id, canal: 'support', origine: origine === 'suggestion' ? 'suggestion' : 'texte', enonce: message, etage: 5, action: 'aide-directe', outils: aide.pages, resultat: 'ok', model: null, costCents: 0, dureeMs: Date.now() - debut });
       } else try {
         // Le même Lumi partout : il connaît le compte (dossier) et peut suivre ou démarrer une migration.
         const dossier = await dossierClient(admin, auth.orgId, auth.user.id);

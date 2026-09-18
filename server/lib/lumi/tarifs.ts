@@ -44,6 +44,24 @@ export interface UsageTokens {
   cache_creation?: { ephemeral_1h_input_tokens: number; ephemeral_5m_input_tokens: number } | null;
 }
 
+/**
+ * Modèles dont le tarif n'est PAS dans cette table et qu'on refuse de deviner
+ * (incident 2026-09-18 : toute la dépense Gemini était comptée NULL, donc
+ * invisible dans les totaux en dollars). Les inscrire ici ne donne pas un
+ * prix — ça rend l'absence de prix explicite et interrogeable, au lieu de la
+ * confondre avec « gratuit ».
+ *
+ * Pour chiffrer Gemini : relever les tarifs publiés par Google et les ajouter
+ * à TARIFS. Tant que ce n'est pas fait, `coutEnCents` renvoie null pour ces
+ * modèles et les tokens restent comptés dans lumi_traces.
+ */
+export const TARIFS_INCONNUS = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-embedding-001'] as const;
+
+/** true si le modèle est facturé mais que son tarif n'est pas connu du code. */
+export function tarifInconnu(model: string): boolean {
+  return TARIFS_INCONNUS.some((m) => model === m || model.startsWith(m));
+}
+
 /** Tarif le plus cher : un modèle inconnu est facturé à ce prix, jamais 0 (on ne sous-compte pas). */
 const TARIF_PLANCHER = TARIFS['claude-opus-5'];
 
