@@ -114,6 +114,7 @@ const ProductsServices = React.lazy(() => import('./pages/ProductsServices'));
 const AppMarketplace = React.lazy(() => import('./pages/AppMarketplace'));
 const SettingsMessaging = React.lazy(() => import('./pages/SettingsMessaging'));
 const SettingsReviews = React.lazy(() => import('./pages/SettingsReviews'));
+const EmailTemplatesSettings = React.lazy(() => import('./pages/settings/EmailTemplatesSettings'));
 const RequestFormSettings = React.lazy(() => import('./pages/RequestFormSettings'));
 const QuotePresets = React.lazy(() => import('./pages/QuotePresets'));
 // Pages porteuses de CARTES (leaflet + mapbox-gl, ~1,9 Mo). Importees
@@ -1586,6 +1587,7 @@ function AuthenticatedApp({
                       <Route path="reminders" element={<Navigate to="/settings/payments" replace />} />
                       <Route path="messaging" element={<Gated permission="settings.read"><SettingsMessaging /></Gated>} />
                       <Route path="reviews" element={<Gated permission="settings.update"><SettingsReviews /></Gated>} />
+                      <Route path="email-templates" element={<Gated permission="settings.update"><EmailTemplatesSettings /></Gated>} />
                       <Route path="request-form" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_request_forms"><RequestFormSettings /></PlanFeatureGate></Gated>} />
                       <Route path="team" element={<Gated permission="team.read"><ManageTeam /></Gated>} />
                       <Route path="roles" element={<Gated permission="users.update_role"><SettingsRoles /></Gated>} />

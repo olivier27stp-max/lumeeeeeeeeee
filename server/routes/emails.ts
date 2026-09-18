@@ -17,6 +17,7 @@ import { getCompanyBranding } from '../lib/companyBranding';
 import { lireLiensSociaux, type SocialLinks } from '../lib/socialLinks';
 import { expediteurDe } from '../lib/courriels/domaines';
 import { rendreCourrielClient, montant as montantLisible, dateLisible, langueDe, MOTS, type Marque, type Langue } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
 
 const router = Router();
 
@@ -232,6 +233,15 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     let bodyHtml = customBody || '';
     void amountStr;
 
+    const templateVars: Record<string, string> = {
+      client_name: clientName,
+      company_name: company.company_name || '',
+      invoice_number: invoice.invoice_number || '',
+      invoice_amount: amountStr,
+      due_date: formatDate(invoice.due_date),
+      payment_link: viewUrl || '',
+    };
+
     // Try to load email template if provided or use default
     if (emailTemplateId) {
       const serviceClient = getServiceClient();
@@ -242,18 +252,25 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
         .eq('org_id', orgId) // tenant guard — don't render another org's template
         .maybeSingle();
       if (tpl) {
-        const templateVars: Record<string, string> = {
-          client_name: clientName,
-          company_name: company.company_name || '',
-          invoice_number: invoice.invoice_number || '',
-          invoice_amount: amountStr,
-          due_date: formatDate(invoice.due_date),
-          payment_link: viewUrl || '',
-        };
         emailSubject = customSubject || tpl.subject.replace(/\{(\w+)\}/g, (_: string, k: string) => templateVars[k] ?? '');
         bodyHtml = customBody || tpl.body.replace(/\{(\w+)\}/g, (_: string, k: string) => templateVars[k] ?? '');
       }
     }
+
+    /* Le modèle de l'entreprise, quand aucun `emailTemplateId` n'est passé.
+       C'est LE branchement qui manquait : `is_default` n'était jamais lu, donc
+       les modèles écrits par les entreprises ne servaient à rien (aucune page
+       ne passe d'`emailTemplateId`).
+
+       Son texte ne remplace PAS le courriel : il part dans `corpsHtml` du
+       gabarit, donc la carte du montant, le bouton « payer », les numéros de
+       taxes et le pied restent posés par nous. Une entreprise ne peut pas
+       écrire un modèle qui empêche son client de payer.
+
+       Sans modèle → `null` → le courriel sort EXACTEMENT comme aujourd'hui. */
+    const modeleOrg = (!emailTemplateId && !customBody)
+      ? await texteDuCourriel(orgId, 'invoice_sent', templateVars)
+      : null;
 
     // If no custom body and no template, use default layout
     const langue = langueEntreprise(company);
@@ -262,17 +279,20 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     const montantTexte = montantLisible(invoice.balance_cents || invoice.total_cents || 0, invoice.currency || 'CAD', langue);
     const echeance = dateLisible(invoice.due_date, langue);
     const dejaPayee = (invoice.status || '') === 'paid' || Number(invoice.balance_cents ?? 1) === 0;
-    if (!customSubject) emailSubject = `${m.facture} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`;
+    if (!customSubject) emailSubject = modeleOrg?.sujet || `${m.facture} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`;
     // Sans modèle ni texte personnalisé : le courriel structuré (montant en carte, échéance, un bouton).
     const htmlStructure = !bodyHtml ? rendreCourrielClient({
       langue,
       marque: marqueDepuis(company),
       preheader: dejaPayee ? `${m.facture} ${numero} — ${m.payee}` : `${m.facture} ${numero} — ${montantTexte}${echeance ? ` — ${m.echeance} ${echeance}` : ''}`,
       titre: langue === 'fr' ? `Votre facture ${numero}` : `Your invoice ${numero}`,
-      salutation: m.bonjour(clientName),
-      intro: dejaPayee
+      // Le modèle de l'entreprise porte sa propre salutation et son propre
+      // texte : on n'ajoute pas les nôtres par-dessus, on les remplace.
+      salutation: modeleOrg ? null : m.bonjour(clientName),
+      intro: modeleOrg ? null : (dejaPayee
         ? (langue === 'fr' ? 'Voici votre facture, réglée. Merci !' : 'Here is your invoice, paid in full. Thank you!')
-        : (langue === 'fr' ? 'Voici votre facture. Vous pouvez la consulter et la payer en ligne en un clic.' : 'Here is your invoice. You can view it and pay online in one click.'),
+        : (langue === 'fr' ? 'Voici votre facture. Vous pouvez la consulter et la payer en ligne en un clic.' : 'Here is your invoice. You can view it and pay online in one click.')),
+      corpsHtml: modeleOrg?.corpsHtml ?? null,
       montant: { libelle: dejaPayee ? m.montantTotal : m.montantDu, valeur: montantTexte, sous: !dejaPayee && echeance ? `${m.echeance} : ${echeance}` : null },
       lignes: [
         { libelle: m.numero, valeur: numero },
@@ -444,13 +464,26 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     const numero = quote.invoice_number || invoiceId.slice(0, 8);
     const montantTexte = montantLisible(quote.total_cents || quote.balance_cents || 0, quote.currency || 'CAD', langue);
     const validite = dateLisible(quote.due_date, langue);
+    // Le modèle « quote_sent » de l'entreprise, s'il existe (sinon null, et le
+    // courriel sort exactement comme avant). Comme pour la facture, son texte
+    // se pose dans `corpsHtml` : le montant, le bouton « Voir la soumission »,
+    // les taxes et le pied restent les nôtres.
+    const modeleOrg = await texteDuCourriel(orgId, 'quote_sent', {
+      client_name: clientName,
+      company_name: company.company_name || '',
+      quote_number: numero,
+      quote_amount: montantTexte,
+      valid_until: validite,
+      quote_link: viewUrl || '',
+    });
     const html = rendreCourrielClient({
       langue,
       marque: marqueDepuis(company),
       preheader: `${m.soumission} ${numero} — ${montantTexte}`,
       titre: langue === 'fr' ? `Votre soumission ${numero}` : `Your quote ${numero}`,
-      salutation: m.bonjour(clientName),
-      intro: langue === 'fr' ? 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.' : 'Here is your quote. You can view and approve it online.',
+      salutation: modeleOrg ? null : m.bonjour(clientName),
+      intro: modeleOrg ? null : (langue === 'fr' ? 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.' : 'Here is your quote. You can view and approve it online.'),
+      corpsHtml: modeleOrg?.corpsHtml ?? null,
       montant: { libelle: m.montantTotal, valeur: montantTexte, sous: validite ? `${m.valideJusquau} ${validite}` : null },
       lignes: [{ libelle: m.numero, valeur: numero }, ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : [])],
       bouton: viewUrl ? { texte: m.voirSoumission, url: viewUrl } : null,
@@ -461,7 +494,7 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
+      subject: modeleOrg?.sujet || `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
       html,
       suivi: { orgId, entityType: 'invoice', entityId: quote.id },
     });

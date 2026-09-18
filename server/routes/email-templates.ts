@@ -4,29 +4,25 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /**
- * ⚠️ MODULE INACCESSIBLE DEPUIS L'APPLICATION (constat 2026-08-12).
+ * Modèles de courriel d'une entreprise — CRUD.
  *
- * Ce CRUD est complet et fonctionnel, mais AUCUNE page ne l'appelle :
- * `src/components/EmailTemplatePicker.tsx` et `src/lib/emailTemplatesApi.ts`
- * ne sont importés nulle part. Il n'existe aucun écran de gestion des
- * modèles.
+ * HISTORIQUE (à ne pas réintroduire) : de 2026-03 à 2026-09, ce CRUD était
+ * complet mais INERTE. `is_default` n'était jamais lu à l'envoi ; un modèle ne
+ * servait que si le front passait un `emailTemplateId` explicite, ce qu'aucune
+ * page ne faisait. Les modèles semés en prod n'ont donc jamais rien changé aux
+ * courriels reçus par les clients.
  *
- * Ce que le code lit réellement dans `email_templates` :
- *   - `review_request` — seul type consommé, par `executeRequestReview`
- *     (server/lib/actions/index.ts) ;
- *   - un modèle par `id`, quand le front passe explicitement
- *     `emailTemplateId` à POST /emails/send-invoice — ce qu'aucune page ne
- *     fait aujourd'hui.
+ * Depuis 2026-09-18, `server/lib/courriels/modeles.ts` (`texteDuCourriel`)
+ * résout le modèle AUTOMATIQUEMENT par (org_id, type, is_active), et les envois
+ * de facture, de soumission et les rappels l'utilisent. Deux règles que ce
+ * fichier doit préserver :
  *
- * Les autres types (`invoice_sent`, `invoice_reminder`, `quote_sent`,
- * `generic`) sont stockables mais jamais lus : les envois correspondants
- * génèrent leur HTML en dur. 11 modèles existent en prod, dont 3 `quote_sent`
- * semés par une migration et jamais utilisés.
- *
- * Conservé volontairement : le code est inerte tant qu'il n'est pas câblé, et
- * le brancher est une fonctionnalité produit (éditeur, prévisualisation,
- * variables), pas un correctif. Ne pas le supprimer sans préserver
- * `review_request`.
+ *   - UN SEUL modèle actif par (org_id, type) : l'index unique partiel
+ *     `uniq_email_templates_actif_par_type` l'impose en base. Toute route qui
+ *     active un modèle doit d'abord désactiver l'autre, sinon elle échoue en
+ *     23505 (et supabase-js ne lève pas : la faute passerait inaperçue).
+ *   - `type` doit rester aligné sur `TYPES_MODELE_COURRIEL`
+ *     (server/lib/validation.ts) ET sur le CHECK de la base.
  */
 
 import { Router } from 'express';
@@ -98,10 +94,21 @@ router.post('/email-templates', validate(emailTemplateSchema), async (req, res) 
     const { orgId, user } = authed;
     const serviceClient = getServiceClient();
 
-    const { name, type, subject, body, variables, is_active, is_default } = req.body;
+    const { name, type, subject, body, variables, is_active, is_default, source } = req.body;
 
-    // If setting as default, unset other defaults of same type
-    if (is_default) {
+    /* Un seul modèle ACTIF par (org_id, type) — c'est l'index unique partiel
+       `uniq_email_templates_actif_par_type` qui l'impose en base, et c'est ce
+       qui rend `texteDuCourriel` déterministe. Le nouveau modèle actif chasse
+       donc le précédent, qui passe en brouillon (rien n'est supprimé : le
+       texte écrit par l'entreprise lui appartient). */
+    if (is_active ?? true) {
+      await serviceClient
+        .from('email_templates')
+        .update({ is_active: false, is_default: false })
+        .eq('org_id', orgId)
+        .eq('type', type)
+        .eq('is_active', true);
+    } else if (is_default) {
       await serviceClient
         .from('email_templates')
         .update({ is_default: false })
@@ -122,6 +129,7 @@ router.post('/email-templates', validate(emailTemplateSchema), async (req, res) 
         variables: variables ?? [],
         is_active: is_active ?? true,
         is_default: is_default || false,
+        source: source || 'editeur',
       })
       .select()
       .single();
@@ -143,15 +151,26 @@ router.put('/email-templates/:id', validate(emailTemplateSchema), async (req, re
     const { id } = req.params;
     const serviceClient = getServiceClient();
 
-    const { name, type, subject, body, variables, is_active, is_default } = req.body;
+    const { name, type, subject, body, variables, is_active, is_default, source } = req.body;
 
-    // If setting as default, unset other defaults of same type
-    if (is_default) {
+    /* Même règle qu'à la création : un seul modèle actif par (org_id, type).
+       On écarte les AUTRES lignes actives de ce type (`.neq('id', id)`) avant
+       d'écrire celle-ci, sinon l'index unique partiel rejette la mise à jour. */
+    if (is_active ?? true) {
+      await serviceClient
+        .from('email_templates')
+        .update({ is_active: false, is_default: false })
+        .eq('org_id', orgId)
+        .eq('type', type)
+        .eq('is_active', true)
+        .neq('id', id);
+    } else if (is_default) {
       await serviceClient
         .from('email_templates')
         .update({ is_default: false })
         .eq('org_id', orgId)
-        .eq('type', type);
+        .eq('type', type)
+        .neq('id', id);
     }
 
     const { data, error } = await serviceClient
@@ -165,6 +184,7 @@ router.put('/email-templates/:id', validate(emailTemplateSchema), async (req, re
         variables: variables ?? [],
         is_active: is_active ?? undefined,
         is_default: is_default ?? undefined,
+        source: source ?? undefined,
         updated_at: new Date().toISOString(),
       })
       .eq('id', id)
@@ -213,8 +233,12 @@ router.post('/email-templates/:id/duplicate', async (req, res) => {
         subject: original.subject,
         body: original.body,
         variables: original.variables,
-        is_active: original.is_active,
+        // Une copie naît TOUJOURS inactive : sinon elle entrerait en collision
+        // avec l'original sur l'index unique (org_id, type) where is_active.
+        // On duplique pour retoucher, pas pour publier d'un clic.
+        is_active: false,
         is_default: false,
+        source: original.source || 'editeur',
       })
       .select()
       .single();
@@ -248,17 +272,21 @@ router.post('/email-templates/:id/set-default', async (req, res) => {
       return res.status(404).json({ error: 'Email template not found' });
     }
 
-    // Unset all defaults for this type in org
+    /* « Rendre par défaut » = « c'est CE texte qu'on envoie ». On désactive donc
+       les autres du même type en même temps qu'on leur retire le drapeau : la
+       résolution serveur cherche par `is_active`, et l'index unique partiel
+       n'admet qu'un seul actif par (org_id, type). */
     await serviceClient
       .from('email_templates')
-      .update({ is_default: false })
+      .update({ is_default: false, is_active: false })
       .eq('org_id', orgId)
-      .eq('type', template.type);
+      .eq('type', template.type)
+      .neq('id', id);
 
     // Set this template as default
     const { data, error } = await serviceClient
       .from('email_templates')
-      .update({ is_default: true, updated_at: new Date().toISOString() })
+      .update({ is_default: true, is_active: true, updated_at: new Date().toISOString() })
       .eq('id', id)
       .eq('org_id', orgId)
       .select()

@@ -19,7 +19,8 @@ import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRules
 import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 
 interface Props {
-  ruleId: string;
+  /** Règle d'automatisation visée. Absent quand `enregistrerTexte` est fourni. */
+  ruleId?: string;
   ruleName: string;
   /** Corps HTML actuel. */
   body: string;
@@ -27,6 +28,13 @@ interface Props {
   fr: boolean;
   onClose: () => void;
   onSaved: () => void;
+  /**
+   * Où va le texte une fois écrit. Par défaut dans la règle d'automatisation
+   * désignée par `ruleId` ; la page « Modèles de courriel » l'envoie plutôt
+   * dans `email_templates`. Le même éditeur sert ainsi aux 35 courriels, au
+   * lieu d'en écrire un second qui divergerait au premier correctif.
+   */
+  enregistrerTexte?: (corpsHtml: string, objet: string) => Promise<void>;
 }
 
 /** Un bloc du courriel : titre, paragraphe ou puce. */
@@ -111,7 +119,7 @@ function blocsEnTexte(blocs: Bloc[]): string {
 }
 
 export default function EmailPreviewEditor({
-  ruleId, ruleName, body, subject, fr, onClose, onSaved,
+  ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte,
 }: Props) {
   const [blocs, setBlocs] = useState<Bloc[]>(() => texteEnBlocs(htmlVersTexte(body)));
   const [objet, setObjet] = useState(subject);
@@ -201,7 +209,16 @@ export default function EmailPreviewEditor({
     setEnregistrement(true);
     try {
       // Le HTML n'est reconstruit qu'ici : l'utilisateur ne l'a jamais vu.
-      await updateRuleMessage(ruleId, 'send_email', texteVersHtml(blocsEnTexte(blocs)), objet);
+      const corpsHtml = texteVersHtml(blocsEnTexte(blocs));
+      if (enregistrerTexte) {
+        await enregistrerTexte(corpsHtml, objet);
+      } else if (ruleId) {
+        await updateRuleMessage(ruleId, 'send_email', corpsHtml, objet);
+      } else {
+        // Ni destination injectée, ni règle : rien n'aurait été écrit, et
+        // l'utilisateur aurait vu « enregistré » pour du travail perdu.
+        throw new Error(fr ? 'Aucune destination d’enregistrement' : 'No save destination');
+      }
       setEnregistre(true);
       setTimeout(() => setEnregistre(false), 1800);
       onSaved();
