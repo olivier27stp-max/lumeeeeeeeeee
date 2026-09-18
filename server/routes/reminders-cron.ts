@@ -25,6 +25,7 @@ import { sendSafeError } from '../lib/error-handler';
 import { sendEmail, isMailerConfigured, adresseInjoignable } from '../lib/mailer';
 import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise } from './emails';
 import { rendreCourrielClient, dateLisible, MOTS } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
 import { logger } from '../lib/logger';
 import { sendSmsIfConfigured, applyTemplate, isSmsOptedOut } from '../lib/notificationHelpers';
 import { twilioClient, twilioPhoneNumber } from '../lib/config';
@@ -285,7 +286,21 @@ router.post('/cron/payment-reminders', async (req, res) => {
             const defauts = DEFAUTS[langueRappel];
 
             if ((channel === 'email' || channel === 'both') && toEmail && !adresseMorte && isMailerConfigured()) {
-              const subject = applyTemplate(settings.custom_email_subject || defauts.sujet, vars);
+              /* Trois sources de texte, dans cet ordre :
+                   1. le modèle « invoice_reminder » de la page Modèles ;
+                   2. le texte des réglages de rappel (custom_email_*, historique) ;
+                   3. DEFAUTS[langue].
+                 Le modèle passe en premier : c'est l'écran où une entreprise
+                 écrit désormais ses textes. Les réglages de rappel restent
+                 honorés pour ne rien casser chez celles qui les ont remplis.
+                 Sans ni l'un ni l'autre, le rappel sort mot pour mot comme
+                 aujourd'hui.
+
+                 Quoi qu'il arrive, le montant, le bouton « payer », les numéros
+                 de taxes et le pied restent posés par le gabarit : un rappel ne
+                 peut pas partir sans le moyen de régler la facture. */
+              const modeleOrg = await texteDuCourriel(orgId, 'invoice_reminder', vars);
+              const subject = modeleOrg?.sujet || applyTemplate(settings.custom_email_subject || defauts.sujet, vars);
               const body = applyTemplate(settings.custom_email_body || defauts.corps, vars);
               // Le texte du rappel (celui de l'entreprise ou le défaut) dans le gabarit commun, avec le montant en carte et le bouton payer.
               const html = rendreCourrielClient({
@@ -293,7 +308,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
                 marque: marqueDepuis(societe),
                 preheader: `${vars.amount_due} — ${langueRappel === 'fr' ? 'facture' : 'invoice'} ${vars.invoice_number}`,
                 titre: langueRappel === 'fr' ? 'Rappel de paiement' : 'Payment reminder',
-                corpsHtml: bodyToHtml(body),
+                corpsHtml: modeleOrg?.corpsHtml || bodyToHtml(body),
                 montant: { libelle: MOTS[langueRappel].montantDu, valeur: vars.amount_due, sous: vars.due_date ? `${MOTS[langueRappel].echeance} : ${dateLisible(vars.due_date, langueRappel)}` : null },
                 bouton: payUrl.includes('/pay/') ? { texte: MOTS[langueRappel].payer(vars.amount_due), url: payUrl } : null,
                 note: MOTS[langueRappel].question,

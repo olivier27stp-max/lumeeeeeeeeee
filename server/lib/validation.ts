@@ -298,17 +298,40 @@ export const invoiceTemplateSchema = z.object({
 
 // ─── Email Templates ─────────────────────────────────────────────────────────
 
+/**
+ * Les types de courriel personnalisables — MÊME LISTE que le CHECK de
+ * `email_templates.type` (migration 20260918100000_modeles_courriel.sql).
+ *
+ * Elle était figée sur 5 valeurs alors que la base en acceptait déjà 10 : le
+ * CRUD refusait donc en 400 des types parfaitement valides en base. Les deux
+ * listes doivent bouger ENSEMBLE — sinon, soit l'API refuse ce que la base
+ * accepte, soit elle laisse passer ce que la base rejettera en 23514.
+ */
+export const TYPES_MODELE_COURRIEL = [
+  'invoice_sent', 'invoice_reminder', 'invoice_paid', 'invoice_overdue',
+  'payment_receipt', 'payment_failed', 'payment_request',
+  'deposit_request', 'deposit_received',
+  'quote_sent', 'quote_reminder', 'quote_accepted', 'quote_declined', 'quote_expiring',
+  'job_confirmation', 'job_reminder', 'job_completed', 'job_rescheduled', 'job_cancelled',
+  'appointment_reminder', 'appointment_confirmation',
+  'contract_sent', 'contract_signed', 'contract_reminder',
+  'lead_ack', 'lead_followup', 'lead_nurture',
+  'client_welcome', 'client_anniversary', 'seasonal_reminder', 'cross_sell',
+  'review_request', 'referral_request',
+  'form_submission', 'generic',
+] as const;
+
 export const emailTemplateSchema = z.object({
   name: z.string().trim().min(1, 'name is required.'),
-  type: z.enum(
-    ['invoice_sent', 'invoice_reminder', 'quote_sent', 'review_request', 'generic'],
-    { error: 'type must be one of: invoice_sent, invoice_reminder, quote_sent, review_request, generic.' },
-  ),
+  type: z.enum(TYPES_MODELE_COURRIEL, { error: 'type is not a supported email template type.' }),
   subject: z.string().trim().min(1, 'subject is required.'),
   body: z.string().min(1, 'body is required.'),
   variables: z.any().optional(),
   is_active: z.boolean().optional(),
   is_default: z.boolean().optional(),
+  // 'import' = HTML collé par l'entreprise : assaini puis posé dans `corpsHtml`
+  // du gabarit, jamais en remplacement du courriel entier.
+  source: z.enum(['editeur', 'import']).optional(),
 });
 
 // ─── Communications ──────────────────────────────────────────────────────────
