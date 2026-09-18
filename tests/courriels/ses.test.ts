@@ -39,8 +39,12 @@ describe('choix du fournisseur', () => {
     expect(fournisseurCourriel({ COURRIEL_FOURNISSEUR: 'resend', RESEND_API_KEY: 're_x', ...AVEC_SES } as NodeJS.ProcessEnv)).toBe('resend');
     expect(fournisseurCourriel({ COURRIEL_FOURNISSEUR: 'smtp', ...AVEC_SES } as NodeJS.ProcessEnv)).toBe('smtp');
   });
-  it('sans variable : SES s’il est prêt, sinon Resend, sinon SMTP', () => {
-    expect(fournisseurCourriel({ ...AVEC_SES, RESEND_API_KEY: 're_x' } as NodeJS.ProcessEnv)).toBe('ses');
+  it('sans variable, SES n’est JAMAIS choisi tout seul — même configuré', () => {
+    // Poser les identifiants SES pour préparer la bascule ne doit pas détourner
+    // la production vers un compte encore en bac à sable : tous les envois
+    // s'arrêteraient en silence. Il faut COURRIEL_FOURNISSEUR=ses.
+    expect(fournisseurCourriel({ ...AVEC_SES, RESEND_API_KEY: 're_x' } as NodeJS.ProcessEnv)).toBe('resend');
+    expect(fournisseurCourriel({ ...AVEC_SES } as NodeJS.ProcessEnv)).toBe('smtp');
     expect(fournisseurCourriel({ RESEND_API_KEY: 're_x' } as NodeJS.ProcessEnv)).toBe('resend');
     expect(fournisseurCourriel({} as NodeJS.ProcessEnv)).toBe('smtp');
   });

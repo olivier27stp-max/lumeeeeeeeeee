@@ -84,7 +84,7 @@ export type FournisseurCourriel = 'ses' | 'resend' | 'smtp';
 
 /**
  * Qui envoie. `COURRIEL_FOURNISSEUR` tranche (ses | resend | smtp) ; sinon
- * l'ordre naturel : SES s'il est configuré, sinon Resend, sinon SMTP.
+ * Resend s'il a une clé, sinon SMTP. SES n'est JAMAIS choisi implicitement.
  *
  * Pourquoi une variable plutôt qu'une simple présence de clés : SES démarre
  * en bac à sable (200 courriels/jour). Tant qu'Amazon n'a pas accordé la
@@ -100,7 +100,11 @@ export function fournisseurCourriel(env: NodeJS.ProcessEnv = process.env): Fourn
   if (demande === 'ses' && sesConfigure(env)) return 'ses';
   if (demande === 'resend' && env.RESEND_API_KEY) return 'resend';
   if (demande === 'smtp') return 'smtp';
-  if (sesConfigure(env)) return 'ses';
+  // SES ne s'active JAMAIS tout seul, même parfaitement configuré : poser les
+  // identifiants pour préparer la bascule ne doit pas détourner la production
+  // vers un compte encore en bac à sable (200 courriels/jour, adresses à
+  // vérifier une à une) — ce qui couperait tous les envois en silence.
+  // Il faut COURRIEL_FOURNISSEUR=ses, un geste conscient.
   return env.RESEND_API_KEY ? 'resend' : 'smtp';
 }
 
