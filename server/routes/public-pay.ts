@@ -103,7 +103,7 @@ router.get('/pay/:publicToken', async (req, res) => {
       getCompanyBranding(
         admin,
         paymentRequest.org_id,
-        'company_name, logo_url, email, phone, brand_color, social_links',
+        'company_name, logo_url, email, phone, brand_color, social_links, default_language',
       ),
       getPaymentSettings(paymentRequest.org_id),
     ]);
@@ -115,6 +115,8 @@ router.get('/pay/:publicToken', async (req, res) => {
       email: orgSettings?.email || null,
       phone: orgSettings?.phone || null,
       social_links: lireLiensSociaux(orgSettings?.social_links),
+      // La page de paiement parle la langue de l'entreprise, pas celle du navigateur du client.
+      language: orgSettings?.default_language === 'en' ? 'en' : 'fr',
     };
 
     if (!reglages.invoice_payments_enabled) {

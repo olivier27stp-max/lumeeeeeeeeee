@@ -4,7 +4,8 @@ import { requireAuthedClient, isOrgMember, getServiceClient } from '../lib/supab
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { resolvePublicBaseUrl } from '../lib/helpers';
 import { sendSafeError } from '../lib/error-handler';
-import { getCompanySettings, buildEmailLayout, senderFor } from './emails';
+import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise } from './emails';
+import { rendreCourrielClient, MOTS } from '../lib/courriels/gabarit';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
@@ -910,28 +911,31 @@ router.post('/emails/send-agreement', async (req, res) => {
     const requireSig = agreement.require_signature !== false;
     const nextVisitDate = await getNextVisitDateFr(admin, agreement.job_id);
 
-    const bodyHtml = `
-<h2 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">Contrat ${number}</h2>
-<p style="margin:0 0 24px;color:#6b7280;">Bonjour ${clientName},</p>
-<p style="margin:0 0 16px;color:#374151;">
-  ${requireSig
-    ? 'Voici votre contrat. Vous pouvez le consulter et le signer en ligne ci-dessous.'
-    : 'Voici votre contrat. Vous pouvez le consulter ci-dessous.'}
-</p>
-${nextVisitDate ? `<p style="margin:0 0 16px;color:#374151;"><strong>Prochaine visite : ${nextVisitDate}.</strong></p>` : ''}
-${refTitle ? `<p style="margin:0 0 16px;color:#6b7280;font-size:13px;">${String(refTitle).replace(/</g, '&lt;')}</p>` : ''}
-<div style="text-align:center;margin-bottom:16px;">
-  <a href="${viewUrl}" style="display:inline-block;padding:12px 32px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
-    ${requireSig ? 'Voir et signer le contrat' : 'Voir le contrat'}
-  </a>
-</div>
-<p style="margin:0;font-size:13px;color:#9ca3af;">Pour toute question, répondez à ce courriel.</p>`;
+    const langue = langueEntreprise(company);
+    const m = MOTS[langue];
+    const html = rendreCourrielClient({
+      langue,
+      marque: marqueDepuis(company),
+      preheader: langue === 'fr' ? `${m.contrat} ${number}${requireSig ? ' — à signer' : ''}` : `${m.contrat} ${number}${requireSig ? ' — to sign' : ''}`,
+      titre: langue === 'fr' ? `Votre contrat ${number}` : `Your contract ${number}`,
+      salutation: m.bonjour(clientName),
+      intro: requireSig
+        ? (langue === 'fr' ? 'Voici votre contrat. Vous pouvez le consulter et le signer en ligne, sur votre téléphone ou votre ordinateur.' : 'Here is your contract. You can review and sign it online, on your phone or computer.')
+        : (langue === 'fr' ? 'Voici votre contrat. Vous pouvez le consulter en ligne.' : 'Here is your contract. You can review it online.'),
+      lignes: [
+        { libelle: m.numero, valeur: number },
+        ...(refTitle ? [{ libelle: langue === 'fr' ? 'Objet' : 'Subject', valeur: String(refTitle) }] : []),
+        ...(nextVisitDate ? [{ libelle: langue === 'fr' ? 'Prochaine visite' : 'Next visit', valeur: nextVisitDate, fort: true }] : []),
+      ],
+      bouton: { texte: requireSig ? m.voirContrat : (langue === 'fr' ? 'Voir le contrat' : 'View contract'), url: viewUrl },
+      note: m.question,
+    });
 
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: `Contrat ${number}${company.company_name ? ` — ${company.company_name}` : ''}`,
-      html: buildEmailLayout(company, bodyHtml),
+      subject: `${m.contrat} ${number}${company.company_name ? ` — ${company.company_name}` : ''}`,
+      html,
       suivi: { orgId, entityType: 'agreement', entityId: agreement.id },
     });
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');

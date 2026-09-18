@@ -31,6 +31,7 @@ import clientErrorsRouter from './routes/client-errors';
 import leadsRouter from './routes/leads';
 import paymentsRouter, { stripeWebhookHandler } from './routes/payments';
 import { emailWebhookHandler } from './routes/webhooks-email';
+import { sesWebhookHandler } from './routes/webhooks-ses';
 import { slackWebhookHandler } from './routes/webhooks-slack';
 import messagesRouter from './routes/messages';
 import quotesRouter, { quoteRedirectRouter } from './routes/quotes';
@@ -38,6 +39,7 @@ import invoicesPublicRouter from './routes/invoices-public';
 import agreementsRouter from './routes/agreements';
 import notificationsRouter from './routes/notifications';
 import emailsRouter from './routes/emails';
+import emailDeliveriesRouter from './routes/email-deliveries';
 import integrationsRouter from './routes/integrations';
 import emailAccountsRouter from './routes/email-accounts';
 import surveysRouter from './routes/surveys';
@@ -47,6 +49,7 @@ import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
 import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
+import sendingDomainsRouter from './routes/sending-domains';
 import paymentRequestsRouter from './routes/payment-requests';
 import publicPayRouter from './routes/public-pay';
 import unsubscribeRouter from './routes/unsubscribe';
@@ -257,6 +260,7 @@ const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
   '/webhooks/stripe-connect',
   '/webhooks/paypal',
   '/webhooks/email',   // Resend (rebonds), signature Svix vérifiée
+  '/webhooks/ses',     // Amazon SES via SNS (rebonds, suivi), jeton partagé dans l'URL
   '/webhooks/slack',   // Réponses du support humain, signature Slack vérifiée
 ];
 app.use('/api', (req, res, next) => {
@@ -329,6 +333,8 @@ app.post('/api/webhooks/stripe', express.raw({ type: 'application/json', limit: 
 app.post('/api/webhooks/stripe-connect', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhookHandler);
 // Rebonds courriel (Resend) : corps brut pour la signature Svix (audit QA n°8).
 app.post('/api/webhooks/email', express.raw({ type: 'application/json', limit: '1mb' }), emailWebhookHandler);
+// SES publie ses rebonds par SNS (corps brut, jeton dans l'URL) — voir routes/webhooks-ses.ts.
+app.post('/api/webhooks/ses', express.raw({ type: ['application/json', 'text/plain'], limit: '1mb' }), sesWebhookHandler);
 // Slack (support humain) : signature sur le corps brut, comme les deux précédents.
 app.post('/api/webhooks/slack', express.raw({ type: 'application/json', limit: '1mb' }), slackWebhookHandler);
 
@@ -753,6 +759,7 @@ app.use('/api', paymentsRouter);
 app.use('/api', notificationsRouter);
 app.use('/api', messagesRouter);
 app.use('/api', emailsRouter);
+app.use('/api', emailDeliveriesRouter);
 app.use('/api', integrationsRouter);
 app.use('/api', emailAccountsRouter);
 app.use('/api', emailTemplatesRouter);
@@ -761,6 +768,8 @@ app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
 app.use('/api', portalRouter);
 app.use('/api', connectRouter);
+// Domaine d'envoi propre à l'entreprise (Resend Domains) — owner/admin, sous son propre préfixe.
+app.use('/api/sending-domain', sendingDomainsRouter);
 app.use('/api', paymentRequestsRouter);
 app.use('/api', publicPayRouter);
 // Désinscription courriel — publique, authentifiée par le jeton de l'URL.
@@ -1386,6 +1395,14 @@ app.listen(port, '0.0.0.0', () => {
     Promise.all([import('./lib/support/resume-quotidien'), import('./lib/supabase')]).then(([{ demarrerResumeQuotidien }, { getServiceClient: serviceClient }]) => {
       demarrerResumeQuotidien(serviceClient);
     }).catch((e: any) => captureCronFailure('support-resume-startup', e));
+    // File de reprise des courriels de fond (sendEmail({ reessayer: true })) : 5 min / 30 min / 3 h, puis abandon signalé à l'exploitant.
+    Promise.all([import('./lib/courriels/reprises'), import('./lib/supabase')]).then(([{ demarrerReprisesCourriels }, { getServiceClient: serviceClient }]) => {
+      demarrerReprisesCourriels(serviceClient);
+    }).catch((e: any) => captureCronFailure('email-retry-startup', e));
+    // Santé des courriels (8 h Montréal) : taux de rebond > 2 % sur 24 h (≥ 20 envois) → un courriel à l'exploitant.
+    Promise.all([import('./lib/courriels/sante'), import('./lib/supabase')]).then(([{ demarrerSanteCourriels }, { getServiceClient: serviceClient }]) => {
+      demarrerSanteCourriels(serviceClient);
+    }).catch((e: any) => captureCronFailure('courriels-sante-startup', e));
     import('./lib/security-alerting').then(({ demarrerAlertingSecurite }) => {
       demarrerAlertingSecurite();
     }).catch((e: any) => captureCronFailure('security-alerting-startup', e));

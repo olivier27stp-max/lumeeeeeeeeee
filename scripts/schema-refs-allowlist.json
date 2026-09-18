@@ -30,6 +30,78 @@
       "table": "migration_import_records",
       "ref": "client_id",
       "reason": "Faux positif d'attribution : la table est une VARIABLE (`admin.from(table)` dans la boucle `for (const [table, ids] of byTable)`), pas `migration_import_records`. Les colonnes visées (is_active sur predefined_services, deleted_at/client_id sur clients|jobs|invoices) existent bien sur leurs tables réelles. Vérifié le 2026-09-03."
+    },
+    {
+      "file": "server/lib/courriels/domaines.ts",
+      "table": "company_settings",
+      "ref": "dns_records",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `org_sending_domains` (constante TABLE du module, migration 20260917160000), pas company_settings. L'analyseur ne résout pas `admin.from(TABLE)` et retombe sur la dernière table littérale du fichier. Colonne vérifiée présente dans org_sending_domains."
+    },
+    {
+      "file": "server/lib/courriels/domaines.ts",
+      "table": "company_settings",
+      "ref": "from_local_part",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `org_sending_domains` (constante TABLE du module, migration 20260917160000), pas company_settings. L'analyseur ne résout pas `admin.from(TABLE)` et retombe sur la dernière table littérale du fichier. Colonne vérifiée présente dans org_sending_domains."
+    },
+    {
+      "file": "server/lib/courriels/domaines.ts",
+      "table": "company_settings",
+      "ref": "last_checked_at",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `org_sending_domains` (constante TABLE du module, migration 20260917160000), pas company_settings. L'analyseur ne résout pas `admin.from(TABLE)` et retombe sur la dernière table littérale du fichier. Colonne vérifiée présente dans org_sending_domains."
+    },
+    {
+      "file": "server/lib/courriels/domaines.ts",
+      "table": "company_settings",
+      "ref": "resend_domain_id",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `org_sending_domains` (constante TABLE du module, migration 20260917160000), pas company_settings. L'analyseur ne résout pas `admin.from(TABLE)` et retombe sur la dernière table littérale du fichier. Colonne vérifiée présente dans org_sending_domains."
+    },
+    {
+      "file": "server/lib/courriels/domaines.ts",
+      "table": "company_settings",
+      "ref": "status",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `org_sending_domains` (constante TABLE du module, migration 20260917160000), pas company_settings. L'analyseur ne résout pas `admin.from(TABLE)` et retombe sur la dernière table littérale du fichier. Colonne vérifiée présente dans org_sending_domains."
+    },
+    {
+      "file": "server/lib/mailer.ts",
+      "table": "email_deliveries",
+      "ref": "from_addr",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `email_retry_queue` (constante TABLE_REPRISES importée de courriels/reprises.ts, migration 20260917150000), pas email_deliveries. L'analyseur ne résout pas `from(TABLE_REPRISES)` et retombe sur la table littérale voisine. Colonne vérifiée présente dans email_retry_queue."
+    },
+    {
+      "file": "server/lib/mailer.ts",
+      "table": "email_deliveries",
+      "ref": "headers",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `email_retry_queue` (constante TABLE_REPRISES importée de courriels/reprises.ts, migration 20260917150000), pas email_deliveries. L'analyseur ne résout pas `from(TABLE_REPRISES)` et retombe sur la table littérale voisine. Colonne vérifiée présente dans email_retry_queue."
+    },
+    {
+      "file": "server/lib/mailer.ts",
+      "table": "email_deliveries",
+      "ref": "html",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `email_retry_queue` (constante TABLE_REPRISES importée de courriels/reprises.ts, migration 20260917150000), pas email_deliveries. L'analyseur ne résout pas `from(TABLE_REPRISES)` et retombe sur la table littérale voisine. Colonne vérifiée présente dans email_retry_queue."
+    },
+    {
+      "file": "server/lib/mailer.ts",
+      "table": "email_deliveries",
+      "ref": "last_error",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `email_retry_queue` (constante TABLE_REPRISES importée de courriels/reprises.ts, migration 20260917150000), pas email_deliveries. L'analyseur ne résout pas `from(TABLE_REPRISES)` et retombe sur la table littérale voisine. Colonne vérifiée présente dans email_retry_queue."
+    },
+    {
+      "file": "server/lib/mailer.ts",
+      "table": "email_deliveries",
+      "ref": "reply_to",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `email_retry_queue` (constante TABLE_REPRISES importée de courriels/reprises.ts, migration 20260917150000), pas email_deliveries. L'analyseur ne résout pas `from(TABLE_REPRISES)` et retombe sur la table littérale voisine. Colonne vérifiée présente dans email_retry_queue."
+    },
+    {
+      "file": "server/lib/mailer.ts",
+      "table": "email_deliveries",
+      "ref": "suivi",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `email_retry_queue` (constante TABLE_REPRISES importée de courriels/reprises.ts, migration 20260917150000), pas email_deliveries. L'analyseur ne résout pas `from(TABLE_REPRISES)` et retombe sur la table littérale voisine. Colonne vérifiée présente dans email_retry_queue."
+    },
+    {
+      "file": "server/lib/mailer.ts",
+      "table": "email_deliveries",
+      "ref": "to_emails",
+      "reason": "Faux positif d'attribution : l'insertion vise la table `email_retry_queue` (constante TABLE_REPRISES importée de courriels/reprises.ts, migration 20260917150000), pas email_deliveries. L'analyseur ne résout pas `from(TABLE_REPRISES)` et retombe sur la table littérale voisine. Colonne vérifiée présente dans email_retry_queue."
     }
   ]
 }

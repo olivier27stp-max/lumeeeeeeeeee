@@ -7,6 +7,7 @@ import { ensureClientForLead } from '../lib/leadClientSync';
 import { upsertLeadPinForClient } from '../lib/fieldPinSync';
 import { eventBus } from '../lib/eventBus';
 import { sendEmail } from '../lib/mailer';
+import { rendreCourrielLume } from '../lib/courriels/gabarit';
 
 const router = Router();
 
@@ -681,16 +682,33 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
           const subj = actorLang === 'fr'
             ? `Nouvelle demande de ${fullName}`
             : `New request from ${fullName}`;
-          const intro = actorLang === 'fr'
-            ? 'Vous avez reçu une nouvelle demande via votre formulaire public.'
-            : 'You received a new request through your public request form.';
-          const view = actorLang === 'fr' ? 'Voir dans Lume' : 'View in Lume';
           const appUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+          // Voix Lume (c'est Lume qui prévient l'exploitant) : gabarit commun, tutoiement.
+          const fr = actorLang === 'fr';
+          const lignes = [
+            { libelle: fr ? 'Nom' : 'Name', valeur: fullName, fort: true },
+            ...(body.company ? [{ libelle: fr ? 'Entreprise' : 'Company', valeur: String(body.company) }] : []),
+            { libelle: fr ? 'Courriel' : 'Email', valeur: body.email },
+            { libelle: fr ? 'Téléphone' : 'Phone', valeur: body.phone },
+            ...(address ? [{ libelle: fr ? 'Adresse' : 'Address', valeur: address }] : []),
+          ];
           await sendEmail({
             to: actorEmail,
             subject: subj,
-            html: `<p>${intro}</p><p><strong>${fullName}</strong><br/>${contactLine || ''}</p>` +
-              (appUrl ? `<p><a href="${appUrl}/requests">${view}</a></p>` : ''),
+            html: rendreCourrielLume({
+              langue: actorLang,
+              preheader: `${fullName} — ${contactLine || ''}`.trim(),
+              titre: fr ? 'Nouvelle demande reçue' : 'New request received',
+              intro: fr
+                ? `${fullName} vient de remplir ton formulaire public. La demande est déjà dans Lume.`
+                : `${fullName} just filled out your public form. The request is already in Lume.`,
+              lignes,
+              corpsHtml: body.notes
+                ? `<p style="margin:0 0 6px;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:#6b7280;font-weight:600;">Message</p><p style="margin:0;padding:14px 16px;background:#f9fafb;border-left:3px solid #111827;border-radius:6px;">${escapeHtml(String(body.notes)).replace(/\r?\n/g, '<br/>')}</p>`
+                : null,
+              bouton: appUrl ? { texte: fr ? 'Voir la demande' : 'View request', url: `${appUrl}/requests` } : null,
+              signature: null,
+            }),
           });
         }
       } catch (e: any) {

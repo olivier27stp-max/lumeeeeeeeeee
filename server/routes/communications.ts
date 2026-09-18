@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
-import { twilioClient, emailFrom, getTwilioStatusCallbackUrl } from '../lib/config';
+import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
@@ -17,6 +17,7 @@ import { requireRole } from '../lib/rbac';
 import { validate, sendSmsSchema } from '../lib/validation';
 import { sanitizeText, sanitizeHtml, sanitizeMessageContent, stripCRLF, logSecurityEvent, checkAnomalies, extractIP } from '../lib/security';
 import { sendSafeError } from '../lib/error-handler';
+import { getCompanySettings, buildEmailLayout, senderForOrg } from './emails';
 
 const router = Router();
 
@@ -173,21 +174,24 @@ router.post('/communications/send-email', async (req, res) => {
     ensureMailer();
     const serviceClient = getServiceClient();
 
-    // Resolve sender identity: user email or org default
-    const senderReplyTo = reply_to || user.email || undefined;
+    // Voix ENTREPRISE : « De : {Entreprise} », réponses vers l'auteur (ou la
+    // boîte de l'entreprise), contenu libre enveloppé dans le gabarit commun.
+    const company = await getCompanySettings(orgId);
+    const expediteur = await senderForOrg(orgId, company);
+    const senderReplyTo = reply_to || user.email || expediteur.replyTo || undefined;
 
     // Sanitize subject (strip CRLF to prevent email header injection) and body
     const safeSubject = stripCRLF(subject);
     const safeBodyHtml = body_html ? sanitizeHtml(body_html) : null;
-    const htmlContent = safeBodyHtml || `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;white-space:pre-wrap;">${sanitizeText(body || '').replace(/\n/g, '<br/>')}</div>`;
+    const htmlContent = safeBodyHtml || `<p style="margin:0;white-space:pre-wrap;">${sanitizeText(body || '').replace(/\n/g, '<br/>')}</p>`;
 
     // Send via SMTP
     const result = await sendEmail({
-      from: emailFrom,
+      from: expediteur.from,
       to,
       replyTo: senderReplyTo,
       subject: safeSubject,
-      html: htmlContent,
+      html: buildEmailLayout(company, htmlContent),
     });
 
     if (!result.sent) throw new Error(result.error || 'Email send failed');
@@ -204,7 +208,7 @@ router.post('/communications/send-email', async (req, res) => {
         channel_type: 'email',
         direction: 'outbound',
         provider: 'resend',
-        from_value: emailFrom,
+        from_value: expediteur.from,
         to_value: to,
         subject,
         body_text: body || null,

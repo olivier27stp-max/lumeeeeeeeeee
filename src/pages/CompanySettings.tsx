@@ -31,6 +31,7 @@ import AddressAutocomplete, { type StructuredAddress } from '../components/Addre
 import { STORAGE_BUCKETS, deleteFile } from '../lib/storage';
 import { RESEAUX, RESEAU_LABEL, lireLiensSociaux, normaliserUrlSociale, type SocialLinks } from '../lib/socialLinks';
 import { IconeReseau } from '../components/IconeReseau';
+import SendingDomainCard from '../components/settings/SendingDomainCard';
 
 interface CompanyDetails {
   id?: string;
@@ -725,6 +726,9 @@ export default function CompanySettings() {
             {language === 'fr' ? 'Configurer' : 'Configure'} <ExternalLink size={12} />
           </Link>
         </div>
+
+        {/* ── Envoyer depuis mon adresse (domaine d'envoi propre) ── */}
+        <SendingDomainCard />
 
         {/* ── Regional ── */}
         <div className="section-card p-6 space-y-4">

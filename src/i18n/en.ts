@@ -1108,6 +1108,17 @@ const en = {
 
   },
 
+  // "Sent Sep 17 · Opened Sep 17 at 2:12 p.m. · Link clicked" under an invoice / quote (Resend tracking)
+  suiviCourriel: {
+    envoyeLe: 'Sent',
+    vuLe: 'Opened',
+    a: 'at',
+    lienClique: 'Link clicked',
+    nonLivre: 'Not delivered',
+    plainte: 'Marked as spam',
+    pasEncoreOuvert: 'Not opened yet',
+  },
+
   // Request Payment Modal
   requestPaymentModal: {
     title: 'Request Payment',
@@ -2324,6 +2335,38 @@ const en = {
     street1: 'Street 1',
     street2: 'Street 2',
     theme: 'Theme',
+    // Send from my own address (own sending domain, Resend)
+    sendingDomainTitle: 'Send from my own address',
+    sendingDomainIntro: 'Your invoices, quotes and contracts currently go out from noreply@lumecrm.net on behalf of your business. Add your domain so they go out from your own address.',
+    sendingDomainLabel: 'Domain',
+    sendingDomainPlaceholder: 'mybusiness.com',
+    sendingDomainActivate: 'Activate',
+    sendingDomainActivating: 'Activating…',
+    sendingDomainNotConfigured: 'The email provider is not configured on this server.',
+    sendingDomainPendingTitle: 'Add these records at your DNS host',
+    sendingDomainPendingHelp: 'Copy each line into your domain\'s DNS zone (GoDaddy, Cloudflare, OVH…), then click Verify. Propagation can take up to 48 hours.',
+    sendingDomainColType: 'Type',
+    sendingDomainColName: 'Name',
+    sendingDomainColValue: 'Value',
+    sendingDomainCopy: 'Copy',
+    sendingDomainCopied: 'Copied',
+    sendingDomainCopyFailed: 'Could not copy — select the text by hand.',
+    sendingDomainVerify: 'Verify',
+    sendingDomainVerifying: 'Verifying…',
+    sendingDomainStatusPending: 'Awaiting verification',
+    sendingDomainStatusVerified: 'Verified',
+    sendingDomainStatusFailed: 'Failed — records not found',
+    sendingDomainStillPending: 'Not detected yet. Check the records and try again in a few minutes.',
+    sendingDomainVerifiedToast: 'Domain verified: your emails now go out from your address.',
+    sendingDomainVerifiedText: 'Your emails go out from {address}',
+    sendingDomainVerifiedHelp: 'Replies from your clients still land in your business email inbox.',
+    sendingDomainLastChecked: 'Last checked',
+    sendingDomainRemove: 'Remove',
+    sendingDomainRemoveConfirm: 'Remove this domain? Your emails will go back to noreply@lumecrm.net on behalf of your business.',
+    sendingDomainRemoved: 'Domain removed.',
+    sendingDomainAdded: 'Domain added. Add the DNS records below.',
+    sendingDomainLoadFailed: 'Could not load the sending domain.',
+    sendingDomainError: 'Error',
     websiteUrl: 'Website URL',
   },
 

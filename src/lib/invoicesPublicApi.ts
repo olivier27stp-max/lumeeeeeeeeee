@@ -18,6 +18,8 @@ export interface PublicInvoiceCompany {
   postal_code: string | null;
   country: string | null;
   brand_color: string | null;
+  /** Langue de l'entreprise : la page s'affiche dans celle-là. */
+  language?: 'fr' | 'en' | null;
   /** Réseaux sociaux — icônes au pied de la page. */
   social_links?: SocialLinks | null;
 }

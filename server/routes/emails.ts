@@ -12,8 +12,11 @@ import {
 import { eventBus } from '../lib/eventBus';
 import { isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
+import { logger } from '../lib/logger';
 import { getCompanyBranding } from '../lib/companyBranding';
-import { lireLiensSociaux, RESEAU_LABEL, RESEAUX, type SocialLinks } from '../lib/socialLinks';
+import { lireLiensSociaux, type SocialLinks } from '../lib/socialLinks';
+import { expediteurDe } from '../lib/courriels/domaines';
+import { rendreCourrielClient, montant as montantLisible, dateLisible, langueDe, MOTS, type Marque, type Langue } from '../lib/courriels/gabarit';
 
 const router = Router();
 
@@ -56,6 +59,11 @@ export interface CompanyInfo {
   tax_registration_lines?: string[];
   /** Réseaux sociaux — liens texte au bas du courriel. */
   social_links?: SocialLinks;
+  /** Couleur de marque (#rrggbb), bouton et bande du courriel. */
+  brand_color?: string | null;
+  /** Langue de l'entreprise : celle de ses courriels à ses clients. */
+  default_language?: string | null;
+  website?: string | null;
 }
 
 export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
@@ -66,7 +74,7 @@ export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
     const data = await getCompanyBranding(
       serviceClient,
       orgId,
-      'company_name, email, phone, street1, city, province, postal_code, logo_url, social_links',
+      'company_name, email, phone, street1, city, province, postal_code, logo_url, social_links, brand_color, default_language, website',
     );
     if (!data) return {};
     const address = [data.street1, data.city, data.province, data.postal_code].filter(Boolean).join(', ') || null;
@@ -93,74 +101,44 @@ export async function getCompanySettings(orgId: string): Promise<CompanyInfo> {
       company_logo_url: data.logo_url || null,
       tax_registration_lines: taxLines,
       social_links: lireLiensSociaux(data.social_links),
+      brand_color: data.brand_color || null,
+      default_language: data.default_language || null,
+      website: data.website || null,
     };
   } catch {
     return {};
   }
 }
 
-/** Liens texte « Facebook · Instagram · … » — les icônes-images sont
- *  bloquées par la plupart des clients courriel, le texte passe partout. */
-function socialLinksHtml(liens: SocialLinks | undefined): string {
-  const propres = lireLiensSociaux(liens);
-  const items = RESEAUX.filter((r) => propres[r]).map((r) =>
-    `<a href="${propres[r]}" style="color:#6b7280;text-decoration:none;font-weight:600;">${RESEAU_LABEL[r]}</a>`,
-  );
-  if (items.length === 0) return '';
-  return `<p style="margin:8px 0 0;font-size:12px;color:#9ca3af;">${items.join(' &nbsp;&middot;&nbsp; ')}</p>`;
+/** La marque d'une entreprise telle que le gabarit la porte (logo, couleur, coordonnées, réseaux, taxes). */
+export function marqueDepuis(company: CompanyInfo): Marque {
+  return {
+    nom: company.company_name || 'Lume',
+    logoUrl: company.company_logo_url || null,
+    couleur: company.brand_color || null,
+    email: company.company_email || null,
+    telephone: company.company_phone || null,
+    adresse: company.company_address || null,
+    siteWeb: company.website || null,
+    liensSociaux: company.social_links || null,
+    lignesTaxes: company.tax_registration_lines || null,
+  };
 }
 
+/** La langue des courriels d'une entreprise à ses clients : la sienne (company_settings.default_language), fr par défaut. */
+export function langueEntreprise(company: CompanyInfo): Langue {
+  return langueDe(company.default_language);
+}
+
+/**
+ * Enveloppe un contenu libre (modèle de l'entreprise, courriel personnalisé,
+ * formulaire) dans le gabarit commun (server/lib/courriels/gabarit.ts) :
+ * bande de couleur, logo, pied aux coordonnées de l'entreprise. Les routes
+ * facture / soumission / contrat utilisent directement rendreCourrielClient
+ * avec un contenu structuré (montant, lignes, bouton).
+ */
 export function buildEmailLayout(company: CompanyInfo, bodyHtml: string) {
-  const companyName = company.company_name || 'LUME';
-  const logoHtml = company.company_logo_url
-    ? `<img src="${company.company_logo_url}" alt="${companyName}" style="max-height:48px;max-width:200px;" />`
-    : `<span style="font-size:24px;font-weight:700;color:#1a1a2e;letter-spacing:2px;">${companyName}</span>`;
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Email</title>
-</head>
-<body style="margin:0;padding:0;background-color:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;">
-<tr><td align="center" style="padding:32px 16px;">
-
-<!-- Container -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-
-<!-- Header -->
-<tr>
-<td style="padding:24px 32px;border-bottom:1px solid #e5e7eb;text-align:center;">
-${logoHtml}
-</td>
-</tr>
-
-<!-- Body -->
-<tr>
-<td style="padding:32px;">
-${bodyHtml}
-</td>
-</tr>
-
-<!-- Footer -->
-<tr>
-<td style="padding:20px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
-<p style="margin:0;font-size:12px;color:#9ca3af;">
-Sent via <strong>LUME</strong>${company.company_name ? ` on behalf of ${company.company_name}` : ''}
-</p>
-${company.company_phone ? `<p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">${company.company_phone}</p>` : ''}
-${socialLinksHtml(company.social_links)}
-${(company.tax_registration_lines || []).length > 0 ? `<p style="margin:6px 0 0;font-size:11px;color:#b0b0b0;">${company.tax_registration_lines!.join(' &middot; ')}</p>` : ''}
-</td>
-</tr>
-
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
+  return rendreCourrielClient({ langue: langueEntreprise(company), marque: marqueDepuis(company), corpsHtml: bodyHtml, signature: null });
 }
 
 // Branded sender: keep the platform's VERIFIED sending address (deliverability),
@@ -175,6 +153,27 @@ export function senderFor(company: CompanyInfo): { from: string; replyTo?: strin
     from: `${name} <${baseAddr}>`,
     replyTo: company.company_email || undefined,
   };
+}
+
+/**
+ * Expéditeur d'une org (2026-09-17) : si elle a fait vérifier SON domaine
+ * (Paramètres entreprise → « Envoyer depuis mon adresse », table
+ * org_sending_domains via Resend), le courriel part de
+ * « {Entreprise} <facturation@sondomaine.ca> » ; sinon senderFor() tel quel
+ * (adresse vérifiée de la plateforme, Reply-To vers l'entreprise). Le Reply-To
+ * ne change pas dans les deux cas. La consultation du domaine est en cache
+ * 5 min par org (server/lib/courriels/domaines.ts) et n'échoue jamais :
+ * toute erreur retombe sur l'expéditeur de la plateforme.
+ */
+export async function senderForOrg(orgId: string, company: CompanyInfo): Promise<{ from: string; replyTo?: string }> {
+  const plateforme = senderFor(company);
+  try {
+    const propre = await expediteurDe(getServiceClient(), orgId, company);
+    return propre ? { from: propre.from, replyTo: plateforme.replyTo } : plateforme;
+  } catch (err: any) {
+    logger.error('[emails/senderForOrg] domaine propre illisible, expéditeur plateforme', { orgId, error: err?.message || String(err) });
+    return plateforme;
+  }
 }
 
 // ── POST /api/emails/send-invoice ──
@@ -231,6 +230,7 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     // Resolve email subject and body
     let emailSubject = customSubject || `Invoice ${invoice.invoice_number || ''} — ${amountStr}`;
     let bodyHtml = customBody || '';
+    void amountStr;
 
     // Try to load email template if provided or use default
     if (emailTemplateId) {
@@ -256,7 +256,33 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
     }
 
     // If no custom body and no template, use default layout
-    if (!bodyHtml) {
+    const langue = langueEntreprise(company);
+    const m = MOTS[langue];
+    const numero = invoice.invoice_number || invoiceId.slice(0, 8);
+    const montantTexte = montantLisible(invoice.balance_cents || invoice.total_cents || 0, invoice.currency || 'CAD', langue);
+    const echeance = dateLisible(invoice.due_date, langue);
+    const dejaPayee = (invoice.status || '') === 'paid' || Number(invoice.balance_cents ?? 1) === 0;
+    if (!customSubject) emailSubject = `${m.facture} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`;
+    // Sans modèle ni texte personnalisé : le courriel structuré (montant en carte, échéance, un bouton).
+    const htmlStructure = !bodyHtml ? rendreCourrielClient({
+      langue,
+      marque: marqueDepuis(company),
+      preheader: dejaPayee ? `${m.facture} ${numero} — ${m.payee}` : `${m.facture} ${numero} — ${montantTexte}${echeance ? ` — ${m.echeance} ${echeance}` : ''}`,
+      titre: langue === 'fr' ? `Votre facture ${numero}` : `Your invoice ${numero}`,
+      salutation: m.bonjour(clientName),
+      intro: dejaPayee
+        ? (langue === 'fr' ? 'Voici votre facture, réglée. Merci !' : 'Here is your invoice, paid in full. Thank you!')
+        : (langue === 'fr' ? 'Voici votre facture. Vous pouvez la consulter et la payer en ligne en un clic.' : 'Here is your invoice. You can view it and pay online in one click.'),
+      montant: { libelle: dejaPayee ? m.montantTotal : m.montantDu, valeur: montantTexte, sous: !dejaPayee && echeance ? `${m.echeance} : ${echeance}` : null },
+      lignes: [
+        { libelle: m.numero, valeur: numero },
+        ...(echeance ? [{ libelle: m.echeance, valeur: echeance }] : []),
+        ...(dejaPayee ? [{ libelle: m.statut, valeur: m.payee, fort: true }] : []),
+      ],
+      bouton: viewUrl ? { texte: dejaPayee ? (langue === 'fr' ? 'Voir la facture' : 'View invoice') : m.voirFacture, url: viewUrl } : null,
+      note: m.question,
+    }) : null;
+    if (!bodyHtml && !htmlStructure) {
       bodyHtml = `
 <h2 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">Invoice ${invoice.invoice_number || ''}</h2>
 <p style="margin:0 0 24px;color:#6b7280;">Hello ${clientName},</p>
@@ -298,10 +324,10 @@ ${viewUrl ? `
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
       subject: emailSubject,
-      html: buildEmailLayout(company, bodyHtml),
+      html: htmlStructure ?? buildEmailLayout(company, bodyHtml),
       suivi: { orgId, entityType: 'invoice', entityId: invoiceId },
     });
 
@@ -413,46 +439,30 @@ router.post('/emails/send-quote', validate(sendQuoteEmailSchema), async (req, re
     const baseUrl = resolvePublicBaseUrl(req);
     const viewUrl = quote.view_token ? `${baseUrl}/q/${quote.view_token}` : null;
 
-    const bodyHtml = `
-<h2 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">Quote ${quote.invoice_number || ''}</h2>
-<p style="margin:0 0 24px;color:#6b7280;">Hello ${clientName},</p>
-<p style="margin:0 0 16px;color:#374151;">
-  We have prepared a quote for your review. Please see the details below.
-</p>
-
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
-<tr style="background-color:#f9fafb;">
-  <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;">Quote #</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;">${quote.invoice_number || invoiceId.slice(0, 8)}</td>
-</tr>
-<tr>
-  <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Amount</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;font-weight:700;">${amountStr}</td>
-</tr>
-<tr>
-  <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Valid Until</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;">${formatDate(quote.due_date)}</td>
-</tr>
-</table>
-
-${viewUrl ? `
-<div style="text-align:center;margin-bottom:16px;">
-  <a href="${viewUrl}" style="display:inline-block;padding:12px 32px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">
-    View Quote
-  </a>
-</div>
-` : ''}
-
-<p style="margin:0;font-size:13px;color:#9ca3af;">
-  If you have any questions or would like to proceed, please reply to this email or contact us directly.
-</p>`;
+        const langue = langueEntreprise(company);
+    const m = MOTS[langue];
+    const numero = quote.invoice_number || invoiceId.slice(0, 8);
+    const montantTexte = montantLisible(quote.total_cents || quote.balance_cents || 0, quote.currency || 'CAD', langue);
+    const validite = dateLisible(quote.due_date, langue);
+    const html = rendreCourrielClient({
+      langue,
+      marque: marqueDepuis(company),
+      preheader: `${m.soumission} ${numero} — ${montantTexte}`,
+      titre: langue === 'fr' ? `Votre soumission ${numero}` : `Your quote ${numero}`,
+      salutation: m.bonjour(clientName),
+      intro: langue === 'fr' ? 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.' : 'Here is your quote. You can view and approve it online.',
+      montant: { libelle: m.montantTotal, valeur: montantTexte, sous: validite ? `${m.valideJusquau} ${validite}` : null },
+      lignes: [{ libelle: m.numero, valeur: numero }, ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : [])],
+      bouton: viewUrl ? { texte: m.voirSoumission, url: viewUrl } : null,
+      note: m.question,
+    });
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: `Quote ${quote.invoice_number || ''} — ${amountStr}`,
-      html: buildEmailLayout(company, bodyHtml),
+      subject: `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
+      html,
       suivi: { orgId, entityType: 'invoice', entityId: quote.id },
     });
 
@@ -523,24 +533,30 @@ router.post('/emails/send-mobile-quote', async (req, res) => {
     const baseUrl = resolvePublicBaseUrl(req);
     const viewUrl = quote.view_token ? `${baseUrl}/quote/${quote.view_token}` : null;
 
-    const bodyHtml = `
-<h2 style="margin:0 0 8px;font-size:20px;color:#1a1a2e;">Soumission ${quote.quote_number || ''}</h2>
-<p style="margin:0 0 24px;color:#6b7280;">Bonjour ${clientName},</p>
-<p style="margin:0 0 16px;color:#374151;">Voici votre soumission. Vous pouvez la consulter et l'approuver ci-dessous.</p>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
-<tr style="background-color:#f9fafb;"><td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;">Soumission</td><td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;">${quote.quote_number || quoteId.slice(0, 8)}</td></tr>
-<tr><td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Montant</td><td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;font-weight:700;">${amountStr}</td></tr>
-<tr><td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Valide jusqu'au</td><td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;">${formatDate(quote.valid_until)}</td></tr>
-</table>
-${viewUrl ? `<div style="text-align:center;margin-bottom:16px;"><a href="${viewUrl}" style="display:inline-block;padding:12px 32px;background-color:#4f46e5;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">Voir et approuver</a></div>` : ''}
-<p style="margin:0;font-size:13px;color:#9ca3af;">Pour toute question, répondez à ce courriel.</p>`;
+        const langue = langueEntreprise(company);
+    const m = MOTS[langue];
+    const numero = quote.quote_number || '';
+    const montantTexte = montantLisible(quote.total_cents || 0, quote.currency || 'CAD', langue);
+    const validite = dateLisible(quote.valid_until, langue);
+    const html = rendreCourrielClient({
+      langue,
+      marque: marqueDepuis(company),
+      preheader: `${m.soumission} ${numero} — ${montantTexte}`,
+      titre: langue === 'fr' ? `Votre soumission ${numero}` : `Your quote ${numero}`,
+      salutation: m.bonjour(clientName),
+      intro: langue === 'fr' ? 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.' : 'Here is your quote. You can view and approve it online.',
+      montant: { libelle: m.montantTotal, valeur: montantTexte, sous: validite ? `${m.valideJusquau} ${validite}` : null },
+      lignes: [{ libelle: m.numero, valeur: numero }, ...(validite ? [{ libelle: m.valideJusquau, valeur: validite }] : [])],
+      bouton: viewUrl ? { texte: m.voirSoumission, url: viewUrl } : null,
+      note: m.question,
+    });
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: `Soumission ${quote.quote_number || ''} — ${amountStr}`,
-      html: buildEmailLayout(company, bodyHtml),
+      subject: `${m.soumission} ${numero} — ${montantTexte} — ${company.company_name || 'Lume'}`,
+      html,
       suivi: { orgId, entityType: 'quote', entityId: quoteId },
     });
     if (!emailResult.sent) throw new Error(emailResult.error || 'Email send failed');
@@ -579,7 +595,7 @@ router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, 
 
     ensureMailer();
     const emailResult = await sendEmail({
-      ...senderFor(company),
+      ...(await senderForOrg(auth.orgId, company)),
       to,
       subject: sanitizeHtml(subject),
       html: buildEmailLayout(company, sanitizeHtml(html)),

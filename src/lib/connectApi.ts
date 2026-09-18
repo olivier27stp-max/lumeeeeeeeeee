@@ -200,6 +200,8 @@ export interface PublicPaymentData {
     brand_color?: string | null;
     /** Réseaux sociaux — icônes au pied de la page. */
     social_links?: SocialLinks | null;
+    /** Langue de l'entreprise : la page s'affiche dans celle-là. */
+    language?: 'fr' | 'en' | null;
   } | null;
 }
 

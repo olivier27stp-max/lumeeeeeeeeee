@@ -11,6 +11,7 @@ import { findUserByEmail, buildSupabaseWithAuth } from '../lib/supabase';
 import { redisRateLimit } from '../lib/rate-limiter';
 import { extractIP, recordLoginAttempt, logSecurityEvent } from '../lib/security';
 import { renderPasswordResetEmail, renderAccountExistsEmail } from '../lib/email-templates/password-reset';
+import { renderVerificationEmail } from '../lib/email-templates/welcome';
 
 // Per-IP rate limit for auth endpoints (defeats brute-force + cron-driven abuse)
 const authRateLimit = redisRateLimit({
@@ -49,24 +50,8 @@ async function sendVerificationEmail(
 
   const result = await sendEmail({
     to,
-    subject: 'Confirme ton compte Lume CRM',
-    html: `
-      <div style="font-family: -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 40px 20px;">
-        <h1 style="font-size: 24px; font-weight: 300; letter-spacing: 4px; margin-bottom: 24px;">LUME</h1>
-        <p style="font-size: 14px; color: #555; line-height: 1.6;">
-          Salut <strong>${name}</strong>,
-        </p>
-        <p style="font-size: 14px; color: #555; line-height: 1.6;">
-          Merci d'avoir créé ton compte. Clique sur le bouton ci-dessous pour confirmer ton adresse email et activer ton espace de travail.
-        </p>
-        <a href="${verifyUrl}" style="display: inline-block; margin-top: 24px; padding: 14px 32px; background: #111; color: white; text-decoration: none; border-radius: 8px; font-size: 14px; font-weight: 600; letter-spacing: 0.5px;">
-          Confirmer mon compte
-        </a>
-        <p style="font-size: 12px; color: #999; margin-top: 32px;">
-          Ce lien expire dans 24 heures. Si tu n'as pas créé de compte, ignore cet email.
-        </p>
-      </div>
-    `,
+    subject: 'Confirme ton compte Lume',
+    html: renderVerificationEmail({ name: name.trim().split(/\s+/)[0] || '', verifyUrl, expiresInHours: 24 }),
   });
 
   if (!result.sent) {

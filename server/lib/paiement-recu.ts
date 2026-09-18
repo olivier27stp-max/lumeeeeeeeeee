@@ -11,6 +11,7 @@
  * webhook Stripe (sinon Stripe rejoue l'événement).
  */
 import { getServiceClient } from './supabase';
+import { rendreCourrielLume } from './courriels/gabarit';
 import { getPaymentSettings } from './payment-settings';
 import { createNotification } from './notificationHelpers';
 import { sendEmail, isMailerConfigured } from './mailer';
@@ -78,26 +79,29 @@ export async function notifierPaiementRecu(p: PaiementRecuParams): Promise<void>
     const base = (process.env.PUBLIC_APP_URL || process.env.FRONTEND_URL || '').replace(/\/$/, '');
     const lien = p.lienInterne && base ? `${base}${p.lienInterne}` : null;
 
-    const ligneTip = p.tipCents && p.tipCents > 0
-      ? `<p style="margin:0 0 12px;font-size:14px;color:#374151;">${langue === 'fr' ? 'Pourboire' : 'Tip'} : <strong>${formaterMontant(p.tipCents, p.currency, langue)}</strong></p>`
-      : '';
-    const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:480px;margin:0 auto;color:#111114">
-  <h1 style="font-size:20px;font-weight:800;margin:0 0 8px">${echapper(sujet.split(' — ')[0])}</h1>
-  <p style="margin:0 0 12px;font-size:14px;color:#374151;">${langue === 'fr'
-    ? `${client} vient de payer <strong>${montant}</strong> en ligne pour ${p.genre === 'deposit' ? 'le dépôt du devis' : 'la facture'} <strong>${echapper(p.reference)}</strong>.`
-    : `${client} just paid <strong>${montant}</strong> online for ${p.genre === 'deposit' ? 'the deposit on quote' : 'invoice'} <strong>${echapper(p.reference)}</strong>.`}</p>
-  ${ligneTip}
-  ${lien ? `<a href="${lien}" style="display:inline-block;background:#111114;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px">${langue === 'fr' ? 'Voir dans Lume' : 'Open in Lume'}</a>` : ''}
-  <p style="font-size:12px;color:#999;margin:24px 0 0">${langue === 'fr'
-    ? 'Vous recevez ce courriel parce que « Courriel à chaque paiement reçu » est activé dans Réglages → Lume Payments.'
-    : 'You receive this email because “Email me on every payment” is enabled in Settings → Lume Payments.'}</p>
-</div>`;
-
+    void client;
+    const html = rendreCourrielLume({
+      langue,
+      preheader: sujet,
+      titre: langue === 'fr' ? 'Paiement reçu' : 'Payment received',
+      intro: langue === 'fr'
+        ? `${p.clientName || 'Un client'} vient de payer en ligne ${p.genre === 'deposit' ? `le dépôt du devis ${p.reference}` : `la facture ${p.reference}`}.`
+        : `${p.clientName || 'A client'} just paid online ${p.genre === 'deposit' ? `the deposit for quote ${p.reference}` : `invoice ${p.reference}`}.`,
+      montant: { libelle: langue === 'fr' ? 'Montant reçu' : 'Amount received', valeur: montant, sous: p.tipCents && p.tipCents > 0 ? `${langue === 'fr' ? 'Pourboire' : 'Tip'} : ${formaterMontant(p.tipCents, p.currency, langue)}` : null },
+      lignes: [
+        { libelle: 'Client', valeur: p.clientName || (langue === 'fr' ? 'un client' : 'a client') },
+        { libelle: p.genre === 'deposit' ? (langue === 'fr' ? 'Devis' : 'Quote') : (langue === 'fr' ? 'Facture' : 'Invoice'), valeur: p.reference },
+      ],
+      bouton: lien ? { texte: langue === 'fr' ? (p.genre === 'deposit' ? 'Voir le devis' : 'Voir la facture') : (p.genre === 'deposit' ? 'View quote' : 'View invoice'), url: lien } : null,
+      note: langue === 'fr' ? 'Vous recevez ce courriel parce que « Être avisé de chaque paiement par courriel » est activé dans Paramètres → Lume Payments.' : 'You receive this email because “Get notified of payments by email” is on in Settings → Lume Payments.',
+    });
     await sendEmail({
       to: destinataire,
       subject: sujet,
       html,
       suivi: { orgId: p.orgId, entityType: p.genre === 'deposit' ? 'quote' : 'invoice', entityId: null },
+      // Envoi de fond (webhook de paiement) : un échec transitoire part dans la file de reprise.
+      reessayer: true,
     });
   } catch (err: any) {
     console.error('[paiement-recu] courriel au propriétaire non envoyé:', err?.message);

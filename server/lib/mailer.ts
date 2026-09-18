@@ -2,11 +2,20 @@ import nodemailer from 'nodemailer';
 import { redirigerEmail } from './qa-redirect';
 import { logger } from './logger';
 import { getServiceClient } from './supabase';
+import { htmlVersTextePourEnvoi } from './courriels/texte';
+import { planifierPremiereReprise, TABLE_REPRISES } from './courriels/reprises';
+import { reglagesSmtpSes, sesConfigure, messageIdSes } from './courriels/ses';
 
 /**
  * Centralized email sender.
  *
- * Deux fournisseurs, choisis par l'environnement :
+ * Trois fournisseurs, choisis par l'environnement (voir `fournisseurCourriel`) :
+ *
+ *   COURRIEL_FOURNISSEUR=ses → Amazon SES par SMTP (courriels/ses.ts). Le
+ *     moins cher à gros volume (~0,10 $ US / 1 000). Attention : SES démarre
+ *     en bac à sable (200/jour) tant qu'Amazon n'a pas accordé la
+ *     « production access ». Rebonds et suivi arrivent par SNS sur
+ *     POST /api/webhooks/ses.
  *
  *   RESEND_API_KEY présent → API Resend (https://resend.com), domaine
  *     lumecrm.net avec SPF / DKIM / DMARC, webhooks de rebond captés par
@@ -24,12 +33,29 @@ import { getServiceClient } from './supabase';
  * les relances sautent une adresse qui a rebondi.
  *
  * Env :
+ *   COURRIEL_FOURNISSEUR — ses | resend | smtp (sinon : automatique)
+ *   SES_SMTP_USER / SES_SMTP_PASS / SES_REGION — Amazon SES
  *   RESEND_API_KEY — active Resend
  *   EMAIL_FROM     — expéditeur par défaut (ex. "Lume CRM <factures@lumecrm.net>")
  *   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS — repli SMTP
  */
 
 let transporter: nodemailer.Transporter | null = null;
+let transporteurSes: nodemailer.Transporter | null = null;
+
+/**
+ * Transport SES : le SMTP d'Amazon, pas un SDK. Séparé du transport SMTP
+ * générique pour que les deux puissent coexister (SES en principal, Gmail en
+ * repli local) sans se marcher dessus.
+ */
+function getTransporteurSes(): nodemailer.Transporter {
+  if (transporteurSes) return transporteurSes;
+  const reglages = reglagesSmtpSes();
+  if (!reglages) throw new Error('SES demandé mais SES_SMTP_USER / SES_SMTP_PASS manquent.');
+  transporteurSes = nodemailer.createTransport({ ...reglages, pool: true, maxConnections: 5, maxMessages: 100 });
+  logger.info('[mailer] transport SES prêt', { host: reglages.host });
+  return transporteurSes;
+}
 
 function getTransporter(): nodemailer.Transporter {
   if (transporter) return transporter;
@@ -54,9 +80,27 @@ function getTransporter(): nodemailer.Transporter {
   return transporter;
 }
 
-export type FournisseurCourriel = 'resend' | 'smtp';
+export type FournisseurCourriel = 'ses' | 'resend' | 'smtp';
 
+/**
+ * Qui envoie. `COURRIEL_FOURNISSEUR` tranche (ses | resend | smtp) ; sinon
+ * l'ordre naturel : SES s'il est configuré, sinon Resend, sinon SMTP.
+ *
+ * Pourquoi une variable plutôt qu'une simple présence de clés : SES démarre
+ * en bac à sable (200 courriels/jour). Tant qu'Amazon n'a pas accordé la
+ * « production access », on veut pouvoir tout préparer — identifiants en
+ * place, envois de test — SANS que la production bascule. Le jour J, une
+ * variable sur Railway suffit, sans redéploiement de code.
+ *
+ * Un fournisseur demandé mais non configuré est ignoré : mieux vaut envoyer
+ * par l'ancien chemin que ne pas envoyer du tout.
+ */
 export function fournisseurCourriel(env: NodeJS.ProcessEnv = process.env): FournisseurCourriel {
+  const demande = String(env.COURRIEL_FOURNISSEUR || '').trim().toLowerCase();
+  if (demande === 'ses' && sesConfigure(env)) return 'ses';
+  if (demande === 'resend' && env.RESEND_API_KEY) return 'resend';
+  if (demande === 'smtp') return 'smtp';
+  if (sesConfigure(env)) return 'ses';
   return env.RESEND_API_KEY ? 'resend' : 'smtp';
 }
 
@@ -74,6 +118,12 @@ export interface SendEmailParams {
   subject: string;
   html: string;
   /**
+   * Partie texte (multipart/alternative). Absente, elle est dérivée du HTML
+   * par `htmlVersTextePourEnvoi` : un courriel HTML seul est un signal de
+   * pourriel pour Gmail et Outlook.
+   */
+  text?: string;
+  /**
    * En-têtes SMTP additionnels.
    *
    * Nécessaire pour `List-Unsubscribe` / `List-Unsubscribe-Post` : sans eux,
@@ -83,17 +133,27 @@ export interface SendEmailParams {
   headers?: Record<string, string>;
   /** Journalise l'envoi dans email_deliveries (badge « non livré », relances). */
   suivi?: SuiviCourriel;
+  /**
+   * Opt-in, envois de FOND seulement (cron, webhook, notification) : un échec
+   * met le courriel dans `email_retry_queue`, repris par
+   * `demarrerReprisesCourriels` (5 min / 30 min / 3 h, puis abandon signalé).
+   * Jamais sur un envoi déclenché par un clic : l'utilisateur réessaie
+   * lui-même, une file créerait des doublons.
+   */
+  reessayer?: boolean;
 }
 
 export interface SendEmailResult {
   sent: boolean;
   messageId?: string;
   error?: string;
+  /** L'envoi a échoué mais attend dans la file de reprise. */
+  enFile?: boolean;
 }
 
 const RESEND_API = 'https://api.resend.com/emails';
 
-async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: string; subject: string; html: string; headers?: Record<string, string> }): Promise<{ id: string }> {
+async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: string; subject: string; html: string; text: string; headers?: Record<string, string> }): Promise<{ id: string }> {
   const res = await fetch(RESEND_API, {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -103,6 +163,7 @@ async function envoyerViaResend(p: { from: string; to: string[]; replyTo?: strin
       ...(p.replyTo ? { reply_to: p.replyTo } : {}),
       subject: p.subject,
       html: p.html,
+      text: p.text,
       ...(p.headers ? { headers: p.headers } : {}),
     }),
   });
@@ -139,11 +200,46 @@ async function journaliserEnvoi(entree: {
 }
 
 /**
+ * Un envoi raté marqué `reessayer` entre dans la file de reprise. Retourne
+ * vrai si la ligne est écrite ; l'échec d'écriture est journalisé (le courriel
+ * est alors vraiment perdu, comme avant la file).
+ */
+async function mettreEnFile(params: SendEmailParams, from: string, text: string, erreur: string): Promise<boolean> {
+  try {
+    const { error } = await getServiceClient().from(TABLE_REPRISES).insert({
+      org_id: params.suivi?.orgId ?? null,
+      from_addr: from,
+      to_emails: Array.isArray(params.to) ? params.to : [params.to],
+      reply_to: params.replyTo ?? null,
+      subject: params.subject,
+      html: params.html,
+      text,
+      headers: params.headers ?? null,
+      suivi: params.suivi ?? null,
+      last_error: erreur.slice(0, 1000),
+      ...planifierPremiereReprise(new Date()),
+    });
+    if (error) {
+      logger.error('[mailer] courriel raté non mis en file', { error: error.message, subject: params.subject });
+      return false;
+    }
+    logger.warn('[mailer] courriel raté mis en file de reprise', { subject: params.subject, orgId: params.suivi?.orgId ?? null });
+    return true;
+  } catch (err: any) {
+    logger.error('[mailer] courriel raté non mis en file', { error: err?.message || String(err), subject: params.subject });
+    return false;
+  }
+}
+
+/**
  * Send an email — Resend si configuré, sinon SMTP.
  * Drop-in replacement for Resend's `resend.emails.send()`.
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const defaultFrom = process.env.EMAIL_FROM || `Lume CRM <${process.env.SMTP_USER}>`;
+  const from = params.from || defaultFrom;
+  // Toujours une partie texte : dérivée du HTML si l'appelant n'en fournit pas.
+  const text = params.text || htmlVersTextePourEnvoi(params.html);
 
   // Mode QA : quand QA_REDIRECT_EMAIL est défini, tout courriel part vers cette
   // adresse et le destinataire d'origine passe dans l'objet. Passe-plat sinon.
@@ -158,25 +254,30 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     let messageId: string;
     if (provider === 'resend') {
       const { id } = await envoyerViaResend({
-        from: params.from || defaultFrom,
+        from,
         to: destinataires,
         replyTo: params.replyTo,
         subject: qa.subject,
         html: params.html,
+        text,
         headers: params.headers,
       });
       messageId = id;
     } else {
-      const transport = getTransporter();
+      // SES et SMTP partagent nodemailer ; seul le transport diffère.
+      const transport = provider === 'ses' ? getTransporteurSes() : getTransporter();
       const info = await transport.sendMail({
-        from: params.from || defaultFrom,
+        from,
         to: destinataires.join(', '),
         replyTo: params.replyTo,
         subject: qa.subject,
         html: params.html,
+        text,
         ...(params.headers ? { headers: params.headers } : {}),
       });
-      messageId = info.messageId;
+      // SES : on range l'identifiant sous la forme que citeront ses notifications
+      // de rebond (sans chevrons ni domaine), sinon aucun rebond ne retrouverait sa ligne.
+      messageId = provider === 'ses' ? messageIdSes(info.messageId) : info.messageId;
     }
 
     // Une ligne par destinataire réel (pas l'adresse de redirection QA).
@@ -204,6 +305,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         subject: params.subject,
       });
     } catch { /* no-op */ }
+    if (params.reessayer && await mettreEnFile(params, from, text, String(err?.message || err))) {
+      return { sent: false, error: err.message, enFile: true };
+    }
     return { sent: false, error: err.message };
   }
 }

@@ -665,3 +665,11 @@ export const migrationTemplateSaveSchema = z.object({
 export const migrationTemplateApplySchema = z.object({
   template_id: z.string().uuid(),
 });
+
+// ─── Domaine d'envoi propre à l'entreprise (POST /api/sending-domain) ────────
+
+export const sendingDomainSchema = z.object({
+  // La validation stricte (minuscules, ASCII, domaines réservés) vit dans
+  // server/lib/courriels/domaines.ts (validerDomaine) ; ici on borne la taille.
+  domain: z.string().trim().min(3, 'Domain is required.').max(253, 'Domain is too long.'),
+});
