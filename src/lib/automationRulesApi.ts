@@ -191,16 +191,18 @@ export interface ApercuEntreprise {
   company_name: string | null;
   company_logo_url: string | null;
   company_phone: string | null;
+  /** Le pied du courriel affiche le téléphone ET le courriel, cliquables. */
+  company_email: string | null;
 }
 
 export async function getCompanyBranding(): Promise<ApercuEntreprise> {
-  const vide = { company_name: null, company_logo_url: null, company_phone: null };
+  const vide = { company_name: null, company_logo_url: null, company_phone: null, company_email: null };
   const orgId = await getCurrentOrgId();
   if (!orgId) return vide;
 
   const { data, error } = await supabase
     .from('company_settings')
-    .select('company_name, logo_url, phone')
+    .select('company_name, logo_url, phone, email')
     .eq('org_id', orgId)
     .maybeSingle();
 
@@ -210,6 +212,7 @@ export async function getCompanyBranding(): Promise<ApercuEntreprise> {
     company_name: data.company_name ?? null,
     company_logo_url: data.logo_url ?? null,
     company_phone: data.phone ?? null,
+    company_email: data.email ?? null,
   };
 }
 
