@@ -11,26 +11,30 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
-  verifierPlafond, ajouterDepense, compterRefus, plafondJourCents, estProduction,
-  etatPlafonds, reinitialiserPlafonds, jourMontreal, SOURCES,
+  verifierPlafond, ajouterDepense, compterRefus, plafondJourCents,
+  etatPlafonds, reinitialiserPlafonds, jourMontreal, SOURCES, PLAFOND_DEFAUT_CENTS,
 } from '../server/lib/lumi/plafond-journalier';
 
 beforeEach(() => reinitialiserPlafonds());
 
-describe('plafond par défaut selon l\'environnement', () => {
-  it('hors production : 5 $ par source — une batterie qui boucle s\'arrête là', () => {
+describe('un seul comportement, staging comme production', () => {
+  it('même plafond par défaut partout : 5 $ par source', () => {
     expect(plafondJourCents('lumi', {} as NodeJS.ProcessEnv)).toBe(500);
     expect(plafondJourCents('eval', { NODE_ENV: 'test' } as NodeJS.ProcessEnv)).toBe(500);
+    expect(PLAFOND_DEFAUT_CENTS).toBe(500);
   });
 
-  it('production : aucun plafond global (0) — les budgets par org gouvernent, jamais un abonné coupé', () => {
-    expect(plafondJourCents('lumi', { NODE_ENV: 'production' } as NodeJS.ProcessEnv)).toBe(0);
+  it('NODE_ENV ne change RIEN : zéro delta entre les environnements', () => {
+    const valeurs = ['production', 'staging', 'test', 'development', ''].map(
+      (e) => plafondJourCents('lumi', { NODE_ENV: e } as NodeJS.ProcessEnv),
+    );
+    expect(new Set(valeurs).size).toBe(1);
+    expect(valeurs[0]).toBe(500);
   });
 
-  it('LUMI_ENV=staging sur une instance NODE_ENV=production reste bridé', () => {
-    const env = { NODE_ENV: 'production', LUMI_ENV: 'staging' } as NodeJS.ProcessEnv;
-    expect(estProduction(env)).toBe(false);
-    expect(plafondJourCents('lumi', env)).toBe(500);
+  it('seule la valeur de la variable distingue les environnements', () => {
+    expect(plafondJourCents('lumi', { NODE_ENV: 'production', LUMI_PLAFOND_JOUR_USD: '50' } as unknown as NodeJS.ProcessEnv)).toBe(5000);
+    expect(plafondJourCents('lumi', { NODE_ENV: 'staging', LUMI_PLAFOND_JOUR_USD: '2' } as unknown as NodeJS.ProcessEnv)).toBe(200);
   });
 
   it('se règle globalement et par source, la source l\'emportant', () => {
@@ -87,10 +91,10 @@ describe('le compteur refuse une fois le plafond atteint', () => {
     expect(verifierPlafond('support', env).autorise).toBe(true);
   });
 
-  it('sans plafond (prod), tout passe et la dépense se compte quand même', () => {
-    const prod = { NODE_ENV: 'production' } as NodeJS.ProcessEnv;
-    ajouterDepense('lumi', 5000, prod);
-    const v = verifierPlafond('lumi', prod);
+  it('plafond explicitement levé (0) : tout passe et la dépense se compte quand même', () => {
+    const illimite = { LUMI_PLAFOND_JOUR_USD: '0' } as unknown as NodeJS.ProcessEnv;
+    ajouterDepense('lumi', 5000, illimite);
+    const v = verifierPlafond('lumi', illimite);
     expect(v.autorise).toBe(true);
     expect(v.depense_cents).toBe(5000);
   });

@@ -102,7 +102,11 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     let reply: string | null = null;
     let transferer = !!humain;
     let motif = humain ? 'Le client a demandé à parler à un humain' : '';
-    // Étage 0 : une question classique (la FAQ, mot pour mot) a une réponse fixe — 0 appel modèle, même Lumi.
+    // Étage 0 : une question classique a une réponse fixe — 0 appel modèle.
+    // Depuis le 2026-09-18, la correspondance n'est plus seulement mot pour
+    // mot : une reformulation sans ambiguïté sur le même sujet produit la même
+    // réponse (voir server/lib/support/faq.ts). Les questions portant sur les
+    // DONNÉES de l'org en sont exclues et descendent toujours au modèle.
     const fixe = humain ? null : reponseFaqPour(message, ctx.langue);
     if (fixe) {
       reply = fixe.reponse;

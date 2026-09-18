@@ -20,11 +20,15 @@
  * TOUTE la dépense de l'instance. Au-delà, l'appel est refusé — pas dégradé.
  *
  * Deux principes :
- *  - Hors production, le plafond est serré par défaut (LUMI_PLAFOND_JOUR_USD,
- *    défaut 5 $) : une batterie d'évaluation qui part en boucle s'arrête au
- *    bout de 5 $, pas de 45 $. En production, aucun plafond global par défaut
- *    (0 = illimité) : ce sont les budgets par org qui gouvernent, et on ne
- *    veut jamais qu'un abonné soit coupé par une borne d'exploitation.
+ *  - UN SEUL comportement, partout. Le code ne regarde JAMAIS NODE_ENV : il
+ *    lit une valeur, un point. Staging et production exécutent exactement le
+ *    même chemin, et c'est la valeur de LUMI_PLAFOND_JOUR_USD qui diffère,
+ *    comme n'importe quel autre réglage d'environnement. Un garde-fou qui se
+ *    comporte autrement selon l'environnement n'est pas testé là où il compte,
+ *    et la règle du projet est « zéro delta » entre les deux.
+ *    Le défaut est 5 $ par source : la valeur qui aurait arrêté l'incident,
+ *    appliquée des deux côtés. À monter par variable d'env si un abonné réel
+ *    a besoin de plus.
  *  - Le compteur est en mémoire, par processus. C'est un cran d'arrêt, pas de
  *    la comptabilité : la comptabilité reste `ai_usage`. Un redémarrage remet
  *    le compteur à zéro, ce qui est acceptable pour un garde-fou (et évite de
@@ -39,15 +43,17 @@ export type SourceLLM = 'lumi' | 'support' | 'migration' | 'public' | 'cache-cha
 
 export const SOURCES: readonly SourceLLM[] = ['lumi', 'support', 'migration', 'public', 'cache-chaud', 'eval'];
 
-/** `production` = l'app qui sert les abonnés. Tout le reste est un environnement de travail. */
-export function estProduction(env: NodeJS.ProcessEnv = process.env): boolean {
-  return (env.NODE_ENV || '').toLowerCase() === 'production' && (env.LUMI_ENV || '').toLowerCase() !== 'staging';
-}
+/** Plafond par défaut, le MÊME partout : la valeur qui aurait arrêté l'incident du 2026-09-18. */
+export const PLAFOND_DEFAUT_CENTS = 500;
 
 /**
- * Plafond du jour en CENTS pour une source. 0 = illimité.
- * `LUMI_PLAFOND_JOUR_USD` fixe le plafond global ; `LUMI_PLAFOND_JOUR_<SOURCE>_USD`
- * l'affine par source (ex. LUMI_PLAFOND_JOUR_EVAL_USD=2).
+ * Plafond du jour en CENTS pour une source. 0 = illimité (échappatoire
+ * explicite). `LUMI_PLAFOND_JOUR_USD` fixe le plafond global ;
+ * `LUMI_PLAFOND_JOUR_<SOURCE>_USD` l'affine par source
+ * (ex. LUMI_PLAFOND_JOUR_EVAL_USD=2).
+ *
+ * Aucune lecture de NODE_ENV ici, volontairement : le comportement est
+ * identique en staging et en production, seule la valeur peut différer.
  */
 export function plafondJourCents(source: SourceLLM, env: NodeJS.ProcessEnv = process.env): number {
   const parSource = env[`LUMI_PLAFOND_JOUR_${source.toUpperCase().replace(/-/g, '_')}_USD`];
@@ -58,8 +64,7 @@ export function plafondJourCents(source: SourceLLM, env: NodeJS.ProcessEnv = pro
     // Une valeur illisible ne doit jamais valoir « illimité » : on retombe sur le défaut.
     if (Number.isFinite(v) && v >= 0) return Math.round(v * 100);
   }
-  // Défaut : serré hors prod, illimité en prod (les budgets par org gouvernent).
-  return estProduction(env) ? 0 : 500;
+  return PLAFOND_DEFAUT_CENTS;
 }
 
 interface Compteur { jour: string; cents: number; refus: number; alerte: boolean }
