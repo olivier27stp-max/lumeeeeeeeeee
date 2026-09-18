@@ -56,6 +56,7 @@ interface Entreprise {
   company_name?: string | null;
   company_logo_url?: string | null;
   company_phone?: string | null;
+  company_email?: string | null;
 }
 
 let compteurId = 0;
@@ -262,9 +263,16 @@ export default function EmailPreviewEditor({
           </button>
         </div>
 
-        {/* Le courriel */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5 bg-surface-tertiary/30">
-          <div className="mx-auto max-w-[600px] rounded-lg bg-white dark:bg-surface shadow-sm overflow-hidden">
+        {/* Le courriel.
+
+            Le fond reprend le CIEL du gabarit serveur (#e6f0ff, celui des
+            pages marketing) : sans lui, l'aperçu montrait une enveloppe
+            blanche que le client ne reçoit pas, et le propriétaire jugeait son
+            courriel sur une image fausse. Les couleurs sont écrites en dur
+            plutôt qu'en classes de thème, parce qu'un courriel ne suit pas le
+            mode sombre de l'app : il arrive tel quel dans la boîte. */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5" style={{ background: '#e6f0ff' }}>
+          <div className="mx-auto max-w-[600px] rounded-lg bg-white shadow-sm overflow-hidden">
             {/* Objet — ce que le client voit dans sa boîte */}
             <div className="px-5 py-3 border-b border-outline/40 bg-surface-secondary/40">
               <p className="text-[9px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
@@ -281,17 +289,18 @@ export default function EmailPreviewEditor({
             </div>
 
             {/* En-tête ajouté par le serveur — non modifiable ici, il vient
-                des réglages de l'entreprise. */}
-            <div className="px-5 py-4 border-b border-outline/30 text-center bg-white dark:bg-surface">
+                des réglages de l'entreprise. Le logo se pose sur le ciel sans
+                cadre blanc : son fond est retiré au téléversement. */}
+            <div className="px-5 py-5 text-center" style={{ background: '#e6f0ff' }}>
               {entreprise.company_logo_url ? (
                 <img
                   src={entreprise.company_logo_url}
                   alt={entreprise.company_name ?? ''}
-                  className="mx-auto max-h-10 object-contain"
+                  className="mx-auto max-h-14 object-contain"
                 />
               ) : (
-                <span className="text-[18px] font-bold tracking-widest text-[#1a1a2e] dark:text-text-primary">
-                  {entreprise.company_name || 'LUME'}
+                <span className="text-[18px] font-bold" style={{ color: '#101828' }}>
+                  {entreprise.company_name || 'Lume'}
                 </span>
               )}
             </div>
@@ -346,14 +355,28 @@ export default function EmailPreviewEditor({
             {/* Pied de page ajouté par le serveur. Le montrer évite de
                 répéter « Merci, [company_name] » en fin de message : la
                 signature y est déjà. */}
-            <div className="px-5 py-3 border-t border-outline/30 bg-surface-secondary/40 text-center">
-              <p className="text-[10px] text-text-tertiary">
-                {fr ? 'Envoyé via' : 'Sent via'} <strong>LUME</strong>
-                {entreprise.company_name ? ` ${fr ? 'pour' : 'on behalf of'} ${entreprise.company_name}` : ''}
-              </p>
-              {entreprise.company_phone && (
-                <p className="text-[10px] text-text-tertiary mt-0.5">{entreprise.company_phone}</p>
+            {/* Le pied, tel que le gabarit serveur le rend : le téléphone et
+                le courriel de l'entreprise d'abord, puis « Envoyé avec Lume »
+                en petit. Il affichait « Envoyé via LUME pour {entreprise} » —
+                formule retirée du serveur le 2026-09-17 parce qu'elle vole la
+                marque du client. L'aperçu la montrait encore. */}
+            <div className="px-5 py-3 border-t text-center" style={{ borderColor: '#d3e3f7' }}>
+              {(entreprise.company_phone || entreprise.company_email) && (
+                <p className="text-[11px]" style={{ color: '#0b5cad' }}>
+                  <span className="font-semibold">{entreprise.company_phone}</span>
+                  {entreprise.company_phone && entreprise.company_email ? (
+                    <span style={{ color: '#9fb3c8' }}> · </span>
+                  ) : null}
+                  <span className="font-semibold">{entreprise.company_email}</span>
+                </p>
               )}
+              {entreprise.company_name && (
+                <p className="text-[10px] mt-0.5" style={{ color: '#5b6b7f' }}>{entreprise.company_name}</p>
+              )}
+              <p className="text-[10px] mt-1.5" style={{ color: '#8fa3ba' }}>
+                {fr ? 'Envoyé avec' : 'Sent with'}{' '}
+                <span className="font-bold" style={{ color: '#0b5cad' }}>Lume</span>
+              </p>
             </div>
           </div>
 

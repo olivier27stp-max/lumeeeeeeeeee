@@ -299,10 +299,31 @@ describe('aperçu — le courriel s’affiche habillé, comme une facture', () =
   });
 
   it('les colonnes lues existent bien dans company_settings', () => {
-    // `logo_url` et `phone` — pas `company_logo_url` ni `company_phone`, qui
-    // sont les noms côté serveur après transformation.
+    // `logo_url`, `phone` et `email` — pas `company_logo_url` ni
+    // `company_phone`, qui sont les noms côté serveur après transformation.
+    // Avec PostgREST, une seule colonne inexistante fait échouer TOUTE la
+    // requête, et supabase-js ne lève pas : l'aperçu perdrait son logo et son
+    // pied sans un mot d'erreur.
     const fn = api.slice(api.indexOf('export async function getCompanyBranding'));
-    expect(fn).toContain("select('company_name, logo_url, phone')");
+    expect(fn).toContain("select('company_name, logo_url, phone, email')");
+  });
+
+  it('le pied de l’aperçu montre ce que le serveur envoie vraiment', () => {
+    // Il affichait « Envoyé via LUME pour {entreprise} » — formule retirée du
+    // gabarit le 2026-09-17 parce qu'elle vole la marque du client. L'aperçu
+    // la gardait, donc le propriétaire jugeait son courriel sur une image
+    // fausse.
+    // On vise le JSX rendu, pas les commentaires : l'un d'eux cite justement
+    // l'ancienne formule pour expliquer pourquoi elle a disparu.
+    const rendu = ed.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+    expect(rendu).not.toContain('Envoyé via');
+    expect(rendu).not.toContain('on behalf of');
+    expect(rendu).toContain("fr ? 'Envoyé avec' : 'Sent with'");
+  });
+
+  it('l’aperçu pose le courriel sur le ciel du gabarit, pas sur du blanc', () => {
+    // #e6f0ff : la couleur de fond de rendreCourrielClient.
+    expect(ed).toContain('#e6f0ff');
   });
 });
 
