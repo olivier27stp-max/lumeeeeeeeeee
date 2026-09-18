@@ -40,6 +40,9 @@ const modeleDemande = option('--modele');
 const seulement = option('--seulement');
 const avecJuge = option('--juge') !== 'non';
 if (modeleDemande) process.env.LUMI_SUPPORT_MODELE = modeleDemande;
+// Palier économe par défaut (incident 2026-09-18) : posé avant les imports
+// dynamiques ci-dessous, qui lisent l'environnement au chargement.
+await import('./reglages-eval.mts');
 
 // ia.ts (et tout ce qui pourrait l'importer) se charge APRÈS la variable, pour que --modele soit vu.
 const { repondreSupportIA, MODELE_SUPPORT } = await import('../../server/lib/support/ia');

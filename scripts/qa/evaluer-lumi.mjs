@@ -641,6 +641,28 @@ const orgId = m.org_id;
 const H = await entetes(session.session, orgId);
 const quota = await fetch(`${API}/api/lumi/quota`, { headers: H }).then((r) => r.json());
 if (!quota.includes_ai || quota.configured === false) throw new Error(`Lumi indisponible : ${JSON.stringify(quota)}`);
+// Garde-fou de coût (incident 2026-09-18 : 39,39 $ en sept jours sur staging).
+// Cette batterie envoie ~2 000 appels ; le modèle est celui du SERVEUR, pas le
+// nôtre. Sur un modèle cher, on refuse de partir plutôt que de découvrir la
+// facture après coup. QA_MODELE=prod pour l'assumer (débogage d'un échec).
+{
+  const modeleServeur = quota.cout?.modele ?? 'inconnu';
+  const cher = /opus|fable|sonnet/.test(modeleServeur);
+  if (cher && process.env.QA_MODELE !== 'prod') {
+    throw new Error(
+      `Le serveur ${API} répond avec « ${modeleServeur} » : cette batterie coûterait cher.\n`
+      + `  → relancer le serveur avec LUMI_MODEL=claude-haiku-4-5-20251001 (palier économe),\n`
+      + `  → ou QA_MODELE=prod npm run qa:lumi pour assumer le coût des modèles de production.`,
+    );
+  }
+  const plafonds = quota.cout?.plafonds_jour ?? [];
+  const lumi = plafonds.find((p) => p.source === 'lumi');
+  if (lumi?.plafond_cents) {
+    console.log(`Coût · modèle ${modeleServeur} · dépense du jour ${(lumi.depense_cents / 100).toFixed(2)} / ${(lumi.plafond_cents / 100).toFixed(2)} $`);
+  } else {
+    console.log(`Coût · modèle ${modeleServeur} · aucun plafond journalier sur ce serveur`);
+  }
+}
 console.log(`Org ${orgId} · plan ${quota.plan_slug} · budget ${(quota.depense_cents / 100).toFixed(2)} / ${(quota.budget_cents / 100).toFixed(2)} $ · semaine ${lundi} → ${dimanche}`);
 
 // La batterie teste la MÉCANIQUE de confirmation (proposition → confirmer/annuler) :

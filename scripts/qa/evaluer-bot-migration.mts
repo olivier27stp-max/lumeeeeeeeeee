@@ -8,6 +8,9 @@
  * Vérifie : statut final = waiting_for_approval (jamais approved), décisions
  * auditées 'assistant', questions posées, coût modèle. Nettoie à la fin.
  */
+// EN PREMIER : pose le palier économe avant que bot.ts ne lise LUMI_MODEL_MIGRATION
+// et LUMI_EFFORT_MIGRATION au chargement du module (incident 2026-09-18).
+import './reglages-eval.mts';
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
 import { executerBotMigration, TYPE_NOTIFICATION_ADMIN } from '../../server/lib/migration/bot';

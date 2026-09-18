@@ -21,7 +21,7 @@ import { validate } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
 import { etatBudget, journaliserUsage, reglagesPourPalier, alerterSiSeuilFranchi, reserverBudget, reglerBudget, messagePause } from '../lib/lumi/budget';
-import { verifierPlafond, ajouterDepense, compterRefus } from '../lib/lumi/plafond-journalier';
+import { verifierPlafond, ajouterDepense, compterRefus, etatPlafonds } from '../lib/lumi/plafond-journalier';
 import { modeleLumi, coutEnCents } from '../lib/lumi/tarifs';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { rendreCourrielLume, echapper } from '../lib/courriels/gabarit';
@@ -893,7 +893,14 @@ router.get('/lumi/quota', async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     const budget = await etatBudget(getServiceClient(), auth.orgId);
-    return res.json({ ...budget, configured: isLumiConfigured() });
+    // Posture de coût du SERVEUR (incident 2026-09-18) : une batterie qui tape
+    // sur cette API ne choisit pas le modèle — c'est l'environnement du serveur
+    // qui décide. Elle doit pouvoir le vérifier avant de lancer 2 000 appels.
+    return res.json({
+      ...budget,
+      configured: isLumiConfigured(),
+      cout: { modele: modeleLumi(), plafonds_jour: etatPlafonds() },
+    });
   } catch (error: any) {
     return sendSafeError(res, error, 'Unable to load Lumi quota.', '[lumi/quota]');
   }
