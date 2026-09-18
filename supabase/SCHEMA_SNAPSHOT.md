@@ -13,13 +13,13 @@
 
 **Généré le 2026-09-17 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
-## 1. Tables (232)
+## 1. Tables (234)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
 | `a2p_registrations` | ✅ | ✅ | 1 | 0 |
 | `active_sessions` | ✅ | ✅ | 2 | 188 |
-| `activity_log` | ✅ | ✅ | 2 | 910 |
+| `activity_log` | ✅ | ✅ | 2 | 1009 |
 | `activity_notes` | ✅ | ✅ | 3 | 1 |
 | `agent_actions` | ✅ | ✅ | 2 | 6 |
 | `agent_messages` | ✅ | ✅ | 1 | 16 |
@@ -40,7 +40,7 @@
 | `checklist_templates` | ✅ | ✅ | 5 | 0 |
 | `client_payment_profiles` | ✅ | ✅ | 1 | ? |
 | `client_tags` | ✅ | ✅ | 3 | 0 |
-| `clients` | ✅ | ✅ | 4 | 59 |
+| `clients` | ✅ | ✅ | 4 | 931 |
 | `commission_settings` | ✅ | ✅ | 2 | 0 |
 | `communication_channels` | ✅ | ✅ | 1 | 1 |
 | `communication_messages` | ✅ | ✅ | 1 | 9 |
@@ -66,10 +66,11 @@
 | `dsar_requests` | ✅ | ✅ | 3 | 0 |
 | `email_accounts` | ✅ | ✅ | 4 | 2 |
 | `email_campaigns` | ✅ | ✅ | 2 | 0 |
-| `email_deliveries` | ✅ | ✅ | 2 | ? |
+| `email_deliveries` | ✅ | ✅ | 2 | 25 |
 | `email_messages` | ✅ | ✅ | 1 | 190 |
 | `email_oauth_states` | ✅ | ✅ | 1 | 0 |
 | `email_opt_outs` | ✅ | ✅ | 2 | 0 |
+| `email_retry_queue` | ✅ | ✅ | 1 | ? |
 | `email_templates` | ✅ | ✅ | 5 | 11 |
 | `email_threads` | ✅ | ✅ | 1 | 175 |
 | `email_unsubscribes` | ✅ | ✅ | 2 | 1 |
@@ -77,7 +78,7 @@
 | `field_daily_stats` | ✅ | ✅ | 4 | 15 |
 | `field_house_events` | ✅ | ✅ | 4 | 184 |
 | `field_house_profiles` | ✅ | ✅ | 7 | 158 |
-| `field_pin_entity_links` | ✅ | ✅ | 1 | 47 |
+| `field_pin_entity_links` | ✅ | ✅ | 1 | 69 |
 | `field_pin_templates` | ✅ | ✅ | 4 | 0 |
 | `field_pins` | ✅ | ✅ | 4 | 148 |
 | `field_rep_performance` | ✅ | ✅ | 1 | 0 |
@@ -145,8 +146,8 @@
 | `migration_field_mappings` | ✅ | ✅ | 1 | 137 |
 | `migration_file_columns` | ✅ | ✅ | 1 | 137 |
 | `migration_files` | ✅ | ✅ | 1 | 5 |
-| `migration_import_batches` | ✅ | ✅ | 1 | 0 |
-| `migration_import_records` | ✅ | ✅ | 1 | 0 |
+| `migration_import_batches` | ✅ | ✅ | 1 | 5 |
+| `migration_import_records` | ✅ | ✅ | 1 | 2728 |
 | `migration_invitations` | ✅ | ✅ | 1 | 0 |
 | `migration_issues` | ✅ | ✅ | 1 | 113 |
 | `migration_mapping_templates` | ✅ | ✅ | 1 | 1 |
@@ -155,16 +156,17 @@
 | `migration_staging_records` | ✅ | ✅ | 1 | 3482 |
 | `note_history` | ✅ | ✅ | 2 | 0 |
 | `notes` | ✅ | ✅ | 4 | 0 |
-| `notifications` | ✅ | ✅ | 4 | 602 |
+| `notifications` | ✅ | ✅ | 4 | 675 |
 | `oauth_authorization_codes` | ✅ | ✅ | 1 | ? |
 | `oauth_clients` | ✅ | ✅ | 1 | ? |
-| `oauth_tokens` | ✅ | ✅ | 3 | 176 |
+| `oauth_tokens` | ✅ | ✅ | 3 | 185 |
 | `org_billing_settings` | ✅ | ✅ | 3 | 0 |
-| `org_client_counters` | ✅ | ✅ | 1 | 2 |
+| `org_client_counters` | ✅ | ✅ | 1 | 6 |
 | `org_features` | ✅ | ✅ | 3 | 10 |
 | `org_invoice_sequences` | ✅ | ✅ | 1 | 12 |
 | `org_job_counters` | ✅ | ✅ | 1 | 3 |
 | `org_knowledge` | ✅ | ✅ | 1 | 0 |
+| `org_sending_domains` | ✅ | ✅ | 2 | ? |
 | `orgs` | ✅ | ✅ | 4 | 2 |
 | `payment_provider_secrets` | ✅ | ✅ | 4 | 1 |
 | `payment_provider_settings` | ✅ | ✅ | 4 | 1 |
@@ -184,7 +186,7 @@
 | `profiles` | ✅ | ✅ | 3 | 22 |
 | `promo_codes` | ✅ | ✅ | 1 | 1 |
 | `proof_of_presence` | ✅ | ✅ | 1 | 0 |
-| `properties` | ✅ | ✅ | 4 | 40 |
+| `properties` | ✅ | ✅ | 4 | 862 |
 | `provisioning_events` | ✅ | ✅ | 1 | 0 |
 | `push_tokens` | ✅ | ✅ | 4 | 0 |
 | `quote_attachments` | ✅ | ✅ | 4 | 1 |
@@ -197,7 +199,7 @@
 | `quote_status_history` | ✅ | ✅ | 2 | 6 |
 | `quote_templates` | ✅ | ✅ | 4 | 3 |
 | `quote_views` | ✅ | ✅ | 4 | 0 |
-| `quotes` | ✅ | ✅ | 4 | 21 |
+| `quotes` | ✅ | ✅ | 4 | 85 |
 | `rate_limits` | ✅ | ✅ | 2 | 0 |
 | `recurring_invoice_schedules` | ✅ | ✅ | 5 | 0 |
 | `recurring_team_schedules` | ✅ | ✅ | 4 | ? |
@@ -1105,6 +1107,11 @@
 - `error` text
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `opened_at` timestamp with time zone
+- `open_count` integer NOT NULL DEFAULT 0
+- `clicked_at` timestamp with time zone
+- `click_count` integer NOT NULL DEFAULT 0
+- `last_clicked_url` text
 
 ### `email_messages`
 
@@ -1149,6 +1156,25 @@
 - `email` text NOT NULL
 - `opted_out_at` timestamp with time zone NOT NULL DEFAULT now()
 - `reason` text
+
+### `email_retry_queue`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid
+- `from_addr` text
+- `to_emails` jsonb NOT NULL DEFAULT '[]'::jsonb
+- `reply_to` text
+- `subject` text NOT NULL
+- `html` text NOT NULL
+- `text` text
+- `headers` jsonb
+- `suivi` jsonb
+- `attempts` integer NOT NULL DEFAULT 0
+- `next_attempt_at` timestamp with time zone NOT NULL DEFAULT now()
+- `last_error` text
+- `status` text NOT NULL DEFAULT 'pending'::text
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
 ### `email_templates`
 
@@ -2626,6 +2652,20 @@
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
+### `org_sending_domains`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `domain` text NOT NULL
+- `resend_domain_id` text
+- `from_local_part` text NOT NULL DEFAULT 'facturation'::text
+- `status` text NOT NULL DEFAULT 'pending'::text
+- `dns_records` jsonb NOT NULL DEFAULT '[]'::jsonb
+- `last_checked_at` timestamp with time zone
+- `verified_at` timestamp with time zone
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
 ### `orgs`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
@@ -2749,6 +2789,8 @@
 - `net_amount` integer
 - `failure_reason` text
 - `tip_cents` integer NOT NULL DEFAULT 0
+- `card_last4` text
+- `card_brand` text
 
 ### `payroll_adjustments`
 
@@ -3984,7 +4026,7 @@
 - `outcome` text
 - `summary` jsonb NOT NULL DEFAULT '{}'::jsonb
 
-## 3. Policies RLS (635)
+## 3. Policies RLS (638)
 
 
 ### `a2p_registrations`
@@ -4474,6 +4516,12 @@
 - **email_opt_outs_select_org** — SELECT, PERMISSIVE, roles={public}
   - USING: `((org_id IS NULL) OR has_org_membership(( SELECT auth.uid() AS uid), org_id))`
 - **email_opt_outs_service** — ALL, PERMISSIVE, roles={service_role}
+  - USING: `true`
+  - WITH CHECK: `true`
+
+### `email_retry_queue`
+
+- **email_retry_queue_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
 
@@ -5353,6 +5401,14 @@
 - **org_knowledge_org_member_select** — SELECT, PERMISSIVE, roles={authenticated}
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
+### `org_sending_domains`
+
+- **org_sending_domains_select_org** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **org_sending_domains_service** — ALL, PERMISSIVE, roles={service_role}
+  - USING: `true`
+  - WITH CHECK: `true`
+
 ### `orgs`
 
 - **orgs_delete_owner** — DELETE, PERMISSIVE, roles={authenticated}
@@ -6138,7 +6194,7 @@
   - WITH CHECK: `true`
 
 
-## 4. Fonctions (333)
+## 4. Fonctions (334)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -6248,6 +6304,7 @@ l'audit. Lire le corps réel avec :
 | `detect_impossible_travel(p_user_id uuid, p_country text)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `detect_login_anomalies(p_minutes integer DEFAULT 15)` → TABLE(kind text, key text, count bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `detect_mass_deletion(p_user_id uuid, p_org_id uuid, p_window_minutes integer DEFAULT 5, p_t)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `email_deliveries_enregistrer_suivi(p_email_id text, p_evenement text, p_quand timestamp with time zone, p)` → TABLE(id uuid, org_id uuid, entity_type text, entity_id uuid) | non | search_path=public, pg_temp | service_role=X/postgres |
 | `enforce_invoice_immutability()` → trigger | non | search_path="" | service_role=X/postgres |
 | `enforce_membership_role_change()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `enforce_soft_delete_admin()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6497,7 +6554,7 @@ l'audit. Lire le corps réel avec :
 - `v_revenue_analytics` — security_invoker=true
 - `v_schedule_calendar` — security_invoker=true
 
-## 6. Contraintes (1196)
+## 6. Contraintes (1203)
 
 
 ### `a2p_registrations`
@@ -6924,6 +6981,12 @@ CASE
 - `email_opt_outs_org_id_email_key` — UNIQUE (org_id, email)
 - `email_opt_outs_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `email_opt_outs_pkey` — PRIMARY KEY (id)
+
+### `email_retry_queue`
+
+- `email_retry_queue_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `email_retry_queue_pkey` — PRIMARY KEY (id)
+- `email_retry_queue_status_check` — CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'dead'::text])))
 
 ### `email_templates`
 
@@ -7686,6 +7749,13 @@ CASE
 - `org_knowledge_org_id_category_key_key` — UNIQUE (org_id, category, key)
 - `org_knowledge_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `org_knowledge_pkey` — PRIMARY KEY (id)
+
+### `org_sending_domains`
+
+- `org_sending_domains_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `org_sending_domains_org_id_key` — UNIQUE (org_id)
+- `org_sending_domains_pkey` — PRIMARY KEY (id)
+- `org_sending_domains_status_check` — CHECK ((status = ANY (ARRAY['pending'::text, 'verified'::text, 'failed'::text])))
 
 ### `orgs`
 
@@ -8453,6 +8523,7 @@ CASE
 - `email_accounts` → **trg_email_accounts_updated_at** (`set_email_accounts_updated_at()`)
 - `email_campaigns` → **set_email_campaigns_updated_at** (`set_updated_at()`)
 - `email_deliveries` → **set_email_deliveries_updated_at** (`set_updated_at()`)
+- `email_retry_queue` → **set_email_retry_queue_updated_at** (`set_updated_at()`)
 - `email_templates` → **trg_email_templates_updated** (`set_email_templates_updated_at()`)
 - `email_threads` → **trg_email_threads_updated_at** (`set_email_threads_updated_at()`)
 - `field_house_events` → **trg_field_daily_stats_apply** (`fn_field_daily_stats_apply()`)
@@ -8565,7 +8636,6 @@ CASE
 - `payment_requirements` → **trg_ac_track_card_saved** (`ac_track_card_saved()`)
 - `payment_settings` → **trg_payment_settings_set_updated_at** (`set_updated_at()`)
 - `payments` → **trg_ac_track_payments** (`ac_track_payments()`)
-- `payments` → **trg_payment_to_invoice_paid** (`trg_payment_to_invoice_paid()`)
 - `payments` → **trg_payments_enforce_scope** (`crm_enforce_scope()`)
 - `payments` → **trg_payments_recalculate_invoice** (`payments_recalculate_invoice_trigger()`)
 - `payments` → **trg_payments_set_updated_at** (`set_updated_at()`)
