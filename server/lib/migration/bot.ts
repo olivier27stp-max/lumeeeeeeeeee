@@ -51,6 +51,7 @@ import { lancerImportTest, demanderApprobation, type ActeurMigration } from './e
 import type { MigrationRow, MigrationCategory, TargetEntity, DryRunReport, FieldDef } from './types';
 import { coutEnCents } from '../lumi/tarifs';
 import { journaliserTrace } from '../lumi/traces';
+import { verifierPlafond, ajouterDepense, compterRefus } from '../lumi/plafond-journalier';
 import { logger } from '../logger';
 import { platformAdminIds } from '../config';
 import { isSlackConfigured, canalSupport, envoyerMessageSlack, echapperSlack } from '../slack';
@@ -361,6 +362,13 @@ ${catalogue}
 RÉPONSE : appelle l'outil « ${OUTIL_PROPOSER} » exactement une fois, avec un verdict par colonne « à décider » (les colonnes fixées par un humain sont montrées pour le contexte : ne les redonne pas, mais tiens-en compte pour ne pas viser un champ déjà pris). Une même cible ne va jamais à deux colonnes. Quand la proposition actuelle du moteur est dangereuse, mets field=null et explique dans « alerte ». Déclare les « manques ». Pas de texte hors de l'outil.`;
   const messages: Anthropic.Messages.MessageParam[] = [{ role: 'user', content: `Fichier « ${p.fileName} » (CRM source : ${p.sourceCrm}). Colonnes à décider : ${aDecider}.\nToutes les colonnes du fichier, dans l'ordre :\n${colonnes}` }];
   let derniereErreur: string | null = null;
+  // Plafond journalier d'exploitation : le bot tourne sur cron (10 min, jusqu'à
+  // MAX_PASSES par migration) et c'est le canal le plus cher au tour (0,24 $
+  // mesuré le 2026-09-17). Sans borne, une migration qui boucle dépense seule.
+  if (!verifierPlafond('migration').autorise) {
+    compterRefus('migration');
+    throw new Error('plafond de dépense journalier atteint (migration) — reprise demain');
+  }
   for (const modele of MODELES_BOT) {
     try {
       const res = await clientAnthropic().beta.messages.create({
@@ -381,6 +389,7 @@ RÉPONSE : appelle l'outil « ${OUTIL_PROPOSER} » exactement une fois, avec un 
       const verdicts = validerVerdicts(brut, champs);
       if (!verdicts.length) logger.warn('[migration-bot] verdicts refusés par le schéma', { migrationId: migration.id, fichier: p.fileName, modele, brut: JSON.stringify(brut).slice(0, 600) });
       const cout = coutEnCents(res.model, res.usage as any);
+      ajouterDepense('migration', cout);
       void journaliserTrace(admin, {
         orgId: migration.org_id, userId: null, canal: 'migration', origine: 'api', enonce: `mapping ${p.fileName}`, etage: 6,
         action: 'bot_mapping', params: { fichier: p.fileName, entite: p.entity, colonnes: p.colonnes.length }, outils: [], resultat: verdicts.length ? 'ok' : 'erreur',

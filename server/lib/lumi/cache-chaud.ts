@@ -21,6 +21,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { clientAnthropic } from './llm';
 import { logger } from '../logger';
 import { coutEnCents, modeleLumi } from './tarifs';
+import { verifierPlafond, ajouterDepense, compterRefus } from './plafond-journalier';
 
 /** Le TTL est d'une heure ; on rafraîchit à 50 min pour garder de la marge. */
 export const DELAI_RAFRAICHISSEMENT_MS = 50 * 60_000;
@@ -122,9 +123,14 @@ export function demarrerMaintienCacheChaud(): void {
       : [{ cle: 'base', prefixe: null, etat: { dernierAppelReel, dernierPing } }];
     for (const c of cibles) {
       if (!doitPinger({ dernierAppelReel: c.etat.dernierAppelReel, dernierPing: c.etat.dernierPing, maintenant, fenetreMs })) continue;
+      // Un ping est un appel facturé émis par une minuterie, sans utilisateur
+      // derrière : il passe par le même plafond que le reste (incident
+      // 2026-09-18 — c'était la seule dépense sans aucune trace en base).
+      if (!verifierPlafond('cache-chaud').autorise) { compterRefus('cache-chaud'); continue; }
       try {
         const r = await pingerCache(clientAnthropic(), undefined, c.prefixe);
         c.etat.dernierPing = Date.now();
+        ajouterDepense('cache-chaud', r.cost_cents);
         logger.info('[lumi] cache 1 h rafraîchi', { jeu: c.cle, ...r });
       } catch (e: any) {
         c.etat.dernierPing = Date.now(); // pas de rafale de tentatives : on réessaie au prochain créneau

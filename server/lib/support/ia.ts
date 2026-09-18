@@ -32,6 +32,7 @@ import { ARTICLES } from '../../../src/components/supportArticles';
 import { SYSTEM_PROMPT as CONNAISSANCE_PUBLIQUE } from '../agent/promptVente';
 import { indexCarteApp } from './carte-app';
 import { coutEnCents } from '../lumi/tarifs';
+import { verifierPlafond, ajouterDepense, compterRefus } from '../lumi/plafond-journalier';
 import { logger } from '../logger';
 
 /** Sonnet 5 par défaut ; LUMI_SUPPORT_MODELE permet de mesurer un autre modèle (Haiku) avec scripts/qa/evaluer-support-qualite.mts. */
@@ -206,6 +207,14 @@ export async function repondreSupportIA(
   const appeles: string[] = [];
 
   for (let etape = 0; etape < MAX_ETAPES; etape++) {
+    // Plafond journalier d'exploitation : on s'arrête net plutôt que de
+    // continuer la boucle d'outils (incident 2026-09-18). Le texte déjà obtenu
+    // est conservé ; sans texte, l'appelant transfère à un humain.
+    if (!verifierPlafond('support').autorise) {
+      compterRefus('support');
+      if (!texte) { transferer = true; motif = 'Plafond de dépense journalier atteint'; }
+      break;
+    }
     const reponse = await clientAnthropic().messages.create({
       model: MODELE_SUPPORT,
       max_tokens: MAX_TOKENS,
@@ -215,7 +224,9 @@ export async function repondreSupportIA(
       // Réflexion adaptative à effort bas : Claude 4.6+ seulement (Haiku 4.5 répond 400 « adaptive thinking is not supported »).
       ...(/haiku-4-5|sonnet-4-5|opus-4-5/.test(MODELE_SUPPORT) ? {} : { thinking: { type: 'adaptive' as const }, output_config: { effort: 'low' as const } }),
     });
-    coutCents += coutEnCents(MODELE_SUPPORT, reponse.usage);
+    const coutAppel = coutEnCents(MODELE_SUPPORT, reponse.usage);
+    coutCents += coutAppel;
+    ajouterDepense('support', coutAppel);
 
     const blocsTexte = reponse.content.filter((b): b is Anthropic.Messages.TextBlock => b.type === 'text');
     texte = [texte, ...blocsTexte.map((b) => b.text)].filter(Boolean).join('\n').trim();
