@@ -160,8 +160,17 @@ describe('éditeur — plus de HTML à l’écran', () => {
   });
 
   it('le HTML n’est reconstruit qu’à l’enregistrement', () => {
-    // L'utilisateur ne doit jamais le voir.
-    expect(apercu).toContain("updateRuleMessage(ruleId, 'send_email', texteVersHtml(blocsEnTexte(blocs)), objet)");
+    // L'utilisateur ne doit jamais le voir : la reconstruction a lieu une seule
+    // fois, dans `enregistrer`, jamais pendant la frappe.
+    expect(apercu).toContain('const corpsHtml = texteVersHtml(blocsEnTexte(blocs));');
+    expect((apercu.match(/texteVersHtml\(/g) || []).length).toBe(1);
+  });
+
+  it('l’éditeur sert aussi aux modèles de courriel, pas qu’aux automatisations', () => {
+    // Depuis la page Modèles de courriel, la destination est injectée : un
+    // second éditeur aurait divergé du premier au premier correctif.
+    expect(apercu).toContain('enregistrerTexte');
+    expect(apercu).toContain("updateRuleMessage(ruleId, 'send_email', corpsHtml, objet)");
   });
 
   it('le courriel s’édite bloc par bloc, pas dans un champ unique', () => {

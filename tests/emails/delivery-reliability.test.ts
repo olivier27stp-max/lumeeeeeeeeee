@@ -968,19 +968,34 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
 });
 
 // ───────────────────────────────────────────────────────────────────
-// 18. Modèles de courriels : module inerte, documenté comme tel
+// 18. Modèles de courriels : branchés de bout en bout
 // ───────────────────────────────────────────────────────────────────
 
-describe('modèles de courriels — état documenté', () => {
-  it('le CRUD porte un avertissement sur son inaccessibilité', () => {
-    // Décision prise : conserver sans câbler. La note évite qu'on redécouvre
-    // le problème dans six mois — ou qu'on supprime `review_request` avec.
-    const routes = read('server/routes/email-templates.ts');
-    expect(routes).toContain('MODULE INACCESSIBLE DEPUIS L’APPLICATION'.replace('’', "'"));
-    expect(routes).toContain('review_request');
+/* Ce bloc vérifiait l'INVERSE jusqu'au 2026-09-18 : le CRUD des modèles
+   existait, sa RLS était complète, et personne ne s'en servait. Un test figeait
+   cet état en exigeant la note « MODULE INACCESSIBLE ». La page
+   /settings/email-templates branche enfin la chaîne, donc le test garde
+   désormais le chemin OUVERT au lieu de documenter qu'il est fermé. */
+describe('modèles de courriels — branchés de bout en bout', () => {
+  it('le serveur résout le modèle de l’organisation sans attendre un id du client', () => {
+    // Le bogue d'origine : un modèle n'était chargé que si le front passait un
+    // `emailTemplateId` explicite — ce qu'aucune page ne faisait jamais.
+    expect(read('server/lib/courriels/modeles.ts')).toContain('texteDuCourriel');
+    expect(read('server/routes/emails.ts')).toContain('texteDuCourriel');
+    expect(read('server/routes/reminders-cron.ts')).toContain('texteDuCourriel');
   });
 
-  it('review_request reste le seul type réellement consommé', () => {
+  it('une page permet d’écrire ces textes', () => {
+    expect(read('src/App.tsx')).toContain('email-templates');
+    expect(read('src/pages/settings/SettingsLayout.tsx')).toContain('/settings/email-templates');
+  });
+
+  it('le HTML importé est assaini avant d’être rendu', () => {
+    // Un `<script>` collé dans un modèle partirait dans la boîte de chaque client.
+    expect(read('server/lib/courriels/modeles.ts')).toContain('assainirHtmlCourriel');
+  });
+
+  it('review_request reste consommé par les actions', () => {
     const actions = read('server/lib/actions/index.ts');
     expect(actions).toContain("'review_request'");
   });
