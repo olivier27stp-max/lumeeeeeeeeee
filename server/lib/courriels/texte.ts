@@ -58,7 +58,16 @@ export function texteDeLien(href: string, libelle: string): string {
   const texte = nettoyerLigne(libelle.replace(/<[^>]+>/g, ' '));
   if (!url) return texte;
   const affiche = SCHEMA_CONTACT.test(url) ? url.replace(SCHEMA_CONTACT, '') : url;
-  const identiques = !texte || texte === url || texte === affiche;
+  // « 514 555-0199 » et « tel:5145550199 » sont le MÊME numéro : la ponctuation
+  // du libellé ne doit pas produire « 514 555-0199 : 5145550199 ». On compare
+  // les chiffres seuls pour un lien téléphone.
+  const memeNumero = /^tel:/i.test(url)
+    && texte.replace(/\D/g, '') !== ''
+    && texte.replace(/\D/g, '') === affiche.replace(/\D/g, '');
+  const identiques = !texte || texte === url || texte === affiche || memeNumero;
+  // Sur un numéro, on garde la forme lisible du libellé (« 514 555-0199 »)
+  // plutôt que la suite de chiffres du lien.
+  if (memeNumero) return texte;
   return identiques ? affiche : `${texte} : ${affiche}`;
 }
 

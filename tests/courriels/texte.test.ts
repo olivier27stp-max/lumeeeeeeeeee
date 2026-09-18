@@ -135,3 +135,16 @@ describe('le mailer envoie toujours une partie texte', () => {
     expect(read('server/lib/courriels/texte.ts')).not.toMatch(/from\s+['"][^'"]*\/src\//);
   });
 });
+
+describe('numéro de téléphone en version texte', () => {
+  it('ne répète pas le numéro sous deux formes (« 514 555-0199 : 5145550199 »)', () => {
+    // Le lien porte les chiffres seuls, le libellé la forme lisible : c'est le
+    // même numéro, le lecteur ne doit le voir qu'une fois.
+    expect(texteDeLien('tel:5145550199', '514 555-0199')).toBe('514 555-0199');
+    expect(texteDeLien('tel:+15145550199', '+1 514 555-0199')).toBe('+1 514 555-0199');
+  });
+  it('un vrai libellé différent reste affiché avec sa cible', () => {
+    expect(texteDeLien('tel:5145550199', 'Nous joindre')).toBe('Nous joindre : 5145550199');
+    expect(texteDeLien('https://x.test/a', 'Voir')).toBe('Voir : https://x.test/a');
+  });
+});
