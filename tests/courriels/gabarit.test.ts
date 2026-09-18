@@ -21,9 +21,9 @@ describe('gabarit client', () => {
     expect(html).toContain('Votre facture 40');
     expect(html).toContain('1,00 $');
     expect(html).toContain('Échéance');
-    expect(html).toContain('background:#0f766e;border-radius:8px;');
+    expect(html).toContain('background:#0f766e;border-radius:10px;');
     expect(html).toContain('href="https://lumecrm.net/invoice/abc?x=1&amp;y=2"');
-    expect(html).toContain('Copiez ce lien');
+    expect(html).toContain('Le bouton ne fonctionne pas ?');
     expect(html).toContain('— Vision Lavage');
     expect(html).toContain('info@visionlavage.ca');
     expect(html).toContain('Facebook');
@@ -33,19 +33,19 @@ describe('gabarit client', () => {
     expect(html).not.toContain('on behalf of');
   });
   it('un logo remplace le nom en tête ; sans logo, le nom', () => {
-    expect(html).toContain('<span style="font-size:20px;font-weight:700;color:#111827;">Vision Lavage</span>');
+    expect(html).toContain('<span style="font-size:20px;font-weight:700;color:#101828;">Vision Lavage</span>');
     const avecLogo = rendreCourrielClient({ langue: 'fr', marque: { ...marque, logoUrl: 'https://x/logo.png' }, titre: 'T' });
     expect(avecLogo).toContain('<img src="https://x/logo.png" alt="Vision Lavage"');
   });
   it('un bouton téléphone ou courriel n’a pas de lien de secours (« tel:514… » sous le bouton, c’est laid)', () => {
     const h = rendreCourrielLume({ langue: 'fr', titre: 'Nouveau lead', bouton: { texte: 'Appeler le prospect', url: 'tel:5145550100' } });
     expect(h).toContain('href="tel:5145550100"');
-    expect(h).not.toContain('Copie ce lien');
+    expect(h).not.toContain('Le bouton ne fonctionne pas');
   });
   it('en anglais, les textes fixes suivent', () => {
     const en = rendreCourrielClient({ langue: 'en', marque, titre: 'Your invoice 40', bouton: { texte: 'View invoice', url: 'https://x' } });
     expect(en).toContain('<html lang="en">');
-    expect(en).toContain('Copy this link');
+    expect(en).toContain('Button not working?');
     expect(en).toContain('Sent with <a');
   });
   it('échappe tout ce qui vient des données', () => {
@@ -63,7 +63,7 @@ describe('gabarit Lume', () => {
     expect(h).toContain('alt="Lume"');
     expect(h).toContain('support@lumecrm.net');
     expect(h).toContain('— L’équipe Lume');
-    expect(h).toContain(`background:${COULEUR_LUME};border-radius:8px;`);
+    expect(h).toContain(`background:${COULEUR_LUME};border-radius:10px;`);
   });
 });
 
@@ -85,5 +85,58 @@ describe('outils', () => {
     expect(langueDe('fr')).toBe('fr');
     expect(langueDe(null)).toBe('fr');
     expect(echapper('<a>')).toBe('&lt;a&gt;');
+  });
+});
+
+/**
+ * Les décisions prises avec Rafba sur les maquettes (2026-09-17), figées ici.
+ * Sans ces tests, une prochaine session les déferait sans le savoir.
+ */
+describe('le ciel et les règles des maquettes', () => {
+  const base = { langue: 'fr' as const, marque, titre: 'Votre facture 48' };
+
+  it('le fond est le ciel du site, pas un gris neutre', () => {
+    const h = rendreCourrielClient(base);
+    expect(h).toContain('background:#e6f0ff');
+    // Outlook ignore linear-gradient : un dégradé y retomberait sur du blanc.
+    expect(h).not.toContain('linear-gradient');
+  });
+
+  it('le bouton vient AVANT la note, jamais après (sinon il passe sous la ligne de flottaison)', () => {
+    const h = rendreCourrielClient({
+      ...base,
+      bouton: { texte: 'Payer 1 220,17 $', url: 'https://lumecrm.net/pay/x' },
+      note: 'Paiement par carte, sans créer de compte.',
+    });
+    expect(h.indexOf('Payer 1 220,17')).toBeLessThan(h.indexOf('Paiement par carte'));
+  });
+
+  it('la ligne sous le bouton lève la dernière objection, collée au bouton', () => {
+    const h = rendreCourrielClient({
+      ...base,
+      bouton: { texte: 'Payer', url: 'https://x/pay', sousBouton: 'Carte de crédit · aucun compte à créer' },
+      note: 'Une note plus bas.',
+    });
+    expect(h).toContain('Carte de crédit &middot; aucun compte à créer'.replace('&middot;', '·'));
+    expect(h.indexOf('aucun compte')).toBeLessThan(h.indexOf('Une note plus bas'));
+  });
+
+  it('le téléphone du pied est cliquable, chiffres seulement dans le lien', () => {
+    const h = rendreCourrielClient(base);
+    expect(h).toContain('href="tel:5145550199"');
+    expect(h).toContain('href="mailto:info@visionlavage.ca"');
+  });
+
+  it('le nom de l’entreprise n’est pas écrit deux fois quand il y a un logo', () => {
+    const h = rendreCourrielClient({ ...base, marque: { ...marque, logoUrl: 'https://x/logo.png' } });
+    const enTete = h.slice(0, h.indexOf('border-radius:16px'));
+    expect(enTete).toContain('alt="Vision Lavage"');
+    expect(enTete.split('Vision Lavage').length - 1).toBe(1);
+  });
+
+  it('le montant reste le plus gros élément de la page', () => {
+    const h = rendreCourrielClient({ ...base, montant: { libelle: 'Solde à payer', valeur: '1 220,17 $' } });
+    expect(h).toContain('font-size:38px');
+    expect(h).toContain('1 220,17 $');
   });
 });

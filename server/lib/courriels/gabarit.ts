@@ -59,7 +59,8 @@ export interface CourrielClient {
   /** La carte du montant : ce que le client cherche du regard en premier. */
   montant?: { libelle: string; valeur: string; sous?: string | null } | null;
   lignes?: LigneDetail[] | null;
-  bouton?: { texte: string; url: string } | null;
+  /** Un seul geste. `sousBouton` leve la derniere objection, colle au bouton. */
+  bouton?: { texte: string; url: string; sousBouton?: string | null } | null;
   /** Contenu libre (modèle de l'entreprise, texte personnalisé) — HTML déjà assaini par l'appelant. */
   corpsHtml?: string | null;
   note?: string | null;
@@ -75,7 +76,8 @@ export interface CourrielLume {
   intro?: string | null;
   montant?: { libelle: string; valeur: string; sous?: string | null } | null;
   lignes?: LigneDetail[] | null;
-  bouton?: { texte: string; url: string } | null;
+  /** Un seul geste. `sousBouton` leve la derniere objection, colle au bouton. */
+  bouton?: { texte: string; url: string; sousBouton?: string | null } | null;
   corpsHtml?: string | null;
   note?: string | null;
   /** Adresse de support au pied. */
@@ -91,6 +93,17 @@ const GRIS_DOUX = '#6b7280';
 const GRIS_PALE = '#9ca3af';
 const FOND = '#f3f4f6';
 const BORDURE = '#e5e7eb';
+
+/* ── Le ciel (maquettes validées 2026-09-17) ──────────────────────────────
+   Le même dégradé que les pages marketing (src/index.css « Ciel bleu clair »)
+   et le bleu de leurs filets. Un courriel ne peut pas porter de dégradé CSS :
+   Outlook (moteur Word) ignore `linear-gradient` et retomberait sur du blanc.
+   On pose donc la couleur de tête du dégradé en fond plein — c'est la teinte
+   que l'œil retient — et les cartes blanches se détachent dessus. */
+const CIEL_HAUT = '#e6f0ff';
+const CIEL_BAS = '#f3f8ff';
+const BLEU_LUME = '#0b5cad';
+const CIEL_FILET = '#d3e3f7';
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function echapper(s: unknown): string {
@@ -128,13 +141,19 @@ function liensSociauxHtml(liens: SocialLinks | null | undefined): string {
   return items.length ? `<p style="margin:10px 0 0;font-size:12px;color:${GRIS_PALE};">${items.join(' &nbsp;&middot;&nbsp; ')}</p>` : '';
 }
 
+/**
+ * Le chiffre que le lecteur cherche du regard. Il ouvre le courriel : pas de
+ * cadre gris autour, mais un filet sous lui qui le sépare du reste. Le libellé
+ * reste en minuscules — une capitale espacée fait « facture d'agence » là où
+ * on veut la voix d'un artisan.
+ */
 function blocMontant(m: NonNullable<CourrielClient['montant']>): string {
   return `
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-<tr><td style="background:#f9fafb;border:1px solid ${BORDURE};border-radius:10px;padding:18px 20px;text-align:center;">
-<div style="font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:${GRIS_DOUX};font-weight:600;">${echapper(m.libelle)}</div>
-<div style="font-size:32px;line-height:1.2;font-weight:700;color:#111827;margin-top:4px;">${echapper(m.valeur)}</div>
-${m.sous ? `<div style="font-size:13px;color:${GRIS_DOUX};margin-top:4px;">${echapper(m.sous)}</div>` : ''}
+<tr><td style="padding:0 0 18px;border-bottom:1px solid ${BORDURE};text-align:center;">
+<div style="font-size:13px;color:${GRIS_DOUX};">${echapper(m.libelle)}</div>
+<div style="font-size:38px;line-height:1.1;font-weight:800;color:#101828;margin-top:3px;letter-spacing:-1px;">${echapper(m.valeur)}</div>
+${m.sous ? `<div style="font-size:13px;color:${GRIS_DOUX};margin-top:8px;">${echapper(m.sous)}</div>` : ''}
 </td></tr>
 </table>`;
 }
@@ -149,18 +168,25 @@ function blocLignes(lignes: LigneDetail[]): string {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">${rows}</table>`;
 }
 
+/**
+ * Un seul bouton, pleine largeur, et sous lui la ligne qui lève la dernière
+ * objection (`sousBouton`) : « Carte de crédit · aucun compte à créer ». Elle
+ * est collée au bouton parce que c'est là que naît l'hésitation, pas trois
+ * paragraphes plus bas.
+ */
 function blocBouton(b: NonNullable<CourrielClient['bouton']>, couleur: string, langue: Langue, tu = false): string {
   const url = echapper(b.url);
   return `
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:4px auto 14px;">
-<tr><td align="center" style="background:${couleur};border-radius:8px;">
-<a href="${url}" style="display:inline-block;padding:14px 36px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;font-family:${POLICE};">${echapper(b.texte)}</a>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 10px;">
+<tr><td align="center" style="background:${couleur};border-radius:10px;">
+<a href="${url}" style="display:block;padding:15px 24px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;font-family:${POLICE};text-align:center;">${echapper(b.texte)}</a>
 </td></tr>
 </table>
-${/^(tel|mailto|sms):/i.test(b.url) ? '' : `<p style="margin:0 0 20px;font-size:12px;color:${GRIS_PALE};text-align:center;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ? Copie ce lien :' : 'Le bouton ne fonctionne pas ? Copiez ce lien :') : 'Button not working? Copy this link:'}<br/><a href="${url}" style="color:${GRIS_DOUX};word-break:break-all;">${url}</a></p>`}`;
+${b.sousBouton ? `<p style="margin:0 0 14px;font-size:12px;color:${GRIS_PALE};text-align:center;">${echapper(b.sousBouton)}</p>` : ''}
+${/^(tel|mailto|sms):/i.test(b.url) ? '' : `<p style="margin:0 0 20px;font-size:11px;color:${GRIS_PALE};text-align:center;line-height:1.5;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ?' : 'Le bouton ne fonctionne pas ?') : 'Button not working?'} <a href="${url}" style="color:${GRIS_PALE};text-decoration:underline;">${langue === 'fr' ? 'Ouvrir le lien' : 'Open the link'}</a></p>`}`;
 }
 
-function coquille(p: { langue: Langue; titreDocument: string; preheader?: string | null; couleur: string; enTeteHtml: string; corpsHtml: string; piedHtml: string }): string {
+function coquille(p: { langue: Langue; titreDocument: string; preheader?: string | null; enTeteHtml: string; corpsHtml: string; piedHtml: string }): string {
   return `<!DOCTYPE html>
 <html lang="${p.langue}">
 <head>
@@ -170,15 +196,14 @@ function coquille(p: { langue: Langue; titreDocument: string; preheader?: string
 <meta name="supported-color-schemes" content="light"/>
 <title>${echapper(p.titreDocument)}</title>
 </head>
-<body style="margin:0;padding:0;background:${FOND};font-family:${POLICE};-webkit-text-size-adjust:100%;">
-${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${FOND};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FOND};">
-<tr><td align="center" style="padding:28px 12px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid ${BORDURE};">
-<tr><td style="height:6px;background:${p.couleur};font-size:0;line-height:0;">&nbsp;</td></tr>
-<tr><td style="padding:26px 32px 8px;text-align:center;">${p.enTeteHtml}</td></tr>
-<tr><td style="padding:8px 32px 28px;">${p.corpsHtml}</td></tr>
-<tr><td style="padding:18px 32px 22px;background:#f9fafb;border-top:1px solid ${BORDURE};text-align:center;">${p.piedHtml}</td></tr>
+<body style="margin:0;padding:0;background:${CIEL_HAUT};font-family:${POLICE};-webkit-text-size-adjust:100%;">
+${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${CIEL_HAUT};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CIEL_HAUT};">
+<tr><td align="center" style="padding:24px 12px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
+<tr><td style="padding:0 8px 18px;text-align:center;">${p.enTeteHtml}</td></tr>
+<tr><td style="background:#ffffff;border:1px solid ${CIEL_FILET};border-radius:16px;padding:26px 32px;">${p.corpsHtml}</td></tr>
+<tr><td style="padding:20px 8px 26px;text-align:center;">${p.piedHtml}</td></tr>
 </table>
 </td></tr>
 </table>
@@ -186,9 +211,18 @@ ${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size
 </html>`;
 }
 
+/**
+ * L'ordre compte, et il vient des maquettes validées avec Rafba :
+ * montant → lignes → BOUTON → note → signature.
+ *
+ * Le bouton était auparavant sous la note. Sur téléphone, cela le poussait
+ * sous la ligne de flottaison : le lecteur devait faire défiler pour trouver
+ * le geste qu'on lui demande. Le geste vient maintenant juste après le
+ * chiffre qui le motive ; la note rassure ensuite, pour qui hésite encore.
+ */
 function corpsCommun(c: { langue: Langue; titre?: string | null; salutation?: string | null; intro?: string | null; montant?: CourrielClient['montant']; lignes?: LigneDetail[] | null; bouton?: CourrielClient['bouton']; corpsHtml?: string | null; note?: string | null; signature?: string | null }, couleur: string, tu = false): string {
   return `
-${c.titre ? `<h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;font-weight:700;color:#111827;">${echapper(c.titre)}</h1>` : ''}
+${c.titre ? `<h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;font-weight:700;color:#101828;">${echapper(c.titre)}</h1>` : ''}
 ${c.salutation ? `<p style="margin:0 0 10px;font-size:15px;color:${GRIS_TEXTE};">${echapper(c.salutation)}</p>` : ''}
 ${c.intro ? `<p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:${GRIS_TEXTE};">${echapper(c.intro)}</p>` : ''}
 ${c.montant ? blocMontant(c.montant) : ''}
@@ -203,20 +237,30 @@ ${c.signature ? `<p style="margin:0;font-size:15px;color:${GRIS_TEXTE};">${echap
 export function rendreCourrielClient(c: CourrielClient): string {
   const couleur = couleurBouton(c.marque.couleur);
   const nom = c.marque.nom || 'Lume';
+  // Le logo se pose sur le ciel, sans cadre ni pastille : il est déjà détouré
+  // au téléversement. Sans logo, le nom tient la place. On n'écrit PAS le nom
+  // sous le logo : son texte alternatif le porte déjà, et la version texte du
+  // courriel afficherait alors « Vision Lavage Vision Lavage ».
   const enTete = c.marque.logoUrl
-    ? `<img src="${echapper(c.marque.logoUrl)}" alt="${echapper(nom)}" style="max-height:52px;max-width:220px;display:inline-block;"/>`
-    : `<span style="font-size:20px;font-weight:700;color:#111827;">${echapper(nom)}</span>`;
-  const coordonnees = [c.marque.adresse, c.marque.telephone, c.marque.email, c.marque.siteWeb].filter(Boolean).map((x) => echapper(x)).join(' &nbsp;&middot;&nbsp; ');
+    ? `<img src="${echapper(c.marque.logoUrl)}" alt="${echapper(nom)}" style="max-height:64px;max-width:220px;display:inline-block;"/>`
+    : `<span style="font-size:20px;font-weight:700;color:#101828;">${echapper(nom)}</span>`;
+  // Le téléphone et le courriel d'abord, et cliquables : un client qui a une
+  // question veut souvent appeler, pas écrire. L'adresse postale suit.
+  const joindre = [
+    c.marque.telephone ? `<a href="tel:${echapper(String(c.marque.telephone).replace(/[^\d+]/g, ''))}" style="color:${BLEU_LUME};text-decoration:none;font-weight:600;">${echapper(c.marque.telephone)}</a>` : '',
+    c.marque.email ? `<a href="mailto:${echapper(c.marque.email)}" style="color:${BLEU_LUME};text-decoration:none;font-weight:600;">${echapper(c.marque.email)}</a>` : '',
+  ].filter(Boolean).join(' &nbsp;&middot;&nbsp; ');
+  const postal = [c.marque.adresse, c.marque.siteWeb].filter(Boolean).map((x) => echapper(x)).join(' &nbsp;&middot;&nbsp; ');
   const taxes = (c.marque.lignesTaxes || []).filter(Boolean);
   const envoyeAvec = c.langue === 'fr' ? 'Envoyé avec' : 'Sent with';
   const pied = `
-<p style="margin:0;font-size:13px;font-weight:600;color:${GRIS_TEXTE};">${echapper(nom)}</p>
-${coordonnees ? `<p style="margin:4px 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${coordonnees}</p>` : ''}
+${joindre ? `<p style="margin:0;font-size:13px;line-height:1.6;">${joindre}</p>` : ''}
+<p style="margin:${joindre ? '4px' : '0'} 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${echapper(nom)}${postal ? ` &nbsp;&middot;&nbsp; ${postal}` : ''}</p>
 ${liensSociauxHtml(c.marque.liensSociaux)}
 ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}
-<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></p>`;
+<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${BLEU_LUME};text-decoration:none;font-weight:700;">Lume</a></p>`;
   return coquille({
-    langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, couleur, enTeteHtml: enTete,
+    langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),
     piedHtml: pied,
   });
@@ -229,7 +273,7 @@ export function rendreCourrielLume(c: CourrielLume): string {
   const pied = `
 <p style="margin:0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${c.langue === 'fr' ? 'Une question ? Réponds à ce courriel ou écris-nous à' : 'Questions? Reply to this email or write to'} <a href="mailto:${echapper(support)}" style="color:${GRIS_DOUX};">${echapper(support)}</a>.</p>
 <p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">Lume CRM &nbsp;&middot;&nbsp; <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;">lumecrm.net</a></p>`;
-  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, couleur: COULEUR_LUME, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team') : c.signature }, COULEUR_LUME, true), piedHtml: pied });
+  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team') : c.signature }, COULEUR_LUME, true), piedHtml: pied });
 }
 
 /** Les mots qui reviennent dans tous les courriels client, dans les deux langues. */
