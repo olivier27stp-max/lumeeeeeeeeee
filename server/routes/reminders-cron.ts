@@ -67,15 +67,42 @@ interface ScheduleEntry {
   template_id?: string | null;
 }
 
-const DEFAULT_EMAIL_SUBJECT = 'Payment reminder — invoice {invoice_number}';
-const DEFAULT_EMAIL_BODY =
-  'Hello {client_name},\n\n' +
-  'This is a friendly reminder that invoice {invoice_number} for {amount_due} ' +
-  'was due on {due_date}.\n\n' +
-  'You can pay securely here: {pay_url}\n\n' +
-  'Thank you,\n{company_name}';
-const DEFAULT_SMS_BODY =
-  'Reminder: invoice {invoice_number} ({amount_due}) was due {due_date}. Pay: {pay_url}';
+/* Textes par défaut du rappel, dans la langue de l'entreprise.
+   Ils étaient en anglais en dur : une entreprise québécoise qui n'avait pas
+   écrit son propre texte relançait ses clients en anglais. Le reste du courriel
+   (titre, bouton, montant) suivait déjà `company_settings.default_language`.
+
+   Le ton suit les maquettes validées : on n'accuse pas. Un client en retard est
+   presque toujours distrait, et la phrase « si c'est déjà réglé, ce message se
+   croise avec votre paiement » évite l'échange vexé qui suit un rappel sec.
+   L'objet ne répète pas le nom de l'entreprise : l'expéditeur l'affiche déjà,
+   et la place gagnée sert à faire tenir le montant avant la coupure. */
+const DEFAUTS = {
+  fr: {
+    sujet: 'Facture {invoice_number} — il reste {amount_due}',
+    corps:
+      'Bonjour {client_name},\n\n' +
+      'La facture {invoice_number} de {amount_due} était due le {due_date} et ' +
+      'n’est pas encore réglée. Si c’est déjà fait, ce message se croise avec ' +
+      'votre paiement.\n\n' +
+      'Vous pouvez la régler ici : {pay_url}\n\n' +
+      'Un imprévu ? Répondez à ce courriel, on peut étaler le paiement.\n\n' +
+      'Merci,\n{company_name}',
+    sms: 'Rappel : facture {invoice_number} ({amount_due}), due le {due_date}. Régler : {pay_url}',
+  },
+  en: {
+    sujet: 'Invoice {invoice_number} — {amount_due} outstanding',
+    corps:
+      'Hello {client_name},\n\n' +
+      'Invoice {invoice_number} for {amount_due} was due on {due_date} and is ' +
+      'still open. If you have already paid, this message crossed with your ' +
+      'payment.\n\n' +
+      'You can pay here: {pay_url}\n\n' +
+      'Something came up? Reply to this email — we can spread the payment.\n\n' +
+      'Thank you,\n{company_name}',
+    sms: 'Reminder: invoice {invoice_number} ({amount_due}) was due {due_date}. Pay: {pay_url}',
+  },
+} as const;
 
 function formatMoney(cents: number, currency = 'CAD') {
   try {
@@ -246,12 +273,21 @@ router.post('/cron/payment-reminders', async (req, res) => {
             // propriétaire a reçu une notification « courriel non livré ».
             const adresseMorte = toEmail ? await adresseInjoignable(orgId, toEmail) : false;
             if (adresseMorte) logger.warn('[reminders] adresse injoignable, relance courriel sautée', { invoiceId: inv.id, email: toEmail });
+
+            /* Les réglages de l'entreprise se lisent UNE fois pour les deux
+               canaux : le courriel et le SMS en ont tous deux besoin, et c'est
+               une requête, pas un cache. Ils portent la langue, dont dépendent
+               désormais les textes par défaut — ils étaient anglais en dur, donc
+               une entreprise québécoise sans texte à elle relançait ses clients
+               en anglais. */
+            const societe = await getCompanySettings(orgId);
+            const langueRappel = langueEntreprise(societe);
+            const defauts = DEFAUTS[langueRappel];
+
             if ((channel === 'email' || channel === 'both') && toEmail && !adresseMorte && isMailerConfigured()) {
-              const subject = applyTemplate(settings.custom_email_subject || DEFAULT_EMAIL_SUBJECT, vars);
-              const body = applyTemplate(settings.custom_email_body || DEFAULT_EMAIL_BODY, vars);
+              const subject = applyTemplate(settings.custom_email_subject || defauts.sujet, vars);
+              const body = applyTemplate(settings.custom_email_body || defauts.corps, vars);
               // Le texte du rappel (celui de l'entreprise ou le défaut) dans le gabarit commun, avec le montant en carte et le bouton payer.
-              const societe = await getCompanySettings(orgId);
-              const langueRappel = langueEntreprise(societe);
               const html = rendreCourrielClient({
                 langue: langueRappel,
                 marque: marqueDepuis(societe),
@@ -308,7 +344,9 @@ router.post('/cron/payment-reminders', async (req, res) => {
               }
             }
             if ((channel === 'sms' || channel === 'both') && toPhone && twilioClient && orgFromNumber) {
-              const smsBody = applyTemplate(settings.custom_sms_body || DEFAULT_SMS_BODY, vars);
+              // Même règle que le courriel : le texte par défaut suit la langue
+              // de l'entreprise, lue une seule fois plus haut.
+              const smsBody = applyTemplate(settings.custom_sms_body || defauts.sms, vars);
               // `sendSmsIfConfigured` ne lève jamais : le try/catch qui entourait
               // cet appel était inatteignable, `smsOk` restait donc toujours à
               // true et un échec Twilio était journalisé comme 'sent'. On lit
