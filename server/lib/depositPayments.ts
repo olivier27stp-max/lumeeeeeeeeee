@@ -108,8 +108,11 @@ export async function createDepositIntent(params: {
   if (keys) {
     const Stripe = (await import('stripe')).default;
     const orgStripe = creerClientStripe(keys.secret);
+    // Même politique que le chemin Connect (voir createDestinationPaymentIntent) :
+    // Stripe choisit les moyens, ce qui rend Apple Pay / Google Pay possibles,
+    // sans aucun moyen qui redirigerait le payeur hors de notre page.
     const intent = await orgStripe.paymentIntents.create(
-      { amount: amountCents, currency, payment_method_types: ['card'], metadata },
+      { amount: amountCents, currency, automatic_payment_methods: { enabled: true, allow_redirects: 'never' }, metadata },
       { idempotencyKey },
     );
     return {
