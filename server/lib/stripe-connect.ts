@@ -255,10 +255,28 @@ export async function createDestinationPaymentIntent(params: {
     params.idempotencyKey ||
     `dest-${params.connectedAccountId}-${params.metadata.entity_type || 'charge'}-${params.metadata.quote_id || params.metadata.invoice_id || 'x'}-${params.amountCents}-${Math.floor(Date.now() / 60_000)}`;
 
+  // Moyens de paiement laissés à Stripe plutôt qu'imposés.
+  //
+  // `payment_method_types: ['card']` EXCLUT Apple Pay et Google Pay : ce ne
+  // sont pas des types distincts mais des façons de présenter une carte, et
+  // Stripe ne les propose que sous `automatic_payment_methods`. Mesuré le
+  // 2026-09-18 sur la vraie page publique : Stripe.js annonçait « apple_pay
+  // not enabled », et l'interrupteur « Apple Pay & Google Pay » des réglages
+  // ne pouvait donc RIEN afficher, quel que soit son état.
+  //
+  // `allow_redirects: 'never'` garde le payeur sur notre page : aucun moyen
+  // qui l'enverrait vers un site tiers (iDEAL, Bancontact…) n'est proposé —
+  // le retour sur /pay/:token n'est pas conçu pour ça. On reste donc sur
+  // carte + portefeuilles, comme la page d'abonnement (server/routes/
+  // billing.ts) qui fonctionne déjà ainsi.
+  //
+  // Le masquage volontaire des portefeuilles (réglage `wallets_enabled`) est
+  // appliqué côté client sur le Payment Element : c'est un choix d'affichage
+  // par entreprise, pas une restriction du PaymentIntent.
   const intent = await stripe.paymentIntents.create({
     amount: params.amountCents,
     currency: params.currency.toLowerCase(),
-    payment_method_types: ['card'],
+    automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
     application_fee_amount: applicationFee,
     transfer_data: {
       destination: params.connectedAccountId,

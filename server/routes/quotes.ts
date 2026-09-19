@@ -1223,10 +1223,13 @@ router.post('/quotes/public/deposit-intent', async (req, res) => {
 
       const Stripe = (await import('stripe')).default;
       const orgStripe = creerClientStripe(decryptedSecret);
+      // Même politique que le chemin Connect (voir createDestinationPaymentIntent) :
+      // Stripe choisit les moyens, ce qui rend Apple Pay / Google Pay possibles,
+      // sans aucun moyen qui redirigerait le payeur hors de notre page.
       const intent = await orgStripe.paymentIntents.create({
         amount: depositCents,
         currency,
-        payment_method_types: ['card'],
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
         metadata: paymentMetadata,
       }, {
         idempotencyKey: depositIdempotencyKey,
