@@ -96,6 +96,85 @@ async function depassePlafondFrequence(
   }
 }
 
+/**
+ * Consentement pour un message COMMERCIAL (F7 de l'audit automatisations).
+ * ─────────────────────────────────────────────────────────────────────
+ * Au Canada, un message électronique commercial exige le consentement du
+ * destinataire (LCAP ; loi 25 au Québec pour les renseignements personnels).
+ * Un message TRANSACTIONNEL — confirmation de rendez-vous, reçu, rappel de
+ * visite attendue — n'est pas visé : il répond à une demande du client.
+ *
+ * Le moteur distinguait déjà les deux (`ctx.commercial`, posé par le worker
+ * des tâches différées) et plafonnait la fréquence des commerciaux, mais ne
+ * vérifiait JAMAIS le consentement lui-même. Les presets `cross_sell_30d`,
+ * `seasonal_reminder_6m` et `lost_lead_reengagement` partaient donc à tout le
+ * monde, avec `"conditions": {}`.
+ *
+ * Les colonnes existaient déjà sur `clients` (`email_consent_at`,
+ * `sms_consent_at`, `email_opt_out_at`) mais n'étaient lues nulle part :
+ * aucune migration n'est nécessaire, seulement s'en servir.
+ *
+ * Règle appliquée :
+ *  - un retrait explicite (`email_opt_out_at`) bloque, même transactionnel
+ *    pour le courriel — c'est le sens d'un désabonnement ;
+ *  - un message commercial exige une date de consentement sur le canal ;
+ *  - un transactionnel passe sans consentement (il est attendu).
+ *
+ * En cas d'erreur, on BLOQUE — à l'inverse du plafond de fréquence. Un
+ * message de trop est un désagrément ; un envoi sans consentement est une
+ * infraction. Le doute doit coûter un message perdu, pas une plainte.
+ */
+export type VerdictConsentement = { autorise: true } | { autorise: false; motif: string };
+
+async function consentementCommercial(
+  ctx: ActionContext,
+  canal: 'sms' | 'email',
+  destinataire: string,
+): Promise<VerdictConsentement> {
+  // Le client n'est identifiable que par son adresse/numéro : sans
+  // destinataire, l'appelant a déjà échoué avant nous.
+  if (!destinataire) return { autorise: true };
+  try {
+    const colonne = canal === 'email' ? 'email' : 'phone';
+    const valeur = canal === 'email' ? destinataire.trim().toLowerCase() : normalizeE164(destinataire);
+    const { data, error } = await ctx.supabase
+      .from('clients')
+      .select('email_consent_at, sms_consent_at, email_opt_out_at')
+      .eq('org_id', ctx.orgId)
+      .eq(colonne, valeur)
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+
+    // Destinataire hors du carnet de clients (prospect saisi à la main,
+    // adresse d'essai) : pas de commercial vers quelqu'un qu'on ne connaît pas.
+    if (!data) {
+      return ctx.commercial
+        ? { autorise: false, motif: 'destinataire inconnu du carnet de clients — pas de consentement vérifiable' }
+        : { autorise: true };
+    }
+
+    // Un désabonnement vaut pour tout courriel, y compris transactionnel.
+    if (canal === 'email' && data.email_opt_out_at) {
+      return { autorise: false, motif: 'le client s\'est désabonné des courriels' };
+    }
+    if (!ctx.commercial) return { autorise: true };
+
+    const consenti = canal === 'email' ? data.email_consent_at : data.sms_consent_at;
+    if (!consenti) {
+      return { autorise: false, motif: `aucun consentement ${canal === 'email' ? 'courriel' : 'SMS'} enregistré pour ce client` };
+    }
+    return { autorise: true };
+  } catch (e: any) {
+    console.error(`[actions] consentement indéterminable (${canal}, org ${ctx.orgId}):`, e?.message || e);
+    // Doute = on ne part pas. Voir l'en-tête : l'inverse du plafond de fréquence.
+    return ctx.commercial
+      ? { autorise: false, motif: 'consentement invérifiable (erreur technique) — envoi commercial suspendu' }
+      : { autorise: true };
+  }
+}
+
 export interface ActionResult {
   success: boolean;
   data?: any;
@@ -470,6 +549,13 @@ export async function executeSendEmail(
       return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
     }
 
+    // Consentement initial (F7) : le retrait ci-dessus traite ceux qui se sont
+    // désabonnés ; ici on vérifie que le client avait consenti au départ.
+    const consentement = await consentementCommercial(ctx, 'email', to);
+    if (!consentement.autorise) {
+      return { success: false, error: `Consentement manquant pour ${to} : ${consentement.motif}` };
+    }
+
     // Plafond anti-spam, tous canaux confondus par destinataire.
     if (await depassePlafondFrequence(ctx, 'email', to)) {
       return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
@@ -549,6 +635,13 @@ export async function executeSendSms(
     .maybeSingle();
   if (optOut) {
     return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
+  }
+
+  // Consentement initial (F7) : le STOP ci-dessus traite le retrait ; ici on
+  // vérifie que le client avait consenti à recevoir des SMS au départ.
+  const consentementSms = await consentementCommercial(ctx, 'sms', to);
+  if (!consentementSms.autorise) {
+    return { success: false, error: `Consentement manquant pour ${optOutPhone} : ${consentementSms.motif}` };
   }
 
   // Plafond anti-spam : pas plus de N messages commerciaux / client / 24h.
