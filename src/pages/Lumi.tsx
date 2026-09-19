@@ -793,7 +793,7 @@ export default function Lumi() {
                   : erreur.code === 'quota_epuise'
                 ? (fr ? 'Le budget IA du mois est atteint. Lumi reprend le 1er du mois prochain.' : 'This month’s AI budget is reached. Lumi resumes on the 1st of next month.')
                 : erreur.code === 'plan_sans_lumi'
-                  ? (fr ? 'Lumi est inclus dans les plans Scale et Autopilot.' : 'Lumi is included in the Scale and Autopilot plans.')
+                  ? (fr ? 'Lumi est inclus dans le forfait Autopilot.' : 'Lumi is included in the Autopilot plan.')
                   : erreur.code === 'lumi_not_configured'
                     ? (fr ? 'Lumi n’est pas encore activé sur ce serveur.' : 'Lumi is not enabled on this server yet.')
                     : erreur.message}

@@ -186,7 +186,7 @@ export const FONCTIONS: FonctionPage[] = [
     replaces: [{ fr: 'Le rappel que tu te fais dans ta tête', en: 'The reminder you keep in your head' }, { fr: 'Le soir à revoir ce qui traîne', en: 'The evening spent reviewing what’s stuck' }, { fr: 'Les clients qui attendent une réponse jusqu’au lendemain', en: 'Clients waiting for an answer until the next day' }],
     faq: [
       { q: { fr: 'Lumi peut-il faire des erreurs ?', en: 'Can Lumi make mistakes?' }, a: { fr: "Oui, c'est une IA. C'est pourquoi il propose et tu confirmes, et que chaque action est journalisée.", en: 'Yes, it is an AI. That is why it proposes and you confirm, and every action is logged.' } },
-      { q: { fr: 'Dans quels forfaits ?', en: 'Which plans?' }, a: { fr: 'Lumi en texte avec quota mensuel à partir de Scale ; en voix et illimité dans Autopilot.', en: 'Lumi in text with a monthly quota from Scale; voice and unlimited in Autopilot.' } },
+      { q: { fr: 'Dans quels forfaits ?', en: 'Which plans?' }, a: { fr: 'Lumi est exclusif au forfait Autopilot, en texte comme en voix.', en: 'Lumi is exclusive to the Autopilot plan, both in text and voice.' } },
     ],
     featureAnchor: 'ai-voice',
   },
