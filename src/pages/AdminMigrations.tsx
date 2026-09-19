@@ -360,7 +360,9 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
     queryKey: ['migration-admin-detail', id],
     queryFn: () => getMigrationDetail(id),
     refetchInterval: (query) => {
-      const status = (query.state.data as any)?.migration?.status;
+      const migration = (query.state.data as any)?.migration;
+      const status = migration?.status;
+      if (passeBotActive(migration?.bot_dernier_rapport)) return 2500;
       return ['parsing', 'testing', 'importing', 'post_import_validation'].includes(status) ? 2500 : false;
     },
     refetchOnWindowFocus: false,
@@ -475,10 +477,23 @@ function CarteImportEnCours({ d }: { d: any }) {
   );
 }
 
+/** Une passe du bot est-elle en cours d'après le rapport publié ? Même règle que le verrou serveur
+ *  (bot.ts › passeBotEnCours) : `en_cours` vrai ET démarrée il y a moins de 20 min — au-delà, un
+ *  drapeau resté vrai après un redémarrage du serveur ne fige plus la console. */
+function passeBotActive(r: RapportBotMigration | null | undefined): boolean {
+  if (!r?.en_cours || !r.debut) return false;
+  return Date.now() - new Date(r.debut).getTime() < 20 * 60 * 1000;
+}
+
 function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
   const [confirmKind, setConfirmKind] = useState<'final' | 'rollback' | null>(null);
   // Une action à la fois : absorbe les doubles clics (deux passes du bot lancées à 20 s d'écart le 2026-09-19).
   const [enCours, setEnCours] = useState(false);
+  // Passe du bot en cours d'après le serveur : visible depuis n'importe quel onglet, et même après un
+  // rechargement de la page (la fiche se rafraîchit toutes les 2,5 s tant que ça tourne).
+  const rapportBot = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+  const botEnCours = passeBotActive(rapportBot);
+  const botOccupe = enCours || botEnCours;
   const btn = 'h-9 px-3.5 rounded-md text-[13px] font-medium border transition-colors';
   const subtle = `${btn} bg-surface-card border-outline text-text-secondary hover:bg-surface-secondary`;
   const primary = `${btn} bg-[#d8d0c2] border-transparent text-black hover:bg-[#cabfad]`;
@@ -501,13 +516,22 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
-        <button type="button" className={primary} disabled={enCours} onClick={() => act(async () => {
+        <button type="button" className={`${primary} inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed`} disabled={botOccupe} onClick={() => act(async () => {
           const { depuis } = await lancerBotMigration(m.id);
           toast.message('Passe du bot lancée : comptez environ 1 minute par fichier. La carte Bot (Résumé) se met à jour à la fin.');
           const r = await attendreFinBot(m.id, depuis);
           if (!r) throw new Error('La passe du bot dépasse 20 minutes : rafraîchissez la page plus tard, le rapport apparaîtra dans la carte Bot.');
           toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`);
-        }, 'Passe du bot terminée')}>{enCours ? 'Passe en cours…' : 'Confier au bot'}</button>
+        }, 'Passe du bot terminée')}>
+          {botOccupe && <Loader2 size={13} className="animate-spin" />}
+          {botOccupe ? 'Passe du bot en cours…' : 'Confier au bot'}
+        </button>
+      )}
+      {botEnCours && (
+        <span className="inline-flex items-center gap-1.5 text-[12px] text-text-tertiary">
+          {rapportBot?.etape_courante ?? 'Le bot travaille'}
+          {rapportBot?.progression && rapportBot.progression.fichiers_total > 0 ? ` — ${rapportBot.progression.fichiers_faits}/${rapportBot.progression.fichiers_total} fichiers` : ''}
+        </span>
       )}
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client'].includes(m.status) && (
         <button type="button" className={subtle} onClick={() => act(() => startAnalysis(m.id), 'Analyse relancée')}>Relancer l'analyse</button>
