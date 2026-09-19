@@ -94,7 +94,6 @@ const PLANS: Plan[] = [
       { en: 'Dispatch map & live GPS', fr: 'Répartition sur carte et GPS en direct' },
       { en: 'Timesheets, payroll & performance', fr: 'Feuilles de temps, paie et performance' },
       { en: 'Advanced analytics & QuickBooks export', fr: 'Statistiques avancées et export QuickBooks' },
-      { en: 'Lumi by text, with a monthly quota', fr: 'Lumi par texte, avec quota mensuel' },
     ],
   },
   {
@@ -113,7 +112,9 @@ const PLANS: Plan[] = [
     seats: { users: 20 },
     inherits: { en: 'Everything in Scale, plus', fr: 'Tout Scale, plus' },
     highlights: [
-      { en: 'Lumi on the phone and by text, unlimited', fr: 'Lumi au téléphone et par texte, illimité' },
+      // Lumi n'existe QUE sur Autopilot depuis le 2026-09-19 (migration
+      // 20260919000000) : c'est ce qui distingue ce forfait de Scale.
+      { en: 'Lumi, the AI assistant — only on Autopilot', fr: 'Lumi, l\'assistant IA — exclusif à Autopilot' },
       { en: 'Door-to-door: pipeline, commissions, leaderboard', fr: 'Porte-à-porte : pipeline, commissions, leaderboard' },
       { en: 'Team courses (LMS)', fr: 'Formations de l\'équipe (LMS)' },
       { en: 'Advanced roles, multi-team & availability', fr: 'Rôles avancés, multi-équipes et disponibilités' },
@@ -274,7 +275,8 @@ const NEEDS: NeedGroup[] = [
       { key: 'sms', label: { en: 'SMS with a dedicated number', fr: 'Textos avec un numéro dédié' }, plan: 1, rows: ['Two-way SMS with a dedicated number'] },
       { key: 'batch', label: { en: 'Batch messaging', fr: 'Messages groupés' }, plan: 1, rows: ['Batch messaging'] },
       { key: 'chat', label: { en: 'Team chat', fr: 'Clavardage d\'équipe' }, plan: 1, rows: ['Internal team chat'] },
-      { key: 'lumi-text', label: { en: 'Lumi answers by text (AI)', fr: 'Lumi répond par texte (IA)' }, plan: 1, rows: ['Lume AI Agent — text'] },
+      // Lumi est exclusif à Autopilot depuis le 2026-09-19 (plan 2, pas 1).
+      { key: 'lumi-text', label: { en: 'Lumi answers by text (AI)', fr: 'Lumi répond par texte (IA)' }, plan: 2, rows: ['Lume AI Agent — text'] },
       { key: 'lumi-voice', label: { en: 'Lumi answers the phone (AI)', fr: 'Lumi répond au téléphone (IA)' }, plan: 2, rows: ['Lume AI Agent — voice'] },
     ],
   },

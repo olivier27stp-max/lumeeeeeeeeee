@@ -1532,7 +1532,7 @@ function AuthenticatedApp({
                         Pour la remettre : restaurer l'element d'origine (MrLumePage est
                         toujours importe) et l'entree de menu 'ai-helper'. */}
                     <Route path="/lume-agent" element={<Navigate to="/day" replace />} />
-                    {/* Lumi — l'assistant IA dans l'app (Claude, outils Lume). Plans Scale et Autopilot. */}
+                    {/* Lumi — l'assistant IA dans l'app (Claude, outils Lume). Forfait Autopilot uniquement (2026-09-19). */}
                     <Route path="/lumi" element={<Gated permission="external_agent.use"><PlanFeatureGate flag="includes_ai"><PageWrapper><LumiPage /></PageWrapper></PlanFeatureGate></Gated>} />
                     <Route path="/dashboard" element={<Navigate to="/day" replace />} />
                     <Route path="/day" element={<Gated permission="settings.read"><PageWrapper><CrmWorkspace /></PageWrapper></Gated>} />
