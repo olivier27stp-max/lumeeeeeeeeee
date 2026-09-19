@@ -18,6 +18,32 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { AUTOMATION_PRESETS } from './automationPresets.data';
 
 /**
+ * Presets de SOLLICITATION commerciale — jamais activés d'office (F7, audit
+ * automatisations ; corrigé le 2026-09-19).
+ * ─────────────────────────────────────────────────────────────────────
+ * La ligne de partage n'est pas « commercial » au sens large : c'est la
+ * sollicitation de NOUVELLES affaires auprès de quelqu'un qui n'a rien
+ * demandé. Une relance de devis ou de facture impayée suit un échange que le
+ * client a lui-même engagé ; un cross-sell six mois après une job, non.
+ *
+ * Au Canada, ces messages-là exigent un consentement (LCAP ; loi 25 au
+ * Québec). Les activer d'office, c'est envoyer de la publicité au nom d'une
+ * entreprise qui vient de s'inscrire et n'a jamais donné son accord — avec
+ * les amendes pour elle, et le reproche pour nous.
+ *
+ * L'entreprise reste libre de les activer dans Automatisations : ce n'est pas
+ * une interdiction, c'est un choix qui lui revient. Le consentement par client
+ * est vérifié en plus, à l'envoi (server/lib/actions/index.ts).
+ */
+export const PRESETS_SOLLICITATION: ReadonlySet<string> = new Set([
+  'cross_sell_30d',            // « on offre aussi d'autres services » — 30 j après la job
+  'seasonal_reminder_6m',      // relance saisonnière, 6 mois après
+  'lost_lead_reengagement',    // réengagement d'un lead perdu, jamais devenu client
+  'reengagement_90d',          // réengagement d'un client dormant, 90 jours
+  'client_anniversary',        // message d'anniversaire à visée commerciale
+]);
+
+/**
  * Complète les presets d'automatisation d'une org. Idempotent et
  * non destructif : n'insère que les preset_key absents.
  *
@@ -80,7 +106,8 @@ export async function ensureAutomationPresets(
         conditions: p.conditions,
         delay_seconds: p.delay_seconds,
         actions: p.actions,
-        is_active: true,
+        // Une sollicitation commerciale n'est jamais activée d'office (F7).
+        is_active: !PRESETS_SOLLICITATION.has(p.preset_key),
         is_preset: true,
         preset_key: p.preset_key,
       })),
@@ -88,14 +115,18 @@ export async function ensureAutomationPresets(
     if (insErr) throw insErr;
   }
 
-  // 3. À la création seulement : tout actif par défaut (décision 20260611)
+  // 3. À la création seulement : actif par défaut (décision 20260611), SAUF
+  // les presets de sollicitation commerciale (F7, 2026-09-19). Voir
+  // PRESETS_SOLLICITATION : on n'active pas d'office une relance publicitaire
+  // au nom d'une entreprise qui vient de s'inscrire et n'a rien demandé.
   if (opts.activateAll) {
     const { error: actErr } = await admin
       .from('automation_rules')
       .update({ is_active: true })
       .eq('org_id', orgId)
       .eq('is_preset', true)
-      .eq('is_active', false);
+      .eq('is_active', false)
+      .not('preset_key', 'in', `(${[...PRESETS_SOLLICITATION].join(',')})`);
     if (actErr) throw actErr;
   }
 
