@@ -1,0 +1,42 @@
+{
+  "preset_key": "no_show_followup",
+  "trigger_event": "appointment.cancelled",
+  "delay_seconds": 3600,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-13T16:00:00.000Z",
+      "execution_key": "regle-no_show_followup:aaaaaaaa-0000-4000-8000-000000000003:0"
+    },
+    {
+      "action": "create_notification",
+      "execute_at": "2026-09-13T16:00:00.000Z",
+      "execution_key": "regle-no_show_followup:aaaaaaaa-0000-4000-8000-000000000003:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-13T16:00:00.000Z",
+      "execution_key": "regle-no_show_followup:aaaaaaaa-0000-4000-8000-000000000003:2"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, on a manqué notre rendez-vous. Répondez à ce message pour reprendre un moment qui vous convient. — Plomberie Tremblay inc.",
+      "moment": "differe"
+    },
+    {
+      "canal": "notification",
+      "body": "Rendez-vous annulé\nLe rendez-vous de Marie Tremblay a été annulé.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "no_show_followup",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

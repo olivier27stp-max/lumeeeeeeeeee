@@ -1,0 +1,33 @@
+{
+  "preset_key": "cross_sell_30d",
+  "trigger_event": "job.completed",
+  "delay_seconds": 2592000,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-10-13T15:00:00.000Z",
+      "execution_key": "regle-cross_sell_30d:aaaaaaaa-0000-4000-8000-000000000002:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-10-13T15:00:00.000Z",
+      "execution_key": "regle-cross_sell_30d:aaaaaaaa-0000-4000-8000-000000000002:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Des nouvelles de nous",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Ça fait un mois depuis nos travaux chez vous — on espère que tout est encore impeccable!</p><p>Saviez-vous qu'on offre aussi d'autres services d'entretien? Répondez à ce courriel pour en savoir plus.</p><p>Au plaisir,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "cross_sell_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

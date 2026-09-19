@@ -1,0 +1,33 @@
+{
+  "preset_key": "welcome_new_lead",
+  "trigger_event": "lead.created",
+  "delay_seconds": 0,
+  "planifie": [],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, merci d'avoir contacté Plomberie Tremblay inc.! On revient vers vous très vite.",
+      "moment": "immediat"
+    },
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Merci d'avoir contacté Plomberie Tremblay inc.",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Bonjour Marie,</h2><p style=\"color:#333;line-height:1.6;\">Merci d'avoir communiqué avec nous. Nous avons bien reçu votre demande et nous revenons vers vous très rapidement.</p><p style=\"color:#333;line-height:1.6;\">Si votre demande est urgente, répondez à ce courriel — nous la traiterons en priorité.</p><p style=\"color:#333;line-height:1.6;\">Plomberie Tremblay inc.</p></div>",
+      "moment": "immediat"
+    },
+    {
+      "canal": "notification",
+      "body": "Nouveau prospect\nMarie Tremblay — +15145550142",
+      "moment": "immediat"
+    },
+    {
+      "canal": "activite",
+      "body": "welcome_sent",
+      "moment": "immediat"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}
