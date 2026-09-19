@@ -477,31 +477,37 @@ function CarteImportEnCours({ d }: { d: any }) {
 
 function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
   const [confirmKind, setConfirmKind] = useState<'final' | 'rollback' | null>(null);
+  // Une action à la fois : absorbe les doubles clics (deux passes du bot lancées à 20 s d'écart le 2026-09-19).
+  const [enCours, setEnCours] = useState(false);
   const btn = 'h-9 px-3.5 rounded-md text-[13px] font-medium border transition-colors';
   const subtle = `${btn} bg-surface-card border-outline text-text-secondary hover:bg-surface-secondary`;
   const primary = `${btn} bg-[#d8d0c2] border-transparent text-black hover:bg-[#cabfad]`;
   const danger = `${btn} bg-red-50 border-red-200 text-red-700 hover:bg-red-100`;
 
   const act = async (fn: () => Promise<unknown>, okMsg: string) => {
+    if (enCours) return;
+    setEnCours(true);
     try {
       await fn();
       toast.success(okMsg);
       onDone();
     } catch (err: any) {
       toast.error(err?.message ?? 'Erreur');
+    } finally {
+      setEnCours(false);
     }
   };
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
-        <button type="button" className={primary} onClick={() => act(async () => {
+        <button type="button" className={primary} disabled={enCours} onClick={() => act(async () => {
           const { depuis } = await lancerBotMigration(m.id);
           toast.message('Passe du bot lancée : comptez environ 1 minute par fichier. La carte Bot (Résumé) se met à jour à la fin.');
           const r = await attendreFinBot(m.id, depuis);
           if (!r) throw new Error('La passe du bot dépasse 20 minutes : rafraîchissez la page plus tard, le rapport apparaîtra dans la carte Bot.');
           toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`);
-        }, 'Passe du bot terminée')}>Confier au bot</button>
+        }, 'Passe du bot terminée')}>{enCours ? 'Passe en cours…' : 'Confier au bot'}</button>
       )}
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client'].includes(m.status) && (
         <button type="button" className={subtle} onClick={() => act(() => startAnalysis(m.id), 'Analyse relancée')}>Relancer l'analyse</button>
@@ -999,6 +1005,7 @@ function ResumeTab({ d, onChanged, onOuvrirOnglet }: { d: any; onChanged: () => 
   const m = d.migration;
   const [ttl, setTtl] = useState(48);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
+  const [generation, setGeneration] = useState(false);
   const activeInv = (d.invitations ?? []).find((i: any) => !i.revoked_at && !i.superseded_at);
   const staging = d.staging_counts ?? {};
 
@@ -1041,17 +1048,20 @@ function ResumeTab({ d, onChanged, onOuvrirOnglet }: { d: any; onChanged: () => 
           </select>
           <button
             type="button"
+            disabled={generation}
             onClick={async () => {
+              if (generation) return;
+              setGeneration(true);
               try {
                 const res = await generateInvitation(m.id, ttl);
                 setInviteUrl(res.invite_url);
                 toast.success('Invitation générée (l\'ancienne est invalidée)');
                 onChanged();
-              } catch (err: any) { toast.error(err?.message ?? 'Erreur'); }
+              } catch (err: any) { toast.error(err?.message ?? 'Erreur'); } finally { setGeneration(false); }
             }}
             className="h-9 px-4 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md font-medium"
           >
-            {activeInv ? 'Regénérer le lien' : 'Générer le lien'}
+            {generation ? 'Génération…' : activeInv ? 'Regénérer le lien' : 'Générer le lien'}
           </button>
           {activeInv && (
             <>

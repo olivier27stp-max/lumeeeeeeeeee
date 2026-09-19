@@ -37,7 +37,7 @@ import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImpor
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
 import { creerPublieurProgression } from '../lib/migration/execution';
 import { logger } from '../lib/logger';
-import { executerBotMigration } from '../lib/migration/bot';
+import { executerBotMigration, passeBotEnCours } from '../lib/migration/bot';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { entityForCategory, normalizeHeader, FIELD_CATALOG } from '../lib/migration/mapping';
@@ -806,6 +806,10 @@ router.post('/migration-admin/migrations/:id/bot', async (req, res) => {
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    // Verrou anti double clic : une seule passe à la fois par migration (voir passesEnCours dans bot.ts).
+    if (await passeBotEnCours(admin, migration.id)) {
+      return res.status(409).json({ error: 'Une passe du bot est déjà en cours pour cette migration — attendez la fin de la passe (carte Bot).' });
+    }
     // Une passe peut durer plusieurs minutes (≈ 50 s par fichier sur Fable 5.1) : par défaut elle tourne
     // en arrière-plan et la console suit `bot_derniere_execution` ; `?sync=1` (banc d'essai) attend le rapport.
     if (req.query.sync === '1') {

@@ -822,6 +822,8 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   const m0 = await lireMigration(admin, migrationId);
   const rapport: RapportBot = { migration_id: migrationId, declencheur: opts.declencheur, debut, fin: debut, statut_avant: m0?.status ?? 'inconnue', statut_apres: m0?.status ?? 'inconnue', decisions: [], questions_posees: 0, arret: '', cout_cents: null, audit: auditVide() };
   if (!m0) { rapport.arret = 'migration introuvable'; rapport.fin = new Date().toISOString(); return rapport; }
+  if (await passeBotEnCours(admin, migrationId)) { rapport.arret = 'passe déjà en cours'; rapport.fin = new Date().toISOString(); return rapport; }
+  passesEnCours.add(migrationId);
   const m = m0;
   const mode = modeBot(m);
   await publierProgression(admin, rapport, `Démarrage de la passe (statut ${m.status}, mode ${mode})`, true);
@@ -948,10 +950,27 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   rapport.en_cours = false;
   rapport.etape_courante = null;
   dernierePublication.delete(migrationId);
+  passesEnCours.delete(migrationId);
   await admin.from('data_migrations').update({ bot_derniere_execution: rapport.fin, bot_dernier_rapport: rapport as unknown as Record<string, unknown> }).eq('id', migrationId);
   await touchMigrationActivity(admin, migrationId);
   await logMigrationAudit(admin, { migrationId, action: 'bot.passe', actorId: opts.acteurId, actorRole: 'assistant', meta: { declencheur: opts.declencheur, decisions: rapport.decisions.length, arret: rapport.arret, statut: `${rapport.statut_avant} → ${rapport.statut_apres}`, cout_cents: rapport.cout_cents } });
   return rapport;
+}
+
+/** Passes en cours dans ce processus — verrou contre un double lancement (double clic sur
+ *  « Confier au bot » constaté le 2026-09-19 : deux passes concurrentes sur la même migration,
+ *  même champ de rapport écrasé, fichiers analysés deux fois). */
+const passesEnCours = new Set<string>();
+/** Au-delà de ce délai (celui qu'attend la console), un drapeau `en_cours` resté vrai après un crash ne bloque plus rien. */
+const PASSE_MAX_MS = 20 * 60 * 1000;
+
+/** Vrai si une passe tourne déjà pour cette migration — dans ce processus, ou d'après le rapport publié (autre instance). */
+export async function passeBotEnCours(admin: Admin, migrationId: string): Promise<boolean> {
+  if (passesEnCours.has(migrationId)) return true;
+  const { data } = await admin.from('data_migrations').select('bot_dernier_rapport').eq('id', migrationId).maybeSingle();
+  const r = data?.bot_dernier_rapport as Partial<RapportBot> | null | undefined;
+  if (!r?.en_cours || !r.debut) return false;
+  return Date.now() - new Date(r.debut).getTime() < PASSE_MAX_MS;
 }
 
 /** Cron : une passe sur chaque migration où le bot est actif et qui a quelque chose à faire. */
