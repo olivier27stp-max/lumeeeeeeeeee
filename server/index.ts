@@ -263,6 +263,17 @@ const WEBHOOK_PATHS_EXEMPT_FROM_CSRF = [
   '/webhooks/ses',     // Amazon SES via SNS (rebonds, suivi), jeton partagé dans l'URL
   '/webhooks/slack',   // Réponses du support humain, signature Slack vérifiée
 ];
+// Aucune réponse d'API n'est mise en cache par le navigateur. Chrome traite un
+// 410 Gone sans Cache-Control comme frais POUR TOUJOURS (même règle que 301/308) :
+// le portail de migration répondait 410 « expired » sur GET /api/migration-portal/session
+// — jeton dans un en-tête, donc même URL pour tous les liens — et Chrome resservait
+// ce corps depuis son cache à chaque nouveau lien, sans requête réseau (2026-09-19).
+// Les réponses portent aussi l'Authorization sans Vary dessus. Les routes qui veulent
+// un cache explicite le redéfinissent après (elles s'exécutent plus tard).
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   // External webhooks: signature-validated downstream, never carry CSRF headers.

@@ -27,10 +27,14 @@ async function portalHeaders(token: string): Promise<Record<string, string>> {
   };
 }
 
+// `cache: 'no-store'` sur chaque appel : Chrome considère une réponse 410 Gone sans
+// Cache-Control comme fraîche pour toujours. Le jeton voyage dans un en-tête, donc
+// GET /session a la même URL pour tous les liens — un 410 « expired » mis en
+// cache était resservi à chaque NOUVEAU lien sans requête réseau (2026-09-19).
 async function portalFetch<T>(token: string, path: string, init?: RequestInit): Promise<T> {
   const headers = await portalHeaders(token);
   if (!headers.Authorization) throw new PortalError('Connexion requise.', 'auth_required', 401);
-  const res = await fetch(`${BASE}/migration-portal${path}`, { ...init, headers: { ...headers, ...(init?.headers ?? {}) } });
+  const res = await fetch(`${BASE}/migration-portal${path}`, { cache: 'no-store', ...init, headers: { ...headers, ...(init?.headers ?? {}) } });
   let body: any = null;
   try {
     body = await res.json();
@@ -95,6 +99,7 @@ export async function uploadPortalFile(token: string, file: File): Promise<Porta
   delete (headers as Record<string, string>)['Content-Type'];
   const res = await fetch(`${BASE}/migration-portal/files?name=${encodeURIComponent(file.name)}`, {
     method: 'POST',
+    cache: 'no-store',
     headers: { ...headers, 'Content-Type': file.type || 'application/octet-stream' },
     body: file,
   });
@@ -199,7 +204,7 @@ export function getPortalPreviewRows(token: string): Promise<{ by_entity: Record
 export async function downloadPortalRejectsCsv(token: string): Promise<string> {
   const headers = await portalHeaders(token);
   if (!headers.Authorization) throw new PortalError('Connexion requise.', 'auth_required', 401);
-  const res = await fetch(`${BASE}/migration-portal/rejects.csv`, { headers });
+  const res = await fetch(`${BASE}/migration-portal/rejects.csv`, { cache: 'no-store', headers });
   if (!res.ok) {
     let body: any = null;
     try { body = await res.json(); } catch { body = null; }
