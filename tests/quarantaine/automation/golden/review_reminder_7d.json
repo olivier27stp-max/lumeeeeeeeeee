@@ -1,0 +1,32 @@
+{
+  "preset_key": "review_reminder_7d",
+  "trigger_event": "job.completed",
+  "delay_seconds": 604800,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-review_reminder_7d:aaaaaaaa-0000-4000-8000-000000000002:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-20T15:00:00.000Z",
+      "execution_key": "regle-review_reminder_7d:aaaaaaaa-0000-4000-8000-000000000002:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Bonjour Marie, un avis Google nous aiderait énormément : https://g.page/r/plomberie-tremblay/review Merci encore! — Plomberie Tremblay inc.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "review_reminder_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

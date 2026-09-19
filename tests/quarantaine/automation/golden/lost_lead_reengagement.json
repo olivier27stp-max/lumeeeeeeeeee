@@ -1,0 +1,29 @@
+{
+  "preset_key": "lost_lead_reengagement",
+  "trigger_event": "lead.status_changed",
+  "delay_seconds": 7776000,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-12-12T15:00:00.000Z",
+      "execution_key": "regle-lost_lead_reengagement:aaaaaaaa-0000-4000-8000-000000000001:0"
+    },
+    {
+      "action": "send_sms",
+      "execute_at": "2026-12-12T15:00:00.000Z",
+      "execution_key": "regle-lost_lead_reengagement:aaaaaaaa-0000-4000-8000-000000000001:1"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-12-12T15:00:00.000Z",
+      "execution_key": "regle-lost_lead_reengagement:aaaaaaaa-0000-4000-8000-000000000001:2"
+    }
+  ],
+  "messages": [],
+  "erreurs": [],
+  "annulees": [
+    "send_email@2026-12-12T15:00:00.000Z",
+    "send_sms@2026-12-12T15:00:00.000Z",
+    "log_activity@2026-12-12T15:00:00.000Z"
+  ]
+}

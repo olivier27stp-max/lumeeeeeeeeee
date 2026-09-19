@@ -1,0 +1,33 @@
+{
+  "preset_key": "payment_confirmation",
+  "trigger_event": "invoice.paid",
+  "delay_seconds": 0,
+  "planifie": [],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Paiement reçu — merci Marie! — Plomberie Tremblay inc.",
+      "moment": "immediat"
+    },
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Paiement reçu — merci Marie!",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2 style=\"color:#1a1a1a;font-size:18px;\">Merci Marie!</h2><p style=\"color:#333;line-height:1.6;\">Nous confirmons la réception de votre paiement pour la facture INV-000042.</p><p style=\"color:#333;line-height:1.6;\">Merci de votre confiance.</p><p style=\"color:#333;line-height:1.6;\">Plomberie Tremblay inc.</p></div>",
+      "moment": "immediat"
+    },
+    {
+      "canal": "notification",
+      "body": "Paiement reçu\nMarie Tremblay a payé la facture INV-000042.",
+      "moment": "immediat"
+    },
+    {
+      "canal": "activite",
+      "body": "payment_confirmed",
+      "moment": "immediat"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

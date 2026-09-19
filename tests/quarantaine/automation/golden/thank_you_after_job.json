@@ -1,0 +1,32 @@
+{
+  "preset_key": "thank_you_after_job",
+  "trigger_event": "job.completed",
+  "delay_seconds": 3600,
+  "planifie": [
+    {
+      "action": "send_sms",
+      "execute_at": "2026-09-13T16:00:00.000Z",
+      "execution_key": "regle-thank_you_after_job:aaaaaaaa-0000-4000-8000-000000000002:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-13T16:00:00.000Z",
+      "execution_key": "regle-thank_you_after_job:aaaaaaaa-0000-4000-8000-000000000002:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "sms",
+      "to": "+15145550142",
+      "body": "Merci de faire affaire avec Plomberie Tremblay inc., Marie! Si tout n'est pas parfait, répondez à ce message.",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "thank_you_sent",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}

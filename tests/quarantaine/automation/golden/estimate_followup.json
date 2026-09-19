@@ -1,0 +1,33 @@
+{
+  "preset_key": "estimate_followup",
+  "trigger_event": "estimate.sent",
+  "delay_seconds": 172800,
+  "planifie": [
+    {
+      "action": "send_email",
+      "execute_at": "2026-09-15T15:00:00.000Z",
+      "execution_key": "regle-estimate_followup:aaaaaaaa-0000-4000-8000-000000000005:0"
+    },
+    {
+      "action": "log_activity",
+      "execute_at": "2026-09-15T15:00:00.000Z",
+      "execution_key": "regle-estimate_followup:aaaaaaaa-0000-4000-8000-000000000005:1"
+    }
+  ],
+  "messages": [
+    {
+      "canal": "courriel",
+      "to": "marie.tremblay@example.test",
+      "subject": "Plomberie Tremblay inc. — Suivi de votre devis",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>On vous a envoyé un devis récemment et on voulait faire un suivi.</p><p>Des questions? Répondez à ce courriel, ça nous fera plaisir d'y répondre.</p><p>Cordialement,<br/>Plomberie Tremblay inc.</p></div>",
+      "moment": "differe"
+    },
+    {
+      "canal": "activite",
+      "body": "estimate_followup",
+      "moment": "differe"
+    }
+  ],
+  "erreurs": [],
+  "annulees": []
+}
