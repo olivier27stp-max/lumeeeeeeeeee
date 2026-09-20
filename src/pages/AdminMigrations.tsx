@@ -409,8 +409,11 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
             {t.id === 'bot' && aFaireBot(m.bot_dernier_rapport) > 0 && (
               <span className="ml-1.5 text-amber-700 font-bold">{aFaireBot(m.bot_dernier_rapport)}</span>
             )}
-            {t.id === 'duplicates' && doublonsATrancher(d.duplicates) > 0 && (
-              <span className="ml-1.5 text-amber-700 font-bold">{doublonsATrancher(d.duplicates)}{(d.duplicates?.length ?? 0) >= 500 ? '+' : ''}</span>
+            {t.id === 'duplicates' && (d.duplicates?.length ?? 0) > 0 && (
+              doublonsATrancher(d.duplicates) > 0
+                // ambre : encore à trancher ; gris : tous tranchés, on montre le total détecté
+                ? <span className="ml-1.5 text-amber-700 font-bold" title="Doublons à trancher">{doublonsATrancher(d.duplicates)}{(d.duplicates?.length ?? 0) >= 500 ? '+' : ''}</span>
+                : <span className="ml-1.5 text-text-tertiary font-semibold" title="Doublons détectés, tous tranchés">{d.duplicates.length}{d.duplicates.length >= 500 ? '+' : ''}</span>
             )}
           </button>
         ))}
