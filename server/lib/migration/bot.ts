@@ -829,6 +829,8 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
   await publierProgression(admin, rapport, `Démarrage de la passe (statut ${m.status}, mode ${mode})`, true);
   // Doublons tranchés depuis le dernier dry-run : un import test frais s'impose avant d'approuver, une seule fois.
   let doublonsDepuisTest = 0;
+  // Passe manuelle : un import test frais est refait une fois avant de juger (voir test_review).
+  let testFraisFait = false;
   try {
     for (let passe = 0; passe < MAX_PASSES; passe++) {
       const s = m.status;
@@ -871,6 +873,15 @@ export async function executerBotMigration(admin: Admin, migrationId: string, op
         break;
       }
       if (s === 'test_review') {
+        // « Confier au bot » à cette étape doit repartir de l'état réel : rejets, doublons et dry-run
+        // datent sinon du dernier import test. Constaté le 2026-09-20 : après le rollback de l'ancienne
+        // migration, la passe finissait en 2 s sur « 7 erreurs bloquantes, 214 doublons » périmés,
+        // sans jamais relancer le test (donc sans purger les candidats de doublons disparus).
+        if (opts.declencheur === 'manuel' && !testFraisFait) {
+          testFraisFait = true;
+          rapport.decisions.push({ etape: 'import test', cible: 'dry-run', decision: 'nouvel import test (passe manuelle : rejets et doublons recalculés)' });
+          if (await poserStatut(admin, m, 'ready_for_test', rapport)) continue;
+        }
         await appliquerReponses(admin, m, acteur, rapport);
         if (mode === 'autonome') await resoudreQuestionsAutonome(admin, m, acteur, rapport);
         // Les correspondances se relisent AUSSI après un import test (le moteur se trompe à 85 %,

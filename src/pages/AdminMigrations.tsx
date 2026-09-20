@@ -392,6 +392,7 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
       </p>
 
       <CarteImportEnCours d={d} />
+      <CarteBotEnCours m={m} />
 
       <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-secondary/60 border border-outline w-fit mb-5 flex-wrap">
         {TABS.map((t) => (
@@ -521,7 +522,13 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
       {['files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
         <button type="button" className={`${primary} inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed`} disabled={botOccupe} onClick={() => act(async () => {
           const { depuis } = await lancerBotMigration(m.id);
-          toast.message('Passe du bot lancée : comptez environ 1 minute par fichier. La carte Bot (Résumé) se met à jour à la fin.');
+          // Le bot publie « Démarrage… » dans la fiche quelques centaines de ms après le 202 : on
+          // recharge tout de suite puis deux fois encore pour attraper en_cours et enclencher le
+          // rafraîchissement automatique (bande verte au-dessus des onglets).
+          onDone();
+          setTimeout(onDone, 1500);
+          setTimeout(onDone, 4000);
+          toast.message('Passe du bot lancée : suivi en direct au-dessus des onglets, environ 1 minute par fichier.');
           const r = await attendreFinBot(m.id, depuis);
           if (!r) throw new Error('La passe du bot dépasse 20 minutes : rafraîchissez la page plus tard, le rapport apparaîtra dans la carte Bot.');
           toast.message(`Bot : ${r.decisions.length} décision${r.decisions.length > 1 ? 's' : ''} — ${r.arret}`);
@@ -712,6 +719,43 @@ function StaffCard({ migrationId }: { migrationId: string }) {
       >
         Enregistrer les correspondances
       </button>
+    </div>
+  );
+}
+
+/** Bande de suivi en direct d'une passe du bot, au-dessus des onglets (visible partout). La fiche se
+ *  rafraîchit toutes les 2,5 s tant que `bot_dernier_rapport.en_cours` est vrai (refetchInterval). */
+function CarteBotEnCours({ m }: { m: any }) {
+  const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+  const actif = passeBotActive(rapport);
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  useEffect(() => {
+    if (!actif) return;
+    const t = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [actif]);
+  if (!actif || !rapport) return null;
+  const secondes = Math.max(0, Math.round((maintenant - new Date(rapport.debut).getTime()) / 1000));
+  const p = rapport.progression;
+  return (
+    <div className="mb-5 rounded-lg border border-emerald-200 bg-emerald-50/60 p-4" role="status" aria-live="polite">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="relative flex h-2.5 w-2.5" aria-hidden="true"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600" /></span>
+        <p className="text-[13px] font-semibold text-emerald-900">Passe du bot en cours — {secondes} s</p>
+        <span className="text-[11.5px] text-emerald-900/60">{rapport.declencheur === 'cron' ? 'lancée par le cron' : 'lancée à la main'} · la fiche se rafraîchit toute seule</span>
+      </div>
+      <p className="mt-1 text-[12.5px] text-emerald-900/90">{rapport.etape_courante ?? 'Démarrage…'}</p>
+      {p && p.fichiers_total > 0 && (
+        <div className="mt-2">
+          <div className="h-1.5 w-full rounded-full bg-emerald-100 overflow-hidden"><div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.round((p.fichiers_faits / p.fichiers_total) * 100)}%` }} /></div>
+          <p className="mt-1 text-[11.5px] text-emerald-900/80">{p.fichiers_faits} / {p.fichiers_total} fichiers</p>
+        </div>
+      )}
+      {rapport.decisions.length > 0 && (
+        <ul className="mt-2 space-y-0.5 max-h-32 overflow-auto text-[12px] text-emerald-950/90">
+          {rapport.decisions.slice(-5).map((d, i) => <li key={`${rapport.decisions.length}-${i}`}>· {d.etape} — {d.cible} : {d.decision}</li>)}
+        </ul>
+      )}
     </div>
   );
 }
@@ -961,7 +1005,7 @@ function CarteBot({ m, onChanged, onOuvrirOnglet }: { m: any; onChanged: () => v
     timer = setTimeout(tick, (m.bot_dernier_rapport as RapportBotMigration | null)?.en_cours ? 0 : 3000);
     return () => { arret = true; if (timer) clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- relance à chaque changement de fiche ; `live` est lu, pas suivi
-  }, [m.id, m.bot_derniere_execution]);
+  }, [m.id, m.bot_derniere_execution, (m.bot_dernier_rapport as RapportBotMigration | null)?.en_cours]);
   const autonome = m.bot_mode !== 'client';
   const basculer = async () => {
     setBusy(true);
