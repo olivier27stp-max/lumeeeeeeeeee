@@ -408,6 +408,9 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
             {t.id === 'bot' && aFaireBot(m.bot_dernier_rapport) > 0 && (
               <span className="ml-1.5 text-amber-700 font-bold">{aFaireBot(m.bot_dernier_rapport)}</span>
             )}
+            {t.id === 'duplicates' && doublonsATrancher(d.duplicates) > 0 && (
+              <span className="ml-1.5 text-amber-700 font-bold">{doublonsATrancher(d.duplicates)}{(d.duplicates?.length ?? 0) >= 500 ? '+' : ''}</span>
+            )}
           </button>
         ))}
       </div>
@@ -711,6 +714,12 @@ function StaffCard({ migrationId }: { migrationId: string }) {
       </button>
     </div>
   );
+}
+
+/** Doublons encore à trancher (pending/review) — badge de l'onglet, même règle que le compteur du bot.
+ *  La fiche n'en renvoie que 500 : au-delà, le badge porte un « + ». */
+function doublonsATrancher(dupes: any[] | null | undefined): number {
+  return (dupes ?? []).filter((d) => d.decision === 'pending' || d.decision === 'review').length;
 }
 
 /** Nombre d'éléments qui attendent quelqu'un (à trancher + manques) dans le dernier rapport du bot — badge de l'onglet. */
