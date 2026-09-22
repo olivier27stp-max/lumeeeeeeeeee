@@ -1028,7 +1028,10 @@ router.post('/migration-admin/migrations/:id/rollback', validate(migrationFinalI
     const admin = getServiceClient();
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
-    if (!['completed', 'completed_with_warnings', 'failed'].includes(migration.status)) {
+    // « rolled_back » reste admis : un import final repris (bouton « Reprendre ») laisse PLUSIEURS
+    // lots finaux, et le premier rollback n'annulait que le plus récent. Constaté le 2026-09-21
+    // (Vision Lavage) : 872 clients et 64 devis du premier lot toujours actifs après « Rollback ».
+    if (!['completed', 'completed_with_warnings', 'failed', 'rolled_back'].includes(migration.status)) {
       return res.status(409).json({ error: 'Le rollback n\'est possible qu\'après un import final.' });
     }
     const { data: org } = await admin.from('orgs').select('name').eq('id', migration.org_id).single();
@@ -1036,41 +1039,44 @@ router.post('/migration-admin/migrations/:id/rollback', validate(migrationFinalI
     if (confirm !== (org?.name ?? '').trim()) {
       return res.status(400).json({ error: 'Le nom du workspace saisi ne correspond pas.' });
     }
-    const { data: batch } = await admin
+    // Tous les lots finaux encore en place, du plus récent au plus ancien.
+    const { data: batches } = await admin
       .from('migration_import_batches')
       .select('id, status')
       .eq('migration_id', migration.id)
       .eq('kind', 'final')
       .in('status', ['completed', 'failed'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!batch) return res.status(404).json({ error: 'Aucun lot final à annuler.' });
+      .order('created_at', { ascending: false });
+    if (!batches || batches.length === 0) return res.status(404).json({ error: 'Aucun lot final à annuler.' });
 
-    const result = await rollbackFinalBatch(admin, batch.id, auth.user.id);
-    // Les soft-deletes du rollback re-déclenchent les triggers d'activité
-    // (AFTER UPDATE, 20260747000000) — constaté à la répétition volumétrique :
-    // 15 000 notifications recréées. Purge ciblée une seconde fois.
-    const noisePurged = await purgeImportActivityNoise(admin, migration, batch.id);
-    if (noisePurged > 0) {
+    const total = { softDeleted: 0, deactivated: 0, restored: 0, pinsPurged: 0, batches: 0 };
+    for (const batch of batches) {
+      const result = await rollbackFinalBatch(admin, batch.id, auth.user.id);
+      total.softDeleted += result.softDeleted; total.deactivated += result.deactivated; total.restored += result.restored; total.pinsPurged += result.pinsPurged; total.batches += 1;
+      // Les soft-deletes du rollback re-déclenchent les triggers d'activité
+      // (AFTER UPDATE, 20260747000000) — constaté à la répétition volumétrique :
+      // 15 000 notifications recréées. Purge ciblée une seconde fois.
+      const noisePurged = await purgeImportActivityNoise(admin, migration, batch.id);
+      if (noisePurged > 0) {
+        await logMigrationAudit(admin, {
+          migrationId: migration.id,
+          action: 'import.noise_purged',
+          actorRole: 'system',
+          target: `batch:${batch.id}`,
+          meta: { notifications_purged: noisePurged, phase: 'rollback' },
+        });
+      }
       await logMigrationAudit(admin, {
         migrationId: migration.id,
-        action: 'import.noise_purged',
-        actorRole: 'system',
+        action: 'import.rollback',
+        actorId: auth.user.id,
+        actorRole: 'platform_admin',
         target: `batch:${batch.id}`,
-        meta: { notifications_purged: noisePurged, phase: 'rollback' },
+        meta: result as unknown as Record<string, unknown>,
       });
     }
     await admin.from('data_migrations').update({ status: 'rolled_back' }).eq('id', migration.id);
-    await logMigrationAudit(admin, {
-      migrationId: migration.id,
-      action: 'import.rollback',
-      actorId: auth.user.id,
-      actorRole: 'platform_admin',
-      target: `batch:${batch.id}`,
-      meta: result as unknown as Record<string, unknown>,
-    });
-    return res.json({ ok: true, ...result });
+    return res.json({ ok: true, ...total });
   } catch (err: any) {
     return sendSafeError(res, err, 'Rollback impossible.', '[migration-admin]');
   }

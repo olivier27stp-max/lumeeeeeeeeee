@@ -238,6 +238,10 @@ export function deciderDoublon(d: { score: number; decision: string; match_reaso
   const raisons = Array.isArray(d.match_reasons) ? d.match_reasons : String(d.match_reasons ?? '').split(/[,\s]+/).filter(Boolean);
   if (d.decision === 'review' || d.score < 90) return 'create_new';
   if (raisons.some((r) => /email|courriel|phone|tel/i.test(r))) return 'merge';
+  // Même numéro de devis / job / facture ou même identifiant externe : c'est LE même document,
+  // jamais un homonyme. Le 2026-09-21, 64 devis « quote_number 95 % » partaient en « nouvelle
+  // fiche » en mode autonome — des devis en double avec le même numéro.
+  if (raisons.some((r) => /number|numero|numéro|external_id|external/i.test(r))) return 'merge';
   return mode === 'autonome' ? 'create_new' : 'demander';
 }
 

@@ -623,8 +623,12 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
       {m.status === 'ready_for_final_import' && (
         <button type="button" className={danger} onClick={() => setConfirmKind('final')}>Lancer l'import final</button>
       )}
-      {['completed', 'completed_with_warnings', 'failed'].includes(m.status) && (
-        <button type="button" className={danger} onClick={() => setConfirmKind('rollback')}>Rollback</button>
+      {(['completed', 'completed_with_warnings', 'failed'].includes(m.status)
+        // déjà annulée, mais un lot final antérieur (import repris) est encore en place
+        || (m.status === 'rolled_back' && (d.batches ?? []).some((b: any) => b.kind === 'final' && ['completed', 'failed'].includes(b.status)))) && (
+        <button type="button" className={danger} onClick={() => setConfirmKind('rollback')}>
+          {m.status === 'rolled_back' ? 'Rollback des lots restants' : 'Rollback'}
+        </button>
       )}
       {!m.closed_at && ['completed', 'completed_with_warnings', 'rolled_back', 'cancelled', 'failed'].includes(m.status) && (
         <button type="button" className={subtle} onClick={() => act(() => closeMigration(m.id), 'Migration fermée')}>Fermer</button>
@@ -638,7 +642,7 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
           orgName={d.org_name ?? ''}
           summary={confirmKind === 'final'
             ? 'L\'import final écrira les données approuvées dans le workspace du client. Approbation client et absence d\'erreurs bloquantes déjà vérifiées côté serveur.'
-            : 'Le rollback retire (soft-delete) UNIQUEMENT les dossiers créés par le dernier lot d\'import final. Les dossiers fusionnés et les données préexistantes ne sont pas touchés.'}
+            : 'Le rollback retire (soft-delete) UNIQUEMENT les dossiers créés par les lots d\'import final encore en place (tous, du plus récent au plus ancien). Les dossiers fusionnés et les données préexistantes ne sont pas touchés.'}
           onClose={() => setConfirmKind(null)}
           onConfirm={async (typed) => {
             if (confirmKind === 'final') await act(() => startFinalImport(m.id, typed), 'Import final démarré');
