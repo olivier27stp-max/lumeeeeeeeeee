@@ -138,8 +138,27 @@ export function langueEntreprise(company: CompanyInfo): Langue {
  * facture / soumission / contrat utilisent directement rendreCourrielClient
  * avec un contenu structuré (montant, lignes, bouton).
  */
-export function buildEmailLayout(company: CompanyInfo, bodyHtml: string) {
-  return rendreCourrielClient({ langue: langueEntreprise(company), marque: marqueDepuis(company), corpsHtml: bodyHtml, signature: null });
+/**
+ * L'enveloppe commune d'un courriel libre (automatisation, message manuel).
+ *
+ * `bouton` est optionnel et récent : les 26 relances automatiques partaient
+ * sans aucun bouton, et demandaient toutes de « répondre à ce courriel ». Une
+ * relance de soumission sans bouton « Accepter » oblige le client à écrire un
+ * message au lieu de cliquer une fois. Les appels qui n'en passent pas se
+ * comportent exactement comme avant.
+ */
+export function buildEmailLayout(
+  company: CompanyInfo,
+  bodyHtml: string,
+  bouton?: { texte: string; url: string } | null,
+) {
+  return rendreCourrielClient({
+    langue: langueEntreprise(company),
+    marque: marqueDepuis(company),
+    corpsHtml: bodyHtml,
+    bouton: bouton ?? null,
+    signature: null,
+  });
 }
 
 // Branded sender: keep the platform's VERIFIED sending address (deliverability),

@@ -654,11 +654,17 @@ describe('automatisations — identité de l’org, plus de « Lume CRM »', () 
     expect(fn).toContain('getCompanySettings(ctx.orgId)');
   });
 
-  it('le courriel est brandé (logo, pied de page, numéros de taxes)', () => {
+  it('le courriel est brandé (logo, pied de page, numéros de taxes) et porte un bouton', () => {
     // Avant : `html: body` brut. Tous les autres envois du produit passent par
     // ce layout — l'automatisation était le seul trou. Le corps porte
     // désormais aussi le lien de désinscription.
-    expect(fn).toContain('buildEmailLayout(company, body + pied)');
+    //
+    // Le 3e argument est arrivé le 2026-09-22 : les 26 relances partaient sans
+    // AUCUN bouton et demandaient toutes de « répondre à ce courriel ». Une
+    // relance de soumission sans bouton « Accepter » oblige le client à écrire
+    // au lieu de cliquer une fois.
+    expect(fn).toContain('buildEmailLayout(company, body + pied, bouton)');
+    expect(fn).toContain('boutonPourEntite');
     expect(fn).not.toMatch(/html:\s*body,/);
   });
 

@@ -561,9 +561,25 @@ export async function executeSendEmail(
       return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
     }
 
-    const { getCompanySettings, buildEmailLayout, senderFor } = await import('../../routes/emails');
+    const { getCompanySettings, buildEmailLayout, senderFor, langueEntreprise } = await import('../../routes/emails');
+    const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
     const company = await getCompanySettings(ctx.orgId);
     const unsubUrl = await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to);
+
+    /* Le bouton vers la page publique de l'entité concernée.
+       Les 26 relances automatiques partaient sans aucun bouton : toutes
+       demandaient de « répondre à ce courriel ». Une relance de soumission
+       sans bouton « Accepter » oblige le client à écrire un message au lieu de
+       cliquer une fois, et la plupart n'écrivent jamais.
+       `null` dès que le lien ne serait pas sûr (entité sans page publique,
+       jeton absent) : le courriel part alors comme avant. */
+    const bouton = await boutonPourEntite(
+      ctx.supabase,
+      ctx.orgId,
+      ctx.entityType,
+      ctx.entityId,
+      langueEntreprise(company),
+    );
 
     // Lien visible en pied de page + en-têtes standards : Gmail et Outlook
     // affichent alors leur bouton natif « Se désabonner », ce qui améliore
@@ -578,7 +594,7 @@ export async function executeSendEmail(
       ...senderFor(company),
       to,
       subject,
-      html: buildEmailLayout(company, body + pied),
+      html: buildEmailLayout(company, body + pied, bouton),
       ...(unsubUrl
         ? {
             headers: {
