@@ -1209,6 +1209,16 @@ app.get('/api/health', async (_req, res) => {
         fournisseur: fournisseurCourriel(),
         force: process.env.COURRIEL_FOURNISSEUR || null,
         resend_cle: Boolean(String(process.env.RESEND_API_KEY || '').trim()),
+        /* `fournisseur: 'smtp'` ne dit pas QUI envoie vraiment : Amazon SES
+           fournit des identifiants SMTP ordinaires, qu'on peut coller dans
+           SMTP_HOST sans jamais toucher aux variables SES_*. Le courriel part
+           alors par Amazon, le code croit faire du SMTP générique, et aucun
+           accusé ne revient — exactement notre cas.
+           L'hôte tranche : « email-smtp.… » = Amazon, « smtp.resend.com » =
+           Resend, autre chose = un vrai serveur SMTP. L'hôte n'est pas un
+           secret ; les identifiants ne sont jamais exposés ici. */
+        smtp_hote: process.env.SMTP_HOST || null,
+        ses_variables: Boolean(String(process.env.SES_SMTP_USER || '').trim()),
       },
     });
   } catch (err: any) {
