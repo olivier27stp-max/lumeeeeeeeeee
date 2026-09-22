@@ -39,8 +39,24 @@ describe('choix du fournisseur', () => {
     expect(fournisseurCourriel({ COURRIEL_FOURNISSEUR: 'resend', RESEND_API_KEY: 're_x', ...AVEC_SES } as NodeJS.ProcessEnv)).toBe('resend');
     expect(fournisseurCourriel({ COURRIEL_FOURNISSEUR: 'smtp', ...AVEC_SES } as NodeJS.ProcessEnv)).toBe('smtp');
   });
-  it('sans variable : SES s’il est prêt, sinon Resend, sinon SMTP', () => {
-    expect(fournisseurCourriel({ ...AVEC_SES, RESEND_API_KEY: 're_x' } as NodeJS.ProcessEnv)).toBe('ses');
+  it('SES n’est JAMAIS choisi tout seul : la bascule reste volontaire', () => {
+    /* Ce test vérifiait l'INVERSE jusqu'au 2026-09-22, et contredisait le
+       commentaire de `fournisseurCourriel` qui le surplombait.
+
+       SES démarre en BAC À SABLE : 200 courriels par jour, et il refuse toute
+       adresse destinataire non vérifiée à la main. Poser les identifiants pour
+       préparer la bascule — ce qu'on fait forcément avant de demander la
+       « production access » à Amazon — aurait donc détourné TOUS les envois
+       vers un compte qui les rejette, sans le moindre signe.
+
+       La bascule se fait le jour J, par `COURRIEL_FOURNISSEUR=ses`. */
+    expect(fournisseurCourriel({ ...AVEC_SES, RESEND_API_KEY: 're_x' } as NodeJS.ProcessEnv)).toBe('resend');
+    expect(fournisseurCourriel({ ...AVEC_SES } as NodeJS.ProcessEnv)).toBe('smtp');
+    // Demandé explicitement, il sert : c'est le seul chemin vers SES.
+    expect(fournisseurCourriel({ ...AVEC_SES, COURRIEL_FOURNISSEUR: 'ses' } as NodeJS.ProcessEnv)).toBe('ses');
+  });
+
+  it('sans variable : Resend s’il est configuré, sinon SMTP', () => {
     expect(fournisseurCourriel({ RESEND_API_KEY: 're_x' } as NodeJS.ProcessEnv)).toBe('resend');
     expect(fournisseurCourriel({} as NodeJS.ProcessEnv)).toBe('smtp');
   });

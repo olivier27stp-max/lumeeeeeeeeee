@@ -98,10 +98,44 @@ export type FournisseurCourriel = 'ses' | 'resend' | 'smtp';
 export function fournisseurCourriel(env: NodeJS.ProcessEnv = process.env): FournisseurCourriel {
   const demande = String(env.COURRIEL_FOURNISSEUR || '').trim().toLowerCase();
   if (demande === 'ses' && sesConfigure(env)) return 'ses';
-  if (demande === 'resend' && env.RESEND_API_KEY) return 'resend';
+  if (demande === 'resend' && String(env.RESEND_API_KEY || '').trim()) return 'resend';
   if (demande === 'smtp') return 'smtp';
-  if (sesConfigure(env)) return 'ses';
-  return env.RESEND_API_KEY ? 'resend' : 'smtp';
+  /* SES n'est JAMAIS choisi tout seul — c'est tout l'objet du paragraphe
+     ci-dessus, et la ligne `if (sesConfigure(env)) return 'ses'` qui vivait
+     ici le contredisait. Poser les identifiants SES pour préparer la bascule
+     aurait suffi à détourner TOUS les envois vers un compte encore en bac à
+     sable (200 courriels/jour, et il refuse toute adresse non vérifiée).
+     La bascule reste `COURRIEL_FOURNISSEUR=ses`, le jour où Amazon accorde la
+     « production access ». */
+  // `.trim()` : une variable posée à « » sur Railway est VRAIE en JavaScript.
+  // Sans cela on bascule sur Resend avec une clé inutilisable, et chaque envoi
+  // échoue en 401 au lieu de retomber proprement sur le SMTP.
+  return String(env.RESEND_API_KEY || '').trim() ? 'resend' : 'smtp';
+}
+
+/**
+ * Pourquoi le SMTP sert alors qu'une clé Resend existe — `null` si tout va bien.
+ *
+ * Incident du 2026-09-22 : `RESEND_API_KEY` était posée sur Railway et les 37
+ * envois partaient quand même par SMTP. Le SMTP ne renvoie AUCUN accusé, donc
+ * ouvertures, clics et rebonds restaient à zéro. Invisible, jusqu'à ce qu'on
+ * pense à lire la colonne `provider` d'`email_deliveries`.
+ *
+ * Les deux causes se corrigent différemment : une variable qui force le SMTP
+ * se retire, une clé vide se repose. D'où deux messages distincts.
+ */
+export function raisonSmtpMalgreResend(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (fournisseurCourriel(env) !== 'smtp') return null;
+  const demande = String(env.COURRIEL_FOURNISSEUR || '').trim().toLowerCase();
+  const cle = String(env.RESEND_API_KEY || '').trim();
+
+  if (demande === 'smtp' && cle) {
+    return 'COURRIEL_FOURNISSEUR=smtp force l’ancien chemin alors que RESEND_API_KEY existe — retirer cette variable pour récupérer le suivi';
+  }
+  if (env.RESEND_API_KEY !== undefined && !cle) {
+    return 'RESEND_API_KEY est déclarée mais vide — aucun accusé de réception ne reviendra';
+  }
+  return null;
 }
 
 /** Ce que le courriel concerne — pour retrouver son sort depuis la facture. */

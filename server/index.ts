@@ -1192,7 +1192,25 @@ app.get('/api/health', async (_req, res) => {
     const admin = getServiceClient();
     const { error } = await admin.from('orgs').select('id').limit(1);
     if (error) throw new Error(error.message);
-    res.json({ status: 'ok', uptime: process.uptime(), db_ms: Date.now() - started });
+
+    /* Le fournisseur de courriel réellement actif.
+       Sans cette ligne, un envoi qui part en SMTP alors que RESEND_API_KEY est
+       posée sur Railway ne se diagnostique qu'en lisant `email_deliveries`
+       APRÈS coup — et personne ne pense à le faire. Le SMTP ne renvoie aucun
+       accusé : ouvertures, clics et rebonds restent à zéro pour toujours.
+       Aucun secret n'est exposé : seulement le nom du fournisseur et le fait
+       que la clé soit présente ou non. */
+    const { fournisseurCourriel } = await import('./lib/mailer.js');
+    res.json({
+      status: 'ok',
+      uptime: process.uptime(),
+      db_ms: Date.now() - started,
+      courriel: {
+        fournisseur: fournisseurCourriel(),
+        force: process.env.COURRIEL_FOURNISSEUR || null,
+        resend_cle: Boolean(String(process.env.RESEND_API_KEY || '').trim()),
+      },
+    });
   } catch (err: any) {
     // Pas de captureCronFailure ici : la panne se répéterait à chaque sondage et
     // noierait Sentry. Le moniteur externe est le bon canal d'alerte.
@@ -1271,6 +1289,23 @@ process.on('uncaughtException', (err: Error) => {
 
 app.listen(port, '0.0.0.0', () => {
   logger.info(`API listening on 0.0.0.0:${port}`);
+
+  /* Le SMTP n'accuse RIEN : ni ouverture, ni clic, ni rebond. Partir par ce
+     chemin alors qu'une clé Resend existe est donc silencieux, et ça s'est vu
+     37 fois avant qu'on lise la colonne `provider` d'`email_deliveries`.
+     La bannière le dit au démarrage, et dit quoi corriger. */
+  void import('./lib/mailer.js').then(({ fournisseurCourriel, raisonSmtpMalgreResend }) => {
+    const raison = raisonSmtpMalgreResend();
+    logger.info(`[courriels] fournisseur : ${fournisseurCourriel()}`);
+    if (raison) {
+      console.warn('');
+      console.warn('  ╔════════════════════════════════════════════════════════════╗');
+      console.warn('  ║  COURRIELS EN SMTP — aucun suivi ne reviendra              ║');
+      console.warn('  ╚════════════════════════════════════════════════════════════╝');
+      console.warn(`  ${raison}`);
+      console.warn('');
+    }
+  }).catch(() => { /* diagnostic best-effort : ne bloque jamais le démarrage */ });
 
   // Mode QA : impossible de l'oublier armé. Sans cette bannière, on pourrait
   // croire que les messages partent aux clients alors qu'ils sont tous détournés
