@@ -33,8 +33,19 @@ interface Plan {
   stage: Bi;
   users: Bi;
   extraUserPrice: Bi;
-  /** Prix par devise (source : table `plans` en prod, colonnes *_cad / *_usd). */
-  prices: Record<'CAD' | 'USD', { monthly: number; annualFullYr: number; annualFirstYr: number; extraUser: number }>;
+  /**
+   * Prix par devise (source : table `plans` en prod, colonnes *_cad / *_usd).
+   * L'annuel n'est PAS stocké : il se déduit de `monthly` et `annualDiscount`,
+   * pour qu'un seul chiffre fasse foi. Deux montants saisis à la main finissent
+   * toujours par diverger entre la carte, le tableau comparatif et Stripe.
+   */
+  prices: Record<'CAD' | 'USD', { monthly: number; extraUser: number }>;
+  /**
+   * Rabais du paiement annuel, propre au forfait (0.10 = 10 %).
+   * Décision du 2026-09-22 : 10 % Minimum, 15 % Scale, 30 % Autopilot — ce
+   * dernier amène Autopilot (495) au niveau du Scale mensuel (347).
+   */
+  annualDiscount: number;
   badge?: Bi;
   desc: Bi;
   cta: Bi;
@@ -54,7 +65,9 @@ const PLANS: Plan[] = [
     stage: { en: 'Getting started', fr: 'Je démarre' },
     users: { en: 'Includes 3 users', fr: '3 utilisateurs inclus' },
     extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
-    prices: { CAD: { monthly: 150, annualFullYr: 1530, annualFirstYr: 1300, extraUser: 35 }, USD: { monthly: 110, annualFullYr: 1122, annualFirstYr: 954, extraUser: 35 } },
+    // USD ≈ CAD × 0,715 (taux du 2026-09-22), arrondi au dollar près.
+    prices: { CAD: { monthly: 150, extraUser: 35 }, USD: { monthly: 109, extraUser: 25 } },
+    annualDiscount: 0.10,
     desc: {
       en: 'Everything you need to run the business solo or with a small crew.',
       fr: 'Tout ce qu\'il faut pour rouler votre entreprise seul ou avec une petite équipe.',
@@ -78,7 +91,8 @@ const PLANS: Plan[] = [
     stage: { en: 'I have a team', fr: 'J\'ai une équipe' },
     users: { en: 'Includes 10 users', fr: '10 utilisateurs inclus' },
     extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
-    prices: { CAD: { monthly: 340, annualFullYr: 3468, annualFirstYr: 2948, extraUser: 30 }, USD: { monthly: 250, annualFullYr: 2550, annualFirstYr: 2168, extraUser: 30 } },
+    prices: { CAD: { monthly: 347, extraUser: 30 }, USD: { monthly: 249, extraUser: 21 } },
+    annualDiscount: 0.15,
     badge: { en: 'Most Popular', fr: 'Le plus populaire' },
     desc: {
       en: 'For growing teams — stop being the dispatcher and let the system run the day.',
@@ -91,9 +105,10 @@ const PLANS: Plan[] = [
     highlights: [
       { en: 'Two-way SMS & batch messaging', fr: 'Textos bidirectionnels et messages groupés' },
       { en: 'Automations & quote/invoice follow-ups', fr: 'Automatisations et relances de soumissions et factures' },
-      { en: 'Dispatch map & live GPS', fr: 'Répartition sur carte et GPS en direct' },
       { en: 'Timesheets, payroll & performance', fr: 'Feuilles de temps, paie et performance' },
       { en: 'Advanced analytics & QuickBooks export', fr: 'Statistiques avancées et export QuickBooks' },
+      { en: 'Team roles & permissions', fr: 'Rôles et permissions de l\'équipe' },
+      { en: 'Free onboarding', fr: 'Intégration gratuite' },
     ],
   },
   {
@@ -102,7 +117,8 @@ const PLANS: Plan[] = [
     stage: { en: 'Runs without me', fr: 'Ça roule sans moi' },
     users: { en: 'Includes 20 users', fr: '20 utilisateurs inclus' },
     extraUserPrice: { en: '+{x}/extra user/mo', fr: '+{x}/utilisateur suppl./mois' },
-    prices: { CAD: { monthly: 495, annualFullYr: 5049, annualFirstYr: 4292, extraUser: 25 }, USD: { monthly: 360, annualFullYr: 3672, annualFirstYr: 3121, extraUser: 25 } },
+    prices: { CAD: { monthly: 495, extraUser: 25 }, USD: { monthly: 359, extraUser: 18 } },
+    annualDiscount: 0.30,
     desc: {
       en: 'For businesses that grow without the owner — AI, sales teams and full control.',
       fr: 'Pour les entreprises qui grandissent sans le propriétaire — IA, équipes de vente et contrôle complet.',
@@ -116,10 +132,14 @@ const PLANS: Plan[] = [
       // 20260919000000) : c'est ce qui distingue ce forfait de Scale.
       { en: 'Lumi, the AI assistant — only on Autopilot', fr: 'Lumi, l\'assistant IA — exclusif à Autopilot' },
       { en: 'Door-to-door: pipeline, commissions, leaderboard', fr: 'Porte-à-porte : pipeline, commissions, leaderboard' },
-      { en: 'Team courses (LMS)', fr: 'Formations de l\'équipe (LMS)' },
+      // Remplace « Formations de l'équipe (LMS) » : ce qui vend, ce n'est pas
+      // l'outil de cours, c'est la bibliothèque de procédures et de vidéos
+      // déjà prête, consultable en tout temps pour maîtriser le CRM.
+      { en: 'SOPs & training videos included', fr: 'Procédures (SOP) et vidéos de formation incluses' },
+      { en: 'Dispatch map & live GPS', fr: 'Répartition sur carte et GPS en direct' },
       { en: 'Advanced roles, multi-team & availability', fr: 'Rôles avancés, multi-équipes et disponibilités' },
-      { en: 'Automated satisfaction surveys', fr: 'Sondages de satisfaction automatisés' },
       { en: 'API, marketplace & premium support', fr: 'API, marketplace et soutien prioritaire' },
+      { en: 'Free onboarding', fr: 'Intégration gratuite' },
     ],
   },
 ];
@@ -157,7 +177,7 @@ const COMPARISON: CompareGroup[] = [
       { label: { en: 'Automations & quote/invoice follow-ups', fr: 'Automatisations et relances de soumissions et factures' }, cells: [false, true, true] },
       { label: { en: 'Custom request forms', fr: 'Formulaires de demande personnalisés' }, cells: [false, true, true] },
       { label: { en: 'Employee timesheets & payroll', fr: 'Feuilles de temps et paie' }, cells: [false, true, true] },
-      { label: { en: 'Dispatch map & live GPS', fr: 'Carte de répartition et GPS en direct' }, cells: [false, true, true] },
+      { label: { en: 'Dispatch map & live GPS', fr: 'Carte de répartition et GPS en direct' }, cells: [false, false, true] },
       { label: { en: 'Checklists & checklist templates', fr: 'Listes de vérification et modèles' }, cells: [false, true, true] },
       { label: { en: 'Internal team chat', fr: 'Clavardage d\'équipe interne' }, cells: [false, true, true] },
       { label: { en: 'Quote templates, presets & satellite measure tool', fr: 'Modèles de soumission, préréglages et mesure satellite' }, cells: [false, true, true] },
@@ -178,13 +198,12 @@ const COMPARISON: CompareGroup[] = [
     title: { en: 'Growth & control', fr: 'Croissance et contrôle' },
     rows: [
       { label: { en: 'Door-to-door: map, pipeline, leaderboard, commissions, reports', fr: 'Porte-à-porte : carte, pipeline, leaderboard, commissions, rapports' }, cells: [false, false, true] },
-      { label: { en: 'Courses / LMS', fr: 'Formations / LMS' }, cells: [false, false, true] },
+      { label: { en: 'SOPs & training videos', fr: 'Procédures (SOP) et vidéos de formation' }, cells: [false, false, true] },
       { label: { en: 'Full API access', fr: 'Accès complet à l\'API' }, cells: [false, false, true] },
       { label: { en: 'Integrations marketplace', fr: 'Marketplace d\'intégrations' }, cells: [false, false, true] },
       { label: { en: 'Advanced roles & permissions', fr: 'Rôles et permissions avancés' }, cells: [false, false, true] },
       { label: { en: 'Multi-team management', fr: 'Gestion multi-équipes' }, cells: [false, false, true] },
       { label: { en: 'Team availability management', fr: 'Gestion des disponibilités' }, cells: [false, false, true] },
-      { label: { en: 'Automated satisfaction surveys', fr: 'Sondages de satisfaction automatisés' }, cells: [false, false, true] },
     ],
   },
   {
@@ -253,7 +272,6 @@ const NEEDS: NeedGroup[] = [
       { key: 'templates', label: { en: 'Quote templates & satellite measure', fr: 'Modèles de soumission et mesure satellite' }, plan: 1, rows: ['Quote templates, presets & satellite measure tool'] },
       { key: 'followups', label: { en: 'Automatic quote follow-ups', fr: 'Relances automatiques des soumissions' }, plan: 1, rows: ['Automations & quote/invoice follow-ups'] },
       { key: 'd2d', label: { en: 'Door-to-door: pipeline & commissions', fr: 'Porte-à-porte : pipeline et commissions' }, plan: 2, rows: ['Door-to-door: map, pipeline, leaderboard, commissions, reports'] },
-      { key: 'surveys', label: { en: 'Automatic satisfaction surveys', fr: 'Sondages de satisfaction automatiques' }, plan: 2, rows: ['Automated satisfaction surveys'] },
     ],
   },
   {
@@ -262,7 +280,7 @@ const NEEDS: NeedGroup[] = [
       { key: 'calendar', label: { en: 'Calendar, jobs & day view', fr: 'Calendrier, jobs et vue Jour' }, plan: 0, rows: ['Jobs, calendar, day view & tasks'] },
       { key: 'recurring', label: { en: 'Recurring jobs', fr: 'Jobs récurrentes' }, plan: 0, rows: ['Recurring jobs'] },
       { key: 'mobile', label: { en: 'Mobile access', fr: 'Accès mobile' }, plan: 0, rows: ['Mobile access'] },
-      { key: 'dispatch', label: { en: 'Dispatch map & live GPS', fr: 'Carte de répartition et GPS en direct' }, plan: 1, rows: ['Dispatch map & live GPS'] },
+      { key: 'dispatch', label: { en: 'Dispatch map & live GPS', fr: 'Carte de répartition et GPS en direct' }, plan: 2, rows: ['Dispatch map & live GPS'] },
       { key: 'checklists', label: { en: 'Checklists', fr: 'Listes de vérification' }, plan: 1, rows: ['Checklists & checklist templates'] },
       { key: 'availability', label: { en: 'Availability management', fr: 'Gestion des disponibilités' }, plan: 2, rows: ['Team availability management'] },
       { key: 'teams', label: { en: 'Multiple teams', fr: 'Plusieurs équipes' }, plan: 2, rows: ['Multi-team management'] },
@@ -309,7 +327,8 @@ const COPY = {
     annual: 'Annual',
     perMonth: '/mo',
     billedMonthly: 'Billed monthly · cancel anytime',
-    billedAnnually: (firstYr: string, fullYr: string) => `${firstYr} billed for year one, then ${fullYr}/yr`,
+    billedAnnually: (yr: string, pct: number) => `${yr} billed yearly · save ${pct}%`,
+    upTo: (pct: number) => `up to −${pct}%`,
     mostPopular: 'Most popular',
     recommended: 'Recommended for you',
     seats: (u: number) => `${u} users included`,
@@ -358,7 +377,8 @@ const COPY = {
     annual: 'Annuel',
     perMonth: '/mois',
     billedMonthly: 'Facturé mensuellement · annulez en tout temps',
-    billedAnnually: (firstYr: string, fullYr: string) => `${firstYr} facturés la première année, puis ${fullYr}/an`,
+    billedAnnually: (yr: string, pct: number) => `${yr} facturés annuellement · économisez ${pct} %`,
+    upTo: (pct: number) => `jusqu'à −${pct} %`,
     mostPopular: 'Le plus choisi',
     recommended: 'Recommandé pour vous',
     seats: (u: number) => `${u} utilisateurs inclus`,
@@ -421,6 +441,18 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
   const { currency } = useRegion();
   const money = (n: number) => (language === 'fr' ? `${n.toLocaleString('fr-CA')} $` : `$${n.toLocaleString('en-CA')}`);
   const pr = (plan: Plan) => plan.prices[currency];
+  /**
+   * Prix annuel du forfait, à partir du seul chiffre qui fait foi (le mensuel).
+   * `perMonth` est ce qu'on affiche en gros ; `perYear` est ce qui sera
+   * réellement facturé une fois par année. Le rabais varie par forfait.
+   */
+  const annualPrice = (plan: Plan) => {
+    const monthly = pr(plan).monthly;
+    const perMonth = Math.round(monthly * (1 - plan.annualDiscount));
+    return { perMonth, perYear: perMonth * 12, pct: Math.round(plan.annualDiscount * 100) };
+  };
+  /** Le meilleur rabais offert, annoncé sur la bascule Mensuel / Annuel. */
+  const bestDiscount = Math.max(...PLANS.map((p) => Math.round(p.annualDiscount * 100)));
 
   // ── Trouveur ──
   const priceFor = (plan: Plan) =>
@@ -467,7 +499,7 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
         <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="pr-sub">{c.subtitle}</motion.p>
         <div className="pr-toggle" role="group">
           <button type="button" aria-pressed={!annual} onClick={() => setAnnual(false)}>{c.monthly}</button>
-          <button type="button" aria-pressed={annual} onClick={() => setAnnual(true)}>{c.annual} <i>−15 %</i></button>
+          <button type="button" aria-pressed={annual} onClick={() => setAnnual(true)}>{c.annual} <i>{c.upTo(bestDiscount)}</i></button>
         </div>
       </section>
 
@@ -476,19 +508,20 @@ export default function Pricing({ authenticated: _authenticated }: { authenticat
         <div className="pr-plans">
           {PLANS.map((plan, i) => {
             const p = pr(plan);
-            const now = annual ? Math.round(p.annualFirstYr / 12) : p.monthly;
+            const an = annualPrice(plan);
+            const now = annual ? an.perMonth : p.monthly;
             return (
               <article key={plan.slug} className={`pr-plan${plan.featured ? ' feat' : ''}${i === rec ? ' rec' : ''}`} data-rec={c.recommended}>
                 <div className="pr-stage">{plan.stage[language]}</div>
                 <h3>{plan.name}{plan.featured && <span className="pr-tag">{c.mostPopular}</span>}</h3>
                 <p className="pr-desc">{plan.desc[language]}</p>
                 <div className="pr-price">
-                  {annual && <span className="was">{money(Math.round(p.annualFullYr / 12))}</span>}
+                  {annual && <span className="was">{money(p.monthly)}</span>}
                   <span className="now">{money(now)}</span>
                   <span className="cur">{currency}</span>
                   <span className="per">{c.perMonth}</span>
                 </div>
-                <div className="pr-bill">{annual ? c.billedAnnually(money(p.annualFirstYr), money(p.annualFullYr)) : c.billedMonthly}</div>
+                <div className="pr-bill">{annual ? c.billedAnnually(money(an.perYear), an.pct) : c.billedMonthly}</div>
                 <div className="pr-seats">{c.seats(plan.seats.users)}<small>{c.seatExtras(money(p.extraUser))}</small></div>
                 <div className="pr-inh">{plan.inherits[language]}</div>
                 <ul>
