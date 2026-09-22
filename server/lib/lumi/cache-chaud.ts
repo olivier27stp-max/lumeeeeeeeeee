@@ -65,11 +65,32 @@ export function signalerAppelLumi(model: string, prefixe?: Prefixe, cle = 'base'
 /** Pour les tests : l'état des préfixes suivis. */
 export function prefixesSuivis(): ReadonlyMap<string, { dernierAppelReel: number; dernierPing: number }> { return prefixes; }
 
-/** Fenêtre après le dernier appel réel pendant laquelle on garde le cache chaud. 0 = désactivé. */
+/**
+ * Fenêtre après le dernier appel réel pendant laquelle on garde le cache
+ * chaud. 0 = désactivé.
+ *
+ * Portée de 2 h à 12 h le 2026-09-22, sur mesure. Le démarrage à froid est
+ * LA source des coûts imprévisibles : un tour à cache froide coûte 5,25 ¢
+ * contre 2,06 ¢ à chaud (4,8×), et 25 % des tours étaient à froid. Ventilé
+ * par écart depuis le tour précédent :
+ *
+ *   0-5 min    57 tours   16 % à froid   2,06 ¢
+ *   1-2 h       2 tours  100 % à froid   4,92 ¢
+ *   > 8 h       5 tours  100 % à froid   5,25 ¢
+ *
+ * Au-delà d'une heure, c'est froid à tous les coups — et une fenêtre de 2 h
+ * ne couvrait pas le cas le plus courant : la personne qui revient le
+ * lendemain matin, ou après le dîner.
+ *
+ * 12 h couvre une journée ouvrable : 15 pings à ~0,15 ¢ = 2,25 ¢ par jour,
+ * rentable dès qu'UN SEUL tour à froid est évité tous les trois jours
+ * (0,7/jour exactement). Le maintien ne s'arme toujours qu'après une activité
+ * réelle : la nuit et le week-end, rien n'est dépensé.
+ */
 export function fenetreMaintienMs(env: NodeJS.ProcessEnv = process.env): number {
   if (env.LUMI_CACHE_CHAUD_MINUTES === '0') return 0;
   const v = Number(env.LUMI_CACHE_CHAUD_MINUTES);
-  return (Number.isFinite(v) && v >= 1 ? v : 120) * 60_000;
+  return (Number.isFinite(v) && v >= 1 ? v : 720) * 60_000;
 }
 
 export interface EtatMaintien { dernierAppelReel: number; dernierPing: number; maintenant: number; fenetreMs: number }

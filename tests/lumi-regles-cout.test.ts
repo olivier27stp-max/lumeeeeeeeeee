@@ -37,7 +37,13 @@ describe('les règles sont branchées dans le code (pas seulement écrites)', ()
     expect(s).toContain('const MAX_TOKENS = reglesCout().max_tokens_sortie;');
     expect(s).toContain("opts.reglages?.effort ?? reglesCout().effort_defaut");
     // Mesuré hors écriture 1 h du préfixe (le froid n'est pas une boucle).
-    expect(s).toContain('if (coutHorsCacheFroid >= reglesCout().plafond_cout_tour_cents)');
+    // Depuis le 2026-09-22, le plafond DÉGRADE avant de couper : passé le
+    // plafond le modèle conclut sans outils et en effort bas (`doitConclure`),
+    // et on ne coupe qu'au double. Couper en plein tour laissait l'utilisateur
+    // sans réponse — perdre une fonction pour économiser des cents.
+    expect(s).toContain('const doitConclure = coutHorsCacheFroid >= plafondTour;');
+    expect(s).toContain('coutHorsCacheFroid >= plafondTour * 2');
+    expect(s).toContain("tool_choice: { type: 'none' as const }");
     expect(s).toContain('ephemeral_1h_input_tokens: 0');
     expect(s).toContain("message: 'plafond_tour'");
   });

@@ -13,7 +13,7 @@ import { journaliserTrace, usageGemini } from '../lib/lumi/traces';
 import { sendSafeError } from '../lib/error-handler';
 import { validate, agentTranscribeSchema } from '../lib/validation';
 import { isGeminiConfigured } from '../lib/agent/gemini';
-import { verifierPlafond, compterRefus } from '../lib/lumi/plafond-journalier';
+import { verifierPlafond, compterRefus, ajouterAppel } from '../lib/lumi/plafond-journalier';
 import { transcribeAudioAvecUsage, type TranscribeMimeType } from '../lib/agent/transcribe';
 
 const router = Router();
@@ -30,15 +30,18 @@ router.post('/agent/transcribe', validate(agentTranscribeSchema), async (req, re
     const authed = await requireAuthedClient(req, res);
     if (!authed) return;
     const { audio, mimeType, language } = req.body as { audio: string; mimeType: TranscribeMimeType; language?: 'fr' | 'en' };
-    // La dictée est un appel facturé dont le tarif n'est pas connu du code
-    // (Gemini absent de TARIFS) : elle compte donc dans le plafond de la
-    // source « lumi », faute de pouvoir la chiffrer à part (incident
-    // 2026-09-18 — c'était une dépense entièrement invisible en dollars).
-    if (!verifierPlafond('lumi').autorise) {
-      compterRefus('lumi');
-      return res.status(429).json({ error: 'Daily spend cap reached for transcription.', code: 'plafond_jour' });
+    // La dictée a sa PROPRE source (« voix ») depuis le 2026-09-22. Avant,
+    // elle puisait dans le plafond de « lumi » : une journée chargée en
+    // dictées aurait coupé le chat, alors que ce sont deux usages distincts.
+    // Son tarif n'est pas connu du code (Gemini absent de TARIFS), donc le
+    // plafond porte sur le VOLUME d'appels, pas sur des dollars.
+    if (!verifierPlafond('voix').autorise) {
+      compterRefus('voix');
+      return res.status(429).json({ error: 'Daily transcription cap reached.', code: 'plafond_jour' });
     }
     const debut = Date.now();
+    // Compté à l'envoi : c'est le volume, pas le montant, qui borne cette source.
+    ajouterAppel('voix');
     const r = await transcribeAudioAvecUsage({ base64: audio, mimeType, language: language ?? 'fr' });
     // Trace (lumi_traces) : la dictée coûte un appel Gemini avant le tour Lumi.
     // org/user = contexte serveur ; le texte transcrit n'est pas stocké ici.

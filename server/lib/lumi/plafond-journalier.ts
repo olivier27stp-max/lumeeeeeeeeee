@@ -39,9 +39,30 @@
 import { logger } from '../logger';
 
 /** Sources d'appel distinctes : chacune a son plafond et son compteur. */
-export type SourceLLM = 'lumi' | 'support' | 'migration' | 'public' | 'cache-chaud' | 'eval';
+export type SourceLLM = 'lumi' | 'support' | 'migration' | 'public' | 'cache-chaud' | 'eval' | 'voix';
 
-export const SOURCES: readonly SourceLLM[] = ['lumi', 'support', 'migration', 'public', 'cache-chaud', 'eval'];
+export const SOURCES: readonly SourceLLM[] = ['lumi', 'support', 'migration', 'public', 'cache-chaud', 'eval', 'voix'];
+
+/**
+ * Sources dont le tarif n'est pas connu du code (Gemini) : leur dépense en
+ * DOLLARS ne peut pas être comptée, seulement leur nombre d'appels. Le
+ * plafond s'applique alors au VOLUME, pas au montant — c'est moins précis,
+ * mais un poste non chiffré sans aucune borne est pire (2026-09-22 : la
+ * dictée ne figurait dans aucun total en dollars).
+ */
+export const SOURCES_SANS_TARIF: readonly SourceLLM[] = ['voix'];
+
+/** Appels/jour tolérés pour une source non chiffrée. `LUMI_PLAFOND_JOUR_VOIX_APPELS`. */
+export function plafondAppelsJour(source: SourceLLM, env: NodeJS.ProcessEnv = process.env): number {
+  const brut = env[`LUMI_PLAFOND_JOUR_${source.toUpperCase()}_APPELS`];
+  if (brut !== undefined && brut !== '') {
+    const v = Number(brut);
+    if (Number.isFinite(v) && v >= 0) return Math.round(v);
+  }
+  // 60 s par dictée : 300 appels = 5 h d'audio en une journée pour une org.
+  // Large pour un usage normal, net contre une boucle.
+  return 300;
+}
 
 /** Plafond par défaut, le MÊME partout : la valeur qui aurait arrêté l'incident du 2026-09-18. */
 export const PLAFOND_DEFAUT_CENTS = 500;
@@ -67,7 +88,7 @@ export function plafondJourCents(source: SourceLLM, env: NodeJS.ProcessEnv = pro
   return PLAFOND_DEFAUT_CENTS;
 }
 
-interface Compteur { jour: string; cents: number; refus: number; alerte: boolean }
+interface Compteur { jour: string; cents: number; appels: number; refus: number; alerte: boolean }
 const compteurs = new Map<SourceLLM, Compteur>();
 
 /** Jour civil de Montréal : la même frontière que le reste du budget. */
@@ -79,13 +100,17 @@ function compteur(source: SourceLLM, maintenant: Date): Compteur {
   const jour = jourMontreal(maintenant);
   const c = compteurs.get(source);
   if (c && c.jour === jour) return c;
-  const neuf: Compteur = { jour, cents: 0, refus: 0, alerte: false };
+  const neuf: Compteur = { jour, cents: 0, appels: 0, refus: 0, alerte: false };
   compteurs.set(source, neuf);
   return neuf;
 }
 
 export interface Verdict {
   autorise: boolean;
+  /** Appels du jour pour cette source (seul compteur disponible sans tarif). */
+  appels?: number;
+  /** Plafond en nombre d'appels, pour une source non chiffrée. */
+  plafond_appels?: number;
   /** Dépense déjà comptée aujourd'hui pour cette source, en cents. */
   depense_cents: number;
   plafond_cents: number;
@@ -97,10 +122,15 @@ export interface Verdict {
  * qui compte, une fois le coût réel connu.
  */
 export function verifierPlafond(source: SourceLLM, env: NodeJS.ProcessEnv = process.env, maintenant = new Date()): Verdict {
-  const plafond = plafondJourCents(source, env);
   const c = compteur(source, maintenant);
-  if (plafond <= 0) return { autorise: true, depense_cents: c.cents, plafond_cents: 0 };
-  return { autorise: c.cents < plafond, depense_cents: c.cents, plafond_cents: plafond };
+  // Source non chiffrée (Gemini) : on borne le VOLUME, faute de connaître le prix.
+  if (SOURCES_SANS_TARIF.includes(source)) {
+    const max = plafondAppelsJour(source, env);
+    return { autorise: max <= 0 || c.appels < max, depense_cents: c.cents, plafond_cents: 0, appels: c.appels, plafond_appels: max };
+  }
+  const plafond = plafondJourCents(source, env);
+  if (plafond <= 0) return { autorise: true, depense_cents: c.cents, plafond_cents: 0, appels: c.appels };
+  return { autorise: c.cents < plafond, depense_cents: c.cents, plafond_cents: plafond, appels: c.appels };
 }
 
 /**
@@ -121,16 +151,41 @@ export function ajouterDepense(source: SourceLLM, coutCents: number, env: NodeJS
   }
 }
 
+/**
+ * Compte UN APPEL, pour les sources dont on ne connaît pas le tarif. Le prix
+ * reste inconnu, mais le volume, lui, est mesurable — et c'est ce volume qui
+ * arme le plafond de ces sources.
+ */
+export function ajouterAppel(source: SourceLLM, env: NodeJS.ProcessEnv = process.env, maintenant = new Date()): void {
+  const c = compteur(source, maintenant);
+  c.appels += 1;
+  const max = plafondAppelsJour(source, env);
+  if (max > 0 && c.appels >= max && !c.alerte) {
+    c.alerte = true;
+    logger.warn('[lumi] plafond journalier d’appels atteint (source sans tarif connu)', { source, appels: c.appels, plafond: max, jour: c.jour });
+  }
+}
+
 /** Compte un refus (pour l'état et l'alerte). */
 export function compterRefus(source: SourceLLM, maintenant = new Date()): void {
   compteur(source, maintenant).refus += 1;
 }
 
 /** État courant, pour /api/lumi/budget et les tests. */
-export function etatPlafonds(env: NodeJS.ProcessEnv = process.env, maintenant = new Date()): Array<{ source: SourceLLM; depense_cents: number; plafond_cents: number; refus: number }> {
+export function etatPlafonds(env: NodeJS.ProcessEnv = process.env, maintenant = new Date()): Array<{ source: SourceLLM; depense_cents: number; plafond_cents: number; appels: number; plafond_appels: number | null; refus: number }> {
   return SOURCES.map((s) => {
     const c = compteur(s, maintenant);
-    return { source: s, depense_cents: c.cents, plafond_cents: plafondJourCents(s, env), refus: c.refus };
+    const sansTarif = SOURCES_SANS_TARIF.includes(s);
+    return {
+      source: s,
+      depense_cents: c.cents,
+      // Une source sans tarif n'a pas de plafond en dollars : le dire (0)
+      // plutôt que d'afficher une borne qui ne s'applique pas.
+      plafond_cents: sansTarif ? 0 : plafondJourCents(s, env),
+      appels: c.appels,
+      plafond_appels: sansTarif ? plafondAppelsJour(s, env) : null,
+      refus: c.refus,
+    };
   });
 }
 
