@@ -52,3 +52,13 @@ describe('buildEntityRow — homonymes départagés par nom + adresse', () => {
     expect((res as any).detail).toMatch(/client introuvable/);
   });
 });
+
+describe('doublons internes — export Jobber « une ligne par propriété »', () => {
+  it('deux lignes avec le même préfixe clientId_ sont le même client (fusionnées, pas homonymes)', async () => {
+    const { planIntraDedupe } = await import('../../server/lib/migration/importer');
+    const row = (id: string, ext: string, address: string) => ({ id, file_id: 'f', row_number: 1, entity_type: 'client', external_id: ext, normalized: { company: 'Les Arpents Verts', external_id: ext, address }, relations: {}, status: 'ready' }) as any;
+    const intra = planIntraDedupe('client', [row('a', '113169748_121696871', '3244 Chemin des Patriotes'), row('b', '113169748_120141036', '17920 avenue St-Louis')]);
+    expect(intra.siblingOf.get('b')).toBe('a');
+    expect(intra.ambiguousKeys.size).toBe(0);
+  });
+});

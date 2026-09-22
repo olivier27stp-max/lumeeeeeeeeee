@@ -411,9 +411,15 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
     if (email) keys.push(`e:${email}`);
     const phone = str(n.phone_digits);
     if (phone.length >= 7) keys.push(`t:${phone.slice(-10)}`);
-    const name = fullNameOf(n);
+    // Export Jobber « Clients » : UNE LIGNE PAR PROPRIÉTÉ, et l'identifiant est
+    // `clientId_propertyId`. Même préfixe = même client (Les Arpents Verts ×3, Louise
+    // Parenteau ×4…) : sans cette clé, un client sans courriel ni téléphone ressortait
+    // en « homonyme » de lui-même et tous ses documents devenaient orphelins (2026-09-22).
+    const ext = str(n.external_id) || str(rec.external_id);
+    const jobber = /^(\d{5,})_(\d{5,})$/.exec(ext);
+    if (jobber) keys.push(`jc:${jobber[1]}`);
     const addr = normalizeAddressKey(str(n.address));
-    if (name && addr) keys.push(`na:${name}|${addr}`);
+    if (addr) for (const name of nameKeysOf(n)) keys.push(`na:${name}|${addr}`);
   } else if (entity === 'property') {
     const addr = normalizeAddressKey(str(n.address));
     if (addr) keys.push(`a:${addr}`);
