@@ -253,3 +253,57 @@ describe('la charpente survit à un modèle importé', () => {
     expect(html.match(/<body/g)?.length).toBe(1);
   });
 });
+
+/**
+ * Les images d'un HTML importé (2026-09-22).
+ *
+ * Une entreprise qui colle un gabarit trouvé ailleurs amène souvent avec lui
+ * un pixel de suivi tiers. Ce n'est pas notre suivi, elle ne l'a pas voulu, et
+ * c'est SON client qui est pisté. On les retire — question de Loi 25 autant
+ * que de propreté.
+ */
+describe('images d’un HTML importé', () => {
+  it('retire le pixel espion, déclaré en attribut ou en style', () => {
+    expect(assainirHtmlCourriel('<img src="http://tracker.ru/p.gif" width="1" height="1">')).toBe('');
+    expect(assainirHtmlCourriel('<img src="http://t.ru/p.gif" style="width:1px;height:1px">')).toBe('');
+    expect(assainirHtmlCourriel('<img src="http://t.ru/p.gif" height="0">')).toBe('');
+  });
+
+  it('retire une source inutilisable dans un courriel', () => {
+    // `file://` pointe sur le disque de l'expéditeur ; `//x` hérite d'un
+    // schéma qui n'existe pas dans une boîte de réception. Image cassée.
+    expect(assainirHtmlCourriel('<img src="file:///C:/secret.png">')).toBe('');
+    expect(assainirHtmlCourriel('<img src="//evil.test/x.png">')).toBe('');
+    expect(assainirHtmlCourriel('<img>')).toBe('');
+  });
+
+  it('borne la largeur sans déformer l’image', () => {
+    // 900 px dans un courriel de 600 px casse la mise en page sur téléphone.
+    const r = assainirHtmlCourriel('<img src="https://x.ca/a.jpg" style="width:900px">');
+    expect(r).toContain('max-width:100%');
+    expect(r).toContain('height:auto');
+    // Le style d'origine survit : on ajoute, on ne remplace pas.
+    expect(r).toContain('width:900px');
+  });
+
+  it('pose un texte alternatif vide plutôt que de retirer l’image', () => {
+    // L'image est peut-être l'essentiel du message ; un alt vide dit au
+    // lecteur d'écran de la passer au lieu d'ânonner une adresse.
+    const r = assainirHtmlCourriel('<img src="https://x.ca/a.png">');
+    expect(r).toContain('alt=""');
+    expect(r).toContain('https://x.ca/a.png');
+  });
+
+  it('garde une photo légitime intacte, avec son texte alternatif', () => {
+    const r = assainirHtmlCourriel('<p>Bonjour</p><img src="https://x.ca/equipe.jpg" alt="Notre équipe">');
+    expect(r).toContain('alt="Notre équipe"');
+    expect(r).toContain('Bonjour');
+    expect(r).not.toContain('alt=""');
+  });
+
+  it('retire toujours onerror, même sur une image gardée', () => {
+    const r = assainirHtmlCourriel('<img src="https://x.ca/a.jpg" alt="x" onerror="vol()">');
+    expect(r).not.toContain('onerror');
+    expect(r).toContain('https://x.ca/a.jpg');
+  });
+});

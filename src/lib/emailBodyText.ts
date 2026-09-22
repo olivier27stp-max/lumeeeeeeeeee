@@ -146,6 +146,19 @@ const EXEMPLES: Record<string, string> = {
   company_name: 'Votre entreprise',
   invoice_number: 'FAC-1042',
   invoice_total: '450,00 $',
+  // Les variables des modèles de courriel (Réglages → Modèles de courriel).
+  // Sans elles, le propriétaire voyait « {invoice_amount} » en toutes lettres
+  // dans son propre aperçu et croyait la variable cassée.
+  invoice_amount: '450,00 $',
+  amount_due: '450,00 $',
+  due_date: '30 août 2026',
+  payment_link: 'lumecrm.net/invoice/…',
+  pay_url: 'lumecrm.net/pay/…',
+  quote_amount: '1 250,00 $',
+  quote_link: 'lumecrm.net/quote/…',
+  valid_until: '2 mai 2026',
+  contract_number: 'CTR-12',
+  contract_link: 'lumecrm.net/contract/…',
   invoice_due_date: '2026-08-30',
   quote_number: 'SOU-218',
   quote_total: '1 250,00 $',
@@ -159,7 +172,12 @@ const EXEMPLES: Record<string, string> = {
 };
 
 export function remplacerVariables(s: string): string {
-  return s.replace(/\[(\w+)\]/g, (tout, cle) => EXEMPLES[cle] ?? tout);
+  // Les deux syntaxes : les automatisations écrivent [cle], les modèles de
+  // courriel {cle}. `applyTemplate` côté serveur accepte déjà les deux ; un
+  // aperçu qui n'en montre qu'une laisse croire que l'autre est cassée.
+  return s
+    .replace(/\[(\w+)\]/g, (tout, cle) => EXEMPLES[cle] ?? tout)
+    .replace(/\{(\w+)\}/g, (tout, cle) => EXEMPLES[cle] ?? tout);
 }
 
 /**
