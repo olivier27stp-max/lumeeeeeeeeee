@@ -31,7 +31,7 @@ import { extractIP } from '../lib/security';
 import { assertTransition, canTransition, InvalidTransitionError } from '../lib/migration/state-machine';
 import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
-import { analyzeMigrationFile, prepareStaging, receptionnerFichierMigration, MIGRATION_BUCKET } from '../lib/migration/pipeline';
+import { analyzeMigrationFile, prepareStaging, receptionnerFichierMigration, estCategorieValide, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, purgeOrphanProperties, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
@@ -460,8 +460,10 @@ router.post('/migration-admin/migrations/:id/files', rawFileParser, async (req, 
     const migration = await getMigration(admin, req.params.id);
     if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
     const rawName = typeof req.query.name === 'string' ? req.query.name : '';
+    const rawCategory = typeof req.query.category === 'string' ? req.query.category : '';
+    if (rawCategory && !estCategorieValide(rawCategory)) return res.status(400).json({ error: 'Catégorie inconnue.' });
     const buf: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    const r = await receptionnerFichierMigration(admin, migration, { buf, name: rawName, uploadedBy: auth.user.id, actorRole: 'platform_admin' });
+    const r = await receptionnerFichierMigration(admin, migration, { buf, name: rawName, uploadedBy: auth.user.id, actorRole: 'platform_admin', categoryDeclared: rawCategory ? (rawCategory as any) : null });
     if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code });
     return res.status(201).json(r.file);
   } catch (err: any) {

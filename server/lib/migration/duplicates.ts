@@ -274,5 +274,32 @@ export async function findDuplicatesForEntity(
     return matches;
   }
 
+  if (entity === 'payment') {
+    // Même facture (par numéro), même montant, même jour = même paiement déjà encaissé.
+    const invoices = await fetchAll<{ id: string; invoice_number: string | null }>(admin, 'invoices', 'id, invoice_number', orgId);
+    const invoiceByNumber = new Map<string, string>();
+    for (const inv of invoices) {
+      const num = (inv.invoice_number ?? '').trim();
+      if (num && !invoiceByNumber.has(num)) invoiceByNumber.set(num, inv.id);
+    }
+    const existing = await fetchAll<{ id: string; invoice_id: string | null; amount_cents: number | null; payment_date: string | null }>(
+      admin, 'payments', 'id, invoice_id, amount_cents, payment_date', orgId,
+    );
+    const byKey = new Map<string, string>();
+    for (const p of existing) {
+      if (!p.invoice_id || p.amount_cents === null) continue;
+      byKey.set(`${p.invoice_id}|${p.amount_cents}|${(p.payment_date ?? '').slice(0, 10)}`, p.id);
+    }
+    for (const r of records) {
+      const n = r.normalized ?? {};
+      const invoiceId = invoiceByNumber.get(str((r.relations ?? {}).invoice_ref).trim());
+      const amount = typeof n.amount_cents === 'number' ? n.amount_cents : null;
+      if (!invoiceId || amount === null) continue;
+      const hit = byKey.get(`${invoiceId}|${amount}|${str(n.date).slice(0, 10)}`);
+      if (hit) matches.push({ stagingRecordId: r.id, existingTable: 'payments', existingId: hit, matchReasons: ['invoice_number', 'amount', 'date'], score: 95 });
+    }
+    return matches;
+  }
+
   return matches;
 }

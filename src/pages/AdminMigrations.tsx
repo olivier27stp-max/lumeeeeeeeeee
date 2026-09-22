@@ -1251,14 +1251,14 @@ function FilesTab({ d, onChanged }: { d: any; onChanged: () => void }) {
             nom accessible — un lecteur d'écran qui l'atteint doit savoir ce
             que c'est, et le cliquet d'accessibilité ne tolère aucun champ
             anonyme (tests/accessibilite-statique.test.ts). */}
-        <input ref={inputRef} type="file" accept=".csv,.pdf" multiple hidden aria-label="Choisir des fichiers CSV ou PDF à déposer" onChange={(e) => void deposer(e.target.files)} />
+        <input ref={inputRef} type="file" accept=".csv,.xlsx,.xls,.pdf" multiple hidden aria-label="Choisir des fichiers CSV, Excel ou PDF à déposer" onChange={(e) => void deposer(e.target.files)} />
         <button
           type="button"
           disabled={!peutDeposer || depot !== null}
           onClick={() => inputRef.current?.click()}
           className="h-9 px-4 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md text-[13px] font-medium inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {depot ? <><Loader2 size={13} className="animate-spin" /> Dépôt de {depot}…</> : 'Déposer des fichiers (CSV, PDF)'}
+          {depot ? <><Loader2 size={13} className="animate-spin" /> Dépôt de {depot}…</> : 'Déposer des fichiers (CSV, Excel, PDF)'}
         </button>
         <span className="text-[12px] text-text-tertiary">
           {peutDeposer

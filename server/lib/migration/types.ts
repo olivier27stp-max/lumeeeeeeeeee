@@ -70,6 +70,7 @@ export const MIGRATION_CATEGORIES = [
   'services',
   'quotes',
   'jobs',
+  'recurring_jobs',
   'visits',
   'invoices',
   'payments',
@@ -92,8 +93,10 @@ export const IMPORTABLE_CATEGORIES: MigrationCategory[] = [
   'billing_addresses',
   'quotes',
   'jobs',
+  'recurring_jobs',
   'visits',
   'invoices',
+  'payments',
 ];
 
 /** Entités cibles d'une correspondance colonne → champ Lume.

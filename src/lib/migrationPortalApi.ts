@@ -49,6 +49,8 @@ async function portalFetch<T>(token: string, path: string, init?: RequestInit): 
 
 export interface PortalFile {
   id: string;
+  /** zone du formulaire où le client a déposé le fichier (fait foi sur la détection) */
+  category_declared?: string | null;
   original_name: string;
   mime_type: string;
   size_bytes: number;
@@ -93,11 +95,37 @@ export function listPortalFiles(token: string): Promise<PortalFile[]> {
   return portalFetch(token, '/files');
 }
 
-export async function uploadPortalFile(token: string, file: File): Promise<PortalFile> {
+export interface PortalFileSummary {
+  entity: string | null;
+  rows: number;
+  unique: number;
+  internal_duplicates: number;
+  invalid: number;
+  invalid_reasons: Array<{ reason: string; count: number }>;
+  needs_review: number;
+  required_missing: string[];
+  identifiers_ok: boolean;
+  identifier_labels: string[];
+}
+
+export function getPortalFileSummary(token: string, fileId: string): Promise<PortalFileSummary> {
+  return portalFetch(token, `/files/${fileId}/summary`);
+}
+
+export function setPortalFileCategory(token: string, fileId: string, category: string): Promise<{ ok: boolean; category_declared: string }> {
+  return portalFetch(token, `/files/${fileId}/category`, { method: 'POST', body: JSON.stringify({ category }) });
+}
+
+export function setPortalCategories(token: string, categories: string[]): Promise<{ ok: boolean; categories: string[] }> {
+  return portalFetch(token, '/categories', { method: 'PATCH', body: JSON.stringify({ categories }) });
+}
+
+export async function uploadPortalFile(token: string, file: File, category?: string | null): Promise<PortalFile> {
   const headers = await portalHeaders(token);
   if (!headers.Authorization) throw new PortalError('Connexion requise.', 'auth_required', 401);
   delete (headers as Record<string, string>)['Content-Type'];
-  const res = await fetch(`${BASE}/migration-portal/files?name=${encodeURIComponent(file.name)}`, {
+  const qs = `name=${encodeURIComponent(file.name)}${category ? `&category=${encodeURIComponent(category)}` : ''}`;
+  const res = await fetch(`${BASE}/migration-portal/files?${qs}`, {
     method: 'POST',
     cache: 'no-store',
     headers: { ...headers, 'Content-Type': file.type || 'application/octet-stream' },

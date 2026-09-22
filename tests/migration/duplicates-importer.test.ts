@@ -68,8 +68,9 @@ describe('deterministicEntityId — idempotence', () => {
 });
 
 describe('ordre d\'import', () => {
-  it('respecte les dépendances (taxes → services → clients → propriétés → adresses de facturation → jobs → soumissions → visites → factures)', () => {
-    expect(IMPORT_ORDER).toEqual(['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice']);
+  it('respecte les dépendances (taxes → services → clients → propriétés → adresses de facturation → jobs → soumissions → visites → factures → paiements)', () => {
+    expect(IMPORT_ORDER).toEqual(['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice', 'payment']);
+    expect(IMPORT_ORDER.indexOf('invoice')).toBeLessThan(IMPORT_ORDER.indexOf('payment'));
     expect(IMPORT_ORDER.indexOf('tax_config')).toBeLessThan(IMPORT_ORDER.indexOf('service'));
     expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('property'));
     expect(IMPORT_ORDER.indexOf('client')).toBeLessThan(IMPORT_ORDER.indexOf('billing_property'));

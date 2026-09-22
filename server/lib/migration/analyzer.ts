@@ -395,6 +395,8 @@ const FILENAME_PATTERNS: [RegExp, MigrationCategory][] = [
   [/invoice|facture/, 'invoices'],
   [/payment|paiement/, 'payments'],
   [/quote|estimate|soumission|devis/, 'quotes'],
+  // « Recurring jobs » (Jobber) avant jobs : plans de service récurrents
+  [/recurr|recurrent|recurrente|plans? de service/, 'recurring_jobs'],
   [/\bjobs?\b|work orders?|travaux/, 'jobs'],
   [/visit|appointment|schedule|rendez/, 'visits'],
   [/\bproducts?\b|\bservices?\b|\bitems?\b|catalog/, 'services'],
@@ -417,7 +419,9 @@ export function detectCategory(fileName: string, headers: string[]): MigrationCa
   // payments avant invoices : un export de paiements référence des factures
   if (has(/payment method|payment date|mode de paiement|date de paiement/)) return 'payments';
   if (has(/invoice (number|no|num|#)|numero de facture|no de facture/)) return 'invoices';
-  if (has(/job (number|no|num|#)|work order|numero de job|no de job/)) return 'jobs';
+  if (has(/job (number|no|num|#)|work order|numero de job|no de job/)) {
+    return has(/frequency|frequence|repeat|recurr|schedule interval|cadence/) ? 'recurring_jobs' : 'jobs';
+  }
   if (has(/quote (number|no|#)|estimate (number|no|#)|numero de (soumission|devis)/)) return 'quotes';
   if ((has(/start time|heure de debut/) && has(/end time|heure de fin/)) || has(/appointment|rendez vous/)) {
     return 'visits';

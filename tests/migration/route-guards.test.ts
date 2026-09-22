@@ -98,10 +98,11 @@ describe('portail — chaîne de validation complète', () => {
     const start = pipelineSrc.indexOf('export async function receptionnerFichierMigration');
     expect(start).toBeGreaterThan(0);
     const body = pipelineSrc.slice(start, pipelineSrc.indexOf('return { ok: true, file:', start));
-    expect(body).toContain("['csv', 'pdf']");
+    expect(body).toContain("['csv', 'pdf', ...EXCEL_EXTENSIONS]");
     expect(body).toContain('unsupported_type');
     expect(body).toContain('looksBinary');
     expect(body).toContain('sniffIsPdf');
+    expect(body).toContain('sniffIsExcel'); // Excel vérifié à sa signature, jamais à l'extension
     expect(body).toContain('sha256');
     expect(body).toContain('MAX_FILE_SIZE_BYTES');
     expect(body).toContain('MAX_FILES_PER_MIGRATION');
@@ -110,6 +111,17 @@ describe('portail — chaîne de validation complète', () => {
     expect(routeBody(adminSrc, "'/migration-admin/migrations/:id/files', rawFileParser")).toContain('receptionnerFichierMigration');
     // la console exige toujours l'admin plateforme avant de recevoir quoi que ce soit
     expect(routeBody(adminSrc, "'/migration-admin/migrations/:id/files', rawFileParser")).toContain('requirePlatformAdmin');
+  });
+
+  it('formulaire d\'importation : résumé, catégorie de fichier et catégories cochées passent par le jeton + session, et respectent les statuts', () => {
+    for (const needle of ["'/migration-portal/files/:fileId/summary'", "'/migration-portal/files/:fileId/category'", "'/migration-portal/categories'"]) {
+      const body = routeBody(portalSrc, needle);
+      expect(body).toContain('requirePortalAccess');
+    }
+    expect(routeBody(portalSrc, "'/migration-portal/files/:fileId/category'")).toContain('UPLOAD_ALLOWED_STATUSES');
+    expect(routeBody(portalSrc, "'/migration-portal/categories'")).toContain('UPLOAD_ALLOWED_STATUSES');
+    // la catégorie déclarée est validée côté serveur avant tout usage
+    expect(routeBody(portalSrc, "'/migration-portal/files', rawParser")).toContain('estCategorieValide');
   });
 
   it("l'approbation exige la phrase exacte et journalise IP + user-agent", () => {
@@ -368,8 +380,8 @@ describe('audit sections 6-14 — garde-fous ajoutés', () => {
     expect(benchSrc).toContain('pins D2D purgés au rollback');
   });
 
-  it('S6 — created_at historique (createdAtPatch) sur client, job, quote et invoice', () => {
-    expect(importerSrc2.split('...createdAtPatch(').length - 1).toBe(4);
+  it('S6 — created_at historique (createdAtPatch) sur client, job, quote, invoice et payment', () => {
+    expect(importerSrc2.split('...createdAtPatch(').length - 1).toBe(5);
   });
 
   it('S6 — le champ fantôme « tags » est retiré du catalogue (aucune promesse non tenue)', () => {

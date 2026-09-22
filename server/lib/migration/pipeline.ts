@@ -11,7 +11,7 @@ import { inferDateConvention, normalizeRow, type DateConvention } from './normal
 import { logMigrationAudit, touchMigrationActivity } from './audit';
 import { canTransition } from './state-machine';
 import type { MigrationCategory, MigrationRow, MigrationStatus, TargetEntity } from './types';
-import { MAX_FILES_PER_MIGRATION, MAX_FILE_SIZE_BYTES, MAX_STAGED_ROWS, UPLOAD_ALLOWED_STATUSES } from './types';
+import { MAX_FILES_PER_MIGRATION, MAX_FILE_SIZE_BYTES, MAX_STAGED_ROWS, MIGRATION_CATEGORIES, UPLOAD_ALLOWED_STATUSES } from './types';
 
 export const MIGRATION_BUCKET = 'migration-files';
 
@@ -31,18 +31,48 @@ export type ReceptionFichier =
  * doublon exact (sha256), stocke, enregistre, fait avancer le statut, journalise, puis lance
  * l'analyse en arrière-plan (progression dans migration_files.parse_status).
  */
+/** Extensions Excel acceptées : converties en CSV (première feuille) avant l'analyse. */
+export const EXCEL_EXTENSIONS = ['xlsx', 'xls'];
+const MIME_BY_EXT: Record<string, string> = {
+  csv: 'text/csv',
+  pdf: 'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xls: 'application/vnd.ms-excel',
+};
+
+/** Signature réelle d'un classeur Excel : ZIP (« PK ») pour .xlsx, conteneur OLE pour .xls. */
+export function sniffIsExcel(buf: Buffer, ext: string): boolean {
+  if (ext === 'xlsx') return buf.length >= 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04;
+  if (ext === 'xls') return buf.length >= 8 && buf[0] === 0xd0 && buf[1] === 0xcf && buf[2] === 0x11 && buf[3] === 0xe0;
+  return false;
+}
+
+/** Première feuille d'un classeur Excel → CSV UTF-8 (virgule), dates en ISO. */
+export async function convertirExcelEnCsv(buf: Buffer): Promise<Buffer> {
+  const XLSX = await import('xlsx');
+  const wb = XLSX.read(buf, { type: 'buffer', cellDates: true, raw: false });
+  const first = wb.SheetNames[0];
+  if (!first) return Buffer.alloc(0);
+  const csv = XLSX.utils.sheet_to_csv(wb.Sheets[first], { FS: ',', blankrows: false, dateNF: 'yyyy-mm-dd' });
+  return Buffer.from(csv, 'utf8');
+}
+
+export function estCategorieValide(v: unknown): v is MigrationCategory {
+  return typeof v === 'string' && (MIGRATION_CATEGORIES as readonly string[]).includes(v);
+}
+
 export async function receptionnerFichierMigration(
   admin: SupabaseClient,
   migration: MigrationRow,
-  input: { buf: Buffer; name: string; uploadedBy: string; actorRole: 'client' | 'platform_admin' },
+  input: { buf: Buffer; name: string; uploadedBy: string; actorRole: 'client' | 'platform_admin'; categoryDeclared?: MigrationCategory | null },
 ): Promise<ReceptionFichier> {
   if (!UPLOAD_ALLOWED_STATUSES.includes(migration.status)) {
     return { ok: false, status: 409, error: 'Le téléversement n\'est plus permis à cette étape.', code: 'upload_closed' };
   }
   const name = sanitizeFileName(input.name);
   const ext = (name.split('.').pop() ?? '').toLowerCase();
-  if (!['csv', 'pdf'].includes(ext)) {
-    return { ok: false, status: 415, error: 'Format non pris en charge. Utilisez des fichiers CSV (données) ou PDF (archive). XLSX/ZIP ne sont pas acceptés en v1.', code: 'unsupported_type' };
+  if (!['csv', 'pdf', ...EXCEL_EXTENSIONS].includes(ext)) {
+    return { ok: false, status: 415, error: 'Format non pris en charge. Utilisez des fichiers CSV ou Excel (.xlsx, .xls) pour les données, PDF pour les archives.', code: 'unsupported_type' };
   }
   const buf = input.buf;
   if (buf.length === 0) return { ok: false, status: 400, error: 'Fichier vide.', code: 'empty' };
@@ -51,7 +81,8 @@ export async function receptionnerFichierMigration(
   // Vérification du contenu réel (jamais l'extension seule).
   const kind = ext === 'pdf' ? 'archive' : 'data';
   if (kind === 'archive' && !sniffIsPdf(buf)) return { ok: false, status: 415, error: 'Ce fichier n\'est pas un PDF valide.', code: 'not_pdf' };
-  if (kind === 'data' && looksBinary(buf)) return { ok: false, status: 415, error: 'Ce fichier ne semble pas être un CSV texte valide.', code: 'binary' };
+  if (EXCEL_EXTENSIONS.includes(ext) && !sniffIsExcel(buf, ext)) return { ok: false, status: 415, error: 'Ce fichier n\'est pas un classeur Excel valide.', code: 'not_excel' };
+  if (ext === 'csv' && looksBinary(buf)) return { ok: false, status: 415, error: 'Ce fichier ne semble pas être un CSV texte valide.', code: 'binary' };
 
   const { count: fileCount } = await admin.from('migration_files').select('id', { count: 'exact', head: true }).eq('migration_id', migration.id).is('deleted_at', null);
   if ((fileCount ?? 0) >= MAX_FILES_PER_MIGRATION) {
@@ -64,7 +95,7 @@ export async function receptionnerFichierMigration(
 
   const fileId = crypto.randomUUID();
   const storagePath = `${migration.org_id}/${migration.id}/${fileId}/${name}`;
-  const mime = kind === 'archive' ? 'application/pdf' : 'text/csv';
+  const mime = MIME_BY_EXT[ext] ?? 'text/csv';
   const { error: upErr } = await admin.storage.from(MIGRATION_BUCKET).upload(storagePath, buf, { contentType: mime, upsert: false });
   if (upErr) throw upErr;
 
@@ -81,11 +112,13 @@ export async function receptionnerFichierMigration(
     else migration.status = 'files_uploaded';
   }
 
-  await logMigrationAudit(admin, { migrationId: migration.id, action: 'file.upload', actorId: input.uploadedBy, actorRole: input.actorRole, target: `file:${fileId}`, meta: { name, size_bytes: buf.length, kind } });
+  // La catégorie déclarée par le client (zone de dépôt du formulaire) est journalisée : l'analyse
+  // et toute ré-analyse la relisent (pas de colonne dédiée sur migration_files).
+  await logMigrationAudit(admin, { migrationId: migration.id, action: 'file.upload', actorId: input.uploadedBy, actorRole: input.actorRole, target: `file:${fileId}`, meta: { name, size_bytes: buf.length, kind, category_declared: input.categoryDeclared ?? null } });
   await touchMigrationActivity(admin, migration.id);
 
   // Analyse asynchrone — la progression vit dans migration_files.parse_status.
-  void analyzeMigrationFile(admin, migration, fileId).catch((err) => console.error('[migration-pipeline] analyze failed:', err));
+  void analyzeMigrationFile(admin, migration, fileId, { categoryDeclared: input.categoryDeclared ?? null }).catch((err) => console.error('[migration-pipeline] analyze failed:', err));
 
   return { ok: true, file: fileRow as Record<string, unknown> };
 }
@@ -117,7 +150,40 @@ interface FileRow {
  * Analyse (ou ré-analyse) un fichier. Ne lance jamais d'exception : tout échec
  * est enregistré dans migration_files.parse_error / security_status.
  */
-export async function analyzeMigrationFile(admin: SupabaseClient, migration: MigrationRow, fileId: string): Promise<void> {
+/** Dernière catégorie déclarée pour un fichier (dépôt sous une zone du formulaire, ou correction). */
+export async function lireCategorieDeclaree(admin: SupabaseClient, migrationId: string, fileId: string): Promise<MigrationCategory | null> {
+  const { data } = await admin
+    .from('migration_audit_logs')
+    .select('meta, created_at')
+    .eq('migration_id', migrationId)
+    .eq('target', `file:${fileId}`)
+    .in('action', ['file.upload', 'file.category'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const v = (data?.meta as { category_declared?: unknown } | null)?.category_declared;
+  return estCategorieValide(v) ? v : null;
+}
+
+/** Catégorie déclarée par fichier, pour toute une migration (listes du portail et de la console). */
+export async function categoriesDeclareesParFichier(admin: SupabaseClient, migrationId: string): Promise<Record<string, MigrationCategory>> {
+  const { data } = await admin
+    .from('migration_audit_logs')
+    .select('target, meta, created_at')
+    .eq('migration_id', migrationId)
+    .in('action', ['file.upload', 'file.category'])
+    .order('created_at', { ascending: true })
+    .limit(2000);
+  const out: Record<string, MigrationCategory> = {};
+  for (const l of data ?? []) {
+    const id = String((l as any).target ?? '').replace(/^file:/, '');
+    const v = ((l as any).meta as { category_declared?: unknown } | null)?.category_declared;
+    if (id && estCategorieValide(v)) out[id] = v; // le plus récent gagne (ordre croissant)
+  }
+  return out;
+}
+
+export async function analyzeMigrationFile(admin: SupabaseClient, migration: MigrationRow, fileId: string, opts: { categoryDeclared?: MigrationCategory | null } = {}): Promise<void> {
   try {
     const { data: file, error: fileErr } = await admin
       .from('migration_files')
@@ -138,7 +204,23 @@ export async function analyzeMigrationFile(admin: SupabaseClient, migration: Mig
       await admin.from('migration_files').update({ parse_status: 'failed', parse_error: 'download_failed' }).eq('id', file.id);
       return;
     }
-    const buf = Buffer.from(await blob.arrayBuffer());
+    let buf = Buffer.from(await blob.arrayBuffer());
+    const ext = (file.original_name.split('.').pop() ?? '').toLowerCase();
+
+    // ── Excel : première feuille convertie en CSV avant tout le reste ──
+    if (file.kind === 'data' && EXCEL_EXTENSIONS.includes(ext)) {
+      if (!sniffIsExcel(buf, ext)) {
+        await admin.from('migration_files').update({ security_status: 'rejected', security_reason: 'not_excel', parse_status: 'failed', parse_error: 'not_excel' }).eq('id', file.id);
+        return;
+      }
+      try {
+        buf = await convertirExcelEnCsv(buf);
+      } catch (err) {
+        console.error('[migration-pipeline] excel conversion failed:', err);
+        await admin.from('migration_files').update({ parse_status: 'failed', parse_error: 'excel_unreadable' }).eq('id', file.id);
+        return;
+      }
+    }
 
     // ── Contrôle de sécurité ────────────────────────────────────────────
     if (file.kind === 'archive') {
@@ -164,7 +246,10 @@ export async function analyzeMigrationFile(admin: SupabaseClient, migration: Mig
 
     // ── Analyse CSV ─────────────────────────────────────────────────────
     const analyzed = await analyzeCsvBuffer(buf);
-    const category: MigrationCategory | null = detectCategory(file.original_name, analyzed.headers);
+    const detected: MigrationCategory | null = detectCategory(file.original_name, analyzed.headers);
+    // La zone du formulaire où le client a déposé le fichier fait foi ; la détection sert d'alerte.
+    const declared = opts.categoryDeclared === undefined ? await lireCategorieDeclaree(admin, migration.id, file.id) : opts.categoryDeclared;
+    const category: MigrationCategory | null = declared ?? detected;
 
     // Ré-analyse : purger les artefacts précédents de CE fichier seulement.
     await admin.from('migration_staging_records').delete().eq('file_id', file.id);
@@ -287,6 +372,21 @@ export async function analyzeMigrationFile(admin: SupabaseClient, migration: Mig
       if (issueErr) console.error('[migration-pipeline] issues insert failed:', issueErr.message);
     }
 
+    // ── Désaccord entre la zone de dépôt et le contenu : dit au client, jamais tranché en silence ──
+    await admin.from('migration_issues').update({ resolved_at: new Date().toISOString(), resolution: 'fichier ré-analysé' })
+      .eq('migration_id', migration.id).eq('type', 'category_mismatch').is('resolved_at', null).contains('details_masked', { file_id: file.id });
+    if (declared && detected && detected !== declared && !(declared === 'recurring_jobs' && detected === 'jobs')) {
+      await admin.from('migration_issues').insert({
+        migration_id: migration.id,
+        type: 'category_mismatch',
+        severity: 'warning',
+        title: `${file.original_name} : déposé sous « ${declared} », mais ses colonnes ressemblent à « ${detected} »`,
+        details_masked: { file_id: file.id, file: file.original_name, declared, detected, headers: analyzed.headers.slice(0, 12) },
+        options: ['keep_declared', 'use_detected'],
+        client_visible: true,
+      });
+    }
+
     // ── Staging ─────────────────────────────────────────────────────────
     const entity = entityForCategory(category);
     if (!entity) {
@@ -388,6 +488,14 @@ export async function prepareStaging(admin: SupabaseClient, migration: Migration
     return { prepared: 0, errors: 0 };
   }
   const fieldByHeaderByFile = new Map<string, Record<string, string>>();
+  // Fichiers déposés sous « Plans de service récurrents » : leurs jobs sont marqués récurrents.
+  const { data: fichiersRecurrents } = await admin
+    .from('migration_files')
+    .select('id')
+    .eq('migration_id', migration.id)
+    .eq('category_detected', 'recurring_jobs')
+    .is('deleted_at', null);
+  const recurrents = new Set((fichiersRecurrents ?? []).map((f: { id: string }) => f.id));
   for (const m of mappings as any[]) {
     const header: string | undefined = m.migration_file_columns?.header;
     if (!header || !m.target_field) continue;
@@ -509,6 +617,7 @@ export async function prepareStaging(admin: SupabaseClient, migration: Migration
         if (hinted) conventions[field] = hinted;
       }
       const res = normalizeRow(r.entity_type, r.payload ?? {}, fieldByHeader, conventions);
+      if (r.entity_type === 'job' && recurrents.has(r.file_id)) res.normalized.job_type = 'recurring';
       const hasBlocking = res.problems.length > 0 && Object.keys(res.normalized).length === 0;
       if (hasBlocking) errors += 1;
       else prepared += 1;

@@ -29,7 +29,7 @@ export const ENTITY_LABELS_FR: Record<string, string> = {
 };
 const PROGRESSION_PAS = 250; // lignes entre deux publications de progression
 
-export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice'];
+export const IMPORT_ORDER: TargetEntity[] = ['tax_config', 'service', 'client', 'property', 'billing_property', 'job', 'quote', 'visit', 'invoice', 'payment'];
 
 /** Table active cible. `property` et `billing_property` partagent `properties`
  *  (kind = 'service' | 'billing') : toute mesure « par table » doit donc
@@ -44,6 +44,7 @@ export const TABLE_BY_ENTITY: Record<string, string> = {
   quote: 'quotes',
   visit: 'schedule_events',
   invoice: 'invoices',
+  payment: 'payments',
 };
 
 const CATEGORY_BY_ENTITY: Record<string, string> = {
@@ -56,6 +57,7 @@ const CATEGORY_BY_ENTITY: Record<string, string> = {
   quote: 'quotes',
   visit: 'visits',
   invoice: 'invoices',
+  payment: 'payments',
 };
 
 const CHUNK = 200;
@@ -293,6 +295,23 @@ async function seedExistingRefs(admin: SupabaseClient, orgId: string, ctx: Build
     }
     if (data.length < STAGING_PAGE) break;
   }
+  // Factures actives : les paiements importés s'y rattachent par numéro.
+  const invoiceMap = ctx.invoiceIdByRef ?? (ctx.invoiceIdByRef = new Map());
+  const ambiguousInvoices = new Set<string>();
+  for (let offset = 0; ; offset += STAGING_PAGE) {
+    const { data, error } = await admin
+      .from('invoices')
+      .select('id, invoice_number')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .range(offset, offset + STAGING_PAGE - 1);
+    if (error) { console.error('[migration-importer] existing invoices seed failed:', error.message); break; }
+    if (!data || data.length === 0) break;
+    for (const inv of data as { id: string; invoice_number: string | null }[]) {
+      seed(invoiceMap, refKey(String(inv.invoice_number ?? '')), inv.id, ambiguousInvoices);
+    }
+    if (data.length < STAGING_PAGE) break;
+  }
 }
 
 /** Clés de référence sous lesquelles une ligne peut être retrouvée par ses enfants. */
@@ -441,6 +460,13 @@ function strongKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   } else if (entity === 'service') {
     const name = refKey(str(n.name));
     if (name) keys.push(`s:${name}`);
+  } else if (entity === 'payment') {
+    // Même identifiant de paiement, sinon même facture + montant + date.
+    const ext = refKey(str(n.external_id) || str((rec.relations ?? {}).external_id) || str(rec.external_id));
+    if (ext) keys.push(`pe:${ext}`);
+    const inv = refKey(str((rec.relations ?? {}).invoice_ref));
+    const amount = typeof n.amount_cents === 'number' ? n.amount_cents : null;
+    if (inv && amount !== null) keys.push(`pay:${inv}|${amount}|${str(n.date).slice(0, 10)}`);
   } else if (entity === 'tax_config') {
     // Même nom + même région = même taxe (« TPS » du Québec ≠ « TPS » de l'Ontario).
     const name = refKey(str(n.name));
@@ -571,6 +597,8 @@ export interface BuildContext {
   clientIdByNameAddress?: Map<string, string>;
   propertyIdByRef: Map<string, string>;
   jobIdByRef: Map<string, string>;
+  /** numéro de facture → invoice id (existantes + importées dans la passe) : rattachement des paiements. */
+  invoiceIdByRef?: Map<string, string>;
   /** refKey(nom source) → user_id Lume (migration_staff_mappings). Absent/null = non assigné. */
   staffIdBySource?: Map<string, string>;
 }
@@ -734,8 +762,11 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         property_id: propertyId,
         title,
         description: safeStr(n.description) || null,
-        notes: joinNotes(safeStr(n.notes), unmappedNotesBlock(n)),
+        notes: joinNotes(joinNotes(safeStr(n.notes), str(n.frequency) ? `Fréquence du plan : ${safeStr(n.frequency)}` : '') ?? '', unmappedNotesBlock(n)),
         job_number: str(n.job_number) || null,
+        // Plan de service récurrent (fichier déposé sous « Plans récurrents ») : job_type = recurring,
+        // la cadence exportée reste lisible dans les notes.
+        job_type: str(n.job_type) === 'recurring' ? 'recurring' : 'one_off',
         status: mapJobStatus(str(n.status)),
         total_cents: totalCents,
         subtotal_cents: num(n.subtotal_cents) ?? totalCents,
@@ -889,7 +920,44 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     };
   }
 
+  if (entity === 'payment') {
+    const invoiceId = r.invoice_ref ? lookupRef(ctx.invoiceIdByRef ?? new Map(), r.invoice_ref) : null;
+    const clientId = resolveClientId(ctx, r, n);
+    if (!invoiceId && !clientId) return { ok: false, reason: 'orphan', detail: 'facture et client introuvables (référence absente ou ambiguë)' };
+    const amount = num(n.amount_cents);
+    if (amount === null || amount <= 0) return { ok: false, reason: 'invalid', detail: 'montant manquant ou nul' };
+    const date = str(n.date);
+    return {
+      ok: true,
+      row: {
+        org_id: orgId,
+        client_id: clientId,
+        invoice_id: invoiceId,
+        amount_cents: amount,
+        currency: 'CAD',
+        method: mapPaymentMethod(str(n.method)),
+        status: 'succeeded',
+        provider: 'manual',
+        // payment_date NOT NULL default now() : clé absente si la date manque (jamais null explicite)
+        ...(date ? { payment_date: `${date}T12:00:00`, paid_at: `${date}T12:00:00` } : {}),
+        created_by: ctx.createdBy,
+        ...createdAtPatch(date),
+      },
+    };
+  }
+
   return { ok: false, reason: 'invalid', detail: 'entité non prise en charge' };
+}
+
+// Modes de paiement Lume (payments.method) : card | cash | cheque | e-transfer | other.
+export function mapPaymentMethod(source: string): string {
+  const s = source.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (!s) return 'other';
+  if (/(interac|e-?transfer|virement|transfer|wire|eft|ach)/.test(s)) return 'e-transfer';
+  if (/(card|carte|visa|master|amex|credit|debit|stripe|square|paypal)/.test(s)) return 'card';
+  if (/(cash|comptant|espece|argent)/.test(s)) return 'cash';
+  if (/(cheque|check|chq)/.test(s)) return 'cheque';
+  return 'other';
 }
 
 function emptyCounts(): EntityCounts {
@@ -971,7 +1039,8 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
     for (const k of intra.ambiguousKeys) allAmbiguousKeys.push(`${entity}:${k}`);
     const targetByStagingId = new Map<string, string>();
     const mapByEntity =
-      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef
+        : entity === 'invoice' ? (ctx.invoiceIdByRef ?? (ctx.invoiceIdByRef = new Map())) : null;
 
     for (const rec of rows) {
       lignesFaites += 1;
@@ -1394,7 +1463,8 @@ export async function runFinalImport(
     const targetByStagingId = new Map<string, string>();
     const siblings: StagingRow[] = [];
     const mapByEntity =
-      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef : null;
+      entity === 'client' ? ctx.clientIdByRef : entity === 'property' ? ctx.propertyIdByRef : entity === 'job' ? ctx.jobIdByRef
+        : entity === 'invoice' ? (ctx.invoiceIdByRef ?? (ctx.invoiceIdByRef = new Map())) : null;
 
     const registerRefs = (rec: StagingRow, targetId: string) => {
       targetByStagingId.set(rec.id, targetId);

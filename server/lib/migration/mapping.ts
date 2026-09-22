@@ -868,6 +868,18 @@ export const FIELD_CATALOG: Record<TargetEntity, FieldDef[]> = {
       ],
     },
     {
+      // Plans récurrents : la cadence exportée (« Every 2 weeks », « Monthly ») est conservée telle
+      // quelle dans les notes du job — Lume n'a pas encore de champ de récurrence sur la job.
+      field: 'frequency',
+      labelFr: 'Fréquence (plan récurrent)',
+      labelEn: 'Frequency (recurring plan)',
+      types: ['text'],
+      synonyms: [
+        'frequency', 'schedule', 'repeats', 'repeat', 'recurrence', 'recurring schedule', 'every', 'interval',
+        'frequence', 'fréquence', 'recurrence', 'récurrence', 'cadence', 'periodicite', 'périodicité',
+      ],
+    },
+    {
       field: 'salesperson',
       labelFr: 'Vendeur',
       labelEn: 'Salesperson',
@@ -1398,6 +1410,8 @@ export function entityForCategory(cat: MigrationCategory | null): TargetEntity |
     case 'services': return 'service';
     case 'quotes': return 'quote';
     case 'jobs': return 'job';
+    // Plans de service récurrents (export « Recurring jobs ») : des jobs, marqués récurrents au staging.
+    case 'recurring_jobs': return 'job';
     case 'visits': return 'visit';
     case 'invoices': return 'invoice';
     case 'payments': return 'payment';
