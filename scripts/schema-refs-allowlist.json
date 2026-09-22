@@ -14,6 +14,12 @@
       "reason": "Repli volontaire et documenté : réessai avec l'ancien slug si la base n'a pas encore la migration 20260703200000 (le CHECK renvoie alors 23514)."
     },
     {
+      "file": "server/lib/migration/execution.ts",
+      "table": "migration_duplicate_candidates",
+      "ref": "deleted_at",
+      "reason": "Faux positif d'attribution : la table est une VARIABLE (`admin.from(table)` dans `for (const [table, liste] of parTable)`), pas migration_duplicate_candidates. `table` vient de `existing_table` et la boucle qui remplit `parTable` filtre déjà par `TABLES_AVEC_DELETED_AT` — seules des tables qui ONT la colonne arrivent ici. Vérifié le 2026-09-22."
+    },
+    {
       "file": "server/lib/migration/importer.ts",
       "table": "migration_import_records",
       "ref": "is_active",

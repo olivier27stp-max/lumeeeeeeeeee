@@ -32,6 +32,10 @@ import { executerEcriture, autorisationsDe, definirAutorisation, modeDe, definir
 import { getUserContext } from '../lib/rbac';
 import { isLumiConfigured, promptSystemeLumi, tourLumi, purgerVieuxResultats, OUTILS_DE_BASE, type EvenementLumi, type ResultatTour } from '../lib/lumi/orchestrateur';
 import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOURCIS, type IdRaccourci } from '../lib/lumi/raccourcis';
+// Lumi répond aussi aux questions de support : le client ne sait pas qu'il y
+// a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
+import { reponseFaqPour } from '../lib/support/faq';
+import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { detecterActionDirecte, repondreActionDirecte, actionDepuisExtraction } from '../lib/lumi/actions-directes';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
@@ -455,6 +459,39 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
       language: ctx.language, fuseau: ctx.fuseau,
       prenom: ctx.userName && !ctx.userName.includes('@') ? ctx.userName.trim().split(/\s+/)[0] || null : null,
     };
+    // Étage « aide » : une question SUR LE PRODUIT (« comment je change de
+    // plan », « mon paiement a échoué ») a une réponse écrite à la main, la
+    // même pour tout le monde. Elle était déjà gratuite dans le chat de
+    // support, mais pas ici : l'utilisateur qui la posait à Lumi payait un
+    // appel complet (4,46 ¢ mesuré en prod le 2026-09-22).
+    //
+    // Un client ne sait pas qu'il y a deux assistants. Il pose sa question là
+    // où il se trouve. Lumi doit donc savoir répondre au support en plus du
+    // CRM — l'inverse n'est pas vrai : le support n'a pas accès aux données.
+    //
+    // Mêmes garde-fous que dans le support : jamais pour une question sur les
+    // DONNÉES du compte, jamais en cours de conversation, jamais sur un repli.
+    if (!enAttente.length && !repli && historique.length === 0) {
+      const aide = reponseFaqPour(message, ctx.language) ?? null;
+      const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
+      const texteAide = aide?.reponse ?? article?.texte ?? null;
+      if (texteAide) {
+        const debut = Date.now();
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texteAide }] }], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('text', { type: 'text', delta: texteAide });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: 0, budget: ctx.budget, proposal: null, etage: aide ? ETAGE.enonceExact : ETAGE.raccourci });
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: aide ? ETAGE.enonceExact : ETAGE.raccourci,
+          action: aide ? `faq:${aide.id}` : 'aide-directe', outils: article?.pages ?? [],
+          resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
+        });
+        return;
+      }
+    }
+
     const raccourci = enAttente.length || repli ? null : detecterRaccourci(message);
     if (raccourci) {
       const debut = Date.now();
