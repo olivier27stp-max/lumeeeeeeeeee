@@ -44,15 +44,19 @@ export type SourceLLM = 'lumi' | 'support' | 'migration' | 'public' | 'cache-cha
 export const SOURCES: readonly SourceLLM[] = ['lumi', 'support', 'migration', 'public', 'cache-chaud', 'eval', 'voix'];
 
 /**
- * Sources dont le tarif n'est pas connu du code (Gemini) : leur dépense en
- * DOLLARS ne peut pas être comptée, seulement leur nombre d'appels. Le
- * plafond s'applique alors au VOLUME, pas au montant — c'est moins précis,
- * mais un poste non chiffré sans aucune borne est pire (2026-09-22 : la
- * dictée ne figurait dans aucun total en dollars).
+ * Sources bornées EN PLUS en nombre d'appels. La dictée est le cas type : un
+ * appel = 60 s d'audio au maximum, donc le compteur d'appels dit quelque
+ * chose que les dollars ne disent pas — une boucle se voit au volume avant
+ * de se voir sur la facture. Les deux bornes s'appliquent, la première
+ * atteinte arrête.
+ *
+ * (Avant le 2026-09-22 cette liste servait aux sources SANS tarif connu ;
+ * les tarifs Gemini sont désormais relevés, donc la voix est aussi bornée en
+ * dollars comme tout le reste.)
  */
-export const SOURCES_SANS_TARIF: readonly SourceLLM[] = ['voix'];
+export const BORNEES_EN_VOLUME: readonly SourceLLM[] = ['voix'];
 
-/** Appels/jour tolérés pour une source non chiffrée. `LUMI_PLAFOND_JOUR_VOIX_APPELS`. */
+/** Appels/jour tolérés pour une source bornée en volume. `LUMI_PLAFOND_JOUR_VOIX_APPELS`. */
 export function plafondAppelsJour(source: SourceLLM, env: NodeJS.ProcessEnv = process.env): number {
   const brut = env[`LUMI_PLAFOND_JOUR_${source.toUpperCase()}_APPELS`];
   if (brut !== undefined && brut !== '') {
@@ -107,9 +111,9 @@ function compteur(source: SourceLLM, maintenant: Date): Compteur {
 
 export interface Verdict {
   autorise: boolean;
-  /** Appels du jour pour cette source (seul compteur disponible sans tarif). */
+  /** Appels du jour pour cette source. */
   appels?: number;
-  /** Plafond en nombre d'appels, pour une source non chiffrée. */
+  /** Plafond en nombre d'appels, pour une source bornée en volume ; null sinon. */
   plafond_appels?: number;
   /** Dépense déjà comptée aujourd'hui pour cette source, en cents. */
   depense_cents: number;
@@ -123,14 +127,20 @@ export interface Verdict {
  */
 export function verifierPlafond(source: SourceLLM, env: NodeJS.ProcessEnv = process.env, maintenant = new Date()): Verdict {
   const c = compteur(source, maintenant);
-  // Source non chiffrée (Gemini) : on borne le VOLUME, faute de connaître le prix.
-  if (SOURCES_SANS_TARIF.includes(source)) {
-    const max = plafondAppelsJour(source, env);
-    return { autorise: max <= 0 || c.appels < max, depense_cents: c.cents, plafond_cents: 0, appels: c.appels, plafond_appels: max };
-  }
   const plafond = plafondJourCents(source, env);
-  if (plafond <= 0) return { autorise: true, depense_cents: c.cents, plafond_cents: 0, appels: c.appels };
-  return { autorise: c.cents < plafond, depense_cents: c.cents, plafond_cents: plafond, appels: c.appels };
+  const sousLeMontant = plafond <= 0 || c.cents < plafond;
+
+  // Certaines sources ont EN PLUS une borne en volume (la dictée : 60 s
+  // d'audio par appel, donc le nombre d'appels dit quelque chose que les
+  // dollars ne disent pas — une boucle se voit au compteur avant de se voir
+  // sur la facture). Les deux bornes s'appliquent : la première atteinte
+  // arrête.
+  if (BORNEES_EN_VOLUME.includes(source)) {
+    const max = plafondAppelsJour(source, env);
+    const sousLeVolume = max <= 0 || c.appels < max;
+    return { autorise: sousLeMontant && sousLeVolume, depense_cents: c.cents, plafond_cents: plafond, appels: c.appels, plafond_appels: max };
+  }
+  return { autorise: sousLeMontant, depense_cents: c.cents, plafond_cents: plafond, appels: c.appels };
 }
 
 /**
@@ -152,9 +162,9 @@ export function ajouterDepense(source: SourceLLM, coutCents: number, env: NodeJS
 }
 
 /**
- * Compte UN APPEL, pour les sources dont on ne connaît pas le tarif. Le prix
- * reste inconnu, mais le volume, lui, est mesurable — et c'est ce volume qui
- * arme le plafond de ces sources.
+ * Compte UN APPEL, pour les sources bornées en volume (la dictée). Le coût
+ * en dollars est compté séparément par `ajouterDepense` : les deux bornes
+ * sont indépendantes et la première atteinte arrête.
  */
 export function ajouterAppel(source: SourceLLM, env: NodeJS.ProcessEnv = process.env, maintenant = new Date()): void {
   const c = compteur(source, maintenant);
@@ -175,15 +185,15 @@ export function compterRefus(source: SourceLLM, maintenant = new Date()): void {
 export function etatPlafonds(env: NodeJS.ProcessEnv = process.env, maintenant = new Date()): Array<{ source: SourceLLM; depense_cents: number; plafond_cents: number; appels: number; plafond_appels: number | null; refus: number }> {
   return SOURCES.map((s) => {
     const c = compteur(s, maintenant);
-    const sansTarif = SOURCES_SANS_TARIF.includes(s);
+    const enVolume = BORNEES_EN_VOLUME.includes(s);
     return {
       source: s,
       depense_cents: c.cents,
-      // Une source sans tarif n'a pas de plafond en dollars : le dire (0)
-      // plutôt que d'afficher une borne qui ne s'applique pas.
-      plafond_cents: sansTarif ? 0 : plafondJourCents(s, env),
+      plafond_cents: plafondJourCents(s, env),
       appels: c.appels,
-      plafond_appels: sansTarif ? plafondAppelsJour(s, env) : null,
+      // Borne en volume seulement là où elle s'applique : ailleurs, null dit
+      // « pas de plafond d'appels », ce qui est plus honnête qu'un chiffre.
+      plafond_appels: enVolume ? plafondAppelsJour(s, env) : null,
       refus: c.refus,
     };
   });

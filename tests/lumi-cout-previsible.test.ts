@@ -9,16 +9,17 @@
  *   un tour à cache froide : 5,25 ¢   un tour à cache chaude : 2,06 ¢  (4,8×)
  *   25 % des tours partaient à froid
  *
- * Trois réponses, aucune ne retire une fonction :
+ * Quatre réponses, aucune ne retire une fonction :
  *  1. fenêtre de maintien du cache portée à 12 h (une journée ouvrable) ;
  *  2. le plafond par tour DÉGRADE au lieu de couper ;
- *  3. la dictée a sa propre source, bornée en volume faute de tarif connu.
+ *  3. la dictée a sa propre source, pour ne jamais couper le chat ;
+ *  4. les tarifs Gemini sont relevés à la source : elle est enfin chiffrée.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { fenetreMaintienMs, DELAI_RAFRAICHISSEMENT_MS, doitPinger } from '../server/lib/lumi/cache-chaud';
 import {
   verifierPlafond, ajouterAppel, ajouterDepense, plafondAppelsJour,
-  etatPlafonds, reinitialiserPlafonds, SOURCES_SANS_TARIF,
+  etatPlafonds, reinitialiserPlafonds, BORNEES_EN_VOLUME,
 } from '../server/lib/lumi/plafond-journalier';
 
 beforeEach(() => reinitialiserPlafonds());
@@ -62,12 +63,12 @@ describe('1. le cache reste chaud une journée ouvrable', () => {
 });
 
 describe('3. la dictée : bornée en volume, jamais confondue avec le chat', () => {
-  it('« voix » est une source à part, sans tarif connu', () => {
-    expect(SOURCES_SANS_TARIF).toContain('voix');
+  it('« voix » est une source à part, bornée AUSSI en volume', () => {
+    expect(BORNEES_EN_VOLUME).toContain('voix');
     expect(plafondAppelsJour('voix', {} as NodeJS.ProcessEnv)).toBe(300);
   });
 
-  it('le plafond porte sur les APPELS, pas sur des dollars', () => {
+  it('la borne en volume arrête, même très loin du plafond en dollars', () => {
     const env = { LUMI_PLAFOND_JOUR_VOIX_APPELS: '3' } as unknown as NodeJS.ProcessEnv;
     for (let i = 0; i < 3; i++) {
       expect(verifierPlafond('voix', env).autorise).toBe(true);
@@ -83,18 +84,55 @@ describe('3. la dictée : bornée en volume, jamais confondue avec le chat', () 
     expect(verifierPlafond('lumi', env).autorise, 'le chat doit rester disponible').toBe(true);
   });
 
-  it('l\'état montre un plafond d\'appels pour la voix, en dollars pour le reste', () => {
+  it('l\'état montre les DEUX bornes pour la voix, une seule pour le reste', () => {
     const etat = etatPlafonds({} as NodeJS.ProcessEnv);
     const voix = etat.find((e) => e.source === 'voix')!;
     const lumi = etat.find((e) => e.source === 'lumi')!;
     expect(voix.plafond_appels).toBe(300);
-    expect(voix.plafond_cents, 'pas de plafond en dollars sans tarif connu').toBe(0);
-    expect(lumi.plafond_appels).toBeNull();
+    // Chiffrée depuis que les tarifs Gemini sont relevés (2026-09-22) : la
+    // voix a aussi un plafond en dollars, comme toutes les autres sources.
+    expect(voix.plafond_cents).toBeGreaterThan(0);
+    expect(lumi.plafond_appels, 'pas de borne en volume ailleurs').toBeNull();
     expect(lumi.plafond_cents).toBeGreaterThan(0);
   });
 
   it('le compteur en dollars reste intact pour les sources chiffrées', () => {
     ajouterDepense('lumi', 42, {} as NodeJS.ProcessEnv);
     expect(verifierPlafond('lumi', {} as NodeJS.ProcessEnv).depense_cents).toBe(42);
+  });
+});
+
+/**
+ * Tarifs Gemini relevés le 2026-09-22 sur ai.google.dev/gemini-api/docs/pricing
+ * (palier payant). Ce test les fige : si quelqu'un les change, il doit dire
+ * d'où viennent les nouveaux — un prix inventé fausse tout ce qui en dépend.
+ */
+describe('4. la dictée est enfin chiffrée', () => {
+  it('les tarifs Gemini publiés sont dans la table', async () => {
+    const { TARIFS } = await import('../server/lib/lumi/tarifs');
+    // 2.5 Pro ne distingue pas l'audio : 1,25 $/M en entrée, 10 $/M en sortie.
+    expect(TARIFS['gemini-2.5-pro']).toEqual({ input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 0 });
+    // 2.5 Flash facture l'audio à part : 1,00 $/M (contre 0,30 $ le texte).
+    expect(TARIFS['gemini-2.5-flash']).toEqual({ input: 1, output: 2.5, cacheRead: 0.1, cacheWrite: 0 });
+  });
+
+  it('plus aucun modèle appelé par le code n\'est sans tarif', async () => {
+    const { tarifInconnu } = await import('../server/lib/lumi/tarifs');
+    for (const m of ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-embedding-001', 'claude-sonnet-5', 'claude-haiku-4-5-20251001']) {
+      expect(tarifInconnu(m), `${m} doit avoir un tarif`).toBe(false);
+    }
+    // Un modèle jamais vu reste signalé : c'est le garde-fou du prochain ajout.
+    expect(tarifInconnu('modele-invente-2030')).toBe(true);
+  });
+
+  it('une dictée de 60 s coûte moins qu\'un tour Lumi', async () => {
+    const { coutEnCents } = await import('../server/lib/lumi/tarifs');
+    // 60 s d'audio ≈ 1 500 tokens (25 tok/s) + le prompt de transcription.
+    const cout = coutEnCents('gemini-2.5-pro', {
+      input_tokens: 1500 + 350, output_tokens: 200 + 512, cache_read_input_tokens: 0, cache_creation_input_tokens: 0,
+    });
+    expect(cout).toBeGreaterThan(0);
+    // Référence mesurée en prod : un tour Lumi à cache chaude = 2,06 ¢.
+    expect(cout, 'une dictée ne doit pas coûter plus cher qu\'un tour de chat').toBeLessThan(2.06);
   });
 });
