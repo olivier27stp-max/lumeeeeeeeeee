@@ -33,10 +33,54 @@ const MOTS_LUME = [
   'prix', 'tarif', 'essai', 'support', 'aide', 'humain', 'equipe',
 ];
 
-/** true si l'énoncé parle de Lume ou du compte : ne jamais le traiter comme hors-sujet. */
+/**
+ * Vocabulaire du MÉTIER de l'utilisateur. Le routeur classe parfois
+ * `hors_scope` une vraie question d'affaires — mesuré le 2026-09-22 sur
+ * « est-ce que je devrais arrêter de faire du lavage de gouttières », rendue
+ * à 0,95 de confiance. Or c'est précisément la question où Lumi a donné sa
+ * meilleure réponse : il a trouvé le service, cité 1 910 $ au cent près et
+ * refusé de conclure sur un seul job.
+ *
+ * Un court-circuit qui remplace CETTE réponse par un refus générique coûte
+ * bien plus que les 2 ¢ qu'il économise. Dès qu'un mot du métier apparaît,
+ * le modèle reprend la main.
+ */
+const MOTS_METIER = [
+  // ce qu'on vend et ce qu'on fait
+  'client', 'clients', 'job', 'jobs', 'travail', 'contrat', 'service', 'services',
+  'devis', 'soumission', 'facture', 'factures', 'paiement', 'paiements',
+  'revenu', 'revenus', 'chiffre', 'profit', 'marge', 'rentable', 'rentabilite',
+  'prix', 'tarif', 'cout', 'couts', 'depense', 'depenses',
+  // le terrain
+  'lavage', 'vitres', 'toiture', 'paysagement', 'gouttiere', 'gouttieres',
+  'deneigement', 'entretien', 'nettoyage', 'installation', 'reparation',
+  // les gens et le temps
+  'employe', 'employes', 'technicien', 'techniciens', 'gars', 'equipe',
+  'horaire', 'calendrier', 'semaine', 'mois', 'journee', 'rendez',
+  // les verbes d'analyse qui trahissent une question d'affaires
+  'devrais', 'devrait', 'vaut', 'rapporte', 'rapportent', 'perds', 'perd',
+  // l'argent, sous toutes ses formes courantes
+  'argent', 'gagne', 'gagner', 'gagnes', 'paye', 'payer', 'facture', 'encaisse',
+  'du', 'doit', 'doivent', 'retard', 'retards', 'impaye', 'impayes',
+];
+
+/**
+ * Un NOM PROPRE (mot capitalisé au milieu de la phrase) trahit presque
+ * toujours une question sur un client, un employé ou un job précis — donc
+ * sur les données. « est-ce que je fais de l'argent avec Tremblay » n'a
+ * aucun mot du métier, mais « Tremblay » suffit à savoir que le modèle doit
+ * répondre. On ignore le premier mot : une phrase commence par une majuscule.
+ */
+function contientNomPropre(message: string): boolean {
+  const mots = message.trim().split(/\s+/).slice(1);
+  return mots.some((m) => /^[A-ZÀ-Þ][a-zà-ÿ]{2,}$/.test(m));
+}
+
+/** true si l'énoncé parle de Lume, du compte, OU du métier : jamais hors-sujet. */
 export function mentionneLume(message: string): boolean {
   const mots = new Set(normaliser(message));
-  return MOTS_LUME.some((m) => mots.has(m));
+  if (contientNomPropre(message)) return true;
+  return MOTS_LUME.some((m) => mots.has(m)) || MOTS_METIER.some((m) => mots.has(m));
 }
 
 /**

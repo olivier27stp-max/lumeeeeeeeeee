@@ -20,8 +20,7 @@ describe('court-circuit du vrai hors-sujet', () => {
   const horsSujet = [
     'c est quoi la meteo demain',
     'ecris moi un poeme sur mon camion',
-    'qui va gagner le match ce soir',
-    'combien ca vaut une tesla usagee',
+    'traduis moi merci beaucoup en espagnol',
   ];
   for (const message of horsSujet) {
     it(`« ${message.slice(0, 40)} » → répond sans le gros modèle`, () => {
@@ -71,5 +70,38 @@ describe('garde-fous : ne JAMAIS refuser une question légitime', () => {
   it('une question CRM normale n\'est jamais coupée', () => {
     // Elle ne serait pas classée hors_scope, mais la double sécurité compte.
     expect(peutRepondreHorsScope({ ...base, decision: 'modele', message: 'quelles factures sont en retard' })).toBe(false);
+  });
+});
+
+/**
+ * Compromis ASSUMÉ, mesuré le 2026-09-22 : « qui va gagner le match » et
+ * « combien vaut une Tesla usagée » sont du vrai hors-sujet, mais ils
+ * contiennent « gagner » et « vaut » — deux mots qui trahissent presque
+ * toujours une question d'affaires (« est-ce que je gagne de l'argent »,
+ * « ça vaut la peine »). Ils vont donc au modèle.
+ *
+ * C'est voulu : rater une économie de 2 ¢ n'a aucune conséquence, servir un
+ * refus générique à une vraie question d'affaires en a une. Le cas qui a
+ * tranché : « est-ce que je devrais arrêter le lavage de gouttières », que
+ * le routeur classait hors_scope à 0,95 — et où Lumi a donné sa MEILLEURE
+ * réponse (service trouvé, 1 910 $ au cent près, refus de conclure sur un
+ * seul job).
+ */
+describe('compromis assumé : dans le doute, le modèle répond', () => {
+  it('un hors-sujet contenant un mot d affaires passe au modèle', () => {
+    for (const message of ['qui va gagner le match ce soir', 'combien ca vaut une tesla usagee']) {
+      expect(peutRepondreHorsScope({ ...base, message }), message).toBe(false);
+    }
+  });
+
+  it('une vraie question d affaires n est JAMAIS coupée', () => {
+    for (const message of [
+      'est ce que je devrais arreter de faire du lavage de gouttieres',
+      'est ce que je fais de l argent avec Tremblay',
+      'mes prix sont ils trop bas',
+      'quelle est ma job la moins rentable',
+    ]) {
+      expect(peutRepondreHorsScope({ ...base, message }), message).toBe(false);
+    }
   });
 });
