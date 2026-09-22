@@ -33,7 +33,7 @@ import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
 import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
-import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
+import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, purgeOrphanProperties, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
 import { creerPublieurProgression } from '../lib/migration/execution';
 import { logger } from '../lib/logger';
@@ -1047,12 +1047,18 @@ router.post('/migration-admin/migrations/:id/rollback', validate(migrationFinalI
       .eq('kind', 'final')
       .in('status', ['completed', 'failed'])
       .order('created_at', { ascending: false });
-    if (!batches || batches.length === 0) return res.status(404).json({ error: 'Aucun lot final à annuler.' });
+    if (!batches || batches.length === 0) {
+      // Plus aucun lot, mais un rollback antérieur (avant ee89456) a pu laisser des propriétés
+      // orphelines créées par déclencheur : on les nettoie quand même, puis on répond.
+      const orphanProperties = await purgeOrphanProperties(admin, migration.org_id);
+      await logMigrationAudit(admin, { migrationId: migration.id, action: 'import.rollback', actorId: auth.user.id, actorRole: 'platform_admin', target: 'orphans', meta: { orphanProperties } });
+      return res.json({ ok: true, softDeleted: 0, deactivated: 0, restored: 0, pinsPurged: 0, orphanProperties, batches: 0 });
+    }
 
-    const total = { softDeleted: 0, deactivated: 0, restored: 0, pinsPurged: 0, batches: 0 };
+    const total = { softDeleted: 0, deactivated: 0, restored: 0, pinsPurged: 0, orphanProperties: 0, batches: 0 };
     for (const batch of batches) {
       const result = await rollbackFinalBatch(admin, batch.id, auth.user.id);
-      total.softDeleted += result.softDeleted; total.deactivated += result.deactivated; total.restored += result.restored; total.pinsPurged += result.pinsPurged; total.batches += 1;
+      total.softDeleted += result.softDeleted; total.deactivated += result.deactivated; total.restored += result.restored; total.pinsPurged += result.pinsPurged; total.orphanProperties += result.orphanProperties; total.batches += 1;
       // Les soft-deletes du rollback re-déclenchent les triggers d'activité
       // (AFTER UPDATE, 20260747000000) — constaté à la répétition volumétrique :
       // 15 000 notifications recréées. Purge ciblée une seconde fois.

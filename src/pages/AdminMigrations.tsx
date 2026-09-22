@@ -623,11 +623,12 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
       {m.status === 'ready_for_final_import' && (
         <button type="button" className={danger} onClick={() => setConfirmKind('final')}>Lancer l'import final</button>
       )}
-      {(['completed', 'completed_with_warnings', 'failed'].includes(m.status)
-        // déjà annulée, mais un lot final antérieur (import repris) est encore en place
-        || (m.status === 'rolled_back' && (d.batches ?? []).some((b: any) => b.kind === 'final' && ['completed', 'failed'].includes(b.status)))) && (
+      {['completed', 'completed_with_warnings', 'failed', 'rolled_back'].includes(m.status) && (
         <button type="button" className={danger} onClick={() => setConfirmKind('rollback')}>
-          {m.status === 'rolled_back' ? 'Rollback des lots restants' : 'Rollback'}
+          {m.status !== 'rolled_back'
+            ? 'Rollback'
+            // déjà annulée : lots finaux antérieurs (import repris) encore en place, sinon nettoyage des orphelins
+            : (d.batches ?? []).some((b: any) => b.kind === 'final' && ['completed', 'failed'].includes(b.status)) ? 'Rollback des lots restants' : 'Nettoyer les orphelins du rollback'}
         </button>
       )}
       {!m.closed_at && ['completed', 'completed_with_warnings', 'rolled_back', 'cancelled', 'failed'].includes(m.status) && (

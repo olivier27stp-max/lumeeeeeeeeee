@@ -1627,11 +1627,55 @@ async function purgeAutoPinsForClients(admin: SupabaseClient, orgId: string, cli
   return purged;
 }
 
+/**
+ * Propriétés dont le client est en suppression douce : suppression douce aussi.
+ *
+ * L'insertion d'un client avec adresse crée sa propriété de service par déclencheur DB, hors du
+ * registre d'import : un rollback qui retire les clients laissait ces propriétés actives. Constaté
+ * le 2026-09-21 (Vision Lavage) : 22 propriétés orphelines → 104 « doublons » d'adresse à chaque
+ * import test. Scopé à l'org ; ne touche jamais une propriété dont le client est actif.
+ */
+export async function purgeOrphanProperties(admin: SupabaseClient, orgId: string): Promise<number> {
+  const PAGE = 1000;
+  const candidates: Array<{ id: string; client_id: string }> = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await admin
+      .from('properties')
+      .select('id, client_id')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .not('client_id', 'is', null)
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) { console.error('[migration-importer] orphan properties fetch failed:', error.message); return 0; }
+    if (!data || data.length === 0) break;
+    candidates.push(...(data as Array<{ id: string; client_id: string }>));
+    if (data.length < PAGE) break;
+  }
+  if (candidates.length === 0) return 0;
+  const clientIds = Array.from(new Set(candidates.map((c) => c.client_id)));
+  const deletedClients = new Set<string>();
+  for (let i = 0; i < clientIds.length; i += CHUNK) {
+    const { data, error } = await admin.from('clients').select('id').in('id', clientIds.slice(i, i + CHUNK)).not('deleted_at', 'is', null);
+    if (error) { console.error('[migration-importer] orphan properties clients check failed:', error.message); return 0; }
+    for (const c of data ?? []) deletedClients.add((c as { id: string }).id);
+  }
+  const orphans = candidates.filter((c) => deletedClients.has(c.client_id)).map((c) => c.id);
+  let purged = 0;
+  for (let i = 0; i < orphans.length; i += CHUNK) {
+    const chunk = orphans.slice(i, i + CHUNK);
+    const { data, error } = await admin.from('properties').update({ deleted_at: new Date().toISOString() }).in('id', chunk).eq('org_id', orgId).is('deleted_at', null).select('id');
+    if (error) { console.error('[migration-importer] orphan properties purge failed:', error.message); continue; }
+    purged += data?.length ?? 0;
+  }
+  return purged;
+}
+
 export async function rollbackFinalBatch(
   admin: SupabaseClient,
   batchId: string,
   actorId: string,
-): Promise<{ softDeleted: number; deactivated: number; restored: number; pinsPurged: number }> {
+): Promise<{ softDeleted: number; deactivated: number; restored: number; pinsPurged: number; orphanProperties: number }> {
   let softDeleted = 0;
   let deactivated = 0;
   let restored = 0;
@@ -1724,7 +1768,10 @@ export async function rollbackFinalBatch(
     .eq('id', batchId);
   if (batchErr) console.error('[migration-importer] batch rollback mark failed:', batchErr.message);
 
-  return { softDeleted, deactivated, restored, pinsPurged };
+  // Propriétés créées par déclencheur pour les clients qu'on vient de retirer (hors registre).
+  const orphanProperties = orgId ? await purgeOrphanProperties(admin, orgId) : 0;
+
+  return { softDeleted, deactivated, restored, pinsPurged, orphanProperties };
 }
 
 // ---------------------------------------------------------------------------

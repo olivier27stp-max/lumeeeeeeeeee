@@ -156,8 +156,17 @@ export async function findDuplicatesForEntity(
     // Même table, jamais mélangées : une adresse de service et une adresse de
     // facturation identiques sont deux dossiers légitimes.
     const wantedKind = entity === 'billing_property' ? 'billing' : 'service';
-    const existing = (await fetchAll<{ id: string; address: string | null; kind: string | null }>(admin, 'properties', 'id, address, kind', orgId))
+    const all = (await fetchAll<{ id: string; address: string | null; kind: string | null; client_id: string | null }>(admin, 'properties', 'id, address, kind, client_id', orgId))
       .filter((p) => (p.kind ?? 'service') === wantedKind);
+    // Une propriété dont le client est en suppression douce n'est plus une fiche vivante : elle ne
+    // doit pas faire ressortir des doublons d'adresse (22 orphelines → 104 candidats, 2026-09-21).
+    const clientIds = Array.from(new Set(all.map((p) => p.client_id).filter((x): x is string => !!x)));
+    const deletedClients = new Set<string>();
+    for (let i = 0; i < clientIds.length; i += 200) {
+      const { data } = await admin.from('clients').select('id').in('id', clientIds.slice(i, i + 200)).not('deleted_at', 'is', null);
+      for (const c of data ?? []) deletedClients.add((c as { id: string }).id);
+    }
+    const existing = all.filter((p) => !p.client_id || !deletedClients.has(p.client_id));
     const byAddress = new Map<string, string>();
     for (const p of existing) {
       const key = normalizeAddressKey(p.address ?? '');
