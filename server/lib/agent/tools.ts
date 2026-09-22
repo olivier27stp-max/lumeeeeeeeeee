@@ -327,7 +327,11 @@ const getJob: AgentTool = {
       .eq('id', String(args.job_id))
       .maybeSingle();
     if (error) return toolError('db', error);
-    if (!data) return { error: 'Job not found.' };
+    // `introuvable`, pas `error` : le job n'existe pas, ce n'est PAS une panne.
+    // Avec `error`, Lumi répondait « la consultation a échoué côté Lume »
+    // (mesuré le 2026-09-22 sur le job 33, qui n'existe simplement pas) — le
+    // client croit à un bug et le signale, alors que tout fonctionne.
+    if (!data) return { introuvable: true, message: "Ce job n'existe pas (ou plus) dans cette entreprise. Si un NUMÉRO de job a été donné, le chercher avec list_jobs — cet outil-ci attend l'identifiant interne, pas le numéro affiché." };
     // Le job complet inclut ses lignes d'items — sans elles, « c'est quoi le
     // détail du job » ne sait répondre que le total.
     // Les visites du job avec leur identifiant : « facture la visite d'hier »
