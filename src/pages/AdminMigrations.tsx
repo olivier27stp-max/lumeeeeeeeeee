@@ -1247,7 +1247,11 @@ function FilesTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   return (
     <div className="section-card p-5">
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        <input ref={inputRef} type="file" accept=".csv,.pdf" multiple hidden onChange={(e) => void deposer(e.target.files)} />
+        {/* `hidden` : ouvert par le bouton au-dessus. Il porte quand même un
+            nom accessible — un lecteur d'écran qui l'atteint doit savoir ce
+            que c'est, et le cliquet d'accessibilité ne tolère aucun champ
+            anonyme (tests/accessibilite-statique.test.ts). */}
+        <input ref={inputRef} type="file" accept=".csv,.pdf" multiple hidden aria-label="Choisir des fichiers CSV ou PDF à déposer" onChange={(e) => void deposer(e.target.files)} />
         <button
           type="button"
           disabled={!peutDeposer || depot !== null}

@@ -21,6 +21,41 @@ export interface Article {
 
 export const ARTICLES: Article[] = [
   {
+    /**
+     * Sujet le plus répété en production (mesuré le 2026-09-22 : 6 + 4 + 2
+     * occurrences, 0,29 $). Le contenu existait déjà — dans la FAQ des pages
+     * Fonctionnalités — mais pas dans le centre d'aide, donc chaque question
+     * repartait au modèle qui reconstruisait la réponse à chaque fois.
+     * Repris mot pour mot de src/pages/marketing/fonctionsData.ts : une seule
+     * vérité, écrite une fois.
+     */
+    id: 'quote-preset',
+    path: '/quotes',
+    q_fr: 'C\'est quoi un préréglage de soumission, et qu\'est-ce qu\'il contient ?',
+    q_en: 'What is a quote preset, and what does it contain?',
+    a_fr: "Un modèle de soumission prêt à envoyer, à votre nom : un titre, une description, une image de couverture, la liste de vos services avec prix et quantités, un texte d'introduction, vos conditions, et un dépôt (fixe ou en pourcentage) si vous en demandez un. À la création du compte, Lume propose des services de départ selon votre métier ; ensuite, vos préréglages ne contiennent que ce que vous y avez mis.",
+    a_en: 'A ready-to-send quote template in your name: a title, a description, a cover image, your services with prices and quantities, an intro text, your terms, and a deposit (fixed or percentage) if you ask for one. When the account is created Lume suggests starter services for your trade; after that, your presets contain only what you put in them.',
+    tags: 'prereglage preset preregle modele soumission devis catalogue service contenu inclus quote template',
+  },
+  {
+    id: 'quote-preset-edit',
+    path: '/quotes',
+    q_fr: 'Jusqu\'où je peux modifier un préréglage ?',
+    q_en: 'How far can I edit a preset?',
+    a_fr: "Entièrement : titre, description, images, services (ajouter, retirer, changer prix et quantités), texte d'intro, conditions, dépôt et sections personnalisées, dans Soumissions → Modèles et préréglages. Les soumissions déjà envoyées ne changent pas : un préréglage est un point de départ, chaque soumission garde sa propre copie. Un préréglage dont vous ne vous servez plus se désactive plutôt que de se supprimer, pour garder l'historique.",
+    a_en: 'Entirely: title, description, images, services (add, remove, change prices and quantities), intro text, terms, deposit and custom sections, under Quotes → Templates and presets. Quotes already sent do not change: a preset is a starting point and each quote keeps its own copy. A preset you no longer use is deactivated rather than deleted, so the history stays intact.',
+    tags: 'modifier preset prereglage editer changer personnaliser jusqu ou limite soumission devis modele',
+  },
+  {
+    id: 'quote-preset-trade',
+    path: '/quotes',
+    q_fr: 'Mon métier n\'est pas dans les préréglages proposés — je fais quoi ?',
+    q_en: 'My trade is not in the suggested presets — what do I do?',
+    a_fr: "Les services proposés au départ ne sont qu'une suggestion selon le métier choisi : vous pouvez créer vos propres préréglages de zéro dans Soumissions → Modèles et préréglages, avec vos services, vos prix et vos conditions. Rien ne vous oblige à partir d'un modèle existant.",
+    a_en: "The starter services are only a suggestion based on the trade you picked: you can build your own presets from scratch under Quotes → Templates and presets, with your own services, prices and terms. Nothing forces you to start from an existing template.",
+    tags: 'metier trade preset prereglage absent pas dans propose creer zero personnalise soumission',
+  },
+  {
     id: 'quote-to-invoice',
     path: '/quotes',
     q_fr: 'Comment transformer un devis en facture ?',

@@ -12,12 +12,17 @@ import { reponseAideDirecte, estQuestionComment, SCORE_FRANC, FACTEUR_ECART } fr
 
 const direct = (q: string) => reponseAideDirecte(q, 'fr', { premierMessage: true });
 
+/**
+ * « est ce que je peux modifier mon preset jusqu ou » a quitté cette liste le
+ * 2026-09-22 : elle est désormais servie par la FAQ (`quote-preset-edit`),
+ * une réponse écrite à la main, donc meilleure que l'extrait d'article. Elle
+ * reste gratuite — simplement par un chemin plus court.
+ */
 describe('répond sans modèle quand la recherche est franche', () => {
   const cas = [
     'comment activer la double authentification',
     'comment lume calcule la tps et la tvq sur mes factures',
     'qu est ce qui marche sans reseau et comment ca se synchronise',
-    'est ce que je peux modifier mon preset jusqu ou',
   ];
   for (const q of cas) {
     it(`« ${q.slice(0, 48)} » → 0 token`, () => {
