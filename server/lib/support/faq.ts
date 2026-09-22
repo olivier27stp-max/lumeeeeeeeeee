@@ -66,6 +66,19 @@ const MOTS_VIDES = new Set([
  * comment faire, elle ne répond jamais sur le contenu du CRM.
  */
 const MARQUES_DONNEES = [
+  // Possessif + entité : « combien J'AI DE clients », « MES factures »,
+  // « MON équipe ». La question porte sur le CONTENU du compte, pas sur le
+  // produit — et une Q/R du genre « Combien de clients je peux avoir ? » (une
+  // limite de forfait) y ressemble dangereusement. Fuite attrapée le
+  // 2026-09-22 en branchant la FAQ produit sur le centre d'aide.
+  // « combien j'ai de X », « X que j'ai », « j'ai combien de X » : le verbe
+  // AVOIR à la 1re personne près d'une entité = on interroge le contenu.
+  /\bj ?ai\b[^.?]{0,20}\b(clients?|factures?|jobs?|devis|soumissions?|t[aâ]ches?|employ[ée]s?|[ée]quipe|revenus?)\b/i,
+  /\b(clients?|factures?|jobs?|devis|soumissions?|t[aâ]ches?)\b[^.?]{0,20}\bj ?ai\b/i,
+  // Possessif COLLÉ à l'entité (« mes factures », « mon équipe ») ET suivi
+  // d'un verbe d'état : on demande leur situation, pas comment faire.
+  // « comment importer MES CLIENTS depuis Excel » reste une question produit.
+  /\b(mes|mon|ma|nos|notre)\s+(clients?|factures?|jobs?|devis|soumissions?|t[aâ]ches?|employ[ée]s?|[ée]quipe|revenus?|chiffre)\b[^.?]{0,30}\b(sont|est|ont|a|payee?s?|en retard|impay[ée]s?|combien|fait)\b/i,
   // Un numéro de pièce, un montant, une date : la question vise une ligne précise.
   /\b(inv|q|job|facture|devis|soumission)\s*[-#]?\s*\d+/i,
   /\b\d{2,}\b/,
@@ -82,8 +95,12 @@ const MARQUES_DONNEES = [
   /\b(non|pas ca|pas le|plutot|au lieu|celui la|celle la|c est lui|c lui|att|attend|oups)\b/i,
 ];
 
-/** Mots significatifs d'un texte : normalisés, sans mots vides, sans doublons. */
-function motsUtiles(texte: string): Set<string> {
+/**
+ * Mots significatifs d'un texte : normalisés, sans mots vides, sans doublons.
+ * Exporté : `articles-dabord` s'en sert pour comparer une question au titre
+ * d'une Q/R — une seule définition de « mot utile » pour les deux étages.
+ */
+export function motsUtiles(texte: string): Set<string> {
   return new Set(normaliser(texte).filter((m) => m.length > 1 && !MOTS_VIDES.has(m)));
 }
 

@@ -117,3 +117,31 @@ describe('refus : ambiguïté et signal trop faible', () => {
     expect(reponseFaqPour('est-ce que ça marche sur téléphone', 'fr')).toBeNull();
   });
 });
+
+/**
+ * Fuite attrapée le 2026-09-22 en branchant la FAQ produit sur le centre
+ * d'aide : « combien j'ai de clients » (une question sur les DONNÉES)
+ * ressemblait à la Q/R « Combien de clients je peux avoir ? » (une question
+ * sur le PRODUIT). Servir l'une pour l'autre serait une erreur grave —
+ * l'utilisateur croirait avoir sa réponse.
+ */
+describe('possessif + entité = question sur les données', () => {
+  const surLesDonnees = [
+    'combien j ai de clients',
+    'j ai combien de clients',
+    'mes factures sont elles payees',
+    'mon equipe a fait combien d heures',
+    'combien de jobs j ai cette semaine',
+  ];
+  for (const q of surLesDonnees) {
+    it(`« ${q} » porte sur les données`, () => {
+      expect(porteSurLesDonnees(q)).toBe(true);
+      expect(reponseFaqPour(q, 'fr')).toBeNull();
+    });
+  }
+
+  it('la même question SANS possessif reste une question produit', () => {
+    // « Combien de clients je peux avoir ? » = limite du forfait, pas le compte.
+    expect(porteSurLesDonnees('combien de clients je peux avoir')).toBe(false);
+  });
+});
