@@ -850,6 +850,13 @@ async function constaterRejets(admin: Admin, m: MigrationRow, acteur: ActeurMigr
   const compte = new Map<string, number>();
   for (const r of rows ?? []) compte.set(`${r.entity_type}|${r.status}`, (compte.get(`${r.entity_type}|${r.status}`) ?? 0) + 1);
   const constats = constatsRejets([...compte.entries()].map(([k, n]) => { const [entity_type, status] = k.split('|'); return { entity_type, status, n }; }));
+  // Les constats de la passe précédente qui ne sont plus vrais sont fermés : l'onglet Problèmes
+  // ne montre que l'état courant (12 constats empilés pour 4 cas réels le 2026-09-22).
+  const { data: ouverts } = await admin.from('migration_issues').select('id, title').eq('migration_id', m.id).eq('type', 'bot_constat').is('resolved_at', null);
+  const perimes = (ouverts ?? []).filter((i: any) => !constats.includes(i.title)).map((i: any) => i.id as string);
+  if (perimes.length) {
+    await admin.from('migration_issues').update({ resolved_at: new Date().toISOString(), resolution: `remplacé par la passe du ${new Date().toISOString().slice(0, 16).replace('T', ' ')}` }).in('id', perimes);
+  }
   for (const titre of constats) {
     const { data: existe } = await admin.from('migration_issues').select('id').eq('migration_id', m.id).eq('type', 'bot_constat').eq('title', titre).is('resolved_at', null).limit(1).maybeSingle();
     if (existe) continue;

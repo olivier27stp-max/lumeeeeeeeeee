@@ -1105,6 +1105,13 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
     }
   }
 
+  // Avertissements des passes précédentes dont le cas a disparu : fermés d'eux-mêmes. Avant, chaque
+  // import test en laissait une couche de plus (12 « problèmes » ouverts pour 4 cas réels, 2026-09-22).
+  await fermerAvertissementsPerimes(admin, migration.id, {
+    ambiguous_relation: allAmbiguousKeys.length > 0,
+    unknown_status: unknownStatuses.size > 0,
+  });
+
   const dupCounts = { pending: 0, merge: 0, createNew: 0, skip: 0, review: 0 };
   for (const d of decisions.values()) {
     if (d.decision === 'merge') dupCounts.merge += 1;
@@ -1257,6 +1264,20 @@ async function enrichMergedClients(
     existingById.set(t.existingId, { ...existing, ...patch });
   }
   return out;
+}
+
+/** Ferme les avertissements ouverts d'un type dont le cas n'est plus constaté par ce dry-run. */
+async function fermerAvertissementsPerimes(admin: SupabaseClient, migrationId: string, encorePresents: Record<string, boolean>): Promise<void> {
+  for (const [type, present] of Object.entries(encorePresents)) {
+    if (present) continue;
+    const { error } = await admin
+      .from('migration_issues')
+      .update({ resolved_at: new Date().toISOString(), resolution: 'plus constaté au dernier import test' })
+      .eq('migration_id', migrationId)
+      .eq('type', type)
+      .is('resolved_at', null);
+    if (error) console.error('[migration-importer] stale issue close failed:', error.message);
+  }
 }
 
 /** Marque les lignes rejetées par le dry-run (statut + motif), groupées par motif pour limiter les requêtes. */
