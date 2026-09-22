@@ -1200,7 +1200,7 @@ app.get('/api/health', async (_req, res) => {
        accusé : ouvertures, clics et rebonds restent à zéro pour toujours.
        Aucun secret n'est exposé : seulement le nom du fournisseur et le fait
        que la clé soit présente ou non. */
-    const { fournisseurCourriel } = await import('./lib/mailer.js');
+    const { fournisseurCourriel, raisonSmtpMalgreResend, raisonSesSansSuivi } = await import('./lib/mailer.js');
     res.json({
       status: 'ok',
       uptime: process.uptime(),
@@ -1219,6 +1219,9 @@ app.get('/api/health', async (_req, res) => {
            secret ; les identifiants ne sont jamais exposés ici. */
         smtp_hote: process.env.SMTP_HOST || null,
         ses_variables: Boolean(String(process.env.SES_SMTP_USER || '').trim()),
+        // Ce qui empêche le suivi, quel que soit le fournisseur : une phrase
+        // qui dit quoi corriger, `null` quand tout est en place.
+        suivi_bloque: raisonSmtpMalgreResend() ?? raisonSesSansSuivi(),
       },
     });
   } catch (err: any) {
@@ -1304,13 +1307,13 @@ app.listen(port, '0.0.0.0', () => {
      chemin alors qu'une clé Resend existe est donc silencieux, et ça s'est vu
      37 fois avant qu'on lise la colonne `provider` d'`email_deliveries`.
      La bannière le dit au démarrage, et dit quoi corriger. */
-  void import('./lib/mailer.js').then(({ fournisseurCourriel, raisonSmtpMalgreResend }) => {
-    const raison = raisonSmtpMalgreResend();
+  void import('./lib/mailer.js').then(({ fournisseurCourriel, raisonSmtpMalgreResend, raisonSesSansSuivi }) => {
+    const raison = raisonSmtpMalgreResend() ?? raisonSesSansSuivi();
     logger.info(`[courriels] fournisseur : ${fournisseurCourriel()}`);
     if (raison) {
       console.warn('');
       console.warn('  ╔════════════════════════════════════════════════════════════╗');
-      console.warn('  ║  COURRIELS EN SMTP — aucun suivi ne reviendra              ║');
+      console.warn('  ║  COURRIELS — aucun suivi ne reviendra                      ║');
       console.warn('  ╚════════════════════════════════════════════════════════════╝');
       console.warn(`  ${raison}`);
       console.warn('');
