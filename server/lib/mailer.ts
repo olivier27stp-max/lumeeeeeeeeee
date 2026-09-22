@@ -100,7 +100,13 @@ export function fournisseurCourriel(env: NodeJS.ProcessEnv = process.env): Fourn
   if (demande === 'ses' && sesConfigure(env)) return 'ses';
   if (demande === 'resend' && String(env.RESEND_API_KEY || '').trim()) return 'resend';
   if (demande === 'smtp') return 'smtp';
-  if (sesConfigure(env)) return 'ses';
+  /* SES n'est JAMAIS choisi tout seul — c'est tout l'objet du paragraphe
+     ci-dessus, et la ligne `if (sesConfigure(env)) return 'ses'` qui vivait
+     ici le contredisait. Poser les identifiants SES pour préparer la bascule
+     aurait suffi à détourner TOUS les envois vers un compte encore en bac à
+     sable (200 courriels/jour, et il refuse toute adresse non vérifiée).
+     La bascule reste `COURRIEL_FOURNISSEUR=ses`, le jour où Amazon accorde la
+     « production access ». */
   // `.trim()` : une variable posée à « » sur Railway est VRAIE en JavaScript.
   // Sans cela on bascule sur Resend avec une clé inutilisable, et chaque envoi
   // échoue en 401 au lieu de retomber proprement sur le SMTP.
