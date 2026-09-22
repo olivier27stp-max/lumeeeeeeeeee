@@ -83,3 +83,34 @@ describe('signalerAppelLumi : un préfixe par jeu d outils', () => {
     expect(prefixesSuivis().has('base')).toBe(false); // le plus ancien est parti
   });
 });
+
+/**
+ * Traçabilité des appels d'ENTRETIEN (2026-09-22).
+ *
+ * Le préchauffage et le réchauffement sont facturés et n'ont aucun
+ * utilisateur derrière. Sans trace en base, la seule façon de savoir s'ils
+ * tournent est de lire les journaux Railway — c'est exactement ce qui avait
+ * rendu `cache-chaud` invisible jusqu'à l'audit du 2026-09-18.
+ */
+describe('les appels d entretien laissent une trace', () => {
+  it('le code trace le préchauffage ET le réchauffement', async () => {
+    const src = await import('node:fs').then((fs) => fs.readFileSync('server/lib/lumi/cache-chaud.ts', 'utf8'));
+    expect(src).toMatch(/tracerEntretien\('prechauffage'/);
+    expect(src).toMatch(/tracerEntretien\('rechauffement'/);
+  });
+
+  it('la trace passe par un canal accepté, sans org (appel de plateforme)', async () => {
+    const src = await import('node:fs').then((fs) => fs.readFileSync('server/lib/lumi/cache-chaud.ts', 'utf8'));
+    const fn = src.slice(src.indexOf('async function tracerEntretien'), src.indexOf('export async function prechaufferCache'));
+    // `canal: 'lumi'` : la contrainte CHECK de lumi_traces refuse tout nouveau
+    // canal (23514 vérifié en base) — pas de migration pour de la traçabilité.
+    expect(fn).toMatch(/canal: 'lumi'/);
+    expect(fn).toMatch(/orgId: null/);
+  });
+
+  it('une trace qui échoue n empêche JAMAIS le serveur de démarrer', async () => {
+    const src = await import('node:fs').then((fs) => fs.readFileSync('server/lib/lumi/cache-chaud.ts', 'utf8'));
+    const fn = src.slice(src.indexOf('async function tracerEntretien'), src.indexOf('export async function prechaufferCache'));
+    expect(fn).toMatch(/catch\s*\{/);
+  });
+});

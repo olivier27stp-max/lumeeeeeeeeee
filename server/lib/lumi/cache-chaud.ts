@@ -142,6 +142,40 @@ export async function pingerCache(client: ClientMinimal, model: string = dernier
 
 /** Vérifie toutes les 5 min ; ne fait rien tant que Lumi n'a pas servi un vrai appel. */
 /**
+ * Trace en base d'un appel d'ENTRETIEN (préchauffage, réchauffement).
+ * ──────────────────────────────────────────────────────────────────
+ * Ces appels sont facturés et n'ont aucun utilisateur derrière : sans trace,
+ * la seule façon de savoir s'ils tournent est de lire les journaux Railway.
+ * C'est exactement le défaut qui avait rendu `cache-chaud` invisible jusqu'à
+ * l'audit du 2026-09-18 — une dépense que personne ne peut vérifier.
+ *
+ * Canal `lumi` avec `org_id` NULL et une `action` explicite : aucune
+ * migration n'est nécessaire (la contrainte CHECK n'accepte pas de nouveau
+ * canal), et `qa:depense` les voit comme le reste. L'écriture ne bloque
+ * jamais le démarrage : toute erreur est avalée.
+ */
+async function tracerEntretien(
+  action: 'prechauffage' | 'rechauffement',
+  r: { model: string; cost_cents: number; cache_lu: number; cache_ecrit: number } | null,
+  dureeMs: number,
+  erreur?: string,
+): Promise<void> {
+  try {
+    const { getServiceClient } = await import('../supabase');
+    const { journaliserTrace } = await import('./traces');
+    await journaliserTrace(getServiceClient(), {
+      orgId: null, userId: null, canal: 'lumi', origine: 'api',
+      etage: 0, action, resultat: r ? 'ok' : 'erreur',
+      model: r?.model ?? null,
+      usage: r ? { input_tokens: 0, cache_5m: 0, cache_1h: r.cache_ecrit, cache_lu: r.cache_lu, output_tokens: 0 } : null,
+      costCents: r?.cost_cents ?? 0,
+      dureeMs,
+      params: erreur ? { erreur: erreur.slice(0, 200) } : null,
+    });
+  } catch { /* la traçabilité ne doit jamais empêcher le serveur de démarrer */ }
+}
+
+/**
  * Préchauffage au DÉMARRAGE du serveur (2026-09-22).
  * ──────────────────────────────────────────────────
  * Le maintien ne s'arme qu'après un premier appel réel : au démarrage, le
@@ -167,6 +201,7 @@ export async function prechaufferCache(): Promise<void> {
   if (process.env.LUMI_PRECHAUFFER === '0' || !process.env.ANTHROPIC_API_KEY) return;
   if (!fenetreMaintienMs()) return; // maintien désactivé = pas de préchauffage non plus
   if (!verifierPlafond('cache-chaud').autorise) { compterRefus('cache-chaud'); return; }
+  const debut = Date.now();
   try {
     const r = await pingerCache(clientAnthropic());
     ajouterDepense('cache-chaud', r.cost_cents);
@@ -174,10 +209,12 @@ export async function prechaufferCache(): Promise<void> {
     // le relais sans attendre qu'un utilisateur ait posé une question.
     signalerAppelLumi(r.model);
     logger.info('[lumi] cache préchauffé au démarrage', r);
+    void tracerEntretien('prechauffage', r, Date.now() - debut);
   } catch (e: any) {
     // Jamais bloquant : sans préchauffage, la première question paie
     // simplement l'écriture, comme avant.
     logger.warn('[lumi] préchauffage impossible', { error: e?.message || String(e) });
+    void tracerEntretien('prechauffage', null, Date.now() - debut, e?.message || String(e));
   }
 }
 
@@ -204,6 +241,9 @@ export function demarrerMaintienCacheChaud(): void {
         c.etat.dernierPing = Date.now();
         ajouterDepense('cache-chaud', r.cost_cents);
         logger.info('[lumi] cache 1 h rafraîchi', { jeu: c.cle, ...r });
+        // Même raison qu'au préchauffage : un appel facturé sans utilisateur
+        // derrière doit laisser une trace en base, pas seulement dans Railway.
+        void tracerEntretien('rechauffement', r, 0);
       } catch (e: any) {
         c.etat.dernierPing = Date.now(); // pas de rafale de tentatives : on réessaie au prochain créneau
         logger.warn('[lumi] rafraîchissement du cache impossible', { jeu: c.cle, error: e?.message || String(e) });
