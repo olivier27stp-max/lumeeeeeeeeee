@@ -36,6 +36,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 // a deux assistants (2026-09-22). Mêmes réponses, mêmes garde-fous, 0 token.
 import { reponseFaqPour } from '../lib/support/faq';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
+import { reponseAideMulti } from '../lib/support/aide-multi';
 import { detecterActionDirecte, repondreActionDirecte, actionDepuisExtraction } from '../lib/lumi/actions-directes';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
@@ -474,7 +475,11 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
     if (!enAttente.length && !repli && historique.length === 0) {
       const aide = reponseFaqPour(message, ctx.language) ?? null;
       const article = aide ? null : reponseAideDirecte(message, ctx.language, { premierMessage: true });
-      const texteAide = aide?.reponse ?? article?.texte ?? null;
+      // Plusieurs questions collées d'un coup : chacune a sa réponse écrite,
+      // mais le bloc entier ne ressemble à rien de connu et partait au modèle
+      // (2,65 ¢ mesuré en prod le 2026-09-22). Tout ou rien — voir aide-multi.
+      const multi = aide || article ? null : reponseAideMulti(message, ctx.language);
+      const texteAide = aide?.reponse ?? article?.texte ?? multi?.texte ?? null;
       if (texteAide) {
         const debut = Date.now();
         const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
@@ -485,7 +490,8 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
         void journaliserTrace(ctx.admin, {
           orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
           enonce: normaliserEnonce(message), etage: aide ? ETAGE.enonceExact : ETAGE.raccourci,
-          action: aide ? `faq:${aide.id}` : 'aide-directe', outils: article?.pages ?? [],
+          action: aide ? `faq:${aide.id}` : multi ? `aide-multi:${multi.ids.length}` : 'aide-directe',
+          outils: article?.pages ?? multi?.ids ?? [],
           resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
         // `res.end()` et pas un simple `return` : sans lui le flux SSE reste

@@ -26,6 +26,7 @@ import { isSupportIAConfigured, repondreSupportIA } from '../lib/support/ia';
 import { dossierClient } from '../lib/support/dossier';
 import { reponseFaqPour } from '../lib/support/faq';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
+import { reponseAideMulti } from '../lib/support/aide-multi';
 import { statutMigrationPour, demarrerMigrationPour } from '../lib/support/migration-outils';
 import { journaliserTrace } from '../lib/lumi/traces';
 import { embed, chercherSemantique, memoriserSemantique, oublierSemantique } from '../lib/lumi/cache-semantique';
@@ -108,7 +109,13 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
     // mot : une reformulation sans ambiguïté sur le même sujet produit la même
     // réponse (voir server/lib/support/faq.ts). Les questions portant sur les
     // DONNÉES de l'org en sont exclues et descendent toujours au modèle.
-    const fixe = humain ? null : reponseFaqPour(message, ctx.langue);
+    // `reponseAideMulti` couvre le cas « plusieurs questions collées d'un
+    // coup » : chacune a sa réponse écrite, mais le bloc entier ne ressemble
+    // à rien de connu et partait au modèle. Tout ou rien (voir aide-multi.ts).
+    const fixe = humain
+      ? null
+      : reponseFaqPour(message, ctx.langue)
+        ?? (() => { const m = reponseAideMulti(message, ctx.langue); return m ? { id: `aide-multi:${m.ids.length}`, reponse: m.texte, path: null } : null; })();
     if (fixe) {
       reply = fixe.reponse;
       await ajouterMessage(admin, { ticket, author: 'ai', body: reply, authorName: 'Lumi' });
