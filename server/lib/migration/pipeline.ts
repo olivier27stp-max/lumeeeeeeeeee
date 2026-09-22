@@ -3,6 +3,7 @@
 // Tout est asynchrone côté route (fire-and-forget) : les statuts du fichier
 // (scanning → safe/rejected, parsing → parsed/failed) servent de progression.
 
+import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { analyzeCsvBuffer, detectCategory, looksBinary, sniffIsPdf } from './analyzer';
 import { entityForCategory, suggestMappings } from './mapping';
@@ -10,9 +11,84 @@ import { inferDateConvention, normalizeRow, type DateConvention } from './normal
 import { logMigrationAudit, touchMigrationActivity } from './audit';
 import { canTransition } from './state-machine';
 import type { MigrationCategory, MigrationRow, MigrationStatus, TargetEntity } from './types';
-import { MAX_STAGED_ROWS } from './types';
+import { MAX_FILES_PER_MIGRATION, MAX_FILE_SIZE_BYTES, MAX_STAGED_ROWS, UPLOAD_ALLOWED_STATUSES } from './types';
 
 export const MIGRATION_BUCKET = 'migration-files';
+
+export function sanitizeFileName(name: string): string {
+  const base = name.split(/[\\/]/).pop() ?? 'fichier';
+  return base.replace(/[^\w.\-()\s]/g, '_').slice(0, 80) || 'fichier';
+}
+
+export type ReceptionFichier =
+  | { ok: true; file: Record<string, unknown> }
+  | { ok: false; status: number; error: string; code: string };
+
+/**
+ * Réception d'un fichier de migration — même chemin pour le portail client et la console
+ * (le 2026-09-22, la console ne savait que supprimer : impossible d'y remplacer un export
+ * Jobber incomplet). Vérifie l'extension ET le contenu, la taille, le nombre de fichiers, le
+ * doublon exact (sha256), stocke, enregistre, fait avancer le statut, journalise, puis lance
+ * l'analyse en arrière-plan (progression dans migration_files.parse_status).
+ */
+export async function receptionnerFichierMigration(
+  admin: SupabaseClient,
+  migration: MigrationRow,
+  input: { buf: Buffer; name: string; uploadedBy: string; actorRole: 'client' | 'platform_admin' },
+): Promise<ReceptionFichier> {
+  if (!UPLOAD_ALLOWED_STATUSES.includes(migration.status)) {
+    return { ok: false, status: 409, error: 'Le téléversement n\'est plus permis à cette étape.', code: 'upload_closed' };
+  }
+  const name = sanitizeFileName(input.name);
+  const ext = (name.split('.').pop() ?? '').toLowerCase();
+  if (!['csv', 'pdf'].includes(ext)) {
+    return { ok: false, status: 415, error: 'Format non pris en charge. Utilisez des fichiers CSV (données) ou PDF (archive). XLSX/ZIP ne sont pas acceptés en v1.', code: 'unsupported_type' };
+  }
+  const buf = input.buf;
+  if (buf.length === 0) return { ok: false, status: 400, error: 'Fichier vide.', code: 'empty' };
+  if (buf.length > MAX_FILE_SIZE_BYTES) return { ok: false, status: 413, error: 'Fichier trop volumineux (max 25 Mo).', code: 'too_large' };
+
+  // Vérification du contenu réel (jamais l'extension seule).
+  const kind = ext === 'pdf' ? 'archive' : 'data';
+  if (kind === 'archive' && !sniffIsPdf(buf)) return { ok: false, status: 415, error: 'Ce fichier n\'est pas un PDF valide.', code: 'not_pdf' };
+  if (kind === 'data' && looksBinary(buf)) return { ok: false, status: 415, error: 'Ce fichier ne semble pas être un CSV texte valide.', code: 'binary' };
+
+  const { count: fileCount } = await admin.from('migration_files').select('id', { count: 'exact', head: true }).eq('migration_id', migration.id).is('deleted_at', null);
+  if ((fileCount ?? 0) >= MAX_FILES_PER_MIGRATION) {
+    return { ok: false, status: 409, error: `Limite de ${MAX_FILES_PER_MIGRATION} fichiers atteinte.`, code: 'too_many_files' };
+  }
+
+  const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+  const { data: dup } = await admin.from('migration_files').select('id, original_name').eq('migration_id', migration.id).eq('sha256', sha256).is('deleted_at', null).maybeSingle();
+  if (dup) return { ok: false, status: 409, error: `Ce fichier a déjà été téléversé (${dup.original_name}).`, code: 'duplicate_file' };
+
+  const fileId = crypto.randomUUID();
+  const storagePath = `${migration.org_id}/${migration.id}/${fileId}/${name}`;
+  const mime = kind === 'archive' ? 'application/pdf' : 'text/csv';
+  const { error: upErr } = await admin.storage.from(MIGRATION_BUCKET).upload(storagePath, buf, { contentType: mime, upsert: false });
+  if (upErr) throw upErr;
+
+  const { data: fileRow, error: insErr } = await admin
+    .from('migration_files')
+    .insert({ id: fileId, migration_id: migration.id, storage_path: storagePath, original_name: name, mime_type: mime, size_bytes: buf.length, sha256, kind, uploaded_by: input.uploadedBy })
+    .select('id, original_name, mime_type, size_bytes, kind, security_status, parse_status, created_at')
+    .single();
+  if (insErr) throw insErr;
+
+  if (migration.status === 'waiting_for_files') {
+    const { error } = await admin.from('data_migrations').update({ status: 'files_uploaded' }).eq('id', migration.id).eq('status', 'waiting_for_files');
+    if (error) console.error('[migration-pipeline] upload transition failed:', error.message);
+    else migration.status = 'files_uploaded';
+  }
+
+  await logMigrationAudit(admin, { migrationId: migration.id, action: 'file.upload', actorId: input.uploadedBy, actorRole: input.actorRole, target: `file:${fileId}`, meta: { name, size_bytes: buf.length, kind } });
+  await touchMigrationActivity(admin, migration.id);
+
+  // Analyse asynchrone — la progression vit dans migration_files.parse_status.
+  void analyzeMigrationFile(admin, migration, fileId).catch((err) => console.error('[migration-pipeline] analyze failed:', err));
+
+  return { ok: true, file: fileRow as Record<string, unknown> };
+}
 
 const STAGING_BATCH = 500;
 

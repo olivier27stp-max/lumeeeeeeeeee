@@ -92,8 +92,12 @@ describe('portail — chaîne de validation complète', () => {
     expect(portalSrc).not.toMatch(/console\.(log|error)\([^)]*\btoken\b/);
   });
 
-  it('téléversement : extensions limitées, sniff du contenu, dédup sha256, limite de taille', () => {
-    const body = routeBody(portalSrc, "'/migration-portal/files', rawParser");
+  it('téléversement : extensions limitées, sniff du contenu, dédup sha256, limite de taille (réception partagée)', () => {
+    // La réception vit dans pipeline.ts (receptionnerFichierMigration) : portail ET console y passent.
+    const pipelineSrc = read('server/lib/migration/pipeline.ts');
+    const start = pipelineSrc.indexOf('export async function receptionnerFichierMigration');
+    expect(start).toBeGreaterThan(0);
+    const body = pipelineSrc.slice(start, pipelineSrc.indexOf('return { ok: true, file:', start));
     expect(body).toContain("['csv', 'pdf']");
     expect(body).toContain('unsupported_type');
     expect(body).toContain('looksBinary');
@@ -101,6 +105,11 @@ describe('portail — chaîne de validation complète', () => {
     expect(body).toContain('sha256');
     expect(body).toContain('MAX_FILE_SIZE_BYTES');
     expect(body).toContain('MAX_FILES_PER_MIGRATION');
+    expect(body).toContain('UPLOAD_ALLOWED_STATUSES');
+    expect(routeBody(portalSrc, "'/migration-portal/files', rawParser")).toContain('receptionnerFichierMigration');
+    expect(routeBody(adminSrc, "'/migration-admin/migrations/:id/files', rawFileParser")).toContain('receptionnerFichierMigration');
+    // la console exige toujours l'admin plateforme avant de recevoir quoi que ce soit
+    expect(routeBody(adminSrc, "'/migration-admin/migrations/:id/files', rawFileParser")).toContain('requirePlatformAdmin');
   });
 
   it("l'approbation exige la phrase exacte et journalise IP + user-agent", () => {

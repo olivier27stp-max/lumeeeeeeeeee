@@ -6,7 +6,7 @@
 // analytiques inter-tenants (décision produit documentée dans index.ts).
 
 import { Router } from 'express';
-import type express from 'express';
+import express from 'express';
 import { requireAuthedClient, getServiceClient, buildSupabaseWithAuth } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import {
@@ -31,7 +31,7 @@ import { extractIP } from '../lib/security';
 import { assertTransition, canTransition, InvalidTransitionError } from '../lib/migration/state-machine';
 import { generateInviteToken, expiryFromNow } from '../lib/migration/tokens';
 import { logMigrationAudit, touchMigrationActivity } from '../lib/migration/audit';
-import { analyzeMigrationFile, prepareStaging, MIGRATION_BUCKET } from '../lib/migration/pipeline';
+import { analyzeMigrationFile, prepareStaging, receptionnerFichierMigration, MIGRATION_BUCKET } from '../lib/migration/pipeline';
 import { findDuplicatesForEntity, } from '../lib/migration/duplicates';
 import { runFinalImport, rollbackFinalBatch, runPostImportValidation, purgeImportActivityNoise, purgeOrphanProperties, MAX_IMPORT_ERROR_RATIO } from '../lib/migration/importer';
 import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '../lib/migration/execution';
@@ -450,6 +450,25 @@ router.post('/migration-admin/migrations/:id/invitation/extend', validate(migrat
 });
 
 // ── Fichiers : rejeter / ré-analyser / téléchargement signé ────────────
+// ── Téléversement depuis la console (même réception que le portail client) ──
+const rawFileParser = express.raw({ type: () => true, limit: '26mb' });
+router.post('/migration-admin/migrations/:id/files', rawFileParser, async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    const rawName = typeof req.query.name === 'string' ? req.query.name : '';
+    const buf: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    const r = await receptionnerFichierMigration(admin, migration, { buf, name: rawName, uploadedBy: auth.user.id, actorRole: 'platform_admin' });
+    if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code });
+    return res.status(201).json(r.file);
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Téléversement impossible.', '[migration-admin]');
+  }
+});
+
 router.post('/migration-admin/migrations/:id/files/:fileId/reject', async (req, res) => {
   try {
     const auth = await requirePlatformAdmin(req, res);

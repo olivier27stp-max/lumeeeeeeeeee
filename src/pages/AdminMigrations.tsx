@@ -21,7 +21,7 @@ import { type AuditBotMigration,
   generateInvitation, revokeInvitation, extendInvitation, decideMapping, resolveIssue,
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
   rollbackMigration, closeMigration, sendAdminMessage, getMigrationAudit, getFileDownloadUrl,
-  reanalyzeFile, rejectFile, deleteFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
+  reanalyzeFile, rejectFile, deleteFile, uploadAdminFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
   type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
@@ -1221,10 +1221,47 @@ function ResumeTab({ d, onChanged, onOuvrirOnglet }: { d: any; onChanged: () => 
   );
 }
 
+/** Statuts où un fichier peut encore être déposé (miroir de UPLOAD_ALLOWED_STATUSES côté serveur). */
+const STATUTS_DEPOT_FICHIERS = ['invitation_sent', 'waiting_for_files', 'files_uploaded', 'parsing', 'mapping', 'human_review', 'waiting_for_client', 'test_review'];
+
 function FilesTab({ d, onChanged }: { d: any; onChanged: () => void }) {
   const m = d.migration;
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [depot, setDepot] = useState<string | null>(null);
+  const peutDeposer = STATUTS_DEPOT_FICHIERS.includes(m.status);
+  const deposer = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    for (const f of Array.from(files)) {
+      setDepot(f.name);
+      try {
+        await uploadAdminFile(m.id, f);
+        toast.success(`${f.name} reçu — analyse en cours`);
+      } catch (err: any) {
+        toast.error(`${f.name} : ${err?.message ?? 'Erreur'}`);
+      }
+    }
+    setDepot(null);
+    if (inputRef.current) inputRef.current.value = '';
+    onChanged();
+  };
   return (
     <div className="section-card p-5">
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <input ref={inputRef} type="file" accept=".csv,.pdf" multiple hidden onChange={(e) => void deposer(e.target.files)} />
+        <button
+          type="button"
+          disabled={!peutDeposer || depot !== null}
+          onClick={() => inputRef.current?.click()}
+          className="h-9 px-4 bg-[#d8d0c2] text-black hover:bg-[#cabfad] rounded-md text-[13px] font-medium inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {depot ? <><Loader2 size={13} className="animate-spin" /> Dépôt de {depot}…</> : 'Déposer des fichiers (CSV, PDF)'}
+        </button>
+        <span className="text-[12px] text-text-tertiary">
+          {peutDeposer
+            ? 'Même réception que le portail client : analyse automatique, puis « Confier au bot » pour les correspondances.'
+            : 'Le dépôt n\'est plus permis à cette étape (après approbation).'}
+        </span>
+      </div>
       {(d.files ?? []).length === 0 ? (
         <p className="text-[13px] text-text-tertiary">Aucun fichier reçu.</p>
       ) : (

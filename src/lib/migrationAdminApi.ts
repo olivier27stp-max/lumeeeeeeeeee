@@ -32,6 +32,21 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+/** Dépose un fichier (CSV ou PDF) dans une migration depuis la console — même réception que le portail. */
+export async function uploadAdminFile(id: string, file: File): Promise<{ id: string; original_name: string }> {
+  const headers = await getAuthHeaders();
+  delete headers['Content-Type'];
+  const res = await fetch(`${BASE}/migration-admin/migrations/${id}/files?name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  let body: any = null;
+  try { body = await res.json(); } catch { body = null; }
+  if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+  return body;
+}
+
 export async function checkPlatformAdmin(): Promise<boolean> {
   try {
     const { data } = await supabase.auth.getSession();
