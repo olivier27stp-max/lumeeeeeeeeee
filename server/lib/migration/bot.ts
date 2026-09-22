@@ -583,7 +583,9 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
     await publierProgression(admin, rapport, `Correspondances : lecture de « ${f.original_name} » (${index + 1}/${total})`, true);
     const cat = f.category_detected as MigrationCategory | null;
     const entity = entityForCategory(cat);
-    const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence, target_field, decided_role, reason').eq('file_id', f.id);
+    // `decided_role` et `decided_at` servent à ne JAMAIS re-soumettre au
+    // modèle une colonne que le bot a déjà tranchée (voir `aTraiter`).
+    const { data: maps } = await admin.from('migration_field_mappings').select('id, column_id, status, confidence, target_field, decided_role, decided_at, reason').eq('file_id', f.id);
     const { data: cols } = await admin.from('migration_file_columns').select('id, position, header, detected_type, samples_masked').eq('file_id', f.id).order('position', { ascending: true });
     if (!entity) {
       // Catégorie sans entité cible (lignes, paiements, notes…) : rien à mapper, mais un manque à déclarer.
@@ -593,12 +595,25 @@ async function proposerParModele(admin: Admin, m: MigrationRow, acteur: ActeurMi
     }
     const champs = FIELD_CATALOG[entity] ?? [];
     const libelle = (field: string | null | undefined) => (field ? champs.find((c) => c.field === field)?.labelFr ?? field : null);
-    const dejaRelues = (maps ?? []).filter((mp) => mp.status === 'suggested' && String(mp.reason ?? '').startsWith(PREFIXE_A_VERIFIER));
+    // Colonnes que le bot a DÉJÀ relues sans oser trancher : elles portent le
+    // préfixe « à vérifier » dans `reason`. Le statut reste `suggested` ou
+    // `needs_review` selon d'où elles viennent — le test ne doit donc PAS se
+    // limiter à `suggested`, sinon les `needs_review` repassent au modèle à
+    // chaque passe. C'est ce qui faisait analyser chaque fichier DEUX FOIS le
+    // 2026-09-22 (8 fichiers × 2 × ~30 ¢ = ~2,60 $ jetés en une journée).
+    const dejaRelues = (maps ?? []).filter((mp) => String(mp.reason ?? '').startsWith(PREFIXE_A_VERIFIER));
     for (const mp of dejaRelues) {
       const col: any = cols?.find((c: any) => c.id === mp.column_id);
       if (col) rapport.audit.a_verifier.push({ fichier: f.original_name, colonne: col.header, actuel: libelle(mp.target_field as string | null), candidats: [], pourquoi: String(mp.reason).slice(PREFIXE_A_VERIFIER.length) });
     }
-    const aTraiter = (maps ?? []).filter((mp) => (mp.status === 'needs_review' || mp.status === 'suggested') && !dejaDemandes.has(mp.id) && !dejaRelues.includes(mp));
+    const aTraiter = (maps ?? []).filter((mp) => (mp.status === 'needs_review' || mp.status === 'suggested')
+      && !dejaDemandes.has(mp.id)
+      && !dejaRelues.includes(mp)
+      // Déjà tranchée par le bot à une passe précédente : ne jamais la
+      // re-soumettre. Sans ce test, une colonne que le modèle a laissée en
+      // `suggested` revenait à chaque passe et le fichier entier était
+      // re-facturé (~30 ¢ l'appel sur Fable 5.1).
+      && mp.decided_role !== 'assistant');
     if (!aTraiter.length || !cols?.length) continue;
     const mapParCol = new Map((maps ?? []).map((mp) => [mp.column_id, mp]));
     const colonnes: ColonneModele[] = cols.map((c: any) => {
