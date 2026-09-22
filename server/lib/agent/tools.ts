@@ -886,6 +886,36 @@ createJob.needsIdentity = true;
 sendSms.handler = handlerSendSms;
 sendSms.needsIdentity = true;
 
+
+/**
+ * Météo — la seule information hors CRM que Lumi connaisse (2026-09-22).
+ * Les clients de Lume travaillent dehors : la pluie décide si la journée a
+ * lieu. Source Open-Meteo, gratuite ; aucune donnée de l'org ne sort, juste
+ * des coordonnées. Voir server/lib/agent/meteo.ts.
+ */
+const getWeather: AgentTool = {
+  // Lecture pure : aucune écriture, donc aucune carte de confirmation.
+  kind: 'read',
+  declaration: {
+    name: 'get_weather',
+    description: "Weather forecast for the company's area, today or tomorrow, with an outdoor-work verdict (bon/variable/mauvais). Use for questions about rain, wind, temperature, or whether a job can be done outside. Only covers today and tomorrow.",
+    parameters: {
+      type: 'object',
+      properties: {
+        jour: { type: 'string', enum: ['aujourdhui', 'demain'], description: "Day to forecast. Defaults to today." },
+      },
+    },
+  },
+  handler: async (args, ctx) => {
+    const { previsionPourOrg } = await import('./meteo');
+    const p = await previsionPourOrg(ctx.client, ctx.orgId, { jour: args.jour === 'demain' ? 1 : 0 });
+    // Pas de prévision (adresse manquante, service indisponible) : on le DIT.
+    // Le modèle doit répondre qu'il ne sait pas, jamais inventer une météo.
+    if (!p) return { disponible: false, raison: "Aucune prévision : l'adresse de l'entreprise est peut-être incomplète (Paramètres → Entreprise)." };
+    return p;
+  },
+};
+
 export const AGENT_TOOLS: AgentTool[] = [
   searchHelp,
   searchClients,
@@ -900,6 +930,7 @@ export const AGENT_TOOLS: AgentTool[] = [
   getOverduePayments,
   getRevenueSummary,
   getDayRoute,
+  getWeather,
   createQuote,
   createInvoice,
   createJob,

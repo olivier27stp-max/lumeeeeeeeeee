@@ -35,8 +35,8 @@ export interface Topic {
 export const TOPICS: readonly Topic[] = [
   {
     id: 'planification',
-    description: 'Jobs, visites, calendrier, horaire, trajets, disponibilités, assignation, statuts de job, dépenses de job.',
-    outils: ['query_schedule', 'list_jobs', 'get_job', 'get_day_route', 'find_free_slot', 'find_dates_in_location', 'optimize_route', 'get_team_locations',
+    description: 'Jobs, visites, calendrier, horaire, trajets, disponibilités, assignation, statuts de job, dépenses de job, météo (travail extérieur).',
+    outils: ['query_schedule', 'list_jobs', 'get_job', 'get_day_route', 'find_free_slot', 'find_dates_in_location', 'optimize_route', 'get_team_locations', 'get_weather',
       'create_job', 'update_job', 'update_job_status', 'assign_job', 'archive_job', 'add_visit', 'reschedule_job', 'cancel_visit', 'set_job_expenses'],
     refuse: 'Argent (devis, factures, paiements) → facturation ; textos et courriels → communications.',
   },

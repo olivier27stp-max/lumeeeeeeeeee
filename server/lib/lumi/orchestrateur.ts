@@ -138,6 +138,9 @@ export const OUTILS_DE_BASE: ReadonlySet<string> = new Set([
   'get_company_info', 'recall_notes',
   // « Où est mon équipe ? » : le modèle refusait sans chercher (évaluation du 2026-09-11).
   'get_team_locations',
+  // Météo : question quotidienne pour un métier extérieur — la différer
+  // coûterait un aller-retour de recherche d'outil pour rien.
+  'get_weather',
 ]);
 
 export const OUTIL_RECHERCHE: Anthropic.Messages.ToolSearchToolRegex20251119 = {
