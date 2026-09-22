@@ -20,7 +20,18 @@ import { ARTICLES, type Article } from '../../../src/components/supportArticles'
 import { CARTE_APP } from '../support/carte-app';
 import { normaliser } from '../lumi/normaliser';
 
-interface Passage { page: string; slug: string; titre: string; texte: string; poids: number; mots: Set<string>; motsTitre?: Set<string> }
+interface Passage {
+  page: string; slug: string; titre: string; texte: string; poids: number;
+  mots: Set<string>; motsTitre?: Set<string>;
+  /**
+   * Ce passage est une QUESTION/RÉPONSE écrite à la main (la FAQ des pages
+   * Fonctionnalités), pas un extrait de prose. Quand la question de
+   * l'utilisateur correspond à celle-là, la réponse est exacte — il n'y a
+   * pas d'ambiguïté à arbitrer, contrairement à deux paragraphes qui
+   * parlent du même sujet (2026-09-22).
+   */
+  qr?: boolean;
+}
 
 const VIDES = new Set(['le', 'la', 'les', 'de', 'des', 'du', 'un', 'une', 'et', 'ou', 'en', 'a', 'au', 'aux', 'ce', 'ca', 'que', 'qui', 'dans', 'sur', 'pour', 'par', 'est', 'je', 'tu', 'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses', 'the', 'and', 'or', 'to', 'of', 'in', 'on', 'for', 'is', 'my', 'your', 'comment', 'how', 'do', 'i', 'faire', 'fais', 'peux', 'peut', 'lume', 'avec', 'with', 'sont', 'suis', 'ont', 'ete', 'etre', 'quoi', 'where', 'what', 'are', 'can']);
 
@@ -144,7 +155,7 @@ function index(): Passage[] {
     out.push({ page, slug: f.slug, titre, texte: f.lead.fr, poids: 3, mots: mots(`${bi(f.title)} ${bi(f.lead)}`), motsTitre: mots(bi(f.title)) });
     for (const p of f.points) out.push({ page, slug: f.slug, titre: `${titre} — ${p.t.fr}`, texte: p.d.fr, poids: 2, mots: mots(`${bi(p.t)} ${bi(p.d)}`), motsTitre: mots(bi(p.t)) });
     for (const s of f.steps) out.push({ page, slug: f.slug, titre: `${titre} — ${s.t.fr}`, texte: s.d.fr, poids: 1, mots: mots(`${bi(s.t)} ${bi(s.d)}`), motsTitre: mots(bi(s.t)) });
-    for (const q of f.faq) out.push({ page, slug: f.slug, titre: `${titre} — ${q.q.fr}`, texte: q.a.fr, poids: 2, mots: mots(`${bi(q.q)} ${bi(q.a)}`), motsTitre: mots(bi(q.q)) });
+    for (const q of f.faq) out.push({ page, slug: f.slug, titre: `${titre} — ${q.q.fr}`, texte: q.a.fr, poids: 2, mots: mots(`${bi(q.q)} ${bi(q.a)}`), motsTitre: mots(bi(q.q)), qr: true });
   }
   out.push(...passagesCarteApp(), ...passagesArticles(), ...passagesSavoir());
   INDEX = out;
@@ -152,7 +163,7 @@ function index(): Passage[] {
 }
 
 /** Les passages les plus proches de la question (pur, testable). */
-export function chercherAide(question: string, limite = 3): Array<{ page: string; titre: string; extrait: string; score: number }> {
+export function chercherAide(question: string, limite = 3): Array<{ page: string; titre: string; extrait: string; score: number; qr?: boolean }> {
   const q = motsRequete(question);
   if (q.size === 0) return [];
   const scores = index().map((p) => {
@@ -168,7 +179,7 @@ export function chercherAide(question: string, limite = 3): Array<{ page: string
     const n = vus.get(p.slug) ?? 0;
     if (n >= 2) continue;
     vus.set(p.slug, n + 1);
-    out.push({ page: p.page, titre: p.titre, extrait: p.texte, score });
+    out.push({ page: p.page, titre: p.titre, extrait: p.texte, score, ...(p.qr ? { qr: true } : {}) });
     if (out.length >= limite) break;
   }
   return out;

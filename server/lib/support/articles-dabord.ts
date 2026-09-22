@@ -31,7 +31,7 @@
  * Tests : tests/support/articles-dabord.test.ts
  */
 import { chercherAide } from '../agent/tools-aide';
-import { porteSurLesDonnees } from './faq';
+import { porteSurLesDonnees, motsUtiles } from './faq';
 import { normaliser } from '../lumi/normaliser';
 
 /** Score minimal du premier résultat : en dessous, la recherche « devine ». */
@@ -85,14 +85,50 @@ export function reponseAideDirecte(
   // Mêmes refus que la FAQ : une action ou une question sur les données du
   // compte n'est jamais servie par un article.
   if (porteSurLesDonnees(message)) return null;
-  if (!estQuestionComment(message)) return null;
 
   const trouves = chercherAide(message, 3);
   if (!trouves.length) return null;
   const premier = trouves[0];
   const second = trouves[1]?.score ?? 0;
   if (premier.score < SCORE_FRANC) return null;
-  if (second > 0 && premier.score < second * FACTEUR_ECART) return null;
+
+  /**
+   * L'écart avec le 2e résultat protège contre l'ambiguïté : deux
+   * paragraphes qui parlent du même sujet, on ne sait pas lequel répond.
+   *
+   * Mais quand le 1er est une QUESTION/RÉPONSE écrite à la main dont le
+   * titre reprend les mots de la question posée, il n'y a rien à arbitrer —
+   * c'est LA réponse à CETTE question. Mesuré le 2026-09-22 : « est-ce que
+   * mes clients doivent créer un compte » (score 16) et « le GPS suit mes
+   * employés en dehors des heures » (score 20) trouvaient leur Q/R exacte en
+   * tête, et l'écart (1,33) les renvoyait quand même au modèle.
+   *
+   * L'exigence reste forte : il faut que la MOITIÉ des mots utiles de la
+   * question se retrouvent dans le titre de la Q/R. Un simple « qr: true »
+   * ne suffit pas — sinon la première Q/R venue du bon rayon répondrait.
+   */
+  const motsQuestion = motsUtiles(message);
+  const motsTitre = motsUtiles(premier.titre);
+  const communs = [...motsQuestion].filter((m) => motsTitre.has(m)).length;
+  const recouvrement = motsQuestion.size ? communs / motsQuestion.size : 0;
+  const correspondanceFranche = !!premier.qr && recouvrement >= 0.5;
+
+  /**
+   * Deux portes d'entrée, et il en faut UNE :
+   *  - la question a la forme « comment faire » (ce que le centre d'aide
+   *    traite naturellement) ;
+   *  - OU elle correspond franchement à une Q/R écrite à la main.
+   *
+   * La deuxième a été ajoutée le 2026-09-22 : « est-ce que mes clients
+   * doivent créer un compte », « le GPS suit mes employés en dehors des
+   * heures », « la signature électronique est-elle valide » n'ont pas la
+   * forme « comment », mais leur Q/R existe mot pour mot dans la doc —
+   * recouvrement de titre mesuré à 100 %. Les renvoyer au modèle, c'est
+   * payer pour reconstruire une réponse déjà écrite.
+   */
+  if (!estQuestionComment(message) && !correspondanceFranche) return null;
+
+  if (!correspondanceFranche && second > 0 && premier.score < second * FACTEUR_ECART) return null;
 
   // Une réponse courte qui cite la page, comme le modèle le ferait.
   const extrait = premier.extrait.trim().replace(/\s+/g, ' ').slice(0, 400);
