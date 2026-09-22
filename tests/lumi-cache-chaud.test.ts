@@ -56,8 +56,16 @@ describe('pingerCache', () => {
     expect(params.model).toBe('claude-sonnet-5');
     expect(params.system[0]).toEqual(reel[0]);              // bloc stable + point de cache 1 h
     expect(params.tools).toEqual(outilsClaude());           // même ordre, même point de cache
-    expect(params.max_tokens).toBeLessThanOrEqual(16);
-    expect(params.thinking).toEqual({ type: 'adaptive' });  // les mêmes réglages qu'un vrai appel
+    // `max_tokens: 0` depuis le 2026-09-22 : l'API fait le prefill (donc écrit
+    // le cache) et rend `content: []` sans facturer de sortie. Vérifié contre
+    // la vraie API : écrit 5 762 tokens, sortie 0, relus au tour suivant.
+    expect(params.max_tokens).toBe(0);
+    // NI `thinking` NI `output_config` : ils ne font pas partie du préfixe mis
+    // en cache (seuls `tools` et `system` comptent), donc les omettre ne change
+    // rien à l'entrée écrite — et `max_tokens: 0` est refusé avec certaines de
+    // leurs combinaisons. Un réchauffement n'a pas à réfléchir.
+    expect(params.thinking).toBeUndefined();
+    expect(params.output_config).toBeUndefined();
     expect(r.cache_lu).toBe(6700);
     expect(r.cost_cents).toBeGreaterThan(0);
     expect(r.cost_cents).toBeLessThan(0.3);
