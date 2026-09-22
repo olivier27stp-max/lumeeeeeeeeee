@@ -1107,9 +1107,17 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
 
   // Avertissements des passes précédentes dont le cas a disparu : fermés d'eux-mêmes. Avant, chaque
   // import test en laissait une couche de plus (12 « problèmes » ouverts pour 4 cas réels, 2026-09-22).
+  const { count: colonnesAVerifier } = await admin
+    .from('migration_field_mappings')
+    .select('id', { count: 'exact', head: true })
+    .eq('migration_id', migration.id)
+    .eq('status', 'needs_review');
   await fermerAvertissementsPerimes(admin, migration.id, {
     ambiguous_relation: allAmbiguousKeys.length > 0,
     unknown_status: unknownStatuses.size > 0,
+    // « Colonne ambiguë » naît à l'analyse ; une fois toutes les correspondances tranchées
+    // (77 encore ouvertes après coup chez Vision Lavage), il n'a plus lieu d'être.
+    ambiguous_column: (colonnesAVerifier ?? 0) > 0,
   });
 
   const dupCounts = { pending: 0, merge: 0, createNew: 0, skip: 0, review: 0 };
