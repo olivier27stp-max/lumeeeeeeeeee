@@ -25,8 +25,12 @@ vi.mock('../../server/lib/mailer', () => ({
 }));
 vi.mock('../../server/routes/emails', () => ({
   getCompanySettings: async () => ({}),
+  // `bouton` est le 3e argument depuis que les automatisations en portent un.
   buildEmailLayout: (_c: unknown, b: string) => b,
   senderFor: () => ({ from: 'test@lume.test' }),
+  // Sans cette entrée, l'import du module réel échoue et AUCUN courriel ne
+  // part — le test accusait le consentement alors que la cause était ici.
+  langueEntreprise: () => 'fr',
 }));
 vi.mock('../../server/lib/notificationHelpers', () => ({
   isEmailUnsubscribed: async () => false,
@@ -42,6 +46,13 @@ function faketSupabase(client: Record<string, unknown> | null, opts: { erreur?: 
     eq: () => chaine,
     is: () => chaine,
     limit: () => chaine,
+    // Le plafond de fréquence compte les envois récents (`gte` sur une date)
+    // et le bouton d'automatisation lit l'entité : sans ces maillons, le faux
+    // client casse la chaîne et le courriel semble bloqué alors que le code
+    // réel laisse passer.
+    gte: () => chaine,
+    order: () => chaine,
+    not: () => chaine,
     maybeSingle: async () => (opts.erreur ? { data: null, error: { message: 'panne' } } : { data: client, error: null }),
     insert: async () => ({ error: null }),
   };
