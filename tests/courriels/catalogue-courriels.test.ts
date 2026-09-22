@@ -19,11 +19,14 @@ const entrees = CATALOGUE_COURRIELS.flatMap((g) => g.entrees);
 
 describe('catalogue des courriels', () => {
   it('couvre les 26 courriels d’automatisation réellement définis', () => {
-    // Le compte vient de automationPresets.data.ts, relevé un par un.
+    // 26 presets relevés un par un dans automationPresets.data.ts, PLUS les
+    // cinq postes que le serveur ne résout pas (rendez-vous, reçu, avis…) :
+    // leur courriel part bien, mais d'une automatisation, et c'est là que son
+    // texte se modifie. Les classer « parcours » ferait écrire dans le vide.
     const auto = entrees
       .filter((e) => e.origine === 'automatisation')
       .reduce((n, e) => n + (e.variantes ?? 1), 0);
-    expect(auto).toBe(26);
+    expect(auto).toBe(31);
   });
 
   it('chaque poste du parcours porte un type, chaque automatisation n’en porte pas', () => {
@@ -75,15 +78,28 @@ describe('textes d’origine montrés dans l’éditeur', () => {
     // L'éditeur ouvre sur ce texte quand l'entreprise n'a rien écrit. S'il
     // diverge de server/routes/emails.ts, le propriétaire corrige une phrase
     // que son client ne reçoit pas — et il ne s'en apercevra jamais.
-    const emails = fs.readFileSync(path.join(process.cwd(), 'server', 'routes', 'emails.ts'), 'utf8');
+    /* Le serveur coupe ses longues phrases en concaténations :
+         'n’est pas encore réglée. Si c’est déjà fait, ' +
+         'ce message se croise avec votre paiement.'
+       On les recolle et on écrase les espaces avant de comparer, sinon un
+       texte parfaitement fidèle échouerait pour une raison de mise en forme
+       du code — et on serait tenté de mutiler la phrase montrée à
+       l'entreprise pour faire passer le test. */
+    const routes = ['emails.ts', 'agreements.ts', 'payment-requests.ts', 'reminders-cron.ts']
+      .map((f) => fs.readFileSync(path.join(process.cwd(), 'server', 'routes', f), 'utf8'))
+      .join('\n')
+      .replace(/'\s*\+\s*\n\s*'/g, '')
+      .replace(/\s+/g, ' ');
+
+    const norm = (x: string) => x.replace(/\s+/g, ' ').trim();
     const avecTexte = CATALOGUE_COURRIELS
       .flatMap((g) => g.entrees)
       .filter((e) => e.texteOrigine);
 
     expect(avecTexte.length).toBeGreaterThan(0);
     for (const e of avecTexte) {
-      expect(emails, `fr « ${e.titre.fr} »`).toContain(e.texteOrigine!.fr);
-      expect(emails, `en « ${e.titre.fr} »`).toContain(e.texteOrigine!.en);
+      expect(routes, `fr « ${e.titre.fr} »`).toContain(norm(e.texteOrigine!.fr));
+      expect(routes, `en « ${e.titre.fr} »`).toContain(norm(e.texteOrigine!.en));
     }
   });
 

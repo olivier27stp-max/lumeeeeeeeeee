@@ -41,6 +41,14 @@ export interface EntreeCourriel {
    * croisent dans tests/courriels/catalogue-courriels.test.ts.
    */
   texteOrigine?: { fr: string; en: string };
+  /**
+   * L'objet par défaut, en gabarit. Le serveur le compose avec des valeurs
+   * calculées, donc il est réécrit ici avec les variables correspondantes :
+   * c'est la forme que l'entreprise voit, modifie, et que `applyTemplate`
+   * remplit à l'envoi. Sans lui, le champ Objet s'ouvrait VIDE et personne ne
+   * savait ce qu'il remplaçait.
+   */
+  objetOrigine?: { fr: string; en: string };
 }
 
 export interface GroupeCourriels {
@@ -76,14 +84,17 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
         origine: 'parcours',
         titre: { fr: 'Envoi de la soumission', en: 'Quote sent' },
         quand: { fr: 'Quand vous envoyez une soumission', en: 'When you send a quote' },
+        objetOrigine: {
+          fr: 'Soumission [quote_number] — [quote_amount]',
+          en: 'Quote [quote_number] — [quote_amount]',
+        },
         texteOrigine: {
           fr: 'Voici votre soumission. Vous pouvez la consulter et l’approuver en ligne.',
           en: 'Here is your quote. You can view and approve it online.',
         },
       },
       {
-        type: 'quote_accepted',
-        origine: 'parcours',
+        origine: 'automatisation',
         titre: { fr: 'Soumission acceptée', en: 'Quote accepted' },
         quand: { fr: 'Quand le client accepte', en: 'When the client accepts' },
       },
@@ -109,6 +120,14 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
         origine: 'parcours',
         titre: { fr: 'Contrat à signer', en: 'Contract to sign' },
         quand: { fr: 'Quand vous envoyez un contrat', en: 'When you send a contract' },
+        objetOrigine: {
+          fr: 'Contrat [contract_number] — à signer',
+          en: 'Contract [contract_number] — to sign',
+        },
+        texteOrigine: {
+          fr: 'Voici votre contrat. Vous pouvez le consulter et le signer en ligne, sur votre téléphone ou votre ordinateur.',
+          en: 'Here is your contract. You can review and sign it online, on your phone or computer.',
+        },
       },
       {
         origine: 'automatisation',
@@ -122,14 +141,12 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
     titre: { fr: 'Le rendez-vous', en: 'The appointment' },
     entrees: [
       {
-        type: 'job_confirmation',
-        origine: 'parcours',
+        origine: 'automatisation',
         titre: { fr: 'Rendez-vous confirmé', en: 'Appointment confirmed' },
         quand: { fr: 'Quand la date est fixée', en: 'When the date is set' },
       },
       {
-        type: 'job_reminder',
-        origine: 'parcours',
+        origine: 'automatisation',
         titre: { fr: 'Rappel de rendez-vous', en: 'Appointment reminder' },
         quand: { fr: 'La veille de la visite', en: 'The day before the visit' },
       },
@@ -150,12 +167,24 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
         origine: 'parcours',
         titre: { fr: 'Demande de dépôt', en: 'Deposit request' },
         quand: { fr: 'Pour réserver une date à l’horaire', en: 'To hold a date on the schedule' },
+        objetOrigine: {
+          fr: '[amount_due] à payer — facture [invoice_number]',
+          en: '[amount_due] due — invoice [invoice_number]',
+        },
+        texteOrigine: {
+          fr: 'Vous pouvez payer en ligne, par carte, en moins d’une minute.',
+          en: 'You can pay online by card in under a minute.',
+        },
       },
       {
         type: 'invoice_sent',
         origine: 'parcours',
         titre: { fr: 'Envoi de la facture', en: 'Invoice sent' },
         quand: { fr: 'Quand vous envoyez une facture', en: 'When you send an invoice' },
+        objetOrigine: {
+          fr: 'Facture [invoice_number] — [invoice_amount]',
+          en: 'Invoice [invoice_number] — [invoice_amount]',
+        },
         texteOrigine: {
           fr: 'Voici votre facture. Vous pouvez la consulter et la payer en ligne en un clic.',
           en: 'Here is your invoice. You can view it and pay online in one click.',
@@ -166,10 +195,17 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
         origine: 'parcours',
         titre: { fr: 'Rappel de paiement', en: 'Payment reminder' },
         quand: { fr: 'Selon votre calendrier de relance', en: 'On your reminder schedule' },
+        objetOrigine: {
+          fr: 'Facture [invoice_number] — il reste [amount_due]',
+          en: 'Invoice [invoice_number] — [amount_due] outstanding',
+        },
+        texteOrigine: {
+          fr: 'Si c’est déjà fait, ce message se croise avec votre paiement.',
+          en: 'If you have already paid, this message crossed with your payment.',
+        },
       },
       {
-        type: 'payment_receipt',
-        origine: 'parcours',
+        origine: 'automatisation',
         titre: { fr: 'Reçu de paiement', en: 'Payment receipt' },
         quand: { fr: 'Dès qu’un paiement entre', en: 'As soon as a payment lands' },
       },
@@ -192,8 +228,7 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
     titre: { fr: 'Après les travaux', en: 'After the job' },
     entrees: [
       {
-        type: 'review_request',
-        origine: 'parcours',
+        origine: 'automatisation',
         titre: { fr: 'Demande d’avis', en: 'Review request' },
         quand: { fr: 'Après une job terminée', en: 'After a completed job' },
       },
