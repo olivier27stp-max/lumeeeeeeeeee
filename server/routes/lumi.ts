@@ -488,7 +488,12 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
           action: aide ? `faq:${aide.id}` : 'aide-directe', outils: article?.pages ?? [],
           resultat: 'ok', model: null, usage: usageVide(), costCents: 0, dureeMs: Date.now() - debut,
         });
-        return;
+        // `res.end()` et pas un simple `return` : sans lui le flux SSE reste
+        // ouvert, le navigateur attend la suite et la roue tourne à l'infini
+        // — l'utilisateur doit recharger la page pour poser un 2e message
+        // (signalé et reproduit le 2026-09-22). Tous les autres étages sans
+        // modèle finissent déjà par `return res.end()`.
+        return res.end();
       }
     }
 
