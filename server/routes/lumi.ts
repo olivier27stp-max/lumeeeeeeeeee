@@ -37,6 +37,7 @@ import { detecterRaccourci, repondreRaccourci, raccourciDepuisAction, IDS_RACCOU
 import { reponseFaqPour } from '../lib/support/faq';
 import { reponseAideDirecte } from '../lib/support/articles-dabord';
 import { reponseAideMulti } from '../lib/support/aide-multi';
+import { peutRepondreHorsScope, reponseHorsScope } from '../lib/lumi/hors-scope';
 import { detecterActionDirecte, repondreActionDirecte, actionDepuisExtraction } from '../lib/lumi/actions-directes';
 import { texteRecus, type LigneRecu } from '../lib/lumi/recus';
 import { VERSION_PROMPT } from '../lib/lumi/version';
@@ -645,6 +646,28 @@ router.post('/lumi/chat', limiteHoraireLumi, validate(chatSchema), async (req, r
           input_tokens: routeur.usage.input_tokens, output_tokens: routeur.usage.output_tokens,
           cache_creation_input_tokens: routeur.usage.cache_creation_input_tokens, cache_read_input_tokens: routeur.usage.cache_read_input_tokens, cost_cents: coutRouteur,
         });
+      }
+      // VRAI hors-sujet (météo, blagues, code) : le routeur l'a identifié pour
+      // 0,36 ¢, inutile de payer un tour complet pour dire non. Mesuré : 14
+      // tours classés hors_scope à 0,95 de confiance étaient quand même
+      // descendus au gros modèle (0,26 $). Les questions sur LUME en sont
+      // exclues — la FAQ y répond, et un refus servi à tort serait pire.
+      if (peutRepondreHorsScope({ decision: routeur.decision, confiance: routeur.verdict?.confidence, seuil: SEUIL_CONFIANCE, message, premierMessage })) {
+        const texte = reponseHorsScope(ctx.language);
+        const cleRefs = `${ctx.auth.orgId}:${ctx.auth.user.id}`;
+        await sauverMessages(conversationId!, ctx.auth.orgId, [...nouveaux, { role: 'assistant', content: [{ type: 'text', text: texte }] }], cleRefs);
+        const emettreSse = ouvrirSse(res);
+        emettreSse('text', { type: 'text', delta: texte });
+        emettreSse('done', { conversation_id: conversationId, cost_cents: coutRouteur, budget: ctx.budget, proposal: null, etage: ETAGE.routeur });
+        void journaliserTrace(ctx.admin, {
+          orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine,
+          enonce: normaliserEnonce(message), etage: ETAGE.routeur, action: 'hors-scope', topic: 'hors_scope',
+          params: { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } },
+          outils: [], resultat: 'ok', model: MODELE_ROUTEUR,
+          usage: routeur.usage ? ajouterUsage(usageVide(), routeur.usage) : usageVide(),
+          costCents: coutRouteur, dureeMs: Date.now() - debut,
+        });
+        return res.end();
       }
       const r = routeur.decision === 'action' && routeur.verdict?.action ? raccourciDepuisAction(routeur.verdict.action, routeur.verdict.params ?? {}) : null;
       const reponse = r ? await repondreRaccourci(r, ctxRaccourci) : null;
