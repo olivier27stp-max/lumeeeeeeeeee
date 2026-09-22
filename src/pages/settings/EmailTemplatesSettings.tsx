@@ -18,13 +18,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Loader2, Pencil, RotateCcw, Zap, ExternalLink, Check } from 'lucide-react';
+import { Mail, Loader2, Pencil, RotateCcw, Zap, ExternalLink, Check, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '../../components/ui';
 import { confirmer } from '../../components/ui/ConfirmDialog';
 import { useTranslation } from '../../i18n';
 import { cn } from '../../lib/utils';
 import EmailPreviewEditor from '../../components/automations/EmailPreviewEditor';
+import ImportHtmlCourriel from '../../components/settings/ImportHtmlCourriel';
 import { CATALOGUE_COURRIELS, type EntreeCourriel } from '../../lib/catalogueCourriels';
 import {
   listEmailTemplates,
@@ -59,6 +60,7 @@ export default function EmailTemplatesSettings() {
   const [modeles, setModeles] = useState<EmailTemplate[]>([]);
   const [chargement, setChargement] = useState(true);
   const [ouvert, setOuvert] = useState<Ouvert | null>(null);
+  const [aImporter, setAImporter] = useState<Ouvert | null>(null);
 
   const charger = async () => {
     try {
@@ -94,6 +96,23 @@ export default function EmailTemplatesSettings() {
         is_active: true,
       });
     }
+  };
+
+  const importer = async (o: Ouvert, html: string) => {
+    if (o.modele) {
+      await updateEmailTemplate(o.modele.id, { body: html, source: 'import' });
+    } else {
+      await createEmailTemplate({
+        name: o.entree.titre[fr ? 'fr' : 'en'],
+        type: o.type,
+        subject: o.entree.objetOrigine?.[fr ? 'fr' : 'en'] ?? '',
+        body: html,
+        variables: [],
+        is_active: true,
+        source: 'import',
+      });
+    }
+    void charger();
   };
 
   const revenirAuDefaut = async (t: EmailTemplate, titre: string) => {
@@ -204,6 +223,15 @@ export default function EmailTemplatesSettings() {
                           ) : null}
                           <button
                             type="button"
+                            onClick={() => setAImporter({ entree, type: entree.type as string, modele })}
+                            className="rounded-lg p-2 text-text-tertiary hover:bg-surface-secondary hover:text-text-secondary"
+                            aria-label={fr ? `Importer un HTML : ${titre}` : `Import HTML: ${titre}`}
+                            title={fr ? 'Importer votre propre HTML' : 'Import your own HTML'}
+                          >
+                            <Upload className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setOuvert({ entree, type: entree.type as string, modele })}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-outline/60 px-3 py-1.5 text-[13px] font-medium text-text-secondary hover:bg-surface-secondary"
                           >
@@ -228,11 +256,23 @@ export default function EmailTemplatesSettings() {
              tombait sur « Courriel vide » et devait tout réécrire. On ouvre
              donc sur le texte que le serveur envoie aujourd'hui. */
           body={ouvert.modele?.body ?? texteDeDepart(ouvert.entree, fr)}
-          subject={ouvert.modele?.subject ?? ''}
+          /* L'objet s'ouvrait VIDE : l'entreprise ne voyait pas ce qu'elle
+             remplaçait, et un champ laissé vide n'enregistre rien. */
+          subject={ouvert.modele?.subject ?? ouvert.entree.objetOrigine?.[fr ? 'fr' : 'en'] ?? ''}
           fr={fr}
+          typeCourriel={ouvert.type}
           enregistrerTexte={(corpsHtml, objet) => enregistrer(ouvert, corpsHtml, objet)}
           onClose={() => setOuvert(null)}
           onSaved={() => { setOuvert(null); void charger(); }}
+        />
+      ) : null}
+
+      {aImporter ? (
+        <ImportHtmlCourriel
+          titreCourriel={aImporter.entree.titre[fr ? 'fr' : 'en']}
+          fr={fr}
+          onImporter={(html) => importer(aImporter, html)}
+          onClose={() => setAImporter(null)}
         />
       ) : null}
     </div>
