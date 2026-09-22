@@ -73,3 +73,32 @@ describe('une clé faite d’espaces', () => {
     expect(fournisseurCourriel({ RESEND_API_KEY: '  ', COURRIEL_FOURNISSEUR: 'resend' })).toBe('smtp');
   });
 });
+
+describe('le diagnostic dit QUI envoie, pas seulement « smtp »', () => {
+  it('expose l’hôte SMTP, qui seul révèle le vrai fournisseur', async () => {
+    /* Amazon SES fournit des identifiants SMTP ordinaires. Collés dans
+       SMTP_HOST sans toucher aux variables SES_*, ils font partir les
+       courriels par Amazon pendant que le code croit faire du SMTP générique
+       — et aucun accusé ne revient. Seul l'hôte tranche. */
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('server/index.ts', 'utf8');
+    expect(src).toContain('smtp_hote: process.env.SMTP_HOST');
+    expect(src).toContain('ses_variables: Boolean(');
+  });
+
+  it('n’expose jamais un mot de passe : /api/health est public', async () => {
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('server/index.ts', 'utf8');
+    const i = src.indexOf('courriel: {');
+    // On juge le CODE, pas les commentaires : ceux-ci nomment légitimement les
+    // variables pour expliquer le piège qu'ils décrivent.
+    const code = src.slice(i, src.indexOf('},', i))
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '');
+    for (const secret of ['SMTP_PASS', 'SES_SMTP_PASS']) {
+      expect(code, `${secret} ne doit jamais sortir sur une route publique`).not.toContain(secret);
+    }
+    // La clé Resend n'apparaît que sous forme de booléen.
+    expect(code).toContain('resend_cle: Boolean(');
+  });
+});
