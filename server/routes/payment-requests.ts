@@ -17,6 +17,7 @@ import { validate, createPaymentRequestSchema } from '../lib/validation';
 import { getPaymentSettings } from '../lib/payment-settings';
 import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise, type CompanyInfo as CompanyInfoCourriel } from './emails';
 import { rendreCourrielClient, montant as montantLisible, MOTS, type Langue } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
 
 const router = Router();
 
@@ -76,17 +77,32 @@ async function getClientContact(clientId: string | null, orgId: string) {
   }
 }
 
-/** Le courriel « paiement demandé » : gabarit commun, aux couleurs de l'entreprise, dans sa langue. */
-function buildPaymentEmailHtml(params: { company: CompanyInfoCourriel; clientName: string; invoiceNumber: string; amountFormatted: string; paymentUrl: string; langue: Langue }) {
+/**
+ * Le courriel « paiement demandé » : gabarit commun, aux couleurs de
+ * l'entreprise, dans sa langue.
+ *
+ * `modeleOrg` porte le texte écrit dans Réglages → Modèles de courriel. Il est
+ * résolu par l'appelant, parce que cette fonction est pure et synchrone. Il
+ * remplace notre salutation et notre phrase (il porte les siennes), jamais le
+ * montant, le bouton ni le pied : un client doit toujours pouvoir payer, quoi
+ * que l'entreprise écrive.
+ */
+function buildPaymentEmailHtml(params: {
+  company: CompanyInfoCourriel; clientName: string; invoiceNumber: string;
+  amountFormatted: string; paymentUrl: string; langue: Langue;
+  modeleOrg?: { sujet: string; corpsHtml: string } | null;
+}) {
   const m = MOTS[params.langue];
   const fr = params.langue === 'fr';
+  const modeleOrg = params.modeleOrg ?? null;
   return rendreCourrielClient({
     langue: params.langue,
     marque: marqueDepuis(params.company),
     preheader: fr ? `${params.amountFormatted} à payer — facture ${params.invoiceNumber}` : `${params.amountFormatted} due — invoice ${params.invoiceNumber}`,
     titre: fr ? 'Paiement demandé' : 'Payment requested',
-    salutation: m.bonjour(params.clientName),
-    intro: fr ? `Un paiement de ${params.amountFormatted} est demandé pour la facture ${params.invoiceNumber}. Vous pouvez payer en ligne, par carte, en moins d’une minute.` : `A payment of ${params.amountFormatted} is requested for invoice ${params.invoiceNumber}. You can pay online by card in under a minute.`,
+    salutation: modeleOrg ? null : m.bonjour(params.clientName),
+    intro: modeleOrg ? null : (fr ? `Un paiement de ${params.amountFormatted} est demandé pour la facture ${params.invoiceNumber}. Vous pouvez payer en ligne, par carte, en moins d’une minute.` : `A payment of ${params.amountFormatted} is requested for invoice ${params.invoiceNumber}. You can pay online by card in under a minute.`),
+    corpsHtml: modeleOrg?.corpsHtml ?? null,
     montant: { libelle: m.montantDu, valeur: params.amountFormatted, sous: `${m.facture} ${params.invoiceNumber}` },
     bouton: { texte: m.payer(params.amountFormatted), url: params.paymentUrl },
     note: fr ? 'Paiement sécurisé par Stripe. Une question ? Répondez simplement à ce courriel.' : 'Payment secured by Stripe. Questions? Just reply to this email.',
@@ -119,11 +135,22 @@ async function sendPaymentEmail(params: {
   const langue = langueEntreprise(company);
   const amountFormatted = montantLisible(params.amountCents, params.currency, langue);
 
+  // Le texte écrit par l'entreprise dans Réglages → Modèles de courriel.
+  // `null` s'il n'a jamais été écrit : le courriel sort alors comme avant.
+  const modeleOrg = await texteDuCourriel(params.orgId, 'deposit_request', {
+    client_name: params.clientName,
+    company_name: company.company_name || '',
+    invoice_number: params.invoiceNumber,
+    amount_due: amountFormatted,
+    payment_link: params.paymentUrl,
+  });
+
   const result = await sendEmail({
     // Expéditeur au nom de l'entreprise (son domaine s'il est vérifié), réponses vers sa boîte (comme la facture).
     ...(await senderForOrg(params.orgId, company)),
     to: params.clientEmail,
-    subject: langue === 'fr' ? `Paiement demandé — ${amountFormatted} — facture ${params.invoiceNumber}` : `Payment requested — ${amountFormatted} — invoice ${params.invoiceNumber}`,
+    subject: modeleOrg?.sujet
+      || (langue === 'fr' ? `Paiement demandé — ${amountFormatted} — facture ${params.invoiceNumber}` : `Payment requested — ${amountFormatted} — invoice ${params.invoiceNumber}`),
     suivi: { orgId: params.orgId, entityType: 'payment_request', entityId: params.invoiceId ?? null },
     html: buildPaymentEmailHtml({
       company,
@@ -132,6 +159,7 @@ async function sendPaymentEmail(params: {
       amountFormatted,
       paymentUrl: params.paymentUrl,
       langue,
+      modeleOrg,
     }),
   });
 

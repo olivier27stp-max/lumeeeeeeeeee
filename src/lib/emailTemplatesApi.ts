@@ -6,12 +6,24 @@ export interface EmailTemplate {
   org_id: string;
   created_by: string | null;
   name: string;
-  type: 'invoice_sent' | 'invoice_reminder' | 'quote_sent' | 'review_request' | 'generic';
+  /**
+   * Quel courriel ce texte remplace. La base en accepte 35 depuis la migration
+   * 20260918100000 ; l'union figée à cinq valeurs qui vivait ici refusait un
+   * modèle `contract_sent` avant même que la requête parte. Le catalogue
+   * (`catalogueCourriels.ts`) décide lesquels sont offerts ; la base arbitre.
+   */
+  type: string;
   subject: string;
   body: string;
   variables: string[];
   is_active: boolean;
   is_default: boolean;
+  /**
+   * `editeur` = texte écrit dans l'app ; `import` = HTML fourni par
+   * l'entreprise. Le serveur n'assainit agressivement (script, style, iframe,
+   * on*, javascript:) que ce qui vient d'un import.
+   */
+  source: 'editeur' | 'import';
   created_at: string;
   updated_at: string;
 }
@@ -19,7 +31,7 @@ export interface EmailTemplate {
 export type EmailTemplateInput = Pick<
   EmailTemplate,
   'name' | 'type' | 'subject' | 'body' | 'variables' | 'is_active'
->;
+> & { source?: 'editeur' | 'import' };
 
 export async function listEmailTemplates(
   type?: EmailTemplate['type']
@@ -61,6 +73,10 @@ export async function createEmailTemplate(input: EmailTemplateInput): Promise<Em
       body: input.body,
       variables: input.variables,
       is_active: input.is_active,
+      // Sans ce champ, un HTML importé était enregistré comme du texte
+      // d'éditeur : le serveur ne l'assainissait pas, et un `<script>` collé
+      // par une entreprise partait dans la boîte de chacun de ses clients.
+      source: input.source ?? 'editeur',
     })
     .select()
     .single();

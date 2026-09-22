@@ -1,4 +1,5 @@
 {
+  "src/components/settings/ImportHtmlCourriel.tsx": "8960d66e1f7a9ad9",
   "src/components/settings/LocationConsentRoster.tsx": "dc7506e095911d24",
   "src/components/settings/LocationTrackingSettingCard.tsx": "da39a3ee5e6b4b0d",
   "src/components/settings/MyLocationConsentCard.tsx": "da39a3ee5e6b4b0d",
@@ -98,7 +99,7 @@
   "src/pages/WorkspaceNew.tsx": "e678f42275fc7b51",
   "src/pages/settings/ApiMcpSettings.tsx": "bc94b968dcd10fc0",
   "src/pages/settings/BillingSettings.tsx": "7dd42aca7ffa2d02",
-  "src/pages/settings/EmailTemplatesSettings.tsx": "bf3d22b3f6cd1721",
+  "src/pages/settings/EmailTemplatesSettings.tsx": "ba6b7953ceb49f35",
   "src/pages/settings/LanguageSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/LocationSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/OfficesSettings.tsx": "9dd0a54fa873c77a",

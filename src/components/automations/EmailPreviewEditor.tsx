@@ -17,6 +17,7 @@ import { confirmer } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
 import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
+import { variablesPour } from '../../lib/variablesCourriel';
 
 interface Props {
   /** Règle d'automatisation visée. Absent quand `enregistrerTexte` est fourni. */
@@ -35,6 +36,12 @@ interface Props {
    * lieu d'en écrire un second qui divergerait au premier correctif.
    */
   enregistrerTexte?: (corpsHtml: string, objet: string) => Promise<void>;
+  /**
+   * Le poste visé (`invoice_sent`, `quote_sent`…), qui décide des variables
+   * offertes : le serveur ne remplit pas les mêmes selon l'envoi. Absent pour
+   * une automatisation, qui garde la liste générique.
+   */
+  typeCourriel?: string;
 }
 
 /** Un bloc du courriel : titre, paragraphe ou puce. */
@@ -120,7 +127,7 @@ function blocsEnTexte(blocs: Bloc[]): string {
 }
 
 export default function EmailPreviewEditor({
-  ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte,
+  ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte, typeCourriel,
 }: Props) {
   const [blocs, setBlocs] = useState<Bloc[]>(() => texteEnBlocs(htmlVersTexte(body)));
   const [objet, setObjet] = useState(subject);
@@ -128,6 +135,16 @@ export default function EmailPreviewEditor({
   const [enregistrement, setEnregistrement] = useState(false);
   const [enregistre, setEnregistre] = useState(false);
   const [entreprise, setEntreprise] = useState<Entreprise>({});
+  /** Objet ou corps : où la prochaine variable insérée doit atterrir. */
+  const [cibleObjet, setCibleObjet] = useState(false);
+
+  /* Les variables offertes. Pour un modèle, celles que le serveur remplit
+     VRAIMENT pour ce poste : proposer `{invoice_total}` sur une soumission
+     laisserait un trou dans le courriel reçu par le client. Pour une
+     automatisation (`typeCourriel` absent), la liste générique d'avant. */
+  const variables = typeCourriel
+    ? variablesPour(typeCourriel).map((v) => ({ cle: v.cle, fr: v.fr, en: v.en }))
+    : VARIABLES_PROPOSEES;
 
   // L'en-tête et le pied de page sont ajoutés par le SERVEUR à l'envoi
   // (`buildEmailLayout`), comme pour une facture ou un devis. Les afficher ici
@@ -200,6 +217,12 @@ export default function EmailPreviewEditor({
     setBlocs((bs) => [...bs, { id: compteurId++, type, texte: '' }]);
 
   const insererVariable = (cle: string) => {
+    // L'objet décide de l'ouverture : il doit pouvoir porter le montant ou le
+    // numéro, pas seulement le corps.
+    if (cibleObjet) {
+      setObjet((o) => `${o}[${cle}]`);
+      return;
+    }
     const cible = actif ?? blocs[blocs.length - 1]?.id;
     if (cible === undefined) return;
     setBlocs((bs) => bs.map((b) => (b.id === cible ? { ...b, texte: `${b.texte}[${cle}]` } : b)));
@@ -281,7 +304,7 @@ export default function EmailPreviewEditor({
               <input
                 value={objet}
                 onChange={(e) => setObjet(e.target.value)}
-                onFocus={() => setActif(null)}
+                onFocus={() => { setActif(null); setCibleObjet(true); }}
                 placeholder={fr ? 'Objet du courriel' : 'Email subject'}
                 aria-label={fr ? 'Objet du courriel' : 'Email subject'}
                 className="w-full bg-transparent border border-transparent rounded px-2 py-1 text-[13px] font-semibold text-text-primary hover:border-outline/40 focus:border-primary/60 focus:bg-surface focus:outline-none transition-colors"
@@ -317,7 +340,7 @@ export default function EmailPreviewEditor({
                       bloc={bloc}
                       fr={fr}
                       onChange={(t) => majBloc(bloc.id, t)}
-                      onFocus={() => setActif(bloc.id)}
+                      onFocus={() => { setActif(bloc.id); setCibleObjet(false); }}
                     />
                   </div>
                   <button
@@ -396,7 +419,7 @@ export default function EmailPreviewEditor({
             <span className="text-[10px] text-text-tertiary mr-1">
               {fr ? 'Insérer :' : 'Insert:'}
             </span>
-            {VARIABLES_PROPOSEES.map((v) => (
+            {variables.map((v) => (
               <button
                 key={v.cle}
                 title={`[${v.cle}]`}

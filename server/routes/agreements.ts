@@ -6,6 +6,7 @@ import { resolvePublicBaseUrl } from '../lib/helpers';
 import { sendSafeError } from '../lib/error-handler';
 import { getCompanySettings, senderForOrg, marqueDepuis, langueEntreprise } from './emails';
 import { rendreCourrielClient, MOTS } from '../lib/courriels/gabarit';
+import { texteDuCourriel } from '../lib/courriels/modeles';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
@@ -913,15 +914,28 @@ router.post('/emails/send-agreement', async (req, res) => {
 
     const langue = langueEntreprise(company);
     const m = MOTS[langue];
+
+    /* Le texte que l'entreprise a écrit dans Réglages → Modèles de courriel.
+       Il remplace notre salutation et notre phrase (il porte les siennes),
+       jamais le bouton, le numéro ni le pied : un client doit toujours pouvoir
+       ouvrir et signer son contrat. Sans modèle, rien ne change. */
+    const modeleOrg = await texteDuCourriel(orgId, 'contract_sent', {
+      client_name: clientName,
+      company_name: company.company_name || '',
+      contract_number: number,
+      contract_link: viewUrl,
+    });
+
     const html = rendreCourrielClient({
       langue,
       marque: marqueDepuis(company),
       preheader: langue === 'fr' ? `${m.contrat} ${number}${requireSig ? ' — à signer' : ''}` : `${m.contrat} ${number}${requireSig ? ' — to sign' : ''}`,
       titre: langue === 'fr' ? `Votre contrat ${number}` : `Your contract ${number}`,
-      salutation: m.bonjour(clientName),
-      intro: requireSig
+      salutation: modeleOrg ? null : m.bonjour(clientName),
+      intro: modeleOrg ? null : (requireSig
         ? (langue === 'fr' ? 'Voici votre contrat. Vous pouvez le consulter et le signer en ligne, sur votre téléphone ou votre ordinateur.' : 'Here is your contract. You can review and sign it online, on your phone or computer.')
-        : (langue === 'fr' ? 'Voici votre contrat. Vous pouvez le consulter en ligne.' : 'Here is your contract. You can review it online.'),
+        : (langue === 'fr' ? 'Voici votre contrat. Vous pouvez le consulter en ligne.' : 'Here is your contract. You can review it online.')),
+      corpsHtml: modeleOrg?.corpsHtml ?? null,
       lignes: [
         { libelle: m.numero, valeur: number },
         ...(refTitle ? [{ libelle: langue === 'fr' ? 'Objet' : 'Subject', valeur: String(refTitle) }] : []),
@@ -934,7 +948,7 @@ router.post('/emails/send-agreement', async (req, res) => {
     const emailResult = await sendEmail({
       ...(await senderForOrg(orgId, company)),
       to: clientData.email,
-      subject: `${m.contrat} ${number}${company.company_name ? ` — ${company.company_name}` : ''}`,
+      subject: modeleOrg?.sujet || `${m.contrat} ${number}${company.company_name ? ` — ${company.company_name}` : ''}`,
       html,
       suivi: { orgId, entityType: 'agreement', entityId: agreement.id },
     });
