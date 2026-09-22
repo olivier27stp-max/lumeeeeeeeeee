@@ -7,7 +7,7 @@
 // Le serveur re-vérifie de toute façon chaque requête. Périmètre limité aux
 // projets de migration.
 
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -365,9 +365,29 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
       if (passeBotActive(migration?.bot_dernier_rapport)) return 2500;
       return ['parsing', 'testing', 'importing', 'post_import_validation'].includes(status) ? 2500 : false;
     },
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
   const refresh = () => qc.invalidateQueries({ queryKey: ['migration-admin-detail', id] });
+  // Vérité sur la passe du bot : sondage léger (une colonne) toutes les 4 s tant que la fiche est
+  // ouverte, quel que soit l'onglet ou la fenêtre qui a cliqué. La fiche complète est trop lourde
+  // pour ça (10 s sous charge pendant un import test), et une passe lancée ailleurs restait
+  // invisible : bouton cliquable, aucun chargement (2026-09-21).
+  const botLive = useQuery({
+    queryKey: ['migration-admin-bot-live', id],
+    queryFn: () => getRapportBot(id),
+    refetchInterval: 4000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  const rapportBot = ((botLive.data?.rapport ?? (detail.data as any)?.migration?.bot_dernier_rapport) ?? null) as RapportBotMigration | null;
+  const botEnCours = passeBotActive(rapportBot);
+  // Fin de passe détectée par le sondage : recharger la fiche (rapport final, statut, doublons, rejets).
+  const botEnCoursPrecedent = useRef(botEnCours);
+  useEffect(() => {
+    if (botEnCoursPrecedent.current && !botEnCours) refresh();
+    botEnCoursPrecedent.current = botEnCours;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh est stable (qc + id)
+  }, [botEnCours]);
 
   if (detail.isLoading || !detail.data) {
     return <div className="flex items-center justify-center py-24 text-text-tertiary"><Loader2 size={22} className="animate-spin" /></div>;
@@ -385,14 +405,14 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <StatusBadgeMig status={m.status} />
         <span className="text-[13px] text-text-tertiary">{CRM_LABELS[m.source_crm] ?? m.source_crm}</span>
         <div className="flex-1" />
-        <ActionsBar m={m} d={d} onDone={refresh} />
+        <ActionsBar m={m} d={d} onDone={refresh} rapportBot={rapportBot} />
       </div>
       <p className="text-[12px] text-text-tertiary mb-4">
         ID {m.id} · créée le {new Date(m.created_at).toLocaleDateString('fr-CA')} · dernière activité {new Date(m.last_activity_at).toLocaleString('fr-CA')}
       </p>
 
       <CarteImportEnCours d={d} />
-      <CarteBotEnCours m={m} />
+      <CarteBotEnCours rapport={rapportBot} />
 
       <div className="flex items-center gap-1 p-1 rounded-xl bg-surface-secondary/60 border border-outline w-fit mb-5 flex-wrap">
         {TABS.map((t) => (
@@ -492,13 +512,12 @@ function passeBotActive(r: RapportBotMigration | null | undefined): boolean {
   return Date.now() - new Date(r.debut).getTime() < 20 * 60 * 1000;
 }
 
-function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
+function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () => void; rapportBot: RapportBotMigration | null }) {
   const [confirmKind, setConfirmKind] = useState<'final' | 'rollback' | null>(null);
   // Une action à la fois : absorbe les doubles clics (deux passes du bot lancées à 20 s d'écart le 2026-09-19).
   const [enCours, setEnCours] = useState(false);
   // Passe du bot en cours d'après le serveur : visible depuis n'importe quel onglet, et même après un
   // rechargement de la page (la fiche se rafraîchit toutes les 2,5 s tant que ça tourne).
-  const rapportBot = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
   const botEnCours = passeBotActive(rapportBot);
   const botOccupe = enCours || botEnCours;
   const btn = 'h-9 px-3.5 rounded-md text-[13px] font-medium border transition-colors';
@@ -514,7 +533,11 @@ function ActionsBar({ m, d, onDone }: { m: any; d: any; onDone: () => void }) {
       toast.success(okMsg);
       onDone();
     } catch (err: any) {
-      toast.error(err?.message ?? 'Erreur');
+      const msg: string = err?.message ?? 'Erreur';
+      // Le serveur refuse un second lancement pendant une passe : ce n'est pas une erreur, la
+      // fiche se met simplement à suivre la passe en cours.
+      if (/déjà en cours/i.test(msg)) { toast.message(msg); onDone(); }
+      else toast.error(msg);
     } finally {
       setEnCours(false);
     }
@@ -728,8 +751,7 @@ function StaffCard({ migrationId }: { migrationId: string }) {
 
 /** Bande de suivi en direct d'une passe du bot, au-dessus des onglets (visible partout). La fiche se
  *  rafraîchit toutes les 2,5 s tant que `bot_dernier_rapport.en_cours` est vrai (refetchInterval). */
-function CarteBotEnCours({ m }: { m: any }) {
-  const rapport = (m.bot_dernier_rapport ?? null) as RapportBotMigration | null;
+function CarteBotEnCours({ rapport }: { rapport: RapportBotMigration | null }) {
   const actif = passeBotActive(rapport);
   const [maintenant, setMaintenant] = useState(() => Date.now());
   useEffect(() => {
