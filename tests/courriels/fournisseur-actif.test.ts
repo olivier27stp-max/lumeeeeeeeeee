@@ -9,7 +9,7 @@
  * Ces tests figent la logique de choix ET le diagnostic qui l'explique.
  */
 import { describe, it, expect } from 'vitest';
-import { fournisseurCourriel, raisonSmtpMalgreResend } from '../../server/lib/mailer';
+import { fournisseurCourriel, raisonSmtpMalgreResend, raisonSesSansSuivi } from '../../server/lib/mailer';
 
 describe('choix du fournisseur', () => {
   it('une clé Resend seule suffit à basculer', () => {
@@ -100,5 +100,55 @@ describe('le diagnostic dit QUI envoie, pas seulement « smtp »', () => {
     }
     // La clé Resend n'apparaît que sous forme de booléen.
     expect(code).toContain('resend_cle: Boolean(');
+  });
+});
+
+/**
+ * SES peut envoyer parfaitement et ne RIEN rapporter (2026-09-22).
+ *
+ * `SES_CONFIGURATION_SET` était documentée dans ses.ts et lue nulle part. Sans
+ * l'en-tête qu'elle produit, Amazon n'attache aucun suivi au courriel et ne
+ * publie donc rien sur SNS : ni livraison, ni ouverture, ni clic, ni rebond.
+ * On aurait tout branché — identifiants, sujet SNS, route — pour n'observer
+ * strictement aucun retour, sans une seule erreur nulle part.
+ */
+describe('SES — ce qui bloque le suivi', () => {
+  const AVEC_SES = {
+    COURRIEL_FOURNISSEUR: 'ses',
+    SES_SMTP_USER: 'u',
+    SES_SMTP_PASS: 'p',
+    SES_REGION: 'ca-central-1',
+  } as NodeJS.ProcessEnv;
+
+  it('nomme le jeu de configuration manquant', () => {
+    const r = raisonSesSansSuivi(AVEC_SES);
+    expect(r).toContain('SES_CONFIGURATION_SET');
+    expect(r).toContain('ne publiera');
+  });
+
+  it('nomme ensuite le jeton du webhook', () => {
+    const r = raisonSesSansSuivi({ ...AVEC_SES, SES_CONFIGURATION_SET: 'suivi-lume' });
+    expect(r).toContain('SES_WEBHOOK_TOKEN');
+  });
+
+  it('se tait quand tout est en place', () => {
+    expect(raisonSesSansSuivi({
+      ...AVEC_SES, SES_CONFIGURATION_SET: 'suivi-lume', SES_WEBHOOK_TOKEN: 'jeton',
+    })).toBeNull();
+  });
+
+  it('se tait quand SES ne sert pas : rien à signaler', () => {
+    expect(raisonSesSansSuivi({ RESEND_API_KEY: 're_x' })).toBeNull();
+    expect(raisonSesSansSuivi({})).toBeNull();
+  });
+
+  it('l’en-tête du jeu de configuration part avec chaque envoi SES', async () => {
+    // C'est lui qui déclenche la publication SNS. Sans cette ligne, tout le
+    // reste du branchement est inutile.
+    const fs = await import('node:fs');
+    const src = fs.readFileSync('server/lib/mailer.ts', 'utf8');
+    expect(src).toContain("'X-SES-CONFIGURATION-SET'");
+    // Et jamais sur un envoi qui n'est pas SES.
+    expect(src).toContain("provider === 'ses' ? String(process.env.SES_CONFIGURATION_SET");
   });
 });

@@ -138,6 +138,26 @@ export function raisonSmtpMalgreResend(env: NodeJS.ProcessEnv = process.env): st
   return null;
 }
 
+/**
+ * Ce qui empêcherait SES de rapporter quoi que ce soit — `null` si tout va bien.
+ *
+ * SES peut envoyer parfaitement sans publier le moindre évènement. Deux
+ * réglages y suffisent, et leur absence ne produit AUCUNE erreur : les
+ * courriels partent, rien ne remonte, et on cherche le défaut ailleurs
+ * pendant des jours.
+ */
+export function raisonSesSansSuivi(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (fournisseurCourriel(env) !== 'ses') return null;
+
+  if (!String(env.SES_CONFIGURATION_SET || '').trim()) {
+    return 'SES_CONFIGURATION_SET manque — Amazon enverra les courriels mais ne publiera ni livraison, ni ouverture, ni rebond';
+  }
+  if (!String(env.SES_WEBHOOK_TOKEN || '').trim()) {
+    return 'SES_WEBHOOK_TOKEN manque — la route /api/webhooks/ses refusera les notifications SNS';
+  }
+  return null;
+}
+
 /** Ce que le courriel concerne — pour retrouver son sort depuis la facture. */
 export interface SuiviCourriel {
   orgId: string | null;
@@ -300,6 +320,19 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     } else {
       // SES et SMTP partagent nodemailer ; seul le transport diffère.
       const transport = provider === 'ses' ? getTransporteurSes() : getTransporter();
+
+      /* Le jeu de configuration SES, en en-tête du message.
+         `SES_CONFIGURATION_SET` était documentée mais lue NULLE PART : sans
+         cet en-tête, Amazon n'attache aucun suivi au courriel et ne publie
+         donc rien sur SNS — ni livraison, ni ouverture, ni clic, ni rebond.
+         On aurait tout branché (identifiants, sujet SNS, route) pour
+         n'observer strictement aucun retour, sans erreur nulle part. */
+      const jeuSes = provider === 'ses' ? String(process.env.SES_CONFIGURATION_SET || '').trim() : '';
+      const enTetes = {
+        ...(params.headers ?? {}),
+        ...(jeuSes ? { 'X-SES-CONFIGURATION-SET': jeuSes } : {}),
+      };
+
       const info = await transport.sendMail({
         from,
         to: destinataires.join(', '),
@@ -307,7 +340,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         subject: qa.subject,
         html: params.html,
         text,
-        ...(params.headers ? { headers: params.headers } : {}),
+        ...(Object.keys(enTetes).length ? { headers: enTetes } : {}),
       });
       // SES : on range l'identifiant sous la forme que citeront ses notifications
       // de rebond (sans chevrons ni domaine), sinon aucun rebond ne retrouverait sa ligne.

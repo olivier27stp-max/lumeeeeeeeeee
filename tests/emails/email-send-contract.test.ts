@@ -59,8 +59,13 @@ describe('mailer — le contrat de base dont tout le reste dépend', () => {
     // retrait (exposition CASL).
     const params = routeBody(mailer, 'export interface SendEmailParams', 'export interface SendEmailResult');
     expect(params).toMatch(/headers\?: Record<string, string>/);
-    // Et les en-têtes sont bien transmis au transport.
-    expect(mailer).toContain('...(params.headers ? { headers: params.headers } : {})');
+    /* Et les en-têtes sont bien transmis au transport. Depuis le 2026-09-22
+       ils sont FUSIONNÉS avec `X-SES-CONFIGURATION-SET` au lieu d'être passés
+       tels quels. On vérifie que `params.headers` survit à cette fusion :
+       sinon `List-Unsubscribe` disparaîtrait en silence et les courriels
+       commerciaux repartiraient sans mécanisme de retrait (exposition CASL). */
+    expect(mailer).toContain('...(params.headers ?? {})');
+    expect(mailer).toContain('Object.keys(enTetes).length ? { headers: enTetes }');
   });
 
   it('le transport est Nodemailer/SMTP, pas Resend', () => {
