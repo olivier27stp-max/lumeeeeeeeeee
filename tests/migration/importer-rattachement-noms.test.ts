@@ -62,3 +62,19 @@ describe('doublons internes — export Jobber « une ligne par propriété »', 
     expect(intra.ambiguousKeys.size).toBe(0);
   });
 });
+
+describe('buildEntityRow — propriétés Jobber sans rue', () => {
+  const ctx = (): BuildContext => ({ migration: { id: 'm', org_id: 'o' } as any, createdBy: 'u', clientIdByRef: new Map([['nicolas-simon d’astous', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map() });
+  it('prend « Property Name » comme adresse quand elle commence par un numéro civique', () => {
+    const rec = { id: 'p', file_id: 'f', row_number: 705, entity_type: 'property', external_id: null, normalized: { name: '1400 Rue Marini', city: 'Sherbrooke' }, relations: { client_name_ref: 'Nicolas-Simon D’astous' }, status: 'ready' } as any;
+    const res = buildEntityRow('property', rec, ctx());
+    expect(res.ok).toBe(true);
+    expect((res as any).row.address).toContain('1400 Rue Marini');
+  });
+  it('ignore la ligne « Report totals: » sans la compter comme erreur bloquante', () => {
+    const rec = { id: 'p', file_id: 'f', row_number: 930, entity_type: 'property', external_id: null, normalized: {}, relations: { client_name_ref: 'Report totals:' }, status: 'ready' } as any;
+    const res = buildEntityRow('property', rec, ctx());
+    expect(res.ok).toBe(false);
+    expect((res as any).reason).toBe('orphan');
+  });
+});

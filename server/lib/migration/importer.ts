@@ -660,7 +660,12 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'property') {
-    const address = str(n.address);
+    // Ligne de totaux que Jobber ajoute au bas de « Client Properties » : pas une propriété.
+    if (/^report totals?:?$/i.test(str(r.client_name_ref) || str(r.client_ref))) {
+      return { ok: false, reason: 'orphan', detail: 'ligne de totaux du rapport Jobber (ignorée)' };
+    }
+    // Rue absente mais « Property Name » qui est une adresse (« 1400 Rue Marini ») : on la prend.
+    const address = str(n.address) || (/^\d+[\s-]/.test(str(n.name)) ? str(n.name) : '');
     if (!address) return { ok: false, reason: 'invalid', detail: 'adresse manquante' };
     const clientId = resolveClientId(ctx, r, n);
     if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
@@ -669,7 +674,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
       row: {
         org_id: orgId,
         client_id: clientId,
-        address: composeAddress(n),
+        address: composeAddress({ ...n, address }),
         city: safeStr(n.city) || null,
         province: safeStr(n.province) || null,
         postal_code: str(n.postal_code) || null,
