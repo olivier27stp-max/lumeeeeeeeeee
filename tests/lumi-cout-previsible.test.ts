@@ -136,3 +136,43 @@ describe('4. la dictée est enfin chiffrée', () => {
     expect(cout, 'une dictée ne doit pas coûter plus cher qu\'un tour de chat').toBeLessThan(2.06);
   });
 });
+
+/**
+ * Démarrage à froid (2026-09-22) — le dernier poste de coût imprévisible.
+ *
+ * Mesuré en prod sur 70 tours d'agent :
+ *   19 tours à froid  → 5,66 ¢ en moyenne
+ *   51 tours à chaud  → 1,21 ¢
+ *   surcoût du froid  → 0,84 $ (27 % des tours)
+ *
+ * Le préfixe fait 11 124 tokens : une écriture coûte 4,45 ¢ à elle seule.
+ * Et comme chaque déploiement redémarre le serveur, ce froid revient
+ * plusieurs fois par jour.
+ */
+describe('5. démarrage à froid', () => {
+  it('le ping ne facture AUCUN token de sortie', async () => {
+    const src = await import('node:fs').then((fs) => fs.readFileSync('server/lib/lumi/cache-chaud.ts', 'utf8'));
+    // `max_tokens: 0` : l'API écrit le cache puis rend `content: []`.
+    // L'ancien `max_tokens: 16` payait 16 tokens de sortie par réchauffement.
+    // Les LIGNES DE CODE seulement (les commentaires citent l'ancienne valeur).
+    const lignes = src.split(/\r?\n/).filter((l) => /max_tokens:/.test(l) && !/^\s*(\/\/|\*)/.test(l.trim()));
+    expect(lignes, 'un seul max_tokens dans ce fichier').toHaveLength(1);
+    expect(lignes[0]).toMatch(/max_tokens:\s*0\b/);
+  });
+
+  it('le ping ne demande pas au modèle de réfléchir', async () => {
+    const src = await import('node:fs').then((fs) => fs.readFileSync('server/lib/lumi/cache-chaud.ts', 'utf8'));
+    const ping = src.slice(src.indexOf('export async function pingerCache'), src.indexOf('export function demarrerMaintienCacheChaud'));
+    // `thinking` / `output_config` ne font pas partie du préfixe caché : les
+    // envoyer ne changeait rien à l'entrée écrite, et `max_tokens: 0` est
+    // refusé avec certaines de leurs combinaisons.
+    expect(ping).not.toMatch(/thinking:/);
+    expect(ping).not.toMatch(/output_config:/);
+  });
+
+  it('le préchauffage au démarrage est désactivable', async () => {
+    const { prechaufferCache } = await import('../server/lib/lumi/cache-chaud');
+    // Sans clé d'API ni activation, il ne doit RIEN tenter (et ne pas jeter).
+    await expect(prechaufferCache()).resolves.toBeUndefined();
+  });
+});

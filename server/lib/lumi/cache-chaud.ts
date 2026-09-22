@@ -6,13 +6,16 @@
  * sans appel, et le prochain appel le réécrit à prix double : 2,7 ¢, soit
  * dix fois un appel chaud (0,3 à 0,6 ¢, mesuré en prod le 2026-09-16).
  *
- * Un « ping » minimal (même modèle, même préfixe, 16 tokens de sortie)
- * rafraîchit le TTL pour ~0,15 ¢. On ne pinge QUE dans la foulée d'une
- * activité réelle : à 50 min d'inactivité, puis toutes les 50 min tant qu'on
- * reste dans la fenêtre (LUMI_CACHE_CHAUD_MINUTES, défaut 120, 0 désactive).
- * Plafond : 2 pings (0,3 ¢) par rafale d'activité ; rentable dès qu'un
- * utilisateur revient une fois sur neuf dans les deux heures. Sans activité
- * (nuit, week-end), aucun ping : rien n'est dépensé dans le vide.
+ * Un « ping » minimal (même modèle, même préfixe, `max_tokens: 0` donc AUCUN
+ * token de sortie facturé) rafraîchit le TTL. On ne pinge QUE dans la foulée
+ * d'une activité réelle : à 50 min d'inactivité, puis toutes les 50 min tant
+ * qu'on reste dans la fenêtre (LUMI_CACHE_CHAUD_MINUTES, défaut 720 — une
+ * journée ouvrable ; 0 désactive). Sans activité (nuit, week-end), aucun
+ * ping : rien n'est dépensé dans le vide.
+ *
+ * S'y ajoute un préchauffage au DÉMARRAGE (`prechaufferCache`) : sans lui, la
+ * première question après chaque déploiement paie l'écriture complète du
+ * préfixe — 11 124 tokens, 4,45 ¢ mesurés — en faisant attendre l'utilisateur.
  *
  * Le ping ne touche ni la base, ni les traces d'une org (pas d'org) : il est
  * journalisé par le logger seulement.
@@ -112,20 +115,25 @@ type ClientMinimal = { messages: { create: (p: Anthropic.Messages.MessageCreateP
  * rafraîchir l'entrée de cache que les vrais appels lisent.
  */
 export async function pingerCache(client: ClientMinimal, model: string = dernierModele || modeleLumi(), prefixe: Prefixe | null = dernierPrefixe): Promise<{ model: string; cost_cents: number; cache_lu: number; cache_ecrit: number }> {
-  const { outilsClaude, promptSystemeLumi, parametresReflexion } = await import('./orchestrateur');
-  const { reglesCout } = await import('./regles-cout');
+  const { outilsClaude, promptSystemeLumi } = await import('./orchestrateur');
   // Seul le bloc stable (1 h) compte : on le prend tel quel du dernier appel ; le bloc variable est jetable.
   const systeme = prefixe ? [prefixe.systeme[0]] : [promptSystemeLumi({ companyName: null, userName: null, language: 'fr', todayIso: new Date().toISOString().slice(0, 10) })[0]];
   const outils = prefixe ? prefixe.outils : outilsClaude();
-  const reflexion = parametresReflexion(model, reglesCout().effort_defaut);
   const reponse = await client.messages.create({
     model,
-    max_tokens: 16,
+    // `max_tokens: 0` : l'API fait le prefill — donc ÉCRIT le cache — puis rend
+    // aussitôt `content: []` sans facturer un seul token de sortie. C'est la
+    // façon prévue de préchauffer (doc Anthropic « Pre-warming the cache ») ;
+    // l'ancien `max_tokens: 16` payait 16 tokens de sortie pour rien à chaque
+    // réchauffement, et le modèle rédigeait une réponse que personne ne lisait.
+    max_tokens: 0,
     system: systeme,
     tools: outils,
     messages: [{ role: 'user', content: 'ping' }],
-    ...(reflexion.thinking ? { thinking: reflexion.thinking } : {}),
-    ...(reflexion.output_config ? { output_config: reflexion.output_config } : {}),
+    // NI `thinking` NI `output_config` : ils ne font pas partie du préfixe mis
+    // en cache (seuls `tools` et `system` comptent), donc les omettre ne change
+    // rien à l'entrée écrite — et `max_tokens: 0` est refusé avec certaines de
+    // leurs combinaisons. Un réchauffement n'a pas à réfléchir.
   });
   dernierPing = Date.now();
   const u = reponse.usage;
@@ -133,9 +141,52 @@ export async function pingerCache(client: ClientMinimal, model: string = dernier
 }
 
 /** Vérifie toutes les 5 min ; ne fait rien tant que Lumi n'a pas servi un vrai appel. */
+/**
+ * Préchauffage au DÉMARRAGE du serveur (2026-09-22).
+ * ──────────────────────────────────────────────────
+ * Le maintien ne s'arme qu'après un premier appel réel : au démarrage, le
+ * compteur en mémoire est vide et la première vraie question paie donc
+ * l'écriture complète du préfixe — 11 124 tokens, 4,45 ¢ mesurés en prod.
+ * Et comme chaque DÉPLOIEMENT redémarre le serveur, ce démarrage à froid
+ * revient à chaque mise en ligne, plusieurs fois par jour.
+ *
+ * Un préchauffage coûte le même prix (une écriture), mais il le paie AVANT
+ * que quelqu'un attende : la première question de la journée répond en
+ * ~1 s au lieu de ~9 s. C'est le cas d'école de la documentation Anthropic
+ * (« pre-warming … at app startup, worker boot, post-deploy ») : latence
+ * visible par l'utilisateur, préfixe volumineux, et un moment calme avant
+ * le trafic.
+ *
+ * On ne préchauffe QUE le jeu de base — celui de la grande majorité des
+ * tours. Préchauffer spéculativement onze jeux d'outils coûterait onze
+ * écritures pour des sujets qui ne serviront peut-être pas aujourd'hui.
+ *
+ * `LUMI_PRECHAUFFER=0` le désactive.
+ */
+export async function prechaufferCache(): Promise<void> {
+  if (process.env.LUMI_PRECHAUFFER === '0' || !process.env.ANTHROPIC_API_KEY) return;
+  if (!fenetreMaintienMs()) return; // maintien désactivé = pas de préchauffage non plus
+  if (!verifierPlafond('cache-chaud').autorise) { compterRefus('cache-chaud'); return; }
+  try {
+    const r = await pingerCache(clientAnthropic());
+    ajouterDepense('cache-chaud', r.cost_cents);
+    // Le préfixe est chaud : on arme l'horloge pour que le maintien prenne
+    // le relais sans attendre qu'un utilisateur ait posé une question.
+    signalerAppelLumi(r.model);
+    logger.info('[lumi] cache préchauffé au démarrage', r);
+  } catch (e: any) {
+    // Jamais bloquant : sans préchauffage, la première question paie
+    // simplement l'écriture, comme avant.
+    logger.warn('[lumi] préchauffage impossible', { error: e?.message || String(e) });
+  }
+}
+
 export function demarrerMaintienCacheChaud(): void {
   const fenetreMs = fenetreMaintienMs();
   if (!fenetreMs || !process.env.ANTHROPIC_API_KEY) return;
+  // Au démarrage : on paie l'écriture tout de suite plutôt que de la faire
+  // payer — en attente — à la première personne qui écrit à Lumi.
+  void prechaufferCache();
   const t = setInterval(async () => {
     const maintenant = Date.now();
     // Sans préfixe suivi (aucun appel réel depuis le démarrage) : l'horloge globale, préfixe par défaut.
