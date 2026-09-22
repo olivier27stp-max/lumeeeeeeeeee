@@ -150,6 +150,37 @@ function fullNameOf(n: Record<string, unknown>): string {
   return refKey(name);
 }
 
+/**
+ * Forme relâchée d'un nom pour le rattachement : sans accents, sans ponctuation, article
+ * initial ou final retiré (« Fabricants de Boyaux Ltée (Les) » ≡ « Les Fabricants de Boyaux
+ * Ltée »). Jamais utilisée pour la dédup, seulement pour retrouver un dossier.
+ */
+export function looseNameKey(v: string): string {
+  let k = v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  k = k.replace(/\((les|le|la|l')\)\s*$/i, '').replace(/^(les|le|la)\s+|^l'\s*/i, '');
+  k = k.replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  return k;
+}
+
+/**
+ * Toutes les clés de nom sous lesquelles un client peut être désigné par ses documents :
+ * « Prénom Nom », raison sociale, nom affiché — chacune en forme exacte et relâchée. Un client
+ * Jobber « entreprise avec contact » est désigné par sa raison sociale dans les rapports
+ * (Client Name), alors que fullNameOf ne donnait que « Prénom Nom » : 35 propriétés orphelines
+ * chez Vision Lavage (2026-09-22) pour des noms pourtant présents une seule fois.
+ */
+export function nameKeysOf(n: { first_name?: unknown; last_name?: unknown; company?: unknown; full_name?: unknown }): string[] {
+  const raw = [`${str(n.first_name)} ${str(n.last_name)}`.trim(), str(n.company), str(n.full_name)].filter(Boolean);
+  const keys: string[] = [];
+  for (const v of raw) {
+    const exact = refKey(v);
+    const loose = looseNameKey(v);
+    if (exact) keys.push(exact);
+    if (loose && loose !== exact) keys.push(loose);
+  }
+  return Array.from(new Set(keys));
+}
+
 async function loadStaging(admin: SupabaseClient, migrationId: string, entity: TargetEntity, statuses: string[]): Promise<StagingRow[]> {
   const out: StagingRow[] = [];
   for (let offset = 0; ; offset += STAGING_PAGE) {
@@ -213,8 +244,7 @@ export function existingClientRefKeys(c: { email?: string | null; first_name?: s
   const keys: string[] = [];
   const email = refKey(str(c.email));
   if (email) keys.push(email);
-  const name = fullNameOf({ first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' });
-  if (name) keys.push(name);
+  keys.push(...nameKeysOf({ first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' }));
   const phone = phoneKey(str(c.phone));
   if (phone) keys.push(phone);
   return Array.from(new Set(keys));
@@ -235,14 +265,15 @@ async function seedExistingRefs(admin: SupabaseClient, orgId: string, ctx: Build
   for (let offset = 0; ; offset += STAGING_PAGE) {
     const { data, error } = await admin
       .from('clients')
-      .select('id, email, first_name, last_name, company, phone')
+      .select('id, email, first_name, last_name, company, phone, address')
       .eq('org_id', orgId)
       .is('deleted_at', null)
       .range(offset, offset + STAGING_PAGE - 1);
     if (error) { console.error('[migration-importer] existing clients seed failed:', error.message); break; }
     if (!data || data.length === 0) break;
-    for (const c of data as { id: string; email: string | null; first_name: string | null; last_name: string | null; company: string | null; phone: string | null }[]) {
+    for (const c of data as { id: string; email: string | null; first_name: string | null; last_name: string | null; company: string | null; phone: string | null; address: string | null }[]) {
       for (const k of existingClientRefKeys(c)) seed(ctx.clientIdByRef, k, c.id, ambiguousClients);
+      if (c.address) registerNameAddress(ctx, { first_name: c.first_name ?? '', last_name: c.last_name ?? '', company: c.company ?? '' }, c.address, c.id);
     }
     if (data.length < STAGING_PAGE) break;
   }
@@ -277,8 +308,7 @@ export function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   if (r.external_id) push(r.external_id);
   if (entity === 'client') {
     push(str(n.email));
-    const name = fullNameOf(n);
-    if (name) keys.push(name);
+    keys.push(...nameKeysOf(n));
     // Téléphone (10 derniers chiffres) : clé de rattachement pour les documents
     // qui ne portent que le numéro du client. Partagé par 2 clients → retiré.
     const phone = phoneKey(str(n.phone));
@@ -296,14 +326,47 @@ export function refKeysOf(entity: TargetEntity, rec: StagingRow): string[] {
   return Array.from(new Set(keys));
 }
 
+/** Enregistre `${nom}|${adresse}` → client (toutes les variantes de nom). Deux dossiers distincts
+ *  sur la même paire → clé retirée (jamais devinée). */
+function registerNameAddress(ctx: BuildContext, n: Record<string, unknown>, address: string, clientId: string): void {
+  const addr = normalizeAddressKey(address);
+  if (!addr) return;
+  const map = ctx.clientIdByNameAddress ?? (ctx.clientIdByNameAddress = new Map());
+  for (const name of nameKeysOf(n)) {
+    const key = `${name}|${addr}`;
+    const existing = map.get(key);
+    if (existing === undefined) map.set(key, clientId);
+    else if (existing !== clientId) map.delete(key);
+  }
+}
+
+/** Homonymes : le nom seul est ambigu, mais nom + adresse du document (propriété, job…) ne l'est
+ *  presque jamais. 34 propriétés et des jobs/factures orphelins chez Vision Lavage (2026-09-22). */
+function resolveClientByNameAddress(ctx: BuildContext, r: Record<string, string>, address: string): string | null {
+  const map = ctx.clientIdByNameAddress;
+  if (!map) return null;
+  const addr = normalizeAddressKey(address);
+  if (!addr) return null;
+  for (const raw of [r.client_name_ref, r.client_ref]) {
+    if (!raw) continue;
+    for (const name of [refKey(raw), looseNameKey(raw)]) {
+      const hit = map.get(`${name}|${addr}`);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
 /** Rattachement client avec repli : identifiant/nom (client_ref) → courriel → nom complet → téléphone.
  *  Chaque clé passe par le même index (id externe, courriel, nom complet des
  *  clients importés) ; une clé ambiguë (homonymes) y est absente → orphelin. */
-function resolveClientId(ctx: BuildContext, r: Record<string, string>): string | null {
-  return lookupRef(ctx.clientIdByRef, r.client_ref)
+function resolveClientId(ctx: BuildContext, r: Record<string, string>, n: Record<string, unknown> = {}): string | null {
+  const address = str(n.address) || str(r.property_ref) || str(r.property_address_ref);
+  return lookupRef(ctx.clientIdByRef, r.client_ref, looseNameKey)
     ?? lookupRef(ctx.clientIdByRef, r.client_email_ref)
-    ?? lookupRef(ctx.clientIdByRef, r.client_name_ref)
-    ?? lookupRef(ctx.clientIdByRef, r.client_phone_ref, phoneKey);
+    ?? lookupRef(ctx.clientIdByRef, r.client_name_ref, looseNameKey)
+    ?? lookupRef(ctx.clientIdByRef, r.client_phone_ref, phoneKey)
+    ?? (address ? resolveClientByNameAddress(ctx, r, address) : null);
 }
 
 /** Clé téléphone : 10 derniers chiffres, préfixée pour ne jamais croiser un id externe numérique. */
@@ -402,8 +465,7 @@ export function planIntraDedupe(entity: TargetEntity, rows: StagingRow[]): Intra
 
     // homonymes : même nom complet porté par deux dossiers DISTINCTS
     if (entity === 'client') {
-      const name = fullNameOf(rec.normalized ?? {});
-      if (name) {
+      for (const name of nameKeysOf(rec.normalized ?? {})) {
         const owner = nameOwner.get(name);
         if (owner && owner !== rec.id) ambiguousKeys.add(name);
         else nameOwner.set(name, rec.id);
@@ -499,6 +561,8 @@ export interface BuildContext {
   migration: MigrationRow;
   createdBy: string;
   clientIdByRef: Map<string, string>;
+  /** `${nom relâché}|${adresse normalisée}` → client : départage les homonymes par l'adresse. */
+  clientIdByNameAddress?: Map<string, string>;
   propertyIdByRef: Map<string, string>;
   jobIdByRef: Map<string, string>;
   /** refKey(nom source) → user_id Lume (migration_staff_mappings). Absent/null = non assigné. */
@@ -592,7 +656,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   if (entity === 'property') {
     const address = str(n.address);
     if (!address) return { ok: false, reason: 'invalid', detail: 'adresse manquante' };
-    const clientId = resolveClientId(ctx, r);
+    const clientId = resolveClientId(ctx, r, n);
     if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     return {
       ok: true,
@@ -616,7 +680,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   if (entity === 'billing_property') {
     const address = str(n.address);
     if (!address) return { ok: false, reason: 'invalid', detail: 'adresse de facturation manquante' };
-    const clientId = resolveClientId(ctx, r);
+    const clientId = resolveClientId(ctx, r, n);
     if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     // Le trigger trg_properties_billing_mirror (20260915000000) reflète cette
     // ligne dans clients.billing_address et passe billing_same_as_service à
@@ -640,7 +704,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'job') {
-    const clientId = resolveClientId(ctx, r);
+    const clientId = resolveClientId(ctx, r, n);
     if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const propertyId = r.property_ref
       ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
@@ -680,7 +744,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'quote') {
-    const clientId = resolveClientId(ctx, r);
+    const clientId = resolveClientId(ctx, r, n);
     if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     const subtotal = num(n.subtotal_cents);
@@ -750,7 +814,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
   }
 
   if (entity === 'invoice') {
-    const clientId = resolveClientId(ctx, r);
+    const clientId = resolveClientId(ctx, r, n);
     if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     let subtotal = num(n.subtotal_cents);
@@ -910,6 +974,7 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
       const registerRefs = (targetId: string) => {
         targetByStagingId.set(rec.id, targetId);
         if (!mapByEntity) return;
+        if (entity === 'client') registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId);
         for (const key of refKeysOf(entity, rec)) {
           if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
           const existing = mapByEntity.get(key);
@@ -1294,6 +1359,7 @@ export async function runFinalImport(
     const registerRefs = (rec: StagingRow, targetId: string) => {
       targetByStagingId.set(rec.id, targetId);
       if (!mapByEntity) return;
+      if (entity === 'client') registerNameAddress(ctx, rec.normalized ?? {}, str((rec.normalized ?? {}).address), targetId);
       for (const key of refKeysOf(entity, rec)) {
         if (entity === 'client' && intra.ambiguousKeys.has(key)) continue; // homonymes : jamais devinés
         const existing = mapByEntity.get(key);
