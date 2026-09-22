@@ -459,7 +459,7 @@ const BENIGN_DEFAULT_RE = /(sched|plan|book|open|activ|new|nouveau|upcoming|veni
 const RECOGNIZED_STATUS_RES: Partial<Record<TargetEntity, RegExp[]>> = {
   client: [/(lead|prospect)/, /(archiv|inactiv|closed|ferm)/, /(activ|client|customer|current)/],
   job: [/(complet|done|closed|term|ferm|finish)/, /(cancel|annul)/, /(progress|en cours)/, /draft|brouillon/, BENIGN_DEFAULT_RE],
-  invoice: [/(paid|pay[ée]e?)/, /partial/, /draft|brouillon/, /(sent|envoy|due|overdue|retard|unpaid|impay)/, BENIGN_DEFAULT_RE],
+  invoice: [/(paid|pay[ée]e?)/, /partial/, /draft|brouillon/, /(sent|envoy|due|overdue|retard|unpaid|impay|await|open|pending)/, BENIGN_DEFAULT_RE],
   quote: [/(convert)/, /(approv|accept|won|sign)/, /(chang|revis)/, /(sent|await|open|pending|envoy)/, /(archiv|declin|lost|refus|expir|cancel|annul)/, /draft|brouillon/],
   visit: [/(complet|done|term)/, /(cancel|annul)/, BENIGN_DEFAULT_RE],
 };
@@ -510,7 +510,7 @@ export interface BuildContext {
 // narrowe pas l'union via `!built.ok` et l'accès à `reason` serait rejeté.
 type BuildResult =
   | { ok: true; row: Record<string, unknown>; reason?: undefined }
-  | { ok: false; row?: undefined; reason: 'orphan' | 'invalid' };
+  | { ok: false; row?: undefined; reason: 'orphan' | 'invalid'; detail?: string };
 
 /** Construit la rangée à insérer dans la table active. Exportée pour les tests
  *  (pure) : les contraintes NOT NULL de prod y sont encodées. */
@@ -521,9 +521,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'tax_config') {
     const name = safeStr(n.name).slice(0, 60);
-    if (!name) return { ok: false, reason: 'invalid' };
+    if (!name) return { ok: false, reason: 'invalid', detail: 'nom de taxe manquant' };
     const rate = num(n.rate);
-    if (rate === null || rate < 0 || rate > 100) return { ok: false, reason: 'invalid' };
+    if (rate === null || rate < 0 || rate > 100) return { ok: false, reason: 'invalid', detail: 'taux de taxe invalide (0–100)' };
     const region = safeStr(n.region).toUpperCase().slice(0, 12);
     const country = safeStr(n.country).toUpperCase().slice(0, 2);
     const sortOrder = num(n.sort_order);
@@ -546,7 +546,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'service') {
     const name = safeStr(n.name);
-    if (!name) return { ok: false, reason: 'invalid' };
+    if (!name) return { ok: false, reason: 'invalid', detail: 'nom de service manquant' };
     return {
       ok: true,
       row: {
@@ -563,7 +563,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'client') {
     const hasIdentity = str(n.first_name) || str(n.last_name) || str(n.company) || str(n.full_name) || str(n.email);
-    if (!hasIdentity) return { ok: false, reason: 'invalid' };
+    if (!hasIdentity) return { ok: false, reason: 'invalid', detail: 'client sans nom, entreprise, courriel ni téléphone' };
     return {
       ok: true,
       row: {
@@ -591,9 +591,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'property') {
     const address = str(n.address);
-    if (!address) return { ok: false, reason: 'invalid' };
+    if (!address) return { ok: false, reason: 'invalid', detail: 'adresse manquante' };
     const clientId = resolveClientId(ctx, r);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     return {
       ok: true,
       row: {
@@ -615,9 +615,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'billing_property') {
     const address = str(n.address);
-    if (!address) return { ok: false, reason: 'invalid' };
+    if (!address) return { ok: false, reason: 'invalid', detail: 'adresse de facturation manquante' };
     const clientId = resolveClientId(ctx, r);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     // Le trigger trg_properties_billing_mirror (20260915000000) reflète cette
     // ligne dans clients.billing_address et passe billing_same_as_service à
     // false : le client est facturé à cette adresse dès l'import.
@@ -641,7 +641,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'job') {
     const clientId = resolveClientId(ctx, r);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const propertyId = r.property_ref
       ? lookupRef(ctx.propertyIdByRef, r.property_ref, (v) => normalizeAddressKey(v))
       : null;
@@ -681,7 +681,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'quote') {
     const clientId = resolveClientId(ctx, r);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     const subtotal = num(n.subtotal_cents);
     const tax = num(n.tax_cents);
@@ -715,9 +715,9 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'visit') {
     const jobId = lookupRef(ctx.jobIdByRef, r.job_ref);
-    if (!jobId) return { ok: false, reason: 'orphan' };
+    if (!jobId) return { ok: false, reason: 'orphan', detail: 'job introuvable (numéro absent ou ambigu)' };
     const startAt = str(n.start_at);
-    if (!startAt) return { ok: false, reason: 'invalid' };
+    if (!startAt) return { ok: false, reason: 'invalid', detail: 'date de début manquante' };
     let endAt = str(n.end_at);
     if (!endAt || endAt <= startAt) {
       // convention « pas d'heure précise » : 00:00 → 23:59, sinon +1 h
@@ -751,7 +751,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
 
   if (entity === 'invoice') {
     const clientId = resolveClientId(ctx, r);
-    if (!clientId) return { ok: false, reason: 'orphan' };
+    if (!clientId) return { ok: false, reason: 'orphan', detail: 'client introuvable (référence absente ou homonyme)' };
     const jobId = r.job_ref ? lookupRef(ctx.jobIdByRef, r.job_ref) : null;
     let subtotal = num(n.subtotal_cents);
     const tax = num(n.tax_cents);
@@ -760,7 +760,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     const discount = Math.max(0, num(n.discount_cents) ?? 0);
     let total = num(n.total_cents);
     if (total === null && subtotal !== null) total = subtotal - discount + (tax ?? 0);
-    if (total === null) return { ok: false, reason: 'invalid' };
+    if (total === null) return { ok: false, reason: 'invalid', detail: 'total manquant' };
     // Contrainte prod invoices_total_non_negatif : même règle que les soumissions.
     const noteMontant = total < 0 ? `Total exporté négatif (${(total / 100).toFixed(2)}) ramené à 0 à l'import.` : '';
     if (total < 0) total = 0;
@@ -814,7 +814,7 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
     };
   }
 
-  return { ok: false, reason: 'invalid' };
+  return { ok: false, reason: 'invalid', detail: 'entité non prise en charge' };
 }
 
 function emptyCounts(): EntityCounts {
@@ -872,6 +872,10 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
   let intraMerged = 0;
   const allAmbiguousKeys: string[] = [];
   const unknownStatuses = new Map<string, number>(); // `${entity}:${valeur}` → occurrences
+  // Lignes rejetées par le dry-run, avec leur motif : marquées dans le staging à la fin pour que
+  // l'onglet Rejets et le CSV les montrent. Avant, « 7 erreurs bloquantes » n'était qu'un compteur,
+  // invisible partout (2026-09-21). prepareStaging remet ces statuts à ready au prochain import.
+  const rejets: Array<{ id: string; status: 'error' | 'orphan'; error: string }> = [];
   for (const entity of entities) {
     const counts = emptyCounts();
     byEntity[entity] = counts;
@@ -947,8 +951,10 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
         if (built.reason === 'orphan') {
           orphans += 1;
           counts.ignored += 1;
+          rejets.push({ id: rec.id, status: 'orphan', error: `orphelin — ${built.detail ?? 'relation introuvable'}` });
         } else {
           counts.errors += 1;
+          rejets.push({ id: rec.id, status: 'error', error: `invalide — ${built.detail ?? 'valeur manquante'}` });
         }
         continue;
       }
@@ -961,8 +967,9 @@ export async function runDryRun(admin: SupabaseClient, migration: MigrationRow, 
     }
 
     if (counts.wouldMerge > 0) notes.push(`${counts.wouldMerge} ${entity}(s) seront fusionnés (doublons internes ou dossiers existants).`);
-    if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} en erreur (valeurs invalides) — voir les problèmes.`);
+    if (counts.errors > 0) notes.push(`${counts.errors} ligne(s) ${entity} en erreur (valeurs invalides) — voir l'onglet Rejets.`);
   }
+  await marquerRejetsDryRun(admin, migration.id, rejets);
 
   if (intraMerged > 0) notes.push(`${intraMerged} doublon(s) interne(s) aux fichiers fusionnés automatiquement (mêmes courriel/téléphone/numéro).`);
   if (allAmbiguousKeys.length > 0) {
@@ -1174,6 +1181,28 @@ async function enrichMergedClients(
     existingById.set(t.existingId, { ...existing, ...patch });
   }
   return out;
+}
+
+/** Marque les lignes rejetées par le dry-run (statut + motif), groupées par motif pour limiter les requêtes. */
+async function marquerRejetsDryRun(admin: SupabaseClient, migrationId: string, rejets: Array<{ id: string; status: 'error' | 'orphan'; error: string }>): Promise<void> {
+  const groupes = new Map<string, string[]>();
+  for (const r of rejets) {
+    const k = `${r.status}\u0000${r.error}`;
+    const arr = groupes.get(k) ?? [];
+    arr.push(r.id);
+    groupes.set(k, arr);
+  }
+  for (const [k, ids] of groupes) {
+    const [status, error] = k.split('\u0000');
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const { error: err } = await admin
+        .from('migration_staging_records')
+        .update({ status, error })
+        .eq('migration_id', migrationId)
+        .in('id', ids.slice(i, i + CHUNK));
+      if (err) console.error('[migration-importer] dry-run reject mark failed:', err.message);
+    }
+  }
 }
 
 async function setStagingStatus(admin: SupabaseClient, migrationId: string, ids: string[], status: string): Promise<void> {
