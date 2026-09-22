@@ -233,13 +233,27 @@ export function getRapportBot(id: string): Promise<{ rapport: RapportBotMigratio
   return apiFetch(`/migrations/${id}/bot`);
 }
 /** Attend la fin d'une passe lancée par lancerBotMigration : suit bot_derniere_execution (toutes les 5 s, 20 min max). */
+/**
+ * Attend la fin de LA passe lancée par ce clic. Trois conditions, toutes sur le rapport lui-même
+ * (pas de comparaison de chaînes ISO aux formats différents) :
+ * - le rapport n'est plus marqué `en_cours` ;
+ * - sa `fin` est postérieure au lancement (`depuis`) ;
+ * - sa `debut` aussi — un rapport final d'une passe antérieure ne compte pas.
+ * Le 2026-09-21, « Passe du bot terminée » s'affichait alors qu'une passe tournait encore.
+ */
 export async function attendreFinBot(id: string, depuis: string, opts: { intervalleMs?: number; maxMs?: number } = {}): Promise<RapportBotMigration | null> {
   const intervalle = opts.intervalleMs ?? 5000;
   const limite = Date.now() + (opts.maxMs ?? 20 * 60 * 1000);
+  const t0 = new Date(depuis).getTime() - 5000; // tolérance : `depuis` est pris juste avant le vrai démarrage
   while (Date.now() < limite) {
     await new Promise((r) => setTimeout(r, intervalle));
-    const { rapport, derniere_execution } = await getRapportBot(id);
-    if (derniere_execution && derniere_execution >= depuis) return rapport;
+    let etat: { rapport: RapportBotMigration | null; derniere_execution: string | null };
+    try { etat = await getRapportBot(id); } catch { continue; }
+    const r = etat.rapport;
+    if (!r || r.en_cours) continue;
+    const debut = r.debut ? new Date(r.debut).getTime() : NaN;
+    const fin = r.fin ? new Date(r.fin).getTime() : NaN;
+    if (Number.isFinite(debut) && Number.isFinite(fin) && debut >= t0 && fin >= t0) return r;
   }
   return null;
 }
