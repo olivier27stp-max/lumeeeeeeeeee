@@ -313,9 +313,18 @@ export async function tourLumi(opts: {
   if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
 
   for (let etape = 0; etape < maxEtapes; etape++) {
-    // Règle stricte : un tour qui a déjà coûté plus que le plafond s'arrête ici
-    // (l'historique est cohérent : le dernier message porte les tool_result).
-    if (coutHorsCacheFroid >= reglesCout().plafond_cout_tour_cents) {
+    // Un tour qui coûte cher ne doit PAS être coupé en plein milieu :
+    // l'utilisateur verrait son assistant s'arrêter sans réponse, et c'est
+    // perdre une fonction pour économiser des cents (2026-09-22).
+    //
+    // À la place, on DÉGRADE : passé le plafond, l'étape suivante part sans
+    // outils (`tool_choice: none`) et en effort bas. Le modèle doit alors
+    // conclure avec ce qu'il a déjà — il répond toujours, plus brièvement et
+    // sans repartir en exploration. On ne coupe que si même ça ne suffit pas,
+    // au double du plafond, où il est acquis que le tour est parti en vrille.
+    const plafondTour = reglesCout().plafond_cout_tour_cents;
+    const doitConclure = coutHorsCacheFroid >= plafondTour;
+    if (coutHorsCacheFroid >= plafondTour * 2) {
       opts.emettre({ type: 'error', message: 'plafond_tour' });
       return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
     }
@@ -337,7 +346,11 @@ export async function tourLumi(opts: {
       // « adaptive thinking is not supported on this model ») : sans ce
       // garde, la pente économe à 60 % du plafond répondait « Lumi failed
       // to respond » (vu à l'évaluation Haiku du 2026-09-11).
-      ...parametresReflexion(model, effort),
+      ...parametresReflexion(model, doitConclure ? 'low' : effort),
+      // Passé le plafond : plus d'outils, le modèle conclut avec ce qu'il a.
+      // `tools` reste envoyé (il est en cache : le retirer changerait le
+      // préfixe et coûterait une réécriture, exactement ce qu'on veut éviter).
+      ...(doitConclure ? { tool_choice: { type: 'none' as const } } : {}),
     });
     stream.on('text', (delta) => { texteTotal += delta; opts.emettre({ type: 'text', delta }); });
     const reponse = await stream.finalMessage();

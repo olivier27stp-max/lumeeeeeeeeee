@@ -36,11 +36,14 @@ describe('doitPinger', () => {
 });
 
 describe('fenetreMaintienMs', () => {
-  it('défaut 120 min, valeur lue, 0 désactive, valeur absurde → défaut', () => {
-    expect(fenetreMaintienMs({})).toBe(120 * MIN);
+  // 12 h depuis le 2026-09-22 : mesuré en prod, au-delà d'une heure sans
+  // appel le cache est froid à 100 % (5,25 ¢ le tour contre 2,06 ¢), et une
+  // fenêtre de 2 h ne couvrait pas la personne qui revient après le dîner.
+  it('défaut 720 min (12 h), valeur lue, 0 désactive, valeur absurde → défaut', () => {
+    expect(fenetreMaintienMs({})).toBe(720 * MIN);
     expect(fenetreMaintienMs({ LUMI_CACHE_CHAUD_MINUTES: '30' })).toBe(30 * MIN);
     expect(fenetreMaintienMs({ LUMI_CACHE_CHAUD_MINUTES: '0' })).toBe(0);
-    expect(fenetreMaintienMs({ LUMI_CACHE_CHAUD_MINUTES: 'abc' })).toBe(120 * MIN);
+    expect(fenetreMaintienMs({ LUMI_CACHE_CHAUD_MINUTES: 'abc' })).toBe(720 * MIN);
   });
 });
 
