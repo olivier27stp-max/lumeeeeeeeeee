@@ -389,3 +389,27 @@ describe('éditeur — utilisable sur téléphone', () => {
     expect(ed).toContain('p-0 sm:p-4');
   });
 });
+
+describe('aperçu — les deux syntaxes de variable', () => {
+  it('résout [cle] ET {cle}', () => {
+    // Les automatisations écrivent [cle], les modèles de courriel {cle}.
+    // `applyTemplate` côté serveur accepte déjà les deux ; un aperçu qui n'en
+    // montrait qu'une laissait croire que l'autre était cassée.
+    expect(remplacerVariables('Facture [invoice_number]')).toBe('Facture FAC-1042');
+    expect(remplacerVariables('Facture {invoice_number}')).toBe('Facture FAC-1042');
+  });
+
+  it('les variables des modèles ont toutes un exemple', () => {
+    // Sans exemple, le propriétaire voit « {invoice_amount} » en toutes
+    // lettres dans son propre aperçu et croit la variable cassée.
+    for (const cle of ['invoice_amount', 'amount_due', 'due_date', 'payment_link',
+      'pay_url', 'quote_amount', 'quote_link', 'valid_until', 'contract_number']) {
+      expect(remplacerVariables(`{${cle}}`), `sans exemple : ${cle}`).not.toBe(`{${cle}}`);
+    }
+  });
+
+  it('une variable inconnue reste visible dans les deux syntaxes', () => {
+    expect(remplacerVariables('{inventee}')).toBe('{inventee}');
+    expect(remplacerVariables('[inventee]')).toBe('[inventee]');
+  });
+});
