@@ -236,10 +236,18 @@ describe('manques, nature et texte pour Claude', () => {
     expect(t).toContain('claude-fable-5-1');
     expect(t).toContain('applique l\'audit');
   });
-  it('modèle par défaut = Fable 5.1 avec repli Opus 5 puis Sonnet 5', () => {
-    expect(MODELES_BOT[0]).toBe(process.env.LUMI_MODEL_MIGRATION || 'claude-fable-5-1');
+  /**
+   * Sonnet 5 depuis le 2026-09-22. Comparé sur la batterie
+   * `evaluer-bot-migration` (3 passages chacun, mêmes fichiers) :
+   * Fable 5.1 « high » = 35,73 ¢, Sonnet 5 « medium » = 4 à 6,8 ¢, pour les
+   * MÊMES décisions (22 correspondances, 3 merge / 3 create) et le même
+   * statut final. Fable reste en repli : si un mapping lui résiste un jour,
+   * LUMI_MODEL_MIGRATION le remet en tête sans redéploiement.
+   */
+  it('modèle par défaut = Sonnet 5, avec Opus 5 et Fable 5.1 en repli', () => {
+    expect(MODELES_BOT[0]).toBe(process.env.LUMI_MODEL_MIGRATION || 'claude-sonnet-5');
     expect(MODELES_BOT).toContain('claude-opus-5');
-    expect(MODELES_BOT[MODELES_BOT.length - 1]).toBe('claude-sonnet-5');
+    expect(MODELES_BOT).toContain('claude-fable-5-1');
   });
   it('les connaissances couvrent chaque entité et les pièges connus, sans valeur variable', () => {
     for (const e of Object.keys(FIELD_CATALOG)) expect(SEMANTIQUE_ENTITE[e as keyof typeof SEMANTIQUE_ENTITE]).toBeTruthy();

@@ -68,10 +68,32 @@ export type ModeBot = 'client' | 'autonome';
 /** En mode autonome, l'admin est (re)prévenu au plus une fois par ce délai. */
 export const RAPPEL_ADMIN_HEURES = 72;
 export const TYPE_NOTIFICATION_ADMIN = 'migration_bot';
-/** Le modèle le plus proche de Claude Code (Fable 5.1), puis repli si le compte n'y a pas accès (400/404). Surcharge : LUMI_MODEL_MIGRATION. */
-/** Profondeur de raisonnement par fichier (≈ 50 s et 25 ¢ par fichier en « high » sur Fable 5.1). Surcharge : LUMI_EFFORT_MIGRATION. */
-const EFFORT_BOT = (['low', 'medium', 'high', 'xhigh', 'max'] as const).find((e) => e === process.env.LUMI_EFFORT_MIGRATION) ?? 'high';
-export const MODELES_BOT: string[] = [...new Set([process.env.LUMI_MODEL_MIGRATION || 'claude-fable-5-1', 'claude-opus-5', 'claude-sonnet-5'])];
+/**
+ * Modèle et profondeur de raisonnement du bot (mesuré le 2026-09-22).
+ * ────────────────────────────────────────────────────────────────────
+ * Le bot tournait sur `claude-fable-5-1` à effort « high » : 24,19 ¢ par
+ * tour en production, soit 77 % de toute la dépense d'inférence sur 22 % des
+ * tours. La décomposition montre que ce n'est ni le prompt ni le cache, mais
+ * la SORTIE : 3 568 tokens par tour à 50 $/M, c'est-à-dire de la réflexion —
+ * pour produire un appel d'outil d'une vingtaine de lignes.
+ *
+ * Comparé sur la batterie `evaluer-bot-migration` contre staging, trois
+ * passages chacun, mêmes fichiers :
+ *
+ *   Fable 5.1 « high »   35,73 ¢   22 correspondances, 3 merge / 3 create
+ *   Sonnet 5  « medium »  4-6,8 ¢   mêmes décisions, même statut final
+ *
+ * Résultat identique pour cinq fois moins cher : on prend. Les deux restent
+ * réglables sans redéploiement (LUMI_MODEL_MIGRATION, LUMI_EFFORT_MIGRATION),
+ * et Fable reste dans la liste de repli — si un jour un mapping résiste à
+ * Sonnet, il suffit de remonter la variable pour le comparer.
+ *
+ * La batterie échoue sur un point AVANT comme APRÈS (« aucune notification
+ * d'approbation pour l'admin assigné ») : défaut préexistant, sans rapport
+ * avec le modèle, à traiter séparément.
+ */
+const EFFORT_BOT = (['low', 'medium', 'high', 'xhigh', 'max'] as const).find((e) => e === process.env.LUMI_EFFORT_MIGRATION) ?? 'medium';
+export const MODELES_BOT: string[] = [...new Set([process.env.LUMI_MODEL_MIGRATION || 'claude-sonnet-5', 'claude-opus-5', 'claude-fable-5-1'])];
 
 export interface DecisionBot {
   etape: string;
@@ -352,18 +374,29 @@ export async function proposerMappings(admin: Admin, migration: MigrationRow, p:
   const colonnes = p.colonnes.map((c) => `#${c.position} « ${c.header} » type=${c.detected_type ?? '?'} exemples=${JSON.stringify(c.samples.slice(0, 5))} · ${c.etat}`).join('\n');
   const aDecider = p.colonnes.filter((c) => c.aDecider).map((c) => `#${c.position}`).join(', ');
   const debut = Date.now();
-  // Le prompt système est STABLE (cache 1 h) : règles + sémantique de l'entité + catalogue. Rien de variable avant le point de cache.
-  const systeme = `Tu es le bot de migration de Lume CRM (entreprises de services au Québec). Tu fais correspondre les colonnes d'un export CSV d'un ancien CRM aux champs de Lume, avec la rigueur d'un développeur qui connaît l'importeur. Les exemples sont MASQUÉS (formes, pas les valeurs).
+  /**
+   * Deux blocs système, et le point de cache entre les deux (2026-09-22).
+   *
+   * Avant, tout était dans UN bloc portant `cache_control` — mais ce bloc
+   * contenait la sémantique et le catalogue de l'entité, donc il changeait à
+   * chaque fichier. Résultat mesuré : 49 347 tokens ÉCRITS en cache (200 % du
+   * tarif) pour 29 970 relus. On payait le cache sans en profiter.
+   *
+   * Le bloc 1 (consigne + règles de l'importeur, ~1 350 tokens) est le même
+   * pour TOUTES les entités : il est écrit une fois puis relu à chaque
+   * fichier. Le bloc 2 (entité, ~285 tokens) reste variable et n'est pas mis
+   * en cache — le mettre coûterait plus cher que de le renvoyer.
+   */
+  const systemeStable = `Tu es le bot de migration de Lume CRM (entreprises de services au Québec). Tu fais correspondre les colonnes d'un export CSV d'un ancien CRM aux champs de Lume, avec la rigueur d'un développeur qui connaît l'importeur. Les exemples sont MASQUÉS (formes, pas les valeurs).
 
 ${REGLES_LUME}
 
-SÉMANTIQUE DE L'ENTITÉ CIBLE (${p.entity})
+RÉPONSE : appelle l'outil « ${OUTIL_PROPOSER} » exactement une fois, avec un verdict par colonne « à décider » (les colonnes fixées par un humain sont montrées pour le contexte : ne les redonne pas, mais tiens-en compte pour ne pas viser un champ déjà pris). Une même cible ne va jamais à deux colonnes. Quand la proposition actuelle du moteur est dangereuse, mets field=null et explique dans « alerte ». Déclare les « manques ». Pas de texte hors de l'outil.`;
+  const systemeEntite = `SÉMANTIQUE DE L'ENTITÉ CIBLE (${p.entity})
 ${semantiquePour(p.entity)}
 
 CATALOGUE (seuls champs permis dans « field ») :
-${catalogue}
-
-RÉPONSE : appelle l'outil « ${OUTIL_PROPOSER} » exactement une fois, avec un verdict par colonne « à décider » (les colonnes fixées par un humain sont montrées pour le contexte : ne les redonne pas, mais tiens-en compte pour ne pas viser un champ déjà pris). Une même cible ne va jamais à deux colonnes. Quand la proposition actuelle du moteur est dangereuse, mets field=null et explique dans « alerte ». Déclare les « manques ». Pas de texte hors de l'outil.`;
+${catalogue}`;
   const messages: Anthropic.Messages.MessageParam[] = [{ role: 'user', content: `Fichier « ${p.fileName} » (CRM source : ${p.sourceCrm}). Colonnes à décider : ${aDecider}.\nToutes les colonnes du fichier, dans l'ordre :\n${colonnes}` }];
   let derniereErreur: string | null = null;
   // Plafond journalier d'exploitation : le bot tourne sur cron (10 min, jusqu'à
@@ -377,12 +410,23 @@ RÉPONSE : appelle l'outil « ${OUTIL_PROPOSER} » exactement une fois, avec un 
     try {
       const res = await clientAnthropic().beta.messages.create({
         model: modele,
-        max_tokens: 16000,
+        // 16 000 était un plafond sans mesure. Sortie réelle en prod sous
+        // « high » : max 5 610, p90 5 367 (22 tours). 12 000 laisse plus du
+        // double de la pointe observée — assez pour qu'un mapping ne soit
+        // JAMAIS tronqué, sans laisser la porte ouverte à une dérive.
+        // C'est une borne de sécurité, pas un levier de coût : on ne paie
+        // que ce qui est réellement produit.
+        max_tokens: 12000,
         // Refus de sécurité côté serveur → repli automatique sur un autre modèle dans le même appel.
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
         output_config: { effort: EFFORT_BOT },
-        system: [{ type: 'text', cache_control: { type: 'ephemeral', ttl: '1h' }, text: systeme }],
+        // Stable d'abord (avec le point de cache), variable ensuite : l'ordre
+        // inverse rendrait le cache inutile (le préfixe changerait).
+        system: [
+          { type: 'text', cache_control: { type: 'ephemeral', ttl: '1h' }, text: systemeStable },
+          { type: 'text', text: systemeEntite },
+        ],
         tools: [outilProposer() as Anthropic.Beta.Messages.BetaTool],
         tool_choice: { type: 'auto' },
         messages: messages as Anthropic.Beta.Messages.BetaMessageParam[],
