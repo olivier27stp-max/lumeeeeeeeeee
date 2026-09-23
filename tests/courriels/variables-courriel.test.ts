@@ -19,9 +19,19 @@ import {
 } from '../../src/lib/variablesCourriel';
 
 const lire = (p: string) => fs.readFileSync(path.join(process.cwd(), p), 'utf8');
-const emails = lire('server/routes/emails.ts');
-const rappels = lire('server/routes/reminders-cron.ts');
-const source = `${emails}\n${rappels}`;
+/* Toutes les routes qui appellent `texteDuCourriel`, pas seulement deux.
+
+   La liste s'arrêtait à emails.ts et reminders-cron.ts. Le contrat et la
+   demande de dépôt partent d'ailleurs (agreements.ts, payment-requests.ts) :
+   leurs variables passaient donc pour « jamais remplies » alors que le
+   serveur les fournit. Le test avait raison de crier, mais sur les mauvais
+   coupables — et c'est ce qui avait tenu ces deux postes hors de la table. */
+const source = [
+  'server/routes/emails.ts',
+  'server/routes/reminders-cron.ts',
+  'server/routes/agreements.ts',
+  'server/routes/payment-requests.ts',
+].map(lire).join('\n');
 
 describe('variables de courriel', () => {
   it('chaque variable offerte est remplie par le serveur', () => {
