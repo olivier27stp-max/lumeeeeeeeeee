@@ -18,14 +18,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, Zap, ExternalLink, Check } from 'lucide-react';
+import { Loader2, Zap, ExternalLink, Check, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '../../components/ui';
 import { confirmer } from '../../components/ui/ConfirmDialog';
 import EmailPreviewEditor from '../../components/automations/EmailPreviewEditor';
 import ImportHtmlCourriel from '../../components/settings/ImportHtmlCourriel';
 import { CATALOGUE_COURRIELS, type EntreeCourriel } from '../../lib/catalogueCourriels';
+import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
+import { STORAGE_BUCKETS, uploadFile } from '../../lib/storage';
 import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import {
   listEmailTemplates,
@@ -107,6 +109,12 @@ export default function EmailTemplatesSettings() {
      et pas un gris générique. `#111827` est le repli du gabarit serveur
      (`COULEUR_LUME`) : une couleur absente ou trop pâle y aboutit aussi. */
   const [couleurMarque, setCouleurMarque] = useState('#111827');
+  /* Le logo, modifiable ICI. Il vit dans Paramètres → Entreprise, mais c'est
+     sur cette page qu'on voit son effet : chaque vignette le porte. Obliger à
+     changer de page pour corriger un logo qu'on regarde est une friction
+     gratuite. Le fond est retiré au téléversement, côté serveur. */
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [televersement, setTeleversement] = useState(false);
 
   const charger = async () => {
     try {
@@ -131,7 +139,7 @@ export default function EmailTemplatesSettings() {
         const orgId = await getCurrentOrgIdOrThrow();
         const { data } = await supabase
           .from('company_settings')
-          .select('brand_color, default_language')
+          .select('brand_color, default_language, logo_url')
           .eq('org_id', orgId)
           .limit(1)
           .maybeSingle();
@@ -140,6 +148,7 @@ export default function EmailTemplatesSettings() {
         // Même règle que `langueDe` côté serveur : tout ce qui n'est pas
         // explicitement anglais est du français.
         if (String(data?.default_language || '').toLowerCase().startsWith('en')) setLangueCourriels('en');
+        if (data?.logo_url) setLogoUrl(String(data.logo_url));
       } catch {
         // Le repli suffit : rien à signaler au propriétaire pour une vignette.
       }
@@ -183,6 +192,43 @@ export default function EmailTemplatesSettings() {
       });
     }
     void charger();
+  };
+
+  /**
+   * Remplacer le logo, depuis cette page.
+   *
+   * Le fond est retiré côté serveur au téléversement (`detourerLogo`) : un
+   * logo JPEG arrive avec un carré blanc qui se voit sur le fond gris du
+   * courriel. On ne demande donc pas un PNG transparent au propriétaire — il
+   * n'a pas à savoir ce qu'est un canal alpha.
+   */
+  const changerLogo = async (fichier: File) => {
+    if (!fichier.type.startsWith('image/')) {
+      toast.error('Choisissez une image (PNG, JPG ou SVG).');
+      return;
+    }
+    // 5 Mo : au-delà, c'est une photo, pas un logo — et le détourage ramerait.
+    if (fichier.size > 5 * 1024 * 1024) {
+      toast.error('Image trop lourde (5 Mo maximum).');
+      return;
+    }
+    setTeleversement(true);
+    try {
+      const orgId = await getCurrentOrgIdOrThrow();
+      const ext = (fichier.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
+      const up = await uploadFile(STORAGE_BUCKETS.COMPANY_LOGOS, `${orgId}/logo-${Date.now()}.${ext}`, fichier);
+      const { error } = await supabase
+        .from('company_settings')
+        .update({ logo_url: up.url })
+        .eq('org_id', orgId);
+      if (error) throw error;
+      setLogoUrl(up.url);
+      toast.success('Logo mis à jour. Il apparaît dans tous vos courriels.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Téléversement impossible');
+    } finally {
+      setTeleversement(false);
+    }
   };
 
   const revenirAuDefaut = async (t: EmailTemplate, titre: string) => {
@@ -234,6 +280,54 @@ export default function EmailTemplatesSettings() {
         </div>
       ) : (
         <div className="space-y-8">
+          {/* L'identité, en haut : c'est ce que le client voit en premier, et
+              c'est ici qu'on en voit l'effet — chaque vignette la porte. Le
+              logo vit dans Paramètres → Entreprise, mais obliger à changer de
+              page pour corriger un logo qu'on regarde est une friction
+              gratuite. */}
+          <section className="flex items-center gap-4 rounded-xl border border-outline/60 bg-surface p-4">
+            <span
+              className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-outline/40"
+              style={{ background: '#f4f5f7' }}
+            >
+              {logoUrl ? (
+                <img src={logoUrl} alt="" className="max-h-12 max-w-12 object-contain" />
+              ) : (
+                <ImageIcon className="h-5 w-5 text-text-tertiary" aria-hidden="true" />
+              )}
+            </span>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-medium text-text-primary">Votre logo</p>
+              <p className="text-[12.5px] text-text-tertiary">
+                Une seule fois, et il apparaît en haut de vos {editables.length} courriels. Le fond blanc est
+                retiré automatiquement.
+              </p>
+            </div>
+
+            <label
+              className={cn(
+                'shrink-0 cursor-pointer rounded-lg border border-outline/60 px-3 py-2 text-[13px] font-semibold text-text-secondary hover:bg-surface-secondary',
+                televersement && 'pointer-events-none opacity-60',
+              )}
+            >
+              {televersement ? 'Envoi…' : logoUrl ? 'Remplacer' : 'Ajouter un logo'}
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                disabled={televersement}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  // On vide le champ : sans ça, re-choisir le MÊME fichier
+                  // après un échec ne déclenche aucun événement.
+                  e.target.value = '';
+                  if (f) void changerLogo(f);
+                }}
+              />
+            </label>
+          </section>
+
           <section>
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
               Vos courriels

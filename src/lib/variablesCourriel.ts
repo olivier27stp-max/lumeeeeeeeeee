@@ -67,6 +67,26 @@ export const VARIABLES_PAR_TYPE: Record<string, VariableCourriel[]> = {
     { cle: 'valid_until', fr: 'Valide jusqu’au', en: 'Valid until', exemple: { fr: '2 mai 2026', en: 'May 2, 2026' } },
     { cle: 'quote_link', fr: 'Lien de la soumission', en: 'Quote link', exemple: { fr: 'lumecrm.net/quote/…', en: 'lumecrm.net/quote/…' } },
   ],
+  /* Ces deux postes manquaient (2026-09-23), alors que le serveur remplit
+     bien leurs variables — `server/routes/agreements.ts` ligne 922 et
+     `server/routes/payment-requests.ts` ligne 140.
+
+     La conséquence était visible par le CLIENT : l'objet par défaut du
+     contrat cite `[contract_number]`, que `variablesPour` ne connaissait pas.
+     L'éditeur ne le proposait donc pas, et surtout l'aperçu ne le remplaçait
+     pas par son exemple — on validait un objet à trou. Un test croise
+     désormais ces listes avec le catalogue. */
+  contract_sent: [
+    ...COMMUNES,
+    { cle: 'contract_number', fr: 'N° de contrat', en: 'Contract #', exemple: { fr: '12', en: '12' } },
+    { cle: 'contract_link', fr: 'Lien du contrat', en: 'Contract link', exemple: { fr: 'lumecrm.net/contract/…', en: 'lumecrm.net/contract/…' } },
+  ],
+  deposit_request: [
+    ...COMMUNES,
+    { cle: 'invoice_number', fr: 'N° de facture', en: 'Invoice #', exemple: { fr: '48', en: '48' } },
+    { cle: 'amount_due', fr: 'Montant demandé', en: 'Amount due', exemple: { fr: '406,73 $', en: '$406.73' } },
+    { cle: 'payment_link', fr: 'Lien de paiement', en: 'Payment link', exemple: { fr: 'lumecrm.net/pay/…', en: 'lumecrm.net/pay/…' } },
+  ],
 };
 
 /**
@@ -88,5 +108,14 @@ export function variablesPour(type: string | undefined): VariableCourriel[] {
  */
 export function remplacerParExemples(texte: string, type: string | undefined, fr: boolean): string {
   const table = new Map(variablesPour(type).map((v) => [v.cle, v.exemple[fr ? 'fr' : 'en']]));
-  return texte.replace(/\{(\w+)\}/g, (tout, cle: string) => table.get(cle) ?? tout);
+  /* Les DEUX syntaxes, comme `applyTemplate` côté serveur (notificationHelpers
+     ligne 344) : `{cle}` et `[cle]`.
+
+     Cette fonction ne gérait que les accolades — mais tous les objets par
+     défaut du catalogue sont écrits avec des crochets. L'aperçu affichait
+     donc « Soumission [quote_number] — [quote_amount] », et le propriétaire
+     validait un objet plein de crochets en croyant que c'est ce que son
+     client recevrait. */
+  const remplacer = (tout: string, cle: string) => table.get(cle) ?? tout;
+  return texte.replace(/\{(\w+)\}/g, remplacer).replace(/\[(\w+)\]/g, remplacer);
 }
