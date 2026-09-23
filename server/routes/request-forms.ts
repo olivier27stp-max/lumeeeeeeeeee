@@ -782,6 +782,50 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
       }
     }
 
+    // 4c. Nouveau pipeline de ventes — en parallèle de l'ancien chemin.
+    //
+    // `ingest_lead` fait tout en une transaction : contact, rapprochement,
+    // deal dans la première étape ouverte, attribution marketing. L'ancien
+    // chemin ci-dessus continue d'alimenter `pipeline_deals` tant que le
+    // board D2D n'est pas retiré — les deux coexistent volontairement.
+    //
+    // NON BLOQUANT : un échec ici ne doit pas faire perdre la soumission au
+    // visiteur, qui a déjà son client, son deal et sa notification. On
+    // journalise pour que le trou se voie, plutôt que de renvoyer une erreur
+    // à quelqu'un dont la demande est bel et bien enregistrée.
+    step = 'pipeline-ventes';
+    try {
+      const { data: ingest, error: ingestErr } = await admin.rpc('ingest_lead', {
+        p_org_id: orgId,
+        p_source: 'form_web',
+        // Idempotence : rejouer la même soumission ne crée pas de doublon.
+        p_external_id: submission?.id ? String(submission.id) : null,
+        p_first_name: body.first_name,
+        p_last_name: body.last_name,
+        p_company: body.company || null,
+        p_email: body.email || null,
+        p_phone: body.phone || null,
+        p_address: address || null,
+        p_notes: clientNotes,
+        p_utm_source: body.utm_source || null,
+        p_utm_medium: body.utm_medium || null,
+        p_utm_campaign: body.utm_campaign || null,
+        p_utm_content: body.utm_content || null,
+        p_fbclid: body.fbclid || null,
+        p_payload: { form_id: form.id, custom_responses: submissionResponses },
+        p_created_by: actorId,
+      });
+      if (ingestErr) {
+        console.error('[public/form] pipeline de ventes — ingestion refusée:', ingestErr.message);
+      } else {
+        console.info('[public/form] pipeline de ventes', {
+          dealId: ingest?.deal_id, cree: ingest?.cree, fusionne: ingest?.fusionne, raison: ingest?.raison,
+        });
+      }
+    } catch (e: any) {
+      console.error('[public/form] pipeline de ventes — ingestion échouée:', e?.message);
+    }
+
     // 5. Emit event for automations
     step = 'event-emit';
     eventBus.emit('lead.created', {
