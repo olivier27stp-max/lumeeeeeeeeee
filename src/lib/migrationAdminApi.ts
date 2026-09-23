@@ -32,6 +32,12 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export interface EtatCommunications { gele: boolean; migration_id: string | null; gele_le: string | null; active_le: string | null; active_par: string | null }
+/** « Activer le compte » : lève le gel des communications posé à l'import final. */
+export function activateAccount(id: string): Promise<{ ok: boolean; communications: EtatCommunications }> {
+  return apiFetch(`/migrations/${id}/activate-account`, { method: 'POST', body: JSON.stringify({}) });
+}
+
 /** Dépose un fichier (CSV ou PDF) dans une migration depuis la console — même réception que le portail. */
 export async function uploadAdminFile(id: string, file: File): Promise<{ id: string; original_name: string }> {
   const headers = await getAuthHeaders();

@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { redirigerEmail } from './qa-redirect';
 import { logger } from './logger';
 import { getServiceClient } from './supabase';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from './migration/gel-communications';
 import { htmlVersTextePourEnvoi } from './courriels/texte';
 import { planifierPremiereReprise, TABLE_REPRISES } from './courriels/reprises';
 import { reglagesSmtpSes, sesConfigure, messageIdSes } from './courriels/ses';
@@ -302,6 +303,14 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     console.warn(`[qa] courriel redirigé : ${qa.destinataireOrigine} → ${qa.to}`);
   }
   const destinataires = Array.isArray(qa.to) ? qa.to : [qa.to];
+  // Bureau en cours d'activation après un import : aucun courriel vers ses clients.
+  for (const dest of Array.isArray(params.to) ? params.to : [params.to]) {
+    const orgGelee = await destinataireGele(getServiceClient(), { email: dest }, params.suivi?.orgId ?? null);
+    if (orgGelee) {
+      journaliserBlocage('courriel', orgGelee, dest, params.suivi?.entityType);
+      return { sent: false, error: MESSAGE_GEL };
+    }
+  }
   const provider = fournisseurCourriel();
 
   try {

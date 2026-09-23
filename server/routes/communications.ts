@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from '../lib/migration/gel-communications';
 import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
@@ -89,6 +90,10 @@ router.post('/communications/send-sms', validate(sendSmsSchema), async (req, res
         code: 'sms_opted_out',
       });
     }
+
+    // Compte importé pas encore activé : personne ne contacte ses clients.
+    const orgGelee = await destinataireGele(serviceClient, { phone: normalizedTo }, orgId);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, normalizedTo, 'sms manuel'); return res.status(423).json({ error: MESSAGE_GEL, code: 'communications_gelees' }); }
 
     // Accusé de réception : sans ce callback, la ligne `messages` insérée juste
     // après reste bloquée à `status: 'sent'` même si le SMS n'arrive jamais.

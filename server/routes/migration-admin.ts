@@ -38,6 +38,7 @@ import { lancerImportTest, demanderApprobation, approuverAuNomDuClient } from '.
 import { creerPublieurProgression } from '../lib/migration/execution';
 import { logger } from '../lib/logger';
 import { executerBotMigration, passeBotEnCours } from '../lib/migration/bot';
+import { activerCommunications, etatGel, gelerCommunications } from '../lib/migration/gel-communications';
 import { buildRejectsCsv } from '../lib/migration/rejects';
 import { getCrmConfig } from '../lib/migration/instructions';
 import { entityForCategory, normalizeHeader, FIELD_CATALOG } from '../lib/migration/mapping';
@@ -254,6 +255,7 @@ router.get('/migration-admin/migrations/:id', async (req, res) => {
       messages: messages.data ?? [],
       staging_counts: stagingCounts,
       crm_config: getCrmConfig(migration.source_crm),
+      communications: await etatGel(admin, migration.org_id),
       field_catalog: FIELD_CATALOG,
     });
   } catch (err: any) {
@@ -961,6 +963,10 @@ router.post('/migration-admin/migrations/:id/final-import', validate(migrationFi
       .eq('status', 'ready_for_final_import');
     if (statusErr) throw statusErr;
     migration.status = 'importing';
+    // Protection : dès que des données entrent, le bureau est gelé — aucun courriel, SMS ni
+    // automatisation vers ses clients avant « Activer le compte » (voir gel-communications.ts).
+    await gelerCommunications(admin, migration.org_id, migration.id);
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'communications.gel', actorId: auth.user.id, actorRole: 'platform_admin' });
 
     const { data: batch, error: batchErr } = await admin
       .from('migration_import_batches')
@@ -1110,6 +1116,26 @@ router.post('/migration-admin/migrations/:id/rollback', validate(migrationFinalI
     return res.json({ ok: true, ...total });
   } catch (err: any) {
     return sendSafeError(res, err, 'Rollback impossible.', '[migration-admin]');
+  }
+});
+
+// ── « Activer le compte » : les communications vers les clients importés repartent ──
+router.post('/migration-admin/migrations/:id/activate-account', async (req, res) => {
+  try {
+    const auth = await requirePlatformAdmin(req, res);
+    if (!auth) return;
+    const admin = getServiceClient();
+    const migration = await getMigration(admin, req.params.id);
+    if (!migration) return res.status(404).json({ error: 'Migration introuvable.' });
+    if (['importing', 'post_import_validation'].includes(migration.status)) {
+      return res.status(409).json({ error: 'Un import est en cours — activez le compte une fois l\'import terminé.' });
+    }
+    await activerCommunications(admin, migration.org_id, auth.user.id);
+    await logMigrationAudit(admin, { migrationId: migration.id, action: 'communications.activation', actorId: auth.user.id, actorRole: 'platform_admin' });
+    await touchMigrationActivity(admin, migration.id);
+    return res.json({ ok: true, communications: await etatGel(admin, migration.org_id) });
+  } catch (err: any) {
+    return sendSafeError(res, err, 'Activation impossible.', '[migration-admin]');
   }
 });
 

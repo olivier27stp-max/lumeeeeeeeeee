@@ -21,7 +21,7 @@ import { type AuditBotMigration,
   generateInvitation, revokeInvitation, extendInvitation, decideMapping, resolveIssue,
   decideDuplicate, startAnalysis, startTestImport, requestApproval, startFinalImport,
   rollbackMigration, closeMigration, sendAdminMessage, getMigrationAudit, getFileDownloadUrl,
-  reanalyzeFile, rejectFile, deleteFile, uploadAdminFile, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
+  reanalyzeFile, rejectFile, deleteFile, uploadAdminFile, activateAccount, downloadRejectsCsv, retryErrors, getMigrationStaff, saveStaffMap,
   getMigrationMembers, listMappingTemplates, saveMappingTemplate, applyMappingTemplate, flagMapping,
   type AdminMigrationListItem, type MigrationStaffEntry, type MappingFlag,
 } from '../lib/migrationAdminApi';
@@ -584,6 +584,15 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
           if (!ok) return;
           await act(() => approuverAuNomDuClient(m.id), 'Approuvée au nom du client — passez la migration « prête pour l\'import final »');
         }}>Approuver au nom du client</button>
+      )}
+      {d.communications?.gele && !['importing', 'post_import_validation'].includes(m.status) && (
+        // Protection post-import : tant que ce bouton n'a pas été cliqué, aucun courriel, SMS ni
+        // automatisation ne part vers les clients de ce bureau (garde dans les fonctions d'envoi).
+        <button type="button" className={primary} onClick={async () => {
+          const ok = await confirmer({ title: 'Activer le compte', message: 'Les communications vers les clients de ce bureau (courriels, SMS, automatisations, rappels, demandes d\'avis) sont gelées depuis l\'import. En activant le compte, elles repartent normalement. Vérifiez d\'abord que les données importées sont en ordre.', confirmLabel: 'Activer le compte' });
+          if (!ok) return;
+          await act(() => activateAccount(m.id), 'Compte activé : les communications vers les clients repartent');
+        }}>Activer le compte</button>
       )}
       {m.status === 'rolled_back' && (
         // après un rollback, la migration repart des correspondances (machine à états : rolled_back → mapping)

@@ -1667,6 +1667,11 @@ async function envoyerUnSms(
     throw e;
   }
 
+  {
+    const { destinataireGele, journaliserBlocage, MESSAGE_GEL } = await import('../migration/gel-communications');
+    const orgGelee = await destinataireGele(admin, { phone: telephone }, ctx.orgId);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, telephone, 'agent'); throw new Error(MESSAGE_GEL); }
+  }
   const conversation = await findOrCreateConversation(admin, ctx.orgId, telephone, clientId || undefined, clientNom || undefined);
   const statusCallback = getTwilioStatusCallbackUrl();
   const twilioMessage = await twilioClient.messages.create({

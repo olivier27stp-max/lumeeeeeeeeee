@@ -685,6 +685,12 @@ export async function executeSendSms(
     };
   }
 
+  {
+    const { destinataireGele, journaliserBlocage, MESSAGE_GEL } = await import('../migration/gel-communications');
+    const { getServiceClient } = await import('../supabase');
+    const orgGelee = await destinataireGele(getServiceClient(), { phone: to }, ctx.orgId);
+    if (orgGelee) { journaliserBlocage('sms', orgGelee, to, 'automatisation'); return { success: false, error: MESSAGE_GEL }; }
+  }
   try {
     const { getTwilioStatusCallbackUrl } = await import('../config');
     const statusCallback = getTwilioStatusCallbackUrl();

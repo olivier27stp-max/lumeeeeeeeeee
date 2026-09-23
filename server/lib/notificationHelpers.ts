@@ -1,6 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { sendExpoPushToOrg } from './pushNotifications';
+import { getServiceClient } from './supabase';
+import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from './migration/gel-communications';
 
 interface TwilioConfig {
   client: any;
@@ -259,8 +261,8 @@ export async function getUnsubscribeUrl(
 export interface SmsSendResult {
   sent: boolean;
   sid?: string;
-  /** `not_configured` | `no_recipient` | `send_failed` */
-  reason?: 'not_configured' | 'no_recipient' | 'send_failed';
+  /** `not_configured` | `no_recipient` | `send_failed` | `communications_gelees` (compte importé non activé) */
+  reason?: 'not_configured' | 'no_recipient' | 'send_failed' | 'communications_gelees';
   error?: string;
 }
 
@@ -292,6 +294,11 @@ export async function sendSmsIfConfigured(
   if (!to) {
     console.warn('[sms] skipped — recipient has no phone number');
     return { sent: false, reason: 'no_recipient' };
+  }
+  const orgGelee = await destinataireGele(getServiceClient(), { phone: to });
+  if (orgGelee) {
+    journaliserBlocage('sms', orgGelee, to);
+    return { sent: false, reason: 'communications_gelees', error: MESSAGE_GEL };
   }
   try {
     const { getTwilioStatusCallbackUrl } = await import('./config');
