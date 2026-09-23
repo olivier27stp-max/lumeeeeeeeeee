@@ -130,6 +130,37 @@ export function isQuietHours(d: Date = new Date()): boolean {
   return h < SEND_START_HOUR || h >= SEND_END_HOUR;
 }
 
+/** Décalage UTC (en minutes) du fuseau local à cet instant — +/- selon l'heure avancée. */
+function decalageLocalMin(t: number): number {
+  const d = new Date(t);
+  // Une date formatée dans le fuseau cible, relue comme si elle était UTC :
+  // l'écart avec l'instant d'origine EST le décalage.
+  const p = new Intl.DateTimeFormat('en-CA', {
+    timeZone: QUIET_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(d).reduce<Record<string, string>>((a, x) => (a[x.type] = x.value, a), {});
+  const commeUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return Math.round((commeUtc - d.getTime()) / 60000);
+}
+
+/**
+ * Cale un rappel sur l'HEURE LOCALE voulue, même à cheval sur un changement
+ * d'heure.
+ *
+ * Un « rappel 7 jours avant » se calcule en 604 800 secondes absolues. Si le
+ * retour à l'heure normale tombe entre les deux, l'heure locale glisse d'une
+ * heure : un rendez-vous à 10 h donnait un rappel à 11 h. Mesuré sur le cas
+ * réel du 1er novembre 2026.
+ *
+ * On compare le décalage UTC aux deux instants et on rattrape la différence.
+ * Rien à faire le reste de l'année : les deux décalages sont égaux, la
+ * correction vaut zéro.
+ */
+function corrigerChangementDHeure(reference: number, cible: number): number {
+  const ecart = decalageLocalMin(reference) - decalageLocalMin(cible);
+  return ecart === 0 ? cible : cible + ecart * 60000;
+}
+
 /**
  * Cette action doit-elle respecter la fenêtre 8h–20h ?
  *
@@ -336,7 +367,9 @@ async function resolveExecuteAt(
     const startField = evt?.start_at || evt?.start_time;
     if (startField) {
       const eventTime = new Date(startField).getTime();
-      const executeAt = new Date(eventTime + rule.delay_seconds * 1000);
+      const executeAt = new Date(
+        corrigerChangementDHeure(eventTime, eventTime + rule.delay_seconds * 1000),
+      );
       const retard = Date.now() - executeAt.getTime();
 
       if (retard > RETARD_TOLERE_MS) {
@@ -615,9 +648,40 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // un courriel de relance pouvait partir à 3h du matin.
     const taskType = task.action_config?.type;
     if ((taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()) {
+      const prochaine = nextSendTime();
+
+      /**
+       * Un rappel « X h avant » que le report ferait tomber APRÈS son objet
+       * n'a plus rien à rappeler : on l'annule au lieu de l'envoyer en retard.
+       *
+       * Le cas : rendez-vous à 7 h, rappel « 2 h avant » donc à 5 h — en
+       * pleine plage calme. Repoussé à 8 h, il arrivait UNE HEURE APRÈS le
+       * rendez-vous, avec un texte du genre « votre rendez-vous est dans
+       * 2 heures » alors que le technicien était déjà passé. Pire qu'un
+       * silence : le client doute de ce qu'il a lu.
+       */
+      const reference = task.action_config?.event_metadata?.start_time
+        ?? task.action_config?.event_metadata?.start_at;
+      const momentPrevu = reference ? new Date(String(reference)).getTime() : NaN;
+      if (Number.isFinite(momentPrevu) && prochaine.getTime() > momentPrevu) {
+        const { error: cancelError } = await supabase
+          .from('automation_scheduled_tasks')
+          // `execute_at` est conservé tel quel : il dit QUAND le rappel aurait
+          // dû partir, ce qu'on veut encore savoir en relisant une tâche
+          // annulée. L'écraser avec la fenêtre reportée raconterait l'inverse.
+          .update({ status: 'cancelled', completed_at: new Date().toISOString(), execute_at: task.execute_at, last_error: 'rappel périmé : la fenêtre d\'envoi tombe après le rendez-vous' })
+          .eq('id', task.id);
+        if (cancelError) {
+          console.error(`[automationEngine] failed to cancel stale reminder ${task.id}:`, cancelError.message);
+        } else {
+          logger.info(`[automationEngine] rappel annulé — la prochaine fenêtre d'envoi (${prochaine.toISOString()}) tombe après le rendez-vous`);
+        }
+        continue;
+      }
+
       const { error: pushError } = await supabase
         .from('automation_scheduled_tasks')
-        .update({ execute_at: nextSendTime().toISOString() })
+        .update({ execute_at: prochaine.toISOString() })
         .eq('id', task.id);
       if (pushError) {
         console.error(`[automationEngine] failed to push task ${task.id} out of quiet hours:`, pushError.message);
