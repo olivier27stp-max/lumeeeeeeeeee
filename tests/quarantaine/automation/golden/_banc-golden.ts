@@ -17,6 +17,8 @@ import type { AutomationPresetDef } from '../../../../server/lib/automationPrese
 import { clientEnregistreur, requetes } from '../_enregistreur';
 
 export const HORLOGE = '2026-09-13T15:00:00Z'; // 11:00 EDT
+/** La veille de l'horloge : donne au client une relation d'affaires en cours (LCAP). */
+const VEILLE = '2026-09-12T15:00:00Z';
 export const ORG = '11111111-1111-4111-8111-111111111111';
 export const IDS = {
   client: 'aaaaaaaa-0000-4000-8000-000000000001',
@@ -35,10 +37,15 @@ export function monde(preset: AutomationPresetDef) {
     automation_rules: { data: [{ id: `regle-${preset.preset_key}`, org_id: ORG, name: preset.name, trigger_event: preset.trigger_event, conditions: preset.conditions, delay_seconds: preset.delay_seconds, actions: preset.actions, is_active: true }] },
     company_settings: { data: { company_name: 'Plomberie Tremblay inc.', phone: '+14505550199', default_language: 'fr', google_review_url: 'https://g.page/r/plomberie-tremblay/review', facebook_review_url: null, review_enabled: true } },
     clients: { data: { ...CLIENT, status: 'lead', lead_status: preset.preset_key === 'lost_lead_reengagement' ? 'lost' : 'new', deleted_at: null } },
-    jobs: { data: { title: 'Nettoyage de gouttières', client_id: IDS.client, deposit_status: 'unpaid', currency: 'CAD' } },
+    // `created_at` la veille de l'horloge : ces presets se déclenchent APRÈS un
+    // job ou une facture, donc le client a une relation d'affaires en cours.
+    // Sans cette date, le calcul du consentement tacite (LCAP, 2 ans après un
+    // contrat) ne trouve aucune base et bloque les envois — ce qui ressemblait
+    // à 59 presets cassés alors que c'est le banc qui était incomplet.
+    jobs: { data: { title: 'Nettoyage de gouttières', client_id: IDS.client, deposit_status: 'unpaid', currency: 'CAD', created_at: VEILLE, deleted_at: null } },
     schedule_events: { data: { id: IDS.visite, job_id: IDS.job, start_at: '2026-09-25T13:00:00Z', end_at: '2026-09-25T14:00:00Z', status: 'scheduled', deleted_at: null, job: { id: IDS.job, title: 'Nettoyage de gouttières', property_address: '412 rue des Érables, Longueuil', client_id: IDS.client, client_name: 'Marie Tremblay', clients: CLIENT } } },
-    quotes: { data: { quote_number: 'Q-2026-042', total_cents: 162690, currency: 'CAD', valid_until: '2026-09-30', client_id: IDS.client, lead_id: null, job_id: IDS.job, status: 'sent', deleted_at: null } },
-    invoices: { data: { invoice_number: 'INV-000042', due_date: '2026-09-01', total_cents: 162690, client_id: IDS.client, job_id: IDS.job, status: 'sent' } },
+    quotes: { data: { quote_number: 'Q-2026-042', total_cents: 162690, currency: 'CAD', valid_until: '2026-09-30', client_id: IDS.client, lead_id: null, job_id: IDS.job, status: 'sent', deleted_at: null, created_at: VEILLE } },
+    invoices: { data: { invoice_number: 'INV-000042', due_date: '2026-09-01', total_cents: 162690, client_id: IDS.client, job_id: IDS.job, status: 'sent', created_at: VEILLE, deleted_at: null } },
     job_agreements: { data: null },
     memberships: { data: { user_id: IDS.owner } },
     sms_opt_outs: { data: null },

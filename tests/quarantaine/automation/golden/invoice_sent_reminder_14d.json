@@ -34,7 +34,7 @@
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
       "subject": "Plomberie Tremblay inc. — Facture INV-000042 impayée depuis 2 semaines",
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>La facture <strong>INV-000042</strong> de <strong>$1626.90</strong> est impayée depuis deux semaines.</p><p>Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>La facture <strong>INV-000042</strong> de <strong>1 626,90 $</strong> est impayée depuis deux semaines.</p><p>Merci de la régler rapidement. En cas de problème, répondez à ce courriel et on trouvera une solution.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },
     {

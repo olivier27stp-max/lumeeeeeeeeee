@@ -19,7 +19,7 @@
       "canal": "courriel",
       "to": "marie.tremblay@example.test",
       "subject": "Plomberie Tremblay inc. — Rappel : facture INV-000042",
-      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Petit rappel amical : la facture <strong>INV-000042</strong> de <strong>$1626.90</strong> est en attente de paiement.</p><p>Si vous avez déjà payé, ignorez ce message.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
+      "body": "<div style=\"font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;\"><h2>Bonjour Marie,</h2><p>Petit rappel amical : la facture <strong>INV-000042</strong> de <strong>1 626,90 $</strong> est en attente de paiement.</p><p>Si vous avez déjà payé, ignorez ce message.</p><p>Merci,<br/>Plomberie Tremblay inc.</p></div>",
       "moment": "differe"
     },
     {

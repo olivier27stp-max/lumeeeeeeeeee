@@ -38,7 +38,10 @@ vi.mock('../../../server/lib/mailer', () => ({
   isMailerConfigured: () => true,
   sendEmail: vi.fn(async (p: any) => { courriels.push({ to: p.to, subject: p.subject, html: p.html }); return { sent: true, messageId: 'golden' }; }),
 }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }) }));
+// `langueEntreprise` a été ajoutée au module après l'écriture de ce mock : son
+// absence faisait échouer 69 des 71 cas sur « No export is defined », ce qui
+// ressemblait à 69 défauts produit alors qu'il manquait UNE ligne au harnais.
+vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 
 import { AUTOMATION_PRESETS } from '../../../server/lib/automationPresets.data';
