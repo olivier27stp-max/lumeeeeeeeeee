@@ -73,7 +73,8 @@
     "qa:depense": "node --env-file=.env.local --import tsx scripts/qa/depense-llm.mts",
     "qa:fumee": "node --env-file=.env.local --import tsx scripts/qa/fumee-cout.mts",
     "test:quarantaine": "vitest run --config vitest.quarantaine.config.ts",
-    "qa:qualite": "node --env-file=.env.local --import tsx scripts/qa/qualite-lumi.mts"
+    "qa:qualite": "node --env-file=.env.local --import tsx scripts/qa/qualite-lumi.mts",
+    "qa:juge": "node --env-file=.env.local --import tsx scripts/qa/juge-lumi.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.124.0",
