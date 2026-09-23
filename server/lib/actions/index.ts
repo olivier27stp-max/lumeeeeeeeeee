@@ -44,6 +44,26 @@ function champLocalise(config: Record<string, any>, champ: string, langue?: 'fr'
 }
 
 /**
+ * DESTINATAIRE_IMPOSE (F18, 2026-09-23) — pourquoi `config.to` n'est plus lu.
+ * ──────────────────────────────────────────────────────────────────────────
+ * Une action d'automatisation acceptait `config.to` : un courriel ou un numéro
+ * écrit dans la règle, qui remplaçait le destinataire réel. Le message partait
+ * donc ailleurs, AVEC les données du client dedans — `[client_name]`,
+ * `[invoice_total]`, l'adresse. Un chemin d'exfiltration ouvert à quiconque
+ * peut modifier une règle.
+ *
+ * Mesuré avant de le retirer : aucun champ dans l'interface pour le saisir,
+ * aucun preset qui l'utilise, et ZÉRO usage sur 671 règles réelles (210 en
+ * production, 461 en staging). Personne ne perd rien.
+ *
+ * Le destinataire vient désormais toujours de l'entité concernée
+ * (`vars.client_email` / `vars.client_phone`), et de nulle part ailleurs.
+ * Si un jour il faut prévenir quelqu'un d'autre que le client — le patron,
+ * par exemple — ça passera par une action dédiée avec sa propre garde, pas
+ * par un champ libre.
+ */
+
+/**
  * Le fuseau dans lequel un client lit ses messages. Identique à `QUIET_TZ`
  * dans `automationEngine.ts` (la fenêtre 8h–20h) : les deux décrivent la même
  * chose — l'heure locale de l'entreprise et de ses clients, au Québec.
@@ -194,6 +214,20 @@ async function consentementCommercial(
   // Le client n'est identifiable que par son adresse/numéro : sans
   // destinataire, l'appelant a déjà échoué avant nous.
   if (!destinataire) return { autorise: true };
+
+  /**
+   * Un SMS TRANSACTIONNEL n'a rien à vérifier ici : le consentement ne
+   * concerne que le commercial, et le retrait (STOP) est déjà contrôlé par
+   * `sms_opt_outs` avant cet appel. On lisait pourtant `clients` à chaque
+   * confirmation de rendez-vous pour finir par un `{ autorise: true }` —
+   * une requête par envoi, pour rien.
+   *
+   * Le courriel transactionnel, lui, continue de passer par la lecture :
+   * `email_opt_out_at` bloque TOUT courriel, y compris transactionnel, et
+   * c'est cette colonne qu'il faut aller chercher.
+   */
+  if (!ctx.commercial && canal === 'sms') return { autorise: true };
+
   try {
     const colonne = canal === 'email' ? 'email' : 'phone';
     const valeur = canal === 'email' ? destinataire.trim().toLowerCase() : normalizeE164(destinataire);
@@ -649,7 +683,10 @@ export async function executeSendEmail(
   vars: Record<string, string>,
   ctx: ActionContext,
 ): Promise<ActionResult> {
-  const to = config.to ? resolveTemplate(config.to, vars) : vars.client_email;
+  // Le destinataire vient TOUJOURS de l'entité, jamais de la règle.
+  // Voir `DESTINATAIRE_IMPOSE` plus haut : `config.to` permettait d'envoyer les
+  // données d'un client (nom, montants, adresse) vers une adresse arbitraire.
+  const to = vars.client_email;
   if (!to) return { success: false, error: 'No recipient email' };
 
   const subject = resolveTemplate(champLocalise(config, 'subject', ctx.langue), vars);
@@ -782,7 +819,9 @@ export async function executeSendSms(
 ): Promise<ActionResult> {
   if (!ctx.twilio) return { success: false, error: 'Twilio not configured' };
 
-  const to = config.to ? resolveTemplate(config.to, vars) : vars.client_phone;
+  // Même règle que pour le courriel : le numéro vient de l'entité, pas de la
+  // règle. Voir `DESTINATAIRE_IMPOSE`.
+  const to = vars.client_phone;
   if (!to) return { success: false, error: 'No recipient phone' };
 
   // CASL compliance — manual sends already blocked opted-out recipients, but

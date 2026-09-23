@@ -31,7 +31,7 @@ vi.mock('../../../server/lib/mailer', () => ({
   isMailerConfigured: () => true,
   sendEmail: vi.fn(async (p: { to: string; subject: string }) => { courriels.push({ to: p.to, subject: p.subject }); return { sent: true, messageId: 'test' }; }),
 }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }) }));
+vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 const twilio = { messages: { create: vi.fn(async (p: { to: string; body: string }) => { sms.push({ to: p.to, body: p.body, args: p }); return { sid: `SM_${sms.length}` }; }) } };
 
