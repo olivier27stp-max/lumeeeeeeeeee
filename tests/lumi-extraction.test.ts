@@ -38,11 +38,20 @@ describe('extraction → action', () => {
 });
 
 describe('prompt et branchement', () => {
-  it('le prompt explique l extraction et ses refus ; la route ne l applique que sous le seuil de confiance et sans action', () => {
-    expect(PROMPT_ROUTEUR).toContain('Extraction (champ « extraction », sinon null)');
-    expect(PROMPT_ROUTEUR).toContain('« texte à Linda qu\'on arrive » demande de rédiger → pas d\'extraction');
+  it('la consigne d\'extraction est EN SOMMEIL dans le prompt, mais le branchement reste entier', () => {
+    // Retirée du prompt le 2026-09-22 : 0 extraction sur 46 verdicts, et la
+    // raison est mesurée — ZÉRO écriture proposée sur 93 tours du canal
+    // `lumi` en 30 jours. Elle n'a rien raté, elle n'a pas eu d'occasion,
+    // tout en coûtant ~500 tokens de prompt par tour.
+    expect(PROMPT_ROUTEUR).not.toContain('Extraction (champ');
+
+    // Le code aval n'a pas bougé : remettre la section du prompt et le champ
+    // `extraction` au schéma de l'outil `classer` suffit à la réveiller.
     const r = readFileSync(resolve(__dirname, '..', 'server', 'routes', 'lumi.ts'), 'utf8');
     expect(r).toContain("if (routeur?.verdict?.extraction && routeur.decision === 'modele' && routeur.verdict.confidence >= SEUIL_CONFIANCE)");
     expect(r).toContain('raccourci: `extraction:${a.id}`');
+    // Et le schéma Zod tolère toujours le champ, donc rien ne casse au réveil.
+    const rt = readFileSync(resolve(__dirname, '..', 'server', 'lib', 'lumi', 'routeur.ts'), 'utf8');
+    expect(rt).toContain('extraction: extractionSchema.nullable().optional()');
   });
 });
