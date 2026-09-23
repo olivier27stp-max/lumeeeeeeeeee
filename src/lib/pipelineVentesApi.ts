@@ -435,6 +435,24 @@ export async function marquerPerdu(dealId: string, versEtapeId: string, raison: 
   if (error) throw error;
 }
 
+/**
+ * Abandonner un deal : le client ne répond plus, on arrête de relancer.
+ *
+ * Différent de « perdu », où le client a dit non. Confondus, le taux de
+ * closing compte comme défaite commerciale un deal qui n'a jamais été
+ * arbitré — et « pourquoi on perd » devient illisible.
+ *
+ * Le vendeur n'a pas à choisir une étape : la fonction place le deal dans
+ * l'étape perdue du pipeline elle-même.
+ */
+export async function abandonnerDeal(dealId: string, raison: string): Promise<void> {
+  const { error } = await supabase.rpc('pipeline_abandonner_deal', {
+    p_deal_id: dealId,
+    p_raison: raison.trim() || null,
+  });
+  if (error) throw error;
+}
+
 export async function assignerDeal(dealId: string, membreId: string | null): Promise<void> {
   const { error } = await supabase
     .from('deals')
