@@ -453,6 +453,38 @@ export async function majContactDuDeal(
   if (error) throw error;
 }
 
+/**
+ * Crée un deal à la main, depuis le board.
+ *
+ * Passe par `ingest_lead` — la porte d'entrée unique déjà utilisée par le
+ * formulaire public. Un deal créé ici suit donc exactement le même chemin
+ * qu'un lead entrant : rapprochement sur le téléphone ou le courriel,
+ * première étape ouverte, non assigné. Écrire directement dans `deals`
+ * contournerait tout ça et créerait un doublon pour un client existant.
+ */
+export async function creerDealManuel(champs: {
+  prenom: string;
+  nom?: string | null;
+  courriel?: string | null;
+  telephone?: string | null;
+  adresse?: string | null;
+}): Promise<{ dealId: string; fusionne: boolean; dealExistant: boolean }> {
+  // `pipeline_creer_deal` ne prend PAS d'organisation : elle la dérive de la
+  // session et vérifie la permission « leads.create ». `ingest_lead` reste
+  // réservée au serveur — elle accepte un org_id en paramètre, ce qui n'a rien
+  // à faire dans un navigateur.
+  const { data, error } = await supabase.rpc('pipeline_creer_deal', {
+    p_first_name: champs.prenom,
+    p_last_name: champs.nom ?? null,
+    p_email: champs.courriel ?? null,
+    p_phone: champs.telephone ?? null,
+    p_address: champs.adresse ?? null,
+  });
+  if (error) throw error;
+  const r = data as { deal_id: string; fusionne: boolean; deal_existant: boolean };
+  return { dealId: r.deal_id, fusionne: r.fusionne, dealExistant: r.deal_existant };
+}
+
 // ── Réglages des étapes ─────────────────────────────────────
 
 export async function renommerEtape(

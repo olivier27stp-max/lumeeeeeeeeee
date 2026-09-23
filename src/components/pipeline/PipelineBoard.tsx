@@ -10,7 +10,7 @@
  * ne reste qu'une pastille ronde devant le nom. La couleur porte l'information
  * qui presse (priorité sur le liseré gauche des cartes), pas la décoration.
  */
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   DndContext, DragOverlay, PointerSensor, closestCorners, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
@@ -18,14 +18,15 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowUpDown, Download, Filter, GripVertical, LayoutGrid, List, MoreVertical, Plus, Search,
+  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Upload,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ActionsRapides from './ActionsRapides';
+import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
-  estJobACreer, nomClient, priorite, type Deal, type PipelineStage,
+  creerDealManuel, estJobACreer, nomClient, priorite, type Deal, type PipelineStage,
 } from '../../lib/pipelineVentesApi';
 import {
   LIBELLE_SOURCE, initiales, rangsOuverts, visuelEtape,
@@ -364,6 +365,171 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
   );
 }
 
+// ── Export CSV ──
+
+/**
+ * Une valeur qui contient le séparateur, un guillemet ou un saut de ligne casse
+ * le fichier si on la pose telle quelle : on l'entoure de guillemets et on
+ * double les guillemets internes (RFC 4180).
+ */
+function champCsv(valeur: string): string {
+  if (!/[";\r\n]/.test(valeur)) return valeur;
+  return `"${valeur.replace(/"/g, '""')}"`;
+}
+
+/** « 2026-09-23 » — nom de fichier et colonnes de dates, sans ambiguïté de locale. */
+function jourIso(d: Date): string {
+  const mois = String(d.getMonth() + 1).padStart(2, '0');
+  const jour = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mois}-${jour}`;
+}
+
+function telechargerCsv(lignes: string[][], nomFichier: string): void {
+  const corps = lignes.map((l) => l.map(champCsv).join(';')).join('\r\n');
+  // BOM UTF-8 : sans lui, Excel francophone lit les accents en Latin-1.
+  const blob = new Blob([`﻿${corps}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const lien = document.createElement('a');
+  lien.href = url;
+  lien.download = nomFichier;
+  document.body.appendChild(lien);
+  lien.click();
+  document.body.removeChild(lien);
+  URL.revokeObjectURL(url);
+}
+
+// ── Nouveau deal ──
+
+interface ChampsDeal {
+  prenom: string;
+  nom: string;
+  courriel: string;
+  telephone: string;
+  adresse: string;
+}
+
+const CHAMPS_DEAL_VIDES: ChampsDeal = { prenom: '', nom: '', courriel: '', telephone: '', adresse: '' };
+
+/**
+ * Petit formulaire de création. En cas d'erreur de la base, il reste ouvert
+ * avec les valeurs saisies : retaper une adresse parce qu'un courriel était
+ * déjà pris est la meilleure façon de perdre quelqu'un.
+ */
+function ModalNouveauDeal({ ouvert, fr, onFermer, onCree }: {
+  ouvert: boolean;
+  fr: boolean;
+  onFermer: () => void;
+  onCree: () => void;
+}) {
+  const [champs, setChamps] = useState<ChampsDeal>(CHAMPS_DEAL_VIDES);
+  const [envoi, setEnvoi] = useState(false);
+  const idPrenom = useId();
+  const idNom = useId();
+  const idCourriel = useId();
+  const idTelephone = useId();
+  const idAdresse = useId();
+
+  function fermer() {
+    setChamps(CHAMPS_DEAL_VIDES);
+    onFermer();
+  }
+
+  function vide(v: string): string | null {
+    const t = v.trim();
+    return t === '' ? null : t;
+  }
+
+  async function soumettre(e: FormEvent) {
+    e.preventDefault();
+    const prenom = champs.prenom.trim();
+    if (prenom === '') {
+      toast.error(fr ? 'Le prénom est requis.' : 'First name is required.');
+      return;
+    }
+    setEnvoi(true);
+    try {
+      const r = await creerDealManuel({
+        prenom,
+        nom: vide(champs.nom),
+        courriel: vide(champs.courriel),
+        telephone: vide(champs.telephone),
+        adresse: vide(champs.adresse),
+      });
+      if (r.dealExistant) {
+        toast.success(fr
+          ? 'Ce contact avait déjà un deal ouvert : la demande y a été ajoutée.'
+          : 'This contact already had an open deal: the request was added to it.');
+      } else if (r.fusionne) {
+        toast.success(fr
+          ? 'Un client existant a été retrouvé : le deal lui est rattaché.'
+          : 'An existing client was found: the deal is linked to them.');
+      } else {
+        toast.success(fr ? 'Deal créé.' : 'Deal created.');
+      }
+      onCree();
+      fermer();
+    } catch (err) {
+      console.error('[pipeline] création de deal refusée', err);
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  const champsTexte: { id: string; cle: keyof ChampsDeal; label: string; type: string; requis: boolean }[] = [
+    { id: idPrenom, cle: 'prenom', label: fr ? 'Prénom' : 'First name', type: 'text', requis: true },
+    { id: idNom, cle: 'nom', label: fr ? 'Nom' : 'Last name', type: 'text', requis: false },
+    { id: idCourriel, cle: 'courriel', label: fr ? 'Courriel' : 'Email', type: 'email', requis: false },
+    { id: idTelephone, cle: 'telephone', label: fr ? 'Téléphone' : 'Phone', type: 'tel', requis: false },
+    { id: idAdresse, cle: 'adresse', label: fr ? 'Adresse' : 'Address', type: 'text', requis: false },
+  ];
+
+  return (
+    <Modal
+      open={ouvert}
+      onClose={fermer}
+      size="md"
+      title={fr ? 'Nouveau deal' : 'New deal'}
+      description={fr
+        ? 'Le deal apparaîtra dans la première étape ouverte du pipeline.'
+        : 'The deal will appear in the first open stage of the pipeline.'}
+    >
+      <form onSubmit={soumettre} className="flex flex-col gap-3">
+        {champsTexte.map((c) => (
+          <div key={c.id}>
+            <label htmlFor={c.id} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {c.label}
+              {c.requis && <span aria-hidden="true"> *</span>}
+            </label>
+            <input
+              id={c.id}
+              type={c.type}
+              required={c.requis}
+              value={champs[c.cle]}
+              onChange={(e) => setChamps((v) => ({ ...v, [c.cle]: e.target.value }))}
+              className={CLASSE_CHAMP}
+            />
+          </div>
+        ))}
+
+        <div className="mt-1 flex items-center justify-end gap-2.5">
+          <button type="button" onClick={fermer} className={CLASSE_BOUTON}>
+            {fr ? 'Annuler' : 'Cancel'}
+          </button>
+          <button
+            type="submit"
+            disabled={envoi}
+            className={cn(CLASSE_BOUTON, 'font-semibold text-white disabled:opacity-60')}
+            style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}
+          >
+            {envoi ? (fr ? 'Création…' : 'Creating…') : (fr ? 'Créer le deal' : 'Create deal')}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Barre d'outils ──
 
 interface EtatFiltres {
@@ -385,7 +551,7 @@ const VUES: Record<VueEnregistree, { fr: string; en: string; filtres: EtatFiltre
 
 function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
-  onFiltres, onBasculerPanneau, onTri, onAffichage,
+  onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onNouveauDeal,
 }: {
   fr: boolean;
   total: number;
@@ -399,6 +565,9 @@ function BarreOutils({
   onBasculerPanneau: () => void;
   onTri: () => void;
   onAffichage: (a: Affichage) => void;
+  /** Télécharge les deals ACTUELLEMENT filtrés en CSV. */
+  onExporter: () => void;
+  onNouveauDeal: () => void;
 }) {
   // `useId()` : ce composant peut réapparaître, un id littéral se dupliquerait.
   const idPipeline = useId();
@@ -506,38 +675,19 @@ function BarreOutils({
             </button>
           </span>
 
-          <button
-            type="button"
-            onClick={() => toast.info(fr
-              ? 'Import CSV : mêmes colonnes que la page Clients.'
-              : 'CSV import: same columns as the Clients page.')}
-            className={CLASSE_BOUTON}
-          >
-            <Download size={13} aria-hidden="true" />
-            {fr ? 'Importer' : 'Import'}
+          <button type="button" onClick={onExporter} className={CLASSE_BOUTON}>
+            <Upload size={13} aria-hidden="true" />
+            {fr ? 'Exporter' : 'Export'}
           </button>
 
           <button
             type="button"
-            onClick={() => toast.info(fr
-              ? 'Le nouveau deal se créera ici, dans la première étape ouverte.'
-              : 'A new deal will be created here, in the first open stage.')}
+            onClick={onNouveauDeal}
             className={cn(CLASSE_BOUTON, 'font-semibold text-white')}
             style={{ background: 'var(--color-accent)', borderColor: 'var(--color-accent)' }}
           >
             <Plus size={13} aria-hidden="true" />
             {fr ? 'Nouveau deal' : 'New deal'}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => toast.info(fr
-              ? 'Exporter · Actions en lot · Gérer les champs affichés.'
-              : 'Export · Bulk actions · Manage displayed fields.')}
-            aria-label={fr ? 'Plus d’actions' : 'More actions'}
-            className={cn(CLASSE_BOUTON, 'px-2.5')}
-          >
-            <MoreVertical size={14} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -642,6 +792,7 @@ export default function PipelineBoard({
   const [tri, setTri] = useState<Tri>('montant');
   const [affichage, setAffichage] = useState<Affichage>('kanban');
   const [vue, setVue] = useState<VueEnregistree>('ouverts');
+  const [nouveauDeal, setNouveauDeal] = useState(false);
   const verrous = useRef<Set<string>>(new Set());
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -699,6 +850,36 @@ export default function PipelineBoard({
     setFiltres(VUES[v].filtres);
   }
 
+  /** Exporte ce qui est à l'écran — les deals filtrés, pas la base entière. */
+  function exporter() {
+    const entetes = fr
+      ? ['Client', 'Étape', 'Montant', 'Source', 'Campagne', 'Assigné', 'Créé le', 'Dernière activité']
+      : ['Client', 'Stage', 'Amount', 'Source', 'Campaign', 'Assignee', 'Created on', 'Last activity'];
+    const lignes = filtres_.map((d) => {
+      const etape = etapes.find((e) => e.id === d.stage_id);
+      const cents = montants[d.id];
+      const assigne = d.assigned_user_id
+        ? membres.find((m) => m.id === d.assigned_user_id)?.name ?? ''
+        : '';
+      return [
+        nomClient(d),
+        etape ? (fr ? etape.name_fr : etape.name_en) : '',
+        // Nombre brut : un « 4 990 $ » avec espace insécable ne s'additionne pas
+        // dans un tableur. La virgule décimale suit la locale francophone.
+        cents === undefined ? '' : (fr ? (cents / 100).toFixed(2).replace('.', ',') : (cents / 100).toFixed(2)),
+        libelleSource(d.source, fr),
+        d.utm_campaign ?? '',
+        assigne,
+        jourIso(new Date(d.created_at)),
+        jourIso(new Date(d.last_activity_at)),
+      ];
+    });
+    telechargerCsv([entetes, ...lignes], `pipeline-${jourIso(new Date())}.csv`);
+    toast.success(fr
+      ? `${lignes.length} deal(s) exporté(s).`
+      : `${lignes.length} deal(s) exported.`);
+  }
+
   function onDragEnd(event: DragEndEvent) {
     setActif(null);
     const { active, over } = event;
@@ -740,6 +921,15 @@ export default function PipelineBoard({
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
         onAffichage={setAffichage}
+        onExporter={exporter}
+        onNouveauDeal={() => setNouveauDeal(true)}
+      />
+
+      <ModalNouveauDeal
+        ouvert={nouveauDeal}
+        fr={fr}
+        onFermer={() => setNouveauDeal(false)}
+        onCree={() => onChangement?.()}
       />
 
       {/* Vues enregistrées : un filtre nommé une fois, retrouvé d'un clic. */}
@@ -765,15 +955,6 @@ export default function PipelineBoard({
             {fr ? VUES[v].fr : VUES[v].en}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={() => toast.info(fr
-            ? 'La vue courante serait enregistrée ici, avec son nom.'
-            : 'The current view would be saved here, with its name.')}
-          className="whitespace-nowrap rounded-full border border-dashed border-outline px-3 py-1.5 text-[12.5px] font-medium text-text-muted hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
-        >
-          {fr ? '+ Vue' : '+ View'}
-        </button>
       </div>
 
       {chargement && (
