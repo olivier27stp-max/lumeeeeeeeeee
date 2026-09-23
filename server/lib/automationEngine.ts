@@ -454,12 +454,21 @@ async function handleEvent(event: CRMEvent) {
 
   try {
     // ── 1. Match automation_rules (legacy system) ──
+    // L'ordre est EXPLICITE : sans `order by`, PostgreSQL n'en garantit aucun.
+    // Deux règles sur le même événement — « confirmer » puis « prévenir
+    // l'équipe » — pouvaient s'exécuter dans un ordre différent d'un appel à
+    // l'autre, et un bug qui n'apparaît qu'une fois sur deux est le plus long
+    // à diagnostiquer. `created_at` d'abord (la plus ancienne règle en
+    // premier), `id` pour départager deux règles créées dans la même
+    // milliseconde — un seeder en insère plusieurs d'un coup.
     const { data: rules, error } = await engineConfig.supabase
       .from('automation_rules')
       .select('*')
       .eq('org_id', event.orgId)
       .eq('trigger_event', event.type)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (error) {
       console.error('[automationEngine] failed to fetch rules:', error.message);

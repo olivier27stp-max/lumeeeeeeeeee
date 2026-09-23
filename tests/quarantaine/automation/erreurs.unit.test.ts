@@ -24,6 +24,13 @@ const mailer = { sendEmail: vi.fn(async (_p: any) => ({ sent: true, messageId: '
 vi.mock('../../../server/lib/mailer', () => ({ isMailerConfigured: () => true, sendEmail: (p: any) => mailer.sendEmail(p) }));
 vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
+// Le gel des communications lit la base par `getServiceClient()` — le VRAI
+// client, pas le faux du test : la lecture échouait et aucun envoi ne partait.
+vi.mock('../../../server/lib/migration/gel-communications', () => ({
+  destinataireGele: async () => null,
+  journaliserBlocage: () => {},
+  MESSAGE_GEL: 'gel',
+}));
 
 import { clientEnregistreur, requetes, type Requete } from './_enregistreur';
 
