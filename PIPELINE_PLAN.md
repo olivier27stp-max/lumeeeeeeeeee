@@ -1,6 +1,7 @@
 # PIPELINE_PLAN.md — Pipeline de ventes (avant-job)
 
-> **Statut : PHASES 0, 1 et 2 livrées. Migrations appliquées sur STAGING seulement.**
+> **Statut : PHASES 0 à 3 livrées — appliquées en PRODUCTION, PR #478 ouverte.**
+> Reste : Phase 4 (ingestion), 5 (branchement UI), 6 (statistiques), 7 (tests CI).
 > Audit en lecture seule du 2026-09-23 contre `origin/main` (15a719ee).
 > Aucune écriture en base, aucune migration, aucun commit.
 > Ce fichier est le plan d'origine **réécrit contre le code réel**. Les écarts
@@ -290,7 +291,26 @@ Inchangées dans l'esprit ; corrigées sur les faits. **STOP + rapport après ch
   avec `kind open|won|lost`, `deals` sans montant, `deal_stage_history`.
   Décision à documenter : colonnes de scoping sur `automation_rules`
   (`pipeline_id`, `stage_id`) + nouveaux déclencheurs.
-- **Phase 3 — Seed + nettoyage.** Presets Nettoyage/Construction. Dump SQL **avant**
+- **Phase 3 — Seed.** ✅ **LIVRÉE (prod).**
+  `20260923110000_pipeline_presets_seed.sql` — `seed_pipeline_ventes(org, modèle)`,
+  idempotente, 3 modèles (générique / nettoyage / construction), 6 étapes avec
+  conseils FR+EN. Semée pour les orgs existantes (**prod : 6 orgs, 36 étapes** ;
+  staging : 15 orgs, 90 étapes) et branchée sur
+  `handle_org_created_seed_automations()` pour les suivantes, avec son garde-fou
+  (un échec de seed ne bloque jamais la création d'une org). Idempotence vérifiée
+  en relançant le seed : aucun doublon.
+  **Aucune règle d'automatisation semée** : les recettes viendront avec l'écran
+  qui permet de les voir et de les éteindre (Phase 5).
+
+- **Phase 3b — Retrait de l'ancien pipeline (PAS FAIT, volontairement).**
+  `pipeline_deals` est **intact** (23 deals actifs en prod). Son retrait exige
+  d'abord de rebrancher `field_pins` (Vente Map) et le moteur de commissions,
+  qui lisent aujourd'hui `pipeline_deals.pin_id` et les deals gagnés. Les
+  colonnes `deals.pin_id` et `deals.field_rep_id` existent déjà pour ça.
+  À faire APRÈS que le nouveau pipeline tourne — on ne casse rien tant que le
+  remplaçant n'est pas en service.
+
+- **Phase 3 (référence d'origine) — Seed + nettoyage.** Presets Nettoyage/Construction. Dump SQL **avant**
   tout drop. Le drop de `pipeline_deals` n'est possible qu'après avoir traité
   ses 5 triggers externes, ses 2 crons, ses 2 vues, ses 14 fonctions et ses
   3 écrivains.
