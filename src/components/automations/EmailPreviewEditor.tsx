@@ -17,8 +17,8 @@ import { confirmer } from '../ui/ConfirmDialog';
 import { cn } from '../../lib/utils';
 import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
 import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
-import { variablesPour } from '../../lib/variablesCourriel';
-import { apercuCourriel } from '../../lib/emailTemplatesApi';
+import { variablesPour, VARIABLES_PAR_TYPE } from '../../lib/variablesCourriel';
+import { apercuCourriel, envoyerEssaiCourriel } from '../../lib/emailTemplatesApi';
 
 interface Props {
   /** Règle d'automatisation visée. Absent quand `enregistrerTexte` est fourni. */
@@ -82,6 +82,13 @@ interface Entreprise {
   company_phone?: string | null;
   company_email?: string | null;
 }
+
+/* Toutes les clés que Lume connaît, tous postes confondus. Sert à repérer
+   celle qui existe AILLEURS : « [quote_number] » dans une facture a l'air
+   juste, mais le serveur ne la remplit pas là et elle partirait en blanc. */
+const TOUTES_LES_CLES = new Set(
+  Object.values(VARIABLES_PAR_TYPE).flat().map((v) => v.cle),
+);
 
 let compteurId = 0;
 
@@ -172,12 +179,27 @@ export default function EmailPreviewEditor({
   const [ongletApercu, setOngletApercu] = useState(false);
   const [htmlReel, setHtmlReel] = useState<string | null>(null);
   const [chargementApercu, setChargementApercu] = useState(false);
+  const [essaiEnCours, setEssaiEnCours] = useState(false);
+
+  /* S'envoyer le courriel, pour le voir dans une vraie boîte. L'aperçu montre
+     le bon rendu, mais il ne dit pas comment Gmail coupe l'objet, ni à quoi
+     ressemble le courriel sur un téléphone. */
+  const envoyerEssai = async () => {
+    setEssaiEnCours(true);
+    try {
+      const adresse = await envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs)), objet, typeCourriel);
+      if (adresse) toast.success(fr ? `Essai envoyé à ${adresse}` : `Test sent to ${adresse}`);
+      else toast.error(fr ? 'Envoi impossible' : 'Could not send');
+    } finally {
+      setEssaiEnCours(false);
+    }
+  };
 
   useEffect(() => {
     if (!ongletApercu) return;
     let vivant = true;
     setChargementApercu(true);
-    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)))
+    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)), typeCourriel)
       .then((h) => { if (vivant) setHtmlReel(h); })
       .finally(() => { if (vivant) setChargementApercu(false); });
     return () => { vivant = false; };
@@ -192,6 +214,66 @@ export default function EmailPreviewEditor({
   const variables = typeCourriel
     ? variablesPour(typeCourriel).map((v) => ({ cle: v.cle, fr: v.fr, en: v.en }))
     : VARIABLES_PROPOSEES;
+
+  /* Les variables ÉCRITES qui n'existent pas.
+
+     Deux façons de se tromper, et aucune ne se voyait :
+
+       [invoice_numbr]  une lettre en moins → le serveur remplace par du VIDE.
+                        Le client reçoit « Facture  » : un trou, pas un crochet.
+       [montant_dû]     un accent, un tiret ou une espace dans la clé → le
+                        serveur ne reconnaît RIEN (`applyTemplate` utilise
+                        `\w`) et le crochet part tel quel chez le client.
+
+     Le second cas est le piège francophone : écrire `[montant_dû]` est
+     naturel, et c'est précisément ce qui casse.
+
+     On ne peut pas effacer tous les crochets à l'envoi — « Rabais [50 %] »
+     est un texte légitime. La seule bonne place pour attraper ça, c'est ici,
+     pendant qu'on écrit. */
+  const inconnues = useMemo(() => {
+    const connues = new Set(variables.map((v) => v.cle));
+    const vues = new Set<string>();
+    const texte = `${objet} ${blocsEnTexte(blocs)}`;
+    // La clé peut contenir n'importe quoi sauf le crochet fermant : c'est
+    // ainsi qu'on attrape `[client-name]` et `[montant_dû]`, que le serveur
+    // ne reconnaîtrait pas.
+    for (const m of texte.matchAll(/[[{]([^\]}]{1,40})[\]}]/g)) {
+      const cle = m[1].trim();
+      /* Un crochet de texte courant n'est pas une variable ratée, et crier
+         dessus apprendrait vite à ignorer l'avertissement — ce qui le rendrait
+         inutile le jour où il a raison.
+
+         Distinguer « [50 %] » de « [invoice_numbr] » par la forme seule est
+         fragile : « [ci-dessous] » ressemble à une clé, « [client name] » n'y
+         ressemble pas. On compare donc à ce qui EXISTE : on ne signale que ce
+         qui est proche d'une variable connue (une lettre en trop, en moins ou
+         changée, ou la même clé écrite autrement). Le reste est du texte, et
+         on se tait. */
+      if (connues.has(cle)) continue;
+      /* Une variable d'un AUTRE poste : elle existe quelque part, donc elle a
+         l'air juste — mais le serveur ne la remplit pas ici, et elle partirait
+         en blanc. C'est le cas le plus sournois : rien dans le mot ne cloche. */
+      if (TOUTES_LES_CLES.has(cle)) { vues.add(cle); continue; }
+      const nu = (x: string) => x.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+      const cleNue = nu(cle);
+      const ressemble = [...connues].some((k) => {
+        const kn = nu(k);
+        if (kn === cleNue) return true;                       // même clé, autre écriture
+        if (Math.abs(kn.length - cleNue.length) > 3) return false;
+        /* Un préfixe commun long : « invoice_amont » et « invoice_amount »
+           partagent « invoice_am », soit assez pour dire que l'un visait
+           l'autre. Le seuil est haut (7 caractères ou les trois quarts) pour
+           que deux mots français courants ne se ressemblent pas par hasard. */
+        let commun = 0;
+        while (commun < kn.length && commun < cleNue.length && kn[commun] === cleNue[commun]) commun++;
+        return commun >= Math.min(7, Math.ceil(Math.max(kn.length, cleNue.length) * 0.75));
+      });
+      if (!ressemble) continue;
+      if (!connues.has(cle)) vues.add(cle);
+    }
+    return [...vues];
+  }, [objet, blocs, variables]);
 
   // L'en-tête et le pied de page sont ajoutés par le SERVEUR à l'envoi
   // (`buildEmailLayout`), comme pour une facture ou un devis. Les afficher ici
@@ -388,6 +470,18 @@ export default function EmailPreviewEditor({
                   : 'Preview unavailable right now. Your text is safe — go back to “Edit”.'}
               </p>
             )}
+            <div className="mx-auto mt-3 flex max-w-[600px] justify-center">
+              <button
+                type="button"
+                onClick={() => void envoyerEssai()}
+                disabled={essaiEnCours}
+                className="rounded-lg border border-outline/60 bg-surface px-4 py-2 text-[12.5px] font-semibold text-text-secondary hover:bg-surface-secondary disabled:opacity-60"
+              >
+                {essaiEnCours
+                  ? (fr ? 'Envoi…' : 'Sending…')
+                  : (fr ? 'M’envoyer un essai' : 'Send me a test')}
+              </button>
+            </div>
             <p className="mx-auto mt-2 max-w-[600px] text-center text-[10px] leading-relaxed text-text-tertiary">
               {fr
                 ? 'Rendu par le serveur, avec le même gabarit qu’à l’envoi. Le montant et le bouton sont des exemples ; les valeurs entre crochets seront remplacées par les vraies données du client.'
@@ -513,6 +607,29 @@ export default function EmailPreviewEditor({
               : 'Header and footer come from your company settings. Bracketed values are replaced with the client’s real data.'}
           </p>
         </div>
+        )}
+
+        {/* L'avertissement, juste au-dessus du bouton Enregistrer : c'est le
+            dernier moment où quelqu'un peut corriger avant que son client
+            reçoive un trou. On ne bloque PAS l'enregistrement — une entreprise
+            peut avoir une raison d'écrire un crochet, et l'empêcher
+            d'enregistrer son travail pour un avertissement serait pire que le
+            défaut qu'on signale. */}
+        {inconnues.length > 0 && (
+          <div className="shrink-0 border-t border-amber-500/30 bg-amber-500/10 px-5 py-2.5">
+            <p className="text-[11px] leading-relaxed text-amber-800 dark:text-amber-300">
+              <span className="font-semibold">
+                {fr
+                  ? `${inconnues.length > 1 ? 'Ces variables n’existent pas' : 'Cette variable n’existe pas'} : `
+                  : `${inconnues.length > 1 ? 'These variables don’t exist' : 'This variable doesn’t exist'}: `}
+              </span>
+              {inconnues.map((c) => `[${c}]`).join(', ')}
+              {' — '}
+              {fr
+                ? 'votre client verra un blanc, ou le crochet tel quel. Utilisez les boutons « Insérer » ci-dessous.'
+                : 'your client will see a blank, or the bracket as-is. Use the “Insert” buttons below.'}
+            </p>
+          </div>
         )}
 
         {/* Pied : variables + enregistrement */}

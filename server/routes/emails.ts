@@ -18,6 +18,7 @@ import { lireLiensSociaux, type SocialLinks } from '../lib/socialLinks';
 import { expediteurDe } from '../lib/courriels/domaines';
 import { rendreCourrielClient, montant as montantLisible, dateLisible, langueDe, MOTS, type Marque, type Langue } from '../lib/courriels/gabarit';
 import { texteDuCourriel, assainirHtmlCourriel } from '../lib/courriels/modeles';
+import { remplacerParExemples } from '../../src/lib/variablesCourriel';
 
 const router = Router();
 
@@ -692,6 +693,16 @@ router.post('/emails/apercu', async (req, res) => {
 
     const company = await getCompanySettings(auth.orgId);
 
+    /* Les variables remplacées par leurs exemples, comme à l'envoi.
+
+       Sans ça, l'aperçu affichait « Bonjour [client_name] » — exactement le
+       genre d'écart que cette route devait supprimer. On rend donc ce que le
+       client verra : un nom, un montant, une date.
+
+       `remplacerParExemples` gère les deux syntaxes, comme `applyTemplate`. */
+    const type = typeof req.body?.type === 'string' ? req.body.type : undefined;
+    const avecExemples = (t: string) => remplacerParExemples(t, type, langueEntreprise(company) === 'fr');
+
     /* Un bouton d'exemple : le gabarit en pose un à l'envoi, et sans lui
        l'aperçu montrerait un courriel plus court que le vrai — l'entreprise
        écrirait « cliquez sur le lien ci-dessous » en croyant qu'il manque. */
@@ -699,7 +710,7 @@ router.post('/emails/apercu', async (req, res) => {
     const html = rendreCourrielClient({
       langue: langueEntreprise(company),
       marque: marqueDepuis(company),
-      corpsHtml: assainirHtmlCourriel(corps),
+      corpsHtml: avecExemples(assainirHtmlCourriel(corps)),
       montant: { libelle: fr ? 'Montant à payer' : 'Amount due', valeur: fr ? '1 220,17 $' : '$1,220.17' },
       bouton: {
         texte: fr ? 'Voir et payer' : 'View and pay',
@@ -708,6 +719,27 @@ router.post('/emails/apercu', async (req, res) => {
       },
       signature: null,
     });
+
+    /* L'envoi d'essai, par le même rendu. Sans lui, la seule façon de voir son
+       courriel pour de vrai était d'envoyer une vraie facture à un vrai
+       client — c'est ce que les gens faisaient, avec le risque que ça suppose.
+
+       Toujours à SOI : jamais une adresse fournie par le client de l'API.
+       Autrement, cette route deviendrait un relais d'envoi anonyme. */
+    if (req.body?.envoyer === true) {
+      const destinataire = auth.user.email;
+      if (!destinataire) return res.status(400).json({ error: 'No email on this account.' });
+      const envoi = await sendEmail({
+        ...(await senderForOrg(auth.orgId, company)),
+        to: destinataire,
+        subject: `[Essai] ${avecExemples(String(req.body?.objet || '')).slice(0, 200) || (fr ? 'Aperçu de votre courriel' : 'Your email preview')}`,
+        html,
+        // Pas de `suivi` : un essai qu'on s'envoie à soi n'a pas à compter
+        // dans les statistiques d'ouverture d'un vrai client.
+      });
+      if (!envoi.sent) return res.status(502).json({ error: envoi.error || 'Send failed.' });
+      return res.json({ html, envoye: destinataire });
+    }
 
     return res.json({ html });
   } catch (error) {

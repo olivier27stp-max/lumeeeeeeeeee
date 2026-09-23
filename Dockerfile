@@ -51,6 +51,11 @@ COPY server ./server
 # l'audit du 2026-09-09 (I3) — déjà couverts par `COPY server`. Seul
 # permissions.ts est encore partagé entre le front et le serveur.
 COPY src/lib/permissions.ts ./src/lib/permissions.ts
+# Les variables des modèles de courriel : la route d'aperçu (POST
+# /api/emails/apercu) les remplace par leurs exemples, pour montrer ce que le
+# client verra plutôt que « Bonjour [client_name] ». Sans cette ligne, l'image
+# démarre et la route plante au premier aperçu.
+COPY src/lib/variablesCourriel.ts ./src/lib/variablesCourriel.ts
 # `src/lib/supabaseAdmin.ts` is now a stub that throws if imported from
 # client code (real impl lives at `server/lib/supabaseAdmin.ts` for security
 # — commit c12b767). The stub exists so Railway/BuildKit cache layers that
