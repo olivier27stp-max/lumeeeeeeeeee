@@ -666,6 +666,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         // empêche une tâche d'une org de conclure sur les données d'une autre.
         task.org_id,
         actionConfig.trigger_event,
+        actionConfig.event_metadata,
       );
 
       if (shouldStop) {
@@ -777,6 +778,7 @@ async function checkStopConditions(
   entityId: string,
   orgId: string,
   triggerEvent?: string,
+  eventMetadata?: Record<string, unknown> | null,
 ): Promise<boolean> {
   /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
   const illisible = (table: string, message: string): boolean => {
@@ -867,7 +869,25 @@ async function checkStopConditions(
     if (lead.deleted_at) return true;
     // Stop once it's no longer an open lead (promoted/won/lost) or funnel-closed.
     if (lead.status !== 'lead') return true;
-    if (['lost', 'closed', 'converted', 'closed_won', 'closed_lost'].includes(lead.lead_status)) return true;
+
+    /**
+     * Exception : une relance de lead PERDU (`lost_lead_reengagement`, 90 jours
+     * après le passage à « perdu ») s'annulait elle-même — la tâche était
+     * planifiée parce que le lead venait d'être marqué perdu, puis supprimée
+     * parce que le lead ÉTAIT perdu. Le preset n'a jamais pu s'exécuter une
+     * seule fois depuis sa création.
+     *
+     * On n'assouplit la règle que pour ce cas précis : le déclencheur était un
+     * passage à « perdu ». Les autres presets gardent la garde intacte — une
+     * relance de soumission doit bien s'arrêter quand le lead devient perdu.
+     */
+    const relanceDeLeadPerdu =
+      triggerEvent === 'lead.status_changed' &&
+      (eventMetadata as { new_status?: unknown } | null)?.new_status === 'lost';
+    const arretsLead = relanceDeLeadPerdu
+      ? ['closed', 'converted', 'closed_won']
+      : ['lost', 'closed', 'converted', 'closed_won', 'closed_lost'];
+    if (arretsLead.includes(lead.lead_status)) return true;
   }
 
   return false;

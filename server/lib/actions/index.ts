@@ -413,9 +413,22 @@ export async function resolveEntityVariables(
   // Fetch company settings
   const { data: company } = await supabase
     .from('company_settings')
-    .select('company_name, phone, google_review_url, facebook_review_url')
+    .select('company_name, phone, google_review_url, facebook_review_url, default_language')
     .eq('org_id', orgId)
     .maybeSingle();
+
+  /**
+   * Les montants suivent la LANGUE DE L'ENTREPRISE, pas une locale figée.
+   * `en-CA` rend « $1,626.90 » et `fr-CA` « 1 626,90 $ » : pour une entreprise
+   * québécoise, la première forme est un montant américain dans un courriel
+   * français. Les rappels de facture l'aggravaient en concaténant à la main
+   * (`$${(cents/100).toFixed(2)}` → « $1626.90 », sans même le séparateur de
+   * milliers) — visible par le client, sur cinq presets.
+   */
+  const locale = (company?.default_language === 'en' ? 'en-CA' : 'fr-CA');
+  const argent = (cents: number | null | undefined, devise = 'CAD') =>
+    new Intl.NumberFormat(locale, { style: 'currency', currency: devise || 'CAD' })
+      .format(Number(cents ?? 0) / 100);
 
   if (company) {
     vars.company_name = company.company_name || '';
@@ -498,10 +511,7 @@ export async function resolveEntityVariables(
       .maybeSingle();
     if (quote) {
       vars.quote_number = quote.quote_number || '';
-      vars.quote_total = quote.total_cents
-        ? new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' })
-            .format(Number(quote.total_cents) / 100)
-        : '$0.00';
+      vars.quote_total = argent(quote.total_cents, quote.currency || 'CAD');
       vars.quote_valid_until = quote.valid_until || '';
 
       // `quotes` porte DEUX liens vers `clients` : `client_id` (client
@@ -556,7 +566,7 @@ export async function resolveEntityVariables(
     if (inv) {
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
-      vars.invoice_total = inv.total_cents ? `$${(inv.total_cents / 100).toFixed(2)}` : '$0.00';
+      vars.invoice_total = argent(inv.total_cents);
       if (inv.client_id) {
         const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
