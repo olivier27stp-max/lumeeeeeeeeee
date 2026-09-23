@@ -113,6 +113,24 @@ describe('garde du webhook SES', () => {
     expect(jetonValide('', '')).toBe(false);
     expect(jetonValide(undefined, 'secret')).toBe(false);
   });
+  it('un blanc invisible ne fait plus échouer un jeton pourtant correct', () => {
+    /* Vécu le 2026-09-22 : l'abonnement SNS restait « en attente de
+       confirmation », et la seule trace était « jeton invalide ». Les deux
+       valeurs étaient identiques — à un espace de fin près, qu'aucune interface
+       n'affiche, ni celle de Railway ni celle d'Amazon. La comparaison échouait
+       sur la LONGUEUR avant même de comparer quoi que ce soit.
+
+       Nettoyer les deux côtés ne relâche rien : un jeton ne contient jamais
+       d'espace, donc aucune valeur refusée avant ne devient acceptée. */
+    const vrai = 'jeton-de-trente-deux-caracteres!';
+    expect(jetonValide(`${vrai} `, vrai)).toBe(true);
+    expect(jetonValide(vrai, `${vrai}\n`)).toBe(true);
+    expect(jetonValide(` ${vrai}`, ` ${vrai} `)).toBe(true);
+    // Un jeton réellement différent reste refusé, blancs ou pas.
+    expect(jetonValide(`${vrai}x `, vrai)).toBe(false);
+    // Et un jeton qui n'est QUE des blancs vaut un jeton absent.
+    expect(jetonValide(vrai, '   ')).toBe(false);
+  });
   it('la route est publique et montée en corps brut, sans jeton configuré elle répond 503', () => {
     const index = readFileSync(resolve(__dirname, '..', '..', 'server', 'index.ts'), 'utf8');
     expect(index).toContain("'/webhooks/ses'");
@@ -122,3 +140,4 @@ describe('garde du webhook SES', () => {
     expect(route).toContain("res.status(401)");
   });
 });
+
