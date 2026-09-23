@@ -13,6 +13,7 @@ import {
   resolveEntityVariables,
 } from './actions';
 import { logger } from './logger';
+import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 
 interface AutomationRule {
   id: string;
@@ -412,6 +413,10 @@ function delayToSeconds(value: number, unit: string): number {
 
 async function handleEvent(event: CRMEvent) {
   if (!engineConfig) return;
+  // Interrupteur d'arrêt (F6) : avant TOUTE lecture. L'événement est
+  // simplement ignoré — rien n'est planifié, rien n'est journalisé comme
+  // échec. Ce qui était déjà en file y reste.
+  if (!automatisationsActivesAvecTrace()) return;
 
   try {
     // ── 1. Match automation_rules (legacy system) ──
@@ -569,6 +574,10 @@ async function recupererTachesFigees(supabase: SupabaseClient): Promise<void> {
 
 export async function processScheduledTasks(supabase: SupabaseClient) {
   if (!engineConfig) return;
+  // Interrupteur d'arrêt (F6) : AVANT la récupération des tâches figées.
+  // Remettre des tâches en file serait déjà y toucher, et l'arrêt doit
+  // laisser la file exactement dans l'état où il l'a trouvée.
+  if (!automatisationsActivesAvecTrace()) return;
 
   // Avant tout : libérer ce qu'un arrêt brutal aurait laissé coincé.
   await recupererTachesFigees(supabase);
