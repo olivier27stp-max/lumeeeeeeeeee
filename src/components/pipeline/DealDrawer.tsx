@@ -29,7 +29,7 @@ import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, deplacerDeal, estJobACreer, fetchElementsLies,
   fetchHistorique, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
-  marquerPerdu, nomClient,
+  abandonnerDeal, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
 import { LIBELLE_SOURCE, depuis, montant } from '../../lib/pipeline/presentation';
@@ -423,6 +423,7 @@ export default function DealDrawer({
   const idEtape = useId();
   const idSource = useId();
   const idRaisonPerte = useId();
+  const idRaisonAbandon = useId();
   const idOnglets = useId();
   const [onglet, setOnglet] = useState<Onglet>('apercu');
   const listeMembres = useMemo(() => membres ?? [], [membres]);
@@ -433,6 +434,12 @@ export default function DealDrawer({
   const [etapePerdueVisee, setEtapePerdueVisee] = useState<string | null>(null);
   const [raisonSaisie, setRaisonSaisie] = useState('');
   const [enEcriture, setEnEcriture] = useState(false);
+
+  // « Abandonné » n'est pas une étape : c'est une décision. Le vendeur dit
+  // qu'il arrête de relancer, et la base place le deal dans l'étape perdue
+  // elle-même — lui demander LAQUELLE rendrait le geste ambigu.
+  const [abandonVise, setAbandonVise] = useState(false);
+  const [raisonAbandon, setRaisonAbandon] = useState('');
 
   const etape = useMemo(
     () => (deal ? etapes.find((e) => e.id === deal.stage_id) ?? null : null),
@@ -545,6 +552,16 @@ export default function DealDrawer({
     ).then(() => {
       setEtapePerdueVisee(null);
       setRaisonSaisie('');
+    });
+  };
+
+  const confirmerAbandon = (): void => {
+    void ecrire(
+      () => abandonnerDeal(deal.id, raisonAbandon),
+      fr ? 'Deal abandonné — plus de relance prévue.' : 'Deal abandoned — no further follow-up.',
+    ).then(() => {
+      setAbandonVise(false);
+      setRaisonAbandon('');
     });
   };
 
@@ -845,6 +862,61 @@ export default function DealDrawer({
                           </button>
                         </div>
                       </div>
+                    )}
+
+                    {/*
+                      Abandonner ≠ perdre. « Perdu » veut dire que le client a
+                      dit non ; « abandonné » qu'il ne répond plus. Les
+                      confondre fait compter comme défaite commerciale un deal
+                      qui n'a jamais été arbitré.
+                      On ne le propose que sur un deal encore ouvert.
+                    */}
+                    {!etapePerdue && etape?.kind !== 'won' && !etapePerdueVisee && (
+                      abandonVise ? (
+                        <div className="mt-2.5 rounded-xl border border-outline bg-surface-secondary p-3">
+                          <label htmlFor={idRaisonAbandon} className="block text-[11px] text-text-tertiary mb-1">
+                            {fr ? 'Pourquoi abandonner ? (facultatif)' : 'Why abandon it? (optional)'}
+                          </label>
+                          <textarea
+                            id={idRaisonAbandon}
+                            rows={2}
+                            value={raisonAbandon}
+                            onChange={(e) => setRaisonAbandon(e.target.value)}
+                            placeholder={fr ? 'Ex. : injoignable après 4 relances' : 'e.g. unreachable after 4 follow-ups'}
+                            className="input-field w-full text-[12.5px] resize-none"
+                          />
+                          <p className="mt-1.5 text-[10.5px] text-text-muted">
+                            {fr
+                              ? "Le deal sort du pipeline sans compter comme une défaite commerciale."
+                              : 'The deal leaves the pipeline without counting as a commercial loss.'}
+                          </p>
+                          <div className="flex justify-end gap-2 mt-2">
+                            <button
+                              type="button"
+                              onClick={() => { setAbandonVise(false); setRaisonAbandon(''); }}
+                              className="btn-secondary text-[12px] px-3 py-1.5"
+                            >
+                              {fr ? 'Annuler' : 'Cancel'}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={enEcriture}
+                              onClick={confirmerAbandon}
+                              className="btn-primary text-[12px] px-3 py-1.5 disabled:opacity-50"
+                            >
+                              {fr ? 'Abandonner' : 'Abandon'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAbandonVise(true)}
+                          className="mt-2.5 text-[11.5px] text-text-tertiary underline-offset-2 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary rounded"
+                        >
+                          {fr ? 'Abandonner ce deal…' : 'Abandon this deal…'}
+                        </button>
+                      )
                     )}
 
                     <div className="mt-2.5 pt-1 border-t border-border-subtle divide-y divide-border-subtle">
