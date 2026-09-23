@@ -160,3 +160,44 @@ export async function getDefaultEmailTemplate(
   if (error) throw error;
   return (data as EmailTemplate) || null;
 }
+
+/**
+ * L'aperçu d'un courriel, rendu par le SERVEUR.
+ *
+ * L'éditeur redessinait le courriel en React — fond, logo, pied — avec les
+ * couleurs écrites en dur. Deux rendus pour une même chose, donc deux
+ * vérités : le jour où le gabarit est passé du ciel bleu au gris neutre,
+ * l'aperçu a continué d'afficher un décor que plus personne ne recevait.
+ *
+ * Une seule source désormais. Le serveur rend ce qu'il enverrait, l'app
+ * l'affiche tel quel.
+ *
+ * Rend `null` en cas d'échec : l'éditeur garde alors son rendu de secours
+ * plutôt que d'afficher un cadre vide — on peut toujours écrire son texte.
+ */
+export async function apercuCourriel(corpsHtml: string): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const orgId = await getCurrentOrgIdOrThrow();
+    const res = await fetch('/api/emails/apercu', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-org-id': orgId,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ corpsHtml }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[emailTemplates] aperçu impossible', body?.error || res.status);
+      return null;
+    }
+    return typeof body?.html === 'string' ? body.html : null;
+  } catch (e) {
+    console.error('[emailTemplates] aperçu impossible', e);
+    return null;
+  }
+}
