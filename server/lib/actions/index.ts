@@ -308,6 +308,7 @@ export function resolveTemplate(
 async function resolveContractVars(
   supabase: SupabaseClient,
   jobId: string,
+  orgId: string,
 ): Promise<{ contract_link: string; contract_line: string; contract_html: string }> {
   const vide = { contract_link: '', contract_line: '', contract_html: '' };
   if (!jobId) return vide;
@@ -323,6 +324,7 @@ async function resolveContractVars(
     .from('job_agreements')
     .select('view_token, status, require_signature')
     .eq('job_id', jobId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -351,6 +353,7 @@ async function resolveContractVars(
 async function resolveSignedContractVars(
   supabase: SupabaseClient,
   jobId: string,
+  orgId: string,
 ): Promise<{ signed_contract_link: string; deposit_amount: string; deposit_line: string }> {
   const vide = { signed_contract_link: '', deposit_amount: '', deposit_line: '' };
   if (!jobId) return vide;
@@ -366,6 +369,7 @@ async function resolveSignedContractVars(
     .from('job_agreements')
     .select('view_token, status, snapshot')
     .eq('job_id', jobId)
+    .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -378,6 +382,7 @@ async function resolveSignedContractVars(
     .from('jobs')
     .select('deposit_status, currency')
     .eq('id', jobId)
+    .eq('org_id', orgId)
     .maybeSingle();
 
   const terms = (acc.snapshot as { payment_terms?: { deposit_required?: boolean; deposit_cents?: number } } | null)?.payment_terms;
@@ -453,6 +458,7 @@ export async function resolveEntityVariables(
       .from('clients')
       .select('first_name, last_name, email, phone, company, title, client_id:id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (lead) {
       setClientVars(lead);
@@ -464,6 +470,7 @@ export async function resolveEntityVariables(
       .from('clients')
       .select('first_name, last_name, email, phone, company')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (client) {
       setClientVars(client);
@@ -506,13 +513,14 @@ export async function resolveEntityVariables(
           .from('clients')
           .select('first_name, last_name, email, phone, company')
           .eq('id', contactId)
+          .eq('org_id', orgId)
           .maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
       if (quote.job_id) {
-        const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).maybeSingle();
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', quote.job_id).eq('org_id', orgId).maybeSingle();
         if (j) vars.job_name = j.title || '';
       }
     }
@@ -523,17 +531,18 @@ export async function resolveEntityVariables(
       .from('jobs')
       .select('title, client_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (job) {
       vars.job_name = job.title || '';
       if (job.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).maybeSingle();
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', job.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
-      Object.assign(vars, await resolveContractVars(supabase, entityId));
-      Object.assign(vars, await resolveSignedContractVars(supabase, entityId));
+      Object.assign(vars, await resolveContractVars(supabase, entityId, orgId));
+      Object.assign(vars, await resolveSignedContractVars(supabase, entityId, orgId));
     }
   }
 
@@ -542,19 +551,20 @@ export async function resolveEntityVariables(
       .from('invoices')
       .select('invoice_number, due_date, total_cents, client_id, job_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
     if (inv) {
       vars.invoice_number = inv.invoice_number || '';
       vars.invoice_due_date = inv.due_date || '';
       vars.invoice_total = inv.total_cents ? `$${(inv.total_cents / 100).toFixed(2)}` : '$0.00';
       if (inv.client_id) {
-        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).maybeSingle();
+        const { data: c } = await supabase.from('clients').select('first_name, last_name, email, phone, company').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
         if (c) {
           setClientVars(c);
         }
       }
       if (inv.job_id) {
-        const { data: j } = await supabase.from('jobs').select('title').eq('id', inv.job_id).maybeSingle();
+        const { data: j } = await supabase.from('jobs').select('title').eq('id', inv.job_id).eq('org_id', orgId).maybeSingle();
         if (j) vars.job_name = j.title || '';
       }
     }
@@ -572,6 +582,7 @@ export async function resolveEntityVariables(
         )
       `)
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle() as any;
     if (evt) {
       const startField = evt.start_at || evt.start_time;
@@ -593,7 +604,7 @@ export async function resolveEntityVariables(
         vars.client_name = evt.job.client_name;
         vars.client_first_name = evt.job.client_name.split(' ')[0] || '';
       }
-      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, evt.job_id));
+      if (evt.job_id) Object.assign(vars, await resolveContractVars(supabase, evt.job_id, orgId));
     }
   }
 
@@ -901,6 +912,7 @@ export async function executeCreateTask(
         .from('schedule_events')
         .select('job_id')
         .eq('id', ctx.entityId)
+        .eq('org_id', ctx.orgId)
         .maybeSingle();
       if (evt?.job_id) {
         lienType = 'job';
@@ -1010,6 +1022,7 @@ export async function executeRequestReview(
       .from('jobs')
       .select('client_id')
       .eq('id', ctx.entityId)
+      .eq('org_id', ctx.orgId)
       .maybeSingle();
     clientId = job?.client_id || null;
   } else if (ctx.entityType === 'invoice') {
@@ -1017,6 +1030,7 @@ export async function executeRequestReview(
       .from('invoices')
       .select('client_id, job_id')
       .eq('id', ctx.entityId)
+      .eq('org_id', ctx.orgId)
       .maybeSingle();
     clientId = inv?.client_id || null;
     jobId = inv?.job_id || null;
