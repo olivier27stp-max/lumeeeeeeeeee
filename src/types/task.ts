@@ -14,7 +14,10 @@ export type TaskType =
   | 'Reminder'
   | 'Custom';
 
-export type TaskLinkedEntityType = 'client' | 'lead' | 'quote' | 'invoice' | 'job';
+// Miroir de la CHECK `tasks_linked_entity_type_check` en base. « deal » ajouté
+// le 2026-09-23 avec le pipeline de ventes : une union en retard sur la base
+// force des casts qui se dispersent et finissent par mentir.
+export type TaskLinkedEntityType = 'client' | 'lead' | 'quote' | 'invoice' | 'job' | 'deal';
 export type TaskLinkedPersonType = 'recruit' | 'client' | 'prospect' | 'contact' | 'team_member';
 
 export interface TaskRow {

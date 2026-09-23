@@ -8,7 +8,8 @@ import { getCurrentOrgIdOrThrow } from './orgApi';
 
 // ── Types ──
 
-export type EntityType = 'client' | 'job' | 'quote';
+// Miroir de la CHECK `specific_notes_entity_type_check` en base.
+export type EntityType = 'client' | 'job' | 'quote' | 'deal';
 
 export interface SpecificNoteFile {
   name: string;
