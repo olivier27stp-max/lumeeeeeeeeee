@@ -959,11 +959,25 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
 
   it('le report ne consomme pas de tentative', () => {
     // Sinon une nuit suffirait à épuiser le quota de reprises.
+    // On cherche l'écriture du nouveau créneau, quelle que soit la façon dont
+    // la date est calculée : depuis 2026-09-23 le moteur passe par une variable
+    // (`prochaine`) pour pouvoir d'abord décider si le rappel est périmé.
     const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
-    const push = bloc.indexOf('execute_at: nextSendTime()');
+    const push = Math.max(
+      bloc.indexOf('execute_at: nextSendTime()'),
+      bloc.indexOf('execute_at: prochaine.toISOString()'),
+    );
     const attempts = bloc.indexOf('attempts:');
-    expect(push).toBeGreaterThan(-1);
+    expect(push, 'aucune écriture de execute_at dans la branche « heures calmes »').toBeGreaterThan(-1);
     expect(attempts === -1 || attempts > push).toBe(true);
+  });
+
+  it('un rappel que le report ferait tomber APRÈS son rendez-vous est annulé', () => {
+    // « Votre rendez-vous est dans 2 heures » reçu une heure après le passage
+    // du technicien est pire qu'un silence : le client doute de ce qu'il lit.
+    const bloc = engine.slice(engine.indexOf('const taskType = task.action_config?.type;'));
+    expect(bloc).toContain('prochaine.getTime() > momentPrevu');
+    expect(bloc).toContain("status: 'cancelled'");
   });
 
   it('la fenêtre reste 8h–20h, heure du Québec', () => {

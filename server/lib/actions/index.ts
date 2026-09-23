@@ -44,6 +44,17 @@ function champLocalise(config: Record<string, any>, champ: string, langue?: 'fr'
 }
 
 /**
+ * Le fuseau dans lequel un client lit ses messages. Identique à `QUIET_TZ`
+ * dans `automationEngine.ts` (la fenêtre 8h–20h) : les deux décrivent la même
+ * chose — l'heure locale de l'entreprise et de ses clients, au Québec.
+ *
+ * Une date sans fuseau explicite prend celui du SERVEUR, et Railway tourne en
+ * UTC : c'est ainsi qu'un rendez-vous de 9 h devenait « 13 h 00 » dans le
+ * message envoyé au client.
+ */
+const FUSEAU_CLIENT = 'America/Toronto';
+
+/**
  * Plafond anti-spam : nombre max de messages COMMERCIAUX d'automatisation
  * qu'un même destinataire peut recevoir par 24 h, tous canaux/règles
  * confondus. Réglable via env, défaut prudent.
@@ -598,8 +609,18 @@ export async function resolveEntityVariables(
       const startField = evt.start_at || evt.start_time;
       if (startField) {
         const d = new Date(startField);
-        vars.appointment_date = d.toLocaleDateString('fr-CA');
-        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' });
+        /**
+         * Le fuseau est OBLIGATOIRE ici. Sans lui, `toLocale*` prend celui du
+         * SERVEUR — et Railway tourne en UTC, sans `TZ` défini.
+         *
+         * Mesuré : un rendez-vous de 9 h à Montréal était annoncé au client
+         * « 13 h 00 », et un rendez-vous de 22 h le 13 septembre était annoncé
+         * « le 14 ». Toutes les confirmations et tous les rappels portaient
+         * donc la mauvaise heure, et parfois le mauvais jour — invisible en
+         * développement (machine à l'heure locale), systématique en production.
+         */
+        vars.appointment_date = d.toLocaleDateString('fr-CA', { timeZone: FUSEAU_CLIENT });
+        vars.appointment_time = d.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit', timeZone: FUSEAU_CLIENT });
       }
       vars.appointment_title = evt.job?.title || '';
       // `jobs.property_address` a pour DEFAULT '-' : sans ce filtre, le client
