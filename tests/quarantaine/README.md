@@ -40,9 +40,9 @@ code le 2026-09-19 :
 
 | Faille | Ce que le test attend | État vérifié |
 |---|---|---|
-| **F7** — consentement | Une relance commerciale (`cross_sell_30d`, `seasonal_reminder_6m`, `lost_lead_reengagement`) ne part pas sans consentement du client ; la demande d'avis compte dans le plafond de fréquence | **non corrigé** — aucune notion de consentement marketing côté serveur (`grep` sur `marketing_consent` : rien) |
+| **F7** — consentement | Une relance commerciale (`cross_sell_30d`, `seasonal_reminder_6m`, `lost_lead_reengagement`) ne part pas sans consentement du client ; la demande d'avis compte dans le plafond de fréquence | **CORRIGÉ** — PR #439 (2026-09-19, le verrou) puis PR #468 (2026-09-23) : les DEUX bases légales de la LCAP sont acceptées (exprès + tacite : 2 ans après un contrat, 6 mois après une demande), une carte sur la fiche client permet de saisir l'exprès, et chaque envoi journalise la base retenue dans `consents` (la charge de la preuve appartient à l'expéditeur). |
 | **F6** — interrupteur d'arrêt | `AUTOMATIONS_ENABLED=false` → aucun événement traité, la file reste intacte | **CORRIGÉ le 2026-09-23** — `server/lib/automations-interrupteur.ts`, branché dans `handleEvent` et `processScheduledTasks`. Les deux tests T12.3 sont passés au VERT. |
-| **F11/F13** — plafonds | Au-delà du plafond quotidien, les SMS sont retenus et reportés, jamais envoyés ; à 80 % une notification prévient l'administrateur | **non vérifié** |
+| **F11/F13** — plafonds | Au-delà du plafond quotidien, les SMS sont retenus et reportés, jamais envoyés ; à 80 % une notification prévient l'administrateur | **ÉCARTÉ le 2026-09-23** — le scénario testé n'existe pas dans le produit, et le plafond serait un mauvais produit. Voir ci-dessous. |
 | **F3, F5, F9, F18** — idempotence, reprise, outbox, destinataire | Voir les intitulés des tests | **non vérifié** |
 
 `AUTOMATIONS_AUDIT.md` annonce plusieurs de ces failles comme « corrigé (M2) /
@@ -51,9 +51,41 @@ correctifs ont été planifiés ou faits sur une branche qui n'a jamais été
 fusionnée. C'est précisément ce qu'un test exécutable évite, là où un document
 affirme sans preuve.
 
-⚠️ **F7 mérite une décision, pas juste un ticket** : des relances commerciales
-envoyées sans consentement, c'est un risque légal (LCAP au Canada, loi 25 au
-Québec), pas seulement un défaut de qualité.
+⚠️ **F7 méritait une décision, pas juste un ticket** — et il l'a eue : voir le
+tableau ci-dessus. Le risque légal (LCAP, loi 25) est traité.
+
+## Pourquoi F11/F13 est ÉCARTÉ et non « à faire » (2026-09-23)
+
+Le test simule 200 `lead.created` émis à la main, puis exige qu'un plafond
+quotidien retienne les SMS au-delà d'une limite. **Les deux moitiés de cette
+exigence sont fausses**, pour des raisons différentes.
+
+**1. La rafale de 200 leads n'existe dans aucun chemin réel.** Vérifié :
+
+- l'import de migration n'émet **aucun** événement — il écrit directement en
+  base (`server/lib/migration/importer.ts`, `admin.from('clients')`), donc il
+  ne déclenche aucune automatisation ;
+- et même s'il en émettait, `server/lib/migration/gel-communications.ts` gèle
+  toutes les communications du bureau dès le début d'un import final : aucun
+  courriel, aucun SMS, aucune automatisation ne part vers ses clients tant que
+  l'admin n'a pas cliqué « Activer le compte ». La garde s'applique **au
+  destinataire**, dans les fonctions d'envoi elles-mêmes ;
+- les vrais `lead.created` viennent de `server/routes/leads.ts` (saisie
+  manuelle) et `server/routes/request-forms.ts` (un client remplit un
+  formulaire) — **un à la fois**.
+
+**2. Un plafond de volume serait un mauvais produit.** Ces SMS partent d'un
+entrepreneur vers **ses propres clients**, et c'est lui qui les paie. Lui dire
+« tu as atteint ta limite de messages à tes clients » serait radin et
+injustifiable : ce n'est ni notre coût, ni notre business.
+
+Ce qui protège réellement de l'emballement existe déjà : le **kill switch F6**
+(`AUTOMATIONS_ENABLED=false`) arrête tout en une variable, sans perdre la file.
+
+**Si ce test redevient pertinent un jour**, ce sera parce qu'un chemin réel
+produit des rafales (un webhook entrant, une synchronisation externe). À ce
+moment-là, la bonne réponse sera d'**étaler dans le temps** — tout part, mais
+assez lentement pour qu'un humain puisse réagir — et non de refuser des envois.
 
 ## Comment sortir un test de quarantaine
 
