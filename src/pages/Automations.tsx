@@ -28,6 +28,8 @@ import {
   getAutomationRules,
   toggleAutomationRule,
   getFailureCountsByRule,
+  getRecentAutomationFailures,
+  type AutomationFailure,
   getAutomationLanguage,
   setAutomationLanguage,
 } from '../lib/automationRulesApi';
@@ -36,6 +38,9 @@ import {
 // Couvre toutes les variantes de noms semées par les migrations
 // (default_workflow_presets, advanced_automation_presets, dedup, activate_all).
 const AUTOMATION_NAME_FR: Record<string, string> = {
+  // Contrats — le seul preset dont le nom semé en anglais restait tel quel
+  // dans l'interface française (2026-09-23).
+  'Contract Signed': 'Contrat signé',
   // Leads
   'Lead — Welcome': 'Prospect — Bienvenue',
   'Welcome New Lead': 'Bienvenue au nouveau prospect',
@@ -112,6 +117,34 @@ const AUTOMATION_NAME_FR: Record<string, string> = {
 function localizeAutomationName(name: string, lang: string): string {
   if (lang !== 'fr') return name;
   return AUTOMATION_NAME_FR[name] ?? name;
+}
+
+/**
+ * La cause d'un échec, dite à quelqu'un qui n'est pas développeur.
+ *
+ * La page affichait « 2 échecs » et s'arrêtait là : l'entrepreneur voyait que
+ * ça n'avait pas marché, sans jamais savoir POURQUOI ni quoi faire. Les
+ * messages bruts (« SMTP not configured », « Frequency cap reached for
+ * +1514… ») sont en anglais, techniques, et ne doivent jamais sortir tels
+ * quels.
+ *
+ * Une cause non reconnue est rendue `null` : on préfère n'afficher que le
+ * compteur plutôt qu'un jargon anglais qui n'aide personne.
+ */
+function raisonLisible(erreur: string | null, fr: boolean): string | null {
+  const e = (erreur || '').toLowerCase();
+  if (!e) return null;
+  if (e.includes('no recipient phone')) return fr ? 'Ce client n’a pas de numéro de téléphone.' : 'This client has no phone number.';
+  if (e.includes('no recipient email')) return fr ? 'Ce client n’a pas d’adresse courriel.' : 'This client has no email address.';
+  if (e.includes('opted out') || e.includes('unsubscribed')) return fr ? 'Ce client s’est désabonné.' : 'This client unsubscribed.';
+  if (e.includes('frequency cap')) return fr ? 'Plafond atteint : ce client a déjà reçu plusieurs messages aujourd’hui.' : 'Cap reached: this client already got several messages today.';
+  if (e.includes('consentement') || e.includes('consent')) return fr ? 'Le consentement de ce client n’est pas enregistré.' : 'This client’s consent is not recorded.';
+  if (e.includes('smtp') && e.includes('not configured')) return fr ? 'Courriel non configuré : impossible d’envoyer.' : 'Email not configured: cannot send.';
+  if (e.includes('twilio') && e.includes('not configured')) return fr ? 'Envoi de textos non configuré : impossible d’envoyer.' : 'SMS sending not configured: cannot send.';
+  if (e.includes('not configured')) return fr ? 'Envoi non configuré dans les réglages.' : 'Sending is not configured in settings.';
+  if (e.includes('plan does not include')) return fr ? 'Votre forfait n’inclut pas cet envoi.' : 'Your plan does not include this send.';
+  if (e.includes('are disabled')) return fr ? 'Cette fonctionnalité est désactivée dans les réglages.' : 'This feature is disabled in settings.';
+  return null;
 }
 
 // ── Category definitions ────────────────────────────────────
@@ -274,6 +307,25 @@ const TRIGGER_DISPLAY: Record<string, { en: string; fr: string }> = {
   'lead.created':          { en: 'Lead created',          fr: 'Lead créé' },
   'lead.status_changed':   { en: 'Lead status changed',   fr: 'Statut du lead changé' },
   'payment.received':      { en: 'Payment received',      fr: 'Paiement reçu' },
+  // Ajoutés le 2026-09-23 : 14 des 27 déclencheurs du bus n'avaient pas
+  // d'entrée ici et s'affichaient en CLÉ TECHNIQUE dans la colonne
+  // « Déclencheur » — une règle sur `invoice.created` montrait littéralement
+  // « invoice.created » à l'entrepreneur. Le repli existait (`|| rule.trigger_event`)
+  // mais il n'était jamais censé servir de traduction.
+  'agreement.signed':      { en: 'Contract signed',       fr: 'Contrat signé' },
+  'client.archived':       { en: 'Client archived',       fr: 'Client archivé' },
+  'client.deleted':        { en: 'Client deleted',        fr: 'Client supprimé' },
+  'estimate.accepted':     { en: 'Quote accepted',        fr: 'Devis accepté' },
+  'estimate.rejected':     { en: 'Quote rejected',        fr: 'Devis refusé' },
+  'invoice.created':       { en: 'Invoice created',       fr: 'Facture créée' },
+  'job.created':           { en: 'Job created',           fr: 'Job créé' },
+  'job.ready_for_invoicing': { en: 'Job ready to invoice', fr: 'Job prêt à facturer' },
+  'lead.converted':        { en: 'Lead converted',        fr: 'Lead converti en client' },
+  'lead.updated':          { en: 'Lead updated',          fr: 'Lead modifié' },
+  'pipeline_deal.stage_changed': { en: 'Deal stage changed', fr: 'Étape du pipeline changée' },
+  'quote.changes_requested': { en: 'Changes requested on quote', fr: 'Modifications demandées au devis' },
+  'quote.converted':       { en: 'Quote converted',       fr: 'Devis converti' },
+  'quote.created':         { en: 'Quote created',         fr: 'Devis créé' },
 };
 
 function formatDelay(seconds: number, lang: string): string {
@@ -337,6 +389,8 @@ export default function Automations() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   /** Échecs par règle sur 7 jours — alimente le badge d'alerte. */
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
+  /** Les échecs récents, pour DIRE pourquoi — le compteur seul ne sert à rien. */
+  const [failures, setFailures] = useState<AutomationFailure[]>([]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   // Langue dans laquelle les messages d'automatisation partent aux clients.
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
@@ -379,6 +433,8 @@ export default function Automations() {
       // jamais que ses clients n'avaient rien reçu.
       // Non bloquant : la liste doit s'afficher même si ce chargement échoue.
       try {
+        const recents = await getRecentAutomationFailures(200);
+        setFailures(recents);
         setFailureCounts(await getFailureCountsByRule());
       } catch (e: any) {
         console.error('Failed to load automation failures:', e.message);
@@ -744,6 +800,33 @@ export default function Automations() {
                             {isExpanded && (
                               <tr className="bg-surface-secondary/30">
                                 <td colSpan={6} className="px-6 py-4">
+                                  {/* POURQUOI ça n'a pas marché. Le badge rouge disait
+                                      « 2 échecs » et s'arrêtait là : l'entrepreneur voyait
+                                      que ses clients n'avaient rien reçu sans jamais savoir
+                                      quoi corriger. Les causes techniques anglaises ne
+                                      sortent jamais telles quelles — une cause non traduite
+                                      n'est simplement pas affichée. */}
+                                  {(() => {
+                                    const raisons = [...new Set(
+                                      failures
+                                        .filter((f) => f.automation_rule_id === rule.id)
+                                        .map((f) => raisonLisible(f.result_error, fr))
+                                        .filter((r): r is string => !!r),
+                                    )];
+                                    if (!raisons.length) return null;
+                                    return (
+                                      <div className="mb-4 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 px-3 py-2">
+                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-300 mb-1">
+                                          {fr ? 'Pourquoi ça n’a pas marché' : 'Why it did not work'}
+                                        </p>
+                                        <ul className="space-y-0.5">
+                                          {raisons.map((r) => (
+                                            <li key={r} className="text-[12px] text-red-800 dark:text-red-200 leading-relaxed">{r}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    );
+                                  })()}
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[12px]">
                                     <div>
                                       <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1">
