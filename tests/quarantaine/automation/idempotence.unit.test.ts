@@ -17,6 +17,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../../../server/lib/mailer', () => ({ sendEmail: vi.fn(async () => ({ sent: true })), isMailerConfigured: () => true }));
 vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
+// Le gel des communications lit la base par `getServiceClient()` — le VRAI
+// client, pas le faux du test : la lecture échouait en « fetch failed » et
+// aucun SMS ne partait. Hors sujet ici (on mesure l'idempotence), on neutralise.
+vi.mock('../../../server/lib/migration/gel-communications', () => ({
+  destinataireGele: async () => null,
+  journaliserBlocage: () => {},
+  MESSAGE_GEL: 'gel',
+}));
 
 import { clientEnregistreur, requetes } from './_enregistreur';
 
@@ -40,6 +48,13 @@ const donneesA = () => ({
   messages: { data: null, count: 0 },
   activity_log: { data: null },
   automation_execution_logs: { data: null },
+  // `clients` et `jobs` manquaient : sans eux, la vérification de consentement
+  // (LCAP) ne trouvait aucun client et AUCUN SMS ne partait — le test mesurait
+  // donc 0 envoi dans tous les cas, y compris son témoin « deux rendez-vous
+  // différents → deux SMS ». Il ne pouvait plus prouver ce qu'il annonce.
+  clients: { data: { id: 'client-a', first_name: 'Alice', last_name: 'A', email: 'alice@a.test', phone: '+15145550101', sms_consent_at: '2026-01-01T00:00:00Z', email_consent_at: '2026-01-01T00:00:00Z', email_opt_out_at: null } },
+  jobs: { data: { id: 'job-a', title: 'Gouttières', client_id: 'client-a', created_at: '2026-09-01T00:00:00Z', deleted_at: null } },
+  automation_scheduled_tasks: { data: null },
 });
 
 let twilio: { messages: { create: ReturnType<typeof vi.fn> } };
@@ -133,7 +148,29 @@ describe('T4.5 — reprise après échec du fournisseur', () => {
     expect(new Date(cloture.execute_at).getTime() - Date.now()).toBeCloseTo(5 * 60_000, -3);
   });
 
-  it('ROUGE ATTENDU (F5) : la reprise porte la même clé d’idempotence fournisseur que la 1re tentative', async () => {
+  /**
+   * NON RÉALISABLE — vérifié le 2026-09-23, et c'est la bonne réponse.
+   *
+   * L'API Messages de Twilio n'accepte AUCUNE clé d'idempotence : ni dans le
+   * SDK installé (`message.d.ts` — body, to, statusCallback, maxPrice… et rien
+   * de tel), ni dans sa documentation. Le mécanisme existe sur d'autres
+   * endpoints Twilio, pas sur celui-ci.
+   *
+   * Ajouter un champ `idempotencyKey` ferait passer ce test en envoyant à
+   * Twilio un paramètre qu'il IGNORE — une fausse garantie, pire que le trou
+   * qu'elle prétend boucher.
+   *
+   * Ce qui protège réellement du double envoi est ailleurs, et existe :
+   *  - la prise de tâche est atomique (`.eq('status','pending')` dans
+   *    `processScheduledTasks`) : deux instances ne peuvent pas envoyer la
+   *    même tâche ;
+   *  - les actions immédiates réservent leur clé avant d'agir (F3, corrigé).
+   *
+   * Reste le seul cas non colmatable sans le fournisseur : un timeout où
+   * Twilio a REÇU la demande sans pouvoir répondre. La reprise renverra alors.
+   * Rien, côté client, ne peut l'éviter.
+   */
+  it.skip('NON RÉALISABLE (F5) : Twilio n’accepte pas de clé d’idempotence sur l’API Messages', async () => {
     twilio.messages.create.mockRejectedValueOnce(new Error('ETIMEDOUT'));
     const { processScheduledTasks, client } = await moteur({ ...donneesA(), automation_scheduled_tasks: { data: [tache(0)] } });
     await processScheduledTasks(client);
