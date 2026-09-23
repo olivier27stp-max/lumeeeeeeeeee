@@ -20,6 +20,7 @@ import { Drawer } from '../ui/drawer';
 import SpecificNotes from '../SpecificNotes';
 import ActivityTimeline from '../ActivityTimeline';
 import { useTranslation } from '../../i18n';
+import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, estJobACreer, fetchElementsLies,
   fetchHistorique, fetchTachesDuDeal, nomClient,
@@ -112,7 +113,10 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
   });
 
   const enRetard = (t: TacheDeal): boolean =>
-    t.status === 'open' && !!t.due_date && new Date(t.due_date) < new Date();
+    // `versDate` lit « 2026-09-04 » comme une date civile : `new Date()` en
+    // ferait minuit UTC, soit la veille au Québec — une échéance d'aujourd'hui
+    // passerait pour en retard (garde figé par tests/date-seule.test.ts).
+    t.status === 'open' && !!t.due_date && versDate(t.due_date) < new Date();
 
   return (
     <>
@@ -190,7 +194,7 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
                     </span>
                     <span className="block text-[10.5px] text-text-muted">
                       {t.due_date
-                        ? `${fr ? 'Échéance' : 'Due'} ${new Date(t.due_date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA')}`
+                        ? `${fr ? 'Échéance' : 'Due'} ${versDate(t.due_date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA')}`
                         : (fr ? 'Sans échéance' : 'No due date')}
                       {enRetard(t) && ` · ${fr ? 'en retard' : 'overdue'}`}
                     </span>
