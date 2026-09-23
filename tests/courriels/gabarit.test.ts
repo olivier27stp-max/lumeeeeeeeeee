@@ -95,11 +95,34 @@ describe('outils', () => {
 describe('le ciel et les règles des maquettes', () => {
   const base = { langue: 'fr' as const, marque, titre: 'Votre facture 48' };
 
-  it('le fond est le ciel du site, pas un gris neutre', () => {
+  it('un courriel d’ENTREPRISE est neutre : c’est SA couleur qu’on voit, pas le ciel de Lume', () => {
+    /* Ce test exigeait l'inverse jusqu'au 2026-09-23 : le ciel partout.
+       C'était une erreur de destinataire. Quand Coquin lavage facture Sophie,
+       Sophie doit voir Coquin lavage — le ciel est la marque de LUME, qu'elle
+       ne connaît pas, et il concurrence la couleur de l'entreprise.
+
+       L'anomalie qui le prouvait : la couleur de l'entreprise ne servait qu'au
+       bouton, tout le décor était du Lume. */
     const h = rendreCourrielClient(base);
+    expect(h).toContain('background:#f4f5f7');
+    expect(h).not.toContain('#e6f0ff');
+    // Sa couleur porte le filet de tête, tout en haut du courriel.
+    expect(h).toContain('background:#0f766e;height:4px');
+  });
+
+  it('une couleur trop pâle ne devient pas un filet invisible sur le gris', () => {
+    // Le jaune ne passe pas `couleurBouton` : il retombe sur le noir Lume,
+    // et le filet reste visible. Sans ça, un filet #ffee58 sur #f4f5f7
+    // disparaîtrait — l'entreprise n'aurait plus aucune couleur du tout.
+    const h = rendreCourrielClient({ ...base, marque: { ...marque, couleur: '#ffee58' } });
+    expect(h).toContain(`background:${COULEUR_LUME};height:4px`);
+  });
+
+  it('un courriel de LUME garde le ciel : là, la marque est à sa place', () => {
+    const h = rendreCourrielLume({ langue: 'fr', titre: 'Votre abonnement' });
     expect(h).toContain('background:#e6f0ff');
-    // Outlook ignore linear-gradient : un dégradé y retomberait sur du blanc.
-    expect(h).not.toContain('linear-gradient');
+    // Pas de filet de tête : Lume n'a pas de couleur de marque à afficher ici.
+    expect(h).not.toContain('height:4px');
   });
 
   it('le bouton vient AVANT la note, jamais après (sinon il passe sous la ligne de flottaison)', () => {

@@ -94,16 +94,31 @@ const GRIS_PALE = '#9ca3af';
 const FOND = '#f3f4f6';
 const BORDURE = '#e5e7eb';
 
-/* ── Le ciel (maquettes validées 2026-09-17) ──────────────────────────────
-   Le même dégradé que les pages marketing (src/index.css « Ciel bleu clair »)
-   et le bleu de leurs filets. Un courriel ne peut pas porter de dégradé CSS :
-   Outlook (moteur Word) ignore `linear-gradient` et retomberait sur du blanc.
-   On pose donc la couleur de tête du dégradé en fond plein — c'est la teinte
-   que l'œil retient — et les cartes blanches se détachent dessus. */
+/* ── Deux décors, parce qu'il y a deux marques (2026-09-23) ────────────────
+
+   Le ciel bleu des pages marketing a d'abord été posé sur TOUS les courriels,
+   y compris ceux qu'une entreprise envoie à ses propres clients. C'était une
+   erreur de destinataire : quand Coquin lavage facture Sophie, Sophie doit
+   voir Coquin lavage. Le ciel est la marque de LUME — Sophie ne le connaît
+   pas, et il concurrence la couleur de l'entreprise.
+
+   L'anomalie qui le prouvait : la couleur de marque de l'entreprise ne servait
+   qu'au bouton. Tout le décor était du Lume. L'inverse de ce qu'il faut.
+
+   Donc :
+   - `rendreCourrielClient` → fond gris neutre, et la couleur de l'entreprise
+     porte le filet de tête, le bouton et les liens. C'est elle qu'on voit.
+   - `rendreCourrielLume` → le ciel. Là, la marque de Lume est à sa place :
+     le destinataire est l'abonné, qui la connaît. */
 const CIEL_HAUT = '#e6f0ff';
 const CIEL_BAS = '#f3f8ff';
 const BLEU_LUME = '#0b5cad';
 const CIEL_FILET = '#d3e3f7';
+/* Le décor d'un courriel d'entreprise : un gris très pâle qui ne concurrence
+   aucune couleur de marque, quelle qu'elle soit — la même approche que Stripe,
+   Square ou QuickBooks. La carte blanche s'y détache sans effort. */
+const FOND_CLIENT = '#f4f5f7';
+const FILET_CLIENT = '#e4e7ec';
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function echapper(s: unknown): string {
@@ -186,7 +201,35 @@ ${b.sousBouton ? `<p style="margin:0 0 14px;font-size:12px;color:${GRIS_PALE};te
 ${/^(tel|mailto|sms):/i.test(b.url) ? '' : `<p style="margin:0 0 20px;font-size:11px;color:${GRIS_PALE};text-align:center;line-height:1.5;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ?' : 'Le bouton ne fonctionne pas ?') : 'Button not working?'} <a href="${url}" style="color:${GRIS_PALE};text-decoration:underline;">${langue === 'fr' ? 'Ouvrir le lien' : 'Open the link'}</a></p>`}`;
 }
 
-function coquille(p: { langue: Langue; titreDocument: string; preheader?: string | null; enTeteHtml: string; corpsHtml: string; piedHtml: string }): string {
+/**
+ * Le décor d'un courriel. Deux seulement, et le choix suit l'expéditeur :
+ * `client` quand c'est une ENTREPRISE qui écrit à son client (gris neutre,
+ * la couleur de l'entreprise en filet de tête), `lume` quand c'est Lume qui
+ * écrit à son abonné (le ciel des pages marketing).
+ *
+ * `filetTete` est la seule couleur variable : celle de l'entreprise, déjà
+ * validée pour le contraste par `couleurBouton`. Le reste du décor est fixe —
+ * une entreprise choisit sa couleur, pas la mise en page.
+ */
+function coquille(p: {
+  langue: Langue;
+  titreDocument: string;
+  preheader?: string | null;
+  enTeteHtml: string;
+  corpsHtml: string;
+  piedHtml: string;
+  decor: 'client' | 'lume';
+  filetTete?: string | null;
+}): string {
+  const client = p.decor === 'client';
+  const fond = client ? FOND_CLIENT : CIEL_HAUT;
+  const filetCarte = client ? FILET_CLIENT : CIEL_FILET;
+  /* Le filet de tête : 4 px de la couleur de l'entreprise, tout en haut. Un
+     courriel d'entreprise n'a sinon AUCUNE couleur à elle avant le bouton,
+     qui arrive après le montant — trop bas pour signer le message. */
+  const bandeau = client && p.filetTete
+    ? `<tr><td style="background:${p.filetTete};height:4px;line-height:4px;font-size:0;">&nbsp;</td></tr>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="${p.langue}">
 <head>
@@ -196,13 +239,14 @@ function coquille(p: { langue: Langue; titreDocument: string; preheader?: string
 <meta name="supported-color-schemes" content="light"/>
 <title>${echapper(p.titreDocument)}</title>
 </head>
-<body style="margin:0;padding:0;background:${CIEL_HAUT};font-family:${POLICE};-webkit-text-size-adjust:100%;">
-${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${CIEL_HAUT};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CIEL_HAUT};">
+<body style="margin:0;padding:0;background:${fond};font-family:${POLICE};-webkit-text-size-adjust:100%;">
+${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${fond};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};">
+${bandeau}
 <tr><td align="center" style="padding:24px 12px 0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
 <tr><td style="padding:0 8px 18px;text-align:center;">${p.enTeteHtml}</td></tr>
-<tr><td style="background:#ffffff;border:1px solid ${CIEL_FILET};border-radius:16px;padding:26px 32px;">${p.corpsHtml}</td></tr>
+<tr><td style="background:#ffffff;border:1px solid ${filetCarte};border-radius:16px;padding:26px 32px;">${p.corpsHtml}</td></tr>
 <tr><td style="padding:20px 8px 26px;text-align:center;">${p.piedHtml}</td></tr>
 </table>
 </td></tr>
@@ -263,6 +307,10 @@ ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">$
     langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),
     piedHtml: pied,
+    decor: 'client',
+    // `couleur` a déjà traversé `couleurBouton` : une teinte trop pâle y est
+    // devenue le noir Lume, donc le filet ne disparaît jamais sur le gris.
+    filetTete: couleur,
   });
 }
 
@@ -273,7 +321,7 @@ export function rendreCourrielLume(c: CourrielLume): string {
   const pied = `
 <p style="margin:0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${c.langue === 'fr' ? 'Une question ? Réponds à ce courriel ou écris-nous à' : 'Questions? Reply to this email or write to'} <a href="mailto:${echapper(support)}" style="color:${GRIS_DOUX};">${echapper(support)}</a>.</p>
 <p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">Lume CRM &nbsp;&middot;&nbsp; <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;">lumecrm.net</a></p>`;
-  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team') : c.signature }, COULEUR_LUME, true), piedHtml: pied });
+  return coquille({ langue: c.langue, titreDocument: c.titre || 'Lume', preheader: c.preheader, enTeteHtml: enTete, corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? '— L’équipe Lume' : '— The Lume team') : c.signature }, COULEUR_LUME, true), piedHtml: pied, decor: 'lume' });
 }
 
 /** Les mots qui reviennent dans tous les courriels client, dans les deux langues. */
