@@ -18,15 +18,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Loader2, Pencil, RotateCcw, Zap, ExternalLink, Check, Upload } from 'lucide-react';
+import { Loader2, Zap, ExternalLink, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '../../components/ui';
 import { confirmer } from '../../components/ui/ConfirmDialog';
-import { useTranslation } from '../../i18n';
-import { cn } from '../../lib/utils';
 import EmailPreviewEditor from '../../components/automations/EmailPreviewEditor';
 import ImportHtmlCourriel from '../../components/settings/ImportHtmlCourriel';
 import { CATALOGUE_COURRIELS, type EntreeCourriel } from '../../lib/catalogueCourriels';
+import { supabase } from '../../lib/supabase';
+import { getCurrentOrgIdOrThrow } from '../../lib/orgApi';
 import {
   listEmailTemplates,
   createEmailTemplate,
@@ -53,14 +53,60 @@ function texteDeDepart(entree: EntreeCourriel, fr: boolean): string {
   return t ? `<p>${t}</p>` : '';
 }
 
+/**
+ * La vignette d'un courriel : ce que le client verra, en petit.
+ *
+ * Elle reprend le décor du gabarit serveur — fond gris, filet de la couleur de
+ * l'entreprise, carte blanche — pour qu'on reconnaisse le bon modèle sans lire
+ * son titre. Volontairement schématique : c'est un repère, pas un aperçu. Le
+ * vrai aperçu est dans l'éditeur, rendu par le serveur.
+ *
+ * Les couleurs sont écrites en dur plutôt qu'en classes de thème : un courriel
+ * ne suit pas le mode sombre de l'app, il arrive tel quel dans la boîte.
+ */
+function MiniatureCourriel({ couleur, avecMontant }: { couleur: string; avecMontant: boolean }) {
+  return (
+    <div className="h-[86px] overflow-hidden px-3 pt-0" style={{ background: '#f4f5f7' }} aria-hidden="true">
+      <div style={{ height: 3, background: couleur, margin: '0 -12px 8px' }} />
+      <div style={{ background: '#fff', border: '1px solid #e4e7ec', borderRadius: 7, padding: '6px 8px' }}>
+        {avecMontant ? (
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#101828', letterSpacing: '-0.5px', textAlign: 'center', margin: '2px 0 4px' }}>
+            1 220,17 $
+          </div>
+        ) : (
+          <div style={{ height: 3, background: '#eceef2', borderRadius: 2, margin: '4px 0' }} />
+        )}
+        <div style={{ height: 3, background: '#eceef2', borderRadius: 2, marginTop: 3 }} />
+        <div style={{ height: 3, width: '62%', background: '#eceef2', borderRadius: 2, marginTop: 3 }} />
+        <div style={{ height: 9, background: couleur, borderRadius: 3, marginTop: 5 }} />
+      </div>
+    </div>
+  );
+}
+
 export default function EmailTemplatesSettings() {
-  const { language } = useTranslation();
-  const fr = language === 'fr';
+  /* `fr` est ici la langue des COURRIELS, pas celle de l'interface.
+
+     La page lisait `useTranslation()` : quelqu'un dont l'app est en anglais
+     voyait les textes d'origine en anglais et les enregistrait par-dessus,
+     alors que le serveur envoie dans la langue de l'entreprise
+     (`company_settings.default_language`, cf. `langueEntreprise`). Ses clients
+     recevaient donc soudain de l'anglais — au Québec, un problème de loi 101
+     autant que d'exactitude.
+
+     Le défaut est le français : `langueDe` côté serveur en fait autant, et la
+     colonne `default_language` vaut 'fr' en base. */
+  const [langueCourriels, setLangueCourriels] = useState<'fr' | 'en'>('fr');
+  const fr = langueCourriels === 'fr';
 
   const [modeles, setModeles] = useState<EmailTemplate[]>([]);
   const [chargement, setChargement] = useState(true);
   const [ouvert, setOuvert] = useState<Ouvert | null>(null);
   const [aImporter, setAImporter] = useState<Ouvert | null>(null);
+  /* La couleur de l'entreprise, pour que les vignettes montrent SES courriels
+     et pas un gris générique. `#111827` est le repli du gabarit serveur
+     (`COULEUR_LUME`) : une couleur absente ou trop pâle y aboutit aussi. */
+  const [couleurMarque, setCouleurMarque] = useState('#111827');
 
   const charger = async () => {
     try {
@@ -75,6 +121,30 @@ export default function EmailTemplatesSettings() {
   };
 
   useEffect(() => { void charger(); }, []);
+
+  /* La couleur de l'entreprise, pour les vignettes. Best-effort : si la
+     lecture échoue, elles gardent le noir de repli — une vignette grise vaut
+     mieux qu'une page qui ne s'affiche pas pour un détail décoratif. */
+  useEffect(() => {
+    void (async () => {
+      try {
+        const orgId = await getCurrentOrgIdOrThrow();
+        const { data } = await supabase
+          .from('company_settings')
+          .select('brand_color, default_language')
+          .eq('org_id', orgId)
+          .limit(1)
+          .maybeSingle();
+        const c = String(data?.brand_color || '').trim();
+        if (/^#[0-9a-f]{6}$/i.test(c)) setCouleurMarque(c);
+        // Même règle que `langueDe` côté serveur : tout ce qui n'est pas
+        // explicitement anglais est du français.
+        if (String(data?.default_language || '').toLowerCase().startsWith('en')) setLangueCourriels('en');
+      } catch {
+        // Le repli suffit : rien à signaler au propriétaire pour une vignette.
+      }
+    })();
+  }, []);
 
   /** Le texte de l'entreprise pour un poste, s'il existe. */
   const parType = useMemo(() => {
@@ -134,118 +204,110 @@ export default function EmailTemplatesSettings() {
     }
   };
 
+  /* Les cinq courriels qu'on modifie ICI, et le compte de ceux qui vivent
+     ailleurs. La page affichait les 27 entrées du catalogue à plat : 22
+     d'entre elles ne faisaient qu'un lien vers /automations, et occupaient
+     80 % de l'écran pour ça. On les replie en UNE ligne. */
+  const { editables, nbAutomatisations } = useMemo(() => {
+    const e: EntreeCourriel[] = [];
+    let n = 0;
+    for (const groupe of CATALOGUE_COURRIELS) {
+      for (const entree of groupe.entrees) {
+        if (entree.origine === 'automatisation') n += entree.variantes ?? 1;
+        else if (entree.type) e.push(entree);
+      }
+    }
+    return { editables: e, nbAutomatisations: n };
+  }, []);
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title={fr ? 'Modèles de courriel' : 'Email templates'}
-        subtitle={fr
-          ? 'Les courriels que vos clients reçoivent. Modifiez le texte de chacun ; le bouton, vos coordonnées et vos numéros de taxes restent ajoutés automatiquement.'
-          : 'The emails your clients receive. Edit any text; the action button, your contact details and tax numbers are always added for you.'}
+        title="Modèles de courriel"
+        subtitle="Le texte que vos clients reçoivent. Le bouton, vos coordonnées et vos numéros de taxes s’ajoutent tout seuls."
       />
 
       {chargement ? (
         <div className="flex items-center gap-2 text-text-secondary text-sm">
           <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-          {fr ? 'Chargement…' : 'Loading…'}
+          Chargement…
         </div>
       ) : (
         <div className="space-y-8">
-          {CATALOGUE_COURRIELS.map((groupe) => (
-            <section key={groupe.cle}>
-              <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
-                {groupe.titre[fr ? 'fr' : 'en']}
-              </h2>
+          <section>
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
+              Vos courriels
+            </h2>
 
-              <ul className="space-y-2">
-                {groupe.entrees.map((entree, i) => {
-                  const modele = entree.type ? parType.get(entree.type) ?? null : null;
-                  const titre = entree.titre[fr ? 'fr' : 'en'];
-                  const estAuto = entree.origine === 'automatisation';
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {editables.map((entree) => {
+                const modele = parType.get(entree.type as string) ?? null;
+                const titre = entree.titre.fr;
+                return (
+                  <article
+                    key={entree.type}
+                    className="flex flex-col overflow-hidden rounded-xl border border-outline/60 bg-surface"
+                  >
+                    <MiniatureCourriel couleur={couleurMarque} avecMontant={entree.type !== 'quote_sent' && entree.type !== 'contract_sent'} />
 
-                  return (
-                    <li
-                      key={`${groupe.cle}-${entree.type ?? i}`}
-                      className="flex items-center gap-3 rounded-xl border border-outline/60 bg-surface px-4 py-3"
-                    >
-                      <span
-                        className={cn(
-                          'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                          estAuto ? 'bg-amber-500/10 text-amber-600' : 'bg-primary/10 text-primary',
-                        )}
-                        aria-hidden="true"
+                    <div className="flex flex-1 flex-col gap-0.5 px-4 pb-3 pt-3">
+                      <h3 className="flex flex-wrap items-center gap-2 text-[14px] font-medium text-text-primary">
+                        {titre}
+                        {modele ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                            Modifié
+                          </span>
+                        ) : null}
+                      </h3>
+                      <p className="text-[12.5px] text-text-tertiary">{entree.quand.fr}</p>
+                    </div>
+
+                    <div className="px-4 pb-4">
+                      <button
+                        type="button"
+                        onClick={() => setOuvert({ entree, type: entree.type as string, modele })}
+                        className="w-full rounded-lg border border-outline/60 px-3 py-2 text-[13px] font-semibold text-text-secondary hover:bg-surface-secondary"
                       >
-                        {estAuto ? <Zap className="h-4 w-4" /> : <Mail className="h-4 w-4" />}
-                      </span>
+                        Modifier
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="text-[14px] font-medium text-text-primary">{titre}</span>
-                          {entree.variantes ? (
-                            <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-[11px] text-text-tertiary">
-                              {fr ? `${entree.variantes} courriels` : `${entree.variantes} emails`}
-                            </span>
-                          ) : null}
-                          {modele ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                              <Check className="h-3 w-3" aria-hidden="true" />
-                              {fr ? 'Votre texte' : 'Your text'}
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-0.5 truncate text-[12px] text-text-secondary">
-                          {entree.quand[fr ? 'fr' : 'en']}
-                        </p>
-                      </div>
+          {/* Les relances : une seule ligne, et la flèche annonce le changement
+              de page. Leur texte vit dans la règle d'automatisation, pas dans
+              email_templates — le déplacer casserait les textes que des
+              entreprises ont déjà personnalisés là-bas. */}
+          <section>
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-text-tertiary mb-3">
+              Les relances automatiques
+            </h2>
 
-                      {estAuto ? (
-                        // Le texte d'une automatisation vit dans sa règle, pas
-                        // dans email_templates : on envoie vers l'éditeur qui
-                        // le possède plutôt que d'en copier une deuxième source.
-                        <Link
-                          to="/automations"
-                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline/60 px-3 py-1.5 text-[13px] font-medium text-text-secondary hover:bg-surface-secondary"
-                        >
-                          {fr ? 'Modifier' : 'Edit'}
-                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                        </Link>
-                      ) : (
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          {modele ? (
-                            <button
-                              type="button"
-                              onClick={() => void revenirAuDefaut(modele, titre)}
-                              className="rounded-lg p-2 text-text-tertiary hover:bg-surface-secondary hover:text-text-secondary"
-                              aria-label={fr ? `Revenir au texte d’origine : ${titre}` : `Restore original: ${titre}`}
-                              title={fr ? 'Revenir au texte d’origine' : 'Restore original'}
-                            >
-                              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => setAImporter({ entree, type: entree.type as string, modele })}
-                            className="rounded-lg p-2 text-text-tertiary hover:bg-surface-secondary hover:text-text-secondary"
-                            aria-label={fr ? `Importer un HTML : ${titre}` : `Import HTML: ${titre}`}
-                            title={fr ? 'Importer votre propre HTML' : 'Import your own HTML'}
-                          >
-                            <Upload className="h-4 w-4" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setOuvert({ entree, type: entree.type as string, modele })}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-outline/60 px-3 py-1.5 text-[13px] font-medium text-text-secondary hover:bg-surface-secondary"
-                          >
-                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                            {fr ? 'Modifier' : 'Edit'}
-                          </button>
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
+            <Link
+              to="/automations"
+              className="flex items-center gap-3 rounded-xl border border-outline/60 bg-surface px-4 py-3.5 hover:bg-surface-secondary"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600" aria-hidden="true">
+                <Zap className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-medium text-text-primary">
+                  {nbAutomatisations} relances automatiques
+                </span>
+                <span className="block text-[12.5px] text-text-tertiary">
+                  Soumissions, factures, rendez-vous, avis — chacune avec son délai
+                </span>
+              </span>
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline/60 px-3 py-1.5 text-[13px] font-semibold text-text-secondary">
+                Ouvrir
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </span>
+            </Link>
+          </section>
         </div>
       )}
 
@@ -262,6 +324,16 @@ export default function EmailTemplatesSettings() {
           fr={fr}
           typeCourriel={ouvert.type}
           enregistrerTexte={(corpsHtml, objet) => enregistrer(ouvert, corpsHtml, objet)}
+          /* Les deux actions rares. `revenirAuDefaut` n'existe QUE si
+             l'entreprise a écrit quelque chose : sans texte à elle, il n'y a
+             rien à défaire, et le bouton ne s'affiche pas. */
+          revenirAuDefaut={ouvert.modele
+            ? async () => {
+                await revenirAuDefaut(ouvert.modele as EmailTemplate, ouvert.entree.titre.fr);
+                setOuvert(null);
+              }
+            : undefined}
+          importerHtml={() => { setOuvert(null); setAImporter(ouvert); }}
           onClose={() => setOuvert(null)}
           onSaved={() => { setOuvert(null); void charger(); }}
         />
