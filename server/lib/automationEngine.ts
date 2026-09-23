@@ -322,6 +322,7 @@ async function resolveExecuteAt(
       .from('schedule_events')
       .select('start_at, start_time')
       .eq('id', event.entityId)
+      .eq('org_id', event.orgId)
       .maybeSingle();
 
     // Une erreur de lecture ne doit pas être confondue avec « pas de date » :
@@ -661,6 +662,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         supabase,
         task.entity_type,
         task.entity_id,
+        // L'org de la TÂCHE, jamais celle de l'entité lue : c'est ce qui
+        // empêche une tâche d'une org de conclure sur les données d'une autre.
+        task.org_id,
         actionConfig.trigger_event,
       );
 
@@ -771,6 +775,7 @@ async function checkStopConditions(
   supabase: SupabaseClient,
   entityType: string,
   entityId: string,
+  orgId: string,
   triggerEvent?: string,
 ): Promise<boolean> {
   /** Journalise et signale qu'aucune conclusion ne peut être tirée. */
@@ -788,6 +793,7 @@ async function checkStopConditions(
       .from('invoices')
       .select('status, client_id')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('invoices', error.message);
@@ -796,7 +802,7 @@ async function checkStopConditions(
     // Check if client is archived/deleted
     if (inv.client_id) {
       const { data: cl, error: clErr } = await supabase
-        .from('clients').select('deleted_at').eq('id', inv.client_id).maybeSingle();
+        .from('clients').select('deleted_at').eq('id', inv.client_id).eq('org_id', orgId).maybeSingle();
       if (clErr) return illisible('clients', clErr.message);
       if (cl?.deleted_at) return true;
     }
@@ -808,6 +814,7 @@ async function checkStopConditions(
       .from('invoices')
       .select('status')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('invoices', error.message);
@@ -821,6 +828,7 @@ async function checkStopConditions(
       .from('schedule_events')
       .select('status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('schedule_events', error.message);
@@ -836,6 +844,7 @@ async function checkStopConditions(
       .from('quotes')
       .select('status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('quotes', error.message);
@@ -850,6 +859,7 @@ async function checkStopConditions(
       .from('clients')
       .select('status, lead_status, deleted_at')
       .eq('id', entityId)
+      .eq('org_id', orgId)
       .maybeSingle();
 
     if (error) return illisible('clients', error.message);
