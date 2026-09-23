@@ -35,7 +35,10 @@ const monde = () => ({
   company_settings: { data: { company_name: 'A inc.', default_language: 'fr', review_enabled: true, google_review_url: 'https://g.page/r/x' } },
   schedule_events: { data: { id: VISITE, job_id: JOB, start_at: '2026-09-25T13:00:00Z', status: 'scheduled', deleted_at: null, job: { id: JOB, title: 'Gouttières', property_address: '10 rue A', client_id: 'client-a', clients: { first_name: 'Alice', last_name: 'A', email: 'alice@a.test', phone: '+15145550101' } } } },
   jobs: { data: { title: 'Gouttières', client_id: 'client-a' } },
-  clients: { data: { first_name: 'Alice', last_name: 'A', email: 'alice@a.test', phone: '+15145550101' } },
+  // `sms_consent_at` : ces tâches différées sont COMMERCIALES, donc soumises au
+  // verrou de consentement (LCAP). Sans base légale, chaque envoi échouerait
+  // sur « consentement manquant » au lieu du défaut que le test examine.
+  clients: { data: { id: 'client-a', first_name: 'Alice', last_name: 'A', email: 'alice@a.test', phone: '+15145550101', sms_consent_at: '2026-01-01T00:00:00Z', email_consent_at: '2026-01-01T00:00:00Z', email_opt_out_at: null } },
   job_agreements: { data: null }, sms_opt_outs: { data: null }, conversations: { data: { id: 'conv-1', client_id: null } },
   messages: { data: null, count: 0 }, activity_log: { data: null, count: 0 }, automation_execution_logs: { data: null }, notifications: { data: null },
   review_requests: { data: null }, satisfaction_surveys: { data: { id: 'sondage-1' } }, email_templates: { data: null },
