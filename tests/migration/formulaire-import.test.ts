@@ -147,3 +147,12 @@ describe('paiements — entité importable de bout en bout', () => {
     expect(mapPaymentMethod('')).toBe('other');
   });
 });
+
+describe('détection — export de jobs qui liste ses factures', () => {
+  it('« Job # » + « Invoice #s » = jobs, pas factures ; « one offs.csv » = jobs par son nom', () => {
+    expect(detectCategory('one offs.csv', ['Job #', 'Title', 'Quote #', 'Invoice #s', 'Client name', 'Total ($)'])).toBe('jobs');
+    expect(detectCategory('export.csv', ['Job #', 'Invoice #s', 'Client name'])).toBe('jobs');
+    expect(detectCategory('export.csv', ['Invoice #', 'Client name', 'Total ($)'])).toBe('invoices');
+    expect(detectCategory('export.csv', ['Invoice #', 'Job #', 'Client name'])).toBe('jobs');
+  });
+});

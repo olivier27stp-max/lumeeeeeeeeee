@@ -585,6 +585,10 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
           await act(() => approuverAuNomDuClient(m.id), 'Approuvée au nom du client — passez la migration « prête pour l\'import final »');
         }}>Approuver au nom du client</button>
       )}
+      {m.status === 'rolled_back' && (
+        // après un rollback, la migration repart des correspondances (machine à états : rolled_back → mapping)
+        <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'mapping'), 'Migration reprise aux correspondances')}>Reprendre après rollback</button>
+      )}
       {(m.status === 'approved' || m.status === 'completed_with_warnings') && (
         <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'ready_for_final_import'), 'Migration prête pour l\'import final')}>
           {m.status === 'approved' ? 'Marquer prête pour l\'import' : 'Préparer l\'import complémentaire'}
@@ -623,7 +627,9 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
       {m.status === 'ready_for_final_import' && (
         <button type="button" className={danger} onClick={() => setConfirmKind('final')}>Lancer l'import final</button>
       )}
-      {['completed', 'completed_with_warnings', 'failed', 'rolled_back'].includes(m.status) && (
+      {(['completed', 'completed_with_warnings', 'failed', 'rolled_back'].includes(m.status)
+        // un lot final complété reste en place même si le statut a été repris (failed → prête pour l'import)
+        || (d.batches ?? []).some((b: any) => b.kind === 'final' && ['completed', 'failed'].includes(b.status))) && (
         <button type="button" className={danger} onClick={() => setConfirmKind('rollback')}>
           {m.status !== 'rolled_back'
             ? 'Rollback'

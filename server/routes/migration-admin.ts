@@ -1052,8 +1052,12 @@ router.post('/migration-admin/migrations/:id/rollback', validate(migrationFinalI
     // « rolled_back » reste admis : un import final repris (bouton « Reprendre ») laisse PLUSIEURS
     // lots finaux, et le premier rollback n'annulait que le plus récent. Constaté le 2026-09-21
     // (Vision Lavage) : 872 clients et 64 devis du premier lot toujours actifs après « Rollback ».
-    if (!['completed', 'completed_with_warnings', 'failed', 'rolled_back'].includes(migration.status)) {
-      return res.status(409).json({ error: 'Le rollback n\'est possible qu\'après un import final.' });
+    // Le statut ne fait pas foi : après « Reprendre l'import final » (failed → ready_for_final_import)
+    // un lot final complété reste en place alors que le statut ne le dit plus (Vision Lavage,
+    // 2026-09-23 : 853 clients et 630 factures fusionnées à annuler, bouton absent). Seul un
+    // import en cours interdit le rollback.
+    if (['importing', 'post_import_validation'].includes(migration.status)) {
+      return res.status(409).json({ error: 'Un import est en cours — attendez sa fin avant un rollback.' });
     }
     const { data: org } = await admin.from('orgs').select('name').eq('id', migration.org_id).single();
     const confirm = (req.body as { confirm_org_name: string }).confirm_org_name.trim();

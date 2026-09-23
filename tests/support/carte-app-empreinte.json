@@ -7,7 +7,7 @@
   "src/components/settings/SignInMethodsCard.tsx": "c96bfb9fd0570943",
   "src/pages/AcceptInvitation.tsx": "63bee0d34c7dbee9",
   "src/pages/AccessBlocked.tsx": "7f5335e3e2955fcf",
-  "src/pages/AdminMigrations.tsx": "66e6b4e90f8bdb1d",
+  "src/pages/AdminMigrations.tsx": "4f60bf5510761276",
   "src/pages/AppMarketplace.tsx": "f9d26b05a05121a7",
   "src/pages/Auth.tsx": "52587541a57174c5",
   "src/pages/Automations.tsx": "f4b46a2e6e9e987d",
