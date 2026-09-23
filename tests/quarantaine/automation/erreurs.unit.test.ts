@@ -22,7 +22,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mailer = { sendEmail: vi.fn(async (_p: any) => ({ sent: true, messageId: 'x' })) };
 vi.mock('../../../server/lib/mailer', () => ({ isMailerConfigured: () => true, sendEmail: (p: any) => mailer.sendEmail(p) }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }) }));
+vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 
 import { clientEnregistreur, requetes, type Requete } from './_enregistreur';

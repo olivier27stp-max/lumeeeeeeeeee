@@ -29,7 +29,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../../server/lib/mailer', () => ({ isMailerConfigured: () => true, sendEmail: vi.fn(async () => ({ sent: true, messageId: 'x' })) }));
-vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }) }));
+vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
 
 import { clientEnregistreur } from './_enregistreur';
@@ -74,9 +74,17 @@ describe('cliquet — requêtes Supabase par événement immédiat', () => {
     ['create_notification', [{ type: 'create_notification', config: { title: 't', body: 'b' } }], SOCLE + 2],
     ['create_task', [{ type: 'create_task', config: { title: 't' } }], SOCLE + 3],
     ['send_sms', [{ type: 'send_sms', config: { body: 'x' } }], SOCLE + 4],
-    ['send_email', [{ type: 'send_email', config: { subject: 's', body: 'b' } }], SOCLE + 5],
-    ['request_review', [{ type: 'request_review', config: {} }], SOCLE + 15],
-    ['welcome (sms + email + notification + log)', [{ type: 'send_sms', config: { body: 'x' } }, { type: 'send_email', config: { subject: 's', body: 'b' } }, { type: 'create_notification', config: { title: 't', body: 'b' } }, { type: 'log_activity', config: { event_type: 'x' } }], SOCLE + 4 + 5 + 2 + 2],
+    // +6 depuis le 2026-09-23 : la vérification de consentement (LCAP) lit
+    // `clients` avant tout courriel — y compris transactionnel, car
+    // `email_opt_out_at` bloque aussi celui-là. C'est un CHOIX assumé : une
+    // requête contre une infraction. Le SMS transactionnel, lui, court-circuite
+    // (le STOP est déjà vérifié par `sms_opt_outs`), d'où send_sms inchangé.
+    ['send_email', [{ type: 'send_email', config: { subject: 's', body: 'b' } }], SOCLE + 6],
+    // +17 : cette action envoie un courriel ET un SMS, donc deux passages par
+    // la vérification de consentement (le SMS y passe ici car la demande d'avis
+    // est commerciale).
+    ['request_review', [{ type: 'request_review', config: {} }], SOCLE + 17],
+    ['welcome (sms + email + notification + log)', [{ type: 'send_sms', config: { body: 'x' } }, { type: 'send_email', config: { subject: 's', body: 'b' } }, { type: 'create_notification', config: { title: 't', body: 'b' } }, { type: 'log_activity', config: { event_type: 'x' } }], SOCLE + 4 + 6 + 2 + 2],
   ];
   for (const [nom, actions, seuil] of cas) {
     it(`${nom} : ≤ ${seuil} requêtes`, async () => {
