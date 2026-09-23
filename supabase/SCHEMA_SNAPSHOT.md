@@ -6331,7 +6331,7 @@
   - WITH CHECK: `true`
 
 
-## 4. Fonctions (341)
+## 4. Fonctions (342)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -6413,8 +6413,8 @@ l'audit. Lire le corps réel avec :
 | `create_client_with_duplicate_handling(p_org_id uuid, p_mode text, p_payload jsonb, p_merge_duplicates boolea)` → clients | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_field_pin_for_client_row(c clients)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `create_incident(p_title text, p_type text, p_severity text, p_description text DEFAULT)` → uuid | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
-| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_job(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `create_invoice_from_job(p_org_id uuid, p_job_id uuid, p_send_now boolean DEFAULT false)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_milestone(p_org_id uuid, p_job_id uuid, p_milestone_id uuid, p_send_now boolean )` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_invoice_from_visit(p_org_id uuid, p_job_id uuid, p_visit_id uuid, p_send_now boolean DEFA)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `create_job_from_intent(p_intent_id uuid, p_lead_id uuid, p_title text, p_address text DEFAULT)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
@@ -6484,8 +6484,8 @@ l'audit. Lire le corps réel avec :
 | `hard_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_company_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_admin_role(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_membership(target_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_role(p_user uuid, p_org uuid, p_roles text[])` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `haversine_distance(lat1 double precision, lng1 double precision, lat2 double precision, l)` → double precision | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `increment_unread_count(p_conversation_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
@@ -6621,6 +6621,7 @@ l'audit. Lire le corps réel avec :
 | `security_maintenance()` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `seed_agreement_signed_preset(p_org_id uuid DEFAULT NULL::uuid)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `seed_automation_presets(p_org_id uuid)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `seed_pipeline_ventes(p_org_id uuid, p_modele text DEFAULT 'generique'::text)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `send_invoice(p_org_id uuid, p_invoice_id uuid, p_channel text, p_to text)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `set_activity_notes_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `set_app_connections_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
