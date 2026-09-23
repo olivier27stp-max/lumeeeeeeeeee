@@ -36,11 +36,23 @@ import { logger } from '../lib/logger';
 import { deplierMessageSns, evenementDepuisSns, urlDeConfirmationSns, type EvenementSes } from '../lib/courriels/ses';
 import { ENTITES_SANS_SUIVI } from './webhooks-email';
 
-/** Comparaison en temps constant de deux jetons, sans fuiter leur longueur. */
+/**
+ * Comparaison en temps constant de deux jetons, sans fuiter leur longueur.
+ *
+ * Les DEUX côtés sont nettoyés de leurs blancs. Une valeur collée depuis l'URL
+ * d'un abonnement SNS, ou saisie dans Railway, emporte souvent un espace ou un
+ * saut de ligne invisible : la comparaison échoue alors sur la longueur et le
+ * webhook refuse un jeton pourtant identique, en disant seulement « jeton
+ * invalide ». Deux heures perdues le 2026-09-22 à comparer caractère par
+ * caractère des valeurs qui étaient les mêmes.
+ *
+ * Nettoyer ne relâche pas la sécurité : un jeton ne contient jamais d'espace,
+ * donc aucune valeur légitime n'est acceptée qui ne l'aurait pas été.
+ */
 export function jetonValide(recu: unknown, attendu: string): boolean {
-  const a = Buffer.from(String(recu || ''));
-  const b = Buffer.from(attendu);
-  if (!attendu || a.length !== b.length) return false;
+  const a = Buffer.from(String(recu || '').trim());
+  const b = Buffer.from(String(attendu || '').trim());
+  if (!b.length || a.length !== b.length) return false;
   return timingSafeEqual(a, b);
 }
 
@@ -54,7 +66,13 @@ export function statutPourEvenement(e: EvenementSes): 'delivered' | 'bounced' | 
 }
 
 export async function sesWebhookHandler(req: express.Request, res: express.Response) {
-  const attendu = String(process.env.SES_WEBHOOK_TOKEN || '');
+  /* `.trim()` des DEUX côtés : une valeur collée depuis l'URL de
+     l'abonnement SNS emporte souvent un espace ou un saut de ligne, invisible
+     dans l'interface de Railway. La comparaison en temps constant échoue alors
+     sur la longueur, et le webhook refuse un jeton pourtant correct — l'erreur
+     dit « jeton invalide » sans dire pourquoi. Vécu le 2026-09-22 : deux
+     heures perdues à comparer des valeurs qui étaient identiques. */
+  const attendu = String(process.env.SES_WEBHOOK_TOKEN || '').trim();
   if (!attendu) {
     logger.error('[webhooks/ses] SES_WEBHOOK_TOKEN absent : webhook refusé');
     return res.status(503).json({ error: 'SES webhook is not configured.' });
