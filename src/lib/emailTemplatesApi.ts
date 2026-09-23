@@ -175,7 +175,7 @@ export async function getDefaultEmailTemplate(
  * Rend `null` en cas d'échec : l'éditeur garde alors son rendu de secours
  * plutôt que d'afficher un cadre vide — on peut toujours écrire son texte.
  */
-export async function apercuCourriel(corpsHtml: string): Promise<string | null> {
+export async function apercuCourriel(corpsHtml: string, type?: string): Promise<string | null> {
   try {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
@@ -188,7 +188,7 @@ export async function apercuCourriel(corpsHtml: string): Promise<string | null> 
         'x-org-id': orgId,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ corpsHtml }),
+      body: JSON.stringify({ corpsHtml, type }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -212,7 +212,7 @@ export async function apercuCourriel(corpsHtml: string): Promise<string | null> 
  * Rend l'adresse touchée, ou `null` en cas d'échec (le message est affiché
  * par l'appelant).
  */
-export async function envoyerEssaiCourriel(corpsHtml: string, objet: string): Promise<string | null> {
+export async function envoyerEssaiCourriel(corpsHtml: string, objet: string, type?: string): Promise<string | null> {
   try {
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
@@ -225,7 +225,7 @@ export async function envoyerEssaiCourriel(corpsHtml: string, objet: string): Pr
         'x-org-id': orgId,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ corpsHtml, objet, envoyer: true }),
+      body: JSON.stringify({ corpsHtml, objet, type, envoyer: true }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {

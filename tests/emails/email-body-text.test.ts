@@ -175,8 +175,11 @@ describe('éditeur — plus de HTML à l’écran', () => {
        nommément, et surtout ce que la règle voulait dire : aucune
        reconstruction dans le chemin de la FRAPPE. */
     expect(apercu).toContain('const corpsHtml = texteVersHtml(blocsEnTexte(blocs));');
-    expect(apercu).toContain('apercuCourriel(texteVersHtml(blocsEnTexte(blocs)))');
-    expect(apercu).toContain('envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs))');
+    // Sans citer les arguments : ajouter `typeCourriel` à l'appel n'est pas
+    // une violation de la règle, et un test qui casse là-dessus ne protège
+    // plus rien — il coûte juste une correction de plus.
+    expect(apercu).toMatch(/apercuCourriel\(texteVersHtml\(blocsEnTexte\(blocs\)\)/);
+    expect(apercu).toMatch(/envoyerEssaiCourriel\(texteVersHtml\(blocsEnTexte\(blocs\)\)/);
 
     // Le cœur de la règle : rien ne reconstruit le HTML à la frappe.
     const majBloc = apercu.slice(apercu.indexOf('const majBloc'), apercu.indexOf('const supprimerBloc'));

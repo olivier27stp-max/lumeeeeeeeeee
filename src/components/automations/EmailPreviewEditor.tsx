@@ -187,7 +187,7 @@ export default function EmailPreviewEditor({
   const envoyerEssai = async () => {
     setEssaiEnCours(true);
     try {
-      const adresse = await envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs)), objet);
+      const adresse = await envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs)), objet, typeCourriel);
       if (adresse) toast.success(fr ? `Essai envoyé à ${adresse}` : `Test sent to ${adresse}`);
       else toast.error(fr ? 'Envoi impossible' : 'Could not send');
     } finally {
@@ -199,7 +199,7 @@ export default function EmailPreviewEditor({
     if (!ongletApercu) return;
     let vivant = true;
     setChargementApercu(true);
-    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)))
+    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)), typeCourriel)
       .then((h) => { if (vivant) setHtmlReel(h); })
       .finally(() => { if (vivant) setChargementApercu(false); });
     return () => { vivant = false; };
