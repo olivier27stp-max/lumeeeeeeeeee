@@ -1568,7 +1568,13 @@ export async function runFinalImport(
       // defaultToNull:false — sans lui, PostgREST envoie NULL pour toute clé absente
       // d'une rangée du lot (ex. created_at préservé sur certaines lignes seulement)
       // et viole les NOT NULL : le lot entier retombait en retry ligne par ligne.
-      const { error } = await admin.from(table).upsert(chunk.map((c) => c.row), { onConflict: 'id', ignoreDuplicates: true, defaultToNull: false });
+      // Identifiants déterministes : une ligne déjà importée puis annulée (rollback = suppression
+      // douce) existe encore avec le même id. Ignorer le conflit la laissait « supprimée » et
+      // l'import « réussissait » avec un bureau vide (Vision Lavage, 2026-09-23). Les lignes qui
+      // arrivent ici ne sont jamais des fiches actives (le registre les a déjà écartées) : on
+      // écrase donc, et on ressuscite.
+      const rangs = chunk.map((c) => ressusciter(table, c.row));
+      const { error } = await admin.from(table).upsert(rangs, { onConflict: 'id', ignoreDuplicates: false, defaultToNull: false });
       if (!error) {
         for (const c of chunk) {
           counts.wouldCreate += 1;
@@ -1585,7 +1591,7 @@ export async function runFinalImport(
       }
       console.error(`[migration-importer] chunk upsert failed on ${table}, retry per row:`, error.message);
       for (const c of chunk) {
-        const { error: rowErr } = await admin.from(table).upsert([c.row], { onConflict: 'id', ignoreDuplicates: true, defaultToNull: false });
+        const { error: rowErr } = await admin.from(table).upsert([ressusciter(table, c.row)], { onConflict: 'id', ignoreDuplicates: false, defaultToNull: false });
         if (rowErr) {
           counts.errors += 1;
           errorIds.push(c.rec.id);
@@ -1885,6 +1891,12 @@ export async function purgeOrphanProperties(admin: SupabaseClient, orgId: string
     purged += data?.length ?? 0;
   }
   return purged;
+}
+
+/** Tables à suppression douce : une reprise après rollback doit remettre deleted_at à null. */
+const TABLES_SUPPRESSION_DOUCE = new Set(['clients', 'properties', 'jobs', 'quotes', 'invoices', 'schedule_events', 'payments']);
+function ressusciter(table: string, row: Record<string, unknown>): Record<string, unknown> {
+  return TABLES_SUPPRESSION_DOUCE.has(table) ? { ...row, deleted_at: null } : row;
 }
 
 export async function rollbackFinalBatch(

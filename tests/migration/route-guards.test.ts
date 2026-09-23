@@ -132,6 +132,10 @@ describe('portail — chaîne de validation complète', () => {
     const rollback = src.slice(src.indexOf('export async function rollbackFinalBatch'));
     expect(rollback).toContain("from('migration_import_records').delete().eq('batch_id', batchId)");
     expect(rollback).toContain(".in('status', ['imported', 'merged'])");
+    // identifiants déterministes : la réimportation d'une fiche annulée (suppression douce) la ressuscite
+    expect(final).toContain("ignoreDuplicates: false");
+    expect(final).not.toContain("onConflict: 'id', ignoreDuplicates: true");
+    expect(src).toContain('{ ...row, deleted_at: null }');
   });
 
   it("l'approbation exige la phrase exacte et journalise IP + user-agent", () => {
