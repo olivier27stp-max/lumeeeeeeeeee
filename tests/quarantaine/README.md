@@ -41,7 +41,7 @@ code le 2026-09-19 :
 | Faille | Ce que le test attend | État vérifié |
 |---|---|---|
 | **F7** — consentement | Une relance commerciale (`cross_sell_30d`, `seasonal_reminder_6m`, `lost_lead_reengagement`) ne part pas sans consentement du client ; la demande d'avis compte dans le plafond de fréquence | **non corrigé** — aucune notion de consentement marketing côté serveur (`grep` sur `marketing_consent` : rien) |
-| **F6** — interrupteur d'arrêt | `AUTOMATIONS_ENABLED=false` → aucun événement traité, la file reste intacte | **non corrigé** — la variable n'existe nulle part dans `server/` |
+| **F6** — interrupteur d'arrêt | `AUTOMATIONS_ENABLED=false` → aucun événement traité, la file reste intacte | **CORRIGÉ le 2026-09-23** — `server/lib/automations-interrupteur.ts`, branché dans `handleEvent` et `processScheduledTasks`. Les deux tests T12.3 sont passés au VERT. |
 | **F11/F13** — plafonds | Au-delà du plafond quotidien, les SMS sont retenus et reportés, jamais envoyés ; à 80 % une notification prévient l'administrateur | **non vérifié** |
 | **F3, F5, F9, F18** — idempotence, reprise, outbox, destinataire | Voir les intitulés des tests | **non vérifié** |
 
