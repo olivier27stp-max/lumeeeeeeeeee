@@ -467,6 +467,15 @@ async function handleEvent(event: CRMEvent) {
 
     if (rules && rules.length > 0) {
       for (const rule of rules as AutomationRule[]) {
+        /**
+         * Chaque règle est isolée. Sans ce try, une seule règle qui lève —
+         * une lecture qui explose, un gabarit malformé — sortait de la boucle
+         * par le catch global et TOUTES les règles suivantes du même
+         * événement étaient sautées, sans trace individuelle. Une règle
+         * cassée dans une org pouvait ainsi faire taire ses confirmations de
+         * rendez-vous, et rien ne disait laquelle.
+         */
+        try {
         if (!evaluateConditions(rule.conditions, event)) continue;
         if (rule.delay_seconds !== 0) {
           await scheduleDelayedActions(rule, event, engineConfig);
@@ -480,6 +489,14 @@ async function handleEvent(event: CRMEvent) {
           logger.info(`[automationEngine] confirmation immédiate supprimée (visite en lot) — règle "${rule.name}"`);
         } else {
           await executeRuleActions(rule, event, engineConfig);
+        }
+        } catch (err: any) {
+          // On nomme la règle fautive : « une automatisation a planté » sans
+          // dire laquelle n'aide personne à la réparer.
+          console.error(
+            `[automationEngine] règle "${rule.name}" (${rule.id}) a échoué sur ${event.type} — les autres règles continuent :`,
+            err?.message || err,
+          );
         }
       }
     }
@@ -520,6 +537,12 @@ function isTransientFailure(error?: string | null): boolean {
     'plan does not include',  // forfait insuffisant
     'are disabled',           // fonctionnalité désactivée dans les réglages
     'frequency cap',          // plafond atteint : le retenter donnerait le même refus
+    // Consentement manquant (LCAP) : rien ne changera dans les 2 h qui
+    // suivent — la base légale se saisit à la main sur la fiche du client.
+    // Réessayer quatre fois ne fait que retarder la notification qui
+    // apprendra à l'entrepreneur qu'il doit agir.
+    'consentement',
+    'consent',
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));
@@ -537,6 +560,55 @@ function isTransientFailure(error?: string | null): boolean {
  * Reprise à délai croissant (5 min, 30 min, 2 h) pour laisser le temps à un
  * service externe de se rétablir sans marteler la file.
  */
+/**
+ * Prévient l'entreprise qu'un message automatique n'est JAMAIS parti.
+ *
+ * Sans ça, un échec définitif ne laissait qu'une ligne dans les journaux du
+ * serveur : le client ne recevait pas sa confirmation, et l'entrepreneur ne
+ * l'apprenait jamais — ni le jour même, ni plus tard. C'est le pire des
+ * silences, parce qu'il donne l'illusion que tout fonctionne.
+ *
+ * Ne lève jamais : une notification perdue ne doit pas empêcher de marquer la
+ * tâche comme terminée, sinon elle resterait `running` pour toujours.
+ */
+async function prevenirEchecDefinitif(
+  supabase: SupabaseClient,
+  task: { id: string; org_id: string; action_config?: { type?: string } | null; automation_rules?: { name?: string } | null },
+  motif: string | null | undefined,
+): Promise<void> {
+  try {
+    const nom = task.automation_rules?.name || 'Automatisation';
+    const canal = task.action_config?.type === 'send_sms' ? 'texto'
+      : task.action_config?.type === 'send_email' ? 'courriel'
+      : 'message';
+    /**
+     * Le motif est TRADUIT, jamais l'erreur brute : « No recipient phone » ne
+     * dit rien à un entrepreneur, « ce client n'a pas de numéro » lui dit quoi
+     * faire. Une cause inconnue reste affichée telle quelle plutôt que
+     * masquée — mieux vaut un message technique qu'un silence.
+     */
+    const brut = (motif || '').toLowerCase();
+    const cause = brut.includes('no recipient phone') ? 'ce client n\'a pas de numéro de téléphone'
+      : brut.includes('no recipient email') ? 'ce client n\'a pas d\'adresse courriel'
+      : brut.includes('opted out') ? 'ce client s\'est désabonné'
+      : brut.includes('not configured') ? 'l\'envoi n\'est pas configuré dans les réglages'
+      : brut.includes('frequency cap') ? 'la limite de messages pour ce client est atteinte'
+      : brut.includes('consentement') ? 'le consentement de ce client n\'est pas enregistré'
+      : (motif || 'cause inconnue');
+
+    const { error } = await supabase.from('notifications').insert({
+      org_id: task.org_id,
+      type: 'automation_failed',
+      title: `Échec d'envoi — ${nom}`,
+      body: `Le ${canal} n'est pas parti et ne partira pas : ${cause}.`,
+      reference_id: task.id,
+    });
+    if (error) throw new Error(error.message);
+  } catch (e: any) {
+    console.error(`[automationEngine] notification d'échec non créée (tâche ${task.id}) :`, e?.message || e);
+  }
+}
+
 function nextStateAfterFailure(
   attempts: number,
   error?: string | null,
@@ -801,6 +873,10 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
             : nextStateAfterFailure(task.attempts, result.error),
         )
         .eq('id', task.id);
+      // Abandon définitif : l'entreprise doit l'apprendre.
+      if (!result.success && nextStateAfterFailure(task.attempts, result.error).status === 'failed') {
+        await prevenirEchecDefinitif(supabase, task, result.error);
+      }
       if (statusError) {
         // La tâche resterait 'running' pour toujours : personne ne la reprend.
         console.error(`[automationEngine] failed to close scheduled task ${task.id}:`, statusError.message);
@@ -811,6 +887,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         .from('automation_scheduled_tasks')
         .update(nextStateAfterFailure(task.attempts, err.message))
         .eq('id', task.id);
+      if (nextStateAfterFailure(task.attempts, err.message).status === 'failed') {
+        await prevenirEchecDefinitif(supabase, task, err?.message);
+      }
       if (statusError) {
         console.error(`[automationEngine] failed to mark task ${task.id} as failed:`, statusError.message);
       }
