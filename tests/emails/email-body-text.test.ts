@@ -159,11 +159,25 @@ describe('éditeur — plus de HTML à l’écran', () => {
     expect(apercu).toContain('texteVersHtml(');
   });
 
-  it('le HTML n’est reconstruit qu’à l’enregistrement', () => {
-    // L'utilisateur ne doit jamais le voir : la reconstruction a lieu une seule
-    // fois, dans `enregistrer`, jamais pendant la frappe.
+  it('le HTML n’est reconstruit qu’à l’enregistrement et pour l’aperçu, jamais pendant la frappe', () => {
+    /* La règle protégée : l'utilisateur ne voit JAMAIS de HTML, et on ne le
+       reconstruit pas à chaque touche.
+
+       Ce test comptait les appels à `texteVersHtml` et exigeait exactement 1.
+       Le critère est devenu trop grossier le 2026-09-23 : l'onglet « Aperçu
+       réel » en fait un second, pour envoyer le corps au serveur qui rend le
+       vrai gabarit. C'est un usage légitime — et refuser un aperçu fidèle pour
+       satisfaire un compteur aurait inversé la fin et les moyens.
+
+       On vérifie donc les DEUX usages nommément, et surtout ce que la règle
+       voulait vraiment dire : aucune reconstruction dans un `onChange`. */
     expect(apercu).toContain('const corpsHtml = texteVersHtml(blocsEnTexte(blocs));');
-    expect((apercu.match(/texteVersHtml\(/g) || []).length).toBe(1);
+    expect(apercu).toContain('apercuCourriel(texteVersHtml(blocsEnTexte(blocs)))');
+    expect((apercu.match(/texteVersHtml\(/g) || []).length).toBe(2);
+
+    // Le cœur de la règle : rien ne reconstruit le HTML à la frappe.
+    const majBloc = apercu.slice(apercu.indexOf('const majBloc'), apercu.indexOf('const supprimerBloc'));
+    expect(majBloc).not.toContain('texteVersHtml');
   });
 
   it('l’éditeur sert aussi aux modèles de courriel, pas qu’aux automatisations', () => {
