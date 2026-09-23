@@ -18,7 +18,7 @@
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, ExternalLink, FileText, Hammer, User } from 'lucide-react';
+import { Briefcase, ExternalLink, FileText, Hammer, User, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
@@ -587,7 +587,44 @@ export default function DealDrawer({
             </p>
             <p className="text-[10.5px] text-text-tertiary mt-1.5">{LIBELLE_PROVENANCE[provenance]}</p>
           </div>
+
+          {/*
+            `Modal` ne dessine sa croix que s'il reçoit un `title` ; l'en-tête
+            étant fait ici, il faut la poser nous-mêmes. Sans elle, la seule
+            sortie est Échap ou le clic sur le fond — que rien n'annonce.
+          */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={fr ? 'Fermer la fiche' : 'Close'}
+            className="shrink-0 rounded-xl border border-outline p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+          >
+            <X size={15} aria-hidden="true" />
+          </button>
         </header>
+
+        {/*
+          Créer la job ne doit pas attendre que le deal soit gagné : en service
+          terrain, on planifie souvent le travail AVANT de clore la vente. Le
+          bouton reste donc offert tant qu'aucune job n'est liée — sur un deal
+          déjà gagné, c'est l'encart ambre ci-dessous qui prend le relais.
+        */}
+        {!deal.job_id && !jobACreer && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-outline bg-surface-secondary p-3.5">
+            <p className="text-[12px] text-text-secondary">
+              {fr
+                ? 'Aucune job rattachée à ce deal.'
+                : 'No job linked to this deal yet.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => onCreerJob(deal)}
+              className="btn-secondary text-[12px]"
+            >
+              {fr ? 'Créer une job' : 'Create a job'}
+            </button>
+          </div>
+        )}
 
         {/* Guidance de l'étape — le « Path ». Hors onglets : c'est le conseil du moment. */}
         {etape && (
