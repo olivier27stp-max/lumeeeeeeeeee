@@ -73,14 +73,56 @@ export function sesConfigure(env: NodeJS.ProcessEnv = process.env): boolean {
 
 /**
  * L'identifiant d'un message SES, tel qu'on veut le retrouver plus tard.
- * nodemailer rend « <010001...@eu-west-1.amazonses.com> » ; les notifications
- * SNS citent « 010001...». On enlève les chevrons et le domaine pour que les
- * deux se rejoignent dans `email_deliveries.message_id`.
+ * Les notifications SNS citent « 010001... » : on enlève les chevrons et le
+ * domaine éventuels pour que les deux se rejoignent dans
+ * `email_deliveries.message_id`.
  */
 export function messageIdSes(brut: string | null | undefined): string {
   const s = String(brut || '').trim().replace(/^<|>$/g, '');
   const arobase = s.indexOf('@');
   return arobase > 0 ? s.slice(0, arobase) : s;
+}
+
+/**
+ * L'identifiant qu'AMAZON a donné au message, extrait de sa réponse SMTP.
+ *
+ * Le piège, et il est total : `info.messageId` de nodemailer n'est PAS
+ * l'identifiant d'Amazon. C'est l'en-tête `Message-ID` que nodemailer a
+ * fabriqué lui-même AVANT de se connecter (smtp-transport/index.js : `const
+ * messageId = mail.message.messageId()` puis `info.messageId = messageId`).
+ * En SMTP simple il ressemble à « <a1b2c3-...@lumecrm.net> », un UUID qui
+ * n'existe nulle part chez Amazon.
+ *
+ * Le vrai identifiant arrive dans la RÉPONSE du serveur, qu'on lit dans
+ * `info.response` : SES répond « 250 Ok 010001999... ».
+ *
+ * Conséquence si on se trompe — c'est ce qui est arrivé : les envois
+ * fonctionnent, les lignes `email_deliveries` s'écrivent, tout a l'air
+ * parfait, et AUCUN évènement SNS ne retrouve jamais sa ligne, parce qu'Amazon
+ * cite un identifiant qui n'a jamais été enregistré. Pas une erreur, pas un
+ * rebond, pas une ouverture. Un suivi silencieusement mort.
+ *
+ * On retombe sur `Message-ID` seulement s'il porte le domaine d'Amazon
+ * (`amazonses.com`) — c'est le cas de l'API SES, pas du SMTP.
+ */
+export function messageIdDepuisReponseSes(info: { response?: string; messageId?: string } | null | undefined): string {
+  /* « 250 Ok 010001999abc-... » : on prend le DERNIER mot de la réponse, qui
+     est l'identifiant. Il contient des tirets, d'où le découpage sur les
+     espaces plutôt qu'une expression qui devrait deviner sa forme exacte. */
+  const reponse = String(info?.response || '').trim();
+  if (/^250(\s|$)/.test(reponse)) {
+    const dernier = reponse.split(/\s+/).pop() || '';
+    // « 250 Ok » tout court ne porte aucun identifiant : ne rien inventer.
+    if (dernier.length >= 16 && /^[0-9a-zA-Z._-]+$/.test(dernier)) return dernier;
+  }
+
+  // Repli : l'en-tête, mais seulement s'il vient vraiment d'Amazon.
+  const entete = String(info?.messageId || '');
+  if (/amazonses\.com/i.test(entete)) return messageIdSes(entete);
+
+  // Rien d'exploitable : mieux vaut une chaîne vide qu'un identifiant qui
+  // ne correspondra jamais à rien et ferait croire que le suivi fonctionne.
+  return '';
 }
 
 export type EvenementCourriel = 'delivered' | 'bounced' | 'complained' | 'delayed' | 'opened' | 'clicked';

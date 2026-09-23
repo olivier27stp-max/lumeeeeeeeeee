@@ -5,7 +5,7 @@ import { getServiceClient } from './supabase';
 import { destinataireGele, journaliserBlocage, MESSAGE_GEL } from './migration/gel-communications';
 import { htmlVersTextePourEnvoi } from './courriels/texte';
 import { planifierPremiereReprise, TABLE_REPRISES } from './courriels/reprises';
-import { reglagesSmtpSes, sesConfigure, messageIdSes } from './courriels/ses';
+import { reglagesSmtpSes, sesConfigure, messageIdDepuisReponseSes } from './courriels/ses';
 
 /**
  * Centralized email sender.
@@ -375,9 +375,17 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         text,
         ...(Object.keys(enTetes).length ? { headers: enTetes } : {}),
       });
-      // SES : on range l'identifiant sous la forme que citeront ses notifications
-      // de rebond (sans chevrons ni domaine), sinon aucun rebond ne retrouverait sa ligne.
-      messageId = provider === 'ses' ? messageIdSes(info.messageId) : info.messageId;
+      /* SES : l'identifiant vient de la RÉPONSE d'Amazon (`info.response`), pas
+         de `info.messageId` — celui-là, nodemailer l'a fabriqué lui-même avant
+         même de se connecter. On enregistrait donc un UUID qu'Amazon n'a jamais
+         vu, et aucune notification SNS ne pouvait retrouver sa ligne : ni
+         ouverture, ni clic, ni rebond, sans la moindre erreur nulle part. */
+      messageId = provider === 'ses' ? messageIdDepuisReponseSes(info) : info.messageId;
+      if (provider === 'ses' && !messageId) {
+        // Sans identifiant d'Amazon, la ligne ne sera jamais rattachable : le
+        // dire, plutôt que de journaliser une ligne muette qu'on croira suivie.
+        logger.error('[mailer] identifiant SES introuvable dans la réponse SMTP', { reponse: String((info as { response?: string }).response || '').slice(0, 200) });
+      }
     }
 
     // Une ligne par destinataire réel (pas l'adresse de redirection QA).
