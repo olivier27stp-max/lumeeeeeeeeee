@@ -1104,7 +1104,11 @@ function AuthenticatedApp({
       items: (venteModule.isEnabled || venteModule.loading || venteModule.indetermine)
         ? [
             { id: 'field-sales', label: t.nav.venteMap, icon: MapPinned, path: '/field-sales', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
-            { id: 'd2d-pipeline', label: t.nav.ventePipeline, icon: GitBranch, path: '/pipeline', tileColor: 'blue', requiredPermission: 'door_to_door.access', requiredPlanFlag: 'includes_d2d' },
+            // L'ancien board D2D n'est plus proposé dans le menu : le pipeline de
+            // ventes (/ventes) le remplace. La route /pipeline reste servie —
+            // 19 fichiers lisent encore pipeline_deals (Tableau de bord, Clients,
+            // Devis, Classement, Commissions), et un lien déjà partagé doit
+            // continuer de répondre.
             { id: 'leaderboard', label: t.nav.leaderboard, icon: Trophy, path: '/leaderboard', tileColor: 'blue', requiredPermission: 'financial.view_reports', requiredPlanFlag: 'includes_d2d' },
             { id: 'commissions', label: t.nav.commissions, icon: Wallet, path: '/commissions', tileColor: 'blue', requiredPermission: 'commissions.read', requiredPlanFlag: 'includes_d2d' },
           ]
