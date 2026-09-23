@@ -537,6 +537,12 @@ function isTransientFailure(error?: string | null): boolean {
     'plan does not include',  // forfait insuffisant
     'are disabled',           // fonctionnalité désactivée dans les réglages
     'frequency cap',          // plafond atteint : le retenter donnerait le même refus
+    // Consentement manquant (LCAP) : rien ne changera dans les 2 h qui
+    // suivent — la base légale se saisit à la main sur la fiche du client.
+    // Réessayer quatre fois ne fait que retarder la notification qui
+    // apprendra à l'entrepreneur qu'il doit agir.
+    'consentement',
+    'consent',
   ];
   const lower = error.toLowerCase();
   return !definitifs.some((d) => lower.includes(d));
