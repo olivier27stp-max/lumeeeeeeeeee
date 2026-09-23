@@ -1,19 +1,25 @@
 /**
  * Pipeline de ventes — onglet « Statistiques ».
  *
- * Maquette 100 % locale : tout vient des helpers purs de `lib/pipeline/mockData`
- * et du vocabulaire visuel de `lib/pipeline/presentation`. Aucun appel réseau,
- * aucun style nouveau — uniquement les jetons du design system.
+ * Tout vient des fonctions Postgres `pipeline_*` (SECURITY INVOKER : elles ne
+ * voient que ce que l'utilisateur connecté peut voir, `org_id` n'est jamais un
+ * paramètre). Aucun calcul métier n'est refait ici — la base est la seule à
+ * décider, l'écran se contente de présenter.
  *
- * Deux formules de conversion cohabitent ici, et c'est VOULU :
+ * Deux formules de conversion cohabitent, et c'est VOULU :
  *  - le taux de closing ne regarde que les deals FERMÉS (gagnés + perdus) ;
  *  - la cohorte du formulaire rapporte les gagnés à TOUS les inscrits du mois,
  *    les deals encore ouverts compris. Chaque tuile le dit dans son infobulle.
+ *
+ * Les taux rendus par la base sont déjà en pourcentage (0–100), jamais en
+ * fraction : les convertir une seconde fois donnerait « 0,42 % » pour 42 %.
  */
 import { useId, useMemo, useState } from 'react';
-import { Info } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Info, Loader2, Target } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
+import EmptyState from '../ui/EmptyState';
 import PeriodSelector from '../insights/PeriodSelector';
 import {
   DEFAULT_INSIGHTS_PERIOD,
@@ -21,42 +27,27 @@ import {
   type InsightsPeriod,
 } from '../../lib/insightsPeriod';
 import {
-  MOCK_MEMBERS,
-  MOCK_NOW,
-  MOCK_STAGE_HISTORY,
-  aTraiter,
-  cohorteFormulaire,
-  delaiPremierContactHeures,
-  dureeMoyenneCycleJours,
-  entonnoir,
-  parVendeur,
-  raisonsDePerte,
-  repartitionParSource,
-  revenusGeneres,
-  tauxClosing,
-  tempsMoyenParEtapeJours,
-  tendanceHebdo,
-  type DealSource,
-  type MockDeal,
-  type MockStage,
-} from '../../lib/pipeline/mockData';
-import { LIBELLE_SOURCE, montant, rangsOuverts, visuelEtape } from '../../lib/pipeline/presentation';
+  fetchATraiter,
+  fetchCohortes,
+  fetchEntonnoir,
+  fetchKpis,
+  fetchParSource,
+  fetchTendance,
+  fetchVitesse,
+  type ATraiterRow,
+} from '../../lib/pipelineVentesApi';
 
 // ---------------------------------------------------------------------------
 // Petits utilitaires locaux
 // ---------------------------------------------------------------------------
 
-const MS_PAR_JOUR = 86_400_000;
-
-function ms(iso: string): number {
-  return new Date(iso).getTime();
-}
-
-function pourcent(fraction: number, fr: boolean): string {
-  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', {
-    style: 'percent',
-    maximumFractionDigits: 0,
-  }).format(fraction);
+/** Taux rendu par la base : déjà 0–100. `null` = « rien à mesurer ». */
+function pourcentDb(valeur: number | null, fr: boolean): string {
+  if (valeur === null) return '—';
+  return `${new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1,
+  }).format(valeur)} %`;
 }
 
 function nombre(n: number, fr: boolean, decimales = 1): string {
@@ -66,6 +57,17 @@ function nombre(n: number, fr: boolean, decimales = 1): string {
   }).format(n);
 }
 
+/** Montant en cents → « 1 250 $ ». Les cents sont la source de vérité. */
+function montant(cents: number | null, fr: boolean): string {
+  if (cents === null) return '—';
+  return new Intl.NumberFormat(fr ? 'fr-CA' : 'en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
 /** « 3,2 h » ou « 1,4 j » selon l'échelle — jamais un nombre nu. */
 function heures(h: number | null, fr: boolean): string {
   if (h === null) return '—';
@@ -73,10 +75,9 @@ function heures(h: number | null, fr: boolean): string {
   return `${nombre(h / 24, fr)} ${fr ? 'j' : 'd'}`;
 }
 
-/** Mois « AAAA-MM » → « août 2026 ». */
+/** Date ISO d'un début de mois → « août 2026 ». */
 function libelleMois(mois: string, fr: boolean): string {
-  const [annee, m] = mois.split('-');
-  const d = new Date(Date.UTC(Number(annee), Number(m) - 1, 1));
+  const d = new Date(`${mois.slice(0, 10)}T00:00:00Z`);
   return new Intl.DateTimeFormat(fr ? 'fr-CA' : 'en-CA', {
     month: 'long',
     year: 'numeric',
@@ -84,9 +85,9 @@ function libelleMois(mois: string, fr: boolean): string {
   }).format(d);
 }
 
-/** Étiquette courte d'une semaine (lundi ISO) pour l'axe du graphique. */
+/** Étiquette courte d'une semaine (lundi) pour l'axe du graphique. */
 function libelleSemaine(jour: string, fr: boolean): string {
-  const d = new Date(`${jour}T00:00:00Z`);
+  const d = new Date(`${jour.slice(0, 10)}T00:00:00Z`);
   return new Intl.DateTimeFormat(fr ? 'fr-CA' : 'en-CA', {
     day: 'numeric',
     month: 'short',
@@ -94,11 +95,27 @@ function libelleSemaine(jour: string, fr: boolean): string {
   }).format(d);
 }
 
-const TOUTES = '__toutes__';
-const NON_ASSIGNE = '__non_assigne__';
+const LIBELLE_SOURCE: Record<string, { fr: string; en: string }> = {
+  form_web: { fr: 'Formulaire web', en: 'Web form' },
+  meta: { fr: 'Meta', en: 'Meta' },
+  manual: { fr: 'Manuel', en: 'Manual' },
+};
+
+function libelleSource(source: string, fr: boolean): string {
+  const l = LIBELLE_SOURCE[source];
+  if (!l) return source;
+  return fr ? l.fr : l.en;
+}
+
+/** Palette douce du kanban, dérivée du rang — jamais du nom de l'étape. */
+const TEINTES_OUVERTES = ['#8A9B7D', '#7E8CA0', '#B39C77', '#8E8AA8'] as const;
+
+function teinteRang(i: number): string {
+  return TEINTES_OUVERTES[i % TEINTES_OUVERTES.length] ?? TEINTES_OUVERTES[0];
+}
 
 // ---------------------------------------------------------------------------
-// Sous-composants locaux (rien n'est exporté : c'est la maquette d'un onglet)
+// Sous-composants locaux (rien n'est exporté : c'est un onglet)
 // ---------------------------------------------------------------------------
 
 function SectionHead({ titre, aide }: { titre: string; aide: string }) {
@@ -118,36 +135,41 @@ function Tuile({
   detail,
   calcul,
   ecart,
+  chargement,
 }: {
   valeur: string;
   libelle: string;
   detail?: string;
   calcul: string;
   ecart?: { signe: 1 | -1 | 0; texte: string } | null;
+  chargement?: boolean;
 }) {
   return (
-    <div
-      className="rounded-xl border border-outline bg-surface-card px-5 py-4"
-      title={calcul}
-    >
+    <div className="rounded-xl border border-outline bg-surface-card px-5 py-4" title={calcul}>
       <div className="flex items-center gap-1.5">
         <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">{libelle}</span>
         <Info className="w-3 h-3 text-text-muted shrink-0" aria-label={calcul} role="img" />
       </div>
-      <div className="mt-3 flex items-baseline gap-2.5 flex-wrap">
-        <span className="text-[28px] font-bold leading-none tracking-tight tabular-nums text-text-primary">{valeur}</span>
-        {ecart && (
-          <span
-            className={cn(
-              'text-[12.5px] font-bold tabular-nums',
-              ecart.signe === 0 ? 'text-text-tertiary' : 'text-text-secondary',
-            )}
-          >
-            {ecart.signe === 1 ? '↑' : ecart.signe === -1 ? '↓' : '→'} {ecart.texte}
-          </span>
-        )}
-      </div>
-      {detail && <div className="mt-2 text-[12px] text-text-tertiary">{detail}</div>}
+      {chargement ? (
+        <div className="mt-3 h-[28px] flex items-center">
+          <Loader2 className="w-4 h-4 text-text-muted animate-spin" aria-hidden="true" />
+        </div>
+      ) : (
+        <div className="mt-3 flex items-baseline gap-2.5 flex-wrap">
+          <span className="text-[28px] font-bold leading-none tracking-tight tabular-nums text-text-primary">{valeur}</span>
+          {ecart && (
+            <span
+              className={cn(
+                'text-[12.5px] font-bold tabular-nums',
+                ecart.signe === 0 ? 'text-text-tertiary' : 'text-text-secondary',
+              )}
+            >
+              {ecart.signe === 1 ? '↑' : ecart.signe === -1 ? '↓' : '→'} {ecart.texte}
+            </span>
+          )}
+        </div>
+      )}
+      {detail && !chargement && <div className="mt-2 text-[12px] text-text-tertiary">{detail}</div>}
     </div>
   );
 }
@@ -197,26 +219,28 @@ function BarreHorizontale({
 
 /** Ligne cliquable d'une liste « à traiter ». */
 function LigneDeal({
-  deal,
+  nom,
   secondaire,
+  dealId,
   onOuvrir,
 }: {
-  deal: MockDeal;
+  nom: string;
   secondaire: string;
-  onOuvrir?: (deal: MockDeal) => void;
+  dealId: string;
+  onOuvrir?: (dealId: string) => void;
 }) {
   const interactif = typeof onOuvrir === 'function';
   return (
     <button
       type="button"
       disabled={!interactif}
-      onClick={() => onOuvrir?.(deal)}
+      onClick={() => onOuvrir?.(dealId)}
       className={cn(
         'w-full text-left rounded-lg px-3 py-2.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-text-tertiary',
         interactif ? 'hover:bg-surface-secondary cursor-pointer' : 'cursor-default',
       )}
     >
-      <div className="text-[13px] font-semibold tracking-tight text-text-primary truncate">{deal.clientName}</div>
+      <div className="text-[13px] font-semibold tracking-tight text-text-primary truncate">{nom}</div>
       <div className="text-[11.5px] text-text-tertiary mt-0.5 truncate">{secondaire}</div>
     </button>
   );
@@ -224,6 +248,46 @@ function LigneDeal({
 
 function Vide({ texte }: { texte: string }) {
   return <div className="px-3 py-6 text-center text-[12.5px] text-text-tertiary">{texte}</div>;
+}
+
+function Chargement({ etiquette }: { etiquette: string }) {
+  return (
+    <div className="px-3 py-8 flex items-center justify-center gap-2 text-[12.5px] text-text-tertiary">
+      <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+      <span>{etiquette}</span>
+    </div>
+  );
+}
+
+/** Encart d'erreur sobre : on dit ce qui a échoué, on ne vide pas l'écran. */
+function Echec({ titre, message }: { titre: string; message: string }) {
+  return (
+    <div className="px-4 py-6 text-center">
+      <div className="text-[13px] font-semibold text-text-primary">{titre}</div>
+      <div className="mt-1 text-[12px] text-text-tertiary break-words">{message}</div>
+    </div>
+  );
+}
+
+/**
+ * Bloc annoncé mais pas encore mesurable : aucune fonction de la base ne le
+ * couvre. Mieux vaut le dire que d'afficher un chiffre calculé à moitié.
+ */
+function BientotDisponible({ titre, phrase, etiquette }: { titre: string; phrase: string; etiquette: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-outline bg-surface-card px-5 py-8 text-center">
+      <span className="inline-block rounded-full border border-outline px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-text-tertiary">
+        {etiquette}
+      </span>
+      <div className="mt-3 text-[13.5px] font-semibold tracking-tight text-text-primary">{titre}</div>
+      <p className="mt-1.5 text-[12.5px] text-text-tertiary max-w-md mx-auto leading-relaxed">{phrase}</p>
+    </div>
+  );
+}
+
+function messageErreur(e: unknown, fr: boolean): string {
+  if (e instanceof Error && e.message) return e.message;
+  return fr ? 'Erreur inconnue.' : 'Unknown error.';
 }
 
 // ---------------------------------------------------------------------------
@@ -264,9 +328,7 @@ function TendanceDeuxSeries({
   const max = Math.max(1, ...leads, ...gagnes);
   const grille = [0, 1, 2, 3].map((s) => TOP + (H - TOP) * (s / 3));
   const cheminLeads = cheminSerie(leads, max);
-  const aireLeads = leads.length
-    ? `${cheminLeads} L${W},${H} L0,${H} Z`
-    : '';
+  const aireLeads = leads.length ? `${cheminLeads} L${W},${H} L0,${H} Z` : '';
 
   if (leads.length === 0) {
     return <Vide texte={fr ? 'Aucune donnée sur la période.' : 'No data for this period.'} />;
@@ -345,11 +407,7 @@ function TendanceDeuxSeries({
 
       <div className="mt-2 flex text-[10px] font-semibold text-text-tertiary">
         {labels.map((l, i) => (
-          <span
-            key={l}
-            className="flex-1 text-center"
-            style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}
-          >
+          <span key={l} className="flex-1 text-center" style={{ visibility: i % 2 === 0 ? 'visible' : 'hidden' }}>
             {l}
           </span>
         ))}
@@ -362,333 +420,216 @@ function TendanceDeuxSeries({
 // Composant principal
 // ---------------------------------------------------------------------------
 
-export default function PipelineStats({
-  deals,
-  etapes,
-  onOuvrirDeal,
-}: {
-  deals: MockDeal[];
-  etapes: MockStage[];
-  onOuvrirDeal?: (deal: MockDeal) => void;
-}) {
+export default function PipelineStats({ onOuvrirDeal }: { onOuvrirDeal?: (dealId: string) => void }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
 
-  const idSource = useId();
-  const idCampagne = useId();
-  const idAssigne = useId();
-
+  const idPeriode = useId();
   const [periode, setPeriode] = useState<InsightsPeriod>(DEFAULT_INSIGHTS_PERIOD);
-  const [source, setSource] = useState<string>(TOUTES);
-  const [campagne, setCampagne] = useState<string>(TOUTES);
-  const [assigne, setAssigne] = useState<string>(TOUTES);
+  const plage = useMemo(() => periodRange(periode), [periode]);
+  const { from, to } = plage;
 
-  /** Campagnes Meta présentes dans les données — jamais une liste écrite en dur. */
-  const campagnes = useMemo(() => {
-    const set = new Set<string>();
-    for (const d of deals) if (d.utmCampaign !== null) set.add(d.utmCampaign);
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [deals]);
+  const kpisQ = useQuery({
+    queryKey: ['pipeline-kpis', from, to],
+    queryFn: () => fetchKpis(from, to),
+    staleTime: 60_000,
+  });
+  const sourcesQ = useQuery({
+    queryKey: ['pipeline-par-source', from, to],
+    queryFn: () => fetchParSource(from, to),
+    staleTime: 60_000,
+  });
+  const cohortesQ = useQuery({
+    queryKey: ['pipeline-cohortes', 6],
+    queryFn: () => fetchCohortes(6),
+    staleTime: 60_000,
+  });
+  const vitesseQ = useQuery({
+    queryKey: ['pipeline-vitesse', from, to],
+    queryFn: () => fetchVitesse(from, to),
+    staleTime: 60_000,
+  });
+  const entonnoirQ = useQuery({
+    queryKey: ['pipeline-entonnoir', from, to],
+    queryFn: () => fetchEntonnoir(from, to),
+    staleTime: 60_000,
+  });
+  const aTraiterQ = useQuery({
+    queryKey: ['pipeline-a-traiter', 7],
+    queryFn: () => fetchATraiter(7),
+    staleTime: 60_000,
+  });
+  const tendanceQ = useQuery({
+    queryKey: ['pipeline-tendance', 12],
+    queryFn: () => fetchTendance(12),
+    staleTime: 60_000,
+  });
 
-  /** Fenêtre courante + fenêtre précédente de même longueur, ancrées sur MOCK_NOW. */
-  const fenetres = useMemo(() => {
-    const plage = periodRange(periode, new Date(MOCK_NOW));
-    const debut = ms(`${plage.from}T00:00:00Z`);
-    const fin = ms(`${plage.to}T23:59:59Z`);
-    const duree = Math.max(MS_PAR_JOUR, fin - debut);
-    return { debut, fin, debutPrec: debut - duree, finPrec: debut };
-  }, [periode]);
+  const kpis = kpisQ.data ?? null;
+  const vitesse = vitesseQ.data ?? null;
+  const sources = sourcesQ.data ?? [];
+  const cohortes = cohortesQ.data ?? [];
+  const entonnoir = entonnoirQ.data ?? [];
+  const tendance = tendanceQ.data ?? [];
 
-  /** Filtres autres que la période — appliqués aux deux fenêtres. */
-  const passeFiltres = useMemo(() => {
-    return (d: MockDeal): boolean => {
-      if (source !== TOUTES && d.source !== source) return false;
-      if (campagne !== TOUTES && d.utmCampaign !== campagne) return false;
-      if (assigne === NON_ASSIGNE) {
-        if (d.assignedUserId !== null) return false;
-      } else if (assigne !== TOUTES && d.assignedUserId !== assigne) {
-        return false;
-      }
-      return true;
-    };
-  }, [source, campagne, assigne]);
-
-  const dealsFiltres = useMemo(
-    () => deals.filter((d) => {
-      const t = ms(d.createdAt);
-      return t >= fenetres.debut && t <= fenetres.fin && passeFiltres(d);
-    }),
-    [deals, fenetres, passeFiltres],
-  );
-
-  const dealsPrecedents = useMemo(
-    () => deals.filter((d) => {
-      const t = ms(d.createdAt);
-      return t >= fenetres.debutPrec && t < fenetres.finPrec && passeFiltres(d);
-    }),
-    [deals, fenetres, passeFiltres],
-  );
-
-  const idsFiltres = useMemo(() => new Set(dealsFiltres.map((d) => d.id)), [dealsFiltres]);
-  const historiqueFiltre = useMemo(
-    () => MOCK_STAGE_HISTORY.filter((h) => idsFiltres.has(h.dealId)),
-    [idsFiltres],
-  );
-
-  const rangs = useMemo(() => rangsOuverts(etapes), [etapes]);
-  const nomEtape = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const e of etapes) m.set(e.id, fr ? e.nameFr : e.nameEn);
-    return m;
-  }, [etapes, fr]);
-  const kinds = useMemo(() => {
-    const m = new Map<string, MockStage['kind']>();
-    for (const e of etapes) m.set(e.id, e.kind);
-    return m;
-  }, [etapes]);
-
-  // ── 1. Leads entrants ────────────────────────────────────────────────────
-  const leads = dealsFiltres.length;
-  const leadsPrec = dealsPrecedents.length;
+  // ── 1. Écart de leads contre la fenêtre précédente ──────────────────────
   const ecartLeads = useMemo(() => {
-    if (leadsPrec === 0) {
-      return leads === 0
+    if (!kpis) return null;
+    const { leads_entrants: courant, leads_precedents: precedent } = kpis;
+    if (precedent === 0) {
+      return courant === 0
         ? { signe: 0 as const, texte: fr ? 'stable' : 'flat' }
         : { signe: 1 as const, texte: fr ? 'nouveau' : 'new' };
     }
-    const delta = (leads - leadsPrec) / leadsPrec;
+    const delta = (courant - precedent) / precedent;
     const signe = delta > 0 ? (1 as const) : delta < 0 ? (-1 as const) : (0 as const);
-    return { signe, texte: pourcent(Math.abs(delta), fr) };
-  }, [leads, leadsPrec, fr]);
+    return { signe, texte: pourcentDb(Math.abs(delta) * 100, fr) };
+  }, [kpis, fr]);
 
-  // ── 2. Taux de closing ───────────────────────────────────────────────────
-  const taux = useMemo(() => tauxClosing(dealsFiltres, etapes), [dealsFiltres, etapes]);
-  const fermes = useMemo(() => {
-    let gagnes = 0;
-    let perdus = 0;
-    for (const d of dealsFiltres) {
-      const k = kinds.get(d.stageId);
-      if (k === 'won') gagnes += 1;
-      else if (k === 'lost') perdus += 1;
-    }
-    return { gagnes, perdus, total: gagnes + perdus };
-  }, [dealsFiltres, kinds]);
+  // ── 6. Tranches de délai — `null` ≠ 0 % ─────────────────────────────────
+  const tranches = useMemo(() => {
+    if (!vitesse) return [];
+    return [
+      {
+        cle: 'lt1h',
+        libelle: fr ? 'Moins de 1 h' : 'Under 1 h',
+        taux: vitesse.closing_moins_1h,
+        deals: vitesse.n_moins_1h,
+      },
+      {
+        cle: 'lt24h',
+        libelle: fr ? 'Moins de 24 h' : 'Under 24 h',
+        taux: vitesse.closing_moins_24h,
+        deals: vitesse.n_moins_24h,
+      },
+      {
+        cle: 'gt24h',
+        libelle: fr ? 'Plus de 24 h' : 'Over 24 h',
+        taux: vitesse.closing_plus_24h,
+        deals: vitesse.n_plus_24h,
+      },
+    ];
+  }, [vitesse, fr]);
 
-  // ── 3. Revenus générés ───────────────────────────────────────────────────
-  const revenus = useMemo(() => revenusGeneres(dealsFiltres), [dealsFiltres]);
-  const avecJob = useMemo(() => dealsFiltres.filter((d) => d.jobId !== null).length, [dealsFiltres]);
-
-  // ── 4. Par source ────────────────────────────────────────────────────────
-  const parSource = useMemo(
-    () => repartitionParSource(dealsFiltres, etapes),
-    [dealsFiltres, etapes],
-  );
-
-  // ── 5. Cohorte du formulaire ─────────────────────────────────────────────
-  const cohortes = useMemo(
-    () => cohorteFormulaire(dealsFiltres, etapes),
-    [dealsFiltres, etapes],
-  );
-
-  // ── 6. Speed-to-lead ─────────────────────────────────────────────────────
-  const speed = useMemo(() => {
-    let somme = 0;
-    let n = 0;
-    const moinsDUneHeure: MockDeal[] = [];
-    const moinsDUnJour: MockDeal[] = [];
-    const plusDUnJour: MockDeal[] = [];
-    const jamais: MockDeal[] = [];
-
-    for (const d of dealsFiltres) {
-      const h = delaiPremierContactHeures(d);
-      if (h === null) {
-        jamais.push(d);
-        continue;
-      }
-      somme += h;
-      n += 1;
-      if (h < 1) moinsDUneHeure.push(d);
-      else if (h < 24) moinsDUnJour.push(d);
-      else plusDUnJour.push(d);
-    }
-
-    const tranche = (liste: MockDeal[]) => {
-      let gagnes = 0;
-      let perdus = 0;
-      for (const d of liste) {
-        const k = kinds.get(d.stageId);
-        if (k === 'won') gagnes += 1;
-        else if (k === 'lost') perdus += 1;
-      }
-      return {
-        deals: liste.length,
-        fermes: gagnes + perdus,
-        taux: tauxClosing(liste, etapes),
-      };
-    };
-
-    return {
-      moyenneHeures: n === 0 ? null : somme / n,
-      contactes: n,
-      jamais: jamais.length,
-      tranches: [
-        { cle: 'lt1h', libelle: fr ? 'Moins de 1 h' : 'Under 1 h', ...tranche(moinsDUneHeure) },
-        { cle: 'lt24h', libelle: fr ? 'Moins de 24 h' : 'Under 24 h', ...tranche(moinsDUnJour) },
-        { cle: 'gt24h', libelle: fr ? 'Plus de 24 h' : 'Over 24 h', ...tranche(plusDUnJour) },
-      ],
-    };
-  }, [dealsFiltres, etapes, kinds, fr]);
-
-  // ── 7. Entonnoir ─────────────────────────────────────────────────────────
-  const marches = useMemo(
-    () => entonnoir(dealsFiltres, etapes, historiqueFiltre),
-    [dealsFiltres, etapes, historiqueFiltre],
-  );
-  const maxEntonnoir = Math.max(1, ...marches.map((m) => m.atteints));
-  /** Le plus gros décrochage : la marche ouverte qui perd le plus de deals. */
-  const idDecrochage = useMemo(() => {
+  // ── 7. Entonnoir : le plus gros décrochage, `taux_passage` vient de la base ──
+  const maxEntonnoir = Math.max(1, ...entonnoir.map((m) => m.atteints));
+  const decrochage = useMemo(() => {
     let pire: string | null = null;
     let perteMax = 0;
-    for (let i = 1; i < marches.length; i += 1) {
-      const precedente = marches[i - 1];
-      const courante = marches[i];
+    for (let i = 1; i < entonnoir.length; i += 1) {
+      const precedente = entonnoir[i - 1];
+      const courante = entonnoir[i];
       if (!precedente || !courante) continue;
-      if (kinds.get(courante.stageId) !== 'open') continue;
       const perte = precedente.atteints - courante.atteints;
       if (perte > perteMax) {
         perteMax = perte;
-        pire = courante.stageId;
+        pire = courante.stage_id;
       }
     }
     return { stageId: pire, perte: perteMax };
-  }, [marches, kinds]);
+  }, [entonnoir]);
 
-  // ── 8. Durée du cycle ────────────────────────────────────────────────────
-  const cycleJours = useMemo(
-    () => dureeMoyenneCycleJours(dealsFiltres, etapes),
-    [dealsFiltres, etapes],
-  );
-  const tempsEtapes = useMemo(
-    () => tempsMoyenParEtapeJours(historiqueFiltre, etapes),
-    [historiqueFiltre, etapes],
-  );
-  const maxTempsEtape = Math.max(0.01, ...tempsEtapes.map((t) => t.jours));
+  // ── 11. À traiter : une liste plate → les trois colonnes de l'écran ─────
+  const traiter = useMemo(() => {
+    const lignes: ATraiterRow[] = aTraiterQ.data ?? [];
+    return {
+      nonAssignes: lignes.filter((l) => l.raison === 'non_assigne'),
+      sansActivite: lignes.filter((l) => l.raison === 'sans_activite'),
+      jobACreer: lignes.filter((l) => l.raison === 'job_a_creer'),
+    };
+  }, [aTraiterQ.data]);
 
-  // ── 9. Raisons de perte ──────────────────────────────────────────────────
-  const raisons = useMemo(() => raisonsDePerte(dealsFiltres, etapes), [dealsFiltres, etapes]);
-  const totalPertes = raisons.reduce((a, r) => a + r.nombre, 0);
+  // ── États globaux ───────────────────────────────────────────────────────
+  if (kpisQ.isLoading) {
+    return (
+      <div className="pb-10">
+        <div className="rounded-xl border border-outline bg-surface-card">
+          <Chargement etiquette={fr ? 'Chargement des statistiques…' : 'Loading statistics…'} />
+        </div>
+      </div>
+    );
+  }
 
-  // ── 10. Par vendeur ──────────────────────────────────────────────────────
-  const vendeurs = useMemo(() => parVendeur(dealsFiltres, etapes), [dealsFiltres, etapes]);
+  if (kpisQ.isError) {
+    return (
+      <div className="pb-10">
+        <div className="rounded-xl border border-outline bg-surface-card">
+          <Echec
+            titre={fr ? 'Statistiques indisponibles' : 'Statistics unavailable'}
+            message={messageErreur(kpisQ.error, fr)}
+          />
+        </div>
+      </div>
+    );
+  }
 
-  // ── 11. À traiter ────────────────────────────────────────────────────────
-  const traiter = useMemo(() => aTraiter(dealsFiltres, etapes), [dealsFiltres, etapes]);
+  const aucunLead = !kpis || kpis.leads_entrants === 0;
 
-  // ── 12. Tendance ─────────────────────────────────────────────────────────
-  const tendance = useMemo(() => tendanceHebdo(dealsFiltres, etapes), [dealsFiltres, etapes]);
-
-  const aucunDeal = dealsFiltres.length === 0;
-
-  const classeChamp =
-    'h-9 w-full rounded-lg border border-outline bg-surface-card px-2.5 text-[12.5px] font-medium text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-text-tertiary';
   const classeEtiquette = 'block text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-1.5';
+
+  const barrePeriode = (
+    <div className="rounded-xl border border-outline bg-surface-card p-4">
+      <div className="max-w-xs">
+        <span id={idPeriode} className={classeEtiquette}>
+          {fr ? 'Période' : 'Period'}
+        </span>
+        <div
+          role="group"
+          aria-labelledby={idPeriode}
+          className="h-9 flex items-center rounded-lg border border-outline bg-surface-card px-2.5"
+        >
+          <PeriodSelector value={periode} onChange={setPeriode} align="left" />
+        </div>
+      </div>
+      <div className="mt-3 text-[11.5px] text-text-tertiary">
+        {fr
+          ? `${kpis?.leads_entrants ?? 0} deal${(kpis?.leads_entrants ?? 0) > 1 ? 's' : ''} entré${(kpis?.leads_entrants ?? 0) > 1 ? 's' : ''} entre le ${from} et le ${to}.`
+          : `${kpis?.leads_entrants ?? 0} deal${(kpis?.leads_entrants ?? 0) > 1 ? 's' : ''} created between ${from} and ${to}.`}
+      </div>
+    </div>
+  );
+
+  if (aucunLead) {
+    return (
+      <div className="pb-10">
+        {barrePeriode}
+        <div className="mt-4 rounded-xl border border-outline bg-surface-card">
+          <EmptyState
+            icon={Target}
+            title={fr ? 'Aucun lead sur la période' : 'No leads for this period'}
+            description={
+              fr
+                ? "Les statistiques se calculent sur les deals entrés dans la période. Crée un premier lead, ou élargis la période, et les douze blocs se remplissent tout seuls."
+                : 'Statistics are computed on deals created within the period. Create a first lead, or widen the period, and the twelve blocks fill in on their own.'
+            }
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-10">
-      {/* ── Barre de filtres ── */}
-      <div className="rounded-xl border border-outline bg-surface-card p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-          <div>
-            <span className={classeEtiquette}>{fr ? 'Période' : 'Period'}</span>
-            <div className="h-9 flex items-center rounded-lg border border-outline bg-surface-card px-2.5">
-              <PeriodSelector value={periode} onChange={setPeriode} align="left" />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor={idSource} className={classeEtiquette}>
-              {fr ? 'Source' : 'Source'}
-            </label>
-            <select
-              id={idSource}
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              className={classeChamp}
-            >
-              <option value={TOUTES}>{fr ? 'Toutes les sources' : 'All sources'}</option>
-              {(['form_web', 'meta', 'manual'] as DealSource[]).map((s) => (
-                <option key={s} value={s}>
-                  {fr ? LIBELLE_SOURCE[s].fr : LIBELLE_SOURCE[s].en}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor={idCampagne} className={classeEtiquette}>
-              {fr ? 'Campagne' : 'Campaign'}
-            </label>
-            <select
-              id={idCampagne}
-              value={campagne}
-              onChange={(e) => setCampagne(e.target.value)}
-              className={classeChamp}
-            >
-              <option value={TOUTES}>{fr ? 'Toutes les campagnes' : 'All campaigns'}</option>
-              {campagnes.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label htmlFor={idAssigne} className={classeEtiquette}>
-              {fr ? 'Assigné à' : 'Assigned to'}
-            </label>
-            <select
-              id={idAssigne}
-              value={assigne}
-              onChange={(e) => setAssigne(e.target.value)}
-              className={classeChamp}
-            >
-              <option value={TOUTES}>{fr ? 'Tout le monde' : 'Everyone'}</option>
-              {MOCK_MEMBERS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-              <option value={NON_ASSIGNE}>{fr ? 'Non assigné' : 'Unassigned'}</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-3 text-[11.5px] text-text-tertiary">
-          {fr
-            ? `${dealsFiltres.length} deal${dealsFiltres.length > 1 ? 's' : ''} sur la période, entrés entre le ${new Date(fenetres.debut).toISOString().slice(0, 10)} et le ${new Date(fenetres.fin).toISOString().slice(0, 10)}.`
-            : `${dealsFiltres.length} deal${dealsFiltres.length > 1 ? 's' : ''} in range, created between ${new Date(fenetres.debut).toISOString().slice(0, 10)} and ${new Date(fenetres.fin).toISOString().slice(0, 10)}.`}
-        </div>
-      </div>
+      {barrePeriode}
 
       {/* ── 1-3. Les trois chiffres du haut ── */}
       <SectionHead
         titre={fr ? "Vue d'ensemble" : 'Overview'}
         aide={
           fr
-            ? "Trois chiffres calculés sur les deals entrés dans la période sélectionnée, après application des filtres."
-            : 'Three figures computed on deals created within the selected period, after filters.'
+            ? 'Trois chiffres calculés par la base sur les deals entrés dans la période sélectionnée.'
+            : 'Three figures computed by the database on deals created within the selected period.'
         }
       />
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         <Tuile
           libelle={fr ? 'Leads entrants' : 'Incoming leads'}
-          valeur={String(leads)}
+          valeur={String(kpis?.leads_entrants ?? 0)}
           ecart={ecartLeads}
           detail={
             fr
-              ? `Période précédente : ${leadsPrec}`
-              : `Previous period: ${leadsPrec}`
+              ? `Période précédente : ${kpis?.leads_precedents ?? 0}`
+              : `Previous period: ${kpis?.leads_precedents ?? 0}`
           }
           calcul={
             fr
@@ -698,11 +639,13 @@ export default function PipelineStats({
         />
         <Tuile
           libelle={fr ? 'Taux de closing' : 'Close rate'}
-          valeur={fermes.total === 0 ? '—' : pourcent(taux, fr)}
+          valeur={
+            (kpis?.gagnes ?? 0) + (kpis?.perdus ?? 0) === 0 ? '—' : pourcentDb(kpis?.taux_closing ?? 0, fr)
+          }
           detail={
             fr
-              ? `${fermes.gagnes} gagné${fermes.gagnes > 1 ? 's' : ''} / ${fermes.total} fermé${fermes.total > 1 ? 's' : ''}`
-              : `${fermes.gagnes} won / ${fermes.total} closed`
+              ? `${kpis?.gagnes ?? 0} gagné${(kpis?.gagnes ?? 0) > 1 ? 's' : ''} / ${(kpis?.gagnes ?? 0) + (kpis?.perdus ?? 0)} fermé${(kpis?.gagnes ?? 0) + (kpis?.perdus ?? 0) > 1 ? 's' : ''}`
+              : `${kpis?.gagnes ?? 0} won / ${(kpis?.gagnes ?? 0) + (kpis?.perdus ?? 0)} closed`
           }
           calcul={
             fr
@@ -712,16 +655,16 @@ export default function PipelineStats({
         />
         <Tuile
           libelle={fr ? 'Revenus générés' : 'Revenue generated'}
-          valeur={montant(revenus, fr)}
+          valeur={montant(kpis?.revenus_cents ?? 0, fr)}
           detail={
             fr
-              ? `${avecJob} deal${avecJob > 1 ? 's' : ''} avec une job créée`
-              : `${avecJob} deal${avecJob > 1 ? 's' : ''} with a job created`
+              ? `${kpis?.jobs_liees ?? 0} deal${(kpis?.jobs_liees ?? 0) > 1 ? 's' : ''} avec une job créée`
+              : `${kpis?.jobs_liees ?? 0} deal${(kpis?.jobs_liees ?? 0) > 1 ? 's' : ''} with a job created`
           }
           calcul={
             fr
-              ? "Somme des montants de job des deals qui ont effectivement une job créée. Un deal gagné sans job compte pour 0 $."
-              : 'Sum of job amounts for deals that actually have a job. A won deal with no job counts as $0.'
+              ? "Somme des montants des jobs liées aux deals de la période. Un deal gagné sans job compte pour 0 $."
+              : 'Sum of the amounts of jobs linked to the period’s deals. A won deal with no job counts as $0.'
           }
         />
       </div>
@@ -731,12 +674,19 @@ export default function PipelineStats({
         titre={fr ? 'Par source' : 'By source'}
         aide={
           fr
-            ? "Une ligne par source ; les leads Meta sont éclatés par campagne UTM. Le revenu moyen par lead divise le revenu du groupe par TOUS ses leads, gagnés ou non."
-            : 'One row per source; Meta leads are split by UTM campaign. Revenue per lead divides the group revenue by ALL its leads, won or not.'
+            ? "Une ligne par source et par campagne UTM. Le revenu moyen par lead divise le revenu du groupe par TOUS ses leads, gagnés ou non."
+            : 'One row per source and UTM campaign. Revenue per lead divides the group revenue by ALL its leads, won or not.'
         }
       />
       <div className="rounded-xl border border-outline bg-surface-card overflow-hidden">
-        {parSource.length === 0 ? (
+        {sourcesQ.isLoading ? (
+          <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+        ) : sourcesQ.isError ? (
+          <Echec
+            titre={fr ? 'Répartition indisponible' : 'Breakdown unavailable'}
+            message={messageErreur(sourcesQ.error, fr)}
+          />
+        ) : sources.length === 0 ? (
           <Vide texte={fr ? 'Aucun lead sur la période.' : 'No leads for this period.'} />
         ) : (
           <div className="overflow-x-auto">
@@ -752,10 +702,10 @@ export default function PipelineStats({
                 </tr>
               </thead>
               <tbody>
-                {parSource.map((r) => (
+                {sources.map((r) => (
                   <tr key={`${r.source}|${r.campagne ?? ''}`} className="border-b border-border-subtle last:border-0">
                     <td className="px-4 py-3 font-semibold text-text-primary whitespace-nowrap">
-                      {fr ? LIBELLE_SOURCE[r.source].fr : LIBELLE_SOURCE[r.source].en}
+                      {libelleSource(r.source, fr)}
                     </td>
                     <td className="px-4 py-3 text-text-secondary">{r.campagne ?? '—'}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-text-primary">{r.leads}</td>
@@ -767,10 +717,10 @@ export default function PipelineStats({
                           : `${r.gagnes} won ÷ ${r.gagnes + r.perdus} closed`
                       }
                     >
-                      {r.gagnes + r.perdus === 0 ? '—' : pourcent(r.tauxClosing, fr)}
+                      {r.gagnes + r.perdus === 0 ? '—' : pourcentDb(r.taux_closing, fr)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-text-primary">{montant(r.revenusCents, fr)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{montant(r.revenuMoyenParLeadCents, fr)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-text-primary">{montant(r.revenus_cents, fr)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-text-secondary">{montant(r.revenu_moyen_par_lead, fr)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -789,8 +739,15 @@ export default function PipelineStats({
         }
       />
       <div className="rounded-xl border border-outline bg-surface-card p-5">
-        {cohortes.length === 0 ? (
-          <Vide texte={fr ? 'Aucun lead du formulaire web sur la période.' : 'No web form leads for this period.'} />
+        {cohortesQ.isLoading ? (
+          <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+        ) : cohortesQ.isError ? (
+          <Echec
+            titre={fr ? 'Cohortes indisponibles' : 'Cohorts unavailable'}
+            message={messageErreur(cohortesQ.error, fr)}
+          />
+        ) : cohortes.length === 0 ? (
+          <Vide texte={fr ? 'Aucun lead du formulaire web sur les derniers mois.' : 'No web form leads over the last months.'} />
         ) : (
           <ul className="space-y-3">
             {cohortes.map((c) => (
@@ -805,11 +762,11 @@ export default function PipelineStats({
               >
                 <span className="text-[13px] text-text-secondary">
                   {fr
-                    ? `${c.inscrits} personne${c.inscrits > 1 ? 's' : ''} ont rempli le formulaire en ${libelleMois(c.mois, fr)} → ${c.gagnes} gagnée${c.gagnes > 1 ? 's' : ''} à date`
-                    : `${c.inscrits} people filled the form in ${libelleMois(c.mois, fr)} → ${c.gagnes} won to date`}
+                    ? `${c.inscrits} personne${c.inscrits > 1 ? 's' : ''} ont rempli le formulaire en ${libelleMois(c.mois, fr)} → ${c.gagnes} gagnée${c.gagnes > 1 ? 's' : ''} à date, ${c.encore_ouvert} encore ouverte${c.encore_ouvert > 1 ? 's' : ''}`
+                    : `${c.inscrits} people filled the form in ${libelleMois(c.mois, fr)} → ${c.gagnes} won to date, ${c.encore_ouvert} still open`}
                 </span>
                 <span className="inline-flex items-center gap-1.5 shrink-0">
-                  <span className="text-[15px] font-bold tabular-nums text-text-primary">{pourcent(c.tauxGagne, fr)}</span>
+                  <span className="text-[15px] font-bold tabular-nums text-text-primary">{pourcentDb(c.taux_gagne, fr)}</span>
                   <Info
                     className="w-3 h-3 text-text-muted"
                     role="img"
@@ -837,12 +794,15 @@ export default function PipelineStats({
       />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Tuile
+          chargement={vitesseQ.isLoading}
           libelle={fr ? 'Délai moyen' : 'Average delay'}
-          valeur={heures(speed.moyenneHeures, fr)}
+          valeur={heures(vitesse ? vitesse.delai_contact_moyen_h : null, fr)}
           detail={
-            fr
-              ? `${speed.contactes} contacté${speed.contactes > 1 ? 's' : ''}, ${speed.jamais} jamais`
-              : `${speed.contactes} contacted, ${speed.jamais} never`
+            vitesse
+              ? fr
+                ? `${vitesse.jamais_contactes} jamais contacté${vitesse.jamais_contactes > 1 ? 's' : ''}`
+                : `${vitesse.jamais_contactes} never contacted`
+              : undefined
           }
           calcul={
             fr
@@ -860,26 +820,35 @@ export default function PipelineStats({
               role="img"
               aria-label={
                 fr
-                  ? 'Chaque tranche regroupe les deals selon leur délai de premier contact, puis applique gagnés ÷ (gagnés + perdus) à ce sous-groupe.'
-                  : 'Each bracket groups deals by first-contact delay, then applies won ÷ (won + lost) within that subgroup.'
+                  ? "Chaque tranche regroupe les deals selon leur délai de premier contact, puis applique gagnés ÷ (gagnés + perdus) à ce sous-groupe. Une tranche sans deal fermé n'a pas de taux du tout."
+                  : 'Each bracket groups deals by first-contact delay, then applies won ÷ (won + lost) within that subgroup. A bracket with no closed deal has no rate at all.'
               }
             />
           </div>
-          <div className="space-y-1">
-            {speed.tranches.map((t) => (
-              <BarreHorizontale
-                key={t.cle}
-                libelle={t.libelle}
-                valeur={t.fermes === 0 ? '—' : pourcent(t.taux, fr)}
-                fraction={t.fermes === 0 ? 0 : t.taux}
-                note={
-                  fr
-                    ? `${t.deals} deal${t.deals > 1 ? 's' : ''} · ${t.fermes} fermé${t.fermes > 1 ? 's' : ''}`
-                    : `${t.deals} deal${t.deals > 1 ? 's' : ''} · ${t.fermes} closed`
-                }
-              />
-            ))}
-          </div>
+          {vitesseQ.isLoading ? (
+            <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+          ) : vitesseQ.isError ? (
+            <Echec
+              titre={fr ? 'Vitesse indisponible' : 'Speed unavailable'}
+              message={messageErreur(vitesseQ.error, fr)}
+            />
+          ) : (
+            <div className="space-y-1">
+              {tranches.map((t) => (
+                <BarreHorizontale
+                  key={t.cle}
+                  libelle={t.libelle}
+                  valeur={t.taux === null ? (fr ? 'aucun fermé' : 'none closed') : pourcentDb(t.taux, fr)}
+                  fraction={t.taux === null ? 0 : t.taux / 100}
+                  note={
+                    fr
+                      ? `${t.deals} deal${t.deals > 1 ? 's' : ''} dans la tranche`
+                      : `${t.deals} deal${t.deals > 1 ? 's' : ''} in this bracket`
+                  }
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -888,39 +857,44 @@ export default function PipelineStats({
         titre={fr ? 'Entonnoir' : 'Funnel'}
         aide={
           fr
-            ? "Calculé sur l'historique d'étapes : un deal passé par une étape y compte, même s'il l'a quittée depuis."
-            : 'Computed on stage history: a deal that went through a stage counts there, even if it has since left.'
+            ? "Calculé sur l'historique d'étapes : un deal passé par une étape y compte, même s'il l'a quittée depuis. Le taux de passage vient de la base."
+            : 'Computed on stage history: a deal that went through a stage counts there, even if it has since left. The pass-through rate comes from the database.'
         }
       />
       <div className="rounded-xl border border-outline bg-surface-card p-4">
-        {aucunDeal ? (
-          <Vide texte={fr ? 'Aucun deal sur la période.' : 'No deals for this period.'} />
+        {entonnoirQ.isLoading ? (
+          <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+        ) : entonnoirQ.isError ? (
+          <Echec
+            titre={fr ? 'Entonnoir indisponible' : 'Funnel unavailable'}
+            message={messageErreur(entonnoirQ.error, fr)}
+          />
+        ) : entonnoir.length === 0 ? (
+          <Vide texte={fr ? 'Aucune étape à afficher.' : 'No stage to display.'} />
         ) : (
           <div className="space-y-1">
-            {marches.map((m, i) => {
-              const etape = etapes.find((e) => e.id === m.stageId);
-              const teinte = etape ? visuelEtape(etape, rangs[etape.id] ?? 0).teinte : undefined;
-              const accent = idDecrochage.stageId === m.stageId && idDecrochage.perte > 0;
+            {entonnoir.map((m, i) => {
+              const accent = decrochage.stageId === m.stage_id && decrochage.perte > 0;
               return (
                 <BarreHorizontale
-                  key={m.stageId}
-                  libelle={fr ? m.nameFr : m.nameEn}
+                  key={m.stage_id}
+                  libelle={fr ? m.nom_fr : m.nom_en}
                   valeur={String(m.atteints)}
                   fraction={m.atteints / maxEntonnoir}
-                  teinte={teinte}
+                  teinte={teinteRang(i)}
                   accent={accent}
                   note={
                     accent
                       ? fr
-                        ? `Plus gros décrochage — ${idDecrochage.perte} deal${idDecrochage.perte > 1 ? 's' : ''} perdu${idDecrochage.perte > 1 ? 's' : ''} à cette marche (${pourcent(m.tauxPassage, fr)} de passage)`
-                        : `Biggest drop-off — ${idDecrochage.perte} deal${idDecrochage.perte > 1 ? 's' : ''} lost at this step (${pourcent(m.tauxPassage, fr)} pass-through)`
+                        ? `Plus gros décrochage — ${decrochage.perte} deal${decrochage.perte > 1 ? 's' : ''} perdu${decrochage.perte > 1 ? 's' : ''} à cette marche (${pourcentDb(m.taux_passage, fr)} de passage)`
+                        : `Biggest drop-off — ${decrochage.perte} deal${decrochage.perte > 1 ? 's' : ''} lost at this step (${pourcentDb(m.taux_passage, fr)} pass-through)`
                       : i === 0
                         ? fr
                           ? 'Point de départ'
                           : 'Starting point'
                         : fr
-                          ? `${pourcent(m.tauxPassage, fr)} de passage depuis l'étape ouverte précédente`
-                          : `${pourcent(m.tauxPassage, fr)} pass-through from the previous open stage`
+                          ? `${pourcentDb(m.taux_passage, fr)} de passage depuis l'étape précédente`
+                          : `${pourcentDb(m.taux_passage, fr)} pass-through from the previous stage`
                   }
                 />
               );
@@ -934,276 +908,226 @@ export default function PipelineStats({
         titre={fr ? 'Durée du cycle' : 'Cycle time'}
         aide={
           fr
-            ? "Le cycle va de la création à la fermeture (gagné ou perdu). Le temps par étape se lit sur les transitions : une étape jamais quittée n'y figure pas."
-            : 'The cycle runs from creation to close (won or lost). Per-stage time is read from transitions: a stage never left is not counted.'
+            ? 'Le cycle va de la création du deal à sa victoire, en jours, calculé par la base sur les deals gagnés.'
+            : 'The cycle runs from deal creation to the win, in days, computed by the database over won deals.'
         }
       />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
         <Tuile
+          chargement={vitesseQ.isLoading}
           libelle={fr ? 'Cycle moyen' : 'Average cycle'}
-          valeur={cycleJours === null ? '—' : `${nombre(cycleJours, fr)} ${fr ? 'j' : 'd'}`}
+          valeur={vitesse === null ? '—' : `${nombre(vitesse.cycle_moyen_jours, fr)} ${fr ? 'j' : 'd'}`}
           detail={
             fr
-              ? `Sur ${fermes.total} deal${fermes.total > 1 ? 's' : ''} fermé${fermes.total > 1 ? 's' : ''}`
-              : `Over ${fermes.total} closed deal${fermes.total > 1 ? 's' : ''}`
+              ? `Sur ${kpis?.gagnes ?? 0} deal${(kpis?.gagnes ?? 0) > 1 ? 's' : ''} gagné${(kpis?.gagnes ?? 0) > 1 ? 's' : ''}`
+              : `Over ${kpis?.gagnes ?? 0} won deal${(kpis?.gagnes ?? 0) > 1 ? 's' : ''}`
           }
           calcul={
             fr
-              ? 'Moyenne de (date de fermeture − date de création), en jours, sur les deals gagnés ou perdus seulement.'
-              : 'Average of (close date − creation date), in days, over won or lost deals only.'
+              ? 'Moyenne de (date de victoire − date de création), en jours, sur les deals gagnés de la période.'
+              : 'Average of (win date − creation date), in days, over the period’s won deals.'
           }
         />
-        <div className="lg:col-span-2 rounded-xl border border-outline bg-surface-card p-4">
-          <div className="flex items-center gap-1.5 mb-3">
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Temps moyen par étape' : 'Average time per stage'}
-            </span>
-            <Info
-              className="w-3 h-3 text-text-muted"
-              role="img"
-              aria-label={
-                fr
-                  ? "Écart moyen entre l'entrée dans l'étape et la transition suivante, d'après l'historique."
-                  : 'Average gap between entering a stage and the next transition, from stage history.'
-              }
-            />
-          </div>
-          {aucunDeal ? (
-            <Vide texte={fr ? 'Aucun deal sur la période.' : 'No deals for this period.'} />
-          ) : (
-            <div className="space-y-1">
-              {tempsEtapes.map((t) => (
-                <BarreHorizontale
-                  key={t.stageId}
-                  libelle={nomEtape.get(t.stageId) ?? t.stageId}
-                  valeur={t.jours === 0 ? '—' : `${nombre(t.jours, fr)} ${fr ? 'j' : 'd'}`}
-                  fraction={t.jours / maxTempsEtape}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        <Tuile
+          chargement={kpisQ.isFetching && !kpis}
+          libelle={fr ? 'Encore ouverts' : 'Still open'}
+          valeur={String(kpis?.ouverts ?? 0)}
+          detail={
+            fr
+              ? `${kpis?.perdus ?? 0} perdu${(kpis?.perdus ?? 0) > 1 ? 's' : ''}`
+              : `${kpis?.perdus ?? 0} lost`
+          }
+          calcul={
+            fr
+              ? "Deals de la période encore à une étape ouverte : ils n'ont pas de durée de cycle, puisqu'ils ne sont pas fermés."
+              : 'Deals of the period still at an open stage: they have no cycle time, since they are not closed.'
+          }
+        />
+        <Tuile
+          chargement={kpisQ.isFetching && !kpis}
+          libelle={fr ? 'Job à créer' : 'Job to create'}
+          valeur={String(kpis?.job_a_creer ?? 0)}
+          detail={fr ? 'Gagnés sans job liée' : 'Won with no linked job'}
+          calcul={
+            fr
+              ? "Badge dérivé, jamais stocké : un deal à une étape gagnée sans job créée, c'est du revenu qui n'existe pas encore."
+              : 'Derived badge, never stored: a deal at a won stage with no job is revenue that does not exist yet.'
+          }
+        />
       </div>
 
-      {/* ── 9. Raisons de perte ── */}
+      {/* ── 9. Raisons de perte — pas encore mesurable ── */}
       <SectionHead
         titre={fr ? 'Raisons de perte' : 'Loss reasons'}
         aide={
           fr
-            ? "Chaque raison est comptée avec l'étape d'où le deal a été perdu : c'est là qu'il faut agir."
-            : 'Each reason is counted with the stage the deal was lost from — that is where to act.'
+            ? "La base enregistre la raison et l'étape de perte sur chaque deal, mais aucune fonction ne les agrège encore."
+            : 'The database records the reason and the stage of loss on each deal, but no function aggregates them yet.'
         }
       />
-      <div className="rounded-xl border border-outline bg-surface-card p-4">
-        {raisons.length === 0 ? (
-          <Vide texte={fr ? 'Aucun deal perdu sur la période.' : 'No lost deals for this period.'} />
-        ) : (
-          <div className="space-y-1">
-            {raisons.map((r) => (
-              <BarreHorizontale
-                key={`${r.raison}|${r.stageIdPerdu ?? ''}`}
-                libelle={r.raison}
-                valeur={`${r.nombre} · ${pourcent(totalPertes === 0 ? 0 : r.nombre / totalPertes, fr)}`}
-                fraction={totalPertes === 0 ? 0 : r.nombre / totalPertes}
-                teinte="var(--color-text-secondary)"
-                note={
-                  r.stageIdPerdu === null
-                    ? fr
-                      ? 'Étape non renseignée'
-                      : 'Stage not recorded'
-                    : fr
-                      ? `Perdu à l'étape « ${nomEtape.get(r.stageIdPerdu) ?? r.stageIdPerdu} »`
-                      : `Lost at stage “${nomEtape.get(r.stageIdPerdu) ?? r.stageIdPerdu}”`
-                }
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <BientotDisponible
+        etiquette={fr ? 'Bientôt' : 'Soon'}
+        titre={fr ? 'Raisons de perte' : 'Loss reasons'}
+        phrase={
+          fr
+            ? "Ce bloc classera les deals perdus par raison, avec l'étape d'où le deal a été perdu — c'est là qu'il faut agir. En attendant, aucun chiffre approximatif n'est affiché ici."
+            : 'This block will rank lost deals by reason, together with the stage the deal was lost from — that is where to act. Until then, no approximate figure is shown here.'
+        }
+      />
 
-      {/* ── 10. Par vendeur ── */}
+      {/* ── 10. Par vendeur — pas encore mesurable ── */}
       <SectionHead
         titre={fr ? 'Par vendeur' : 'By rep'}
         aide={
           fr
-            ? "Les deals non assignés forment leur propre ligne. Le taux de closing d'un vendeur suit la même formule que celui du haut : fermés seulement."
-            : 'Unassigned deals form their own row. A rep’s close rate uses the same formula as the top tile: closed deals only.'
+            ? "L'assignation est bien enregistrée sur chaque deal, mais aucune fonction ne la ventile encore par membre."
+            : 'Assignment is recorded on each deal, but no function breaks it down per member yet.'
         }
       />
-      <div className="rounded-xl border border-outline bg-surface-card overflow-hidden">
-        {vendeurs.length === 0 ? (
-          <Vide texte={fr ? 'Aucun deal sur la période.' : 'No deals for this period.'} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-[12.5px]">
-              <thead>
-                <tr className="border-b border-outline">
-                  <th scope="col" className="text-left font-semibold text-text-tertiary uppercase tracking-wide text-[11px] px-4 py-2.5">{fr ? 'Vendeur' : 'Rep'}</th>
-                  <th scope="col" className="text-right font-semibold text-text-tertiary uppercase tracking-wide text-[11px] px-4 py-2.5">{fr ? 'Deals pris' : 'Deals taken'}</th>
-                  <th scope="col" className="text-right font-semibold text-text-tertiary uppercase tracking-wide text-[11px] px-4 py-2.5">{fr ? 'Gagnés' : 'Won'}</th>
-                  <th scope="col" className="text-right font-semibold text-text-tertiary uppercase tracking-wide text-[11px] px-4 py-2.5">{fr ? 'Closing' : 'Close rate'}</th>
-                  <th scope="col" className="text-right font-semibold text-text-tertiary uppercase tracking-wide text-[11px] px-4 py-2.5">{fr ? 'Contact moyen' : 'Avg. contact'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vendeurs.map((v) => (
-                  <tr key={v.memberId ?? NON_ASSIGNE} className="border-b border-border-subtle last:border-0">
-                    <td className="px-4 py-3 font-semibold text-text-primary whitespace-nowrap">
-                      {v.memberId === null ? (fr ? 'Non assigné' : 'Unassigned') : v.nom}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-text-primary">{v.pris}</td>
-                    <td className="px-4 py-3 text-right tabular-nums text-text-primary">{v.gagnes}</td>
-                    <td
-                      className="px-4 py-3 text-right tabular-nums text-text-primary"
-                      title={
-                        fr
-                          ? 'Gagnés ÷ (gagnés + perdus) pour ce vendeur — ses deals encore ouverts sont exclus.'
-                          : 'Won ÷ (won + lost) for this rep — their still-open deals are excluded.'
-                      }
-                    >
-                      {pourcent(v.tauxClosing, fr)}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-right tabular-nums text-text-secondary"
-                      title={
-                        fr
-                          ? 'Délai moyen de premier contact sur ses deals contactés.'
-                          : 'Average first-contact delay across their contacted deals.'
-                      }
-                    >
-                      {heures(v.delaiContactMoyenHeures, fr)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <BientotDisponible
+        etiquette={fr ? 'Bientôt' : 'Soon'}
+        titre={fr ? 'Par vendeur' : 'By rep'}
+        phrase={
+          fr
+            ? "Ce bloc donnera, par membre de l'équipe, les deals pris, les gagnés, le taux de closing (fermés seulement) et le délai moyen de premier contact, avec une ligne à part pour les deals non assignés."
+            : 'This block will give, per team member, deals taken, wins, close rate (closed deals only) and average first-contact delay, with a separate row for unassigned deals.'
+        }
+      />
 
       {/* ── 11. À traiter ── */}
       <SectionHead
         titre={fr ? 'À traiter' : 'Needs action'}
         aide={
           fr
-            ? "Trois listes d'action, pas un graphique : chaque ligne ouvre le deal. Les délais se comptent depuis la date de référence de la maquette."
-            : 'Three action lists, not a chart: each row opens the deal. Delays are counted from the mock reference date.'
+            ? "Trois listes d'action, pas un graphique : chaque ligne ouvre le deal. Cette liste ignore la période — c'est ce qui dort aujourd'hui."
+            : 'Three action lists, not a chart: each row opens the deal. This list ignores the period — it is what is stale today.'
         }
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        <div className="rounded-xl border border-outline bg-surface-card p-3">
-          <div className="flex items-center justify-between gap-2 px-2 pb-2 border-b border-border-subtle">
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Leads non assignés' : 'Unassigned leads'}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-[13px] font-bold tabular-nums text-text-primary">{traiter.nonAssignes.length}</span>
-              <Info
-                className="w-3 h-3 text-text-muted"
-                role="img"
-                aria-label={
-                  fr
-                    ? 'Deals à une étape ouverte sans personne assignée.'
-                    : 'Deals at an open stage with nobody assigned.'
-                }
-              />
-            </span>
-          </div>
-          <div className="mt-1.5 space-y-0.5">
-            {traiter.nonAssignes.length === 0 ? (
-              <Vide texte={fr ? 'Tout est assigné.' : 'Everything is assigned.'} />
-            ) : (
-              traiter.nonAssignes.map((d) => (
-                <LigneDeal
-                  key={d.id}
-                  deal={d}
-                  onOuvrir={onOuvrirDeal}
-                  secondaire={`${nomEtape.get(d.stageId) ?? d.stageId} · ${fr ? LIBELLE_SOURCE[d.source].fr : LIBELLE_SOURCE[d.source].en}`}
-                />
-              ))
-            )}
-          </div>
+      {aTraiterQ.isError ? (
+        <div className="rounded-xl border border-outline bg-surface-card">
+          <Echec
+            titre={fr ? 'Liste indisponible' : 'List unavailable'}
+            message={messageErreur(aTraiterQ.error, fr)}
+          />
         </div>
-
-        <div className="rounded-xl border border-outline bg-surface-card p-3">
-          <div className="flex items-center justify-between gap-2 px-2 pb-2 border-b border-border-subtle">
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Sans activité 7 j +' : 'No activity 7+ days'}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-[13px] font-bold tabular-nums text-text-primary">{traiter.sansActiviteDepuis7Jours.length}</span>
-              <Info
-                className="w-3 h-3 text-text-muted"
-                role="img"
-                aria-label={
-                  fr
-                    ? "Deals ouverts dont la dernière activité remonte à plus de 7 jours."
-                    : 'Open deals whose last activity is more than 7 days old.'
-                }
-              />
-            </span>
-          </div>
-          <div className="mt-1.5 space-y-0.5">
-            {traiter.sansActiviteDepuis7Jours.length === 0 ? (
-              <Vide texte={fr ? 'Rien ne dort.' : 'Nothing is stale.'} />
-            ) : (
-              traiter.sansActiviteDepuis7Jours.map((d) => {
-                const jours = Math.floor((ms(MOCK_NOW) - ms(d.lastActivityAt)) / MS_PAR_JOUR);
-                return (
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-outline bg-surface-card p-3">
+            <div className="flex items-center justify-between gap-2 px-2 pb-2 border-b border-border-subtle">
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
+                {fr ? 'Leads non assignés' : 'Unassigned leads'}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-[13px] font-bold tabular-nums text-text-primary">{traiter.nonAssignes.length}</span>
+                <Info
+                  className="w-3 h-3 text-text-muted"
+                  role="img"
+                  aria-label={
+                    fr
+                      ? 'Deals à une étape ouverte sans personne assignée.'
+                      : 'Deals at an open stage with nobody assigned.'
+                  }
+                />
+              </span>
+            </div>
+            <div className="mt-1.5 space-y-0.5">
+              {aTraiterQ.isLoading ? (
+                <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+              ) : traiter.nonAssignes.length === 0 ? (
+                <Vide texte={fr ? 'Tout est assigné.' : 'Everything is assigned.'} />
+              ) : (
+                traiter.nonAssignes.map((l) => (
                   <LigneDeal
-                    key={d.id}
-                    deal={d}
+                    key={l.deal_id}
+                    dealId={l.deal_id}
+                    nom={l.client_nom || (fr ? 'Sans nom' : 'Unnamed')}
+                    onOuvrir={onOuvrirDeal}
+                    secondaire={l.stage_nom_fr}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-outline bg-surface-card p-3">
+            <div className="flex items-center justify-between gap-2 px-2 pb-2 border-b border-border-subtle">
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
+                {fr ? 'Sans activité 7 j +' : 'No activity 7+ days'}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-[13px] font-bold tabular-nums text-text-primary">{traiter.sansActivite.length}</span>
+                <Info
+                  className="w-3 h-3 text-text-muted"
+                  role="img"
+                  aria-label={
+                    fr
+                      ? "Deals ouverts dont la dernière activité remonte à plus de 7 jours."
+                      : 'Open deals whose last activity is more than 7 days old.'
+                  }
+                />
+              </span>
+            </div>
+            <div className="mt-1.5 space-y-0.5">
+              {aTraiterQ.isLoading ? (
+                <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+              ) : traiter.sansActivite.length === 0 ? (
+                <Vide texte={fr ? 'Rien ne dort.' : 'Nothing is stale.'} />
+              ) : (
+                traiter.sansActivite.map((l) => (
+                  <LigneDeal
+                    key={l.deal_id}
+                    dealId={l.deal_id}
+                    nom={l.client_nom || (fr ? 'Sans nom' : 'Unnamed')}
                     onOuvrir={onOuvrirDeal}
                     secondaire={
                       fr
-                        ? `${nomEtape.get(d.stageId) ?? d.stageId} · ${jours} j sans activité`
-                        : `${nomEtape.get(d.stageId) ?? d.stageId} · ${jours}d without activity`
+                        ? `${l.stage_nom_fr} · ${l.depuis_jours} j sans activité`
+                        : `${l.stage_nom_fr} · ${l.depuis_jours}d without activity`
                     }
                   />
-                );
-              })
-            )}
+                ))
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="rounded-xl border border-outline bg-surface-card p-3">
-          <div className="flex items-center justify-between gap-2 px-2 pb-2 border-b border-border-subtle">
-            <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
-              {fr ? 'Job à créer' : 'Job to create'}
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="text-[13px] font-bold tabular-nums text-text-primary">{traiter.jobACreer.length}</span>
-              <Info
-                className="w-3 h-3 text-text-muted"
-                role="img"
-                aria-label={
-                  fr
-                    ? "Badge dérivé : deal à une étape gagnée, sans job créée. Jamais stocké sur le deal."
-                    : 'Derived badge: deal at a won stage with no job created. Never stored on the deal.'
-                }
-              />
-            </span>
-          </div>
-          <div className="mt-1.5 space-y-0.5">
-            {traiter.jobACreer.length === 0 ? (
-              <Vide texte={fr ? 'Toutes les jobs sont créées.' : 'All jobs are created.'} />
-            ) : (
-              traiter.jobACreer.map((d) => (
-                <LigneDeal
-                  key={d.id}
-                  deal={d}
-                  onOuvrir={onOuvrirDeal}
-                  secondaire={
+          <div className="rounded-xl border border-outline bg-surface-card p-3">
+            <div className="flex items-center justify-between gap-2 px-2 pb-2 border-b border-border-subtle">
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-text-tertiary">
+                {fr ? 'Job à créer' : 'Job to create'}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="text-[13px] font-bold tabular-nums text-text-primary">{traiter.jobACreer.length}</span>
+                <Info
+                  className="w-3 h-3 text-text-muted"
+                  role="img"
+                  aria-label={
                     fr
-                      ? `Gagné · ${d.assignedName ?? 'Non assigné'}`
-                      : `Won · ${d.assignedName ?? 'Unassigned'}`
+                      ? "Badge dérivé : deal à une étape gagnée, sans job créée. Jamais stocké sur le deal."
+                      : 'Derived badge: deal at a won stage with no job created. Never stored on the deal.'
                   }
                 />
-              ))
-            )}
+              </span>
+            </div>
+            <div className="mt-1.5 space-y-0.5">
+              {aTraiterQ.isLoading ? (
+                <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+              ) : traiter.jobACreer.length === 0 ? (
+                <Vide texte={fr ? 'Toutes les jobs sont créées.' : 'All jobs are created.'} />
+              ) : (
+                traiter.jobACreer.map((l) => (
+                  <LigneDeal
+                    key={l.deal_id}
+                    dealId={l.deal_id}
+                    nom={l.client_nom || (fr ? 'Sans nom' : 'Unnamed')}
+                    onOuvrir={onOuvrirDeal}
+                    secondaire={fr ? `Gagné · ${l.stage_nom_fr}` : `Won · ${l.stage_nom_fr}`}
+                  />
+                ))
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ── 12. Tendance ── */}
       <SectionHead
@@ -1215,14 +1139,23 @@ export default function PipelineStats({
         }
       />
       <div className="rounded-xl border border-outline bg-surface-card">
-        <TendanceDeuxSeries
-          fr={fr}
-          labels={tendance.map((s) => libelleSemaine(s.semaine, fr))}
-          leads={tendance.map((s) => s.leads)}
-          gagnes={tendance.map((s) => s.gagnes)}
-          libelleLeads={fr ? 'Leads entrants' : 'Incoming leads'}
-          libelleGagnes={fr ? 'Gagnés' : 'Won'}
-        />
+        {tendanceQ.isLoading ? (
+          <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />
+        ) : tendanceQ.isError ? (
+          <Echec
+            titre={fr ? 'Tendance indisponible' : 'Trend unavailable'}
+            message={messageErreur(tendanceQ.error, fr)}
+          />
+        ) : (
+          <TendanceDeuxSeries
+            fr={fr}
+            labels={tendance.map((s) => libelleSemaine(s.semaine, fr))}
+            leads={tendance.map((s) => s.leads)}
+            gagnes={tendance.map((s) => s.gagnes)}
+            libelleLeads={fr ? 'Leads entrants' : 'Incoming leads'}
+            libelleGagnes={fr ? 'Gagnés' : 'Won'}
+          />
+        )}
       </div>
     </div>
   );

@@ -4,17 +4,23 @@
  * Règle du chantier : si l'utilisateur annule, le deal RESTE gagné et porte le
  * badge « Job à créer ». Le badge est dérivé (étape de kind `won` + aucune job
  * liée), jamais stocké : annuler ici ne fait donc rien d'autre que fermer.
+ *
+ * La job est créée par `createJob` de `jobsApi` — c'est lui qui résout l'org,
+ * le nom du client, l'adresse et l'horaire. Écrire la ligne `jobs` à la main
+ * ici contournerait tout ça.
  */
 import { useId, useState } from 'react';
+import { toast } from 'sonner';
 import Modal from '../ui/Modal';
 import { useTranslation } from '../../i18n';
-import type { MockDeal } from '../../lib/pipeline/mockData';
+import { nomClient, type Deal } from '../../lib/pipelineVentesApi';
+import { createJob } from '../../lib/jobsApi';
 
 export default function GagneJobModal({ deal, onFermer, onCreer }: {
-  deal: MockDeal | null;
+  deal: Deal | null;
   /** Annuler : le deal reste gagné, badge « Job à créer ». */
   onFermer: () => void;
-  onCreer: (dealId: string, titre: string, date: string) => void;
+  onCreer: (dealId: string, jobId: string) => void;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -25,10 +31,40 @@ export default function GagneJobModal({ deal, onFermer, onCreer }: {
 
   const [titre, setTitre] = useState('');
   const [date, setDate] = useState('');
+  const [enCours, setEnCours] = useState(false);
 
   if (!deal) return null;
 
-  const titreParDefaut = fr ? `Nettoyage — ${deal.clientName}` : `Cleaning — ${deal.clientName}`;
+  const nom = nomClient(deal);
+  const adresse = deal.client?.address ?? '';
+  const titreParDefaut = fr ? `Nettoyage — ${nom}` : `Cleaning — ${nom}`;
+
+  async function creer() {
+    if (!deal || enCours) return;
+    setEnCours(true);
+    try {
+      const job = await createJob({
+        title: titre.trim() || titreParDefaut,
+        client_id: deal.client_id,
+        status: 'scheduled',
+        property_address: adresse || null,
+        // La date est facultative : sans elle, la job est créée sans visite.
+        scheduled_at: date ? new Date(`${date}T09:00:00`).toISOString() : null,
+      });
+      onCreer(deal.id, job.id);
+    } catch (e) {
+      // Échec = la fenêtre reste ouverte : l'utilisateur peut corriger et
+      // réessayer sans avoir à rouvrir le deal.
+      console.error('[GagneJobModal] création de job échouée', e);
+      toast.error(
+        fr
+          ? `Impossible de créer la job : ${e instanceof Error ? e.message : 'erreur inconnue'}`
+          : `Could not create the job: ${e instanceof Error ? e.message : 'unknown error'}`,
+      );
+    } finally {
+      setEnCours(false);
+    }
+  }
 
   return (
     <Modal
@@ -48,10 +84,11 @@ export default function GagneJobModal({ deal, onFermer, onCreer }: {
           </button>
           <button
             type="button"
-            onClick={() => onCreer(deal.id, titre.trim() || titreParDefaut, date)}
-            className="btn-primary text-[12.5px]"
+            disabled={enCours}
+            onClick={() => { void creer(); }}
+            className="btn-primary text-[12.5px] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {fr ? 'Créer la job' : 'Create job'}
+            {enCours ? (fr ? 'Création…' : 'Creating…') : fr ? 'Créer la job' : 'Create job'}
           </button>
         </div>
       }
@@ -64,7 +101,7 @@ export default function GagneJobModal({ deal, onFermer, onCreer }: {
           <input
             id={idClient}
             readOnly
-            value={deal.clientName}
+            value={nom}
             className="input-field w-full text-[12.5px] opacity-70"
           />
         </div>
@@ -76,7 +113,7 @@ export default function GagneJobModal({ deal, onFermer, onCreer }: {
           <input
             id={idAdresse}
             readOnly
-            value={deal.address}
+            value={adresse}
             className="input-field w-full text-[12.5px] opacity-70"
           />
         </div>

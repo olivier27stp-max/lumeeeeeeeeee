@@ -2,20 +2,20 @@
  * Modal « Perdu » — raison de perte en texte libre.
  *
  * L'étape d'où le deal a été perdu est enregistrée séparément
- * (`lostFromStageId`) : c'est ce qui permet de dire PLUS TARD à quelle étape on
+ * (`lost_from_stage_id`) : c'est ce qui permet de dire PLUS TARD à quelle étape on
  * perd le plus, sans jamais se fier au nom de l'étape.
  */
 import { useId, useState } from 'react';
 import Modal from '../ui/Modal';
 import { useTranslation } from '../../i18n';
-import type { MockDeal } from '../../lib/pipeline/mockData';
+import type { Deal } from '../../lib/pipelineVentesApi';
 
 /** Raisons courantes — cliquables, mais le champ reste libre. */
 const SUGGESTIONS_FR = ['Prix trop élevé', 'A choisi un concurrent', 'Ne répond plus', 'Hors territoire'];
 const SUGGESTIONS_EN = ['Price too high', 'Chose a competitor', 'Stopped responding', 'Outside service area'];
 
 export default function PerduModal({ deal, onFermer, onConfirmer }: {
-  deal: MockDeal | null;
+  deal: Deal | null;
   onFermer: () => void;
   onConfirmer: (dealId: string, raison: string) => void;
 }) {

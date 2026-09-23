@@ -176,6 +176,7 @@ const RequestDetails = React.lazy(() => import('./pages/RequestDetails'));
 const Leaderboard = React.lazy(() => import('./pages/Leaderboard'));
 const Commissions = React.lazy(() => import('./pages/Commissions'));
 const D2DPipeline = React.lazy(() => import('./pages/D2DPipeline'));
+const Pipeline = React.lazy(() => import('./pages/Pipeline'));
 const D2DReports = React.lazy(() => import('./pages/D2DReports'));
 // D2DSettingsGeneral (mock non branché) puis D2DSettingsTeams (config terrain)
 // retirées sur demande de Rafba — les équipes restent assignables à
@@ -1076,6 +1077,7 @@ function AuthenticatedApp({
       items: [
         { id: 'clients', label: t.nav.clients, icon: Users, path: '/clients', tileColor: 'blue', requiredPermission: 'clients.read' },
         { id: 'requests', label: t.nav.requests, icon: Inbox, path: '/requests', tileColor: 'blue', requiredPermission: 'clients.read' },
+        { id: 'pipeline-ventes', label: language === 'fr' ? 'Pipeline' : 'Pipeline', icon: GitBranch, path: '/ventes', tileColor: 'blue', requiredPermission: 'leads.read', requiredPlanFlag: 'includes_pipeline' },
         { id: 'quotes', label: language === 'fr' ? 'Devis' : 'Quotes', icon: ClipboardList, path: '/quotes', tileColor: 'blue', requiredPermission: 'quotes.read' },
         { id: 'finances', label: t.nav.finances, icon: Wallet, path: '/finances', tileColor: 'blue', requiredPermission: 'financial.view_invoices' },
         { id: 'jobs', label: t.nav.jobs, icon: Briefcase, path: '/jobs', tileColor: 'blue', requiredPermission: 'jobs.read' },
@@ -1635,6 +1637,10 @@ function AuthenticatedApp({
                     {/* Dashboard page removed for all roles — redirect to Sales Map */}
                     <Route path="/d2d-dashboard" element={<Navigate to="/field-sales" replace />} />
                     <Route path="/pipeline" element={<Gated permission="door_to_door.access"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><D2DPipeline /></ModuleGate></PlanFeatureGate></Gated>} />
+                    {/* Pipeline de ventes (avant-job). Sur /ventes et non /pipeline :
+                        l'ancien board D2D tourne encore avec ses deals, et on ne
+                        bascule l'adresse qu'une fois celui-ci retiré. */}
+                    <Route path="/ventes" element={<Gated permission="leads.read"><PlanFeatureGate flag="includes_pipeline"><PageWrapper><React.Suspense fallback={null}><Pipeline /></React.Suspense></PageWrapper></PlanFeatureGate></Gated>} />
                     {/* Legacy URL — keep old bookmarks/links working */}
                     <Route path="/d2d-pipeline" element={<Navigate to="/pipeline" replace />} />
                     <Route path="/leaderboard" element={<Gated permission="reports.read"><PlanFeatureGate flag="includes_d2d"><ModuleGate moduleKey="module_vente" moduleName={t.nav.d2d}><PageWrapper><Leaderboard /></PageWrapper></ModuleGate></PlanFeatureGate></Gated>} />

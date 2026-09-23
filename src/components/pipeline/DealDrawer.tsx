@@ -1,30 +1,36 @@
 /**
  * Drawer d'un deal — contact, source + UTM, guidance de l'étape, historique,
- * actions exécutées, activités, assignation, lien vers la job.
+ * assignation, lien vers la job.
  *
  * La guidance est le « Path » de Salesforce : le conseil de l'étape courante,
  * affiché là où le vendeur travaille. Elle vient de l'étape, jamais du deal.
  */
 import { useId, useMemo } from 'react';
-import {
-  Bot, Briefcase, CheckCircle2, Hammer, Mail, MapPin, Phone, Sparkles, User, Zap,
-} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Briefcase, Hammer, MapPin } from 'lucide-react';
 import { Drawer } from '../ui/drawer';
 import { useTranslation } from '../../i18n';
 import {
-  MOCK_ACTIVITIES, MOCK_MEMBERS, MOCK_NOW, MOCK_STAGE_HISTORY, delaiPremierContactHeures,
-  isJobACreer, type MockDeal, type MockStage,
-} from '../../lib/pipeline/mockData';
-import { LIBELLE_SOURCE, depuis, montant } from '../../lib/pipeline/presentation';
+  estJobACreer, fetchHistorique, nomClient, type Deal, type PipelineStage,
+} from '../../lib/pipelineVentesApi';
+import { LIBELLE_SOURCE, depuis } from '../../lib/pipeline/presentation';
+import type { DealSource } from '../../lib/pipeline/mockData';
 
-const ICONE_ACTIVITE = {
-  note: Sparkles,
-  call: Phone,
-  sms: Phone,
-  email: Mail,
-  stage: Zap,
-  action: Bot,
-} as const;
+interface Membre { id: string; name: string }
+
+/** `deals.source` est du texte libre en base : un canal inconnu s'affiche tel quel. */
+function libelleSource(source: string, fr: boolean): string {
+  const connu = LIBELLE_SOURCE[source as DealSource];
+  if (!connu) return source;
+  return fr ? connu.fr : connu.en;
+}
+
+/** Délai entre la création du deal et le premier contact, en heures. */
+function delaiPremierContactHeures(deal: Deal): number | null {
+  if (!deal.first_contacted_at) return null;
+  const ms = new Date(deal.first_contacted_at).getTime() - new Date(deal.created_at).getTime();
+  return Math.max(0, ms / 3_600_000);
+}
 
 function Ligne({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -44,50 +50,52 @@ function Section({ titre, children }: { titre: string; children: React.ReactNode
   );
 }
 
-export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJob }: {
-  deal: MockDeal | null;
-  etapes: MockStage[];
+export default function DealDrawer({ deal, etapes, membres, onClose, onAssigner, onCreerJob }: {
+  deal: Deal | null;
+  etapes: PipelineStage[];
+  membres?: Membre[];
   onClose: () => void;
   onAssigner: (dealId: string, membreId: string | null) => void;
-  onCreerJob: (deal: MockDeal) => void;
+  onCreerJob: (deal: Deal) => void;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const idAssignation = useId();
+  const listeMembres = useMemo(() => membres ?? [], [membres]);
 
   const etape = useMemo(
-    () => (deal ? etapes.find((e) => e.id === deal.stageId) ?? null : null),
+    () => (deal ? etapes.find((e) => e.id === deal.stage_id) ?? null : null),
     [deal, etapes],
   );
-  const historique = useMemo(
-    () => (deal ? MOCK_STAGE_HISTORY.filter((h) => h.dealId === deal.id) : []),
-    [deal],
-  );
-  const activites = useMemo(
-    () => (deal ? MOCK_ACTIVITIES.filter((a) => a.dealId === deal.id) : []),
-    [deal],
-  );
+
+  // L'historique vient de la base : les triggers l'écrivent à chaque mouvement.
+  const { data: historique = [] } = useQuery({
+    queryKey: ['deal-historique', deal?.id],
+    queryFn: () => fetchHistorique(deal?.id ?? ''),
+    enabled: !!deal,
+  });
 
   if (!deal) return null;
 
-  const jobACreer = isJobACreer(deal, etapes);
+  const maintenant = new Date().toISOString();
+  const jobACreer = estJobACreer(deal, etapes);
   const delai = delaiPremierContactHeures(deal);
   const nomEtape = (id: string | null) => {
     if (!id) return fr ? '(entrée)' : '(entry)';
     const e = etapes.find((x) => x.id === id);
-    return e ? (fr ? e.nameFr : e.nameEn) : id;
+    return e ? (fr ? e.name_fr : e.name_en) : id;
   };
 
   return (
-    <Drawer open onClose={onClose} title={deal.clientName} width="lg">
+    <Drawer open onClose={onClose} title={nomClient(deal)} width="lg">
       {/* Guidance de l'étape — le « Path » */}
       {etape && (
         <div className="rounded-xl border border-outline bg-surface-secondary p-3.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-            {fr ? etape.nameFr : etape.nameEn}
+            {fr ? etape.name_fr : etape.name_en}
           </p>
           <p className="text-[12.5px] text-text-secondary leading-relaxed mt-1.5">
-            {fr ? etape.guidanceFr : etape.guidanceEn}
+            {fr ? etape.guidance_fr : etape.guidance_en}
           </p>
         </div>
       )}
@@ -115,13 +123,13 @@ export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJ
 
       <Section titre={fr ? 'Contact' : 'Contact'}>
         <div className="rounded-xl border border-outline bg-surface-card px-3.5 py-2 divide-y divide-border-subtle">
-          <Ligne label={fr ? 'Nom' : 'Name'}>{deal.clientName}</Ligne>
-          <Ligne label={fr ? 'Courriel' : 'Email'}>{deal.clientEmail ?? '—'}</Ligne>
-          <Ligne label={fr ? 'Téléphone' : 'Phone'}>{deal.clientPhone ?? '—'}</Ligne>
+          <Ligne label={fr ? 'Nom' : 'Name'}>{nomClient(deal)}</Ligne>
+          <Ligne label={fr ? 'Courriel' : 'Email'}>{deal.client?.email ?? '—'}</Ligne>
+          <Ligne label={fr ? 'Téléphone' : 'Phone'}>{deal.client?.phone ?? '—'}</Ligne>
           <Ligne label={fr ? 'Adresse' : 'Address'}>
             <span className="inline-flex items-center gap-1">
               <MapPin size={11} aria-hidden="true" className="text-text-muted shrink-0" />
-              {deal.address}
+              {deal.client?.address ?? '—'}
             </span>
           </Ligne>
         </div>
@@ -129,13 +137,11 @@ export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJ
 
       <Section titre={fr ? 'Provenance' : 'Source'}>
         <div className="rounded-xl border border-outline bg-surface-card px-3.5 py-2 divide-y divide-border-subtle">
-          <Ligne label={fr ? 'Source' : 'Source'}>
-            {fr ? LIBELLE_SOURCE[deal.source].fr : LIBELLE_SOURCE[deal.source].en}
-          </Ligne>
-          {deal.utmCampaign && <Ligne label="Campagne">{deal.utmCampaign}</Ligne>}
-          {deal.utmContent && <Ligne label="Contenu">{deal.utmContent}</Ligne>}
-          {deal.utmSource && <Ligne label="utm_source">{deal.utmSource}</Ligne>}
-          {deal.utmMedium && <Ligne label="utm_medium">{deal.utmMedium}</Ligne>}
+          <Ligne label={fr ? 'Source' : 'Source'}>{libelleSource(deal.source, fr)}</Ligne>
+          {deal.utm_campaign && <Ligne label="Campagne">{deal.utm_campaign}</Ligne>}
+          {deal.utm_content && <Ligne label="Contenu">{deal.utm_content}</Ligne>}
+          {deal.utm_source && <Ligne label="utm_source">{deal.utm_source}</Ligne>}
+          {deal.utm_medium && <Ligne label="utm_medium">{deal.utm_medium}</Ligne>}
           {deal.fbclid && (
             <Ligne label="fbclid">
               <span className="font-mono text-[10.5px] text-text-tertiary">{deal.fbclid.slice(0, 18)}…</span>
@@ -147,7 +153,9 @@ export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJ
       <Section titre={fr ? 'Suivi' : 'Tracking'}>
         <div className="rounded-xl border border-outline bg-surface-card px-3.5 py-2 divide-y divide-border-subtle">
           <Ligne label={fr ? 'Créé' : 'Created'}>
-            {fr ? `il y a ${depuis(deal.createdAt, MOCK_NOW, fr)}` : `${depuis(deal.createdAt, MOCK_NOW, fr)} ago`}
+            {fr
+              ? `il y a ${depuis(deal.created_at, maintenant, fr)}`
+              : `${depuis(deal.created_at, maintenant, fr)} ago`}
           </Ligne>
           <Ligne label={fr ? 'Premier contact' : 'First contact'}>
             {delai === null
@@ -158,10 +166,10 @@ export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJ
           </Ligne>
           <Ligne label={fr ? 'Dernière activité' : 'Last activity'}>
             {fr
-              ? `il y a ${depuis(deal.lastActivityAt, MOCK_NOW, fr)}`
-              : `${depuis(deal.lastActivityAt, MOCK_NOW, fr)} ago`}
+              ? `il y a ${depuis(deal.last_activity_at, maintenant, fr)}`
+              : `${depuis(deal.last_activity_at, maintenant, fr)} ago`}
           </Ligne>
-          {deal.lostReason && <Ligne label={fr ? 'Raison de perte' : 'Loss reason'}>{deal.lostReason}</Ligne>}
+          {deal.lost_reason && <Ligne label={fr ? 'Raison de perte' : 'Loss reason'}>{deal.lost_reason}</Ligne>}
         </div>
       </Section>
 
@@ -171,38 +179,24 @@ export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJ
         </label>
         <select
           id={idAssignation}
-          value={deal.assignedUserId ?? ''}
+          value={deal.assigned_user_id ?? ''}
           onChange={(e) => onAssigner(deal.id, e.target.value || null)}
           className="input-field w-full text-[12.5px]"
         >
           <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
-          {MOCK_MEMBERS.map((m) => (
+          {listeMembres.map((m) => (
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>
       </Section>
 
-      {deal.jobId && (
+      {deal.job_id && (
         <Section titre={fr ? 'Job liée' : 'Linked job'}>
           <div className="rounded-xl border border-outline bg-surface-card p-3.5">
             <p className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-text-primary">
               <Briefcase size={13} aria-hidden="true" />
-              {deal.jobId}
+              {deal.job_id}
             </p>
-            <div className="flex items-center gap-4 mt-2">
-              <span className="text-[11.5px] text-text-tertiary">
-                {fr ? 'Montant' : 'Amount'}{' '}
-                <span className="font-semibold text-text-primary tabular-nums">
-                  {montant(deal.jobAmountCents, fr)}
-                </span>
-              </span>
-              <span className="text-[11.5px] text-text-tertiary">
-                {fr ? 'Encaissé' : 'Collected'}{' '}
-                <span className="font-semibold text-text-primary tabular-nums">
-                  {montant(deal.invoicePaidCents, fr)}
-                </span>
-              </span>
-            </div>
           </div>
         </Section>
       )}
@@ -214,15 +208,19 @@ export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJ
               <span className="mt-1 w-1.5 h-1.5 rounded-full bg-text-muted shrink-0" aria-hidden="true" />
               <div className="min-w-0">
                 <p className="text-[12px] text-text-primary">
-                  {nomEtape(h.fromStageId)} → <span className="font-semibold">{nomEtape(h.toStageId)}</span>
+                  {nomEtape(h.from_stage_id)} → <span className="font-semibold">{nomEtape(h.to_stage_id)}</span>
                 </p>
                 <p className="text-[10.5px] text-text-muted">
-                  {h.actorType === 'automation' && (fr ? 'Automatisation' : 'Automation')}
-                  {h.actorType === 'lumi' && 'Lumi'}
-                  {h.actorType === 'system' && (fr ? 'Système' : 'System')}
-                  {h.actorType === 'user' && (h.actorName ?? (fr ? 'Utilisateur' : 'User'))}
+                  {h.actor_type === 'automation' && (fr ? 'Automatisation' : 'Automation')}
+                  {h.actor_type === 'lumi' && 'Lumi'}
+                  {h.actor_type === 'system' && (fr ? 'Système' : 'System')}
+                  {h.actor_type === 'user'
+                    && (listeMembres.find((m) => m.id === h.actor_id)?.name
+                      ?? (fr ? 'Utilisateur' : 'User'))}
                   {' · '}
-                  {fr ? `il y a ${depuis(h.createdAt, MOCK_NOW, fr)}` : `${depuis(h.createdAt, MOCK_NOW, fr)} ago`}
+                  {fr
+                    ? `il y a ${depuis(h.created_at, maintenant, fr)}`
+                    : `${depuis(h.created_at, maintenant, fr)} ago`}
                 </p>
               </div>
             </li>
@@ -231,46 +229,6 @@ export default function DealDrawer({ deal, etapes, onClose, onAssigner, onCreerJ
             <li className="text-[12px] text-text-muted">{fr ? 'Aucun mouvement.' : 'No movement yet.'}</li>
           )}
         </ol>
-      </Section>
-
-      <Section titre={fr ? 'Activités' : 'Activity'}>
-        <ul className="space-y-2.5">
-          {activites.map((a) => {
-            const Icone = ICONE_ACTIVITE[a.kind] ?? Sparkles;
-            const auto = a.kind === 'action';
-            return (
-              <li key={a.id} className="flex items-start gap-2.5">
-                <span
-                  className="grid place-items-center w-6 h-6 rounded-full bg-surface-tertiary text-text-secondary shrink-0"
-                  aria-hidden="true"
-                >
-                  <Icone size={12} />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[12px] text-text-primary leading-relaxed">{a.body}</p>
-                  <p className="text-[10.5px] text-text-muted mt-0.5">
-                    {auto && (
-                      <span className="inline-flex items-center gap-1 mr-1.5 text-text-tertiary">
-                        <CheckCircle2 size={9} aria-hidden="true" />
-                        {fr ? 'Action exécutée' : 'Action ran'}
-                      </span>
-                    )}
-                    {!auto && a.authorName && (
-                      <span className="inline-flex items-center gap-1 mr-1.5">
-                        <User size={9} aria-hidden="true" />
-                        {a.authorName}
-                      </span>
-                    )}
-                    {fr ? `il y a ${depuis(a.createdAt, MOCK_NOW, fr)}` : `${depuis(a.createdAt, MOCK_NOW, fr)} ago`}
-                  </p>
-                </div>
-              </li>
-            );
-          })}
-          {activites.length === 0 && (
-            <li className="text-[12px] text-text-muted">{fr ? 'Aucune activité.' : 'No activity yet.'}</li>
-          )}
-        </ul>
       </Section>
     </Drawer>
   );

@@ -6331,7 +6331,7 @@
   - WITH CHECK: `true`
 
 
-## 4. Fonctions (351)
+## 4. Fonctions (352)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -6484,8 +6484,8 @@ l'audit. Lire le corps réel avec :
 | `hard_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_company_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_admin_role(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_membership(target_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_role(p_user uuid, p_org uuid, p_roles text[])` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `haversine_distance(lat1 double precision, lng1 double precision, lat2 double precision, l)` → double precision | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `increment_unread_count(p_conversation_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
@@ -6548,6 +6548,7 @@ l'audit. Lire le corps réel avec :
 | `pipeline_entonnoir(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(stage_id uuid, nom_fr text, nom_en text, rang integer, atteints bigint, taux_passage numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_kpis(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(leads_entrants bigint, leads_precedents bigint, gagnes bigint, perdus bigint, ouverts bigint, taux_closing numeric, revenus_cents bigint, jobs_liees bigint, job_a_creer bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_par_source(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(source text, campagne text, leads bigint, gagnes bigint, perdus bigint, taux_closing numeric, revenus_cents bigint, revenu_moyen_par_lead bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_reordonner_etapes(p_ordre jsonb)` → void | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_stages_verifier_archivage()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_tendance(p_semaines integer DEFAULT 12)` → TABLE(semaine date, leads bigint, gagnes bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_vitesse(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(delai_contact_moyen_h numeric, jamais_contactes bigint, closing_moins_1h numeric, closing_moins_24h numeric, closing_plus_24h numeric, n_moins_1h bigint, n_moins_24h bigint, n_plus_24h bigint, cycle_moyen_jours numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |

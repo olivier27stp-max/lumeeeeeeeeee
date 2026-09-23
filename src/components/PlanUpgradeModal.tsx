@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock, Zap, Store, Timer, FileText, Shield } from 'lucide-react';
+import { Check, Sparkles, X, MessageSquare, Bot, MapPin, GraduationCap, Code, Lock, Zap, Store, Timer, FileText, Shield, GitBranch } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import type { Plan } from '../lib/billingApi';
 import type { PlanFeatureFlag } from '../hooks/usePlanFeature';
@@ -227,6 +227,26 @@ const FEATURE_META: Record<PlanFeatureFlag, {
       'Hiérarchies de gestionnaires',
     ],
     gradient: 'from-rose-600 via-red-600 to-orange-700',
+  },
+  includes_pipeline: {
+    icon: GitBranch,
+    titleEn: 'Sales pipeline',
+    titleFr: 'Pipeline de ventes',
+    taglineEn: 'See where every lead stands, and why you lose the ones you lose',
+    taglineFr: 'Vois où en est chaque lead, et pourquoi tu perds ceux que tu perds',
+    benefitsEn: [
+      'Drag leads through stages you name yourself',
+      'Know which ad campaign actually pays',
+      'Spot where deals stall, and how fast you answer',
+      'Won deals turn into jobs in one click',
+    ],
+    benefitsFr: [
+      'Fais avancer tes leads dans des étapes que tu nommes toi-même',
+      'Sache quelle campagne publicitaire rapporte vraiment',
+      'Vois où les deals bloquent, et en combien de temps tu réponds',
+      'Un deal gagné devient une job en un clic',
+    ],
+    gradient: 'from-sky-600 via-blue-600 to-indigo-700',
   },
 };
 

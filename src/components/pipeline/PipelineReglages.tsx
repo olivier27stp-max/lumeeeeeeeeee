@@ -1,31 +1,52 @@
 /**
- * Réglages du pipeline — étapes et actions, en blocs interchangeables.
+ * Réglages du pipeline — étapes, renommage, ordre, archivage.
  *
- * Deux garde-fous du chantier sont visibles ici :
- *  - archiver une étape qui contient des deals est REFUSÉ (il faut d'abord les
- *    déplacer) — et l'archivage n'efface jamais rien ;
- *  - supprimer une étape n'efface jamais ses actions en silence : on demande de
- *    les déplacer ou de les désactiver.
- * Les actions d'étape SONT des règles du moteur d'Automatisations, filtrées par
- * étape : la mention est affichée pour que ce ne soit pas une surprise.
+ * Les garde-fous ne sont pas ici : ils sont EN BASE (une étape qui contient des
+ * deals, ou la dernière étape de son type, refuse d'être archivée). L'écran se
+ * contente de relayer le message que la base renvoie — c'est ce qui garantit
+ * qu'un même refus vaut aussi pour Lumi, le MCP ou un script.
+ *
+ * Les champs texte sont sauvés au `blur`, jamais à la frappe : une écriture par
+ * caractère saturerait PostgREST pour rien.
  */
-import { useId, useMemo, useState } from 'react';
-import {
-  Archive, ArrowDown, ArrowUp, Clock, Info, LogIn, LogOut, Plus, Trash2,
-} from 'lucide-react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { Archive, ArrowDown, ArrowUp, Info, Plus, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { useTranslation } from '../../i18n';
-import type { MockDeal, MockStage, MockStageAction } from '../../lib/pipeline/mockData';
 import {
-  LIBELLE_ACTION, LIBELLE_DECLENCHEUR, LIBELLE_KIND, rangsOuverts, visuelEtape,
-} from '../../lib/pipeline/presentation';
+  ajouterEtape, archiverEtape, renommerEtape, reordonnerEtapes,
+  type Deal, type PipelineStage,
+} from '../../lib/pipelineVentesApi';
+import { LIBELLE_KIND, rangsOuverts, visuelEtape } from '../../lib/pipeline/presentation';
+import type { MockStage } from '../../lib/pipeline/mockData';
 
-const ICONE_DECLENCHEUR = {
-  stage_entered: LogIn,
-  stage_exited: LogOut,
-  stage_idle: Clock,
-} as const;
+/**
+ * `presentation.ts` est typé sur la maquette : `visuelEtape` et `rangsOuverts`
+ * ne lisent que `id`, `kind` et `position`, identiques entre les deux formes.
+ */
+function pourVisuel(e: PipelineStage): MockStage {
+  return {
+    id: e.id,
+    nameFr: e.name_fr,
+    nameEn: e.name_en,
+    guidanceFr: e.guidance_fr,
+    guidanceEn: e.guidance_en,
+    position: e.position,
+    kind: e.kind,
+    archivedAt: e.archived_at,
+  };
+}
+
+/** Message d'erreur de la base, affiché tel quel : c'est lui qui explique le refus. */
+function messageErreur(e: unknown, fr: boolean): string {
+  if (e instanceof Error && e.message) return e.message;
+  if (typeof e === 'object' && e !== null && 'message' in e) {
+    const m = (e as { message: unknown }).message;
+    if (typeof m === 'string' && m) return m;
+  }
+  return fr ? 'Erreur inconnue' : 'Unknown error';
+}
 
 function Aide({ texte }: { texte: string }) {
   return (
@@ -38,22 +59,19 @@ function Aide({ texte }: { texte: string }) {
 // ── Une étape ──
 
 function CarteEtape({
-  etape, etapes, deals, actions, fr,
-  onRenommer, onGuidance, onMonter, onDescendre, onArchiver, onDeplacerAction, onBasculerAction, onRetirerAction,
+  etape, etapes, deals, fr, onEnregistrer, onMonter, onDescendre, onArchiver,
 }: {
-  etape: MockStage;
-  etapes: MockStage[];
-  deals: MockDeal[];
-  actions: MockStageAction[];
+  etape: PipelineStage;
+  etapes: PipelineStage[];
+  deals: Deal[];
   fr: boolean;
-  onRenommer: (id: string, nomFr: string, nomEn: string) => void;
-  onGuidance: (id: string, guidFr: string, guidEn: string) => void;
+  onEnregistrer: (
+    id: string,
+    champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en'>>,
+  ) => void;
   onMonter: (id: string) => void;
   onDescendre: (id: string) => void;
   onArchiver: (id: string) => void;
-  onDeplacerAction: (actionId: string, versEtapeId: string) => void;
-  onBasculerAction: (actionId: string) => void;
-  onRetirerAction: (actionId: string) => void;
 }) {
   const idNomFr = useId();
   const idNomEn = useId();
@@ -61,10 +79,24 @@ function CarteEtape({
   const idGuidEn = useId();
   const [ouvert, setOuvert] = useState(false);
 
-  const rangs = rangsOuverts(etapes);
-  const v = visuelEtape(etape, rangs[etape.id] ?? 0);
-  const nb = deals.filter((d) => d.stageId === etape.id).length;
-  const mesActions = actions.filter((a) => a.stageId === etape.id).sort((a, b) => a.position - b.position);
+  // Brouillon local : la frappe reste fluide, l'écriture part au `blur`.
+  const [nomFr, setNomFr] = useState(etape.name_fr);
+  const [nomEn, setNomEn] = useState(etape.name_en);
+  const [guidFr, setGuidFr] = useState(etape.guidance_fr);
+  const [guidEn, setGuidEn] = useState(etape.guidance_en);
+
+  // Une écriture refusée par la base laisse le brouillon désynchronisé : on le
+  // recale sur la valeur réelle dès que le parent recharge les étapes.
+  useEffect(() => {
+    setNomFr(etape.name_fr);
+    setNomEn(etape.name_en);
+    setGuidFr(etape.guidance_fr);
+    setGuidEn(etape.guidance_en);
+  }, [etape.name_fr, etape.name_en, etape.guidance_fr, etape.guidance_en]);
+
+  const rangs = rangsOuverts(etapes.map(pourVisuel));
+  const v = visuelEtape(pourVisuel(etape), rangs[etape.id] ?? 0);
+  const nb = deals.filter((d) => d.stage_id === etape.id).length;
 
   return (
     <div className="rounded-xl border border-outline bg-surface-card overflow-hidden">
@@ -72,13 +104,12 @@ function CarteEtape({
         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: v.teinte }} aria-hidden="true" />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-text-primary truncate">
-            {fr ? etape.nameFr : etape.nameEn}
+            {fr ? etape.name_fr : etape.name_en}
           </p>
           <p className="text-[11px] text-text-muted">
             {fr ? LIBELLE_KIND[etape.kind].fr : LIBELLE_KIND[etape.kind].en}
             {' · '}
-            {nb} {fr ? (nb > 1 ? 'deals' : 'deal') : nb > 1 ? 'deals' : 'deal'}
-            {mesActions.length > 0 && ` · ${mesActions.length} ${fr ? 'action(s)' : 'action(s)'}`}
+            {nb} {nb > 1 ? 'deals' : 'deal'}
           </p>
         </div>
 
@@ -86,7 +117,7 @@ function CarteEtape({
           <button
             type="button"
             onClick={() => onMonter(etape.id)}
-            aria-label={fr ? `Monter ${etape.nameFr}` : `Move ${etape.nameEn} up`}
+            aria-label={fr ? `Monter ${etape.name_fr}` : `Move ${etape.name_en} up`}
             className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
           >
             <ArrowUp size={14} />
@@ -94,7 +125,7 @@ function CarteEtape({
           <button
             type="button"
             onClick={() => onDescendre(etape.id)}
-            aria-label={fr ? `Descendre ${etape.nameFr}` : `Move ${etape.nameEn} down`}
+            aria-label={fr ? `Descendre ${etape.name_fr}` : `Move ${etape.name_en} down`}
             className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
           >
             <ArrowDown size={14} />
@@ -102,7 +133,7 @@ function CarteEtape({
           <button
             type="button"
             onClick={() => onArchiver(etape.id)}
-            aria-label={fr ? `Archiver ${etape.nameFr}` : `Archive ${etape.nameEn}`}
+            aria-label={fr ? `Archiver ${etape.name_fr}` : `Archive ${etape.name_en}`}
             className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
           >
             <Archive size={14} />
@@ -126,8 +157,9 @@ function CarteEtape({
               </label>
               <input
                 id={idNomFr}
-                value={etape.nameFr}
-                onChange={(e) => onRenommer(etape.id, e.target.value, etape.nameEn)}
+                value={nomFr}
+                onChange={(e) => setNomFr(e.target.value)}
+                onBlur={() => { if (nomFr !== etape.name_fr) onEnregistrer(etape.id, { name_fr: nomFr }); }}
                 className="input-field w-full text-[12.5px]"
               />
             </div>
@@ -137,8 +169,9 @@ function CarteEtape({
               </label>
               <input
                 id={idNomEn}
-                value={etape.nameEn}
-                onChange={(e) => onRenommer(etape.id, etape.nameFr, e.target.value)}
+                value={nomEn}
+                onChange={(e) => setNomEn(e.target.value)}
+                onBlur={() => { if (nomEn !== etape.name_en) onEnregistrer(etape.id, { name_en: nomEn }); }}
                 className="input-field w-full text-[12.5px]"
               />
             </div>
@@ -159,8 +192,9 @@ function CarteEtape({
               <textarea
                 id={idGuidFr}
                 rows={3}
-                value={etape.guidanceFr}
-                onChange={(e) => onGuidance(etape.id, e.target.value, etape.guidanceEn)}
+                value={guidFr}
+                onChange={(e) => setGuidFr(e.target.value)}
+                onBlur={() => { if (guidFr !== etape.guidance_fr) onEnregistrer(etape.id, { guidance_fr: guidFr }); }}
                 className="input-field w-full text-[12.5px] resize-none"
               />
             </div>
@@ -171,93 +205,26 @@ function CarteEtape({
               <textarea
                 id={idGuidEn}
                 rows={3}
-                value={etape.guidanceEn}
-                onChange={(e) => onGuidance(etape.id, etape.guidanceFr, e.target.value)}
+                value={guidEn}
+                onChange={(e) => setGuidEn(e.target.value)}
+                onBlur={() => { if (guidEn !== etape.guidance_en) onEnregistrer(etape.id, { guidance_en: guidEn }); }}
                 className="input-field w-full text-[12.5px] resize-none"
               />
             </div>
           </div>
 
-          {/* Actions attachées */}
-          <div>
-            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">
-              {fr ? 'Actions de cette étape' : 'Actions on this stage'}
-              <Aide
-                texte={
-                  fr
-                    ? "Ce sont des règles du moteur d'Automatisations, filtrées sur cette étape. Elles apparaissent aussi dans la page Automatisations."
-                    : 'These are Automations-engine rules scoped to this stage. They also appear on the Automations page.'
-                }
-              />
+          {/* Les actions d'étape n'existent pas encore côté base : rien n'est
+              affiché de faux, on annonce simplement ce qui vient. */}
+          <div className="rounded-lg border border-border-subtle bg-surface-secondary px-3.5 py-3">
+            <p className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-text-secondary">
+              <Workflow size={13} aria-hidden="true" />
+              {fr ? 'Automatisations par étape' : 'Per-stage automations'}
             </p>
-
-            <ul className="space-y-2">
-              {mesActions.map((a) => {
-                const IconeDecl = ICONE_DECLENCHEUR[a.trigger];
-                return (
-                  <li
-                    key={a.id}
-                    className="flex items-center gap-2.5 rounded-lg border border-border-subtle bg-surface-secondary px-3 py-2"
-                  >
-                    <IconeDecl size={13} className="text-text-muted shrink-0" aria-hidden="true" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12px] text-text-primary truncate">
-                        {fr ? a.labelFr : a.labelEn}
-                      </p>
-                      <p className="text-[10.5px] text-text-muted">
-                        {fr ? LIBELLE_DECLENCHEUR[a.trigger].fr : LIBELLE_DECLENCHEUR[a.trigger].en}
-                        {a.trigger === 'stage_idle' && a.idleDays !== null && ` ${a.idleDays} ${fr ? 'jours' : 'days'}`}
-                        {' · '}
-                        {fr ? LIBELLE_ACTION[a.actionType].fr : LIBELLE_ACTION[a.actionType].en}
-                      </p>
-                    </div>
-
-                    <select
-                      value={a.stageId}
-                      onChange={(e) => onDeplacerAction(a.id, e.target.value)}
-                      aria-label={fr ? `Déplacer l'action « ${a.labelFr} »` : `Move action “${a.labelEn}”`}
-                      className="input-field text-[11px] py-1 max-w-[9rem]"
-                    >
-                      {etapes
-                        .filter((e) => e.archivedAt === null)
-                        .sort((x, y) => x.position - y.position)
-                        .map((e) => (
-                          <option key={e.id} value={e.id}>
-                            {fr ? e.nameFr : e.nameEn}
-                          </option>
-                        ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => onBasculerAction(a.id)}
-                      className={`text-[10.5px] font-medium px-2 py-1 rounded-full transition-colors ${
-                        a.enabled
-                          ? 'bg-green-500/15 text-green-700 dark:text-green-400'
-                          : 'bg-surface-tertiary text-text-muted'
-                      }`}
-                    >
-                      {a.enabled ? (fr ? 'Active' : 'On') : fr ? 'Inactive' : 'Off'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onRetirerAction(a.id)}
-                      aria-label={fr ? `Retirer l'action « ${a.labelFr} »` : `Remove action “${a.labelEn}”`}
-                      className="p-1 rounded-md text-text-muted hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </li>
-                );
-              })}
-
-              {mesActions.length === 0 && (
-                <li className="text-[12px] text-text-muted py-1">
-                  {fr ? 'Aucune action à cette étape.' : 'No action on this stage.'}
-                </li>
-              )}
-            </ul>
+            <p className="text-[11.5px] text-text-muted mt-1 leading-relaxed">
+              {fr
+                ? "Bientôt : déclencher un courriel, un SMS ou une tâche à l'entrée dans cette étape, ou après quelques jours sans activité."
+                : 'Coming soon: trigger an email, a text or a task when a deal enters this stage, or after a few days without activity.'}
+            </p>
           </div>
         </div>
       )}
@@ -267,105 +234,91 @@ function CarteEtape({
 
 // ── Écran ──
 
-export default function PipelineReglages({ etapes, deals, actions, onChangement }: {
-  etapes: MockStage[];
-  deals: MockDeal[];
-  actions: MockStageAction[];
-  onChangement: (etapes: MockStage[], actions: MockStageAction[]) => void;
+export default function PipelineReglages({ pipelineId, etapes, deals, onChangement }: {
+  pipelineId: string;
+  etapes: PipelineStage[];
+  deals: Deal[];
+  onChangement: () => void;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
 
   const visibles = useMemo(
-    () => [...etapes].filter((e) => e.archivedAt === null).sort((a, b) => a.position - b.position),
+    () => [...etapes].filter((e) => e.archived_at === null).sort((a, b) => a.position - b.position),
     [etapes],
   );
-  const archivees = useMemo(() => etapes.filter((e) => e.archivedAt !== null), [etapes]);
+  const archivees = useMemo(() => etapes.filter((e) => e.archived_at !== null), [etapes]);
 
-  function renommer(id: string, nomFr: string, nomEn: string) {
-    onChangement(etapes.map((e) => (e.id === id ? { ...e, nameFr: nomFr, nameEn: nomEn } : e)), actions);
+  async function enregistrer(
+    id: string,
+    champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en'>>,
+  ) {
+    try {
+      await renommerEtape(id, champs);
+      onChangement();
+    } catch (e) {
+      console.error('[PipelineReglages] renommage refusé', e);
+      toast.error(messageErreur(e, fr));
+      onChangement();
+    }
   }
 
-  function guidance(id: string, guidFr: string, guidEn: string) {
-    onChangement(etapes.map((e) => (e.id === id ? { ...e, guidanceFr: guidFr, guidanceEn: guidEn } : e)), actions);
-  }
-
-  function bouger(id: string, delta: -1 | 1) {
+  async function bouger(id: string, delta: -1 | 1) {
     const ordre = [...visibles];
     const i = ordre.findIndex((e) => e.id === id);
     const j = i + delta;
     if (i < 0 || j < 0 || j >= ordre.length) return;
     [ordre[i], ordre[j]] = [ordre[j], ordre[i]];
-    const positions = new Map(ordre.map((e, n) => [e.id, n + 1]));
-    onChangement(
-      etapes.map((e) => (positions.has(e.id) ? { ...e, position: positions.get(e.id) ?? e.position } : e)),
-      actions,
-    );
+    try {
+      await reordonnerEtapes(ordre.map((e, n) => ({ id: e.id, position: n + 1 })));
+      onChangement();
+    } catch (e) {
+      console.error('[PipelineReglages] réordonnancement refusé', e);
+      toast.error(messageErreur(e, fr));
+      onChangement();
+    }
   }
 
   async function archiver(id: string) {
     const etape = etapes.find((e) => e.id === id);
     if (!etape) return;
 
-    const nb = deals.filter((d) => d.stageId === id).length;
-    if (nb > 0) {
-      toast.error(
-        fr
-          ? `Impossible d'archiver : ${nb} deal(s) sont encore à cette étape. Déplace-les d'abord.`
-          : `Cannot archive: ${nb} deal(s) still sit at this stage. Move them first.`,
-      );
-      return;
-    }
+    const ok = await confirmer({
+      title: fr ? "Archiver l'étape ?" : 'Archive the stage?',
+      message: fr
+        ? `« ${etape.name_fr} » disparaîtra du board mais reste comptée dans les statistiques. Rien n'est effacé.`
+        : `“${etape.name_en}” will leave the board but stays counted in statistics. Nothing is deleted.`,
+      confirmLabel: fr ? 'Archiver' : 'Archive',
+    });
+    if (!ok) return;
 
-    // Une étape ouverte/gagnée/perdue doit toujours rester représentée.
-    const restantes = visibles.filter((e) => e.id !== id);
-    if (!restantes.some((e) => e.kind === etape.kind)) {
-      toast.error(
-        fr
-          ? `Il doit rester au moins une étape « ${LIBELLE_KIND[etape.kind].fr} ».`
-          : `At least one “${LIBELLE_KIND[etape.kind].en}” stage must remain.`,
-      );
-      return;
+    try {
+      // La base refuse elle-même une étape qui porte des deals ou la dernière
+      // de son type : son message est plus précis que tout test fait ici.
+      await archiverEtape(id);
+      onChangement();
+      toast.success(fr ? 'Étape archivée.' : 'Stage archived.');
+    } catch (e) {
+      console.error('[PipelineReglages] archivage refusé', e);
+      toast.error(messageErreur(e, fr));
+      onChangement();
     }
-
-    const sesActions = actions.filter((a) => a.stageId === id);
-    if (sesActions.length > 0) {
-      const ok = await confirmer({
-        title: fr ? "Et ses actions ?" : 'What about its actions?',
-        message: fr
-          ? `Cette étape porte ${sesActions.length} action(s). Elles seront DÉSACTIVÉES, pas supprimées — tu pourras les rattacher à une autre étape. Continuer ?`
-          : `This stage carries ${sesActions.length} action(s). They will be DISABLED, not deleted — you can reattach them to another stage. Continue?`,
-        confirmLabel: fr ? 'Archiver' : 'Archive',
-      });
-      if (!ok) return;
-    }
-
-    onChangement(
-      etapes.map((e) => (e.id === id ? { ...e, archivedAt: new Date().toISOString() } : e)),
-      actions.map((a) => (a.stageId === id ? { ...a, enabled: false } : a)),
-    );
-    toast.success(fr ? 'Étape archivée.' : 'Stage archived.');
   }
 
-  function ajouterEtape() {
+  async function ajouter() {
     const position = visibles.filter((e) => e.kind === 'open').length + 1;
-    const nouvelle: MockStage = {
-      id: `stg_${Date.now()}`,
-      nameFr: 'Nouvelle étape',
-      nameEn: 'New stage',
-      guidanceFr: '',
-      guidanceEn: '',
-      position,
-      kind: 'open',
-      archivedAt: null,
-    };
-    // On insère avant les étapes terminales pour garder un ordre lisible.
-    const reordonnees = [...visibles.filter((e) => e.kind === 'open'), nouvelle, ...visibles.filter((e) => e.kind !== 'open')];
-    const positions = new Map(reordonnees.map((e, n) => [e.id, n + 1]));
-    onChangement(
-      [...etapes, nouvelle].map((e) => (positions.has(e.id) ? { ...e, position: positions.get(e.id) ?? e.position } : e)),
-      actions,
-    );
+    try {
+      await ajouterEtape(pipelineId, {
+        name_fr: 'Nouvelle étape',
+        name_en: 'New stage',
+        position,
+      });
+      onChangement();
+    } catch (e) {
+      console.error('[PipelineReglages] ajout refusé', e);
+      toast.error(messageErreur(e, fr));
+      onChangement();
+    }
   }
 
   return (
@@ -381,7 +334,11 @@ export default function PipelineReglages({ etapes, deals, actions, onChangement 
               : 'Rename, reorder, add or archive. Nothing depends on a stage name: renaming “Follow-up” changes no behaviour.'}
           </p>
         </div>
-        <button type="button" onClick={ajouterEtape} className="btn-secondary text-[12.5px] inline-flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => { void ajouter(); }}
+          className="btn-secondary text-[12.5px] inline-flex items-center gap-1.5"
+        >
           <Plus size={14} aria-hidden="true" />
           {fr ? 'Ajouter une étape' : 'Add a stage'}
         </button>
@@ -394,33 +351,11 @@ export default function PipelineReglages({ etapes, deals, actions, onChangement 
             etape={etape}
             etapes={etapes}
             deals={deals}
-            actions={actions}
             fr={fr}
-            onRenommer={renommer}
-            onGuidance={guidance}
-            onMonter={(id) => bouger(id, -1)}
-            onDescendre={(id) => bouger(id, 1)}
-            onArchiver={archiver}
-            onDeplacerAction={(actionId, vers) =>
-              onChangement(etapes, actions.map((a) => (a.id === actionId ? { ...a, stageId: vers } : a)))
-            }
-            onBasculerAction={(actionId) =>
-              onChangement(etapes, actions.map((a) => (a.id === actionId ? { ...a, enabled: !a.enabled } : a)))
-            }
-            onRetirerAction={async (actionId) => {
-              const a = actions.find((x) => x.id === actionId);
-              if (!a) return;
-              const ok = await confirmer({
-                title: fr ? "Retirer l'action ?" : 'Remove the action?',
-                message: fr
-                  ? `« ${a.labelFr} » ne se déclenchera plus à cette étape.`
-                  : `“${a.labelEn}” will no longer run on this stage.`,
-                confirmLabel: fr ? 'Retirer' : 'Remove',
-                danger: true,
-              });
-              if (!ok) return;
-              onChangement(etapes, actions.filter((x) => x.id !== actionId));
-            }}
+            onEnregistrer={(id, champs) => { void enregistrer(id, champs); }}
+            onMonter={(id) => { void bouger(id, -1); }}
+            onDescendre={(id) => { void bouger(id, 1); }}
+            onArchiver={(id) => { void archiver(id); }}
           />
         ))}
       </div>
@@ -437,7 +372,7 @@ export default function PipelineReglages({ etapes, deals, actions, onChangement 
                 className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-secondary px-3 py-2 text-[12px] text-text-tertiary"
               >
                 <Archive size={12} aria-hidden="true" />
-                {fr ? e.nameFr : e.nameEn}
+                {fr ? e.name_fr : e.name_en}
                 <span className="text-[10.5px] text-text-muted ml-auto">
                   {fr ? 'conservée dans les statistiques' : 'kept in statistics'}
                 </span>

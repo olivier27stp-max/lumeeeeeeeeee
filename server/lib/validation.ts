@@ -450,8 +450,7 @@ export const publicFormSubmissionSchema = z.object({
   // Attribution marketing. Ce ne sont PAS des champs du formulaire : la page
   // publique les relève dans son URL et les joint à l'envoi. Tous optionnels,
   // pour qu'un formulaire intégré ailleurs (ou un vieux cache) continue de
-  // fonctionner sans eux. Bornés à 256 pour qu'une URL forgée ne serve pas de
-  // champ de texte libre.
+  // fonctionner sans eux.
   utm_source: attributionString,
   utm_medium: attributionString,
   utm_campaign: attributionString,
@@ -579,9 +578,10 @@ export const idRequiredSchema = z.object({
 // ─── Migration assistée (console interne + portail temporaire) ───────────
 
 const migrationCategoryEnum = z.enum([
-  'taxes', 'clients', 'properties', 'billing_addresses', 'services', 'quotes', 'jobs', 'visits',
+  'taxes', 'clients', 'properties', 'billing_addresses', 'services', 'quotes', 'jobs', 'recurring_jobs', 'visits',
   'invoices', 'payments', 'notes', 'attachments', 'team_members', 'custom_fields',
 ]);
+export { migrationCategoryEnum };
 
 const migrationSourceCrmEnum = z.enum([
   'jobber', 'housecall_pro', 'servicetitan', 'gohighlevel', 'quickbooks', 'other', 'custom_files',
@@ -685,6 +685,16 @@ export const migrationPortalMappingSchema = z.object({
 
 export const migrationPortalAnswerSchema = z.object({
   answer: z.string().trim().min(1).max(4000),
+});
+
+/** Formulaire « Importer vos données » : catégories cochées par le client. */
+export const migrationPortalCategoriesSchema = z.object({
+  categories: z.array(migrationCategoryEnum).min(1).max(16),
+});
+
+/** Réaffectation d'un fichier à une catégorie (le client corrige la détection). */
+export const migrationPortalFileCategorySchema = z.object({
+  category: migrationCategoryEnum,
 });
 
 export const migrationStaffMapSchema = z.object({

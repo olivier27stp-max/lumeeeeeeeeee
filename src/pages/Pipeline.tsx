@@ -1,18 +1,23 @@
 /**
- * Pipeline de ventes — MAQUETTE (Phase 1, données mock, zéro backend).
+ * Pipeline de ventes — l'avant-job.
  *
- * L'avant-job : les leads entrent, avancent dans des étapes renommables, et
- * « Gagné » mène à la création d'une job. Trois onglets : Board, Statistiques,
- * Réglages.
+ * Les leads entrent, avancent dans des étapes que le client renomme lui-même,
+ * et « Gagné » mène à la création d'une job.
  *
- * Tout l'état vit ici, en mémoire. Aucun appel réseau, aucune écriture : c'est
- * l'écran à valider AVANT de toucher à la base.
+ * Tout ce que l'écran affiche vient de la base : les statistiques passent par
+ * les fonctions `pipeline_*` (SECURITY INVOKER, `org_id` dérivé de la session),
+ * et les mouvements n'écrivent QUE l'étape — horodatages, historique et
+ * événements sont posés par les triggers. C'est ce qui garantit qu'un deal
+ * déplacé par Lumi, un import ou du SQL produit exactement le même résultat
+ * qu'un glisser-déposer ici.
  */
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { GitBranch } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { GitBranch, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import PageHeader from '../components/ui/PageHeader';
+import EmptyState from '../components/ui/EmptyState';
 import PipelineBoard from '../components/pipeline/PipelineBoard';
 import DealDrawer from '../components/pipeline/DealDrawer';
 import GagneJobModal from '../components/pipeline/GagneJobModal';
@@ -20,10 +25,13 @@ import PerduModal from '../components/pipeline/PerduModal';
 import PipelineReglages from '../components/pipeline/PipelineReglages';
 import PipelineStats from '../components/pipeline/PipelineStats';
 import { useTranslation } from '../i18n';
+import { hasPermission } from '../lib/permissions';
+import { usePermissions } from '../hooks/usePermissions';
 import {
-  MOCK_DEALS, MOCK_MEMBERS, MOCK_NOW, MOCK_STAGES, MOCK_STAGE_ACTIONS,
-  type MockDeal, type MockStage, type MockStageAction,
-} from '../lib/pipeline/mockData';
+  assignerDeal, deplacerDeal, fetchDeals, fetchPipelineDefaut, fetchStages,
+  lierJob, marquerPerdu, nomClient,
+  type Deal, type PipelineStage,
+} from '../lib/pipelineVentesApi';
 
 type Onglet = 'board' | 'stats' | 'reglages';
 
@@ -32,16 +40,49 @@ export default function Pipeline() {
   const fr = language === 'fr';
   const [params, setParams] = useSearchParams();
   const onglet = (params.get('tab') as Onglet) || 'board';
+  const qc = useQueryClient();
 
-  const [deals, setDeals] = useState<MockDeal[]>(MOCK_DEALS);
-  const [etapes, setEtapes] = useState<MockStage[]>(MOCK_STAGES);
-  const [actions, setActions] = useState<MockStageAction[]>(MOCK_STAGE_ACTIONS);
+  const perms = usePermissions();
+  const estPatron = perms.role === 'owner' || perms.role === 'admin';
+  // Les revenus et la performance par vendeur restent réservés aux
+  // propriétaires et administrateurs (décision Q7).
+  const voitLesStats = estPatron
+    || hasPermission(perms.permissions, 'financial.view_analytics', perms.role ?? undefined);
+  const peutConfigurer = estPatron;
 
-  const [dealOuvert, setDealOuvert] = useState<MockDeal | null>(null);
-  const [dealAGagner, setDealAGagner] = useState<MockDeal | null>(null);
-  const [dealAPerdre, setDealAPerdre] = useState<MockDeal | null>(null);
+  const pipelineQ = useQuery({
+    queryKey: ['pipeline-defaut'],
+    queryFn: fetchPipelineDefaut,
+    staleTime: 300_000,
+  });
+  const pipelineId = pipelineQ.data?.id ?? null;
 
+  const stagesQ = useQuery({
+    queryKey: ['pipeline-stages', pipelineId],
+    queryFn: () => fetchStages(pipelineId as string),
+    enabled: !!pipelineId,
+    staleTime: 60_000,
+  });
+
+  const dealsQ = useQuery({
+    queryKey: ['pipeline-deals', pipelineId],
+    queryFn: () => fetchDeals(pipelineId as string),
+    enabled: !!pipelineId,
+    staleTime: 30_000,
+  });
+
+  const etapes = useMemo<PipelineStage[]>(() => stagesQ.data ?? [], [stagesQ.data]);
+  const deals = useMemo<Deal[]>(() => dealsQ.data ?? [], [dealsQ.data]);
   const etapeParId = useMemo(() => new Map(etapes.map((e) => [e.id, e])), [etapes]);
+
+  const [dealOuvert, setDealOuvert] = useState<Deal | null>(null);
+  const [dealAGagner, setDealAGagner] = useState<Deal | null>(null);
+  const [dealAPerdre, setDealAPerdre] = useState<{ deal: Deal; versEtapeId: string } | null>(null);
+
+  const rafraichir = () => {
+    qc.invalidateQueries({ queryKey: ['pipeline-deals', pipelineId] });
+    qc.invalidateQueries({ queryKey: ['pipeline-stats'] });
+  };
 
   function choisirOnglet(suivant: Onglet) {
     const sp = new URLSearchParams();
@@ -50,65 +91,91 @@ export default function Pipeline() {
   }
 
   /** Déplacement depuis le board : les étapes terminales ouvrent une fenêtre. */
-  function deplacer(dealId: string, versEtapeId: string) {
+  async function deplacer(dealId: string, versEtapeId: string) {
     const deal = deals.find((d) => d.id === dealId);
     const cible = etapeParId.get(versEtapeId);
     if (!deal || !cible) return;
 
-    if (cible.kind === 'won') {
-      // On marque gagné TOUT DE SUITE ; la job est proposée juste après.
-      // Annuler la popup laisse le deal gagné, avec le badge « Job à créer ».
-      appliquerEtape(dealId, versEtapeId, { wonAt: MOCK_NOW, lostAt: null, lostReason: null });
-      setDealAGagner({ ...deal, stageId: versEtapeId });
-      return;
-    }
-
     if (cible.kind === 'lost') {
-      setDealAPerdre({ ...deal, stageId: versEtapeId });
+      // La raison est demandée AVANT d'écrire : un deal perdu sans raison
+      // n'apprend rien sur les prix.
+      setDealAPerdre({ deal, versEtapeId });
       return;
     }
 
-    appliquerEtape(dealId, versEtapeId, { wonAt: null, lostAt: null });
+    try {
+      await deplacerDeal(dealId, versEtapeId);
+      rafraichir();
+      if (cible.kind === 'won') {
+        // Le deal est gagné tout de suite ; la job est proposée juste après.
+        // Annuler la fenêtre laisse le deal gagné, avec le badge « Job à créer ».
+        setDealAGagner({ ...deal, stage_id: versEtapeId });
+      } else {
+        toast.success(fr ? `Déplacé vers « ${cible.name_fr} ».` : `Moved to “${cible.name_en}”.`);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg);
+      rafraichir();
+    }
   }
 
-  function appliquerEtape(
-    dealId: string,
-    versEtapeId: string,
-    extra: Partial<MockDeal> = {},
-  ) {
-    setDeals((prev) =>
-      prev.map((d) =>
-        d.id === dealId
-          ? { ...d, stageId: versEtapeId, stageEnteredAt: MOCK_NOW, lastActivityAt: MOCK_NOW, ...extra }
-          : d,
-      ),
+  const tabs: { cle: Onglet; libelle: string; visible: boolean }[] = [
+    { cle: 'board', libelle: 'Board', visible: true },
+    { cle: 'stats', libelle: fr ? 'Statistiques' : 'Statistics', visible: voitLesStats },
+    { cle: 'reglages', libelle: fr ? 'Réglages' : 'Settings', visible: peutConfigurer },
+  ];
+  const ongletActif = tabs.find((t) => t.cle === onglet)?.visible ? onglet : 'board';
+
+  if (pipelineQ.isLoading || stagesQ.isLoading) {
+    return (
+      <>
+        <PageHeader title="Pipeline" icon={GitBranch} />
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-7 w-7 animate-spin text-text-tertiary" aria-hidden="true" />
+          <span className="sr-only">{fr ? 'Chargement…' : 'Loading…'}</span>
+        </div>
+      </>
     );
   }
 
-  const tabs: { cle: Onglet; libelle: string }[] = [
-    { cle: 'board', libelle: fr ? 'Board' : 'Board' },
-    { cle: 'stats', libelle: fr ? 'Statistiques' : 'Statistics' },
-    { cle: 'reglages', libelle: fr ? 'Réglages' : 'Settings' },
-  ];
+  if (!pipelineId || etapes.length === 0) {
+    return (
+      <>
+        <PageHeader title="Pipeline" icon={GitBranch} />
+        <EmptyState
+          icon={GitBranch}
+          title={fr ? 'Pipeline non configuré' : 'Pipeline not set up'}
+          description={
+            fr
+              ? "Aucun pipeline n'est encore rattaché à cette entreprise. Contacte le support : il se crée normalement tout seul."
+              : 'No pipeline is attached to this company yet. Contact support — it is normally created automatically.'
+          }
+        />
+      </>
+    );
+  }
+
+  const ouverts = deals.filter((d) => etapeParId.get(d.stage_id)?.kind === 'open').length;
 
   return (
     <>
       <PageHeader
-        title={fr ? 'Pipeline' : 'Pipeline'}
+        title="Pipeline"
         subtitle={
           fr
-            ? `${deals.length} deals · maquette avec données de démonstration`
-            : `${deals.length} deals · mockup with demo data`
+            ? `${deals.length} deals · ${ouverts} en cours`
+            : `${deals.length} deals · ${ouverts} open`
         }
         icon={GitBranch}
       />
 
       <div className="tab-nav mt-4">
-        {tabs.map((t) => (
+        {tabs.filter((t) => t.visible).map((t) => (
           <button
             key={t.cle}
             type="button"
-            className={onglet === t.cle ? 'tab-item-active' : 'tab-item'}
+            className={ongletActif === t.cle ? 'tab-item-active' : 'tab-item'}
             onClick={() => choisirOnglet(t.cle)}
           >
             {t.libelle}
@@ -117,25 +184,31 @@ export default function Pipeline() {
       </div>
 
       <div className="mt-4">
-        {onglet === 'board' && (
+        {ongletActif === 'board' && (
           <PipelineBoard
             deals={deals}
             etapes={etapes}
+            chargement={dealsQ.isLoading}
             onOuvrir={setDealOuvert}
             onDeplacer={deplacer}
           />
         )}
 
-        {onglet === 'stats' && <PipelineStats deals={deals} etapes={etapes} onOuvrirDeal={setDealOuvert} />}
+        {ongletActif === 'stats' && voitLesStats && (
+          <PipelineStats onOuvrirDeal={(id) => {
+            const d = deals.find((x) => x.id === id);
+            if (d) { setDealOuvert(d); choisirOnglet('board'); }
+          }} />
+        )}
 
-        {onglet === 'reglages' && (
+        {ongletActif === 'reglages' && peutConfigurer && (
           <PipelineReglages
+            pipelineId={pipelineId}
             etapes={etapes}
             deals={deals}
-            actions={actions}
-            onChangement={(e, a) => {
-              setEtapes(e);
-              setActions(a);
+            onChangement={() => {
+              qc.invalidateQueries({ queryKey: ['pipeline-stages', pipelineId] });
+              rafraichir();
             }}
           />
         )}
@@ -145,57 +218,51 @@ export default function Pipeline() {
         deal={dealOuvert}
         etapes={etapes}
         onClose={() => setDealOuvert(null)}
-        onAssigner={(dealId, membreId) => {
-          const membre = MOCK_MEMBERS.find((m) => m.id === membreId) ?? null;
-          setDeals((prev) =>
-            prev.map((d) =>
-              d.id === dealId
-                ? { ...d, assignedUserId: membre?.id ?? null, assignedName: membre?.name ?? null, assignedAt: MOCK_NOW }
-                : d,
-            ),
-          );
-          setDealOuvert((d) =>
-            d && d.id === dealId
-              ? { ...d, assignedUserId: membre?.id ?? null, assignedName: membre?.name ?? null }
-              : d,
-          );
+        onAssigner={async (dealId, membreId) => {
+          try {
+            await assignerDeal(dealId, membreId);
+            rafraichir();
+            toast.success(membreId ? (fr ? 'Deal assigné.' : 'Deal assigned.') : (fr ? 'Deal désassigné.' : 'Deal unassigned.'));
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
+          }
         }}
-        onCreerJob={(deal) => {
-          setDealOuvert(null);
-          setDealAGagner(deal);
-        }}
+        onCreerJob={(deal) => { setDealOuvert(null); setDealAGagner(deal); }}
       />
 
       <GagneJobModal
         deal={dealAGagner}
         onFermer={() => {
-          // Le deal reste gagné : le badge « Job à créer » est DÉRIVÉ.
+          // Le deal RESTE gagné : le badge « Job à créer » est dérivé de
+          // l'étape et de l'absence de job, jamais d'un indicateur stocké.
           setDealAGagner(null);
           toast.info(fr ? 'Deal gagné — job à créer.' : 'Deal won — job to create.');
         }}
-        onCreer={(dealId, titre) => {
-          setDeals((prev) =>
-            prev.map((d) =>
-              d.id === dealId ? { ...d, jobId: `JOB-${dealId.slice(-4)}`, jobAmountCents: d.jobAmountCents ?? 0 } : d,
-            ),
-          );
-          setDealAGagner(null);
-          toast.success(fr ? `Job créée : ${titre}` : `Job created: ${titre}`);
+        onCreer={async (dealId, jobId) => {
+          try {
+            await lierJob(dealId, jobId);
+            rafraichir();
+            setDealAGagner(null);
+            toast.success(fr ? 'Job créée et liée au deal.' : 'Job created and linked.');
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
+          }
         }}
       />
 
       <PerduModal
-        deal={dealAPerdre}
+        deal={dealAPerdre?.deal ?? null}
         onFermer={() => setDealAPerdre(null)}
-        onConfirmer={(dealId, raison) => {
-          const deal = deals.find((d) => d.id === dealId);
-          appliquerEtape(dealId, dealAPerdre?.stageId ?? '', {
-            lostAt: MOCK_NOW,
-            lostReason: raison,
-            lostFromStageId: deal?.stageId ?? null,
-            wonAt: null,
-          });
-          setDealAPerdre(null);
+        onConfirmer={async (dealId, raison) => {
+          if (!dealAPerdre) return;
+          try {
+            await marquerPerdu(dealId, dealAPerdre.versEtapeId, raison);
+            rafraichir();
+            setDealAPerdre(null);
+            toast.success(fr ? `${nomClient(dealAPerdre.deal)} — marqué perdu.` : `${nomClient(dealAPerdre.deal)} — marked lost.`);
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
+          }
         }}
       />
     </>
