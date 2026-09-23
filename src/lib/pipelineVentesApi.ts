@@ -49,6 +49,9 @@ export interface Deal {
   lost_at: string | null;
   lost_reason: string | null;
   lost_from_stage_id: string | null;
+  /** Porte-à-porte : la porte d'où vient ce deal, et le rep qui l'a ouverte. */
+  pin_id: string | null;
+  field_rep_id: string | null;
   created_at: string;
   /** Jointure client — le « contact » est une ligne de `clients`. */
   client?: {
@@ -196,7 +199,7 @@ export async function fetchDeals(pipelineId: string): Promise<Deal[]> {
       'id,pipeline_id,stage_id,client_id,assigned_user_id,source,' +
       'utm_source,utm_medium,utm_campaign,utm_content,fbclid,job_id,quote_id,' +
       'first_contacted_at,last_activity_at,stage_entered_at,won_at,lost_at,' +
-      'lost_reason,lost_from_stage_id,created_at,' +
+      'lost_reason,lost_from_stage_id,pin_id,field_rep_id,created_at,' +
       'client:clients!deals_client_same_org(first_name,last_name,company,email,phone,address)',
     )
     .eq('pipeline_id', pipelineId)
@@ -242,10 +245,20 @@ export interface PaiementLie {
   status: string;
 }
 
+/** La porte du D2D d'où vient le deal, pour revenir à sa position sur la carte. */
+export interface PorteLiee {
+  house_id: string;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  status: string;
+}
+
 export interface ElementsLies {
   job: JobLiee | null;
   devis: DevisLie | null;
   paiements: PaiementLie[];
+  porte: PorteLiee | null;
 }
 
 /**
@@ -256,12 +269,40 @@ export interface ElementsLies {
  * paiement : additionner ceux du client entier donnerait un chiffre faux.
  */
 export async function fetchElementsLies(deal: Deal): Promise<ElementsLies> {
-  const [job, devis, paiements] = await Promise.all([
+  const [job, devis, paiements, porte] = await Promise.all([
     chargerJob(deal.job_id),
     chargerDevis(deal.quote_id),
     chargerPaiements(deal.job_id),
+    chargerPorte(deal.pin_id),
   ]);
-  return { job, devis, paiements };
+  return { job, devis, paiements, porte };
+}
+
+/**
+ * La porte du porte-à-porte. Les coordonnées vivent sur
+ * `field_house_profiles` — `field_pins` ne porte ni lat ni lng — d'où la
+ * jointure par `house_id`.
+ */
+async function chargerPorte(pinId: string | null): Promise<PorteLiee | null> {
+  if (!pinId) return null;
+  const { data, error } = await supabase
+    .from('field_pins')
+    .select('status,house_id,maison:field_house_profiles!field_pins_house_id_fkey(address,lat,lng)')
+    .eq('id', pinId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const brut = data as unknown as {
+    status: string; house_id: string;
+    maison: { address: string | null; lat: number | null; lng: number | null } | null;
+  };
+  return {
+    house_id: brut.house_id,
+    address: brut.maison?.address ?? null,
+    lat: brut.maison?.lat ?? null,
+    lng: brut.maison?.lng ?? null,
+    status: brut.status,
+  };
 }
 
 async function chargerJob(jobId: string | null): Promise<JobLiee | null> {
