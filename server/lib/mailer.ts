@@ -155,6 +155,30 @@ export function raisonSesSansSuivi(env: NodeJS.ProcessEnv = process.env): string
   if (!String(env.SES_WEBHOOK_TOKEN || '').trim()) {
     return 'SES_WEBHOOK_TOKEN manque — la route /api/webhooks/ses refusera les notifications SNS';
   }
+
+  /* Une valeur PRÉSENTE mais absurde, c'est le même effet qu'absente — en
+     pire, parce que le diagnostic disait « tout va bien ».
+
+     Vécu le 2026-09-22 : deux variables gardaient la valeur temporaire « a »
+     posée pour contourner le refus de Railway d'enregistrer une variable vide.
+     Le diagnostic affichait `ses_variables: true`, l'envoi échouait en
+     « 535 Authentication Credentials Invalid », et on a cherché du côté de
+     l'expéditeur, du domaine et du code pendant une heure.
+
+     On ne vérifie pas la valeur — ce sont des secrets — mais sa FORME, qui
+     est publique et suffit à distinguer un vrai identifiant d'un reliquat. */
+  const user = String(env.SES_SMTP_USER || '').trim();
+  if (user && !/^AKIA[A-Z0-9]{12,}$/.test(user)) {
+    return 'SES_SMTP_USER ne ressemble pas à un identifiant Amazon (attendu : AKIA… sur 20 caractères) — Amazon refusera la connexion';
+  }
+  const pass = String(env.SES_SMTP_PASS || '').trim();
+  if (pass && pass.length < 20) {
+    return `SES_SMTP_PASS fait ${pass.length} caractère(s), un mot de passe SMTP Amazon en fait ~44 — valeur temporaire oubliée ?`;
+  }
+  const jeton = String(env.SES_WEBHOOK_TOKEN || '').trim();
+  if (jeton.length < 16) {
+    return `SES_WEBHOOK_TOKEN fait ${jeton.length} caractère(s) — trop court pour un jeton partagé, l'abonnement SNS restera « en attente de confirmation »`;
+  }
   return null;
 }
 

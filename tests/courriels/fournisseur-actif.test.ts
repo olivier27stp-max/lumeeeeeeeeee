@@ -83,7 +83,9 @@ describe('le diagnostic dit QUI envoie, pas seulement « smtp »', () => {
     const fs = await import('node:fs');
     const src = fs.readFileSync('server/index.ts', 'utf8');
     expect(src).toContain('smtp_hote: process.env.SMTP_HOST');
-    expect(src).toContain('ses_variables: Boolean(');
+    // `ses_variables` teste désormais la FORME de l'identifiant, pas sa
+    // seule présence : une variable posée à « a » passait l'ancien test.
+    expect(src).toContain('ses_variables: /^AKIA');
   });
 
   it('n’expose jamais un mot de passe : /api/health est public', async () => {
@@ -132,8 +134,14 @@ describe('SES — ce qui bloque le suivi', () => {
   });
 
   it('se tait quand tout est en place', () => {
+    // Les valeurs doivent avoir la forme attendue : un « jeton » de 5 lettres
+    // ou un mot de passe « p » sont désormais signalés, à raison.
     expect(raisonSesSansSuivi({
-      ...AVEC_SES, SES_CONFIGURATION_SET: 'suivi-lume', SES_WEBHOOK_TOKEN: 'jeton',
+      ...AVEC_SES,
+      SES_SMTP_USER: 'AKIATBEGR77RQZA6OT6X',
+      SES_SMTP_PASS: 'x'.repeat(44),
+      SES_CONFIGURATION_SET: 'suivi-lume',
+      SES_WEBHOOK_TOKEN: '7f3c2a10e94b4d1a8c65b2f0d7e83a19',
     })).toBeNull();
   });
 
@@ -150,5 +158,55 @@ describe('SES — ce qui bloque le suivi', () => {
     expect(src).toContain("'X-SES-CONFIGURATION-SET'");
     // Et jamais sur un envoi qui n'est pas SES.
     expect(src).toContain("provider === 'ses' ? String(process.env.SES_CONFIGURATION_SET");
+  });
+});
+
+/**
+ * Une valeur PRÉSENTE mais absurde (2026-09-22).
+ *
+ * Railway refuse d'enregistrer une variable vide. Pour contourner, on pose une
+ * valeur temporaire « a » puis on colle la vraie. Si le collage ne prend pas —
+ * un clic de validation oublié — la variable existe, le diagnostic dit « tout
+ * va bien », et chaque envoi échoue en « 535 Authentication Credentials
+ * Invalid ». On a cherché l'expéditeur, le domaine et le code pendant une
+ * heure avant de mesurer la longueur des valeurs.
+ *
+ * On ne vérifie jamais la valeur — ce sont des secrets — mais sa FORME.
+ */
+describe('SES — une valeur présente mais absurde', () => {
+  const BASE = {
+    COURRIEL_FOURNISSEUR: 'ses',
+    SES_REGION: 'ca-central-1',
+    SES_CONFIGURATION_SET: 'lume-suivi',
+    SES_SMTP_USER: 'AKIATBEGR77RQZA6OT6X',
+    SES_SMTP_PASS: 'x'.repeat(44),
+    SES_WEBHOOK_TOKEN: '7f3c2a10e94b4d1a8c65b2f0d7e83a19',
+  } as NodeJS.ProcessEnv;
+
+  it('se tait quand les trois valeurs ont la bonne forme', () => {
+    expect(raisonSesSansSuivi(BASE)).toBeNull();
+  });
+
+  it('repère le mot de passe resté à « a »', () => {
+    const r = raisonSesSansSuivi({ ...BASE, SES_SMTP_PASS: 'a' });
+    expect(r).toContain('1 caractère');
+    expect(r).toContain('~44');
+  });
+
+  it('repère le jeton resté à « a »', () => {
+    const r = raisonSesSansSuivi({ ...BASE, SES_WEBHOOK_TOKEN: 'a' });
+    expect(r).toContain('trop court');
+    expect(r).toContain('en attente de confirmation');
+  });
+
+  it('repère un identifiant qui n’est pas une clé Amazon', () => {
+    const r = raisonSesSansSuivi({ ...BASE, SES_SMTP_USER: 'resend' });
+    expect(r).toContain('AKIA');
+  });
+
+  it('ne fuite jamais la valeur elle-même, seulement sa longueur', () => {
+    const secret = 'MotDePasseSecretQuiNeDoitPasFuiter';
+    const r = raisonSesSansSuivi({ ...BASE, SES_SMTP_PASS: secret.slice(0, 5) });
+    expect(r).not.toContain(secret.slice(0, 5));
   });
 });

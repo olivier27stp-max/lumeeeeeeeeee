@@ -1218,7 +1218,10 @@ app.get('/api/health', async (_req, res) => {
            Resend, autre chose = un vrai serveur SMTP. L'hôte n'est pas un
            secret ; les identifiants ne sont jamais exposés ici. */
         smtp_hote: process.env.SMTP_HOST || null,
-        ses_variables: Boolean(String(process.env.SES_SMTP_USER || '').trim()),
+        /* La FORME de l'identifiant, pas seulement sa présence. Une variable
+           posée à « a » passait ce test et affichait « tout va bien » pendant
+           que chaque envoi échouait en 535. */
+        ses_variables: /^AKIA[A-Z0-9]{12,}$/.test(String(process.env.SES_SMTP_USER || '').trim()),
         // Ce qui empêche le suivi, quel que soit le fournisseur : une phrase
         // qui dit quoi corriger, `null` quand tout est en place.
         suivi_bloque: raisonSmtpMalgreResend() ?? raisonSesSansSuivi(),
