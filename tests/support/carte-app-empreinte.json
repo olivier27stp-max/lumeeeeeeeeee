@@ -100,7 +100,7 @@
   "src/pages/WorkspaceNew.tsx": "e678f42275fc7b51",
   "src/pages/settings/ApiMcpSettings.tsx": "bc94b968dcd10fc0",
   "src/pages/settings/BillingSettings.tsx": "7dd42aca7ffa2d02",
-  "src/pages/settings/EmailTemplatesSettings.tsx": "e12da99285dc53b0",
+  "src/pages/settings/EmailTemplatesSettings.tsx": "2344e65b6917fa6d",
   "src/pages/settings/LanguageSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/LocationSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/OfficesSettings.tsx": "9dd0a54fa873c77a",

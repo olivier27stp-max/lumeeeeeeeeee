@@ -709,6 +709,27 @@ router.post('/emails/apercu', async (req, res) => {
       signature: null,
     });
 
+    /* L'envoi d'essai, par le même rendu. Sans lui, la seule façon de voir son
+       courriel pour de vrai était d'envoyer une vraie facture à un vrai
+       client — c'est ce que les gens faisaient, avec le risque que ça suppose.
+
+       Toujours à SOI : jamais une adresse fournie par le client de l'API.
+       Autrement, cette route deviendrait un relais d'envoi anonyme. */
+    if (req.body?.envoyer === true) {
+      const destinataire = auth.user.email;
+      if (!destinataire) return res.status(400).json({ error: 'No email on this account.' });
+      const envoi = await sendEmail({
+        ...(await senderForOrg(auth.orgId, company)),
+        to: destinataire,
+        subject: `[Essai] ${String(req.body?.objet || '').slice(0, 200) || (fr ? 'Aperçu de votre courriel' : 'Your email preview')}`,
+        html,
+        // Pas de `suivi` : un essai qu'on s'envoie à soi n'a pas à compter
+        // dans les statistiques d'ouverture d'un vrai client.
+      });
+      if (!envoi.sent) return res.status(502).json({ error: envoi.error || 'Send failed.' });
+      return res.json({ html, envoye: destinataire });
+    }
+
     return res.json({ html });
   } catch (error) {
     return sendSafeError(res, error, 'Failed to render preview.', '[emails/apercu]');

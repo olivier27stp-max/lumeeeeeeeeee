@@ -351,8 +351,21 @@ describe('senderForOrg est l’expéditeur des routes d’envoi', () => {
     expect(fn).toContain('replyTo: plateforme.replyTo');
   });
 
-  it('emails.ts : les 4 routes (facture, devis, devis mobile, personnalisé) utilisent senderForOrg', () => {
-    expect((emails.match(/\.\.\.\(await senderForOrg\(/g) || []).length).toBe(4);
+  it('emails.ts : TOUT envoi passe par senderForOrg, jamais par senderFor', () => {
+    /* La règle protégée : un courriel part toujours au nom de l'entreprise,
+       depuis son domaine s'il est vérifié. `senderFor` seul utiliserait
+       l'adresse de la plateforme.
+
+       Ce test exigeait exactement 4 appels. Le compteur a lâché le
+       2026-09-23, quand l'envoi d'essai (« M'envoyer un essai ») en a ajouté
+       un cinquième — un envoi parfaitement conforme. Un compteur ne distingue
+       pas une violation d'un ajout légitime ; on vérifie donc la règle
+       elle-même : chaque `sendEmail` de ce fichier a son expéditeur, et aucun
+       ne passe par `senderFor` directement. */
+    const appelsSender = (emails.match(/\.\.\.\(await senderForOrg\(/g) || []).length;
+    const envois = (emails.match(/await sendEmail\(\{/g) || []).length;
+    expect(appelsSender).toBe(envois);
+    expect(appelsSender).toBeGreaterThanOrEqual(4);
     expect(emails).not.toMatch(/\.\.\.senderFor\(company\)/);
   });
 

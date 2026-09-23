@@ -169,11 +169,14 @@ describe('éditeur — plus de HTML à l’écran', () => {
        vrai gabarit. C'est un usage légitime — et refuser un aperçu fidèle pour
        satisfaire un compteur aurait inversé la fin et les moyens.
 
-       On vérifie donc les DEUX usages nommément, et surtout ce que la règle
-       voulait vraiment dire : aucune reconstruction dans un `onChange`. */
+       On a d'abord exigé 2, puis l'envoi d'essai en a ajouté un troisième :
+       un compteur ne distingue pas une violation d'un ajout légitime, et le
+       corriger à chaque fois n'apprend rien. On vérifie donc les usages
+       nommément, et surtout ce que la règle voulait dire : aucune
+       reconstruction dans le chemin de la FRAPPE. */
     expect(apercu).toContain('const corpsHtml = texteVersHtml(blocsEnTexte(blocs));');
     expect(apercu).toContain('apercuCourriel(texteVersHtml(blocsEnTexte(blocs)))');
-    expect((apercu.match(/texteVersHtml\(/g) || []).length).toBe(2);
+    expect(apercu).toContain('envoyerEssaiCourriel(texteVersHtml(blocsEnTexte(blocs))');
 
     // Le cœur de la règle : rien ne reconstruit le HTML à la frappe.
     const majBloc = apercu.slice(apercu.indexOf('const majBloc'), apercu.indexOf('const supprimerBloc'));

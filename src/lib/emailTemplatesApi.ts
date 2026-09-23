@@ -201,3 +201,40 @@ export async function apercuCourriel(corpsHtml: string): Promise<string | null> 
     return null;
   }
 }
+
+/**
+ * S'envoyer le courriel à soi-même, pour le voir dans une vraie boîte.
+ *
+ * Sans ça, la seule façon de voir son courriel pour de vrai était d'envoyer
+ * une vraie facture à un vrai client. L'adresse est TOUJOURS celle du compte
+ * connecté, décidée côté serveur : cette route n'est pas un relais d'envoi.
+ *
+ * Rend l'adresse touchée, ou `null` en cas d'échec (le message est affiché
+ * par l'appelant).
+ */
+export async function envoyerEssaiCourriel(corpsHtml: string, objet: string): Promise<string | null> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const orgId = await getCurrentOrgIdOrThrow();
+    const res = await fetch('/api/emails/apercu', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-org-id': orgId,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ corpsHtml, objet, envoyer: true }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[emailTemplates] envoi d’essai impossible', body?.error || res.status);
+      return null;
+    }
+    return typeof body?.envoye === 'string' ? body.envoye : null;
+  } catch (e) {
+    console.error('[emailTemplates] envoi d’essai impossible', e);
+    return null;
+  }
+}

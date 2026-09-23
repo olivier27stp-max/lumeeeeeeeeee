@@ -231,6 +231,33 @@ export default function EmailTemplatesSettings() {
     }
   };
 
+  /**
+   * La couleur de marque, depuis cette page.
+   *
+   * Elle porte le filet de tête et le bouton d'action — c'est la SEULE couleur
+   * du courriel, depuis qu'on a retiré le ciel de Lume côté client. La laisser
+   * dans une autre page alors que le logo est ici, et que les vignettes
+   * montrent son effet, n'avait pas de sens.
+   *
+   * Une teinte trop pâle est ramenée au noir par le serveur (`couleurBouton`,
+   * contraste minimum 3:1) : du texte blanc sur du jaune est illisible. On ne
+   * l'interdit donc pas ici — on explique ce qui se passera.
+   */
+  const changerCouleur = async (valeur: string) => {
+    if (!/^#[0-9a-f]{6}$/i.test(valeur)) return;
+    setCouleurMarque(valeur);
+    try {
+      const orgId = await getCurrentOrgIdOrThrow();
+      const { error } = await supabase
+        .from('company_settings')
+        .update({ brand_color: valeur })
+        .eq('org_id', orgId);
+      if (error) throw error;
+    } catch (e: any) {
+      toast.error(e?.message || 'Enregistrement impossible');
+    }
+  };
+
   const revenirAuDefaut = async (t: EmailTemplate, titre: string) => {
     const ok = await confirmer({
       title: fr ? 'Revenir au texte d’origine ?' : 'Restore the original text?',
@@ -298,12 +325,30 @@ export default function EmailTemplatesSettings() {
             </span>
 
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-medium text-text-primary">Votre logo</p>
+              <p className="text-[14px] font-medium text-text-primary">Votre identité</p>
               <p className="text-[12.5px] text-text-tertiary">
-                Une seule fois, et il apparaît en haut de vos {editables.length} courriels. Le fond blanc est
+                Le logo et la couleur de vos {editables.length} courriels. Le fond blanc du logo est
                 retiré automatiquement.
               </p>
             </div>
+
+            {/* La couleur, à côté du logo : les deux forment l'identité du
+                courriel, et les vignettes en montrent l'effet immédiatement. */}
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-outline/60 px-3 py-2 text-[13px] font-semibold text-text-secondary hover:bg-surface-secondary">
+              <span
+                className="h-4 w-4 rounded border border-outline/40"
+                style={{ background: couleurMarque }}
+                aria-hidden="true"
+              />
+              Couleur
+              <input
+                type="color"
+                value={couleurMarque}
+                onChange={(e) => void changerCouleur(e.target.value)}
+                className="sr-only"
+                aria-label="Couleur de votre marque"
+              />
+            </label>
 
             <label
               className={cn(
