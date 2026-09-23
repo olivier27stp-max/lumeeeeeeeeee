@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils';
 import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRulesApi';
 import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 import { variablesPour } from '../../lib/variablesCourriel';
+import { apercuCourriel } from '../../lib/emailTemplatesApi';
 
 interface Props {
   /** Règle d'automatisation visée. Absent quand `enregistrerTexte` est fourni. */
@@ -155,6 +156,34 @@ export default function EmailPreviewEditor({
   const [entreprise, setEntreprise] = useState<Entreprise>({});
   /** Objet ou corps : où la prochaine variable insérée doit atterrir. */
   const [cibleObjet, setCibleObjet] = useState(false);
+
+  /* L'aperçu RÉEL, rendu par le serveur.
+
+     Le bloc modifiable ci-dessous reste : on corrige une phrase en cliquant
+     dessus, c'est tout l'intérêt de cet éditeur. Mais il ne DESSINE plus le
+     décor — fond, logo, pied — qu'il inventait en React avec les couleurs en
+     dur. Deux rendus pour une même chose, donc deux vérités : le jour où le
+     gabarit serveur est passé du ciel au gris neutre, l'aperçu a continué de
+     montrer un décor que plus personne ne recevait.
+
+     L'onglet « Aperçu réel » affiche ce que le serveur enverrait, dans une
+     iframe. `null` = le serveur n'a pas répondu : on reste sur l'éditeur
+     plutôt que de bloquer l'écriture pour une image. */
+  const [ongletApercu, setOngletApercu] = useState(false);
+  const [htmlReel, setHtmlReel] = useState<string | null>(null);
+  const [chargementApercu, setChargementApercu] = useState(false);
+
+  useEffect(() => {
+    if (!ongletApercu) return;
+    let vivant = true;
+    setChargementApercu(true);
+    void apercuCourriel(texteVersHtml(blocsEnTexte(blocs)))
+      .then((h) => { if (vivant) setHtmlReel(h); })
+      .finally(() => { if (vivant) setChargementApercu(false); });
+    return () => { vivant = false; };
+    // Volontairement recalculé à chaque bascule vers l'onglet : l'aperçu doit
+    // refléter le texte au moment où on le regarde, pas celui de l'ouverture.
+  }, [ongletApercu, blocs]);
 
   /* Les variables offertes. Pour un modèle, celles que le serveur remplit
      VRAIMENT pour ce poste : proposer `{invoice_total}` sur une soumission
@@ -312,7 +341,61 @@ export default function EmailPreviewEditor({
             courriel sur une image fausse. Les couleurs sont écrites en dur
             plutôt qu'en classes de thème, parce qu'un courriel ne suit pas le
             mode sombre de l'app : il arrive tel quel dans la boîte. */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5" style={{ background: '#e6f0ff' }}>
+        {/* Deux onglets. « Modifier » garde l'édition sur place ; « Aperçu
+            réel » montre ce que le serveur enverrait, sans rien redessiner. */}
+        <div className="flex items-center gap-1 px-3 sm:px-5 pt-3 border-b border-outline/40">
+          <button
+            type="button"
+            onClick={() => setOngletApercu(false)}
+            className={cn(
+              'px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors',
+              !ongletApercu ? 'border-primary text-text-primary' : 'border-transparent text-text-tertiary hover:text-text-secondary',
+            )}
+          >
+            {fr ? 'Modifier' : 'Edit'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setOngletApercu(true)}
+            className={cn(
+              'px-3 py-2 text-[12px] font-semibold border-b-2 -mb-px transition-colors',
+              ongletApercu ? 'border-primary text-text-primary' : 'border-transparent text-text-tertiary hover:text-text-secondary',
+            )}
+          >
+            {fr ? 'Aperçu réel' : 'Real preview'}
+          </button>
+        </div>
+
+        {ongletApercu ? (
+          <div className="flex-1 overflow-y-auto bg-surface-secondary p-3 sm:p-5">
+            {chargementApercu ? (
+              <p className="flex items-center justify-center gap-2 py-10 text-[12px] text-text-tertiary">
+                <Loader2 size={13} className="animate-spin" />
+                {fr ? 'Rendu du courriel…' : 'Rendering…'}
+              </p>
+            ) : htmlReel ? (
+              <iframe
+                title={fr ? 'Aperçu du courriel' : 'Email preview'}
+                srcDoc={htmlReel}
+                sandbox=""
+                className="mx-auto block w-full max-w-[600px] rounded-lg border border-outline/40 bg-white"
+                style={{ height: 620 }}
+              />
+            ) : (
+              <p className="py-10 text-center text-[12px] text-text-tertiary">
+                {fr
+                  ? 'Aperçu indisponible pour le moment. Votre texte est intact — revenez à « Modifier ».'
+                  : 'Preview unavailable right now. Your text is safe — go back to “Edit”.'}
+              </p>
+            )}
+            <p className="mx-auto mt-2 max-w-[600px] text-center text-[10px] leading-relaxed text-text-tertiary">
+              {fr
+                ? 'Rendu par le serveur, avec le même gabarit qu’à l’envoi. Le montant et le bouton sont des exemples ; les valeurs entre crochets seront remplacées par les vraies données du client.'
+                : 'Rendered by the server, with the same template used when sending. The amount and button are samples; bracketed values are replaced with the client’s real data.'}
+            </p>
+          </div>
+        ) : (
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5" style={{ background: '#f4f5f7' }}>
           <div className="mx-auto max-w-[600px] rounded-lg bg-white shadow-sm overflow-hidden">
             {/* Objet — ce que le client voit dans sa boîte */}
             <div className="px-5 py-3 border-b border-outline/40 bg-surface-secondary/40">
@@ -332,7 +415,7 @@ export default function EmailPreviewEditor({
             {/* En-tête ajouté par le serveur — non modifiable ici, il vient
                 des réglages de l'entreprise. Le logo se pose sur le ciel sans
                 cadre blanc : son fond est retiré au téléversement. */}
-            <div className="px-5 py-5 text-center" style={{ background: '#e6f0ff' }}>
+            <div className="px-5 py-5 text-center" style={{ background: '#f4f5f7' }}>
               {entreprise.company_logo_url ? (
                 <img
                   src={entreprise.company_logo_url}
@@ -430,6 +513,7 @@ export default function EmailPreviewEditor({
               : 'Header and footer come from your company settings. Bracketed values are replaced with the client’s real data.'}
           </p>
         </div>
+        )}
 
         {/* Pied : variables + enregistrement */}
         <div className="border-t border-outline/50 px-5 py-3 shrink-0 bg-surface-secondary">

@@ -17,7 +17,7 @@ import { getCompanyBranding } from '../lib/companyBranding';
 import { lireLiensSociaux, type SocialLinks } from '../lib/socialLinks';
 import { expediteurDe } from '../lib/courriels/domaines';
 import { rendreCourrielClient, montant as montantLisible, dateLisible, langueDe, MOTS, type Marque, type Langue } from '../lib/courriels/gabarit';
-import { texteDuCourriel } from '../lib/courriels/modeles';
+import { texteDuCourriel, assainirHtmlCourriel } from '../lib/courriels/modeles';
 
 const router = Router();
 
@@ -659,6 +659,59 @@ router.post('/emails/send-custom', validate(sendCustomEmailSchema), async (req, 
     return res.json({ ok: true, emailId: emailResult?.messageId || null });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to send email.', '[emails/send-custom]');
+  }
+});
+
+/**
+ * L'aperçu d'un courriel, rendu par le VRAI gabarit.
+ * ──────────────────────────────────────────────────
+ * Pourquoi cette route existe : `EmailPreviewEditor` redessinait le courriel
+ * en React — le fond, le logo, le pied — avec les couleurs écrites en dur.
+ * Deux sources de vérité pour une même chose, donc deux vérités : le jour où
+ * le gabarit serveur est passé du ciel bleu au gris neutre, l'aperçu a
+ * continué d'afficher un décor que plus personne ne recevait. Une entreprise
+ * validait son texte sur une image fausse.
+ *
+ * Ici, le serveur rend exactement ce qu'il enverrait, et l'app l'affiche dans
+ * une `iframe`. L'écart ne peut plus revenir : il n'y a plus qu'un rendu.
+ *
+ * Lecture seule : aucun envoi, aucune écriture. Le corps arrive de l'éditeur,
+ * donc il est assaini comme à l'enregistrement — une entreprise ne doit pas
+ * pouvoir exécuter du script dans notre app en tapant dans son propre champ.
+ */
+router.post('/emails/apercu', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+
+    const member = await isOrgMember(auth.client, auth.user.id, auth.orgId);
+    if (!member) return res.status(403).json({ error: 'Forbidden.' });
+
+    const corps = typeof req.body?.corpsHtml === 'string' ? req.body.corpsHtml : '';
+    if (corps.length > 200_000) return res.status(400).json({ error: 'Body too large.' });
+
+    const company = await getCompanySettings(auth.orgId);
+
+    /* Un bouton d'exemple : le gabarit en pose un à l'envoi, et sans lui
+       l'aperçu montrerait un courriel plus court que le vrai — l'entreprise
+       écrirait « cliquez sur le lien ci-dessous » en croyant qu'il manque. */
+    const fr = langueEntreprise(company) === 'fr';
+    const html = rendreCourrielClient({
+      langue: langueEntreprise(company),
+      marque: marqueDepuis(company),
+      corpsHtml: assainirHtmlCourriel(corps),
+      montant: { libelle: fr ? 'Montant à payer' : 'Amount due', valeur: fr ? '1 220,17 $' : '$1,220.17' },
+      bouton: {
+        texte: fr ? 'Voir et payer' : 'View and pay',
+        url: 'https://lumecrm.net/',
+        sousBouton: fr ? 'Carte de crédit · aucun compte à créer' : 'Credit card · no account needed',
+      },
+      signature: null,
+    });
+
+    return res.json({ html });
+  } catch (error) {
+    return sendSafeError(res, error, 'Failed to render preview.', '[emails/apercu]');
   }
 });
 
