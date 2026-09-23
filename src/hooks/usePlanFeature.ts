@@ -11,7 +11,8 @@ export type PlanFeatureFlag =
   | 'includes_marketplace'
   | 'includes_timesheets'
   | 'includes_request_forms'
-  | 'includes_advanced_roles';
+  | 'includes_advanced_roles'
+  | 'includes_pipeline';
 
 interface UsePlanFeatureReturn {
   /** True when the user's current plan grants this feature */

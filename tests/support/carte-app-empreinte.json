@@ -60,6 +60,7 @@
   "src/pages/OnboardingFlow.tsx": "5dffc29fdf6d37c1",
   "src/pages/PaymentSettings.tsx": "8cda8a07a0caa83b",
   "src/pages/Payments.tsx": "4c358598e6733172",
+  "src/pages/Pipeline.tsx": "1659082a1805b546",
   "src/pages/Privacy.tsx": "bc17af16c4f0ccc3",
   "src/pages/PrivacyCenter.tsx": "7c372f0b23acd752",
   "src/pages/ProductsServices.tsx": "af3cb22848ac7499",

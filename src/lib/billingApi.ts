@@ -39,6 +39,8 @@ export interface Plan {
   includes_sms?: boolean;
   includes_ai?: boolean;
   includes_d2d?: boolean;
+  /** Pipeline de ventes — Scale (slug `pro`) et Autopilot. */
+  includes_pipeline?: boolean;
   includes_courses?: boolean;
   includes_api?: boolean;
   includes_automations?: boolean;
@@ -128,6 +130,10 @@ export async function fetchPlans(): Promise<Plan[]> {
     includes_timesheets: p.includes_timesheets ?? (p.slug !== 'starter'),
     includes_request_forms: p.includes_request_forms ?? (p.slug !== 'starter'),
     includes_advanced_roles: p.includes_advanced_roles ?? (p.slug === 'autopilot'),
+    // Pipeline de ventes : la colonne existe en base (migration 20260923100100),
+    // mais le repli par slug évite que la page disparaisse le temps qu'un
+    // serveur non redéployé cesse de renvoyer des plans sans ce champ.
+    includes_pipeline: p.includes_pipeline ?? (p.slug !== 'starter'),
   }));
 }
 

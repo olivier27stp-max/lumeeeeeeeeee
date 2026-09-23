@@ -26,6 +26,9 @@ export function validate<T extends ZodSchema>(schema: T) {
 // ─── Reusable pieces ──────────────────────────────────────────────────────────
 
 const optionalString = z.string().trim().optional().nullable();
+// Valeur d'attribution lue dans l'URL, jamais saisie par un humain : bornée,
+// pour qu'une URL forgée ne se transforme pas en champ de texte libre.
+const attributionString = z.string().trim().max(256).optional().nullable();
 const optionalOrgId = z.string().uuid().optional().nullable();
 
 // ─── Password policy (server-side enforcement) ───────────────────────────────
@@ -444,6 +447,15 @@ export const publicFormSubmissionSchema = z.object({
   // qui remplit tous les champs le remplira aussi → soumission rejetée
   // silencieusement (voir la route). Toujours vide pour un vrai visiteur.
   website: optionalString,
+  // Attribution marketing. Ce ne sont PAS des champs du formulaire : la page
+  // publique les relève dans son URL et les joint à l'envoi. Tous optionnels,
+  // pour qu'un formulaire intégré ailleurs (ou un vieux cache) continue de
+  // fonctionner sans eux.
+  utm_source: attributionString,
+  utm_medium: attributionString,
+  utm_campaign: attributionString,
+  utm_content: attributionString,
+  fbclid: attributionString,
 });
 
 // ─── AI / Agent ─────────────────────────────────────────────────

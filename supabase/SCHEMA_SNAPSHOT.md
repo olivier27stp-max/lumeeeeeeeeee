@@ -11,21 +11,21 @@
 > **Régénérer avec** `scripts/gen-schema-snapshot.mjs` après tout changement
 > structurel. Un référentiel périmé est pire qu'aucun référentiel.
 
-**Généré le 2026-09-17 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
+**Généré le 2026-09-23 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
-## 1. Tables (234)
+## 1. Tables (240)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
 | `a2p_registrations` | ✅ | ✅ | 1 | 0 |
-| `active_sessions` | ✅ | ✅ | 2 | 188 |
+| `active_sessions` | ✅ | ✅ | 2 | 237 |
 | `activity_log` | ✅ | ✅ | 2 | 1009 |
 | `activity_notes` | ✅ | ✅ | 3 | 1 |
-| `agent_actions` | ✅ | ✅ | 2 | 6 |
+| `agent_actions` | ✅ | ✅ | 2 | 3 |
 | `agent_messages` | ✅ | ✅ | 1 | 16 |
-| `ai_reservations` | ✅ | ✅ | 1 | ? |
-| `ai_usage` | ✅ | ✅ | 2 | 109 |
-| `ai_usage_monthly` | ✅ | ✅ | 2 | ? |
+| `ai_reservations` | ✅ | ✅ | 1 | 63 |
+| `ai_usage` | ✅ | ✅ | 2 | 170 |
+| `ai_usage_monthly` | ✅ | ✅ | 2 | 2 |
 | `alert_rules` | ✅ | ✅ | 3 | 4 |
 | `api_keys` | ✅ | ✅ | 4 | 0 |
 | `app_connections` | ✅ | ✅ | 4 | 1 |
@@ -40,7 +40,7 @@
 | `checklist_templates` | ✅ | ✅ | 5 | 0 |
 | `client_payment_profiles` | ✅ | ✅ | 1 | ? |
 | `client_tags` | ✅ | ✅ | 3 | 0 |
-| `clients` | ✅ | ✅ | 4 | 931 |
+| `clients` | ✅ | ✅ | 4 | 1784 |
 | `commission_settings` | ✅ | ✅ | 2 | 0 |
 | `communication_channels` | ✅ | ✅ | 1 | 1 |
 | `communication_messages` | ✅ | ✅ | 1 | 9 |
@@ -56,12 +56,15 @@
 | `course_modules` | ✅ | ✅ | 7 | 7 |
 | `course_progress` | ✅ | ✅ | 3 | 5 |
 | `courses` | ✅ | ✅ | 7 | 18 |
+| `creator_space_notes` | ✅ | ✅ | 0 | ? |
 | `cron_locks` | ✅ | ✅ | 0 | 0 |
 | `custom_column_values` | ✅ | ✅ | 4 | 0 |
 | `custom_columns` | ✅ | ✅ | 4 | 2 |
 | `data_export_log` | ✅ | ✅ | 4 | 0 |
-| `data_migrations` | ✅ | ✅ | 1 | 1 |
+| `data_migrations` | ✅ | ✅ | 1 | 2 |
 | `dead_letters` | ✅ | ✅ | 1 | 0 |
+| `deal_stage_history` | ✅ | ✅ | 1 | 0 |
+| `deals` | ✅ | ✅ | 4 | 0 |
 | `demo_requests` | ✅ | ✅ | 1 | 2 |
 | `dsar_requests` | ✅ | ✅ | 3 | 0 |
 | `email_accounts` | ✅ | ✅ | 4 | 2 |
@@ -71,16 +74,16 @@
 | `email_oauth_states` | ✅ | ✅ | 1 | 0 |
 | `email_opt_outs` | ✅ | ✅ | 2 | 0 |
 | `email_retry_queue` | ✅ | ✅ | 1 | ? |
-| `email_templates` | ✅ | ✅ | 5 | 11 |
+| `email_templates` | ✅ | ✅ | 5 | 10 |
 | `email_threads` | ✅ | ✅ | 1 | 175 |
 | `email_unsubscribes` | ✅ | ✅ | 2 | 1 |
 | `failed_login_attempts` | ✅ | ✅ | 0 | 0 |
 | `field_daily_stats` | ✅ | ✅ | 4 | 15 |
 | `field_house_events` | ✅ | ✅ | 4 | 184 |
-| `field_house_profiles` | ✅ | ✅ | 7 | 158 |
-| `field_pin_entity_links` | ✅ | ✅ | 1 | 69 |
+| `field_house_profiles` | ✅ | ✅ | 7 | 1021 |
+| `field_pin_entity_links` | ✅ | ✅ | 1 | 47 |
 | `field_pin_templates` | ✅ | ✅ | 4 | 0 |
-| `field_pins` | ✅ | ✅ | 4 | 148 |
+| `field_pins` | ✅ | ✅ | 4 | 126 |
 | `field_rep_performance` | ✅ | ✅ | 1 | 0 |
 | `field_sales_reps` | ✅ | ✅ | 4 | 3 |
 | `field_sales_team_members` | ✅ | ✅ | 2 | 0 |
@@ -110,9 +113,9 @@
 | `invitations` | ✅ | ✅ | 3 | 5 |
 | `invoice_items` | ✅ | ✅ | 4 | 14 |
 | `invoice_send_events` | ✅ | ✅ | 2 | 0 |
-| `invoice_sequences` | ✅ | ✅ | 1 | 1 |
+| `invoice_sequences` | ✅ | ✅ | 1 | 3 |
 | `invoice_templates` | ✅ | ✅ | 7 | 6 |
-| `invoices` | ✅ | ✅ | 4 | 17 |
+| `invoices` | ✅ | ✅ | 4 | 899 |
 | `ip_blocklist` | ✅ | ✅ | 4 | 0 |
 | `job_agreements` | ✅ | ✅ | 4 | 4 |
 | `job_billing_milestones` | ✅ | ✅ | 4 | ? |
@@ -129,37 +132,37 @@
 | `lead_sources` | ✅ | ✅ | 4 | ? |
 | `lists` | ✅ | ✅ | 1 | 0 |
 | `location_tracking_settings` | ✅ | ✅ | 4 | 0 |
-| `login_history` | ✅ | ✅ | 4 | 155 |
+| `login_history` | ✅ | ✅ | 4 | 224 |
 | `lumi_autorisations` | ✅ | ✅ | 2 | ? |
-| `lumi_briefings` | ✅ | ✅ | 2 | ? |
-| `lumi_conversations` | ✅ | ✅ | 2 | 43 |
-| `lumi_messages` | ✅ | ✅ | 2 | 165 |
-| `lumi_traces` | ✅ | ❌ | 1 | 51 |
+| `lumi_briefings` | ✅ | ✅ | 2 | 35 |
+| `lumi_conversations` | ✅ | ✅ | 2 | 79 |
+| `lumi_messages` | ✅ | ✅ | 2 | 312 |
+| `lumi_traces` | ✅ | ❌ | 1 | 107 |
 | `memberships` | ✅ | ✅ | 5 | 41 |
 | `messages` | ✅ | ✅ | 4 | 134 |
 | `mfa_phone` | ✅ | ✅ | 1 | 1 |
 | `mfa_sms_challenges` | ✅ | ✅ | 1 | ? |
 | `mfa_trusted_devices` | ✅ | ✅ | 1 | 1 |
 | `migration_approvals` | ✅ | ✅ | 1 | ? |
-| `migration_audit_logs` | ✅ | ✅ | 1 | 197 |
-| `migration_duplicate_candidates` | ✅ | ✅ | 1 | ? |
-| `migration_field_mappings` | ✅ | ✅ | 1 | 137 |
-| `migration_file_columns` | ✅ | ✅ | 1 | 137 |
-| `migration_files` | ✅ | ✅ | 1 | 5 |
-| `migration_import_batches` | ✅ | ✅ | 1 | 5 |
-| `migration_import_records` | ✅ | ✅ | 1 | 2728 |
+| `migration_audit_logs` | ✅ | ✅ | 1 | 3503 |
+| `migration_duplicate_candidates` | ✅ | ✅ | 1 | 0 |
+| `migration_field_mappings` | ✅ | ✅ | 1 | 327 |
+| `migration_file_columns` | ✅ | ✅ | 1 | 307 |
+| `migration_files` | ✅ | ✅ | 1 | 14 |
+| `migration_import_batches` | ✅ | ✅ | 1 | 27 |
+| `migration_import_records` | ✅ | ✅ | 1 | 6167 |
 | `migration_invitations` | ✅ | ✅ | 1 | 0 |
-| `migration_issues` | ✅ | ✅ | 1 | 113 |
+| `migration_issues` | ✅ | ✅ | 1 | 487 |
 | `migration_mapping_templates` | ✅ | ✅ | 1 | 1 |
 | `migration_messages` | ✅ | ✅ | 1 | ? |
 | `migration_staff_mappings` | ✅ | ✅ | 1 | ? |
-| `migration_staging_records` | ✅ | ✅ | 1 | 3482 |
+| `migration_staging_records` | ✅ | ✅ | 1 | 7807 |
 | `note_history` | ✅ | ✅ | 2 | 0 |
 | `notes` | ✅ | ✅ | 4 | 0 |
-| `notifications` | ✅ | ✅ | 4 | 675 |
+| `notifications` | ✅ | ✅ | 4 | 847 |
 | `oauth_authorization_codes` | ✅ | ✅ | 1 | ? |
 | `oauth_clients` | ✅ | ✅ | 1 | ? |
-| `oauth_tokens` | ✅ | ✅ | 3 | 185 |
+| `oauth_tokens` | ✅ | ✅ | 3 | 258 |
 | `org_billing_settings` | ✅ | ✅ | 3 | 0 |
 | `org_client_counters` | ✅ | ✅ | 1 | 6 |
 | `org_features` | ✅ | ✅ | 3 | 10 |
@@ -179,14 +182,17 @@
 | `payroll_payments` | ✅ | ✅ | 1 | ? |
 | `payroll_settings` | ✅ | ✅ | 7 | 0 |
 | `pipeline_deals` | ✅ | ✅ | 7 | 126 |
+| `pipeline_events` | ✅ | ✅ | 1 | 0 |
+| `pipeline_stages` | ✅ | ✅ | 2 | ? |
 | `pipelines` | ✅ | ✅ | 1 | 2 |
+| `pipelines_ventes` | ✅ | ✅ | 2 | ? |
 | `plans` | ✅ | ✅ | 1 | 3 |
-| `predefined_services` | ✅ | ✅ | 4 | 13 |
+| `predefined_services` | ✅ | ✅ | 4 | 22 |
 | `processed_checkout_sessions` | ✅ | ✅ | 1 | 1 |
 | `profiles` | ✅ | ✅ | 3 | 22 |
 | `promo_codes` | ✅ | ✅ | 1 | 1 |
 | `proof_of_presence` | ✅ | ✅ | 1 | 0 |
-| `properties` | ✅ | ✅ | 4 | 862 |
+| `properties` | ✅ | ✅ | 4 | 2590 |
 | `provisioning_events` | ✅ | ✅ | 1 | 0 |
 | `push_tokens` | ✅ | ✅ | 4 | 0 |
 | `quote_attachments` | ✅ | ✅ | 4 | 1 |
@@ -199,7 +205,7 @@
 | `quote_status_history` | ✅ | ✅ | 2 | 6 |
 | `quote_templates` | ✅ | ✅ | 4 | 3 |
 | `quote_views` | ✅ | ✅ | 4 | 0 |
-| `quotes` | ✅ | ✅ | 4 | 85 |
+| `quotes` | ✅ | ✅ | 4 | 153 |
 | `rate_limits` | ✅ | ✅ | 2 | 0 |
 | `recurring_invoice_schedules` | ✅ | ✅ | 5 | 0 |
 | `recurring_team_schedules` | ✅ | ✅ | 4 | ? |
@@ -215,8 +221,8 @@
 | `scheduled_reports` | ✅ | ✅ | 7 | 0 |
 | `secret_rotation_log` | ✅ | ✅ | 1 | 0 |
 | `security_alerts` | ✅ | ✅ | 4 | 0 |
-| `security_canary_runs` | ✅ | ✅ | 0 | 423 |
-| `security_events` | ✅ | ✅ | 4 | 290 |
+| `security_canary_runs` | ✅ | ✅ | 0 | 522 |
+| `security_events` | ✅ | ✅ | 4 | 370 |
 | `security_incidents` | ✅ | ✅ | 3 | 0 |
 | `service_contracts` | ✅ | ✅ | 4 | 1 |
 | `sms_opt_outs` | ✅ | ✅ | 2 | 0 |
@@ -246,7 +252,7 @@
 | `tracking_events` | ✅ | ✅ | 2 | 513 |
 | `tracking_live_locations` | ✅ | ✅ | 3 | 2 |
 | `tracking_points` | ✅ | ✅ | 2 | 5372 |
-| `tracking_sessions` | ✅ | ✅ | 3 | 219 |
+| `tracking_sessions` | ✅ | ✅ | 3 | 226 |
 | `webhook_deliveries` | ✅ | ✅ | 1 | 0 |
 | `webhook_endpoints` | ✅ | ✅ | 2 | 0 |
 | `webhook_events` | ✅ | ✅ | 4 | 36 |
@@ -503,6 +509,8 @@
 - `preset_key` text
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `pipeline_id` uuid
+- `stage_id` uuid
 
 ### `automation_scheduled_tasks`
 
@@ -925,6 +933,14 @@
 - `category` text NOT NULL DEFAULT ''::text
 - `visibility` text NOT NULL DEFAULT 'all'::text
 
+### `creator_space_notes`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `author_id` uuid NOT NULL
+- `body` text NOT NULL
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+
 ### `cron_locks`
 
 - `key` bigint NOT NULL
@@ -1012,6 +1028,50 @@
 - `first_seen_at` timestamp with time zone NOT NULL DEFAULT now()
 - `last_seen_at` timestamp with time zone NOT NULL DEFAULT now()
 - `resolved_at` timestamp with time zone
+
+### `deal_stage_history`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `deal_id` uuid NOT NULL
+- `from_stage_id` uuid
+- `to_stage_id` uuid NOT NULL
+- `actor_type` deal_actor_type NOT NULL DEFAULT 'user'::deal_actor_type
+- `actor_id` uuid
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+
+### `deals`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `pipeline_id` uuid NOT NULL
+- `stage_id` uuid NOT NULL
+- `client_id` uuid NOT NULL
+- `assigned_user_id` uuid
+- `assigned_at` timestamp with time zone
+- `source` text NOT NULL DEFAULT 'manual'::text
+- `external_id` text
+- `utm_source` text
+- `utm_medium` text
+- `utm_campaign` text
+- `utm_content` text
+- `fbclid` text
+- `raw_payload` jsonb NOT NULL DEFAULT '{}'::jsonb
+- `job_id` uuid
+- `quote_id` uuid
+- `first_contacted_at` timestamp with time zone
+- `last_activity_at` timestamp with time zone NOT NULL DEFAULT now()
+- `stage_entered_at` timestamp with time zone NOT NULL DEFAULT now()
+- `won_at` timestamp with time zone
+- `lost_at` timestamp with time zone
+- `lost_reason` text
+- `lost_from_stage_id` uuid
+- `pin_id` uuid
+- `field_rep_id` uuid
+- `created_by` uuid DEFAULT auth.uid()
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `deleted_at` timestamp with time zone
 
 ### `demo_requests`
 
@@ -1190,6 +1250,7 @@
 - `is_default` boolean NOT NULL DEFAULT false
 - `created_at` timestamp with time zone NOT NULL DEFAULT now()
 - `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+- `source` text NOT NULL DEFAULT 'editeur'::text
 
 ### `email_threads`
 
@@ -2865,11 +2926,48 @@
 - `source` text DEFAULT 'manual'::text
 - `version` integer NOT NULL DEFAULT 1
 
+### `pipeline_events`
+
+- `id` bigint NOT NULL
+- `org_id` uuid NOT NULL
+- `deal_id` uuid NOT NULL
+- `type` text NOT NULL
+- `payload` jsonb NOT NULL DEFAULT '{}'::jsonb
+- `cle_unicite` text NOT NULL
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `processed_at` timestamp with time zone
+- `attempts` integer NOT NULL DEFAULT 0
+- `last_error` text
+
+### `pipeline_stages`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `pipeline_id` uuid NOT NULL
+- `name_fr` text NOT NULL
+- `name_en` text NOT NULL
+- `guidance_fr` text NOT NULL DEFAULT ''::text
+- `guidance_en` text NOT NULL DEFAULT ''::text
+- `position` integer NOT NULL
+- `kind` pipeline_stage_kind NOT NULL DEFAULT 'open'::pipeline_stage_kind
+- `archived_at` timestamp with time zone
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
+
 ### `pipelines`
 
 - `id` uuid NOT NULL DEFAULT gen_random_uuid()
 - `name` text NOT NULL
 - `user_id` uuid NOT NULL DEFAULT auth.uid()
+
+### `pipelines_ventes`
+
+- `id` uuid NOT NULL DEFAULT gen_random_uuid()
+- `org_id` uuid NOT NULL
+- `name` text NOT NULL
+- `is_default` boolean NOT NULL DEFAULT false
+- `created_at` timestamp with time zone NOT NULL DEFAULT now()
+- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
 
 ### `plans`
 
@@ -2915,6 +3013,7 @@
 - `includes_request_forms` boolean NOT NULL DEFAULT false
 - `includes_marketplace` boolean NOT NULL DEFAULT false
 - `ai_monthly_budget_cents` integer NOT NULL DEFAULT 0
+- `includes_pipeline` boolean NOT NULL DEFAULT false
 
 ### `predefined_services`
 
@@ -4026,7 +4125,7 @@
 - `outcome` text
 - `summary` jsonb NOT NULL DEFAULT '{}'::jsonb
 
-## 3. Policies RLS (638)
+## 3. Policies RLS (648)
 
 
 ### `a2p_registrations`
@@ -4455,6 +4554,23 @@
 - **dead_letters_service** — ALL, PERMISSIVE, roles={service_role}
   - USING: `true`
   - WITH CHECK: `true`
+
+### `deal_stage_history`
+
+- **deal_stage_history_select_org** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+
+### `deals`
+
+- **deals_delete_perm** — DELETE, PERMISSIVE, roles={authenticated}
+  - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND member_has_permission(( SELECT auth.uid() AS uid), org_id, 'leads.delete'::text))`
+- **deals_insert_perm** — INSERT, PERMISSIVE, roles={authenticated}
+  - WITH CHECK: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND member_has_permission(( SELECT auth.uid() AS uid), org_id, 'leads.create'::text))`
+- **deals_select_org** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+- **deals_update_perm** — UPDATE, PERMISSIVE, roles={authenticated}
+  - USING: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND member_has_permission(( SELECT auth.uid() AS uid), org_id, 'leads.update'::text))`
+  - WITH CHECK: `(has_org_membership(( SELECT auth.uid() AS uid), org_id) AND member_has_permission(( SELECT auth.uid() AS uid), org_id, 'leads.update'::text))`
 
 ### `demo_requests`
 
@@ -5544,11 +5660,32 @@
   - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
+### `pipeline_events`
+
+- **pipeline_events_select_org** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+
+### `pipeline_stages`
+
+- **pipeline_stages_admin_write** — ALL, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+  - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+- **pipeline_stages_select_org** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
+
 ### `pipelines`
 
 - **pipelines_owner_rw** — ALL, PERMISSIVE, roles={authenticated}
   - USING: `(user_id = ( SELECT auth.uid() AS uid))`
   - WITH CHECK: `(user_id = ( SELECT auth.uid() AS uid))`
+
+### `pipelines_ventes`
+
+- **pipelines_ventes_admin_write** — ALL, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+  - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
+- **pipelines_ventes_select_org** — SELECT, PERMISSIVE, roles={authenticated}
+  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `plans`
 
@@ -6194,7 +6331,7 @@
   - WITH CHECK: `true`
 
 
-## 4. Fonctions (334)
+## 4. Fonctions (352)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -6257,8 +6394,8 @@ l'audit. Lire le corps réel avec :
 | `check_invoice_totals_balance()` → TABLE(invoice_id uuid, org_id uuid, invoice_number text, stored_subtotal_cents integer, computed_subtotal_cents bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_password_strength(p_password text)` → jsonb | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `check_public_true_policies()` → TABLE(schemaname text, tablename text, policyname text) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_rate_limit(p_key text, p_max_tokens integer DEFAULT 60, p_refill_rate integer DEF)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `check_rate_limit(p_action text, p_max_per_minute integer DEFAULT 60)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_rls_coverage()` → TABLE(table_name text, rls_enabled boolean, rls_forced boolean, policy_count bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_subscription_active(p_org_id uuid)` → boolean | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `check_team_schedule_assignment()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6293,6 +6430,11 @@ l'audit. Lire le corps réel avec :
 | `current_org_id()` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `current_org_ids()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `custom_access_token_hook(event jsonb)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres | supabase_auth_admin=X/postgres |
+| `deals_ecrire_historique()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `deals_emettre_evenements()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `deals_figer_premier_contact()` → trigger | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `deals_horodater_etape()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `deals_verifier_etape()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `delete_client_cascade(p_org_id uuid, p_client_id uuid, p_deleted_by uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `delete_invoice_cascade(p_org_id uuid, p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `delete_job_cascade(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
@@ -6342,11 +6484,12 @@ l'audit. Lire le corps réel avec :
 | `hard_delete_client(p_org_id uuid, p_client_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_company_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_admin_role(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
-| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_membership(target_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
+| `has_org_membership(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `has_org_role(p_user uuid, p_org uuid, p_roles text[])` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `haversine_distance(lat1 double precision, lng1 double precision, lat2 double precision, l)` → double precision | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `increment_unread_count(p_conversation_id uuid)` → void | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
+| `ingest_lead(p_org_id uuid, p_source text, p_external_id text DEFAULT NULL::text, p)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `invalidate_all_sessions(p_user_id uuid, p_reason text DEFAULT 'manual'::text)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `invalidate_user_sessions(p_user_id uuid)` → integer | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `invoice_items_recalculate_parent()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
@@ -6383,6 +6526,7 @@ l'audit. Lire le corps réel avec :
 | `member_has_permission(p_user uuid, p_org uuid, p_key text)` → boolean | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `membre_voit_les_montants(p_user uuid, p_org uuid)` → boolean | ⚠️ oui | search_path=public, pg_temp | authenticated=X/postgres | service_role=X/postgres |
 | `next_recurrence_at(p_from timestamp with time zone, p_frequency text, p_interval integer )` → timestamp with time zone | non | search_path=public, pg_temp | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `normaliser_telephone(p_phone text)` → text | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normalize_lead_stage_value(p_value text)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normalize_phone(p_phone text)` → text | non | search_path=public, pg_temp | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `normalize_phone_digits(p text)` → text | non | search_path=public | =X/postgres | anon=X/postgres | authenticated=X/postgres | service_role=X/postgres |
@@ -6394,10 +6538,20 @@ l'audit. Lire le corps réel avec :
 | `payments_recalculate_invoice_trigger()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `payments_sync_dates_and_update()` → trigger | non | search_path=public | service_role=X/postgres |
 | `payments_sync_legacy_dates()` → trigger | non | search_path=public | service_role=X/postgres |
+| `pipeline_a_traiter(p_jours integer DEFAULT 7)` → TABLE(deal_id uuid, client_nom text, raison text, stage_nom_fr text, depuis_jours integer) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_cohortes(p_mois integer DEFAULT 6)` → TABLE(mois date, inscrits bigint, gagnes bigint, encore_ouvert bigint, taux_gagne numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_deals_cascade_client_soft_delete()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_deals_emit_job_intent()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_deals_sync_value_columns()` → trigger | non | search_path=public, app | service_role=X/postgres |
 | `pipeline_deals_sync_values()` → trigger | non | search_path=public | service_role=X/postgres |
+| `pipeline_detecter_stagnation()` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `pipeline_entonnoir(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(stage_id uuid, nom_fr text, nom_en text, rang integer, atteints bigint, taux_passage numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_kpis(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(leads_entrants bigint, leads_precedents bigint, gagnes bigint, perdus bigint, ouverts bigint, taux_closing numeric, revenus_cents bigint, jobs_liees bigint, job_a_creer bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_par_source(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(source text, campagne text, leads bigint, gagnes bigint, perdus bigint, taux_closing numeric, revenus_cents bigint, revenu_moyen_par_lead bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_reordonner_etapes(p_ordre jsonb)` → void | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_stages_verifier_archivage()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `pipeline_tendance(p_semaines integer DEFAULT 12)` → TABLE(semaine date, leads bigint, gagnes bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_vitesse(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(delai_contact_moyen_h numeric, jamais_contactes bigint, closing_moins_1h numeric, closing_moins_24h numeric, closing_plus_24h numeric, n_moins_1h bigint, n_moins_24h bigint, n_plus_24h bigint, cycle_moyen_jours numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `prevent_paid_invoice_edit()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `properties_billing_mirror_to_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `property_address_line(p_address text, p_street_number text, p_street_name text, p_city text,)` → text | non | ❌ aucun | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
@@ -6477,6 +6631,7 @@ l'audit. Lire le corps réel avec :
 | `security_maintenance()` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `seed_agreement_signed_preset(p_org_id uuid DEFAULT NULL::uuid)` → void | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `seed_automation_presets(p_org_id uuid)` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `seed_pipeline_ventes(p_org_id uuid, p_modele text DEFAULT 'generique'::text)` → uuid | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `send_invoice(p_org_id uuid, p_invoice_id uuid, p_channel text, p_to text)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `set_activity_notes_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
 | `set_app_connections_updated_at()` → trigger | ⚠️ oui | search_path="" | service_role=X/postgres |
@@ -6554,7 +6709,7 @@ l'audit. Lire le corps réel avec :
 - `v_revenue_analytics` — security_invoker=true
 - `v_schedule_calendar` — security_invoker=true
 
-## 6. Contraintes (1203)
+## 6. Contraintes (1241)
 
 
 ### `a2p_registrations`
@@ -6660,7 +6815,9 @@ l'audit. Lire le corps réel avec :
 
 - `automation_rules_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `automation_rules_org_id_id_uq` — UNIQUE (org_id, id)
+- `automation_rules_pipeline_same_org` — FOREIGN KEY (org_id, pipeline_id) REFERENCES pipelines_ventes(org_id, id) ON DELETE CASCADE
 - `automation_rules_pkey` — PRIMARY KEY (id)
+- `automation_rules_stage_same_org` — FOREIGN KEY (org_id, stage_id) REFERENCES pipeline_stages(org_id, id) ON DELETE CASCADE
 
 ### `automation_scheduled_tasks`
 
@@ -6868,6 +7025,12 @@ l'audit. Lire le corps réel avec :
 - `courses_status_check` — CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text])))
 - `courses_visibility_check` — CHECK ((visibility = ANY (ARRAY['all'::text, 'assigned'::text])))
 
+### `creator_space_notes`
+
+- `creator_space_notes_body_not_blank` — CHECK ((length(TRIM(BOTH FROM body)) > 0))
+- `creator_space_notes_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `creator_space_notes_pkey` — PRIMARY KEY (id)
+
 ### `cron_locks`
 
 - `cron_locks_pkey` — PRIMARY KEY (key)
@@ -6920,6 +7083,29 @@ CASE
 ### `dead_letters`
 
 - `dead_letters_pkey` — PRIMARY KEY (id)
+
+### `deal_stage_history`
+
+- `deal_stage_history_deal_same_org` — FOREIGN KEY (org_id, deal_id) REFERENCES deals(org_id, id) ON DELETE CASCADE
+- `deal_stage_history_mouvement_reel` — CHECK ((from_stage_id IS DISTINCT FROM to_stage_id))
+- `deal_stage_history_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `deal_stage_history_org_id_id_uq` — UNIQUE (org_id, id)
+- `deal_stage_history_pkey` — PRIMARY KEY (id)
+
+### `deals`
+
+- `deals_assigned_user_id_fkey` — FOREIGN KEY (assigned_user_id) REFERENCES auth.users(id) ON DELETE SET NULL
+- `deals_client_same_org` — FOREIGN KEY (org_id, client_id) REFERENCES clients(org_id, id) ON DELETE CASCADE
+- `deals_job_same_org` — FOREIGN KEY (org_id, job_id) REFERENCES jobs(org_id, id) ON DELETE SET NULL
+- `deals_lost_from_stage_same_org` — FOREIGN KEY (org_id, lost_from_stage_id) REFERENCES pipeline_stages(org_id, id) ON DELETE SET NULL
+- `deals_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `deals_org_id_id_uq` — UNIQUE (org_id, id)
+- `deals_pin_id_fkey` — FOREIGN KEY (pin_id) REFERENCES field_pins(id) ON DELETE SET NULL
+- `deals_pipeline_same_org` — FOREIGN KEY (org_id, pipeline_id) REFERENCES pipelines_ventes(org_id, id) ON DELETE CASCADE
+- `deals_pkey` — PRIMARY KEY (id)
+- `deals_quote_same_org` — FOREIGN KEY (org_id, quote_id) REFERENCES quotes(org_id, id) ON DELETE SET NULL
+- `deals_raison_perte_coherente` — CHECK (((lost_reason IS NULL) OR (lost_at IS NOT NULL)))
+- `deals_stage_same_org` — FOREIGN KEY (org_id, stage_id) REFERENCES pipeline_stages(org_id, id)
 
 ### `demo_requests`
 
@@ -6994,7 +7180,8 @@ CASE
 - `email_templates_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
 - `email_templates_org_id_id_uq` — UNIQUE (org_id, id)
 - `email_templates_pkey` — PRIMARY KEY (id)
-- `email_templates_type_check` — CHECK ((type = ANY (ARRAY['invoice_sent'::text, 'invoice_reminder'::text, 'quote_sent'::text, 'quote_accepted'::text, 'quote_declined'::text, 'job_confirmation'::text, 'job_reminder'::text, 'job_completed'::text, 'review
+- `email_templates_source_check` — CHECK ((source = ANY (ARRAY['editeur'::text, 'import'::text])))
+- `email_templates_type_check` — CHECK ((type = ANY (ARRAY['invoice_sent'::text, 'invoice_reminder'::text, 'invoice_paid'::text, 'invoice_overdue'::text, 'payment_receipt'::text, 'payment_failed'::text, 'payment_request'::text, 'deposit_request'::text, 
 
 ### `email_threads`
 
@@ -7866,10 +8053,34 @@ CASE
 - `pipeline_deals_quote_id_same_org` — FOREIGN KEY (org_id, quote_id) REFERENCES quotes(org_id, id)
 - `pipeline_deals_stage_check` — CHECK ((stage = ANY (ARRAY['new_prospect'::text, 'no_response'::text, 'quote_sent'::text, 'closed_won'::text, 'closed_lost'::text])))
 
+### `pipeline_events`
+
+- `pipeline_events_deal_same_org` — FOREIGN KEY (org_id, deal_id) REFERENCES deals(org_id, id) ON DELETE CASCADE
+- `pipeline_events_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `pipeline_events_pkey` — PRIMARY KEY (id)
+- `pipeline_events_type_connu` — CHECK ((type = ANY (ARRAY['deal.stage_entered'::text, 'deal.stage_exited'::text, 'deal.stage_idle'::text])))
+
+### `pipeline_stages`
+
+- `pipeline_stages_noms_non_vides` — CHECK (((length(btrim(name_fr)) > 0) AND (length(btrim(name_en)) > 0)))
+- `pipeline_stages_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `pipeline_stages_org_id_id_uq` — UNIQUE (org_id, id)
+- `pipeline_stages_pipeline_same_org` — FOREIGN KEY (org_id, pipeline_id) REFERENCES pipelines_ventes(org_id, id) ON DELETE CASCADE
+- `pipeline_stages_pkey` — PRIMARY KEY (id)
+- `pipeline_stages_position_positive` — CHECK (("position" > 0))
+- `pipeline_stages_position_unique` — UNIQUE (pipeline_id, "position") DEFERRABLE INITIALLY DEFERRED
+
 ### `pipelines`
 
 - `pipelines_pkey` — PRIMARY KEY (id)
 - `pipelines_user_id_fkey` — FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+
+### `pipelines_ventes`
+
+- `pipelines_ventes_name_non_vide` — CHECK ((length(btrim(name)) > 0))
+- `pipelines_ventes_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
+- `pipelines_ventes_org_id_id_uq` — UNIQUE (org_id, id)
+- `pipelines_ventes_pkey` — PRIMARY KEY (id)
 
 ### `plans`
 
@@ -8476,7 +8687,7 @@ CASE
 
 - `webhook_receipts_pkey` — PRIMARY KEY (id)
 
-## 7. Triggers (238)
+## 7. Triggers (247)
 
 - `a2p_registrations` → **trg_a2p_registrations_updated_at** (`set_updated_at()`)
 - `activity_notes` → **trg_ac_track_activity_notes** (`ac_track_activity_notes()`)
@@ -8519,6 +8730,12 @@ CASE
 - `custom_column_values` → **custom_column_values_updated_at** (`set_updated_at()`)
 - `custom_columns` → **custom_columns_updated_at** (`set_updated_at()`)
 - `data_migrations` → **trg_data_migrations_set_updated_at** (`set_updated_at()`)
+- `deals` → **trg_deals_ecrire_historique** (`deals_ecrire_historique()`)
+- `deals` → **trg_deals_emettre_evenements** (`deals_emettre_evenements()`)
+- `deals` → **trg_deals_figer_premier_contact** (`deals_figer_premier_contact()`)
+- `deals` → **trg_deals_horodater_etape** (`deals_horodater_etape()`)
+- `deals` → **trg_deals_updated** (`set_updated_at()`)
+- `deals` → **trg_deals_verifier_etape** (`deals_verifier_etape()`)
 - `dsar_requests` → **set_dsar_requests_updated_at** (`set_updated_at()`)
 - `email_accounts` → **trg_email_accounts_updated_at** (`set_email_accounts_updated_at()`)
 - `email_campaigns` → **set_email_campaigns_updated_at** (`set_updated_at()`)
@@ -8648,6 +8865,9 @@ CASE
 - `pipeline_deals` → **trg_pipeline_deals_set_updated_at** (`set_updated_at()`)
 - `pipeline_deals` → **trg_pipeline_deals_sync_lead_stage** (`sync_lead_stage_from_deal()`)
 - `pipeline_deals` → **trg_pipeline_deals_sync_values** (`pipeline_deals_sync_values()`)
+- `pipeline_stages` → **trg_pipeline_stages_archivage** (`pipeline_stages_verifier_archivage()`)
+- `pipeline_stages` → **trg_pipeline_stages_updated** (`set_updated_at()`)
+- `pipelines_ventes` → **trg_pipelines_ventes_updated** (`set_updated_at()`)
 - `plans` → **set_plans_updated_at** (`set_updated_at()`)
 - `predefined_services` → **set_predefined_services_updated_at** (`set_updated_at()`)
 - `profiles` → **trg_profiles_set_updated_at** (`set_updated_at()`)
@@ -8717,10 +8937,8 @@ CASE
 - `webhook_endpoints` → **set_webhook_endpoints_updated_at** (`set_updated_at()`)
 - `webhook_events` → **set_webhook_events_updated_at** (`set_updated_at()`)
 
-## 8. Tâches planifiées (12)
+## 8. Tâches planifiées (10)
 
-- `cleanup_lost_pipeline_deals_daily` — `0 3 * * *` — actif
-- `cleanup-expired-pipeline-deals` — `0 * * * *` — actif
 - `lume_invariant_checks` — `40 4 * * *` — actif
 - `lume_purge_audit_events` — `15 3 * * *` — actif
 - `lume_purge_location_data` — `30 4 * * *` — actif
