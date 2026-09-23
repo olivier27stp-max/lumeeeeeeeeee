@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { hoteSmtpSes, reglagesSmtpSes, sesConfigure, messageIdSes, evenementDepuisSns, deplierMessageSns, urlDeConfirmationSns, REGION_SES_DEFAUT } from '../../server/lib/courriels/ses';
+import { hoteSmtpSes, reglagesSmtpSes, sesConfigure, messageIdSes, messageIdDepuisReponseSes, evenementDepuisSns, deplierMessageSns, urlDeConfirmationSns, REGION_SES_DEFAUT } from '../../server/lib/courriels/ses';
 import { fournisseurCourriel } from '../../server/lib/mailer';
 import { statutPourEvenement, jetonValide } from '../../server/routes/webhooks-ses';
 
@@ -67,6 +67,45 @@ describe('identifiant de message', () => {
     expect(messageIdSes('<010001abc@eu-west-1.amazonses.com>')).toBe('010001abc');
     expect(messageIdSes('010001abc')).toBe('010001abc');
     expect(messageIdSes(null)).toBe('');
+  });
+
+  /* Le bogue qui rendait TOUT le suivi inopérant (2026-09-23).
+
+     On enregistrait `info.messageId` de nodemailer, en croyant que c'était
+     l'identifiant d'Amazon. Ce n'en est pas un : nodemailer fabrique cet
+     en-tête lui-même AVANT de se connecter. On stockait donc des UUID comme
+     « fb53a6a1-50bf-7287-8d6e-5267fc1f8dfd », qu'Amazon n'a jamais vus.
+
+     Rien ne signalait le problème. Les courriels partaient, les lignes
+     s'écrivaient, `/api/health` disait que tout allait bien — et aucune
+     notification SNS n'aurait JAMAIS pu retrouver sa ligne. Même en réparant
+     l'abonnement SNS, le suivi serait resté vide.
+
+     Le vrai identifiant est dans la réponse SMTP : « 250 Ok 010001999... ». */
+  it('l’identifiant d’Amazon se lit dans la RÉPONSE SMTP, pas dans l’en-tête', () => {
+    // Le cas réel : SES répond « 250 Ok <identifiant> ».
+    expect(messageIdDepuisReponseSes({
+      response: '250 Ok 010001999abcdef0-1234abcd-5678-90ef-aaaa-bbbbccccdddd-000000',
+      messageId: '<fb53a6a1-50bf-7287-8d6e-5267fc1f8dfd@lumecrm.net>',
+    })).toBe('010001999abcdef0-1234abcd-5678-90ef-aaaa-bbbbccccdddd-000000');
+  });
+
+  it('l’UUID inventé par nodemailer n’est JAMAIS retenu', () => {
+    // C'est exactement ce qu'on enregistrait avant : un identifiant local.
+    expect(messageIdDepuisReponseSes({
+      messageId: '<fb53a6a1-50bf-7287-8d6e-5267fc1f8dfd@lumecrm.net>',
+    })).toBe('');
+    // Mieux vaut vide qu'un identifiant qui ne correspondra à rien : une ligne
+    // vide se voit, une ligne fausse se croit suivie.
+    expect(messageIdDepuisReponseSes({ response: '250 Ok' })).toBe('');
+    expect(messageIdDepuisReponseSes(null)).toBe('');
+  });
+
+  it('un en-tête qui vient VRAIMENT d’Amazon sert de repli', () => {
+    // L'API SES (pas le SMTP) pose bien son domaine dans l'en-tête.
+    expect(messageIdDepuisReponseSes({
+      messageId: '<010001abc@eu-west-1.amazonses.com>',
+    })).toBe('010001abc');
   });
 });
 
