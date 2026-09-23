@@ -10,9 +10,11 @@ import { Award, Ban, Clock, FileText, Target, Users, type LucideIcon } from 'luc
 import type { DealSource, MockStage, MockStageAction, StageKind } from './mockData';
 
 /** Palette douce du kanban — dérivée de la position pour les étapes ouvertes. */
-const TEINTES_OUVERTES = ['#8A9B7D', '#7E8CA0', '#B39C77', '#8E8AA8'] as const;
-const TEINTE_GAGNE = '#6FA287';
-const TEINTE_PERDU = '#B08A8A';
+// Teintes de Lume (src/lib/d2d-pipeline-stages.ts) — les mêmes que le board
+// existant, pour qu'un pipeline ne ressemble pas à une autre application.
+const TEINTES_OUVERTES = ['#58A6FF', '#D29922', '#9CA3AF', '#06B6D4'] as const;
+const TEINTE_GAGNE = '#3FB950';
+const TEINTE_PERDU = '#F85149';
 
 const ICONES_OUVERTES: readonly LucideIcon[] = [Target, Users, FileText, Clock];
 

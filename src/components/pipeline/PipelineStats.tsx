@@ -108,7 +108,9 @@ function libelleSource(source: string, fr: boolean): string {
 }
 
 /** Palette douce du kanban, dérivée du rang — jamais du nom de l'étape. */
-const TEINTES_OUVERTES = ['#8A9B7D', '#7E8CA0', '#B39C77', '#8E8AA8'] as const;
+// Mêmes teintes que le board (src/lib/d2d-pipeline-stages.ts) : une étape
+// doit avoir la même couleur dans les colonnes et dans l'entonnoir.
+const TEINTES_OUVERTES = ['#58A6FF', '#D29922', '#9CA3AF', '#06B6D4'] as const;
 
 function teinteRang(i: number): string {
   return TEINTES_OUVERTES[i % TEINTES_OUVERTES.length] ?? TEINTES_OUVERTES[0];

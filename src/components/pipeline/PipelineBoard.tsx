@@ -52,7 +52,10 @@ function libelleSource(source: string, fr: boolean): string {
   return fr ? connu.fr : connu.en;
 }
 
-const TEINTE_PRIORITE = { urgent: '#B08A8A', moyen: '#B39C77', frais: '#8A9B7D' } as const;
+// Couleurs sémantiques de Lume (src/index.css) : rouge pour ce qui presse,
+// ambre pour ce qui attend, vert pour ce qui va bien. Une pastille « urgent »
+// dans un vert-gris inventé ne se lisait pas comme une alerte.
+const TEINTE_PRIORITE = { urgent: '#dc2626', moyen: '#d97706', frais: '#059669' } as const;
 const LIBELLE_PRIORITE = {
   urgent: { fr: 'Urgent', en: 'Urgent' },
   moyen: { fr: 'À relancer', en: 'Needs follow-up' },
