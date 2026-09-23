@@ -16,6 +16,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../../../server/lib/mailer', () => ({ sendEmail: vi.fn(async () => ({ sent: true })), isMailerConfigured: () => true }));
 vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
+// Le gel des communications lit la base par `getServiceClient()` — le VRAI
+// client, pas le faux du test : la lecture échouait et aucun SMS ne partait.
+vi.mock('../../../server/lib/migration/gel-communications', () => ({
+  destinataireGele: async () => null,
+  journaliserBlocage: () => {},
+  MESSAGE_GEL: 'gel',
+}));
 
 import { clientEnregistreur, requetes } from './_enregistreur';
 import { AUTOMATION_PRESETS } from '../../../server/lib/automationPresets.data';
@@ -203,7 +210,11 @@ describe('T1.8 — ordre d’exécution des règles d’un même événement (F1
     // Le client enregistreur note les filtres, pas l'ordre : on lit la requête source.
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('server/lib/automationEngine.ts', 'utf8');
-    const bloc = src.slice(src.indexOf(".from('automation_rules')"), src.indexOf(".eq('is_active', true)") + 30);
+    // Jusqu'au POINT-VIRGULE, pas 30 caractères après `is_active` : l'ordre
+    // se déclare légitimement APRÈS les filtres, et la découpe courte ne le
+    // voyait pas (le test restait rouge sur une requête pourtant corrigée).
+    const debut = src.indexOf(".from('automation_rules')");
+    const bloc = src.slice(debut, src.indexOf(';', src.indexOf(".eq('is_active', true)", debut)));
     expect(bloc, `sélection des règles sans order by : ${bloc.replace(/\s+/g, ' ')}`).toMatch(/\.order\(/);
   });
 });

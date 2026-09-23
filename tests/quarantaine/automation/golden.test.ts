@@ -43,6 +43,13 @@ vi.mock('../../../server/lib/mailer', () => ({
 // ressemblait à 69 défauts produit alors qu'il manquait UNE ligne au harnais.
 vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'qa@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
+// Le gel des communications lit la base par `getServiceClient()` — le VRAI
+// client, pas le faux du test : la lecture échouait et aucun envoi ne partait.
+vi.mock('../../../server/lib/migration/gel-communications', () => ({
+  destinataireGele: async () => null,
+  journaliserBlocage: () => {},
+  MESSAGE_GEL: 'gel',
+}));
 
 import { AUTOMATION_PRESETS } from '../../../server/lib/automationPresets.data';
 import { jouer, type Sortie } from './golden/_banc-golden';

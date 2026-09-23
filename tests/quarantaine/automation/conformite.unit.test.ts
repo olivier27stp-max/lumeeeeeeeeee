@@ -23,6 +23,13 @@ const mailer = { sendEmail: vi.fn(async (_p?: unknown) => ({ sent: true, message
 vi.mock('../../../server/lib/mailer', () => ({ isMailerConfigured: () => true, sendEmail: (p: any) => mailer.sendEmail(p) }));
 vi.mock('../../../server/routes/emails', () => ({ getCompanySettings: async () => ({}), buildEmailLayout: (_c: unknown, b: string) => b, senderFor: () => ({ from: 'test@lume.test' }), langueEntreprise: () => 'fr' }));
 vi.mock('../../../server/lib/twilioProvisioning', () => ({ getOrgSmsFromNumber: async () => '+15550000000' }));
+// Le gel des communications lit la base par `getServiceClient()` — le VRAI
+// client, pas le faux du test : la lecture échouait et aucun envoi ne partait.
+vi.mock('../../../server/lib/migration/gel-communications', () => ({
+  destinataireGele: async () => null,
+  journaliserBlocage: () => {},
+  MESSAGE_GEL: 'gel',
+}));
 
 import { clientEnregistreur, requetes } from './_enregistreur';
 import { AUTOMATION_PRESETS } from '../../../server/lib/automationPresets.data';
@@ -32,7 +39,12 @@ const JOB = '44444444-4444-4444-8444-444444444444';
 const VISITE = '55555555-5555-4555-8555-555555555555';
 
 /** Un client SANS consentement commercial (colonne de la migration M5 ; absente aujourd'hui, le moteur l'ignore). */
-const clientSansConsentement = { first_name: 'Alice', last_name: 'A', email: 'alice@a.test', phone: '+15145550101', marketing_consent: 'none', marketing_consent_at: null };
+// `marketing_consent` vient d'une conception ANTÉRIEURE et n'existe plus en
+// base : le verrou lit `email_consent_at` / `sms_consent_at` / `email_opt_out_at`
+// sur `clients`. Sans `id` ni ces colonnes, même un courriel TRANSACTIONNEL
+// ne partait pas — le témoin du fichier ne pouvait donc rien démontrer.
+// Les consentements restent à null : c'est le point de ces tests.
+const clientSansConsentement = { id: 'client-a', first_name: 'Alice', last_name: 'A', email: 'alice@a.test', phone: '+15145550101', email_consent_at: null, sms_consent_at: null, email_opt_out_at: null };
 
 const monde = () => ({
   company_settings: { data: { company_name: 'A inc.', default_language: 'fr', review_enabled: true, google_review_url: 'https://g.page/r/x' } },

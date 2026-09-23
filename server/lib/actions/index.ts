@@ -1209,8 +1209,26 @@ export async function executeRequestReview(
     status: sent ? 'sent' : 'failed',
     sent_at: sent ? new Date().toISOString() : null,
   });
+  /**
+   * DEMI-ÉTAT : le message est parti, mais sa trace n'a pas été écrite.
+   *
+   * `review_requests` est ce que lit l'anti-doublon de 7 jours (plus haut
+   * dans cette fonction). Sans cette ligne, le prochain passage ne verra
+   * aucun envoi récent et redemandera un avis au même client — qui l'a déjà
+   * reçu. Rapporter « réussi » ferait fermer la tâche et perdrait
+   * l'information.
+   *
+   * On rapporte donc l'échec : la reprise renverra peut-être un message de
+   * trop, mais avec sa trace cette fois. Un doublon visible vaut mieux qu'un
+   * doublon invisible qui se répétera à chaque exécution.
+   */
   if (trackError) {
     console.error(`[actions/request_review] review_requests insert failed (org ${ctx.orgId}, client ${clientId || 'n/a'}):`, trackError.message);
+    return {
+      success: false,
+      error: `Demande d'avis envoyée mais son suivi n'a pas été enregistré (${trackError.message}) — l'anti-doublon ne la verra pas`,
+      data: { token, surveyUrl, emailSent: emailResult.success, smsSent: smsResult.success },
+    };
   }
 
   // 11. Log activity

@@ -454,12 +454,21 @@ async function handleEvent(event: CRMEvent) {
 
   try {
     // ── 1. Match automation_rules (legacy system) ──
+    // L'ordre est EXPLICITE : sans `order by`, PostgreSQL n'en garantit aucun.
+    // Deux règles sur le même événement — « confirmer » puis « prévenir
+    // l'équipe » — pouvaient s'exécuter dans un ordre différent d'un appel à
+    // l'autre, et un bug qui n'apparaît qu'une fois sur deux est le plus long
+    // à diagnostiquer. `created_at` d'abord (la plus ancienne règle en
+    // premier), `id` pour départager deux règles créées dans la même
+    // milliseconde — un seeder en insère plusieurs d'un coup.
     const { data: rules, error } = await engineConfig.supabase
       .from('automation_rules')
       .select('*')
       .eq('org_id', event.orgId)
       .eq('trigger_event', event.type)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true });
 
     if (error) {
       console.error('[automationEngine] failed to fetch rules:', error.message);
@@ -520,6 +529,46 @@ async function handleEvent(event: CRMEvent) {
 
 /** Nombre maximal de tentatives pour une tâche planifiée (1 initiale + 3 reprises). */
 const MAX_TASK_ATTEMPTS = 4;
+
+/**
+ * Délai maximal accordé à UNE action avant de la considérer perdue.
+ *
+ * Le tick traite les tâches en série : sans limite, un fournisseur qui ne
+ * répond pas (Twilio ou SMTP muet, connexion à moitié ouverte) suspend la
+ * boucle entière — aucune autre tâche de la file n'est traitée, pour
+ * personne, tant qu'il n'a pas rendu la main. Une seule org en panne gelait
+ * ainsi les automatisations de toutes les autres.
+ *
+ * 5 s : un envoi normal prend moins d'une seconde ; au-delà de cinq, il
+ * n'est plus « lent », il est perdu. L'échec est transitoire au sens de
+ * `isTransientFailure`, donc la tâche repart en reprise (5 min, 30 min, 2 h)
+ * plutôt que d'être abandonnée — rien n'est jeté.
+ */
+const DELAI_MAX_ACTION_MS = 5_000;
+
+/**
+ * La promesse, ou un échec au bout de `delaiMs`.
+ *
+ * Le travail sous-jacent n'est PAS annulé — on ne peut pas rappeler un appel
+ * HTTP déjà parti. On cesse seulement de l'attendre : c'est exactement ce
+ * qu'il faut, puisque le but est de libérer le tick, pas de garantir que
+ * rien n'est parti (la reprise et l'idempotence s'en chargent).
+ */
+async function avecDelaiMax<T>(promesse: Promise<T>, delaiMs: number, message: string): Promise<T> {
+  let minuterie: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promesse,
+      new Promise<never>((_, rejeter) => {
+        minuterie = setTimeout(() => rejeter(new Error(message)), delaiMs);
+      }),
+    ]);
+  } finally {
+    // Sans ce nettoyage, la minuterie garde le processus éveillé jusqu'à son
+    // terme — 20 s de retard à chaque arrêt du serveur.
+    if (minuterie) clearTimeout(minuterie);
+  }
+}
 
 /**
  * Un échec est-il réessayable ?
@@ -838,7 +887,11 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
       };
 
       const startTime = Date.now();
-      const result = await executeAction(actionType, config, vars, ctx);
+      const result = await avecDelaiMax(
+        executeAction(actionType, config, vars, ctx),
+        DELAI_MAX_ACTION_MS,
+        `${actionType} n'a pas répondu en ${Math.round(DELAI_MAX_ACTION_MS / 1000)} s`,
+      );
       const durationMs = Date.now() - startTime;
 
       // Log execution
