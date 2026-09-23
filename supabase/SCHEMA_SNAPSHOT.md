@@ -63,8 +63,8 @@
 | `data_export_log` | ✅ | ✅ | 4 | 0 |
 | `data_migrations` | ✅ | ✅ | 1 | 2 |
 | `dead_letters` | ✅ | ✅ | 1 | 0 |
-| `deal_stage_history` | ✅ | ✅ | 1 | ? |
-| `deals` | ✅ | ✅ | 4 | ? |
+| `deal_stage_history` | ✅ | ✅ | 1 | 0 |
+| `deals` | ✅ | ✅ | 4 | 0 |
 | `demo_requests` | ✅ | ✅ | 1 | 2 |
 | `dsar_requests` | ✅ | ✅ | 3 | 0 |
 | `email_accounts` | ✅ | ✅ | 4 | 2 |
@@ -182,7 +182,7 @@
 | `payroll_payments` | ✅ | ✅ | 1 | ? |
 | `payroll_settings` | ✅ | ✅ | 7 | 0 |
 | `pipeline_deals` | ✅ | ✅ | 7 | 126 |
-| `pipeline_events` | ✅ | ✅ | 1 | ? |
+| `pipeline_events` | ✅ | ✅ | 1 | 0 |
 | `pipeline_stages` | ✅ | ✅ | 2 | ? |
 | `pipelines` | ✅ | ✅ | 1 | 2 |
 | `pipelines_ventes` | ✅ | ✅ | 2 | ? |
@@ -6331,7 +6331,7 @@
   - WITH CHECK: `true`
 
 
-## 4. Fonctions (344)
+## 4. Fonctions (351)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -6430,11 +6430,11 @@ l'audit. Lire le corps réel avec :
 | `current_org_id()` → uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `current_org_ids()` → SETOF uuid | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `custom_access_token_hook(event jsonb)` → jsonb | ⚠️ oui | search_path=public | service_role=X/postgres | supabase_auth_admin=X/postgres |
-| `deals_ecrire_historique()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `deals_emettre_evenements()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `deals_ecrire_historique()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `deals_emettre_evenements()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `deals_figer_premier_contact()` → trigger | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `deals_horodater_etape()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
-| `deals_verifier_etape()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `deals_horodater_etape()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `deals_verifier_etape()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `delete_client_cascade(p_org_id uuid, p_client_id uuid, p_deleted_by uuid DEFAULT NULL::uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `delete_invoice_cascade(p_org_id uuid, p_invoice_id uuid)` → void | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
 | `delete_job_cascade(p_org_id uuid, p_job_id uuid)` → jsonb | ⚠️ oui | search_path=public | authenticated=X/postgres | service_role=X/postgres |
@@ -6538,12 +6538,19 @@ l'audit. Lire le corps réel avec :
 | `payments_recalculate_invoice_trigger()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `payments_sync_dates_and_update()` → trigger | non | search_path=public | service_role=X/postgres |
 | `payments_sync_legacy_dates()` → trigger | non | search_path=public | service_role=X/postgres |
+| `pipeline_a_traiter(p_jours integer DEFAULT 7)` → TABLE(deal_id uuid, client_nom text, raison text, stage_nom_fr text, depuis_jours integer) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_cohortes(p_mois integer DEFAULT 6)` → TABLE(mois date, inscrits bigint, gagnes bigint, encore_ouvert bigint, taux_gagne numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `pipeline_deals_cascade_client_soft_delete()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_deals_emit_job_intent()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `pipeline_deals_sync_value_columns()` → trigger | non | search_path=public, app | service_role=X/postgres |
 | `pipeline_deals_sync_values()` → trigger | non | search_path=public | service_role=X/postgres |
 | `pipeline_detecter_stagnation()` → integer | ⚠️ oui | search_path=public | service_role=X/postgres |
-| `pipeline_stages_verifier_archivage()` → trigger | ⚠️ oui | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_entonnoir(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(stage_id uuid, nom_fr text, nom_en text, rang integer, atteints bigint, taux_passage numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_kpis(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(leads_entrants bigint, leads_precedents bigint, gagnes bigint, perdus bigint, ouverts bigint, taux_closing numeric, revenus_cents bigint, jobs_liees bigint, job_a_creer bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_par_source(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(source text, campagne text, leads bigint, gagnes bigint, perdus bigint, taux_closing numeric, revenus_cents bigint, revenu_moyen_par_lead bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_stages_verifier_archivage()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
+| `pipeline_tendance(p_semaines integer DEFAULT 12)` → TABLE(semaine date, leads bigint, gagnes bigint) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
+| `pipeline_vitesse(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date)` → TABLE(delai_contact_moyen_h numeric, jamais_contactes bigint, closing_moins_1h numeric, closing_moins_24h numeric, closing_plus_24h numeric, n_moins_1h bigint, n_moins_24h bigint, n_plus_24h bigint, cycle_moyen_jours numeric) | non | search_path=public | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
 | `prevent_paid_invoice_edit()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `properties_billing_mirror_to_client()` → trigger | ⚠️ oui | search_path=public | service_role=X/postgres |
 | `property_address_line(p_address text, p_street_number text, p_street_name text, p_city text,)` → text | non | ❌ aucun | =X/postgres | authenticated=X/postgres | service_role=X/postgres |
