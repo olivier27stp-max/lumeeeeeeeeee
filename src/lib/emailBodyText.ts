@@ -199,3 +199,36 @@ export const VARIABLES_PROPOSEES: Array<{ cle: string; fr: string; en: string }>
   { cle: 'appointment_date', fr: 'Date du RDV', en: 'Appointment date' },
   { cle: 'appointment_time', fr: 'Heure du RDV', en: 'Appointment time' },
 ];
+
+/**
+ * TOUTES les variables que le serveur sait résoudre — pas seulement les huit
+ * proposées ci-dessus, qui ne sont qu'un raccourci de saisie.
+ *
+ * Relevée dans `resolveEntityVariables` (server/lib/actions/index.ts). Elle
+ * sert à repérer une variable ÉCRITE À LA MAIN qui n'existe pas : le serveur
+ * remplace alors `[prenom]` par une chaîne vide (`vars[key] ?? ''`), et le
+ * client reçoit « Bonjour , à demain. » sans que personne ne soit prévenu.
+ *
+ * Si le serveur en ajoute une, l'oublier ici ne casse rien : on signalerait
+ * une variable valide comme inconnue, ce qui se voit tout de suite — l'inverse
+ * (ne rien dire) est le défaut qu'on corrige.
+ */
+export const VARIABLES_CONNUES: readonly string[] = [
+  'appointment_address', 'appointment_date', 'appointment_time', 'appointment_title',
+  'client_email', 'client_first_name', 'client_last_name', 'client_name', 'client_phone',
+  'company_name', 'company_phone', 'facebook_review_url', 'google_review_url',
+  'invoice_due_date', 'invoice_number', 'invoice_total', 'job_name',
+  'quote_number', 'quote_total', 'quote_valid_until', 'review_page_url',
+  // Contrats : ajoutées par resolveContractVars / resolveSignedContractVars.
+  'contract_link', 'contract_line', 'contract_html',
+  'signed_contract_link', 'deposit_amount', 'deposit_line',
+];
+
+/**
+ * Les variables d'un gabarit que le serveur ne saura PAS remplir.
+ * Accepte les deux syntaxes reconnues par `resolveTemplate` : `{var}` et `[var]`.
+ */
+export function variablesInconnues(texte: string): string[] {
+  const citees = [...texte.matchAll(/[{[](\w+)[}\]]/g)].map((m) => m[1]);
+  return [...new Set(citees.filter((v) => !VARIABLES_CONNUES.includes(v)))];
+}

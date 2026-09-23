@@ -193,7 +193,10 @@ describe('T13.4 — toggle', () => {
     expect(texteDe()).toMatch(/Actives\s*1/);
   });
   it('l’API réelle refuse un faux succès : 0 ligne renvoyée (RLS) ⇒ exception, pas de toast vert', async () => {
-    const reel = await vi.importActual<typeof api>('../../src/lib/automationRulesApi');
+    // Chemin corrigé le 2026-09-23 : il manquait un niveau (../../ au lieu de
+    // ../../../), tous les autres imports du fichier utilisant bien trois. Le
+    // test échouait sur le chargement du module, pas sur ce qu'il vérifie.
+    const reel = await vi.importActual<typeof api>('../../../src/lib/automationRulesApi');
     etatSupabase.reponse = { data: [], error: null };
     await expect(reel.toggleAutomationRule(RULE_ID, false)).rejects.toThrow(/not applied/);
     etatSupabase.reponse = { data: [{ is_active: true }], error: null }; // la ligne renvoyée ne porte pas la valeur demandée
