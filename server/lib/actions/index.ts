@@ -595,6 +595,15 @@ export async function executeSendEmail(
       to,
       subject,
       html: buildEmailLayout(company, body + pied, bouton),
+      /* Sans `suivi`, la ligne `email_deliveries` part sans entity_type, et la
+         fonction de suivi en base REFUSE alors d'enregistrer l'ouverture
+         (`and d.entity_type is not null`, exclusion Loi 25 des courriels de
+         compte). Les relances automatiques — rappels de rendez-vous, factures
+         en retard, demandes d'avis — étaient donc les seuls courriels vraiment
+         commerciaux de Lume, et les seuls dont on ignorait s'ils étaient lus.
+         Les trois valeurs étaient déjà là, servant à `activity_log` juste en
+         dessous. */
+      suivi: { orgId: ctx.orgId, entityType: ctx.entityType, entityId: ctx.entityId },
       ...(unsubUrl
         ? {
             headers: {
