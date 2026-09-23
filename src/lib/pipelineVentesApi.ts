@@ -160,6 +160,25 @@ export async function fetchPipelineDefaut(): Promise<{ id: string; name: string 
   return data ?? null;
 }
 
+export interface PipelineResume {
+  id: string;
+  name: string;
+  is_default: boolean;
+}
+
+/** Tous les pipelines de l'organisation — le défaut en premier, puis par nom. */
+export async function fetchPipelines(): Promise<PipelineResume[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('pipelines_ventes')
+    .select('id,name,is_default')
+    .eq('org_id', orgId)
+    .order('is_default', { ascending: false })
+    .order('name');
+  if (error) throw error;
+  return (data ?? []) as PipelineResume[];
+}
+
 export async function fetchStages(pipelineId: string): Promise<PipelineStage[]> {
   const { data, error } = await supabase
     .from('pipeline_stages')
@@ -391,6 +410,49 @@ export async function lierJob(dealId: string, jobId: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Canal d'acquisition du deal. `deals.source` est du texte libre : on écrit ce qu'on reçoit. */
+export async function majSourceDuDeal(dealId: string, source: string): Promise<void> {
+  const { error } = await supabase.from('deals').update({ source }).eq('id', dealId);
+  if (error) throw error;
+}
+
+/** Raison de perte seule — sans changer d'étape (le deal est déjà dans une étape `lost`). */
+export async function majRaisonPerte(dealId: string, raison: string): Promise<void> {
+  const { error } = await supabase.from('deals').update({ lost_reason: raison }).eq('id', dealId);
+  if (error) throw error;
+}
+
+/** Champs de contact modifiables depuis la fiche d'un deal — ils vivent dans `clients`. */
+export interface ContactClient {
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+}
+
+/**
+ * Écrit le contact du CLIENT rattaché au deal.
+ *
+ * Le courriel, le téléphone et l'adresse n'appartiennent pas au deal : ils sont
+ * sur `clients`. Les modifier depuis la fiche du deal change donc la fiche
+ * client — la fiche le dit explicitement, sans quoi l'utilisateur croirait
+ * n'avoir touché qu'un deal.
+ *
+ * `org_id` est filtré en plus de la RLS : un id de client d'une autre org ne
+ * doit pas pouvoir être adressé, même par accident.
+ */
+export async function majContactDuDeal(
+  clientId: string,
+  champs: Partial<ContactClient>,
+): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { error } = await supabase
+    .from('clients')
+    .update(champs)
+    .eq('id', clientId)
+    .eq('org_id', orgId);
+  if (error) throw error;
+}
+
 // ── Réglages des étapes ─────────────────────────────────────
 
 export async function renommerEtape(
@@ -436,6 +498,48 @@ export async function ajouterEtape(
     .single();
   if (error) throw error;
   return data as PipelineStage;
+}
+
+// ── Réglages du pipeline lui-même ───────────────────────────
+
+export type ModelePipeline = 'generique' | 'nettoyage' | 'construction';
+
+/**
+ * Crée un pipeline SUPPLÉMENTAIRE avec ses étapes.
+ *
+ * `seed_pipeline_ventes` ne convient pas ici : elle est idempotente (elle ne
+ * fait rien si un pipeline par défaut existe) et elle pose `is_default`. Le
+ * RPC `creer_pipeline_ventes` (migration 20260923190000) fait l'inverse :
+ * jamais de court-circuit, jamais de défaut volé. `org_id` n'est pas un
+ * paramètre — il vient de la session.
+ */
+export async function creerPipeline(nom: string, modele: ModelePipeline): Promise<string> {
+  const { data, error } = await supabase.rpc('creer_pipeline_ventes', {
+    p_nom: nom,
+    p_modele: modele,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function renommerPipeline(pipelineId: string, nom: string): Promise<void> {
+  const { error } = await supabase
+    .from('pipelines_ventes')
+    .update({ name: nom })
+    .eq('id', pipelineId);
+  if (error) throw error;
+}
+
+/**
+ * Change le pipeline par défaut. Passe par un RPC : l'index partiel
+ * `uq_pipelines_ventes_defaut` refuserait l'état intermédiaire à deux
+ * défauts que produiraient deux `update` PostgREST séparés.
+ */
+export async function definirParDefaut(pipelineId: string): Promise<void> {
+  const { error } = await supabase.rpc('pipeline_definir_defaut', {
+    p_pipeline_id: pipelineId,
+  });
+  if (error) throw error;
 }
 
 // ── Statistiques ────────────────────────────────────────────

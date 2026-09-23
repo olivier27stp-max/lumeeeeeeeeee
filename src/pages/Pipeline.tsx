@@ -100,6 +100,23 @@ export default function Pipeline() {
     qc.invalidateQueries({ queryKey: ['pipeline-stats'] });
   };
 
+  /** Assignation — appelée par le menu « ⋮ » d'une carte et par la fiche. */
+  async function assigner(dealId: string, membreId: string | null) {
+    const membre = membresQ.data?.find((m) => m.id === membreId) ?? null;
+    try {
+      await assignerDeal(dealId, membreId);
+      rafraichir();
+      setDealOuvert((d) => (d && d.id === dealId ? { ...d, assigned_user_id: membreId } : d));
+      toast.success(
+        membre
+          ? (fr ? `Assigné à ${membre.name}.` : `Assigned to ${membre.name}.`)
+          : (fr ? 'Deal désassigné.' : 'Deal unassigned.'),
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   function choisirOnglet(suivant: Onglet) {
     const sp = new URLSearchParams();
     if (suivant !== 'board') sp.set('tab', suivant);
@@ -209,6 +226,8 @@ export default function Pipeline() {
             chargement={dealsQ.isLoading}
             onOuvrir={setDealOuvert}
             onDeplacer={deplacer}
+            onAssigner={assigner}
+            onChangement={rafraichir}
           />
         )}
 
