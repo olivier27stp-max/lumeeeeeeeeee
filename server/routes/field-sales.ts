@@ -8,6 +8,7 @@ import { getFollowUpRecommendations } from '../lib/field-sales/followup-engine';
 import { generateDailyPlan } from '../lib/field-sales/daily-plan-engine';
 import { getAssignmentRecommendations } from '../lib/field-sales/territory-assignment-engine';
 import { autoCreateOrMergePin } from '../lib/field-sales/auto-pin';
+import { ingererPorteDansPipeline } from '../lib/pipelinePorteAPorte';
 import { geocodeAddress } from '../lib/helpers';
 import { cached, cacheDelete } from '../lib/cache';
 
@@ -387,7 +388,19 @@ router.post('/houses', async (req: Request, res: Response) => {
 
       const { data: merged, error: readErr } = await admin.from('field_house_profiles').select('*').eq('id', existing.id).single();
       if (readErr || !merged) return sendSafeError(res, readErr ?? new Error('merged house not found'), 'Field sales operation failed.', '[field-sales]');
-      return res.status(200).json({ ...merged, merged: true, client_id: clientId });
+
+      // Ce chemin-ci est le cas NORMAL, pas un cas rare : créer un client
+      // déclenche la création d'une maison (trigger 20260743000000), donc un
+      // pin déposé ensuite à la même adresse fusionne au lieu de créer.
+      // L'ingestion doit donc être ici aussi, sinon une porte vendue
+      // n'entrerait jamais dans le pipeline.
+      const ingereFusion = await ingererPorteDansPipeline(admin, {
+        orgId: auth.orgId, houseId: existing.id,
+        clientId: clientId ?? existing.client_id ?? null,
+        actorId: auth.user.id, statut: pinStatus,
+      });
+
+      return res.status(200).json({ ...merged, merged: true, client_id: clientId, deal_id: ingereFusion?.dealId ?? null });
     };
 
     if (duplicate) return mergeIntoExisting(duplicate);
@@ -497,6 +510,13 @@ router.post('/houses', async (req: Request, res: Response) => {
       if (linkErr) console.error('[field-sales] client link failed:', { orgId: auth.orgId, houseId: house.id, clientId }, linkErr.message);
     }
 
+    // Une porte qui naît déjà prospect (lead / devis envoyé / vente) entre
+    // dans le pipeline. Les autres statuts restent sur la carte.
+    const ingestion = await ingererPorteDansPipeline(admin, {
+      orgId: auth.orgId, houseId: house.id, clientId,
+      actorId: auth.user.id, statut: pinStatus,
+    });
+
     // Async: trigger AI recalculation (non-blocking)
     (async () => {
       try {
@@ -506,7 +526,7 @@ router.post('/houses', async (req: Request, res: Response) => {
       } catch { /* silent background task */ }
     })();
 
-    return res.status(201).json({ ...house, pin, client_id: clientId });
+    return res.status(201).json({ ...house, pin, client_id: clientId, deal_id: ingestion?.dealId ?? null });
   } catch (err: any) {
     return sendSafeError(res, err, 'Field sales operation failed.', '[field-sales]');
   }
@@ -808,6 +828,20 @@ router.post('/houses/:id/events', async (req: Request, res: Response) => {
       });
       if (pinInsErr) console.error('[field-sales/events] pin insert failed:', { orgId: auth.orgId, houseId: req.params.id }, pinInsErr.message);
     }
+
+    // La porte vient-elle de devenir un prospect ? Alors elle entre dans le
+    // pipeline. `pipeline_ingerer_porte` est idempotente par maison : repasser
+    // de « lead » à « callback » puis à « lead » ne crée pas un second deal.
+    const { data: maisonPourDeal } = await admin
+      .from('field_house_profiles')
+      .select('client_id')
+      .eq('id', req.params.id)
+      .maybeSingle();
+    await ingererPorteDansPipeline(admin, {
+      orgId: auth.orgId, houseId: req.params.id,
+      clientId: maisonPourDeal?.client_id ?? null,
+      actorId: auth.user.id, statut: newStatus,
+    });
 
     // Upsert daily_stats
     const today = now.slice(0, 10); // YYYY-MM-DD

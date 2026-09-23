@@ -76,6 +76,7 @@ export const LIBELLE_SOURCE: Record<DealSource, { fr: string; en: string }> = {
   form_web: { fr: 'Formulaire web', en: 'Web form' },
   meta: { fr: 'Meta', en: 'Meta' },
   manual: { fr: 'Manuel', en: 'Manual' },
+  d2d: { fr: 'Porte-à-porte', en: 'Door-to-door' },
 };
 
 export const LIBELLE_DECLENCHEUR: Record<MockStageAction['trigger'], { fr: string; en: string }> = {

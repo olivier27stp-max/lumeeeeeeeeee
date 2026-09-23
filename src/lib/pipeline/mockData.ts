@@ -32,7 +32,7 @@ export interface MockStage {
   archivedAt: string | null;
 }
 
-export type DealSource = 'form_web' | 'meta' | 'manual';
+export type DealSource = 'form_web' | 'meta' | 'manual' | 'd2d';
 
 export interface MockDeal {
   id: string;

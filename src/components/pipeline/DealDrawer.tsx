@@ -18,7 +18,7 @@
  */
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Briefcase, ExternalLink, FileText, Hammer, User, X } from 'lucide-react';
+import { Briefcase, ExternalLink, FileText, Hammer, MapPin, User, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
@@ -281,9 +281,33 @@ function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
   const job = data?.job ?? null;
   const devis = data?.devis ?? null;
   const paiements = data?.paiements ?? [];
+  const porte = data?.porte ?? null;
 
   return (
     <>
+      {/* Le deal vient d'une porte cognée : on peut retourner la voir sur la
+          carte. La carte accepte ?lat=&lng= pour se centrer dessus. */}
+      {porte && (
+        <Section titre={fr ? 'Porte-à-porte' : 'Door-to-door'}>
+          {porte.lat != null && porte.lng != null ? (
+            <Link
+              to={`/field-sales?lat=${porte.lat}&lng=${porte.lng}`}
+              className="flex items-center gap-2 rounded-xl border border-outline bg-surface-card px-3.5 py-2.5 text-[12.5px] text-text-primary hover:bg-surface-hover"
+            >
+              <MapPin size={13} aria-hidden="true" className="text-text-muted shrink-0" />
+              <span className="min-w-0 truncate">
+                {porte.address ?? (fr ? 'Voir sur la carte' : 'View on the map')}
+              </span>
+            </Link>
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl border border-outline bg-surface-card px-3.5 py-2.5 text-[12.5px] text-text-secondary">
+              <MapPin size={13} aria-hidden="true" className="text-text-muted shrink-0" />
+              <span className="min-w-0 truncate">{porte.address ?? (fr ? 'Adresse inconnue' : 'Unknown address')}</span>
+            </div>
+          )}
+        </Section>
+      )}
+
       <Section titre={fr ? 'Client' : 'Client'}>
         {deal.client_id ? (
           <Link
