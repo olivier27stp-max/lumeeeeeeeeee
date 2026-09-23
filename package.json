@@ -72,7 +72,8 @@
     "test:parcours": "tsx --env-file=.env.local scripts/test-parcours-contrat.mjs",
     "qa:depense": "node --env-file=.env.local --import tsx scripts/qa/depense-llm.mts",
     "qa:fumee": "node --env-file=.env.local --import tsx scripts/qa/fumee-cout.mts",
-    "test:quarantaine": "vitest run --config vitest.quarantaine.config.ts"
+    "test:quarantaine": "vitest run --config vitest.quarantaine.config.ts",
+    "qa:qualite": "node --env-file=.env.local --import tsx scripts/qa/qualite-lumi.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.124.0",

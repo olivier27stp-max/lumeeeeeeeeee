@@ -294,7 +294,7 @@ async function executerTourSse(opts: {
   // Routeur en OBSERVATION : classifie en parallèle, n'agit pas, et son verdict
   // entre dans la trace pour être comparé à ce que le modèle a fait.
   const observation = opts.routeur ? Promise.resolve(opts.routeur) : (modeRouteur() === 'observation' && opts.enonce ? classifier(opts.enonce, contexteRouteur(opts.historique)) : null);
-  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null) => {
+  const tracer = async (resultat: 'ok' | 'proposition' | 'erreur', cost_cents: number, action?: string | null, chiffresSuspects?: string[]) => {
     const routeur = observation ? await observation : null;
     // Règle stricte : le routeur en OBSERVATION coûte aussi (Haiku) — journalisé
     // dans ai_usage comme en mode actif, jamais un coût hors budget.
@@ -309,7 +309,14 @@ async function executerTourSse(opts: {
     void journaliserTrace(ctx.admin, {
       orgId: ctx.auth.orgId, userId: ctx.auth.user.id, conversationId, canal: 'lumi', origine: opts.origine,
       enonce: normaliserEnonce(opts.enonce), etage: ETAGE.agent, action: opts.action ?? action ?? null,
-      params: { ...(opts.params ?? {}), ...(opts.sousAgent ? { sous_agent: opts.sousAgent } : {}), ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}) },
+      params: {
+        ...(opts.params ?? {}),
+        ...(opts.sousAgent ? { sous_agent: opts.sousAgent } : {}),
+        ...(routeur ? { routeur: { verdict: routeur.verdict, statut: routeur.statut, decision: routeur.decision, duree_ms: routeur.duree_ms, usage: routeur.usage ?? null } } : {}),
+        // Première métrique de QUALITÉ en base : un montant cité sans source.
+        // Requêtable comme le reste — `qa:depense` et n'importe quel SQL le voient.
+        ...(chiffresSuspects?.length ? { chiffres_suspects: chiffresSuspects } : {}),
+      },
       outils, resultat, model, promptVersion: VERSION_PROMPT, usage, costCents: cost_cents, dureeMs: Date.now() - debut,
     });
     // Escalade humaine : le modèle a refusé ou n'a pas pu finir.
@@ -382,7 +389,16 @@ async function executerTourSse(opts: {
     await sauverMessages(conversationId, ctx.auth.orgId, resultat.nouveauxMessages, cleRefs);
     const budget = await etatBudget(ctx.admin, ctx.auth.orgId);
     if (!ferme) emettreSse('done', { conversation_id: conversationId, cost_cents: resultat.cost_cents, budget, proposal: resultat.proposition, etage: ETAGE.agent });
-    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null);
+    // Montants cités sans source dans les résultats d'outils : on le dit
+    // FORT. Le prompt exige que chaque chiffre vienne d'un outil ; sans
+    // cette ligne, une hallucination de montant passerait inaperçue jusqu'à
+    // ce qu'un client la remarque sur sa facture (2026-09-22).
+    if (resultat.chiffresSuspects?.length) {
+      logger.warn('[lumi] montant cité sans source dans les résultats d’outils', {
+        orgId: ctx.auth.orgId, conversationId, montants: resultat.chiffresSuspects,
+      });
+    }
+    void tracer(resultat.proposition ? 'proposition' : 'ok', resultat.cost_cents, resultat.plafond ? 'budget_epuise' : resultat.proposition?.tool ?? null, resultat.chiffresSuspects);
     // Étages 3-4 : une réponse de lecture au premier message se mémorise (exacte + sémantique).
     if (opts.cache && opts.enonce && !erreurModele && !resultat.plafond && tourCachable({ historiqueVide: opts.cache.historiqueVide, texte: resultat.texte, outils, proposition: !!resultat.proposition, resultat: 'ok', ecritureExecutee, enonce: opts.enonce })) {
       const p = { orgId: ctx.auth.orgId, userId: ctx.auth.user.id, enonce: opts.enonce };

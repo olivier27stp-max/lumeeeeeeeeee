@@ -39,6 +39,7 @@ import { coutEnCents, modeleLumi, type UsageTokens } from './tarifs';
 import { estimationCoutAppel, type Reservation } from './budget';
 import { serialiserResultat } from './compress';
 import { reglesCout } from './regles-cout';
+import { verifierChiffres } from './verifier-chiffres';
 import { outilsDuSousAgent } from './sous-agents';
 import type { IdTopic } from './topics';
 import { fichesDuResultat, apercuProposition, type Fiche, type Apercu } from './fiches';
@@ -276,6 +277,13 @@ export interface ResultatTour {
   cost_cents: number;
   /** Plafond du budget atteint : l'étape n'a pas été envoyée au modèle (la route sert le message gabarit). */
   plafond?: boolean;
+  /**
+   * Montants cités dans la réponse qu'on ne retrouve dans AUCUN résultat
+   * d'outil du tour (verifier-chiffres.ts). Vide = rien à signaler. C'est un
+   * drapeau pour relecture, jamais un blocage : un faux positif ne doit pas
+   * priver l'utilisateur de sa réponse.
+   */
+  chiffresSuspects?: string[];
 }
 
 export async function tourLumi(opts: {
@@ -311,6 +319,9 @@ export async function tourLumi(opts: {
   let texteTotal = '';
   let coutTotal = 0;
   let coutHorsCacheFroid = 0;
+  // Tous les résultats d'outils du tour, pour vérifier après coup que les
+  // montants cités dans la réponse en viennent bien.
+  const resultatsBruts: string[] = [];
 
   const maxEtapes = Math.min(MAX_ETAPES, Math.max(0, opts.reglages?.max_etapes ?? MAX_ETAPES));
   if (maxEtapes === 0) return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, plafond: true };
@@ -439,7 +450,9 @@ export async function tourLumi(opts: {
           if (fiches.length) opts.emettre({ type: 'fiches', fiches });
           const masque = masquerIds(espaceRefs, r.result);
           // Compacté (vides retirés, listes en table) : −35 à −45 % de tokens sur une liste, sans perte (compress.ts).
-          resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: serialiserResultat(masque) });
+          const contenuOutil = serialiserResultat(masque);
+        resultatsBruts.push(contenuOutil);
+        resultats.push({ type: 'tool_result', tool_use_id: appel.id, content: contenuOutil });
         }
       } catch (err: any) {
         // Jamais le texte brut d'une erreur (internes de la base) au modèle.
@@ -471,5 +484,15 @@ export async function tourLumi(opts: {
   }
 
   opts.emettre({ type: 'error', message: 'trop_d_etapes' });
-  return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal };
+  return { nouveauxMessages: nouveaux, proposition: null, texte: texteTotal, cost_cents: coutTotal, chiffresSuspects: chiffresSuspects(texteTotal, resultatsBruts) };
+}
+
+/**
+ * Montants cités dans la réponse qu'aucun résultat d'outil ne justifie.
+ * Détecteur déterministe et gratuit : le prompt EXIGE que chaque chiffre
+ * vienne d'un outil, on le constate au lieu de l'espérer (2026-09-22).
+ */
+function chiffresSuspects(texte: string, resultats: string[]): string[] | undefined {
+  const v = verifierChiffres(texte, resultats);
+  return v.suspects.length ? v.suspects.map((s) => s.texte) : undefined;
 }
