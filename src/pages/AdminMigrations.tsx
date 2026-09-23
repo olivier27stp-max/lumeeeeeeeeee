@@ -363,6 +363,8 @@ function MigrationDetail({ id, onBack }: { id: string; onBack: () => void }) {
       const migration = (query.state.data as any)?.migration;
       const status = migration?.status;
       if (passeBotActive(migration?.bot_dernier_rapport)) return 2500;
+      // un lot (test ou final) qui tourne encore : suivi même si le statut n'a pas encore basculé
+      if (((query.state.data as any)?.batches ?? []).some((b: any) => b.status === 'running')) return 2500;
       return ['parsing', 'testing', 'importing', 'post_import_validation'].includes(status) ? 2500 : false;
     },
     refetchOnWindowFocus: true,
@@ -573,7 +575,13 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
         <button type="button" className={subtle} onClick={() => act(() => startAnalysis(m.id), 'Analyse relancée')}>Relancer l'analyse</button>
       )}
       {['mapping', 'human_review', 'waiting_for_client', 'ready_for_test', 'test_review'].includes(m.status) && (
-        <button type="button" className={primary} onClick={() => act(() => startTestImport(m.id), 'Import test lancé')}>Lancer l'import test</button>
+        <button type="button" className={primary} disabled={enCours} onClick={() => act(async () => {
+          await startTestImport(m.id);
+          // l'import tourne en arrière-plan : on recharge tout de suite puis deux fois pour attraper le
+          // lot « running » et enclencher le suivi (carte bleue « Import test en cours »)
+          setTimeout(onDone, 1500);
+          setTimeout(onDone, 4000);
+        }, 'Import test lancé — suivi ci-dessus')}>{enCours ? 'Lancement…' : 'Lancer l\'import test'}</button>
       )}
       {m.status === 'test_review' && (
         <button type="button" className={primary} onClick={() => act(() => requestApproval(m.id), 'Approbation demandée au client')}>Demander l'approbation</button>
@@ -661,7 +669,7 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
             : 'Le rollback retire (soft-delete) UNIQUEMENT les dossiers créés par les lots d\'import final encore en place (tous, du plus récent au plus ancien). Les dossiers fusionnés et les données préexistantes ne sont pas touchés.'}
           onClose={() => setConfirmKind(null)}
           onConfirm={async (typed) => {
-            if (confirmKind === 'final') await act(() => startFinalImport(m.id, typed), 'Import final démarré');
+            if (confirmKind === 'final') await act(async () => { await startFinalImport(m.id, typed); setTimeout(onDone, 1500); setTimeout(onDone, 4000); }, 'Import final démarré — suivi ci-dessus');
             else await act(() => rollbackMigration(m.id, typed), 'Rollback effectué');
             setConfirmKind(null);
           }}
