@@ -1,5 +1,5 @@
 /**
- * Réglages du pipeline — étapes, renommage, ordre, archivage.
+ * Réglages du pipeline — pipelines, étapes, conseils, ordre, archivage.
  *
  * Les garde-fous ne sont pas ici : ils sont EN BASE (une étape qui contient des
  * deals, ou la dernière étape de son type, refuse d'être archivée). L'écran se
@@ -7,16 +7,22 @@
  * qu'un même refus vaut aussi pour Lumi, le MCP ou un script.
  *
  * Les champs texte sont sauvés au `blur`, jamais à la frappe : une écriture par
- * caractère saturerait PostgREST pour rien.
+ * caractère saturerait PostgREST pour rien. Le nom d'une étape est un champ
+ * VISIBLE, pas caché derrière un bouton « Modifier » : personne ne devine un
+ * réglage qu'il ne voit pas.
  */
-import { useEffect, useId, useMemo, useState } from 'react';
-import { Archive, ArrowDown, ArrowUp, Info, Plus, Workflow } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import {
+  Archive, ArrowDown, ArrowUp, Check, ChevronDown, Info, Layers,
+  Loader2, Plus, Star, Workflow, X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { useTranslation } from '../../i18n';
 import {
-  ajouterEtape, archiverEtape, renommerEtape, reordonnerEtapes,
-  type Deal, type PipelineStage,
+  ajouterEtape, archiverEtape, creerPipeline, definirParDefaut, fetchPipelines,
+  renommerEtape, renommerPipeline, reordonnerEtapes,
+  type Deal, type ModelePipeline, type PipelineResume, type PipelineStage,
 } from '../../lib/pipelineVentesApi';
 import { LIBELLE_KIND, rangsOuverts, visuelEtape } from '../../lib/pipeline/presentation';
 import type { MockStage } from '../../lib/pipeline/mockData';
@@ -56,10 +62,54 @@ function Aide({ texte }: { texte: string }) {
   );
 }
 
-// ── Une étape ──
+function Section({ titre, sousTitre, action, children }: {
+  titre: string;
+  sousTitre: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[15px] font-semibold text-text-primary">{titre}</h2>
+          <p className="text-[12px] text-text-tertiary mt-0.5 max-w-xl leading-relaxed">{sousTitre}</p>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
 
-function CarteEtape({
-  etape, etapes, deals, fr, onEnregistrer, onMonter, onDescendre, onArchiver,
+const MODELES: { valeur: ModelePipeline; fr: string; en: string; aideFr: string; aideEn: string }[] = [
+  {
+    valeur: 'generique',
+    fr: 'Générique',
+    en: 'Generic',
+    aideFr: 'Nouveau lead → Contacté → Soumission → Relance → Gagné / Perdu.',
+    aideEn: 'New lead → Contacted → Quote sent → Follow-up → Won / Lost.',
+  },
+  {
+    valeur: 'nettoyage',
+    fr: 'Nettoyage',
+    en: 'Cleaning',
+    aideFr: 'Même ossature, avec des conseils écrits pour le nettoyage.',
+    aideEn: 'Same backbone, with guidance written for cleaning work.',
+  },
+  {
+    valeur: 'construction',
+    fr: 'Construction',
+    en: 'Construction',
+    aideFr: 'Visite planifiée et Estimation remplacent l’étape Soumission.',
+    aideEn: 'Site visit and Estimate replace the Quote stage.',
+  },
+];
+
+// ── Une étape ──────────────────────────────────────────────
+
+function LigneEtape({
+  etape, etapes, deals, fr, onEnregistrer, onMonter, onDescendre, onArchiver, premiere, derniere,
 }: {
   etape: PipelineStage;
   etapes: PipelineStage[];
@@ -72,12 +122,14 @@ function CarteEtape({
   onMonter: (id: string) => void;
   onDescendre: (id: string) => void;
   onArchiver: (id: string) => void;
+  premiere: boolean;
+  derniere: boolean;
 }) {
   const idNomFr = useId();
   const idNomEn = useId();
   const idGuidFr = useId();
   const idGuidEn = useId();
-  const [ouvert, setOuvert] = useState(false);
+  const [conseilsOuverts, setConseilsOuverts] = useState(false);
 
   // Brouillon local : la frappe reste fluide, l'écriture part au `blur`.
   const [nomFr, setNomFr] = useState(etape.name_fr);
@@ -98,61 +150,25 @@ function CarteEtape({
   const v = visuelEtape(pourVisuel(etape), rangs[etape.id] ?? 0);
   const nb = deals.filter((d) => d.stage_id === etape.id).length;
 
+  const aideType = fr
+    ? "Le type décide du comportement : « Gagné » propose de créer la job, « Perdu » demande la raison. Toute la logique s'accroche au type, jamais au nom — renommer une étape ne change rien."
+    : 'The type drives behaviour: “Won” offers to create the job, “Lost” asks for the reason. All logic hangs off the type, never the name — renaming a stage changes nothing.';
+
+  const conseilRempli = guidFr.trim() !== '' || guidEn.trim() !== '';
+
   return (
     <div className="rounded-xl border border-outline bg-surface-card overflow-hidden">
-      <div className="flex items-center gap-2.5 px-4 py-3">
-        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: v.teinte }} aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-text-primary truncate">
-            {fr ? etape.name_fr : etape.name_en}
-          </p>
-          <p className="text-[11px] text-text-muted">
-            {fr ? LIBELLE_KIND[etape.kind].fr : LIBELLE_KIND[etape.kind].en}
-            {' · '}
-            {nb} {nb > 1 ? 'deals' : 'deal'}
-          </p>
-        </div>
+      <div className="flex items-start gap-3 px-4 py-3">
+        <span
+          className="w-2.5 h-2.5 rounded-full shrink-0 mt-2.5"
+          style={{ background: v.teinte }}
+          aria-hidden="true"
+        />
 
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => onMonter(etape.id)}
-            aria-label={fr ? `Monter ${etape.name_fr}` : `Move ${etape.name_en} up`}
-            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
-          >
-            <ArrowUp size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDescendre(etape.id)}
-            aria-label={fr ? `Descendre ${etape.name_fr}` : `Move ${etape.name_en} down`}
-            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
-          >
-            <ArrowDown size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onArchiver(etape.id)}
-            aria-label={fr ? `Archiver ${etape.name_fr}` : `Archive ${etape.name_en}`}
-            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
-          >
-            <Archive size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setOuvert((o) => !o)}
-            className="ml-1 text-[11.5px] font-medium text-text-secondary hover:text-text-primary px-2 py-1 rounded-md hover:bg-surface-secondary transition-colors"
-          >
-            {ouvert ? (fr ? 'Fermer' : 'Close') : fr ? 'Modifier' : 'Edit'}
-          </button>
-        </div>
-      </div>
-
-      {ouvert && (
-        <div className="px-4 pb-4 pt-1 border-t border-border-subtle space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2">
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="grid gap-2.5 sm:grid-cols-2">
             <div>
-              <label htmlFor={idNomFr} className="block text-[11px] text-text-tertiary mb-1.5">
+              <label htmlFor={idNomFr} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
                 {fr ? 'Nom (français)' : 'Name (French)'}
               </label>
               <input
@@ -160,11 +176,11 @@ function CarteEtape({
                 value={nomFr}
                 onChange={(e) => setNomFr(e.target.value)}
                 onBlur={() => { if (nomFr !== etape.name_fr) onEnregistrer(etape.id, { name_fr: nomFr }); }}
-                className="input-field w-full text-[12.5px]"
+                className="input-field w-full text-[13px] font-medium"
               />
             </div>
             <div>
-              <label htmlFor={idNomEn} className="block text-[11px] text-text-tertiary mb-1.5">
+              <label htmlFor={idNomEn} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
                 {fr ? 'Nom (anglais)' : 'Name (English)'}
               </label>
               <input
@@ -172,22 +188,79 @@ function CarteEtape({
                 value={nomEn}
                 onChange={(e) => setNomEn(e.target.value)}
                 onBlur={() => { if (nomEn !== etape.name_en) onEnregistrer(etape.id, { name_en: nomEn }); }}
-                className="input-field w-full text-[12.5px]"
+                className="input-field w-full text-[13px] font-medium"
               />
             </div>
           </div>
 
+          <div className="flex items-center gap-2 flex-wrap text-[11px] text-text-muted">
+            <span className="inline-flex items-center gap-1 rounded-full border border-border-subtle bg-surface-secondary px-2 py-0.5 font-medium text-text-secondary">
+              {fr ? LIBELLE_KIND[etape.kind].fr : LIBELLE_KIND[etape.kind].en}
+              <Aide texte={aideType} />
+            </span>
+            <span>
+              {nb} {fr ? (nb > 1 ? 'deals à cette étape' : 'deal à cette étape') : nb > 1 ? 'deals here' : 'deal here'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setConseilsOuverts((o) => !o)}
+              aria-expanded={conseilsOuverts}
+              className="inline-flex items-center gap-1 text-text-secondary hover:text-text-primary rounded focus-visible:outline-2 focus-visible:outline-primary transition-colors"
+            >
+              <ChevronDown
+                size={12}
+                aria-hidden="true"
+                className={conseilsOuverts ? 'rotate-180 transition-transform' : 'transition-transform'}
+              />
+              {fr ? 'Conseil au vendeur' : 'Rep guidance'}
+              {conseilRempli && !conseilsOuverts && (
+                <span className="text-text-muted">{fr ? '· rempli' : '· set'}</span>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => onMonter(etape.id)}
+            disabled={premiere}
+            aria-label={fr ? `Monter ${etape.name_fr}` : `Move ${etape.name_en} up`}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          >
+            <ArrowUp size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDescendre(etape.id)}
+            disabled={derniere}
+            aria-label={fr ? `Descendre ${etape.name_fr}` : `Move ${etape.name_en} down`}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          >
+            <ArrowDown size={14} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onArchiver(etape.id)}
+            aria-label={fr ? `Archiver ${etape.name_fr}` : `Archive ${etape.name_en}`}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
+          >
+            <Archive size={14} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {conseilsOuverts && (
+        <div className="px-4 pb-4 pt-3 border-t border-border-subtle space-y-3">
+          <p className="text-[11.5px] text-text-muted leading-relaxed">
+            {fr
+              ? "Ce texte s'affiche dans la fiche du deal, uniquement quand il est à cette étape. C'est le rappel que le vendeur a sous les yeux au moment d'agir — une phrase concrète vaut mieux qu'un paragraphe."
+              : 'This text shows in the deal panel, only while the deal sits at this stage. It is the reminder the rep reads right before acting — one concrete sentence beats a paragraph.'}
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label htmlFor={idGuidFr} className="flex items-center gap-1.5 text-[11px] text-text-tertiary mb-1.5">
-                {fr ? 'Conseil affiché (français)' : 'Guidance shown (French)'}
-                <Aide
-                  texte={
-                    fr
-                      ? "Affiché dans la fiche du deal, à cette étape seulement."
-                      : 'Shown in the deal panel, at this stage only.'
-                  }
-                />
+              <label htmlFor={idGuidFr} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+                {fr ? 'Conseil (français)' : 'Guidance (French)'}
               </label>
               <textarea
                 id={idGuidFr}
@@ -199,8 +272,8 @@ function CarteEtape({
               />
             </div>
             <div>
-              <label htmlFor={idGuidEn} className="block text-[11px] text-text-tertiary mb-1.5">
-                {fr ? 'Conseil affiché (anglais)' : 'Guidance shown (English)'}
+              <label htmlFor={idGuidEn} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+                {fr ? 'Conseil (anglais)' : 'Guidance (English)'}
               </label>
               <textarea
                 id={idGuidEn}
@@ -232,7 +305,202 @@ function CarteEtape({
   );
 }
 
-// ── Écran ──
+// ── Formulaire d'ajout d'étape ─────────────────────────────
+
+function AjoutEtape({ fr, onAjouter, onAnnuler }: {
+  fr: boolean;
+  onAjouter: (nomFr: string, nomEn: string) => void;
+  onAnnuler: () => void;
+}) {
+  const idFr = useId();
+  const idEn = useId();
+  const [nomFr, setNomFr] = useState('');
+  const [nomEn, setNomEn] = useState('');
+  const pret = nomFr.trim() !== '' && nomEn.trim() !== '';
+
+  return (
+    <form
+      className="rounded-xl border border-dashed border-outline bg-surface-secondary px-4 py-3.5 space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (pret) onAjouter(nomFr.trim(), nomEn.trim());
+      }}
+    >
+      <p className="text-[11.5px] text-text-muted leading-relaxed">
+        {fr
+          ? "La nouvelle étape est de type « Ouverte » et se place à la fin des étapes ouvertes, juste avant Gagné. Tu pourras la déplacer ensuite."
+          : 'The new stage is of type “Open” and lands at the end of the open stages, just before Won. You can move it afterwards.'}
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor={idFr} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+            {fr ? 'Nom (français)' : 'Name (French)'}
+          </label>
+          <input
+            id={idFr}
+            value={nomFr}
+            onChange={(e) => setNomFr(e.target.value)}
+            placeholder={fr ? 'Ex. : Visite planifiée' : 'e.g. Site visit booked'}
+            className="input-field w-full text-[13px]"
+          />
+        </div>
+        <div>
+          <label htmlFor={idEn} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+            {fr ? 'Nom (anglais)' : 'Name (English)'}
+          </label>
+          <input
+            id={idEn}
+            value={nomEn}
+            onChange={(e) => setNomEn(e.target.value)}
+            placeholder={fr ? 'Ex. : Site visit booked' : 'e.g. Site visit booked'}
+            className="input-field w-full text-[13px]"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={!pret} className="btn-primary text-[12.5px] disabled:opacity-40">
+          {fr ? "Ajouter l'étape" : 'Add the stage'}
+        </button>
+        <button type="button" onClick={onAnnuler} className="btn-secondary text-[12.5px]">
+          {fr ? 'Annuler' : 'Cancel'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ── Formulaire de création de pipeline ─────────────────────
+
+function AjoutPipeline({ fr, occupe, onCreer, onAnnuler }: {
+  fr: boolean;
+  occupe: boolean;
+  onCreer: (nom: string, modele: ModelePipeline) => void;
+  onAnnuler: () => void;
+}) {
+  const idNom = useId();
+  const idModele = useId();
+  const [nom, setNom] = useState('');
+  const [modele, setModele] = useState<ModelePipeline>('generique');
+  const choisi = MODELES.find((m) => m.valeur === modele) ?? MODELES[0];
+
+  return (
+    <form
+      className="rounded-xl border border-dashed border-outline bg-surface-secondary px-4 py-3.5 space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (nom.trim() !== '' && !occupe) onCreer(nom.trim(), modele);
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label htmlFor={idNom} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+            {fr ? 'Nom du pipeline' : 'Pipeline name'}
+          </label>
+          <input
+            id={idNom}
+            value={nom}
+            onChange={(e) => setNom(e.target.value)}
+            placeholder={fr ? 'Ex. : Contrats commerciaux' : 'e.g. Commercial contracts'}
+            className="input-field w-full text-[13px]"
+          />
+        </div>
+        <div>
+          <label htmlFor={idModele} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+            {fr ? 'Modèle de départ' : 'Starting template'}
+          </label>
+          <select
+            id={idModele}
+            value={modele}
+            onChange={(e) => setModele(e.target.value as ModelePipeline)}
+            className="input-field w-full text-[13px]"
+          >
+            {MODELES.map((m) => (
+              <option key={m.valeur} value={m.valeur}>{fr ? m.fr : m.en}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <p className="text-[11.5px] text-text-muted leading-relaxed">
+        {fr ? choisi.aideFr : choisi.aideEn}
+        {' '}
+        {fr
+          ? 'Tout est modifiable après coup : le modèle sert seulement à ne pas partir d’une page blanche.'
+          : 'Everything stays editable afterwards: the template only saves you from a blank page.'}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="submit"
+          disabled={nom.trim() === '' || occupe}
+          className="btn-primary text-[12.5px] inline-flex items-center gap-1.5 disabled:opacity-40"
+        >
+          {occupe && <Loader2 size={13} aria-hidden="true" className="animate-spin" />}
+          {fr ? 'Créer le pipeline' : 'Create the pipeline'}
+        </button>
+        <button type="button" onClick={onAnnuler} className="btn-secondary text-[12.5px]">
+          {fr ? 'Annuler' : 'Cancel'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// ── Une ligne de la liste des pipelines ────────────────────
+
+function LignePipeline({ pipeline, fr, actif, onRenommer, onDefaut }: {
+  pipeline: PipelineResume;
+  fr: boolean;
+  actif: boolean;
+  onRenommer: (id: string, nom: string) => void;
+  onDefaut: (id: string) => void;
+}) {
+  const idNom = useId();
+  const [nom, setNom] = useState(pipeline.name);
+  useEffect(() => { setNom(pipeline.name); }, [pipeline.name]);
+
+  return (
+    <div className="flex items-end gap-3 rounded-xl border border-outline bg-surface-card px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <label htmlFor={idNom} className="flex items-center gap-2 text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+          {fr ? 'Nom du pipeline' : 'Pipeline name'}
+          {pipeline.is_default && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9.5px] font-semibold normal-case tracking-normal text-primary">
+              <Star size={9} aria-hidden="true" />
+              {fr ? 'Par défaut' : 'Default'}
+            </span>
+          )}
+          {actif && !pipeline.is_default && (
+            <span className="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[9.5px] font-semibold normal-case tracking-normal text-text-secondary">
+              {fr ? 'Affiché' : 'Shown'}
+            </span>
+          )}
+        </label>
+        <input
+          id={idNom}
+          value={nom}
+          onChange={(e) => setNom(e.target.value)}
+          onBlur={() => { if (nom.trim() !== '' && nom !== pipeline.name) onRenommer(pipeline.id, nom.trim()); }}
+          className="input-field w-full text-[13px] font-medium"
+        />
+      </div>
+      {pipeline.is_default ? (
+        <span className="inline-flex items-center gap-1.5 shrink-0 px-2.5 py-2 text-[11.5px] text-text-muted">
+          <Check size={13} aria-hidden="true" />
+          {fr ? 'Pipeline par défaut' : 'Default pipeline'}
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onDefaut(pipeline.id)}
+          className="btn-secondary shrink-0 text-[12px]"
+        >
+          {fr ? 'Définir par défaut' : 'Set as default'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Écran ──────────────────────────────────────────────────
 
 export default function PipelineReglages({ pipelineId, etapes, deals, onChangement }: {
   pipelineId: string;
@@ -243,11 +511,32 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
   const { language } = useTranslation();
   const fr = language === 'fr';
 
+  const [pipelines, setPipelines] = useState<PipelineResume[] | null>(null);
+  const [creation, setCreation] = useState(false);
+  const [enCreation, setEnCreation] = useState(false);
+  const [ajoutEtape, setAjoutEtape] = useState(false);
+
+  const rechargerPipelines = useCallback(async () => {
+    try {
+      setPipelines(await fetchPipelines());
+    } catch (e) {
+      console.error('[PipelineReglages] liste des pipelines indisponible', e);
+      toast.error(messageErreur(e, fr));
+      setPipelines([]);
+    }
+  }, [fr]);
+
+  useEffect(() => { void rechargerPipelines(); }, [rechargerPipelines]);
+
   const visibles = useMemo(
     () => [...etapes].filter((e) => e.archived_at === null).sort((a, b) => a.position - b.position),
     [etapes],
   );
   const archivees = useMemo(() => etapes.filter((e) => e.archived_at !== null), [etapes]);
+  const courant = useMemo(
+    () => pipelines?.find((p) => p.id === pipelineId) ?? null,
+    [pipelines, pipelineId],
+  );
 
   async function enregistrer(
     id: string,
@@ -305,15 +594,13 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
     }
   }
 
-  async function ajouter() {
+  async function ajouter(nomFr: string, nomEn: string) {
     const position = visibles.filter((e) => e.kind === 'open').length + 1;
     try {
-      await ajouterEtape(pipelineId, {
-        name_fr: 'Nouvelle étape',
-        name_en: 'New stage',
-        position,
-      });
+      await ajouterEtape(pipelineId, { name_fr: nomFr, name_en: nomEn, position });
+      setAjoutEtape(false);
       onChangement();
+      toast.success(fr ? 'Étape ajoutée.' : 'Stage added.');
     } catch (e) {
       console.error('[PipelineReglages] ajout refusé', e);
       toast.error(messageErreur(e, fr));
@@ -321,66 +608,242 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
     }
   }
 
+  async function renommerLePipeline(id: string, nom: string) {
+    try {
+      await renommerPipeline(id, nom);
+      await rechargerPipelines();
+    } catch (e) {
+      console.error('[PipelineReglages] renommage du pipeline refusé', e);
+      toast.error(messageErreur(e, fr));
+      await rechargerPipelines();
+    }
+  }
+
+  async function creer(nom: string, modele: ModelePipeline) {
+    setEnCreation(true);
+    try {
+      await creerPipeline(nom, modele);
+      setCreation(false);
+      await rechargerPipelines();
+      toast.success(fr ? 'Pipeline créé.' : 'Pipeline created.');
+    } catch (e) {
+      console.error('[PipelineReglages] création de pipeline refusée', e);
+      toast.error(messageErreur(e, fr));
+    } finally {
+      setEnCreation(false);
+    }
+  }
+
+  async function basculerDefaut(id: string) {
+    const cible = pipelines?.find((p) => p.id === id);
+    if (!cible) return;
+
+    const ok = await confirmer({
+      title: fr ? 'Changer le pipeline par défaut ?' : 'Change the default pipeline?',
+      message: fr
+        ? `« ${cible.name} » deviendra le pipeline ouvert par défaut, et celui où atterrissent les nouveaux leads (formulaires web, Meta, import). Les deals existants ne bougent pas.`
+        : `“${cible.name}” becomes the pipeline opened by default, and where new leads land (web forms, Meta, imports). Existing deals do not move.`,
+      confirmLabel: fr ? 'Définir par défaut' : 'Set as default',
+    });
+    if (!ok) return;
+
+    try {
+      await definirParDefaut(id);
+      await rechargerPipelines();
+      toast.success(fr ? 'Pipeline par défaut mis à jour.' : 'Default pipeline updated.');
+    } catch (e) {
+      console.error('[PipelineReglages] changement de défaut refusé', e);
+      toast.error(messageErreur(e, fr));
+      await rechargerPipelines();
+    }
+  }
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-[15px] font-semibold text-text-primary">
-            {fr ? 'Étapes du pipeline' : 'Pipeline stages'}
-          </h2>
-          <p className="text-[12px] text-text-tertiary mt-0.5 max-w-xl leading-relaxed">
-            {fr
-              ? "Renomme, réordonne, ajoute ou archive. Rien ne dépend du nom d'une étape : renommer « Relance » ne change aucun comportement."
-              : 'Rename, reorder, add or archive. Nothing depends on a stage name: renaming “Follow-up” changes no behaviour.'}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => { void ajouter(); }}
-          className="btn-secondary text-[12.5px] inline-flex items-center gap-1.5"
-        >
-          <Plus size={14} aria-hidden="true" />
-          {fr ? 'Ajouter une étape' : 'Add a stage'}
-        </button>
+    <div className="space-y-7">
+      {/* Bannière : ce que la page permet, en une phrase. */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-border-subtle bg-surface-secondary px-4 py-3">
+        <Layers size={15} aria-hidden="true" className="text-text-secondary mt-0.5 shrink-0" />
+        <p className="text-[12px] text-text-secondary leading-relaxed">
+          {fr
+            ? "Règle ici le parcours que suivent tes leads : les étapes du board, le conseil affiché au vendeur à chacune, et le nombre de pipelines si tu vends plusieurs choses différentes. Aucun comportement ne dépend du nom d'une étape — seulement de son type."
+            : 'Set up the path your leads follow: the board stages, the guidance shown to the rep at each one, and how many pipelines you keep if you sell different things. No behaviour depends on a stage name — only on its type.'}
+        </p>
       </div>
 
-      <div className="space-y-2.5">
-        {visibles.map((etape) => (
-          <CarteEtape
-            key={etape.id}
-            etape={etape}
-            etapes={etapes}
-            deals={deals}
+      {/* ── Étapes ── */}
+      <Section
+        titre={fr ? 'Étapes' : 'Stages'}
+        sousTitre={
+          fr
+            ? "Modifie un nom directement dans son champ : il est enregistré quand tu en sors. Réordonne avec les flèches, archive ce que tu n'utilises plus."
+            : 'Edit a name right in its field: it saves when you leave it. Reorder with the arrows, archive what you no longer use.'
+        }
+        action={
+          !ajoutEtape ? (
+            <button
+              type="button"
+              onClick={() => setAjoutEtape(true)}
+              className="btn-secondary text-[12.5px] inline-flex items-center gap-1.5"
+            >
+              <Plus size={14} aria-hidden="true" />
+              {fr ? 'Ajouter une étape' : 'Add a stage'}
+            </button>
+          ) : undefined
+        }
+      >
+        <div className="space-y-2.5">
+          {visibles.map((etape, i) => (
+            <LigneEtape
+              key={etape.id}
+              etape={etape}
+              etapes={etapes}
+              deals={deals}
+              fr={fr}
+              premiere={i === 0}
+              derniere={i === visibles.length - 1}
+              onEnregistrer={(id, champs) => { void enregistrer(id, champs); }}
+              onMonter={(id) => { void bouger(id, -1); }}
+              onDescendre={(id) => { void bouger(id, 1); }}
+              onArchiver={(id) => { void archiver(id); }}
+            />
+          ))}
+
+          {visibles.length === 0 && !ajoutEtape && (
+            <div className="rounded-xl border border-dashed border-outline px-4 py-8 text-center">
+              <p className="text-[12.5px] text-text-tertiary">
+                {fr
+                  ? "Ce pipeline n'a aucune étape active. Ajoute-en une pour que le board affiche quelque chose."
+                  : 'This pipeline has no active stage. Add one so the board has something to show.'}
+              </p>
+            </div>
+          )}
+
+          {ajoutEtape && (
+            <AjoutEtape
+              fr={fr}
+              onAjouter={(nomFr, nomEn) => { void ajouter(nomFr, nomEn); }}
+              onAnnuler={() => setAjoutEtape(false)}
+            />
+          )}
+        </div>
+
+        {archivees.length > 0 && (
+          <div className="pt-1">
+            <h3 className="text-[10.5px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">
+              {fr ? 'Étapes archivées' : 'Archived stages'}
+            </h3>
+            <ul className="space-y-1.5">
+              {archivees.map((e) => (
+                <li
+                  key={e.id}
+                  className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-secondary px-3 py-2 text-[12px] text-text-tertiary"
+                >
+                  <Archive size={12} aria-hidden="true" />
+                  {fr ? e.name_fr : e.name_en}
+                  <span className="text-[10.5px] text-text-muted ml-auto">
+                    {fr ? 'conservée dans les statistiques' : 'kept in statistics'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </Section>
+
+      {/* ── Ce pipeline ── */}
+      <Section
+        titre={fr ? 'Ce pipeline' : 'This pipeline'}
+        sousTitre={
+          fr
+            ? "Le nom du pipeline actuellement affiché sur le board. Il n'apparaît pas aux clients."
+            : 'The name of the pipeline currently shown on the board. Clients never see it.'
+        }
+      >
+        {pipelines === null ? (
+          <div className="flex items-center gap-2 text-[12px] text-text-tertiary py-3">
+            <Loader2 size={14} aria-hidden="true" className="animate-spin" />
+            {fr ? 'Chargement…' : 'Loading…'}
+          </div>
+        ) : courant ? (
+          <LignePipeline
+            pipeline={courant}
             fr={fr}
-            onEnregistrer={(id, champs) => { void enregistrer(id, champs); }}
-            onMonter={(id) => { void bouger(id, -1); }}
-            onDescendre={(id) => { void bouger(id, 1); }}
-            onArchiver={(id) => { void archiver(id); }}
+            actif
+            onRenommer={(id, nom) => { void renommerLePipeline(id, nom); }}
+            onDefaut={(id) => { void basculerDefaut(id); }}
           />
-        ))}
-      </div>
+        ) : (
+          <p className="text-[12px] text-text-tertiary">
+            {fr ? 'Pipeline introuvable.' : 'Pipeline not found.'}
+          </p>
+        )}
+      </Section>
 
-      {archivees.length > 0 && (
-        <div>
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">
-            {fr ? 'Étapes archivées' : 'Archived stages'}
-          </h3>
-          <ul className="space-y-1.5">
-            {archivees.map((e) => (
-              <li
-                key={e.id}
-                className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface-secondary px-3 py-2 text-[12px] text-text-tertiary"
-              >
-                <Archive size={12} aria-hidden="true" />
-                {fr ? e.name_fr : e.name_en}
-                <span className="text-[10.5px] text-text-muted ml-auto">
-                  {fr ? 'conservée dans les statistiques' : 'kept in statistics'}
-                </span>
-              </li>
+      {/* ── Mes pipelines ── */}
+      <Section
+        titre={fr ? 'Mes pipelines' : 'My pipelines'}
+        sousTitre={
+          fr
+            ? "Un pipeline par type de vente qui n'a pas le même parcours — résidentiel et commercial, par exemple. Les nouveaux leads arrivent dans le pipeline par défaut."
+            : 'One pipeline per kind of sale that follows a different path — residential and commercial, say. New leads land in the default pipeline.'
+        }
+        action={
+          !creation ? (
+            <button
+              type="button"
+              onClick={() => setCreation(true)}
+              className="btn-secondary text-[12.5px] inline-flex items-center gap-1.5"
+            >
+              <Plus size={14} aria-hidden="true" />
+              {fr ? 'Créer un pipeline' : 'Create a pipeline'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCreation(false)}
+              aria-label={fr ? 'Fermer le formulaire de création' : 'Close the creation form'}
+              className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-secondary transition-colors"
+            >
+              <X size={15} aria-hidden="true" />
+            </button>
+          )
+        }
+      >
+        {creation && (
+          <AjoutPipeline
+            fr={fr}
+            occupe={enCreation}
+            onCreer={(nom, modele) => { void creer(nom, modele); }}
+            onAnnuler={() => setCreation(false)}
+          />
+        )}
+
+        {pipelines === null ? (
+          <div className="flex items-center gap-2 text-[12px] text-text-tertiary py-3">
+            <Loader2 size={14} aria-hidden="true" className="animate-spin" />
+            {fr ? 'Chargement des pipelines…' : 'Loading pipelines…'}
+          </div>
+        ) : pipelines.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-outline px-4 py-8 text-center">
+            <p className="text-[12.5px] text-text-tertiary">
+              {fr ? 'Aucun pipeline pour le moment.' : 'No pipeline yet.'}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {pipelines.map((p) => (
+              <LignePipeline
+                key={p.id}
+                pipeline={p}
+                fr={fr}
+                actif={p.id === pipelineId}
+                onRenommer={(id, nom) => { void renommerLePipeline(id, nom); }}
+                onDefaut={(id) => { void basculerDefaut(id); }}
+              />
             ))}
-          </ul>
-        </div>
-      )}
+          </div>
+        )}
+      </Section>
     </div>
   );
 }

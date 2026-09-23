@@ -21,6 +21,7 @@ import {
   ArrowUpDown, Download, Filter, GripVertical, LayoutGrid, List, MoreVertical, Plus, Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import ActionsRapides from './ActionsRapides';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
@@ -115,13 +116,15 @@ const CLASSE_CHAMP =
 
 // ── Carte ──
 
-function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir }: {
+function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, onChangement }: {
   deal: Deal;
   etapes: PipelineStage[];
   membres: Membre[];
   /** Montant du devis puis de la job. `null` = rien de lié pour l'instant. */
   montantCents: number | null;
   onOuvrir: (deal: Deal) => void;
+  onAssigner: (dealId: string, membreId: string | null) => void;
+  onChangement?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: deal.id,
@@ -211,18 +214,12 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir }: {
           </span>
         ) : null}
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            toast.info(fr
-              ? 'Menu — assigner, déplacer, créer un devis, supprimer.'
-              : 'Menu — assign, move, create a quote, delete.');
-          }}
-          aria-label={fr ? `Actions pour ${nom}` : `Actions for ${nom}`}
-          className="shrink-0 rounded text-text-muted hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
-        >
-          <MoreVertical size={13} aria-hidden="true" />
-        </button>
+        <ActionsRapides
+          deal={deal}
+          membres={membres}
+          onAssigner={onAssigner}
+          onChangement={onChangement}
+        />
       </div>
 
       {/* Milieu : le montant, ou l'aveu qu'il n'y en a pas encore */}
@@ -272,7 +269,7 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir }: {
 
 // ── Colonne ──
 
-function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir }: {
+function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement }: {
   etape: PipelineStage;
   /** Toutes les étapes : le badge « Job à créer » se dérive du `kind` de l'étape du deal. */
   etapes: PipelineStage[];
@@ -281,6 +278,8 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
   membres: Membre[];
   montants: Record<string, number>;
   onOuvrir: (deal: Deal) => void;
+  onAssigner: (dealId: string, membreId: string | null) => void;
+  onChangement?: () => void;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -293,6 +292,10 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
   // Le compteur ET la somme, comme GoHighLevel — affichés même à zéro, pour que
   // l'œil compare les colonnes sans avoir à additionner les cartes.
   const somme = deals.reduce((s, d) => s + (montants[d.id] ?? 0), 0);
+  // Combien de deals portent réellement un chiffre : sans ça, une colonne de
+  // 19 deals affichant 7 243 $ pendant que les cartes visibles disent
+  // « Montant à venir » ressemble à une erreur.
+  const chiffres = deals.filter((d) => (montants[d.id] ?? 0) > 0).length;
 
   return (
     <div className="flex w-[292px] shrink-0 flex-col">
@@ -307,7 +310,23 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
           <span className="tabular-nums">
             {deals.length} {fr ? (deals.length > 1 ? 'deals' : 'deal') : (deals.length > 1 ? 'deals' : 'deal')}
           </span>
-          <b className="font-semibold tabular-nums text-text-primary">{argent(somme, fr)}</b>
+          <b
+            className="font-semibold tabular-nums text-text-primary"
+            title={
+              chiffres === deals.length
+                ? undefined
+                : fr
+                  ? `${chiffres} deal(s) sur ${deals.length} ont un devis ou une job. Les autres n'ont pas encore de montant.`
+                  : `${chiffres} of ${deals.length} deals have a quote or job. The others have no amount yet.`
+            }
+          >
+            {argent(somme, fr)}
+          </b>
+          {chiffres > 0 && chiffres < deals.length && (
+            <span className="tabular-nums text-text-muted">
+              {fr ? `sur ${chiffres}` : `from ${chiffres}`}
+            </span>
+          )}
         </p>
       </div>
 
@@ -327,6 +346,8 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
               membres={membres}
               montantCents={montants[deal.id] ?? null}
               onOuvrir={onOuvrir}
+              onAssigner={onAssigner}
+              onChangement={onChangement}
             />
           ))}
           {deals.length === 0 && (
@@ -594,7 +615,7 @@ function BarreOutils({
 // ── Board ──
 
 export default function PipelineBoard({
-  deals, etapes, montants, membres, chargement, onOuvrir, onDeplacer,
+  deals, etapes, montants, membres, chargement, onOuvrir, onDeplacer, onAssigner, onChangement,
 }: {
   deals: Deal[];
   etapes: PipelineStage[];
@@ -605,13 +626,20 @@ export default function PipelineBoard({
   onOuvrir: (deal: Deal) => void;
   /** Le parent décide : popup de job vers « Gagné », modal de raison vers « Perdu ». */
   onDeplacer: (dealId: string, versEtapeId: string) => void;
+  /** Assignation depuis le menu « ⋮ » d'une carte, sans ouvrir la fiche. */
+  onAssigner: (dealId: string, membreId: string | null) => void;
+  /** Appelé après une action rapide (texto, rappel) pour rafraîchir. */
+  onChangement?: () => void;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [actif, setActif] = useState<Deal | null>(null);
   const [filtres, setFiltres] = useState<EtatFiltres>(FILTRES_VIDES);
   const [panneauOuvert, setPanneauOuvert] = useState(false);
-  const [tri, setTri] = useState<Tri>('ancien');
+  // Montant décroissant par défaut : un total de colonne qu'on ne retrouve
+  // sur aucune carte visible n'explique rien. Les deals qui pèsent doivent
+  // être en haut — c'est aussi ce qu'on veut voir en premier le matin.
+  const [tri, setTri] = useState<Tri>('montant');
   const [affichage, setAffichage] = useState<Affichage>('kanban');
   const [vue, setVue] = useState<VueEnregistree>('ouverts');
   const verrous = useRef<Set<string>>(new Set());
@@ -872,6 +900,8 @@ export default function PipelineBoard({
                 membres={membres}
                 montants={montants}
                 onOuvrir={onOuvrir}
+                onAssigner={onAssigner}
+                onChangement={onChangement}
               />
             ))}
           </div>
