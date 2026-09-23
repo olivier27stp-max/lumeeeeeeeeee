@@ -95,11 +95,27 @@ describe('outils', () => {
 describe('le ciel et les règles des maquettes', () => {
   const base = { langue: 'fr' as const, marque, titre: 'Votre facture 48' };
 
-  it('le fond est le ciel du site, pas un gris neutre', () => {
+  it('le fond est le ciel du site : le dégradé ET les nuages', () => {
+    /* Ce test exigeait l'INVERSE jusqu'au 2026-09-23 — il interdisait
+       `linear-gradient`. Le motif était juste (Outlook, moteur Word, l'ignore)
+       mais la conclusion trop courte : on avait livré un aplat, alors que les
+       maquettes validées le 17 montraient le dégradé et les nuages. Le
+       résultat ne ressemblait plus au site, et le test empêchait de le voir.
+
+       Outlook sait faire un dégradé — en VML. On sert donc les deux, et
+       personne ne voit du blanc. */
     const h = rendreCourrielClient(base);
+    // Le repli, pour les rares clients sans dégradé ni VML.
     expect(h).toContain('background:#e6f0ff');
-    // Outlook ignore linear-gradient : un dégradé y retomberait sur du blanc.
-    expect(h).not.toContain('linear-gradient');
+    // Le vrai ciel, identique à src/index.css.
+    expect(h).toContain('linear-gradient(180deg, #e6f0ff 0%, #eef5ff 30%, #f3f8ff 100%)');
+    // Les nuages du site, en image de fond (`position:absolute` ne survit pas
+    // à Gmail : les pastilles se seraient empilées sur le texte).
+    expect(h).toContain('data:image/svg+xml');
+    expect(h).toContain('ellipse');
+    // Et le dégradé pour Outlook, dans un bloc qu'aucun autre client ne lit.
+    expect(h).toContain('<!--[if mso]>');
+    expect(h).toContain('v:fill');
   });
 
   it('le bouton vient AVANT la note, jamais après (sinon il passe sous la ligne de flottaison)', () => {
@@ -129,14 +145,18 @@ describe('le ciel et les règles des maquettes', () => {
 
   it('le nom de l’entreprise n’est pas écrit deux fois quand il y a un logo', () => {
     const h = rendreCourrielClient({ ...base, marque: { ...marque, logoUrl: 'https://x/logo.png' } });
-    const enTete = h.slice(0, h.indexOf('border-radius:16px'));
+    /* On coupe à la carte blanche. Repérée par sa COULEUR, pas par son rayon :
+       le test découpait sur `border-radius:16px`, et le jour où la carte est
+       passée à 18 px il a mesuré le courriel entier — il comptait le nom du
+       pied de page et accusait un doublon qui n'existait pas. */
+    const enTete = h.slice(0, h.indexOf('background:#ffffff'));
     expect(enTete).toContain('alt="Vision Lavage"');
     expect(enTete.split('Vision Lavage').length - 1).toBe(1);
   });
 
   it('le montant reste le plus gros élément de la page', () => {
     const h = rendreCourrielClient({ ...base, montant: { libelle: 'Solde à payer', valeur: '1 220,17 $' } });
-    expect(h).toContain('font-size:38px');
+    expect(h).toContain('font-size:40px');
     expect(h).toContain('1 220,17 $');
   });
 });

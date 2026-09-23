@@ -96,14 +96,56 @@ const BORDURE = '#e5e7eb';
 
 /* ── Le ciel (maquettes validées 2026-09-17) ──────────────────────────────
    Le même dégradé que les pages marketing (src/index.css « Ciel bleu clair »)
-   et le bleu de leurs filets. Un courriel ne peut pas porter de dégradé CSS :
-   Outlook (moteur Word) ignore `linear-gradient` et retomberait sur du blanc.
-   On pose donc la couleur de tête du dégradé en fond plein — c'est la teinte
-   que l'œil retient — et les cartes blanches se détachent dessus. */
+   et le bleu de leurs filets.
+
+   Le dégradé a d'abord été abandonné au motif qu'Outlook (moteur Word) ignore
+   `linear-gradient`. C'est vrai, mais la conclusion était trop courte : on
+   avait donc livré un aplat, alors que les maquettes validées montraient le
+   dégradé ET les nuages. Le résultat ne ressemblait plus au site.
+
+   Outlook sait faire un dégradé — par VML, pas par CSS. On sert donc les deux :
+   un `<v:rect>` dans un bloc conditionnel `<!--[if mso]>` pour lui, le
+   `linear-gradient` pour tous les autres, et `CIEL_HAUT` en couleur de repli
+   pour les rares clients qui n'ont ni l'un ni l'autre. Personne ne voit du
+   blanc, et ceux qui peuvent voient le vrai ciel. */
 const CIEL_HAUT = '#e6f0ff';
+const CIEL_MILIEU = '#eef5ff';
 const CIEL_BAS = '#f3f8ff';
+const CIEL_DEGRADE = `linear-gradient(180deg, ${CIEL_HAUT} 0%, ${CIEL_MILIEU} 30%, ${CIEL_BAS} 100%)`;
 const BLEU_LUME = '#0b5cad';
 const CIEL_FILET = '#d3e3f7';
+/* Le filet de la carte, repris de la maquette : un bleu transparent, plus
+   doux qu'une ligne grise, qui laisse le ciel transparaître au bord. */
+const CARTE_FILET = 'rgba(11, 92, 173, 0.14)';
+
+/* Le dégradé pour Outlook, en VML. Word ne lit pas `background-image`, mais il
+   lit ce rectangle, qu'il place derrière le contenu (`v-text-anchor:top` et
+   `mso-position-horizontal:center`). Le bloc est entre `<!--[if mso]>` : tout
+   autre client le voit comme un commentaire et ne le rend jamais.
+   La hauteur est fixée à 1600 px — un courriel plus long garde le bas en
+   `CIEL_BAS`, ce qui est la fin du dégradé de toute façon. */
+const CIEL_POUR_OUTLOOK = `<!--[if mso]>
+<v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:600px;height:1600px;position:absolute;z-index:-1;">
+<v:fill type="gradient" color="${CIEL_HAUT}" color2="${CIEL_BAS}" angle="180"/>
+<v:textbox inset="0,0,0,0"><div>
+<![endif]-->`;
+const FIN_CIEL_POUR_OUTLOOK = `<!--[if mso]></div></v:textbox></v:rect><![endif]-->`;
+
+/* Les nuages du site (HomeApercu.tsx), en SVG encodé dans l'URL du fond.
+   La maquette les posait en `position:absolute` : un courriel ne peut pas —
+   Gmail retire `position`, et les trois pastilles se seraient empilées sur le
+   texte. En image de fond, elles restent derrière, ne décalent rien, et se
+   contentent d'être absentes là où elles ne sont pas lues (Outlook, qui a
+   déjà son dégradé VML).
+   Fixés en haut, sans répétition : le ciel du site a ses nuages en haut. */
+const NUAGES_SVG = encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="220">` +
+    `<ellipse cx="46" cy="78" rx="94" ry="31" fill="#ffffff" opacity="0.9"/>` +
+    `<ellipse cx="566" cy="60" rx="69" ry="24" fill="#ffffff" opacity="0.9"/>` +
+    `<ellipse cx="238" cy="150" rx="52" ry="17" fill="#ffffff" opacity="0.55"/>` +
+    `</svg>`,
+);
+const CIEL_FOND = `url("data:image/svg+xml,${NUAGES_SVG}") top center no-repeat, ${CIEL_DEGRADE}`;
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function echapper(s: unknown): string {
@@ -152,7 +194,7 @@ function blocMontant(m: NonNullable<CourrielClient['montant']>): string {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
 <tr><td style="padding:0 0 18px;border-bottom:1px solid ${BORDURE};text-align:center;">
 <div style="font-size:13px;color:${GRIS_DOUX};">${echapper(m.libelle)}</div>
-<div style="font-size:38px;line-height:1.1;font-weight:800;color:#101828;margin-top:3px;letter-spacing:-1px;">${echapper(m.valeur)}</div>
+<div style="font-size:40px;line-height:1.1;font-weight:800;color:#101828;margin-top:3px;letter-spacing:-1.8px;">${echapper(m.valeur)}</div>
 ${m.sous ? `<div style="font-size:13px;color:${GRIS_DOUX};margin-top:8px;">${echapper(m.sous)}</div>` : ''}
 </td></tr>
 </table>`;
@@ -198,13 +240,15 @@ function coquille(p: { langue: Langue; titreDocument: string; preheader?: string
 </head>
 <body style="margin:0;padding:0;background:${CIEL_HAUT};font-family:${POLICE};-webkit-text-size-adjust:100%;">
 ${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${CIEL_HAUT};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CIEL_HAUT};">
-<tr><td align="center" style="padding:24px 12px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${CIEL_HAUT};background:${CIEL_FOND};">
+<tr><td align="center" style="padding:0;">
+${CIEL_POUR_OUTLOOK}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
-<tr><td style="padding:0 8px 18px;text-align:center;">${p.enTeteHtml}</td></tr>
-<tr><td style="background:#ffffff;border:1px solid ${CIEL_FILET};border-radius:16px;padding:26px 32px;">${p.corpsHtml}</td></tr>
+<tr><td style="padding:26px 8px 18px;text-align:center;">${p.enTeteHtml}</td></tr>
+<tr><td style="background:#ffffff;border:1px solid ${CARTE_FILET};border-radius:18px;padding:26px 32px;">${p.corpsHtml}</td></tr>
 <tr><td style="padding:20px 8px 26px;text-align:center;">${p.piedHtml}</td></tr>
 </table>
+${FIN_CIEL_POUR_OUTLOOK}
 </td></tr>
 </table>
 </body>
