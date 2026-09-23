@@ -104,7 +104,16 @@ describe('le ciel et les règles des maquettes', () => {
        L'anomalie qui le prouvait : la couleur de l'entreprise ne servait qu'au
        bouton, tout le décor était du Lume. */
     const h = rendreCourrielClient(base);
-    expect(h).toContain('background:#f4f5f7');
+    /* Le fond est BLANC depuis le 2026-09-23. Il a d'abord été gris (#f4f5f7),
+       jusqu'à ce que Rafba le reçoive : « c'est encore en noir et vert ».
+
+       Gmail sur Android et iOS ignore `color-scheme: light` et inverse les
+       couleurs en mode sombre. Un gris pâle y devient un gris foncé. Le blanc
+       résiste mieux, et surtout : chaque conteneur porte désormais son fond en
+       ligne, parce que Gmail inverse un par un les éléments où il n'en trouve
+       aucun — c'était ça, la vraie cause. */
+    expect(h).toContain('background:#ffffff');
+    expect(h).not.toContain('#f4f5f7');
     expect(h).not.toContain('#e6f0ff');
     // Sa couleur porte le filet de tête, tout en haut du courriel.
     expect(h).toContain('background:#0f766e;height:4px');
@@ -112,7 +121,7 @@ describe('le ciel et les règles des maquettes', () => {
 
   it('une couleur trop pâle ne devient pas un filet invisible sur le gris', () => {
     // Le jaune ne passe pas `couleurBouton` : il retombe sur le noir Lume,
-    // et le filet reste visible. Sans ça, un filet #ffee58 sur #f4f5f7
+    // et le filet reste visible. Sans ça, un filet #ffee58 sur du blanc
     // disparaîtrait — l'entreprise n'aurait plus aucune couleur du tout.
     const h = rendreCourrielClient({ ...base, marque: { ...marque, couleur: '#ffee58' } });
     expect(h).toContain(`background:${COULEUR_LUME};height:4px`);
@@ -152,7 +161,14 @@ describe('le ciel et les règles des maquettes', () => {
 
   it('le nom de l’entreprise n’est pas écrit deux fois quand il y a un logo', () => {
     const h = rendreCourrielClient({ ...base, marque: { ...marque, logoUrl: 'https://x/logo.png' } });
-    const enTete = h.slice(0, h.indexOf('border-radius:16px'));
+    /* On coupe au TITRE du courriel : tout ce qui précède est l'en-tête.
+
+       Ce test a déjà été cassé deux fois par un repère qui n'était pas le bon
+       — `border-radius:16px` (la carte, retirée côté client le 2026-09-23),
+       puis `background:#ffffff` (devenu omniprésent quand chaque conteneur a
+       reçu son fond). Le titre, lui, est ce que l'en-tête précède par
+       définition. */
+    const enTete = h.slice(0, h.indexOf('<h1'));
     expect(enTete).toContain('alt="Vision Lavage"');
     expect(enTete.split('Vision Lavage').length - 1).toBe(1);
   });

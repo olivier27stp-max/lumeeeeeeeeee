@@ -114,10 +114,24 @@ const CIEL_HAUT = '#e6f0ff';
 const CIEL_BAS = '#f3f8ff';
 const BLEU_LUME = '#0b5cad';
 const CIEL_FILET = '#d3e3f7';
-/* Le décor d'un courriel d'entreprise : un gris très pâle qui ne concurrence
-   aucune couleur de marque, quelle qu'elle soit — la même approche que Stripe,
-   Square ou QuickBooks. La carte blanche s'y détache sans effort. */
-const FOND_CLIENT = '#f4f5f7';
+/* Le décor d'un courriel d'entreprise : BLANC.
+
+   C'était d'abord un gris très pâle (#f4f5f7), sur lequel la carte blanche se
+   détachait. Deux raisons de l'abandonner, la seconde décisive :
+
+   1. Rafba, en recevant le courriel : « c'est comme dark, je suis pas sûr
+      d'aimer ça ». Un gris clair sur un écran est lu comme une teinte, et
+      une teinte qu'on n'a pas choisie paraît sale.
+
+   2. Surtout : Gmail sur Android et iOS IGNORE `color-scheme: light` et
+      inverse les couleurs en mode sombre. Un gris pâle y devient un gris
+      foncé — exactement ce qui a été observé. Le blanc pur, lui, reste le
+      fond que ces clients gardent ou inversent proprement en noir, sans
+      teinte intermédiaire douteuse.
+
+   La carte perd donc son fond distinct et devient un simple cadre : c'est le
+   contour, pas le contraste, qui la sépare maintenant du fond. */
+const FOND_CLIENT = '#ffffff';
 const FILET_CLIENT = '#e4e7ec';
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
@@ -164,8 +178,8 @@ function liensSociauxHtml(liens: SocialLinks | null | undefined): string {
  */
 function blocMontant(m: NonNullable<CourrielClient['montant']>): string {
   return `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-<tr><td style="padding:0 0 18px;border-bottom:1px solid ${BORDURE};text-align:center;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:0 0 20px;">
+<tr><td style="background:#ffffff;padding:0 0 18px;border-bottom:1px solid ${BORDURE};text-align:center;">
 <div style="font-size:13px;color:${GRIS_DOUX};">${echapper(m.libelle)}</div>
 <div style="font-size:38px;line-height:1.1;font-weight:800;color:#101828;margin-top:3px;letter-spacing:-1px;">${echapper(m.valeur)}</div>
 ${m.sous ? `<div style="font-size:13px;color:${GRIS_DOUX};margin-top:8px;">${echapper(m.sous)}</div>` : ''}
@@ -177,10 +191,10 @@ function blocLignes(lignes: LigneDetail[]): string {
   if (!lignes.length) return '';
   const rows = lignes.map((l, i) => `
 <tr>
-<td style="padding:10px 0;font-size:14px;color:${GRIS_DOUX};${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.libelle)}</td>
-<td align="right" style="padding:10px 0;font-size:14px;color:#111827;${l.fort ? 'font-weight:700;' : ''}${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.valeur)}</td>
+<td style="background:#ffffff;padding:10px 0;font-size:14px;color:${GRIS_DOUX};${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.libelle)}</td>
+<td align="right" style="background:#ffffff;padding:10px 0;font-size:14px;color:#111827;${l.fort ? 'font-weight:700;' : ''}${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.valeur)}</td>
 </tr>`).join('');
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">${rows}</table>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:0 0 20px;">${rows}</table>`;
 }
 
 /**
@@ -192,7 +206,7 @@ function blocLignes(lignes: LigneDetail[]): string {
 function blocBouton(b: NonNullable<CourrielClient['bouton']>, couleur: string, langue: Langue, tu = false): string {
   const url = echapper(b.url);
   return `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 10px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:4px 0 10px;">
 <tr><td align="center" style="background:${couleur};border-radius:10px;">
 <a href="${url}" style="display:block;padding:15px 24px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;font-family:${POLICE};text-align:center;">${echapper(b.texte)}</a>
 </td></tr>
@@ -224,6 +238,14 @@ function coquille(p: {
   const client = p.decor === 'client';
   const fond = client ? FOND_CLIENT : CIEL_HAUT;
   const filetCarte = client ? FILET_CLIENT : CIEL_FILET;
+  /* La carte, des deux côtés — mais pour deux raisons différentes.
+
+     Côté Lume elle se détache du ciel. Côté client, sur fond blanc, elle ne se
+     détache de rien : c'est sa BORDURE qui travaille. Elle a été retirée
+     brièvement le 2026-09-23, en pensant qu'un cadre sur du blanc n'encadrait
+     rien ; Rafba, en recevant le résultat : « blanc sur ordi mais y a pas de
+     bordure ». Sans elle le contenu flotte, et un courriel de facture a besoin
+     d'un contour pour se lire comme un document. */
   /* Le filet de tête : 4 px de la couleur de l'entreprise, tout en haut. Un
      courriel d'entreprise n'a sinon AUCUNE couleur à elle avant le bouton,
      qui arrive après le montant — trop bas pour signer le message. */
@@ -238,16 +260,49 @@ function coquille(p: {
 <meta name="color-scheme" content="light"/>
 <meta name="supported-color-schemes" content="light"/>
 <title>${echapper(p.titreDocument)}</title>
+<style>
+/* Le mode sombre des clients de courriel.
+
+   Les deux balises ci-dessus DEMANDENT le mode clair — et Apple Mail les
+   respecte. Gmail (Android, iOS) et Outlook.com, eux, les ignorent et
+   inversent les couleurs eux-mêmes : un fond blanc devient gris foncé, un
+   texte sombre devient pâle. Rafba, en recevant le courriel : « c’est encore
+   en noir et vert, moi je veux blanc et vert ».
+
+   Il n’existe pas de façon propre de l’interdire. Ce qui suit est ce que la
+   pratique a retenu :
+
+   - color-scheme: light only sur :root : la déclaration CSS que les
+     moteurs récents lisent, plus forte que la balise <meta>.
+   - [data-ogsc] / [data-ogsb] : Outlook.com pose ces attributs quand il
+     inverse ; on remet alors nos couleurs à la main.
+   - La media query : sur les clients qui l’appliquent, on redit explicitement
+     ce qu’on veut au lieu de les laisser deviner.
+
+   Gmail supprime les media queries dans certains cas ; c’est pourquoi les
+   couleurs restent AUSSI en ligne sur chaque élément. Cette feuille ne
+   remplace rien : elle résiste. */
+:root { color-scheme: light only; supported-color-schemes: light only; }
+body, .lume-fond { background-color: ${fond} !important; }
+.lume-texte { color: #101828 !important; }
+[data-ogsc] body, [data-ogsb] body,
+[data-ogsc] .lume-fond, [data-ogsb] .lume-fond { background-color: ${fond} !important; }
+[data-ogsc] .lume-texte, [data-ogsb] .lume-texte { color: #101828 !important; }
+@media (prefers-color-scheme: dark) {
+  body, .lume-fond { background-color: ${fond} !important; }
+  .lume-texte { color: #101828 !important; }
+}
+</style>
 </head>
 <body style="margin:0;padding:0;background:${fond};font-family:${POLICE};-webkit-text-size-adjust:100%;">
 ${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${fond};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};">
+<table role="presentation" class="lume-fond" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};">
 ${bandeau}
-<tr><td align="center" style="padding:24px 12px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
-<tr><td style="padding:0 8px 18px;text-align:center;">${p.enTeteHtml}</td></tr>
-<tr><td style="background:#ffffff;border:1px solid ${filetCarte};border-radius:16px;padding:26px 32px;">${p.corpsHtml}</td></tr>
-<tr><td style="padding:20px 8px 26px;text-align:center;">${p.piedHtml}</td></tr>
+<tr><td align="center" style="background:${fond};padding:24px 12px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};max-width:600px;">
+<tr><td style="background:${fond};padding:0 8px 18px;text-align:center;">${p.enTeteHtml}</td></tr>
+<tr><td style="${client ? `background:#ffffff;border:1px solid ${filetCarte};border-radius:14px;padding:22px 26px;` : `background:#ffffff;border:1px solid ${filetCarte};border-radius:16px;padding:26px 32px;`}">${p.corpsHtml}</td></tr>
+<tr><td style="background:${fond};padding:20px 8px 26px;text-align:center;">${p.piedHtml}</td></tr>
 </table>
 </td></tr>
 </table>
