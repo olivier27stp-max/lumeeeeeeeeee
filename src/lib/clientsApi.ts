@@ -13,6 +13,12 @@ export interface ClientRecord {
   client_number?: string | null;
   /** Exonéré de taxes (gouvernements, Premières Nations, OSBL…) — absent tant que la migration n'est pas appliquée. */
   tax_exempt?: boolean;
+  /** Consentement commercial EXPRÈS au courriel (LCAP) — null = aucun, le tacite peut encore s'appliquer. */
+  email_consent_at?: string | null;
+  /** Consentement commercial EXPRÈS au SMS (LCAP). */
+  sms_consent_at?: string | null;
+  /** Désabonnement courriel : bloque TOUT courriel, même transactionnel. */
+  email_opt_out_at?: string | null;
   first_name: string;
   last_name: string;
   company: string | null;
@@ -351,4 +357,53 @@ export async function findClientsByPlaceId(placeId: string, excludeClientId?: st
   const { data, error } = await query;
   if (error) throw error;
   return (data || []) as ClientRecord[];
+}
+
+/**
+ * Accorde ou retire le consentement commercial EXPRÈS d'un client (LCAP).
+ *
+ * Pourquoi une fonction dédiée plutôt qu'un champ de plus dans
+ * `updateClient` : celui-ci recopie les champs par allowlist, donc un
+ * `email_consent_at` passé en douce serait ignoré SANS erreur. Et surtout,
+ * accorder un consentement n'est pas modifier une fiche — c'est un acte qui
+ * doit laisser une trace.
+ *
+ * Deux écritures, dans cet ordre :
+ *  1. la colonne `clients.*_consent_at` — l'état courant, lu avant chaque envoi ;
+ *  2. une ligne dans `consents` — le registre immuable. Le CRTC met la charge
+ *     de la preuve sur l'expéditeur : la colonne dit qu'on a le droit, le
+ *     journal dit depuis quand, comment, et qui l'a saisi.
+ *
+ * Si le journal échoue, on ne défait PAS la colonne : le consentement a bien
+ * été donné, et le perdre serait pire que de perdre sa trace. L'échec est
+ * signalé à l'appelant, qui en informe l'utilisateur.
+ */
+export async function definirConsentement(
+  clientId: string,
+  canal: 'email' | 'sms',
+  accorde: boolean,
+): Promise<{ journalEcrit: boolean }> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const colonne = canal === 'email' ? 'email_consent_at' : 'sms_consent_at';
+  const { error } = await supabase
+    .from('clients')
+    .update({ [colonne]: accorde ? new Date().toISOString() : null })
+    .eq('id', clientId)
+    .eq('org_id', orgId);
+  // supabase-js ne lève pas : sans lire `error`, un refus RLS passerait pour
+  // un succès et on afficherait « enregistré » alors que rien n'a été écrit.
+  if (error) throw erreurLisible(error);
+
+  const { recordConsent } = await import('./consentApi');
+  const { data: session } = await supabase.auth.getSession();
+  const res = await recordConsent({
+    subjectType: 'client',
+    subjectId: clientId,
+    purpose: canal === 'email' ? 'email-marketing' : 'sms-marketing',
+    granted: accorde,
+    method: 'crm-manual',
+    orgId,
+    authToken: session?.session?.access_token ?? null,
+  });
+  return { journalEcrit: !res.error };
 }

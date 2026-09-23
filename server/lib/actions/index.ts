@@ -6,6 +6,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
 import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
+import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
 
 export interface ActionContext {
   supabase: SupabaseClient;
@@ -114,17 +115,65 @@ async function depassePlafondFrequence(
  * `sms_consent_at`, `email_opt_out_at`) mais n'étaient lues nulle part :
  * aucune migration n'est nécessaire, seulement s'en servir.
  *
- * Règle appliquée :
+ * ── Élargi le 2026-09-23 : le TACITE compte aussi ──
+ * La première version n'acceptait que le consentement EXPRÈS. Or la LCAP en
+ * reconnaît deux, et le tacite découle de la relation elle-même : 2 ans après
+ * un contrat ou une facture, 6 mois après une demande de prix. Mesuré en
+ * production : sur 30 clients joignables, 19 avaient une relation d'affaires
+ * de moins de 2 ans — donc le droit d'être contactés — et tous étaient
+ * bloqués. Le verrou était juste, mais plus strict que la loi, et comme
+ * aucun écran ne permettait de saisir un exprès, la fonctionnalité était
+ * inutilisable.
+ *
+ * Règle appliquée, dans cet ordre :
  *  - un retrait explicite (`email_opt_out_at`) bloque, même transactionnel
- *    pour le courriel — c'est le sens d'un désabonnement ;
- *  - un message commercial exige une date de consentement sur le canal ;
- *  - un transactionnel passe sans consentement (il est attendu).
+ *    pour le courriel — c'est le sens d'un désabonnement, et aucune base
+ *    légale ne survit à un retrait ;
+ *  - un transactionnel passe sans consentement (il est attendu) ;
+ *  - un commercial exige une base : exprès (`*_consent_at`) ou tacite
+ *    (calculé depuis les jobs, factures et devis du client) ;
+ *  - sans base, on bloque.
+ *
+ * Le verdict PORTE la base retenue : le CRTC met la charge de la preuve sur
+ * l'expéditeur, donc savoir qu'on avait le droit ne suffit pas — il faut
+ * pouvoir dire pourquoi. L'appelant la journalise dans `consents`.
  *
  * En cas d'erreur, on BLOQUE — à l'inverse du plafond de fréquence. Un
  * message de trop est un désagrément ; un envoi sans consentement est une
  * infraction. Le doute doit coûter un message perdu, pas une plainte.
  */
-export type VerdictConsentement = { autorise: true } | { autorise: false; motif: string };
+export type VerdictConsentement =
+  | { autorise: true; base?: BaseLegale; clientId?: string }
+  | { autorise: false; motif: string };
+
+/**
+ * Les dates qui peuvent fonder un tacite, pour un client donné.
+ *
+ * Trois requêtes courtes, faites SEULEMENT si aucun exprès n'a été trouvé :
+ * le cas fréquent (exprès présent, ou destinataire inconnu) ne les paie pas.
+ */
+async function ancragesDuClient(ctx: ActionContext, clientId: string): Promise<AncragesTacite> {
+  const recent = async (table: 'jobs' | 'invoices' | 'quotes') => {
+    const { data, error } = await ctx.supabase
+      .from(table)
+      .select('id, created_at')
+      .eq('org_id', ctx.orgId)
+      .eq('client_id', clientId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    // Une erreur ici doit remonter : la traiter comme « pas d'ancrage »
+    // transformerait une panne en refus silencieux, et l'appelant ne saurait
+    // pas distinguer « pas de droit » de « on n'a pas pu vérifier ».
+    if (error) throw new Error(`${table}: ${error.message}`);
+    return data ? { id: String(data.id), date: String(data.created_at) } : null;
+  };
+  const [dernierJob, derniereFacture, dernierDevis] = await Promise.all([
+    recent('jobs'), recent('invoices'), recent('quotes'),
+  ]);
+  return { dernierJob, derniereFacture, dernierDevis };
+}
 
 async function consentementCommercial(
   ctx: ActionContext,
@@ -139,7 +188,7 @@ async function consentementCommercial(
     const valeur = canal === 'email' ? destinataire.trim().toLowerCase() : normalizeE164(destinataire);
     const { data, error } = await ctx.supabase
       .from('clients')
-      .select('email_consent_at, sms_consent_at, email_opt_out_at')
+      .select('id, email_consent_at, sms_consent_at, email_opt_out_at')
       .eq('org_id', ctx.orgId)
       .eq(colonne, valeur)
       .is('deleted_at', null)
@@ -161,17 +210,58 @@ async function consentementCommercial(
     }
     if (!ctx.commercial) return { autorise: true };
 
+    const clientId = String(data.id);
     const consenti = canal === 'email' ? data.email_consent_at : data.sms_consent_at;
-    if (!consenti) {
-      return { autorise: false, motif: `aucun consentement ${canal === 'email' ? 'courriel' : 'SMS'} enregistré pour ce client` };
+    // L'exprès d'abord : il ne coûte aucune requête et prime sur le tacite.
+    if (consenti) {
+      const base = baseLegalePour(consenti, {});
+      if (base) return { autorise: true, base, clientId };
     }
-    return { autorise: true };
+
+    // Pas d'exprès : la relation elle-même peut suffire.
+    const base = baseLegalePour(null, await ancragesDuClient(ctx, clientId));
+    if (base) return { autorise: true, base, clientId };
+
+    return {
+      autorise: false,
+      motif: `aucune base légale ${canal === 'email' ? 'courriel' : 'SMS'} : ni consentement enregistré, ni relation d'affaires de moins de 2 ans, ni demande de moins de 6 mois`,
+    };
   } catch (e: any) {
     console.error(`[actions] consentement indéterminable (${canal}, org ${ctx.orgId}):`, e?.message || e);
     // Doute = on ne part pas. Voir l'en-tête : l'inverse du plafond de fréquence.
     return ctx.commercial
       ? { autorise: false, motif: 'consentement invérifiable (erreur technique) — envoi commercial suspendu' }
       : { autorise: true };
+  }
+}
+
+/**
+ * Consigne la base légale dans `consents` — le registre probant.
+ *
+ * Ne lève jamais et ne bloque jamais l'envoi : le message est déjà autorisé,
+ * et perdre une ligne de journal ne doit pas coûter une communication
+ * légitime. Un échec est journalisé pour être vu.
+ */
+async function journaliserBaseLegale(
+  ctx: ActionContext,
+  canal: 'sms' | 'email',
+  clientId: string | null,
+  base: BaseLegale | undefined,
+): Promise<void> {
+  if (!base || !clientId) return;
+  try {
+    const { error } = await ctx.supabase.rpc('record_consent', {
+      p_subject_type: 'client',
+      p_subject_id: clientId,
+      p_purpose: canal === 'email' ? 'email-marketing' : 'sms-marketing',
+      p_granted: true,
+      p_method: methodePourJournal(base),
+      p_doc_version: base.type === 'tacite' ? base.reference : null,
+      p_org_id: ctx.orgId,
+    });
+    if (error) throw new Error(error.message);
+  } catch (e: any) {
+    console.error(`[actions] journal de consentement non écrit (${canal}, org ${ctx.orgId}):`, e?.message || e);
   }
 }
 
@@ -549,12 +639,16 @@ export async function executeSendEmail(
       return { success: false, error: `Recipient ${to} has unsubscribed from marketing emails` };
     }
 
-    // Consentement initial (F7) : le retrait ci-dessus traite ceux qui se sont
-    // désabonnés ; ici on vérifie que le client avait consenti au départ.
+    // Consentement (F7) : le retrait ci-dessus traite ceux qui se sont
+    // désabonnés ; ici on vérifie qu'une base légale existe — un consentement
+    // exprès, ou la relation d'affaires elle-même (LCAP).
     const consentement = await consentementCommercial(ctx, 'email', to);
     if (!consentement.autorise) {
       return { success: false, error: `Consentement manquant pour ${to} : ${consentement.motif}` };
     }
+    // La preuve, pas seulement l'autorisation : le CRTC demande à l'expéditeur
+    // de démontrer POURQUOI il avait le droit. N'échoue jamais l'envoi.
+    if (ctx.commercial) void journaliserBaseLegale(ctx, 'email', consentement.clientId ?? null, consentement.base);
 
     // Plafond anti-spam, tous canaux confondus par destinataire.
     if (await depassePlafondFrequence(ctx, 'email', to)) {
@@ -662,12 +756,14 @@ export async function executeSendSms(
     return { success: false, error: `Recipient ${optOutPhone} has opted out of SMS (STOP)` };
   }
 
-  // Consentement initial (F7) : le STOP ci-dessus traite le retrait ; ici on
-  // vérifie que le client avait consenti à recevoir des SMS au départ.
+  // Consentement (F7) : le STOP ci-dessus traite le retrait ; ici on vérifie
+  // qu'une base légale existe — exprès, ou la relation d'affaires (LCAP).
   const consentementSms = await consentementCommercial(ctx, 'sms', to);
   if (!consentementSms.autorise) {
     return { success: false, error: `Consentement manquant pour ${optOutPhone} : ${consentementSms.motif}` };
   }
+  // Même raison que pour le courriel : la base retenue doit être démontrable.
+  if (ctx.commercial) void journaliserBaseLegale(ctx, 'sms', consentementSms.clientId ?? null, consentementSms.base);
 
   // Plafond anti-spam : pas plus de N messages commerciaux / client / 24h.
   if (await depassePlafondFrequence(ctx, 'sms', to)) {

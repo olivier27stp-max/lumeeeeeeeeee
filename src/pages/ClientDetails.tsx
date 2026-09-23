@@ -40,6 +40,7 @@ import { exportClientData, eraseClient } from '../lib/consentApi';
 import type { ClientRecord } from '../lib/clientsApi';
 import { BillingAddressSection } from '../components/BillingAddressSection';
 import ClientCardOnFile from '../components/ClientCardOnFile';
+import ClientConsentement from '../components/ClientConsentement';
 import PropertiesSection from '../components/PropertiesSection';
 import EventsPanel from '../components/events/EventsPanel';
 import { supabase } from '../lib/supabase';
@@ -1238,6 +1239,13 @@ export default function ClientDetails() {
               </button>
             </div>
           )}
+
+          {/* Consentement commercial (LCAP / loi 25) — exprès saisi ici, tacite calculé */}
+          <ClientConsentement
+            client={client}
+            fr={isFr}
+            onChange={(champs) => setClient((prev) => (prev ? { ...prev, ...champs } : prev))}
+          />
 
           {/* Payment on file — carte sauvegardée avec consentement (Loi 25) */}
           <ClientCardOnFile clientId={client.id} fr={isFr} />
