@@ -602,6 +602,10 @@ function ActionsBar({ m, d, onDone, rapportBot }: { m: any; d: any; onDone: () =
           await act(() => activateAccount(m.id), 'Compte activé : les communications vers les clients repartent');
         }}>Activer le compte</button>
       )}
+      {m.status === 'failed' && (
+        // un import échoué ne se relance pas à l'aveugle : retour aux correspondances, bot, import test, puis import final
+        <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'mapping'), 'Migration reprise aux correspondances')}>Reprendre aux correspondances</button>
+      )}
       {m.status === 'rolled_back' && (
         // après un rollback, la migration repart des correspondances (machine à états : rolled_back → mapping)
         <button type="button" className={primary} onClick={() => act(() => setMigrationStatus(m.id, 'mapping'), 'Migration reprise aux correspondances')}>Reprendre après rollback</button>

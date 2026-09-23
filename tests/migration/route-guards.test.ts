@@ -124,6 +124,16 @@ describe('portail — chaîne de validation complète', () => {
     expect(routeBody(portalSrc, "'/migration-portal/files', rawParser")).toContain('estCategorieValide');
   });
 
+  it('reprise après rollback : le registre du lot annulé ne compte plus et est effacé, le staging repasse à ready', () => {
+    const src = read('server/lib/migration/importer.ts');
+    const final = src.slice(src.indexOf('export async function runFinalImport'), src.indexOf('export async function rollbackFinalBatch'));
+    expect(final).toContain(".neq('status', 'rolled_back')");
+    expect(final).toContain(".in('batch_id', idsLotsEnPlace)");
+    const rollback = src.slice(src.indexOf('export async function rollbackFinalBatch'));
+    expect(rollback).toContain("from('migration_import_records').delete().eq('batch_id', batchId)");
+    expect(rollback).toContain(".in('status', ['imported', 'merged'])");
+  });
+
   it("l'approbation exige la phrase exacte et journalise IP + user-agent", () => {
     const body = routeBody(portalSrc, "'/migration-portal/approval'");
     expect(body).toContain('APPROVAL_SENTENCE_FR');

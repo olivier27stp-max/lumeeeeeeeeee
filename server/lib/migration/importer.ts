@@ -1401,13 +1401,24 @@ export async function runFinalImport(
   const staffIdBySource = await loadStaffMap(admin, migration.id);
   const entities = entitiesForMigration(migration);
 
-  // Reprise : ce qui a déjà été importé pour cette migration.
+  // Reprise : ce qui a déjà été importé pour cette migration — par un lot ENCORE EN PLACE.
+  // Les enregistrements d'un lot annulé (rollback) ne comptent plus : le 2026-09-23, 3 439
+  // enregistrements du lot annulé faisaient croire que tout était déjà importé, et l'import
+  // final « réussissait » en 5 s sans rien créer (review_required → failed).
+  const { data: lotsEnPlace } = await admin
+    .from('migration_import_batches')
+    .select('id')
+    .eq('migration_id', migration.id)
+    .eq('kind', 'final')
+    .neq('status', 'rolled_back');
+  const idsLotsEnPlace = (lotsEnPlace ?? []).map((b: { id: string }) => b.id);
   const already = new Map<string, { entity_id: string; action: string; entity_table: string }>();
-  for (let offset = 0; ; offset += STAGING_PAGE) {
+  for (let offset = 0; idsLotsEnPlace.length > 0; offset += STAGING_PAGE) {
     const { data, error } = await admin
       .from('migration_import_records')
       .select('staging_record_id, entity_id, action, entity_table')
       .eq('migration_id', migration.id)
+      .in('batch_id', idsLotsEnPlace)
       .range(offset, offset + STAGING_PAGE - 1);
     if (error) {
       console.error('[migration-importer] import_records fetch failed:', error.message);
@@ -1975,6 +1986,20 @@ export async function rollbackFinalBatch(
 
   // Propriétés créées par déclencheur pour les clients qu'on vient de retirer (hors registre).
   const orphanProperties = orgId ? await purgeOrphanProperties(admin, orgId) : 0;
+
+  // Le lot annulé ne doit plus peser sur la reprise : son registre est effacé (le lot lui-même
+  // reste, avec ses totaux, comme trace), et les lignes de staging repassent à « ready » pour
+  // être réimportées telles quelles au prochain import final.
+  const { error: regErr } = await admin.from('migration_import_records').delete().eq('batch_id', batchId);
+  if (regErr) console.error('[migration-importer] rollback registry purge failed:', regErr.message);
+  if (batchRow?.migration_id) {
+    const { error: stErr } = await admin
+      .from('migration_staging_records')
+      .update({ status: 'ready' })
+      .eq('migration_id', batchRow.migration_id)
+      .in('status', ['imported', 'merged']);
+    if (stErr) console.error('[migration-importer] rollback staging reset failed:', stErr.message);
+  }
 
   return { softDeleted, deactivated, restored, pinsPurged, orphanProperties };
 }
