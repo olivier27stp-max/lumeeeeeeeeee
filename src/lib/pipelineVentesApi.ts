@@ -130,6 +130,13 @@ export interface TendanceRow {
   gagnes: number;
 }
 
+export interface MontantDeal {
+  deal_id: string;
+  cents: number;
+  /** D'où vient le chiffre : job liée, devis lié, dernier devis du client, ou rien. */
+  provenance: 'job' | 'devis' | 'devis_client' | 'aucun';
+}
+
 export interface CohorteRow {
   mois: string;
   inscrits: number;
@@ -188,6 +195,162 @@ export async function fetchHistorique(dealId: string): Promise<DealStageHistory[
     .order('created_at');
   if (error) throw error;
   return (data ?? []) as DealStageHistory[];
+}
+
+// ── Éléments liés à un deal (onglet « Lié » de la fiche) ────
+
+export interface JobLiee {
+  id: string;
+  job_number: string;
+  title: string;
+  status: string;
+  total_cents: number;
+}
+
+export interface DevisLie {
+  id: string;
+  quote_number: string;
+  title: string;
+  status: string;
+  total_cents: number;
+}
+
+export interface PaiementLie {
+  id: string;
+  amount_cents: number;
+  paid_at: string;
+  method: string | null;
+  status: string;
+}
+
+export interface ElementsLies {
+  job: JobLiee | null;
+  devis: DevisLie | null;
+  paiements: PaiementLie[];
+}
+
+/**
+ * Job, devis et paiements rattachés à un deal.
+ *
+ * Les paiements sont lus par `payments.job_id` — le lien DIRECT de la table,
+ * pas une reconstitution par les factures. Sans job liée on ne renvoie aucun
+ * paiement : additionner ceux du client entier donnerait un chiffre faux.
+ */
+export async function fetchElementsLies(deal: Deal): Promise<ElementsLies> {
+  const [job, devis, paiements] = await Promise.all([
+    chargerJob(deal.job_id),
+    chargerDevis(deal.quote_id),
+    chargerPaiements(deal.job_id),
+  ]);
+  return { job, devis, paiements };
+}
+
+async function chargerJob(jobId: string | null): Promise<JobLiee | null> {
+  if (!jobId) return null;
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id,job_number,title,status,total_cents')
+    .eq('id', jobId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as JobLiee | null) ?? null;
+}
+
+async function chargerDevis(quoteId: string | null): Promise<DevisLie | null> {
+  if (!quoteId) return null;
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('id,quote_number,title,status,total_cents')
+    .eq('id', quoteId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as DevisLie | null) ?? null;
+}
+
+async function chargerPaiements(jobId: string | null): Promise<PaiementLie[]> {
+  if (!jobId) return [];
+  const { data, error } = await supabase
+    .from('payments')
+    .select('id,amount_cents,paid_at,method,status')
+    .eq('job_id', jobId)
+    .is('deleted_at', null)
+    .order('paid_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as PaiementLie[];
+}
+
+// ── Tâches rattachées à un deal ─────────────────────────────
+//
+// `tasks.linked_entity_type` accepte 'deal' depuis la migration
+// 20260923180000. Le type `TaskLinkedEntityType` de src/types/task.ts ne le
+// liste pas encore : les deux fonctions ci-dessous tapent donc leur propre
+// forme, restreinte aux colonnes réellement lues.
+
+export interface TacheDeal {
+  id: string;
+  title: string;
+  status: 'open' | 'done';
+  priority: 'low' | 'medium' | 'high';
+  due_date: string | null;
+  created_at: string;
+}
+
+const COLONNES_TACHE = 'id,title,status,priority,due_date,created_at';
+
+export async function fetchTachesDuDeal(dealId: string): Promise<TacheDeal[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('tasks')
+    .select(COLONNES_TACHE)
+    .eq('org_id', orgId)
+    .eq('linked_entity_type', 'deal')
+    .eq('linked_entity_id', dealId)
+    .is('deleted_at', null)
+    .order('status')
+    .order('due_date', { nullsFirst: false });
+  if (error) throw error;
+  return (data ?? []) as TacheDeal[];
+}
+
+/** Crée une tâche rattachée au deal. `created_by` est NOT NULL sans défaut. */
+export async function creerTacheDeal(
+  dealId: string,
+  champs: { title: string; due_date: string | null },
+): Promise<TacheDeal> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({
+      org_id: orgId,
+      created_by: user.id,
+      title: champs.title,
+      due_date: champs.due_date,
+      status: 'open',
+      priority: 'medium',
+      type: 'Sales',
+      linked_entity_type: 'deal',
+      linked_entity_id: dealId,
+    })
+    .select(COLONNES_TACHE)
+    .single();
+  if (error) throw error;
+  return data as TacheDeal;
+}
+
+/** Coche / décoche une tâche. `completed_at` suit le statut, comme tasksApi. */
+export async function basculerTacheDeal(tacheId: string, fait: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('tasks')
+    .update({
+      status: fait ? 'done' : 'open',
+      completed_at: fait ? new Date().toISOString() : null,
+    })
+    .eq('id', tacheId);
+  if (error) throw error;
 }
 
 // ── Écriture ────────────────────────────────────────────────
@@ -320,6 +483,45 @@ export async function fetchCohortes(mois = 6): Promise<CohorteRow[]> {
   const { data, error } = await supabase.rpc('pipeline_cohortes', { p_mois: mois });
   if (error) throw error;
   return (data ?? []) as CohorteRow[];
+}
+
+/**
+ * Valeur de chaque deal, dérivée : job liée, sinon devis lié, sinon dernier
+ * devis du client. Aucun montant n'est stocké sur le deal (décision Q5).
+ * Rendu en Map pour que le board y accède sans parcourir un tableau.
+ */
+export async function fetchMontants(): Promise<Record<string, number>> {
+  const { data, error } = await supabase.rpc('pipeline_montants');
+  if (error) throw error;
+  const out: Record<string, number> = {};
+  for (const r of (data ?? []) as MontantDeal[]) {
+    if (r.cents > 0) out[r.deal_id] = Number(r.cents);
+  }
+  return out;
+}
+
+/**
+ * Membres de l'organisation, pour afficher le nom d'un deal assigné.
+ *
+ * `team_members` porte `first_name` / `last_name` — PAS `full_name` : une
+ * assignation avait déjà été cassée par cette confusion (audit 2026-09-10).
+ * Les membres sans compte utilisateur sont écartés : on ne peut pas leur
+ * assigner un deal.
+ */
+export async function fetchMembres(): Promise<{ id: string; name: string }[]> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('user_id,first_name,last_name,email')
+    .eq('org_id', orgId)
+    .not('user_id', 'is', null);
+  if (error) throw error;
+  return (data ?? [])
+    .filter((m): m is { user_id: string; first_name: string; last_name: string; email: string } => !!m.user_id)
+    .map((m) => ({
+      id: m.user_id,
+      name: `${m.first_name ?? ''} ${m.last_name ?? ''}`.trim() || m.email,
+    }));
 }
 
 // ── Dérivés (jamais stockés) ────────────────────────────────

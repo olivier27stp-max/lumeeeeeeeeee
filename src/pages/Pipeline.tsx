@@ -28,8 +28,8 @@ import { useTranslation } from '../i18n';
 import { hasPermission } from '../lib/permissions';
 import { usePermissions } from '../hooks/usePermissions';
 import {
-  assignerDeal, deplacerDeal, fetchDeals, fetchPipelineDefaut, fetchStages,
-  lierJob, marquerPerdu, nomClient,
+  assignerDeal, deplacerDeal, fetchDeals, fetchMembres, fetchMontants,
+  fetchPipelineDefaut, fetchStages, lierJob, marquerPerdu, nomClient,
   type Deal, type PipelineStage,
 } from '../lib/pipelineVentesApi';
 
@@ -71,6 +71,21 @@ export default function Pipeline() {
     staleTime: 30_000,
   });
 
+  // La valeur des deals est DÉRIVÉE (job, puis devis) : jamais stockée sur le
+  // deal. Requête séparée pour que le board s'affiche sans l'attendre.
+  const montantsQ = useQuery({
+    queryKey: ['pipeline-montants', pipelineId],
+    queryFn: fetchMontants,
+    enabled: !!pipelineId,
+    staleTime: 60_000,
+  });
+
+  const membresQ = useQuery({
+    queryKey: ['pipeline-membres'],
+    queryFn: fetchMembres,
+    staleTime: 300_000,
+  });
+
   const etapes = useMemo<PipelineStage[]>(() => stagesQ.data ?? [], [stagesQ.data]);
   const deals = useMemo<Deal[]>(() => dealsQ.data ?? [], [dealsQ.data]);
   const etapeParId = useMemo(() => new Map(etapes.map((e) => [e.id, e])), [etapes]);
@@ -81,6 +96,7 @@ export default function Pipeline() {
 
   const rafraichir = () => {
     qc.invalidateQueries({ queryKey: ['pipeline-deals', pipelineId] });
+    qc.invalidateQueries({ queryKey: ['pipeline-montants', pipelineId] });
     qc.invalidateQueries({ queryKey: ['pipeline-stats'] });
   };
 
@@ -188,6 +204,8 @@ export default function Pipeline() {
           <PipelineBoard
             deals={deals}
             etapes={etapes}
+            montants={montantsQ.data ?? {}}
+            membres={membresQ.data ?? []}
             chargement={dealsQ.isLoading}
             onOuvrir={setDealOuvert}
             onDeplacer={deplacer}
@@ -217,6 +235,13 @@ export default function Pipeline() {
       <DealDrawer
         deal={dealOuvert}
         etapes={etapes}
+        membres={membresQ.data ?? []}
+        montantCents={dealOuvert ? (montantsQ.data?.[dealOuvert.id] ?? null) : null}
+        montantProvenance={
+          dealOuvert && montantsQ.data?.[dealOuvert.id]
+            ? (dealOuvert.job_id ? 'job' : dealOuvert.quote_id ? 'devis' : 'devis_client')
+            : 'aucun'
+        }
         onClose={() => setDealOuvert(null)}
         onAssigner={async (dealId, membreId) => {
           try {
