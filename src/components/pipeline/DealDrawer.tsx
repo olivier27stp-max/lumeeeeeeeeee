@@ -23,13 +23,14 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
 import SpecificNotes from '../SpecificNotes';
-import CustomFieldsPanel from '../champs/CustomFieldsPanel';
+import CustomFieldCell from '../CustomFieldCell';
+import { getValuesForRecord, listColumns } from '../../lib/customFieldsApi';
 import ActivityTimeline from '../ActivityTimeline';
 import { useTranslation } from '../../i18n';
 import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, deplacerDeal, estJobACreer, fetchElementsLies,
-  fetchDossierClient, fetchHistorique, fetchRendezVousClient, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
+  fetchDossierClient, fetchHistorique, fetchRelances, fetchRendezVousClient, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
   abandonnerDeal, fetchRaisonsProposees, majDateFermeture, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
@@ -51,6 +52,22 @@ type Onglet = 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'paiements' | 'act
  * intégration) est ajoutée à la volée au sélecteur pour ne jamais être écrasée
  * par le simple fait d'ouvrir la fiche.
  */
+/** Le nom lisible d'une action d'automatisation, dans la langue de l'écran. */
+function LIBELLE_RELANCE(action: string, fr: boolean): string {
+  const t: Record<string, [string, string]> = {
+    send_sms: ['Texto envoyé', 'Text message sent'],
+    send_email: ['Courriel envoyé', 'Email sent'],
+    create_task: ['Tâche créée', 'Task created'],
+    create_notification: ['Notification envoyée', 'Notification sent'],
+    request_review: ['Demande d\'avis', 'Review requested'],
+    log_activity: ['Activité journalisée', 'Activity logged'],
+  };
+  const paire = t[action];
+  // Une action inconnue garde sa clé : mieux vaut un nom technique qu'un
+  // libellé inventé qui ferait croire à autre chose.
+  return paire ? (fr ? paire[0] : paire[1]) : action;
+}
+
 const SOURCES_CONNUES = ['form_web', 'meta', 'manual', 'd2d'] as const;
 
 /** Libellés des canaux absents de `LIBELLE_SOURCE` (qui ne couvre que la maquette). */
@@ -368,7 +385,7 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
   if (!clientId) return null;
   if (isLoading) return <Vide texte={fr ? 'Chargement du dossier…' : 'Loading history…'} />;
 
-  const d = data ?? { jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0 };
+  const d = data ?? { jobs: [], devis: [], factures: [], transactions: [], proprietes: [], messages: [], paye_cents: 0, du_cents: 0 };
   const rien = d.jobs.length + d.devis.length + d.factures.length === 0;
 
   return (
@@ -457,6 +474,30 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
             {d.devis.map((q) => (
               <LigneDossier key={q.id} vers={`/quotes/${q.id}`} numero={q.numero} titre={q.titre}
                 statut={q.statut} cents={q.cents} fr={fr} />
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/*
+        Les propriétés du client : ses immeubles, ses adresses de service.
+        C'est l'équivalent terrain des « objets associés » de GoHighLevel —
+        chez un gestionnaire d'immeubles, savoir qu'on parle du 3e duplex et
+        non du premier change la visite.
+      */}
+      {(d.proprietes ?? []).length > 0 && (
+        <Section titre={fr ? `Propriétés (${d.proprietes.length})` : `Properties (${d.proprietes.length})`}>
+          <div className="space-y-1.5">
+            {d.proprietes.map((pr) => (
+              <div
+                key={pr.id}
+                className="rounded-lg border border-outline bg-surface-card px-3 py-2"
+              >
+                <span className="block text-[12.5px] text-text-primary">{pr.nom}</span>
+                {pr.adresse && (
+                  <span className="block text-[11.5px] text-text-tertiary">{pr.adresse}</span>
+                )}
+              </div>
             ))}
           </div>
         </Section>
@@ -922,6 +963,55 @@ function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
 // ── Fiche ───────────────────────────────────────────────────
 
 
+/**
+ * Les champs personnalisés d'un deal.
+ *
+ * `custom_columns` porte l'entité `deals` depuis la migration
+ * 20260923280000 ; tout le reste (treize types de champs, valeurs par
+ * défaut, ordre) existait déjà et sert aussi aux clients, jobs et factures.
+ *
+ * Chaque cellule s'enregistre elle-même au changement — c'est le contrat de
+ * `CustomFieldCell`, utilisé tel quel ailleurs dans Lume.
+ */
+function ChampsPersonnalises({ dealId, fr }: { dealId: string; fr: boolean }) {
+  const { data: colonnes = [] } = useQuery({
+    queryKey: ['custom-columns', 'deals'],
+    queryFn: () => listColumns('deals'),
+    staleTime: 600_000,
+  });
+  const { data: valeurs = {}, refetch } = useQuery({
+    queryKey: ['custom-values', dealId],
+    queryFn: () => getValuesForRecord(dealId),
+    enabled: colonnes.length > 0,
+  });
+
+  const visibles = colonnes.filter((c) => c.visible);
+  if (visibles.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t border-border-subtle pt-3">
+      <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+        {fr ? 'Informations du métier' : 'Business details'}
+      </h4>
+      <div className="space-y-2">
+        {visibles.map((col) => (
+          <div key={col.id} className="flex items-baseline justify-between gap-3">
+            <span className="shrink-0 text-[11px] text-text-tertiary">{col.name}</span>
+            <div className="min-w-0 text-right text-[12px]">
+              <CustomFieldCell
+                column={col}
+                recordId={dealId}
+                value={valeurs[col.id]}
+                onChange={() => { void refetch(); }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DealDrawer({
   deal, etapes, membres, montantCents, montantProvenance, onClose, onAssigner, onCreerJob,
   onChangement,
@@ -987,6 +1077,16 @@ export default function DealDrawer({
     queryKey: ['deal-historique', deal?.id],
     queryFn: () => fetchHistorique(deal?.id ?? ''),
     enabled: !!deal,
+  });
+
+  // Les relances automatiques déjà parties. C'est la preuve que le Reçu
+  // montrera : sans savoir QUAND une relance est partie, on ne peut pas dire
+  // qu'elle a récupéré une vente.
+  const { data: relances = [] } = useQuery({
+    queryKey: ['deal-relances', deal?.id],
+    queryFn: () => fetchRelances(deal?.id ?? '', deal?.client_id ?? null),
+    enabled: !!deal,
+    staleTime: 60_000,
   });
 
   // Fermer la fiche, ou en ouvrir une autre, ne doit jamais laisser traîner une
@@ -1599,10 +1699,7 @@ export default function DealDrawer({
                       Rien ne s'affiche tant qu'aucun champ n'est défini :
                       une section vide ferait croire à un écran cassé.
                     */}
-                    {/* Champs personnalisés v2 : même panneau que client, job, devis,
-                        facture (groupés par dossier, validés par type). */}
-                    <CustomFieldsPanel objet="deal" entityId={deal.id} fr={fr} className="mt-3 border-t border-border-subtle pt-3"
-                      titre={fr ? 'Informations du métier' : 'Business details'} />
+                    <ChampsPersonnalises dealId={deal.id} fr={fr} />
 
                     {/* Le deal est DÉJÀ perdu : la raison se corrige sans changer d'étape. */}
                     {etapePerdue && !etapePerdueVisee && (
@@ -1688,6 +1785,47 @@ export default function DealDrawer({
                   )}
                 </ol>
               </Section>
+
+              {/*
+                Les relances automatiques, avec leur DATE EXACTE.
+                « il y a 3 jours » suffit pour se repérer, pas pour prouver :
+                un reçu qui dit « relance du 19 → signée le 20 » a besoin du
+                jour, pas d'une distance.
+              */}
+              {relances.length > 0 && (
+                <Section titre={fr ? 'Relances automatiques' : 'Automated follow-ups'}>
+                  <ol className="space-y-2">
+                    {relances.map((r) => (
+                      <li key={r.id} className="flex items-start gap-2.5">
+                        <span
+                          className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ background: r.reussi ? 'var(--color-success)' : 'var(--color-danger)' }}
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-[12px] text-text-primary">
+                            {LIBELLE_RELANCE(r.action, fr)}
+                            {!r.reussi && (
+                              <span className="ml-1.5 text-[11px]" style={{ color: 'var(--color-danger)' }}>
+                                {fr ? '· échec' : '· failed'}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[10.5px] text-text-muted">
+                            {new Date(r.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', {
+                              day: 'numeric', month: 'long', year: 'numeric',
+                            })}
+                            {' · '}
+                            {new Date(r.created_at).toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', {
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </Section>
+              )}
 
               <Section titre={fr ? "Journal d'activité" : 'Activity log'}>
                 <ActivityTimeline entityType="deal" entityId={deal.id} />

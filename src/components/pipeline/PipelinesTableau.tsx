@@ -14,12 +14,12 @@
  * deux ou trois ; afficher « Page 1 sur 1 » sous une liste de deux pipelines
  * habille l'écran sans rien apprendre à personne.
  */
-import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useId, useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, MoreVertical, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { useTranslation } from '../../i18n';
-import { supprimerPipeline, type PipelineResume } from '../../lib/pipelineVentesApi';
+import { dupliquerPipeline, supprimerPipeline, type PipelineResume } from '../../lib/pipelineVentesApi';
 
 const PAR_PAGE = 20;
 
@@ -44,34 +44,6 @@ export default function PipelinesTableau({
   const [page, setPage] = useState(1);
   const [menuOuvert, setMenuOuvert] = useState<string | null>(null);
   const [deplie, setDeplie] = useState<string | null>(null);
-  const zoneMenu = useRef<HTMLTableSectionElement>(null);
-
-  /*
-   * Un menu « ⋮ » ouvert restait ouvert : cliquer ailleurs, ouvrir celui
-   * d'une autre ligne ou appuyer sur Échap ne le fermait pas. Sur une liste
-   * de pipelines, on se retrouvait avec un menu flottant par-dessus la ligne
-   * qu'on essayait de lire.
-   */
-  useEffect(() => {
-    if (!menuOuvert) return;
-
-    function auClic(e: MouseEvent) {
-      // Un clic DANS le menu (ou sur le « ⋮ ») garde la main : c'est le
-      // bouton lui-même qui bascule, sinon rouvrir fermerait aussitôt.
-      if (zoneMenu.current?.contains(e.target as Node)) return;
-      setMenuOuvert(null);
-    }
-    function auClavier(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuOuvert(null);
-    }
-
-    document.addEventListener('mousedown', auClic);
-    document.addEventListener('keydown', auClavier);
-    return () => {
-      document.removeEventListener('mousedown', auClic);
-      document.removeEventListener('keydown', auClavier);
-    };
-  }, [menuOuvert]);
 
   const filtres = useMemo(() => {
     const q = recherche.trim().toLowerCase();
@@ -86,6 +58,30 @@ export default function PipelinesTableau({
     if (!iso) return '—';
     const d = new Date(iso);
     return `${d.toLocaleDateString(fr ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short', year: 'numeric' })} · ${d.toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', { hour: '2-digit', minute: '2-digit' })}`;
+  }
+
+  async function dupliquer(p: PipelineResume) {
+    setMenuOuvert(null);
+    // Le nom est demandé AVANT la copie : deux pipelines homonymes dans un
+    // sélecteur ne se distinguent plus.
+    const ok = await confirmer({
+      title: fr ? `Dupliquer « ${p.name} » ?` : `Duplicate “${p.name}”?`,
+      message: fr
+        ? "Les étapes et les réglages d'affichage sont copiés. Les deals ne le sont pas : on duplique un parcours, pas un carnet de commandes."
+        : 'Stages and display settings are copied. Deals are not: you duplicate a process, not a book of business.',
+      confirmLabel: fr ? 'Dupliquer' : 'Duplicate',
+    });
+    if (!ok) return;
+
+    try {
+      const nom = fr ? `${p.name} (copie)` : `${p.name} (copy)`;
+      await dupliquerPipeline(p.id, nom);
+      onChangement();
+      toast.success(fr ? `« ${nom} » créé.` : `“${nom}” created.`);
+    } catch (e) {
+      console.error('[pipelines] duplication', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function supprimer(p: PipelineResume) {
@@ -144,7 +140,7 @@ export default function PipelinesTableau({
               </th>
             </tr>
           </thead>
-          <tbody ref={zoneMenu} className="divide-y divide-border-subtle">
+          <tbody className="divide-y divide-border-subtle">
             {visibles.map((p, i) => (
               <Fragment key={p.id}>
                 <tr className={p.id === pipelineActif ? 'bg-surface-secondary' : undefined}>
@@ -225,6 +221,14 @@ export default function PipelinesTableau({
                             className="block w-full px-3 py-2 text-left text-[12.5px] text-text-primary hover:bg-surface-secondary focus-visible:outline-none focus-visible:bg-surface-secondary"
                           >
                             {fr ? 'Renommer et partager' : 'Rename and share'}
+                          </button>
+
+                          <button
+                            type="button" role="menuitem"
+                            onClick={() => { void dupliquer(p); }}
+                            className="block w-full px-3 py-2 text-left text-[12.5px] text-text-primary hover:bg-surface-secondary focus-visible:outline-none focus-visible:bg-surface-secondary"
+                          >
+                            {fr ? 'Dupliquer' : 'Duplicate'}
                           </button>
 
                           {!p.is_default && (

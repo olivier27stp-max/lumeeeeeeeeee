@@ -285,6 +285,54 @@ export async function fetchHistorique(dealId: string): Promise<DealStageHistory[
   return (data ?? []) as DealStageHistory[];
 }
 
+/**
+ * Les relances automatiques parties sur ce deal.
+ *
+ * C'est la matière première du Reçu : sans savoir QUAND une relance est
+ * partie, on ne peut pas dire qu'elle a récupéré une vente. Le journal
+ * d'exécution des automatisations porte déjà l'information (`entity_type` +
+ * `entity_id`) — il suffisait de la lire du bon côté.
+ *
+ * On interroge aussi le CLIENT, pas seulement le deal : une relance de
+ * soumission vise la facture ou le devis, mais elle a bel et bien été
+ * déclenchée pour cette personne, et c'est ce que le vendeur veut voir.
+ */
+export interface RelanceDeal {
+  id: string;
+  /** `send_sms`, `send_email`, `create_task`… */
+  action: string;
+  reussi: boolean;
+  erreur: string | null;
+  declencheur: string;
+  created_at: string;
+}
+
+export async function fetchRelances(
+  dealId: string,
+  clientId?: string | null,
+): Promise<RelanceDeal[]> {
+  // `entity_id` est un uuid nu : on cible le deal ET son client, sans
+  // supposer lequel des deux l'automatisation a nommé.
+  const cibles = [dealId, clientId].filter(Boolean) as string[];
+  const { data, error } = await supabase
+    .from('automation_execution_logs')
+    .select('id,action_type,result_success,result_error,trigger_event,created_at,entity_id')
+    .in('entity_id', cibles)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data ?? []).map((x: Record<string, unknown>) => ({
+    id: x.id as string,
+    action: (x.action_type as string) ?? '',
+    reussi: (x.result_success as boolean) ?? false,
+    erreur: (x.result_error as string) ?? null,
+    declencheur: (x.trigger_event as string) ?? '',
+    created_at: x.created_at as string,
+  }));
+}
+
+
+
 // ── Éléments liés à un deal (onglet « Lié » de la fiche) ────
 
 export interface JobLiee {
@@ -1539,6 +1587,56 @@ export async function creerPipelineSurMesure(
 
 /** Renommer se fait déjà ; supprimer un pipeline n'est PAS exposé :
  *  ses deals partiraient avec lui (cascade). On archive ses étapes. */
+/**
+ * Duplique un pipeline avec toutes ses étapes.
+ *
+ * Aucun RPC dédié : on relit les étapes et on rappelle
+ * `creer_pipeline_sur_mesure`. Une fonction serveur qui copierait les lignes
+ * dupliquerait aussi ses propres règles (ajout de Gagné/Perdu, garde admin,
+ * bornes de probabilité) — deux chemins de création qui dériveraient l'un de
+ * l'autre au premier ajustement.
+ *
+ * Les DEALS ne sont pas copiés : on duplique un parcours, pas un carnet de
+ * commandes. Les étapes archivées non plus — on repart du pipeline tel qu'il
+ * est utilisé aujourd'hui.
+ */
+export async function dupliquerPipeline(
+  pipelineId: string,
+  nouveauNom: string,
+): Promise<string> {
+  const etapes = await fetchStages(pipelineId);
+  const actives = etapes
+    .filter((e) => e.archived_at === null)
+    .sort((a, b) => a.position - b.position);
+
+  if (actives.length === 0) {
+    throw new Error("Ce pipeline n'a aucune étape active à copier.");
+  }
+
+  // Les réglages d'affichage suivent aussi : dupliquer un pipeline teinté
+  // pour obtenir un pipeline gris ne serait pas une copie.
+  const { data: source } = await supabase
+    .from('pipelines_ventes')
+    .select('color_mode,use_deal_probability')
+    .eq('id', pipelineId)
+    .maybeSingle();
+
+  return creerPipelineSurMesure(
+    nouveauNom,
+    actives.map((e) => ({
+      nom_fr: e.name_fr,
+      nom_en: e.name_en,
+      kind: e.kind,
+      probability: e.probability,
+      show_in_reports: e.show_in_reports,
+    })),
+    {
+      color_mode: (source?.color_mode as ModeCouleur | undefined) ?? 'none',
+      use_deal_probability: (source?.use_deal_probability as boolean | undefined) ?? false,
+    },
+  );
+}
+
 export async function supprimerPipeline(pipelineId: string): Promise<void> {
   const { error } = await supabase.from('pipelines_ventes').delete().eq('id', pipelineId);
   if (error) throw error;

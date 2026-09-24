@@ -13,9 +13,10 @@
  */
 import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import {
-  Archive, ArrowDown, ArrowUp, Check, ChevronDown, Info, Layers,
+  Archive, ArrowDown, ArrowUp, ArrowUpRight, Check, ChevronDown, Info, Layers,
   Loader2, Plus, Star, Workflow, X,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { confirmer } from '../ui/ConfirmDialog';
@@ -343,8 +344,17 @@ function LigneEtape({
             </label>
           </div>
 
-          {/* Les actions d'étape n'existent pas encore côté base : rien n'est
-              affiché de faux, on annonce simplement ce qui vient. */}
+          {/*
+            Ces automatisations EXISTENT et tournent : le pipeline émet
+            « entre dans une étape », « sort d'une étape » et « dort depuis
+            X jours », et une règle peut viser une étape précise. Le texte
+            disait « Bientôt » — il annonçait comme à venir une fonction déjà
+            livrée, et personne n'allait la chercher.
+
+            Elles se règlent depuis Automatisations, pas ici : une règle peut
+            enchaîner plusieurs actions et plusieurs délais, ce qu'un encart
+            dans les réglages d'étape ne saurait pas montrer.
+          */}
           <div className="rounded-lg border border-border-subtle bg-surface-secondary px-3.5 py-3">
             <p className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-text-secondary">
               <Workflow size={13} aria-hidden="true" />
@@ -352,9 +362,16 @@ function LigneEtape({
             </p>
             <p className="text-[11.5px] text-text-muted mt-1 leading-relaxed">
               {fr
-                ? "Bientôt : déclencher un courriel, un SMS ou une tâche à l'entrée dans cette étape, ou après quelques jours sans activité."
-                : 'Coming soon: trigger an email, a text or a task when a deal enters this stage, or after a few days without activity.'}
+                ? "Déclenche un courriel, un SMS ou une tâche quand un deal entre dans cette étape, ou quand il y dort depuis quelques jours. Ça se règle dans Automatisations, où une règle peut enchaîner plusieurs actions."
+                : 'Trigger an email, a text or a task when a deal enters this stage, or when it has been sitting there for a few days. Set it up in Automations, where one rule can chain several actions.'}
             </p>
+            <Link
+              to="/automations"
+              className="mt-2 inline-flex items-center gap-1 rounded text-[11.5px] font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+            >
+              {fr ? 'Ouvrir les automatisations' : 'Open automations'}
+              <ArrowUpRight size={12} aria-hidden="true" />
+            </Link>
           </div>
         </div>
       )}
