@@ -76,7 +76,7 @@ const MEMBRES = [{ id: 'u1', name: 'Marie Tremblay' }];
 let conteneur: HTMLDivElement;
 let racine: ReturnType<typeof createRoot>;
 
-async function rendre() {
+async function rendre(extra: Record<string, unknown> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   await act(async () => {
     racine.render(
@@ -93,6 +93,7 @@ async function rendre() {
           onOuvrir={vi.fn()}
           onDeplacer={vi.fn()}
           onAssigner={vi.fn()}
+          {...extra}
         />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -213,5 +214,47 @@ describe('filtres du board', () => {
     // d1 (5 000 $) passe, d2 (1 000 $) non.
     expect(vus).toContain('Alpha');
     expect(vus).not.toContain('Bravo');
+  });
+});
+
+describe('sélecteur de pipeline', () => {
+  /** Le select qui liste les pipelines (il porte l'id du pipeline actif). */
+  function selecteurPipeline(): HTMLSelectElement | undefined {
+    return [...conteneur.querySelectorAll('select')]
+      .find((sel) => [...sel.options].some((o) => o.value === 'p1')) as HTMLSelectElement | undefined;
+  }
+
+  it('reste cliquable même avec un seul pipeline', async () => {
+    // Il était `disabled` quand la liste n'avait qu'une entrée : on ne
+    // pouvait ni cliquer, ni découvrir qu'on pouvait en créer un autre.
+    await rendre();
+    expect(selecteurPipeline()?.disabled).toBe(false);
+  });
+
+  it('propose « Créer un pipeline » quand on en a le droit', async () => {
+    await rendre({ onCreerPipeline: vi.fn() });
+    const libelles = [...(selecteurPipeline()?.options ?? [])].map((o) => o.textContent ?? '');
+    expect(libelles.some((t) => /Créer un pipeline/.test(t))).toBe(true);
+  });
+
+  it('ne propose pas la création sans le droit', async () => {
+    await rendre();
+    const libelles = [...(selecteurPipeline()?.options ?? [])].map((o) => o.textContent ?? '');
+    expect(libelles.some((t) => /Créer un pipeline/.test(t))).toBe(false);
+  });
+
+  it('choisir « Créer un pipeline » appelle le parent, sans changer de board', async () => {
+    const onCreer = vi.fn();
+    const onChanger = vi.fn();
+    await rendre({ onCreerPipeline: onCreer, onChangerPipeline: onChanger });
+    const sel = selecteurPipeline()!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(sel, '__creer');
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(onCreer).toHaveBeenCalled();
+    // Surtout pas : « __creer » n'est pas un identifiant de pipeline.
+    expect(onChanger).not.toHaveBeenCalledWith('__creer');
   });
 });

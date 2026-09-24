@@ -301,6 +301,9 @@ export default function Pipeline() {
           pipelineActif={pipelineId}
           modeCouleur={pipelines.find((p) => p.id === pipelineId)?.color_mode ?? 'dot'}
           onChangerPipeline={choisirPipeline}
+          // Créer un pipeline est un geste d'administration : la base le
+          // refuserait de toute façon, autant ne pas proposer la porte.
+          onCreerPipeline={peutConfigurer ? () => choisirOnglet('reglages') : undefined}
           onAssigner={assigner}
             onChangement={rafraichir}
           />
