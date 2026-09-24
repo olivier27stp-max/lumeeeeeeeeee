@@ -47,6 +47,7 @@ import emailTemplatesRouter from './routes/email-templates';
 import communicationsRouter from './routes/communications';
 import automationTestRouter from './routes/automation-test';
 import automationEventsRouter from './routes/automation-events';
+import automationRulesRouter from './routes/automation-rules';
 import portalRouter from './routes/portal';
 import connectRouter from './routes/connect';
 import sendingDomainsRouter from './routes/sending-domains';
@@ -637,6 +638,9 @@ if (!useRedis) {
   app.use('/api/quotes', quoteLimiterStrict);
   app.use('/api/agreements/public', agreementPublicLimiter);
   app.use('/api/automations/events', automationLimiter);
+  // Les écritures d'automatisations passent par le même plafond : une règle
+  // enregistrée met en file des textos et des courriels réels.
+  app.use('/api/automations/rules', automationLimiter);
   app.use('/api/agent', agentLimiter);
   app.use('/api/lumi', agentLimiter);
   app.use('/api/dsr', dsrLimiterMem);
@@ -777,6 +781,7 @@ app.use('/api', emailTemplatesRouter);
 app.use('/api', communicationsRouter);
 app.use('/api', automationTestRouter);
 app.use('/api', automationEventsRouter);
+app.use('/api', automationRulesRouter);
 app.use('/api', portalRouter);
 app.use('/api', connectRouter);
 // Domaine d'envoi propre à l'entreprise (Resend Domains) — owner/admin, sous son propre préfixe.

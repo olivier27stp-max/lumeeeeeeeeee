@@ -1,5 +1,16 @@
 import { z, ZodSchema, ZodError } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
+// Le catalogue des automatisations personnalisables vit sous src/ : c'est le
+// sens de partage autorisé (server/ importe src/, jamais l'inverse — voir
+// tests/frontiere-serveur-client.test.ts), déjà utilisé pour permissions.ts.
+import {
+  CLES_DECLENCHEURS,
+  CLES_ACTIONS,
+  trouverAction,
+  DELAI_MAX_SECONDES,
+  DELAI_NEGATIF_MAX_SECONDES,
+  ACTIONS_MAX,
+} from '../../src/lib/automationCatalogue';
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
@@ -719,3 +730,141 @@ export const sendingDomainSchema = z.object({
   // server/lib/courriels/domaines.ts (validerDomaine) ; ici on borne la taille.
   domain: z.string().trim().min(3, 'Domain is required.').max(253, 'Domain is too long.'),
 });
+
+// ─── Automatisations personnalisées (POST/PATCH /api/automations/rules) ─────
+//
+// Jusqu'ici la table `automation_rules` n'était remplie que par le seeder :
+// aucune entrée utilisateur n'y arrivait, donc aucun schéma. Maintenant que
+// l'interface permet de créer ses propres automatisations, tout ce qui vient
+// du navigateur passe par ici.
+//
+// Le catalogue (`src/lib/automationCatalogue.ts`) est la source de vérité des
+// clés acceptées : un déclencheur ou une action hors catalogue est refusé, et
+// on ne peut donc pas enregistrer une règle que le moteur ne saurait pas
+// exécuter — ou pire, qu'il exécuterait de travers.
+
+const cleDeclencheur = z.enum(
+  CLES_DECLENCHEURS as [string, ...string[]],
+  { message: 'Unknown trigger.' },
+);
+
+/**
+ * Une action, validée CONTRE SON PROPRE type : les champs obligatoires de
+ * `send_email` (objet + message) ne sont pas ceux de `create_task`.
+ *
+ * `config` est volontairement fermé (`strict`) : une clé inconnue est
+ * refusée plutôt qu'ignorée. C'est ce qui empêche de réintroduire par la
+ * bande un `to` — le destinataire imposé (`DESTINATAIRE_IMPOSE` dans
+ * server/lib/actions/index.ts) est une garde de sécurité, pas une
+ * préférence.
+ */
+const actionAutomatisation = z
+  .object({
+    type: z.enum(CLES_ACTIONS as [string, ...string[]], { message: 'Unknown action.' }),
+    config: z
+      .object({
+        body: z.string().trim().max(10000).optional(),
+        subject: z.string().trim().max(200).optional(),
+        title: z.string().trim().max(200).optional(),
+      })
+      // `strict` : une clé inconnue est refusée, pas ignorée.
+      .strict(),
+  })
+  .superRefine((action, ctx) => {
+    const modele = trouverAction(action.type);
+    if (!modele) return;
+    for (const champ of modele.champs) {
+      const valeur = (action.config as Record<string, unknown>)[champ.cle];
+      if (champ.obligatoire && (typeof valeur !== 'string' || valeur.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', champ.cle],
+          message: `« ${modele.fr} » : le champ « ${champ.fr} » est obligatoire.`,
+        });
+      }
+      if (typeof valeur === 'string' && valeur.length > champ.max) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', champ.cle],
+          message: `« ${champ.fr} » dépasse ${champ.max} caractères.`,
+        });
+      }
+    }
+    // Un champ rempli qui n'appartient pas à cette action : refusé plutôt
+    // qu'ignoré, sinon l'utilisateur croit avoir écrit un objet de courriel
+    // sur un texto et ne comprend pas pourquoi il disparaît.
+    const attendus = new Set(modele.champs.map((c) => c.cle));
+    for (const cle of Object.keys(action.config)) {
+      if (!attendus.has(cle as 'body' | 'subject' | 'title')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['config', cle],
+          message: `« ${modele.fr} » n'utilise pas le champ « ${cle} ».`,
+        });
+      }
+    }
+  });
+
+/**
+ * Les conditions, en objet plat comparé aux métadonnées de l'événement.
+ *
+ * Seuls les 4 opérateurs que `evaluateConditions` connaît sont acceptés.
+ * Un opérateur inconnu ne se contente pas d'être ignoré côté moteur : il
+ * fait échouer la règle ENTIÈRE, en silence (automationEngine.ts). Le
+ * refuser à l'enregistrement est la seule façon d'éviter une automatisation
+ * qui ne part jamais sans que personne sache pourquoi.
+ */
+const valeurCondition = z.union([z.string().max(200), z.number(), z.boolean()]);
+const conditionsAutomatisation = z
+  .record(
+    z.string().trim().min(1).max(64),
+    z.union([
+      valeurCondition,
+      z
+        .object({
+          eq: valeurCondition.optional(),
+          neq: valeurCondition.optional(),
+          in: z.array(valeurCondition).min(1).max(50).optional(),
+          not_in: z.array(valeurCondition).min(1).max(50).optional(),
+        })
+        .strict()
+        .refine((o) => Object.keys(o).length > 0, 'Empty condition.'),
+    ]),
+  )
+  .refine((c) => Object.keys(c).length <= 10, 'Too many conditions (10 max).');
+
+const corpsAutomatisation = z.object({
+  name: z.string().trim().min(1, 'Name is required.').max(120),
+  description: z.string().trim().max(500).optional().nullable(),
+  trigger_event: cleDeclencheur,
+  conditions: conditionsAutomatisation.optional().default({}),
+  // Borné des deux côtés : un délai négatif signifie « avant la date de
+  // référence » et n'a de sens que pour un rendez-vous — la route le vérifie
+  // contre le catalogue, qui sait quels déclencheurs portent une date future.
+  delay_seconds: z
+    .number()
+    .int('The delay must be a whole number of seconds.')
+    .min(-DELAI_NEGATIF_MAX_SECONDES, 'Cannot send more than 30 days before.')
+    .max(DELAI_MAX_SECONDES, 'Cannot wait more than a year.'),
+  actions: z
+    .array(actionAutomatisation)
+    .min(1, 'Add at least one action.')
+    .max(ACTIONS_MAX, `An automation carries at most ${ACTIONS_MAX} actions.`),
+  is_active: z.boolean().optional().default(false),
+});
+
+export const automationRuleCreateSchema = corpsAutomatisation;
+
+/**
+ * La modification accepte un sous-ensemble, mais jamais un objet vide.
+ *
+ * Le refus regarde le corps REÇU, pas le résultat du parsing : `conditions` et
+ * `is_active` portent un `.default()`, donc après parsing l'objet contient
+ * toujours ces deux clés et ne serait jamais « vide ». Un PATCH sans rien
+ * passerait alors, écraserait les conditions existantes par `{}` et
+ * remettrait la règle en pause — sans que personne ne l'ait demandé.
+ */
+export const automationRuleUpdateSchema = z
+  .record(z.string(), z.unknown())
+  .refine((o) => Object.keys(o).length > 0, 'Nothing to update.')
+  .pipe(corpsAutomatisation.partial());
