@@ -69,6 +69,7 @@ import quoteTemplatesRouter from './routes/quote-templates';
 import checklistsRouter from './routes/checklists';
 import taxesRouter from './routes/taxes';
 import featureFlagsRouter from './routes/feature-flags';
+import customFieldsRouter from './routes/custom-fields';
 import scheduledReportsRouter from './routes/scheduled-reports';
 import goalsRouter from './routes/goals';
 import auditLogRouter from './routes/audit-log';
@@ -766,6 +767,7 @@ app.use(subscriptionGuard());
 
 // ── Mount all route modules under /api ──
 app.use('/api', searchRouter);
+app.use('/api', customFieldsRouter);
 app.use('/api', geocodeRouter);
 app.use('/api', clientErrorsRouter);
 app.use('/api', routeOptimizationRouter);

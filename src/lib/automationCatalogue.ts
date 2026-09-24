@@ -60,7 +60,7 @@ export interface DeclencheurCatalogue {
 }
 
 /**
- * Les 16 déclencheurs offerts. Chacun a été vérifié comme réellement émis
+ * Les 17 déclencheurs offerts. Chacun a été vérifié comme réellement émis
  * par le serveur — voir la cartographie du 2026-09-23.
  */
 export const DECLENCHEURS: DeclencheurCatalogue[] = [
@@ -171,6 +171,18 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_en: 'When a deal sits too long in its stage.',
     famille: 'vente', entite: 'deal',
   },
+
+  // ── Champs personnalisés ──
+  // Émis par customFieldsService (server/lib/champs/service.ts) quand une
+  // valeur change VRAIMENT — jamais sur un rejeu identique, jamais pour une
+  // écriture faite par une automatisation (pas de boucle). Le champ visé se
+  // choisit dans le builder et devient la condition {field_id: {eq}}.
+  {
+    cle: 'custom_field.changed', fr: 'Champ personnalisé modifié', en: 'Custom field changed',
+    aide_fr: 'Quand la valeur d’un champ personnalisé change sur une fiche.',
+    aide_en: 'When a custom field value changes on a record.',
+    famille: 'client', entite: 'lead',
+  },
 ];
 
 export const CLES_DECLENCHEURS = DECLENCHEURS.map((d) => d.cle);
@@ -182,7 +194,7 @@ export function trouverDeclencheur(cle: string): DeclencheurCatalogue | undefine
 // ── Actions ─────────────────────────────────────────────────
 
 export interface ActionCatalogue {
-  cle: 'send_sms' | 'send_email' | 'create_notification' | 'create_task' | 'request_review';
+  cle: 'send_sms' | 'send_email' | 'create_notification' | 'create_task' | 'request_review' | 'update_custom_field';
   fr: string;
   en: string;
   aide_fr: string;
@@ -191,7 +203,7 @@ export interface ActionCatalogue {
   vers_client: boolean;
   /** Champs que l'utilisateur remplit. */
   champs: Array<{
-    cle: 'body' | 'subject' | 'title';
+    cle: 'body' | 'subject' | 'title' | 'field_id' | 'value';
     fr: string;
     en: string;
     obligatoire: boolean;
@@ -202,7 +214,7 @@ export interface ActionCatalogue {
 }
 
 /**
- * Les 5 actions offertes.
+ * Les 6 actions offertes.
  *
  * Absentes volontairement : `log_activity` (écriture interne du moteur),
  * `send_notification` (alias de `create_notification`), `update_status` et
@@ -259,6 +271,18 @@ export const ACTIONS: ActionCatalogue[] = [
     vers_client: true,
     champs: [
       { cle: 'body', fr: 'Texte du message', en: 'Message text', obligatoire: true, max: 1600, multiligne: true },
+    ],
+  },
+  {
+    // Garde dédiée (server/lib/champs/automatisations.ts) : n'écrit que sur
+    // l'entité de l'événement, et seulement un champ de SON objet.
+    cle: 'update_custom_field', fr: 'Mettre à jour un champ personnalisé', en: 'Update a custom field',
+    aide_fr: 'Écrit une valeur dans un champ de la fiche concernée. Reste à l’interne.',
+    aide_en: 'Writes a value into a field of the record concerned. Stays internal.',
+    vers_client: false,
+    champs: [
+      { cle: 'field_id', fr: 'Champ', en: 'Field', obligatoire: true, max: 36, multiligne: false },
+      { cle: 'value', fr: 'Nouvelle valeur (vide = effacer)', en: 'New value (empty = clear)', obligatoire: false, max: 5000, multiligne: false },
     ],
   },
 ];

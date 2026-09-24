@@ -151,6 +151,20 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'GET /api/features': 'settings.read',
   'PUT /api/features/:feature': 'settings.update',
 
+  // ── Champs personnalisés v2 (définitions = réglages ; valeurs = RLS de l'objet parent) ──
+  'GET /api/custom-fields': 'settings.read',
+  'POST /api/custom-fields': 'settings.update',
+  'PATCH /api/custom-fields/:id': 'settings.update',
+  'POST /api/custom-fields/:id/archive': 'settings.update',
+  'GET /api/custom-fields/:id/impact': 'settings.update',
+  'DELETE /api/custom-fields/:id': 'settings.update',
+  'PUT /api/custom-fields/searchable': 'settings.update',
+  'PUT /api/custom-fields/unique': 'settings.update',
+  'PUT /api/custom-fields/pipeline-cards/:id': 'settings.update',
+  'POST /api/custom-field-folders': 'settings.update',
+  'PATCH /api/custom-field-folders/:id': 'settings.update',
+  'DELETE /api/custom-field-folders/:id': 'settings.update',
+
   // ── Billing ──
   // 'GET /api/billing/current' is NOT permission-gated: every member must be
   // able to resolve the org's PLAN (it gates whole app areas). The route

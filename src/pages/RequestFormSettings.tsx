@@ -29,6 +29,8 @@ import { STORAGE_BUCKETS } from '../lib/storage';
 import FileUpload from '../components/FileUpload';
 import Modal from '../components/ui/Modal';
 import type { RequestForm, FormField, FormFieldType } from '../types';
+import { useChampsPourFormulaire } from '../components/champs/formulaire';
+import type { ChampPerso } from '../lib/champs/types';
 
 // ── Constants ──────────────────────────────────────────────
 
@@ -56,7 +58,10 @@ function FieldEditor({
   isFr,
   onUpdate,
   onRemove,
+  champsPerso = [],
 }: {
+  /** Champs personnalisés (opportunité + client) que la réponse peut remplir. */
+  champsPerso?: ChampPerso[];
   field: FormField;
   isFr: boolean;
   onUpdate: (updated: FormField) => void;
@@ -124,6 +129,30 @@ function FieldEditor({
           </div>
         </div>
       </div>
+
+      {champsPerso.length > 0 && (
+        <div className="ml-7">
+          <label htmlFor={`${id}-cf`} className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+            {isFr ? 'La réponse remplit le champ personnalisé' : 'The answer fills the custom field'}
+          </label>
+          <select
+            id={`${id}-cf`}
+            value={field.cf_field_id ?? ''}
+            onChange={(e) => onUpdate({ ...field, cf_field_id: e.target.value || null })}
+            className="glass-input w-full mt-1 md:w-1/2"
+          >
+            <option value="">{isFr ? '— Aucun (texte dans la demande seulement) —' : '— None (text in the request only) —'}</option>
+            {(['deal', 'client'] as const).map((o) => {
+              const liste = champsPerso.filter((c) => c.object_type === o);
+              return liste.length ? (
+                <optgroup key={o} label={o === 'deal' ? (isFr ? 'Opportunité' : 'Opportunity') : 'Client'}>
+                  {liste.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </optgroup>
+              ) : null;
+            })}
+          </select>
+        </div>
+      )}
 
       {(needsOptions || isCheckbox) && (
         <div className="ml-7 space-y-2">
@@ -330,6 +359,7 @@ function FormPreview({
 // ── Main Component ─────────────────────────────────────────
 
 export default function RequestFormSettings() {
+  const champsPerso = useChampsPourFormulaire();
   const { t, language } = useTranslation();
   const id = useId();
   const isFr = language === 'fr';
@@ -757,6 +787,7 @@ export default function RequestFormSettings() {
                         isFr={isFr}
                         onUpdate={(u) => updateField(field.id, u)}
                         onRemove={() => removeField(field.id)}
+                        champsPerso={champsPerso}
                       />
                     </Reorder.Item>
                   ))}
@@ -802,6 +833,7 @@ export default function RequestFormSettings() {
                         isFr={isFr}
                         onUpdate={(u) => updateField(field.id, u)}
                         onRemove={() => removeField(field.id)}
+                        champsPerso={champsPerso}
                       />
                     </Reorder.Item>
                   ))}

@@ -6,6 +6,7 @@ import { validate, upsertRequestFormSchema, publicFormSubmissionSchema, updateFo
 import { ensureClientForLead } from '../lib/leadClientSync';
 import { upsertLeadPinForClient } from '../lib/fieldPinSync';
 import { eventBus } from '../lib/eventBus';
+import { appliquerReponsesFormulaire, type QuestionFormulaire } from '../lib/champs/formulaires';
 import { sendEmail } from '../lib/mailer';
 import { rendreCourrielLume } from '../lib/courriels/gabarit';
 
@@ -305,7 +306,10 @@ router.get('/public/form/:apiKey', async (req, res) => {
         description: form.description,
         success_message: form.success_message,
         enabled: form.enabled,
-        custom_fields: form.custom_fields,
+        // Le lien vers un champ personnalisé est interne : le visiteur n'en a rien à faire.
+        custom_fields: Array.isArray(form.custom_fields)
+          ? form.custom_fields.map(({ cf_field_id: _lien, ...q }: Record<string, unknown>) => q)
+          : form.custom_fields,
         logo_url: logoUrl,
       },
     });
@@ -823,6 +827,20 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
         console.info('[public/form] pipeline de ventes', {
           dealId: ingest?.deal_id, cree: ingest?.cree, fusionne: ingest?.fusionne, raison: ingest?.raison,
         });
+        // Questions liées à un champ personnalisé (cf_field_id) : la réponse
+        // remplit le champ sur l'opportunité ou sur son client. Le client du
+        // deal fait foi (ingest_lead a pu rapprocher un contact existant).
+        const questions = Array.isArray(form.custom_fields) ? form.custom_fields as QuestionFormulaire[] : [];
+        if (ingest?.deal_id && questions.some((q) => q.cf_field_id)) {
+          try {
+            const { data: d } = await admin.from('deals').select('client_id').eq('id', ingest.deal_id).eq('org_id', orgId).maybeSingle();
+            const r = await appliquerReponsesFormulaire(admin, orgId, questions, submissionResponses,
+              { dealId: String(ingest.deal_id), clientId: (d?.client_id as string | undefined) ?? String(clientId) });
+            console.info('[public/form] champs personnalisés', r);
+          } catch (e: any) {
+            console.error('[public/form] champs personnalisés — écriture échouée:', e?.message);
+          }
+        }
       }
     } catch (e: any) {
       console.error('[public/form] pipeline de ventes — ingestion échouée:', e?.message);

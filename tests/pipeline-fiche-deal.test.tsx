@@ -16,8 +16,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const fetchRaisonsMock = vi.fn(async () => [] as any[]);
-const listColumnsMock = vi.fn(async () => [] as any[]);
-const getValuesMock = vi.fn(async () => ({}) as Record<string, any>);
+const lireValeursMock = vi.fn(async () => ({ fields: [], folders: [], values: {} }) as any);
+const ecrireValeursMock = vi.fn(async () => [] as any[]);
 const rdvMock = vi.fn(async () => [] as any[]);
 const dossierMock = vi.fn(async () => ({
   jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
@@ -42,10 +42,14 @@ vi.mock('../src/lib/pipelineVentesApi', () => ({
   nomClient: (d: any) => `${d.client?.first_name ?? ''} ${d.client?.last_name ?? ''}`.trim() || 'Client',
 }));
 
-vi.mock('../src/lib/customFieldsApi', () => ({
-  listColumns: (...a: any[]) => listColumnsMock(...(a as [])),
-  getValuesForRecord: (...a: any[]) => getValuesMock(...(a as [])),
-  setValue: vi.fn(async () => undefined),
+// Champs personnalisés v2 : le VRAI panneau est rendu ; seules l'API et le
+// drapeau sont simulés.
+vi.mock('../src/lib/champsPersoApi', () => ({
+  lireValeurs: (...a: any[]) => lireValeursMock(...(a as [])),
+  ecrireValeurs: (...a: any[]) => ecrireValeursMock(...(a as [])),
+}));
+vi.mock('../src/hooks/useModuleAccess', () => ({
+  useModuleAccess: () => ({ isEnabled: true, indetermine: false, loading: false, activate: async () => true, activating: false, platformLocked: false }),
 }));
 
 // Les notes et la chronologie parlent à la base : hors sujet ici.
@@ -152,8 +156,8 @@ function boutonNomme(motif: RegExp): HTMLButtonElement | undefined {
 
 beforeEach(() => {
   fetchRaisonsMock.mockClear().mockResolvedValue([]);
-  listColumnsMock.mockClear().mockResolvedValue([]);
-  getValuesMock.mockClear().mockResolvedValue({});
+  lireValeursMock.mockClear().mockResolvedValue({ fields: [], folders: [], values: {} });
+  ecrireValeursMock.mockClear().mockResolvedValue([]);
   rdvMock.mockClear().mockResolvedValue([]);
   dossierMock.mockClear().mockResolvedValue({
     jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
@@ -188,6 +192,12 @@ describe('fiche du deal — abandonner', () => {
   });
 });
 
+const SUPERFICIE = {
+  id: 'col1', object_type: 'deal', folder_id: null, key: 'superficie', label: 'Superficie', placeholder: null, help_text: null,
+  field_type: 'number', config: {}, is_required: false, is_searchable: false, is_unique: false, position: 0,
+  created_at: 'x', updated_at: 'x', archived_at: null, options: [],
+};
+
 describe('fiche du deal — champs personnalisés', () => {
   it("n'affiche rien tant qu'aucun champ n'est défini", async () => {
     await rendre();
@@ -196,24 +206,49 @@ describe('fiche du deal — champs personnalisés', () => {
   });
 
   it('affiche les champs définis, avec leur valeur', async () => {
-    listColumnsMock.mockResolvedValue([
-      { id: 'col1', org_id: 'o1', entity: 'deals', name: 'Superficie', col_type: 'number', config: {}, position: 0, visible: true, required: false },
-    ]);
-    getValuesMock.mockResolvedValue({ col1: 2400 });
+    lireValeursMock.mockResolvedValue({
+      fields: [SUPERFICIE], folders: [], values: { col1: { field_id: 'col1', value: 2400, version: 3, updated_at: 'x' } },
+    });
     await rendre();
     await ouvrirSection('Deal');
 
-    expect(listColumnsMock).toHaveBeenCalledWith('deals');
+    expect(lireValeursMock).toHaveBeenCalledWith('deal', expect.any(String));
     expect(conteneur.textContent).toContain('Informations du métier');
     expect(conteneur.textContent).toContain('Superficie');
+    const champ = conteneur.querySelector('input[inputmode="decimal"]') as HTMLInputElement;
+    expect(champ.value).toBe('2400');
   });
 
-  it('ignore un champ masqué', async () => {
-    listColumnsMock.mockResolvedValue([
-      { id: 'col1', org_id: 'o1', entity: 'deals', name: 'Interne', col_type: 'text', config: {}, position: 0, visible: false, required: false },
-    ]);
+  it('enregistre au blur, avec la version lue (verrou optimiste)', async () => {
+    lireValeursMock.mockResolvedValue({
+      fields: [SUPERFICIE], folders: [], values: { col1: { field_id: 'col1', value: 2400, version: 3, updated_at: 'x' } },
+    });
+    ecrireValeursMock.mockResolvedValue([{ field_id: 'col1', ok: true, changed: true, version: 4 }]);
     await rendre();
-    expect(conteneur.textContent).not.toContain('Interne');
+    await ouvrirSection('Deal');
+    const champ = conteneur.querySelector('input[inputmode="decimal"]') as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(champ, '2500');
+      champ.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { champ.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    expect(ecrireValeursMock).toHaveBeenCalledWith('deal', expect.any(String), [{ field_id: 'col1', value: 2500, version: 3 }]);
+  });
+
+  it('montre le refus du serveur sous le champ, en clair', async () => {
+    lireValeursMock.mockResolvedValue({ fields: [SUPERFICIE], folders: [], values: {} });
+    ecrireValeursMock.mockResolvedValue([{ field_id: 'col1', ok: false, changed: false, version: null, erreur: '« Superficie » doit être au plus 100.' }]);
+    await rendre();
+    await ouvrirSection('Deal');
+    const champ = conteneur.querySelector('input[inputmode="decimal"]') as HTMLInputElement;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(champ, '900');
+      champ.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => { champ.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
+    expect(conteneur.querySelector('[role="alert"]')?.textContent).toContain('doit être au plus 100');
   });
 });
 

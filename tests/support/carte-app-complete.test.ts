@@ -36,7 +36,9 @@ describe('carte de l’app du support', () => {
     expect(manquantes, `écrans absents de carte-app.ts : ${manquantes.join(', ')}`).toEqual([]);
   });
   it('reste un texte borné : la carte est indexée par search_help (plus dans le prompt depuis #412), seul son index entre dans le prompt', () => {
-    expect(CARTE_APP.length).toBeLessThan(24_000);
+    // 25 000 depuis les champs personnalisés v2 (2026-09-26) : la carte n'est plus dans le prompt,
+    // seul son index y entre (borné juste en dessous) — l'agrandir ne coûte rien par tour.
+    expect(CARTE_APP.length).toBeLessThan(25_000);
     expect(indexCarteApp().length).toBeLessThan(4_000);
     expect(CARTE_APP).toContain('/tasks');
   });

@@ -10,7 +10,7 @@
  * ne reste qu'une pastille ronde devant le nom. La couleur porte l'information
  * qui presse (priorité sur le liseré gauche des cartes), pas la décoration.
  */
-import { useCallback, useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   DndContext, DragOverlay, PointerSensor, closestCorners, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
@@ -26,6 +26,10 @@ import { confirmer } from '../ui/ConfirmDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 import ActionsRapides from './ActionsRapides';
 import ImportCsvModal from './ImportCsvModal';
+import {
+  useChampsPipeline, useFiltreChamps, comparerParChamp, ChampsSurCarte, PanneauChamps, valeurCsv, type TriChamp,
+} from '../champs/pipeline';
+import type { Condition } from '../../lib/champs/filtres';
 import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -124,8 +128,10 @@ const CLASSE_CHAMP =
 
 function CarteDeal({
   deal, etapes, membres, montantCents, onOuvrir, onAssigner, onChangement,
-  selectionne, onBasculerSelection,
+  selectionne, onBasculerSelection, extra,
 }: {
+  /** Champs personnalisés choisis pour les cartes de ce pipeline. */
+  extra?: ReactNode;
   /** `undefined` = mode sélection inactif : aucune case n'est dessinée. */
   selectionne?: boolean;
   onBasculerSelection?: (dealId: string) => void;
@@ -321,6 +327,8 @@ function CarteDeal({
         </span>
       </div>
 
+      {extra}
+
       {deal.lost_reason && (
         <p className="mt-1 truncate text-[10px] text-text-muted">↳ {deal.lost_reason}</p>
       )}
@@ -332,8 +340,10 @@ function CarteDeal({
 
 function Colonne({
   etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement,
-  selection, onBasculerSelection, modeCouleur,
+  selection, onBasculerSelection, modeCouleur, extraCarte,
 }: {
+  /** Contenu ajouté au bas de chaque carte (champs personnalisés). */
+  extraCarte?: (deal: Deal) => ReactNode;
   /** Où poser la teinte de l'étape — réglage du pipeline. */
   modeCouleur: ModeCouleur;
   /** Les deals cochés. `undefined` = mode sélection inactif. */
@@ -433,6 +443,7 @@ function Colonne({
               onChangement={onChangement}
               selectionne={selection?.has(deal.id)}
               onBasculerSelection={onBasculerSelection}
+              extra={extraCarte?.(deal)}
             />
           ))}
           {deals.length === 0 && (
@@ -776,9 +787,12 @@ function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
   pipelines, pipelineActif, onChangerPipeline, etapesFiltrables, onCreerPipeline,
   onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onImporter, onNouveauDeal,
+  extraPanneau,
 }: {
   /** Ouvre les réglages pour créer un pipeline. Absent = pas le droit. */
   onCreerPipeline?: () => void;
+  /** Section ajoutée au panneau de filtres (champs personnalisés). */
+  extraPanneau?: ReactNode;
   /** Étapes proposées au filtre — les actives, dans l'ordre du board. */
   etapesFiltrables: PipelineStage[];
   pipelines: { id: string; name: string; is_default: boolean }[];
@@ -1078,6 +1092,7 @@ function BarreOutils({
           >
             {fr ? 'Effacer les filtres' : 'Clear filters'}
           </button>
+          {extraPanneau}
         </div>
       )}
     </>
@@ -1219,6 +1234,13 @@ export default function PipelineBoard({
   // sur aucune carte visible n'explique rien. Les deals qui pèsent doivent
   // être en haut — c'est aussi ce qu'on veut voir en premier le matin.
   const [tri, setTri] = useState<Tri>('montant');
+  // Champs personnalisés : conditions (filtrées en SQL) et tri par champ.
+  // Hors d'EtatFiltres : les vues enregistrées ne les portent pas (encore).
+  const [conditionsChamps, setConditionsChamps] = useState<Condition[]>([]);
+  const [triChamp, setTriChamp] = useState<TriChamp | null>(null);
+  const idsDeals = useMemo(() => deals.map((d) => d.id), [deals]);
+  const champsPipeline = useChampsPipeline(pipelineActif, idsDeals);
+  const filtreChamps = useFiltreChamps(champsPipeline.actif ? conditionsChamps : [], idsDeals);
   const [affichage, setAffichage] = useState<Affichage>('kanban');
   const [vue, setVue] = useState<VueEnregistree | string>('tous');
   const [nouveauDeal, setNouveauDeal] = useState(false);
@@ -1442,6 +1464,7 @@ export default function PipelineBoard({
         if (cents === undefined || cents < montantPlancher) return false;
       }
       if (depuisBorne !== null && new Date(d.created_at).getTime() < depuisBorne) return false;
+      if (filtreChamps.ids && !filtreChamps.ids.has(d.id)) return false;
       if (q) {
         const c = d.client;
         // Le téléphone est cherché sans sa ponctuation : personne ne tape
@@ -1459,8 +1482,10 @@ export default function PipelineBoard({
       montant: (a, b) => (montants[b.id] ?? 0) - (montants[a.id] ?? 0),
       inactif: (a, b) => new Date(a.last_activity_at).getTime() - new Date(b.last_activity_at).getTime(),
     };
-    return [...retenus].sort(parTri[tri]);
-  }, [deals, etapes, filtres, montants, tri]);
+    const tries = [...retenus].sort(parTri[tri]);
+    // Tri par champ personnalisé : stable, il départage selon le tri habituel.
+    return triChamp ? tries.sort(comparerParChamp(triChamp, champsPipeline.valeurs)) : tries;
+  }, [deals, etapes, filtres, montants, tri, filtreChamps.ids, triChamp, champsPipeline.valeurs]);
 
   const parEtape = useMemo(() => {
     const g: Record<string, Deal[]> = {};
@@ -1532,6 +1557,15 @@ export default function PipelineBoard({
         jourIso(new Date(d.last_activity_at)),
       ];
     });
+    // Champs personnalisés (v2) : une colonne par champ d'opportunité, en fin
+    // de ligne — l'import lit les colonnes par leur nom, rien ne se décale.
+    const champsExport = champsPipeline.actif ? champsPipeline.champsDeal.filter((c) => !c.archived_at) : [];
+    if (champsExport.length) {
+      entetes.push(...champsExport.map((c) => c.label));
+      filtres_.forEach((d, i) => {
+        lignes[i].push(...champsExport.map((c) => valeurCsv(c, champsPipeline.valeurs[d.id]?.[c.id]?.value, fr)));
+      });
+    }
     telechargerCsv([entetes, ...lignes], `pipeline-${jourIso(new Date())}.csv`);
     toast.success(fr
       ? `${lignes.length} deal(s) exporté(s).`
@@ -1587,6 +1621,10 @@ export default function PipelineBoard({
         onExporter={exporter}
         onImporter={() => setImportOuvert(true)}
         onNouveauDeal={() => setNouveauDeal(true)}
+        extraPanneau={champsPipeline.actif ? (
+          <PanneauChamps champs={champsPipeline.champsDeal} conditions={conditionsChamps} onConditions={setConditionsChamps}
+            tri={triChamp} onTri={setTriChamp} fr={fr} enCours={filtreChamps.enCours} />
+        ) : null}
       />
 
       <ImportCsvModal
@@ -1883,6 +1921,9 @@ export default function PipelineBoard({
                 selection={selection}
                 onBasculerSelection={basculerSelection}
                 modeCouleur={modeCouleur}
+                extraCarte={champsPipeline.champsCarte.length ? (d) => (
+                  <ChampsSurCarte champs={champsPipeline.champsCarte} valeurs={champsPipeline.valeurs[d.id]} fr={fr} />
+                ) : undefined}
               />
             ))}
           </div>

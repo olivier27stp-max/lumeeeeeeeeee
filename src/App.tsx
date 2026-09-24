@@ -68,6 +68,7 @@ const ProfileSettings = React.lazy(() => import('./pages/settings/ProfileSetting
 const BillingSettings = React.lazy(() => import('./pages/settings/BillingSettings'));
 const LocationSettings = React.lazy(() => import('./pages/settings/LocationSettings'));
 const OfficesSettings = React.lazy(() => import('./pages/settings/OfficesSettings'));
+const ChampsPersoSettings = React.lazy(() => import('./pages/settings/ChampsPersoSettings'));
 const OfficeNew = React.lazy(() => import('./pages/OfficeNew'));
 const ArchivesPanel = React.lazy(() => import('./components/ArchivesPanel'));
 const SupportPage = React.lazy(() => import('./components/SupportPage'));
@@ -1588,6 +1589,7 @@ function AuthenticatedApp({
                       <Route path="company" element={<Gated permission="settings.update"><CompanySettings /></Gated>} />
                       {/* Bureaux de la compagnie (liste résolue côté serveur, owner/admin) */}
                       <Route path="offices" element={<Gated permission="settings.read"><OfficesSettings /></Gated>} />
+                      <Route path="custom-fields" element={<Gated permission="settings.update"><ChampsPersoSettings /></Gated>} />
                       <Route path="billing" element={<Gated permission="settings.read"><BillingSettings /></Gated>} />
                       <Route path="products" element={<Gated permission="settings.update"><ProductsServices /></Gated>} />
                       <Route path="taxes" element={<Gated permission="settings.update"><TaxSettings /></Gated>} />

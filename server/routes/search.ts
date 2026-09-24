@@ -3,6 +3,7 @@ import { sendSafeError } from '../lib/error-handler';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { getUserContext, isFinanciallyRestricted, hasPermission, stripFinancialFields, filterFinancialEntities } from '../lib/rbac';
+import { rechercherDansChamps } from '../lib/champs/recherche';
 import {
   sanitizeQuery,
   clampInt,
@@ -328,8 +329,12 @@ async function handleSuggestions(req: import('express').Request, res: import('ex
     // Enrich client names on expanded items
     enrichClientNames(expandedItems, clientNameMap);
 
+    // Champs personnalisés « cherchables » (v2) : valeurs trouvées sous la RLS
+    // de l'utilisateur, rattachées à la fiche que la recherche sait ouvrir.
+    const parChamps = await rechercherDansChamps(client, orgId, q, existingIds);
+
     // Merge: direct results first, then expanded
-    let allItems = [...mapped, ...expandedItems];
+    let allItems = [...mapped, ...expandedItems, ...parChamps];
 
     // ── RBAC: Filter financial entities for restricted roles ──
     const ctx = req.userContext || await getUserContext(client, auth.user.id, orgId);
