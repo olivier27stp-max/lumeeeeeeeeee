@@ -17,6 +17,7 @@ import type { ChampStandard } from './champs/standard';
 import type { Condition } from './champs/filtres';
 import { valeurCsv, valeurDepuisTexte } from './champs/valeurs';
 import { messageChamps } from './champs/messages';
+import type { IndustrieModele } from './champs/modeles';
 
 export type { ChampPerso, DossierChamp, ObjetChamp, TypeChamp, ValeurChamp, ValeurEnregistree, Condition };
 
@@ -30,6 +31,18 @@ async function entetes(): Promise<HeadersInit> {
     Authorization: `Bearer ${token}`,
     ...(orgId ? { 'x-org-id': orgId } : {}),
   };
+}
+
+/** Industrie de l'entreprise (inscription) si un modèle de champs existe pour elle. */
+export async function lireIndustrie(): Promise<IndustrieModele | null> {
+  return (await appel<{ industry: IndustrieModele | null }>('/api/custom-fields/templates', {}, 'Impossible de charger les champs.')).industry;
+}
+
+/** Crée les champs suggérés cochés (rejouable : les clés déjà prises sont sautées). */
+export async function installerModele(industrie: IndustrieModele, ids: string[], langue: 'fr' | 'en') {
+  return appel<{ crees: number; deja: number }>('/api/custom-fields/templates', {
+    method: 'POST', body: JSON.stringify({ industry: industrie, ids, language: langue }),
+  }, 'Impossible de créer le champ.');
 }
 
 /** Erreur du serveur, avec son corps (doublons, impact…) quand il y en a un. */

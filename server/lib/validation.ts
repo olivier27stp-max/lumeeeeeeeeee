@@ -12,6 +12,7 @@ import {
   ACTIONS_MAX,
 } from '../../src/lib/automationCatalogue';
 import { problemesDuGraphe, type Etape } from './automationSequences';
+import { INDUSTRIES_MODELES } from '../../src/lib/champs/modeles';
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
@@ -1071,6 +1072,12 @@ export const champCreerSchema = z.object({
   ...baseChamp,
   object_type: objetChamp,
   folder_id: z.string().uuid().nullable().optional(),
+}).strict();
+
+export const modeleInstallerSchema = z.object({
+  industry: z.enum(INDUSTRIES_MODELES),
+  ids: z.array(z.string().regex(/^[a-z][a-z0-9_]{0,49}$/)).max(50).optional(),
+  language: z.enum(['fr', 'en']).optional(),
 }).strict();
 
 export const champModifierSchema = z.object({

@@ -26,6 +26,7 @@ import { preparerValeur, lireValeur, formaterValeur, ErreurValeur } from '../../
 import type { Condition } from '../../../src/lib/champs/filtres';
 import { eventBus } from '../eventBus';
 import { logger } from '../logger';
+import { champsDuModele, estIndustrieModele, type IndustrieModele } from '../../../src/lib/champs/modeles';
 
 /** Drapeau de fonctionnalité (table org_features) — l'UI v2 et ses points d'entrée. */
 export const DRAPEAU_CHAMPS_V2 = 'custom_fields_v2';
@@ -497,6 +498,46 @@ export async function majCartesPipeline(db: SupabaseClient, orgId: string, pipel
     );
     if (error) traduireErreur(error, 'modifier l’affichage des cartes');
   }
+}
+
+// ─── Modèles par métier ─────────────────────────────────────────
+
+/** Industrie de l'entreprise (choisie à l'inscription) si elle a un modèle. */
+export async function industrieDe(db: SupabaseClient, orgId: string): Promise<IndustrieModele | null> {
+  const { data } = await db.from('company_settings').select('industry').eq('org_id', orgId).maybeSingle();
+  const industrie: unknown = data?.industry;
+  return estIndustrieModele(industrie) ? industrie : null;
+}
+
+/**
+ * Crée les champs suggérés pour un métier. Rejouable : un champ dont la clé
+ * existe déjà sur l'objet (même archivé) est sauté, jamais dupliqué ni
+ * modifié. Libellés dans la langue de l'entreprise par défaut.
+ */
+export async function installerModele(
+  db: SupabaseClient, orgId: string, industrie: IndustrieModele,
+  opts: { ids?: string[]; langue?: 'fr' | 'en' } = {},
+): Promise<{ crees: number; deja: number }> {
+  let langue = opts.langue;
+  if (!langue) {
+    const { data: cs } = await db.from('company_settings').select('default_language').eq('org_id', orgId).maybeSingle();
+    langue = cs?.default_language === 'en' ? 'en' : 'fr';
+  }
+  const { champs } = await listerChamps(db, orgId, { inclureArchives: true });
+  const pris = new Set(champs.map((c) => `${c.object_type}:${c.key}`));
+  let crees = 0;
+  let deja = 0;
+  for (const { modele, objet } of champsDuModele(industrie, opts.ids)) {
+    if (pris.has(`${objet}:${modele.key}`)) { deja++; continue; }
+    await creerChamp(db, orgId, {
+      object_type: objet, key: modele.key, label: modele[langue], field_type: modele.field_type,
+      config: modele.document && (objet === 'quote' || objet === 'invoice') ? { show_on_documents: true } : {},
+      options: modele.options?.map((o) => ({ label: o[langue!], color: o.color ?? null })),
+    });
+    pris.add(`${objet}:${modele.key}`);
+    crees++;
+  }
+  return { crees, deja };
 }
 
 // ─── Documents du client (devis, facture) ───────────────────────
