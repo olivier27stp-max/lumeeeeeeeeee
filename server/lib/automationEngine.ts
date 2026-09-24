@@ -13,6 +13,13 @@ import {
   resolveEntityVariables,
 } from './actions';
 import { logger } from './logger';
+import {
+  type Etape,
+  planifierEtape,
+  trouverEtape,
+  etapeSuivante,
+  premiereEtape,
+} from './automationSequences';
 import { automatisationsActivesAvecTrace } from './automations-interrupteur';
 
 interface AutomationRule {
@@ -23,6 +30,11 @@ interface AutomationRule {
   conditions: Record<string, any>;
   delay_seconds: number;
   actions: Array<{ type: ActionType; config: Record<string, any> }>;
+  /**
+   * Graphe d'étapes d'une SÉQUENCE. `null` sur une règle simple, qui continue
+   * d'être pilotée par `delay_seconds` + `actions` exactement comme avant.
+   */
+  steps?: Etape[] | null;
   is_active: boolean;
   /** Portée pipeline (déclencheurs `deal.*`). `null` = toutes les étapes. */
   pipeline_id?: string | null;
@@ -512,6 +524,30 @@ async function handleEvent(event: CRMEvent) {
         try {
         if (!regleViseCetEvenement(rule, event)) continue;
         if (!evaluateConditions(rule.conditions, event)) continue;
+        // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
+        // première, chacune ouvrant la suivante une fois faite. Rien n'est
+        // planifié d'avance, pour qu'une branche « si » soit évaluée sur
+        // l'état du devis AU MOMENT où on y arrive, pas sur celui d'il y a
+        // trois jours.
+        if (Array.isArray(rule.steps) && rule.steps.length > 0) {
+          const debut = premiereEtape(rule.steps);
+          if (debut) {
+            await planifierEtape(
+              {
+                supabase: engineConfig.supabase,
+                orgId: event.orgId,
+                ruleId: rule.id,
+                entityType: event.entityType,
+                entityId: event.entityId,
+                contexte: event.metadata ?? {},
+                franchies: 0,
+              },
+              rule.steps,
+              debut.id,
+            );
+          }
+          continue;
+        }
         if (rule.delay_seconds !== 0) {
           await scheduleDelayedActions(rule, event, engineConfig);
         } else if (event.metadata?.suppress_immediate) {
@@ -774,7 +810,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // (org_id, automation_rule_id) qui porte l'isolation multi-tenant).
     // PostgREST répondait PGRST201 et AUCUNE tâche d'automatisation planifiée
     // n'était plus exécutée.
-    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions)')
+    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions, steps)')
     .eq('status', 'pending')
     .lte('execute_at', now)
     .order('execute_at', { ascending: true })
@@ -891,6 +927,53 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         continue;
       }
 
+      // ── Séquence : une étape « si » ne s'exécute pas, elle décide ──
+      //
+      // Elle est traitée AVANT toute exécution : il n'y a rien à envoyer, il
+      // y a une branche à choisir. Et elle est évaluée MAINTENANT, contre
+      // l'état actuel de l'entité — c'est tout l'intérêt de ne rien planifier
+      // d'avance : « si le devis est toujours sans réponse » se juge au
+      // moment où on y arrive, pas trois jours plus tôt.
+      const etapesRegle = (task.automation_rules?.steps ?? null) as Etape[] | null;
+      if (task.step_id && Array.isArray(etapesRegle)) {
+        const etape = trouverEtape(etapesRegle, task.step_id);
+        if (etape && etape.type === 'si') {
+          const contexte = (task.sequence_context ?? {}) as Record<string, unknown>;
+          // On réutilise l'évaluateur des règles simples : mêmes opérateurs,
+          // même sémantique. Deux moteurs de conditions divergeraient.
+          const verdict = evaluateConditions(etape.conditions as Record<string, any>, {
+            type: actionConfig.trigger_event,
+            orgId: task.org_id,
+            entityType: task.entity_type,
+            entityId: task.entity_id,
+            metadata: await metadonneesFraiches(supabase, task, contexte),
+          } as CRMEvent);
+
+          await planifierEtape(
+            {
+              supabase,
+              orgId: task.org_id,
+              ruleId: task.automation_rule_id,
+              entityType: task.entity_type,
+              entityId: task.entity_id,
+              contexte,
+              franchies: Number(contexte.franchies ?? 0),
+            },
+            etapesRegle,
+            etapeSuivante(etape, verdict),
+          );
+
+          await supabase
+            .from('automation_scheduled_tasks')
+            .update({ status: 'completed', completed_at: new Date().toISOString() })
+            .eq('id', task.id);
+          logger.info(`[sequences] branche « ${verdict ? 'alors' : 'sinon' } » suivie`, {
+            rule_id: task.automation_rule_id, step_id: task.step_id,
+          });
+          continue;
+        }
+      }
+
       const vars = await resolveEntityVariables(
         supabase,
         task.org_id,
@@ -952,6 +1035,33 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
             : nextStateAfterFailure(task.attempts, result.error),
         )
         .eq('id', task.id);
+      // ── Séquence : l'étape est faite, on ouvre la suivante ──
+      //
+      // Seulement sur SUCCÈS : une étape échouée sera reprise (backoff), et
+      // enchaîner tout de suite ferait partir la suite alors que le message
+      // précédent n'est jamais parti. Après épuisement des reprises, la
+      // séquence s'arrête là — c'est voulu : mieux vaut une séquence
+      // interrompue qu'une séquence qui saute une étape en silence.
+      if (result.success && task.step_id && Array.isArray(etapesRegle)) {
+        const etape = trouverEtape(etapesRegle, task.step_id);
+        if (etape) {
+          const contexte = (task.sequence_context ?? {}) as Record<string, unknown>;
+          await planifierEtape(
+            {
+              supabase,
+              orgId: task.org_id,
+              ruleId: task.automation_rule_id,
+              entityType: task.entity_type,
+              entityId: task.entity_id,
+              contexte,
+              franchies: Number(contexte.franchies ?? 0),
+            },
+            etapesRegle,
+            etapeSuivante(etape),
+          );
+        }
+      }
+
       // Abandon définitif : l'entreprise doit l'apprendre.
       if (!result.success && nextStateAfterFailure(task.attempts, result.error).status === 'failed') {
         await prevenirEchecDefinitif(supabase, task, result.error);
@@ -994,6 +1104,60 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
  * Règle appliquée partout maintenant : une erreur de LECTURE ne conclut rien.
  * On laisse la tâche en place ; le tick suivant réessaiera.
  */
+/**
+ * Les métadonnées à jour de l'entité, pour évaluer une branche « si ».
+ *
+ * C'EST LE CŒUR DE L'INTÉRÊT D'UNE SÉQUENCE. Les métadonnées de l'événement
+ * déclencheur décrivent le devis tel qu'il était le jour de l'envoi. Trois
+ * jours plus tard, « si le devis est toujours sans réponse » doit se juger
+ * sur son état ACTUEL — sinon la branche répondrait toujours la même chose
+ * et ne servirait à rien.
+ *
+ * On part du contexte d'origine et on écrase ce qui a pu changer. Une lecture
+ * qui échoue n'est pas silencieuse : on garde l'ancien contexte et on le dit,
+ * plutôt que de décider sur du vide.
+ */
+async function metadonneesFraiches(
+  supabase: SupabaseClient,
+  task: { entity_type: string; entity_id: string; org_id: string },
+  contexte: Record<string, unknown>,
+): Promise<Record<string, any>> {
+  const base: Record<string, any> = { ...contexte };
+
+  /** Table et colonnes à relire selon le type d'entité. */
+  const source: Record<string, { table: string; colonnes: string }> = {
+    quote: { table: 'quotes', colonnes: 'status, total_cents' },
+    invoice: { table: 'invoices', colonnes: 'status, total_cents, balance_cents' },
+    job: { table: 'jobs', colonnes: 'status' },
+    lead: { table: 'leads_active', colonnes: 'status, lead_status' },
+    appointment: { table: 'schedule_events', colonnes: 'status' },
+  };
+
+  const cible = source[task.entity_type];
+  if (!cible) return base;
+
+  const { data, error } = await supabase
+    .from(cible.table)
+    .select(cible.colonnes)
+    .eq('id', task.entity_id)
+    .eq('org_id', task.org_id)
+    .maybeSingle();
+
+  if (error) {
+    // Ne pas confondre « je ne sais pas » et « rien n'a changé » : on décide
+    // sur le contexte d'origine, mais la trace dit pourquoi.
+    logger.error('[sequences] état actuel illisible — branche évaluée sur le contexte d’origine', {
+      entity_type: task.entity_type, entity_id: task.entity_id, message: error.message,
+    });
+    return base;
+  }
+  if (!data) return base;
+
+  // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
+  // dynamiquement : la forme est garantie par `source` juste au-dessus.
+  return { ...base, ...(data as unknown as Record<string, unknown>) };
+}
+
 async function checkStopConditions(
   supabase: SupabaseClient,
   entityType: string,

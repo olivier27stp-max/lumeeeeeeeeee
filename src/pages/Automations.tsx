@@ -645,7 +645,7 @@ export default function Automations() {
                   key={l}
                   onClick={() => changerLangue(l)}
                   disabled={savingLang}
-                  className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-surface-primary' : 'text-text-secondary hover:bg-surface-tertiary'}`}
+                  className={`px-2.5 py-1 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
                 >
                   {l === 'fr' ? 'FR' : 'EN'}
                 </button>
@@ -657,7 +657,7 @@ export default function Automations() {
           {catalogue && (
             <button
               onClick={() => setEnEdition(null)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-text-primary px-3 py-1.5 text-[12px] font-medium text-surface-primary hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-text-primary px-3 py-1.5 text-[12px] font-medium text-white hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Plus size={14} aria-hidden="true" />
               {fr ? 'Créer' : 'Create'}
