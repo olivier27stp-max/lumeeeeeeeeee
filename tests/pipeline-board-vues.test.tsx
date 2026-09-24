@@ -23,10 +23,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const fetchVuesMock = vi.fn(async () => [] as any[]);
+const creerVueMock = vi.fn(async () => 'vue-1');
 
 vi.mock('../src/lib/pipelineVentesApi', () => ({
   fetchVues: (...a: any[]) => fetchVuesMock(...(a as [])),
-  creerVue: vi.fn(async () => 'vue-1'),
+  creerVue: (...a: any[]) => creerVueMock(...(a as [])),
   supprimerVue: vi.fn(async () => undefined),
   creerDealManuel: vi.fn(async () => ({ deal_id: 'd', client_id: 'c', cree: true })),
   estJobACreer: () => false,
@@ -45,7 +46,13 @@ vi.mock('../src/hooks/usePermissions', () => ({
 }));
 
 vi.mock('../src/i18n', () => ({
-  useTranslation: () => ({ language: 'fr', t: {} }),
+  // `t` doit porter les clés que les composants partagés lisent vraiment :
+  // `Modal` fait `t.common.close` pour son bouton de fermeture, et un `t`
+  // vide le fait planter — un défaut du mock, pas du composant.
+  useTranslation: () => ({
+    language: 'fr',
+    t: { common: { close: 'Fermer', cancel: 'Annuler', save: 'Enregistrer' } },
+  }),
 }));
 
 import PipelineBoard from '../src/components/pipeline/PipelineBoard';
@@ -97,6 +104,7 @@ function selecteurPipeline(): HTMLSelectElement | null {
 
 beforeEach(() => {
   fetchVuesMock.mockClear();
+  creerVueMock.mockClear();
   conteneur = document.createElement('div');
   document.body.appendChild(conteneur);
   racine = createRoot(conteneur);
@@ -332,5 +340,58 @@ describe('board — actions en lot', () => {
     expect(libelles).toContain('Nouveau lead');
     expect(libelles).not.toContain('Gagné');
     expect(libelles).not.toContain('Perdu');
+  });
+});
+
+describe('board — enregistrer une vue', () => {
+  function boutonEnregistrer(): HTMLButtonElement {
+    const b = [...conteneur.querySelectorAll('button')]
+      .find((x) => /Enregistrer la vue/.test(x.textContent ?? '')) as HTMLButtonElement;
+    expect(b, 'bouton « Enregistrer la vue » introuvable').toBeTruthy();
+    return b;
+  }
+
+  it("le bouton est désactivé tant qu'aucun filtre n'est actif", async () => {
+    await rendre();
+    // Une vue « aucun filtre » ne sert à rien : c'est déjà l'onglet « Tous ».
+    expect(boutonEnregistrer().disabled).toBe(true);
+  });
+
+  it('enregistre les filtres courants sous le nom donné', async () => {
+    await rendre();
+
+    // Un filtre, pour activer le bouton.
+    const recherche = conteneur.querySelector('input[type="search"]') as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      setter?.call(recherche, 'Tremblay');
+      recherche.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(boutonEnregistrer().disabled).toBe(false);
+
+    await act(async () => { boutonEnregistrer().click(); });
+
+    // Par son libellé : le modal est rendu dans document.body (portail),
+    // pas dans `conteneur`.
+    const lab = [...document.querySelectorAll('label')]
+      .find((l) => /Nom de la vue/.test(l.textContent ?? ''));
+    expect(lab, 'libellé du nom introuvable').toBeTruthy();
+    const nom = document.getElementById(lab!.htmlFor) as HTMLInputElement;
+    expect(nom, 'champ du nom introuvable').toBeTruthy();
+    await act(async () => {
+      setter?.call(nom, 'Mes Tremblay');
+      nom.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const valider = [...document.querySelectorAll('button')]
+      .find((b) => b.getAttribute('type') === 'submit') as HTMLButtonElement;
+    await act(async () => { valider.click(); });
+
+    expect(creerVueMock).toHaveBeenCalledTimes(1);
+    const [pipelineId, nomVue, filtres] = creerVueMock.mock.calls[0] as any[];
+    expect(pipelineId).toBe('p1');
+    expect(nomVue).toBe('Mes Tremblay');
+    // Les filtres RENSEIGNÉS voyagent avec la vue — c'est tout son intérêt.
+    expect(filtres.texte).toBe('Tremblay');
   });
 });

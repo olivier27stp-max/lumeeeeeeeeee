@@ -85,8 +85,9 @@ async function rendre(over: Record<string, unknown> = {}) {
             etapes={ETAPES}
             membres={[]}
             montantCents={null}
-            provenance="aucun"
-            onFermer={vi.fn()}
+            montantProvenance="aucun"
+            onClose={vi.fn()}
+            onAssigner={vi.fn()}
             onCreerJob={vi.fn()}
             onChangement={vi.fn()}
           />
