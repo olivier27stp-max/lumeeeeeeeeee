@@ -292,18 +292,34 @@ describe('statusCallback — les SMS ne restent plus figés à « envoyé »', (
     // La signature Twilio se valide contre l'URL EXACTE appelée : toute
     // divergence ferait rejeter 100 % des callbacks avec une erreur 403.
     const config = read('server/lib/config.ts');
-    const fn = config.slice(
+    const base = config.slice(
+      config.indexOf('export function getTwilioWebhookBaseUrl'),
       config.indexOf('export function getTwilioStatusCallbackUrl'),
-      config.indexOf('export const stripeWebhookClient'),
     );
     const order = ['TWILIO_WEBHOOK_BASE_URL', 'PUBLIC_URL', 'PUBLIC_BASE_URL', 'FRONTEND_URL'];
     let cursor = -1;
     for (const v of order) {
-      const idx = fn.indexOf(v);
+      const idx = base.indexOf(v);
       expect(idx, `${v} manquant ou dans le désordre`).toBeGreaterThan(cursor);
       cursor = idx;
     }
-    expect(fn).toContain('/api/messages/status');
+    const cb = config.slice(
+      config.indexOf('export function getTwilioStatusCallbackUrl'),
+      config.indexOf('export const stripeWebhookClient'),
+    );
+    expect(cb).toContain('getTwilioWebhookBaseUrl()');
+    expect(cb).toContain('/api/messages/status');
+  });
+
+  it('achat d’un numéro et validation de signature lisent la MÊME base d’URL', () => {
+    // L'achat lisait PUBLIC_URL en premier, la validation TWILIO_WEBHOOK_BASE_URL :
+    // deux variables différentes = chaque nouveau numéro rejeté à la signature.
+    const prov = read('server/lib/twilioProvisioning.ts');
+    expect(prov).toContain('getTwilioWebhookBaseUrl()');
+    expect(prov).not.toMatch(/process\.env\.(PUBLIC_URL|TWILIO_WEBHOOK_BASE_URL)/);
+    const messages = read('server/routes/messages.ts');
+    expect(messages.match(/getTwilioWebhookBaseUrl\(\) \|\| resolvePublicBaseUrl\(req\)/g)).toHaveLength(2);
+    expect(messages).not.toMatch(/process\.env\.TWILIO_WEBHOOK_BASE_URL/);
   });
 
   it('aucun callback annoncé quand l’URL est absente ou locale', () => {

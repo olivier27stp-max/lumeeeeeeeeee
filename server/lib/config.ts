@@ -56,6 +56,25 @@ export const twilioProvisioningClient =
     : twilioClient;
 
 /**
+ * Base publique des webhooks Twilio, sans « / » final ('' si rien n'est défini).
+ *
+ * SOURCE UNIQUE : la validation de signature (`routes/messages.ts`) calcule
+ * l'URL dans cet ordre-ci, donc l'URL enregistrée à l'achat d'un numéro DOIT
+ * sortir de la même fonction. L'achat lisait `PUBLIC_URL` en premier : si les
+ * deux variables différaient, chaque nouveau numéro aurait reçu un webhook
+ * dont la signature était ensuite rejetée — textos entrants perdus en silence.
+ */
+export function getTwilioWebhookBaseUrl(): string {
+  return (
+    process.env.TWILIO_WEBHOOK_BASE_URL
+    || process.env.PUBLIC_URL
+    || process.env.PUBLIC_BASE_URL
+    || process.env.FRONTEND_URL
+    || ''
+  ).trim().replace(/\/$/, '');
+}
+
+/**
  * URL du callback de statut Twilio, à passer à CHAQUE `messages.create`.
  *
  * Sans ce paramètre par message, Twilio ne renvoie jamais l'accusé de
@@ -74,13 +93,7 @@ export const twilioProvisioningClient =
  * on n'envoie alors pas de callback plutôt qu'une URL relative invalide.
  */
 export function getTwilioStatusCallbackUrl(): string | undefined {
-  const base = (
-    process.env.TWILIO_WEBHOOK_BASE_URL
-    || process.env.PUBLIC_URL
-    || process.env.PUBLIC_BASE_URL
-    || process.env.FRONTEND_URL
-    || ''
-  ).trim().replace(/\/$/, '');
+  const base = getTwilioWebhookBaseUrl();
 
   if (!base || !/^https?:\/\//.test(base)) return undefined;
   // Twilio ne peut pas joindre une machine locale : inutile d'annoncer une URL

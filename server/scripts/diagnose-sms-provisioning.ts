@@ -21,7 +21,7 @@
  */
 
 import 'dotenv/config';
-import { twilioClient, twilioAccountSid, getTwilioStatusCallbackUrl } from '../lib/config';
+import { twilioClient, twilioAccountSid, getTwilioStatusCallbackUrl, getTwilioWebhookBaseUrl } from '../lib/config';
 import { getServiceClient } from '../lib/supabase';
 import { logger } from '../lib/logger';
 
@@ -53,8 +53,8 @@ async function main() {
   // C'est le garde le plus souvent en cause : provisionSmsNumber refuse
   // d'acheter un numéro dont les webhooks pointeraient vers du vide.
   titre('2. URL publique des webhooks');
-  const publicUrl = (process.env.PUBLIC_URL || process.env.TWILIO_WEBHOOK_BASE_URL || '')
-    .trim().replace(/\/$/, '');
+  // Même base que l'achat réel et que la validation de signature.
+  const publicUrl = getTwilioWebhookBaseUrl();
 
   if (!publicUrl) {
     ko('Ni PUBLIC_URL ni TWILIO_WEBHOOK_BASE_URL n’est défini.');
