@@ -13,7 +13,7 @@
  * « Job à créer » et la raison de perte — c'est un état dont on ne sort pas.
  */
 import { useId, useState, type FormEvent } from 'react';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
 import { useTranslation } from '../../i18n';
@@ -269,16 +269,35 @@ export default function CreerPipelineModal({ ouvert, onFermer, onCree }: {
                 key={e.cle}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-outline bg-surface-card px-2.5 py-2"
               >
-                <span className="flex shrink-0 flex-col">
-                  <button
-                    type="button"
-                    onClick={() => deplacer(e.cle, -1)}
-                    disabled={i === 0}
-                    aria-label={fr ? 'Monter' : 'Move up'}
-                    className="text-text-muted hover:text-text-primary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary rounded"
-                  >
-                    <GripVertical size={13} aria-hidden="true" />
-                  </button>
+                {/*
+                  Deux flèches, pas une. Il n'y avait que « Monter » : une
+                  étape descendue par erreur ne pouvait plus remonter sans
+                  déplacer toutes les autres. Le numéro dit où on en est.
+                */}
+                <span className="flex shrink-0 items-center gap-1">
+                  <span className="w-4 text-right text-[11px] tabular-nums text-text-muted" aria-hidden="true">
+                    {i + 1}
+                  </span>
+                  <span className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => deplacer(e.cle, -1)}
+                      disabled={i === 0}
+                      aria-label={fr ? `Monter l'étape ${i + 1}` : `Move stage ${i + 1} up`}
+                      className="rounded text-text-muted hover:text-text-primary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                    >
+                      <ChevronUp size={13} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deplacer(e.cle, 1)}
+                      disabled={i === etapes.length - 1}
+                      aria-label={fr ? `Descendre l'étape ${i + 1}` : `Move stage ${i + 1} down`}
+                      className="rounded text-text-muted hover:text-text-primary disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                    >
+                      <ChevronDown size={13} aria-hidden="true" />
+                    </button>
+                  </span>
                 </span>
 
                 <input

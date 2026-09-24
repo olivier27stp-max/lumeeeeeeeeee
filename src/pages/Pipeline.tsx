@@ -23,6 +23,7 @@ import DealDrawer from '../components/pipeline/DealDrawer';
 import GagneJobModal from '../components/pipeline/GagneJobModal';
 import PerduModal from '../components/pipeline/PerduModal';
 import PipelineReglages from '../components/pipeline/PipelineReglages';
+import CreerPipelineModal from '../components/pipeline/CreerPipelineModal';
 import PipelinePrevisions from '../components/pipeline/PipelinePrevisions';
 import PipelineJournalLots from '../components/pipeline/PipelineJournalLots';
 import { useTranslation } from '../i18n';
@@ -145,6 +146,7 @@ export default function Pipeline() {
   const etapeParId = useMemo(() => new Map(etapes.map((e) => [e.id, e])), [etapes]);
 
   const [dealOuvert, setDealOuvert] = useState<Deal | null>(null);
+  const [creationPipeline, setCreationPipeline] = useState(false);
 
   /**
    * La fiche suit les données rechargées.
@@ -303,7 +305,10 @@ export default function Pipeline() {
           onChangerPipeline={choisirPipeline}
           // Créer un pipeline est un geste d'administration : la base le
           // refuserait de toute façon, autant ne pas proposer la porte.
-          onCreerPipeline={peutConfigurer ? () => choisirOnglet('reglages') : undefined}
+          // Ouvre directement le modal : renvoyer vers les Réglages obligeait
+          // à y retrouver le bouton soi-même, alors qu'on venait de demander
+          // à créer un pipeline.
+          onCreerPipeline={peutConfigurer ? () => setCreationPipeline(true) : undefined}
           onAssigner={assigner}
             onChangement={rafraichir}
           />
@@ -371,6 +376,19 @@ export default function Pipeline() {
           }
         }}
         onCreerJob={(deal) => { setDealOuvert(null); setDealAGagner(deal); }}
+      />
+
+      <CreerPipelineModal
+        ouvert={creationPipeline}
+        onFermer={() => setCreationPipeline(false)}
+        onCree={(id) => {
+          setCreationPipeline(false);
+          // On affiche le pipeline qu'on vient de créer : le créer pour
+          // rester devant l'ancien n'aurait aucun sens.
+          choisirPipeline(id);
+          qc.invalidateQueries({ queryKey: ['pipeline-liste'] });
+          qc.invalidateQueries({ queryKey: ['pipeline-defaut'] });
+        }}
       />
 
       <GagneJobModal
