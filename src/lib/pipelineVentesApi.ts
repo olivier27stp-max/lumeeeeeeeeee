@@ -691,7 +691,7 @@ export async function creerDealManuel(champs: {
   assigneA?: string | null;
   dateFermetureVisee?: string | null;
   source?: string | null;
-}): Promise<{ dealId: string; fusionne: boolean; dealExistant: boolean }> {
+}): Promise<{ dealId: string; fusionne: boolean; dealExistant: boolean; pipelineId: string | null }> {
   // `pipeline_creer_deal` ne prend PAS d'organisation : elle la dérive de la
   // session et vérifie la permission « leads.create ». `ingest_lead` reste
   // réservée au serveur — elle accepte un org_id en paramètre, ce qui n'a rien
@@ -709,7 +709,23 @@ export async function creerDealManuel(champs: {
   });
   if (error) throw error;
   const r = data as { deal_id: string; fusionne: boolean; deal_existant: boolean };
-  return { dealId: r.deal_id, fusionne: r.fusionne, dealExistant: r.deal_existant };
+
+  // OÙ le deal a atterri. `ingest_lead` le place toujours dans le pipeline
+  // PAR DÉFAUT de l'organisation — pas dans celui qu'on regarde. Sans cette
+  // information, créer un deal en consultant un autre pipeline laissait le
+  // compteur à zéro, et le bug passait pour un défaut de rafraîchissement
+  // (QA 2026-09-24, P1-6).
+  let pipelineId: string | null = null;
+  if (r.deal_id) {
+    const { data: place } = await supabase
+      .from('deals')
+      .select('pipeline_id')
+      .eq('id', r.deal_id)
+      .maybeSingle();
+    pipelineId = (place as { pipeline_id?: string } | null)?.pipeline_id ?? null;
+  }
+
+  return { dealId: r.deal_id, fusionne: r.fusionne, dealExistant: r.deal_existant, pipelineId };
 }
 
 // ── Réglages des étapes ─────────────────────────────────────

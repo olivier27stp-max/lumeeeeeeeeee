@@ -541,7 +541,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
   ouvert: boolean;
   fr: boolean;
   onFermer: () => void;
-  onCree: () => void;
+  /** Reçoit le pipeline où le deal a VRAIMENT atterri. */
+  onCree: (pipelineId: string | null) => void;
   /** Pour proposer un responsable dès la création. */
   membres: Membre[];
 }) {
@@ -611,7 +612,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
       } else {
         toast.success(fr ? 'Deal créé.' : 'Deal created.');
       }
-      onCree();
+      onCree(r.pipelineId);
       fermer();
     } catch (err) {
       console.error('[pipeline] création de deal refusée', err);
@@ -1675,7 +1676,18 @@ export default function PipelineBoard({
         fr={fr}
         membres={membres}
         onFermer={() => setNouveauDeal(false)}
-        onCree={() => onChangement?.()}
+        onCree={(pipelineOuCree) => {
+          // Le deal atterrit dans le pipeline PAR DÉFAUT. Si on en regardait
+          // un autre, le board resterait vide sans explication : on bascule
+          // dessus plutôt que de laisser croire que rien ne s'est passé.
+          if (pipelineOuCree && pipelineActif && pipelineOuCree !== pipelineActif) {
+            toast.info(fr
+              ? 'Le deal part dans le pipeline par défaut — on t\'y amène.'
+              : 'New deals land in the default pipeline — taking you there.');
+            onChangerPipeline(pipelineOuCree);
+          }
+          onChangement?.();
+        }}
       />
 
       {/* Vues enregistrées : un filtre nommé une fois, retrouvé d'un clic. */}
