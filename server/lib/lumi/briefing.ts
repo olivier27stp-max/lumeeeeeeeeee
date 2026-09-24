@@ -32,7 +32,7 @@ const FUSEAU_DEFAUT = 'America/Toronto';
 
 export interface DonneesBriefing {
   date: string;
-  overdue_invoices: { total_matching: number; total_cents: number; worst: Array<{ client: string; balance_cents: number; due_date: string | null }> };
+  overdue_invoices: { total_matching: number; total_cents: number; worst: Array<{ id?: string; client: string; balance_cents: number; due_date: string | null }> };
   todays_visits: { total_matching: number; visits: Array<{ start_at: string; end_at?: string; job_number?: number | string | null; title?: string | null; client?: string | null; address?: string | null }> };
   tasks_due: { total_matching: number; tasks: Array<{ title: string; priorite?: string; echeance?: string | null }> };
   new_requests_48h: { total_matching: number; requests: Array<{ nom: string; ville: string | null; quand: string }> };
@@ -46,8 +46,8 @@ export interface DonneesBriefing {
     total_cents: number;
     devis_total_cents: number;
     factures_total_cents: number;
-    devis: Array<{ client: string | null; montant_cents: number; jours_sans_contact: number }>;
-    factures: Array<{ client: string | null; solde_cents: number; jours_de_retard: number }>;
+    devis: Array<{ id?: string; client: string | null; montant_cents: number; jours_sans_contact: number }>;
+    factures: Array<{ id?: string; client: string | null; solde_cents: number; jours_de_retard: number }>;
   };
 }
 
@@ -55,6 +55,35 @@ export interface DonneesBriefing {
 const fmtDollars = (cents: number, fr: boolean) => (fr
   ? `${(cents / 100).toLocaleString('fr-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} $`
   : `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`).replace(/[  ]/g, ' ');
+
+export interface FicheBriefing { type: 'invoice' | 'quote' | 'client' | 'job'; id: string; label: string; href: string }
+
+const CHEMIN: Record<FicheBriefing['type'], string> = {
+  invoice: '/invoices', quote: '/quotes', client: '/clients', job: '/jobs',
+};
+
+/**
+ * Un nom citÃ© par le briefing, et de quoi le rendre cliquable.
+ *
+ * Lumi ne rend PAS les liens Markdown â son affichage connaÃ®t le gras, les
+ * puces, les titres et les tableaux, pas `[texte](url)`. Les liens passent par
+ * les Â« fiches Â» : le front retrouve le nom dans la phrase et le transforme en
+ * lien. On Ã©crit donc le nom NU, et on dÃ©clare la fiche Ã  cÃ´tÃ©.
+ *
+ * Sans identifiant (donnÃ©e incomplÃ¨te, client supprimÃ©), le nom reste du texte :
+ * mieux vaut un nom lisible qu'un lien mort.
+ */
+function nomEtFiche(
+  nom: string,
+  id: string | undefined,
+  type: FicheBriefing['type'],
+  fiches: FicheBriefing[],
+): string {
+  if (id && nom && !fiches.some((f) => f.href === `${CHEMIN[type]}/${id}`)) {
+    fiches.push({ type, id, label: nom, href: `${CHEMIN[type]}/${id}` });
+  }
+  return nom;
+}
 
 function heureLocale(iso: string, fuseau: string, fr: boolean): string {
   try {
@@ -81,8 +110,14 @@ function prenom(nomComplet: string | null | undefined): string {
  * que ce que les données contiennent, et une section vide disparaît.
  * Renvoie null quand il n'y a rien à dire (pas de briefing envoyé).
  */
-export function composerBriefing(d: DonneesBriefing, opts: { prenom: string | null; fr: boolean; fuseau: string; maintenant: Date }): string | null {
+export function composerBriefing(
+  d: DonneesBriefing,
+  opts: { prenom: string | null; fr: boolean; fuseau: string; maintenant: Date;
+    /** Rempli au passage : les fiches des entités citées, pour les rendre cliquables. */
+    fiches?: FicheBriefing[] },
+): string | null {
   const { fr, fuseau } = opts;
+  const fiches = opts.fiches ?? [];
   const parts: string[] = [];
   const v = d.todays_visits;
   if (v.total_matching > 0) {
@@ -103,27 +138,23 @@ export function composerBriefing(d: DonneesBriefing, opts: { prenom: string | nu
     const pire = [...o.worst].sort((a, b) => (joursDeRetard(b.due_date, opts.maintenant) ?? 0) - (joursDeRetard(a.due_date, opts.maintenant) ?? 0))[0];
     const jours = pire ? joursDeRetard(pire.due_date, opts.maintenant) : null;
     parts.push(fr
-      ? `${o.total_matching} ${o.total_matching > 1 ? 'factures' : 'facture'} en retard pour ${fmtDollars(o.total_cents, fr)}${pire ? `, la plus vieille chez ${pire.client}${jours != null ? ` (${jours} jours)` : ''}` : ''}.`
-      : `${o.total_matching} overdue ${o.total_matching > 1 ? 'invoices' : 'invoice'} for ${fmtDollars(o.total_cents, fr)}${pire ? `, the oldest at ${pire.client}${jours != null ? ` (${jours} days)` : ''}` : ''}.`);
+      ? `${o.total_matching} ${o.total_matching > 1 ? 'factures' : 'facture'} en retard pour ${fmtDollars(o.total_cents, fr)}${pire ? `, la plus vieille chez ${nomEtFiche(pire.client, pire.id, 'invoice', fiches)}${jours != null ? ` (${jours} jours)` : ''}` : ''}.`
+      : `${o.total_matching} overdue ${o.total_matching > 1 ? 'invoices' : 'invoice'} for ${fmtDollars(o.total_cents, fr)}${pire ? `, the oldest at ${nomEtFiche(pire.client, pire.id, 'invoice', fiches)}${jours != null ? ` (${jours} days)` : ''}` : ''}.`);
   }
-  // « Le Reçu » — l'argent qui dort. Placé après les retards : on passe du
-  // constat (« 3 factures en retard ») au montant total qu'on peut aller
-  // chercher, devis dormants compris. Le total porte sur TOUT ce qui dort,
-  // pas seulement sur les exemples nommés.
+  // « Le Reçu » — les DEVIS qui dorment, et eux seuls.
+  //
+  // Les factures en retard sont déjà annoncées par la phrase précédente : les
+  // répéter ici faisait lire deux fois le même argent (« 2 789 $ en retard »
+  // puis « 2 789 $ qui dorment »), donc croire au double. Cette section
+  // n'ajoute que ce que l'autre ne dit pas : les devis partis sans réponse.
   const a = d.argent_qui_dort;
-  if (a && a.total_cents > 0) {
-    const plusGros = [
-      ...a.factures.map((f) => ({ qui: f.client, cents: f.solde_cents, detail: fr ? `${f.jours_de_retard} j de retard` : `${f.jours_de_retard} days late` })),
-      ...a.devis.map((x) => ({ qui: x.client, cents: x.montant_cents, detail: fr ? `sans suivi depuis ${x.jours_sans_contact} j` : `no follow-up for ${x.jours_sans_contact} days` })),
-    ].sort((x, y) => y.cents - x.cents)[0];
-    const exemple = plusGros
-      ? (fr
-        ? `, le plus gros ${plusGros.qui ? `chez ${plusGros.qui} ` : ''}à ${fmtDollars(plusGros.cents, fr)} (${plusGros.detail})`
-        : `, the largest ${plusGros.qui ? `at ${plusGros.qui} ` : ''}for ${fmtDollars(plusGros.cents, fr)} (${plusGros.detail})`)
-      : '';
+  if (a && a.devis_total_cents > 0 && a.devis.length > 0) {
+    const plusGros = [...a.devis].sort((x, y) => y.montant_cents - x.montant_cents)[0];
+    const n = a.devis.length;
+    const qui = plusGros.client ? (fr ? `chez ${nomEtFiche(plusGros.client, plusGros.id, 'quote', fiches)} ` : `at ${nomEtFiche(plusGros.client, plusGros.id, 'quote', fiches)} `) : '';
     parts.push(fr
-      ? `${fmtDollars(a.total_cents, fr)} qui dorment${exemple}.`
-      : `${fmtDollars(a.total_cents, fr)} sitting idle${exemple}.`);
+      ? `${fmtDollars(a.devis_total_cents, fr)} en soumissions sans réponse (${n} ${n > 1 ? 'devis' : 'devis'}), la plus grosse ${qui}à ${fmtDollars(plusGros.montant_cents, fr)}, sans suivi depuis ${plusGros.jours_sans_contact} j.`
+      : `${fmtDollars(a.devis_total_cents, fr)} in quotes with no reply (${n}), the largest ${qui}at ${fmtDollars(plusGros.montant_cents, fr)}, no follow-up for ${plusGros.jours_sans_contact} days.`);
   }
 
   const t = d.tasks_due;
@@ -245,8 +276,8 @@ async function briefingPourOrg(admin: SupabaseClient, orgId: string, maintenant:
           total_cents: dort.totalCents,
           devis_total_cents: dort.devisTotalCents,
           factures_total_cents: dort.facturesTotalCents,
-          devis: dort.devis.map((x) => ({ client: x.client, montant_cents: x.montantCents, jours_sans_contact: x.joursSansContact })),
-          factures: dort.factures.map((x) => ({ client: x.client, solde_cents: x.soldeCents, jours_de_retard: x.joursDeRetard })),
+          devis: dort.devis.map((x) => ({ id: x.devisId, client: x.client, montant_cents: x.montantCents, jours_sans_contact: x.joursSansContact })),
+          factures: dort.factures.map((x) => ({ id: x.factureId, client: x.client, solde_cents: x.soldeCents, jours_de_retard: x.joursDeRetard })),
         };
       }
     }
@@ -257,7 +288,11 @@ async function briefingPourOrg(admin: SupabaseClient, orgId: string, maintenant:
   let crees = 0;
   for (const m of restants) {
     const fr = (m.language || 'fr') !== 'en';
-    const texte = composerBriefing(donnees, { prenom: prenom(m.full_name), fr, fuseau, maintenant });
+    // Les fiches des entités citées voyagent AVEC le message : sans outil
+    // appelé, rien ne les reconstruirait au rechargement, et les noms ne
+    // seraient pas cliquables.
+    const fiches: FicheBriefing[] = [];
+    const texte = composerBriefing(donnees, { prenom: prenom(m.full_name), fr, fuseau, maintenant, fiches });
     // Idempotence d'abord : la ligne est posée AVANT la conversation ; si un
     // second serveur passe en même temps, un seul gagne la clé primaire.
     const { error: verrou } = await admin.from('lumi_briefings').insert({ org_id: orgId, user_id: m.user_id, jour });
@@ -268,7 +303,8 @@ async function briefingPourOrg(admin: SupabaseClient, orgId: string, maintenant:
       .select('id').single();
     if (eConv || !conv) { logger.error('[lumi/briefing] conversation non créée', { orgId, error: eConv?.message }); continue; }
     const { error: eMsg } = await admin.from('lumi_messages').insert({
-      conversation_id: conv.id, org_id: orgId, role: 'assistant', content: [{ type: 'text', text: texte }] as any,
+      conversation_id: conv.id, org_id: orgId, role: 'assistant',
+      content: [{ type: 'text', text: texte }, ...(fiches.length ? [{ type: 'fiches', fiches }] : [])] as any,
     });
     if (eMsg) { logger.error('[lumi/briefing] message non créé', { orgId, error: eMsg.message }); continue; }
     await admin.from('lumi_briefings').update({ conversation_id: conv.id }).eq('org_id', orgId).eq('user_id', m.user_id).eq('jour', jour);

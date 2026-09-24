@@ -1011,7 +1011,7 @@ router.get('/lumi/conversations', async (req, res) => {
 
 /** Rend les blocs stockés en éléments d'interface : texte, appels d'outils, propositions et leur sort. */
 type PropositionRendue = { tool_use_id: string; tool: string; args: Record<string, any>; capacite: string | null; statut: 'en_attente' | 'confirmee' | 'annulee' | 'echouee'; fiche?: Fiche | null; auto?: boolean; groupe?: PropositionRendue[] };
-export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: PropositionRendue; report?: Rapport }> {
+export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant'; text: string; tools: string[]; proposal?: PropositionRendue; report?: Rapport; fiches?: Fiche[] }> {
   const sorts = new Map<string, 'confirmee' | 'annulee' | 'echouee'>();
   const fiches = new Map<string, Fiche>();
   const autos = new Set<string>();
@@ -1061,7 +1061,11 @@ export function rendreMessages(msgs: Msg[]): Array<{ role: 'user' | 'assistant';
       const statut = ecritures.some((e) => e.statut === 'en_attente') ? 'en_attente' : ecritures.some((e) => e.statut === 'echouee') ? 'echouee' : ecritures.every((e) => e.statut === 'annulee') ? 'annulee' : 'confirmee';
       proposal = { ...ecritures[0], statut, groupe: ecritures };
     }
-    if (texte || proposal || tools.length) out.push({ role: 'assistant', text: texte, tools, ...(proposal ? { proposal } : {}), ...(report ? { report } : {}) });
+    // Un message peut porter ses propres fiches : le briefing du matin est
+    // composé sans appeler d'outil, donc rien ne les reconstruit depuis les
+    // `tool_result`. Sans ça, les noms qu'il cite ne sont pas cliquables.
+    const fichesPropres = blocs.filter((b: any) => b.type === 'fiches' && Array.isArray(b.fiches)).flatMap((b: any) => b.fiches as Fiche[]);
+    if (texte || proposal || tools.length) out.push({ role: 'assistant', text: texte, tools, ...(proposal ? { proposal } : {}), ...(report ? { report } : {}), ...(fichesPropres.length ? { fiches: fichesPropres } : {}) });
   }
   return out;
 }

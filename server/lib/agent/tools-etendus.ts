@@ -1991,7 +1991,7 @@ const getMorningBriefing: AgentTool = {
 
     const [impayesR, jobsR, tachesR, demandesR, nonLusR] = await Promise.all([
       ctx.client.from('invoices')
-        .select('client_id, balance_cents, total_cents, due_date, status', { count: 'exact' })
+        .select('id, client_id, balance_cents, total_cents, due_date, status', { count: 'exact' })
         .eq('org_id', ctx.orgId).is('deleted_at', null)
         .in('status', ['sent', 'partial', 'overdue']).lt('due_date', aujourdHui)
         .order('due_date', { ascending: true }).limit(5),
@@ -2041,6 +2041,9 @@ const getMorningBriefing: AgentTool = {
         total_cents: (impayesR.data || []).reduce((s2: number, f: any) =>
           s2 + (f.balance_cents != null ? Number(f.balance_cents) : Number(f.total_cents) || 0), 0),
         worst: (impayesR.data || []).map((f: any) => ({
+          // L'id sert au lien cliquable du briefing : « Sophie Bouchard »
+          // ouvre SA facture, au lieu d'obliger à la chercher.
+          id: f.id,
           client: noms.get(f.client_id) || 'client supprimé',
           balance_cents: f.balance_cents != null ? f.balance_cents : f.total_cents,
           due_date: f.due_date,
