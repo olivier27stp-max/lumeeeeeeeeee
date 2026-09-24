@@ -87,7 +87,20 @@ export interface CourrielLume {
 }
 
 export const COULEUR_LUME = '#111827';
-export const LOGO_LUME_URL = 'https://lumecrm.net/lume-logo.png';
+/* Le logo HORIZONTAL, celui du site (2026-09-24).
+
+   Les courriels servaient `lume-logo.png` : 1536 × 1024, un logo VERTICAL
+   (le panda au-dessus, « LUME » dessous, « CRM » encore dessous) écrasé à
+   36 px de haut. Mesuré sur le fichier : le mot « LUME » y faisait 8 px et
+   « CRM » en faisait 2 — invisibles. L'image entière occupait 54 px de large,
+   un timbre au milieu du courriel, pour 140 Ko téléchargés.
+
+   `lume-logo-v2.png` est celui que l'app et le site utilisent déjà à neuf
+   endroits (barre latérale, pied de page). Horizontal, ratio 3,85 : 139 px de
+   large à 36 px de haut, et 65 Ko au lieu de 140.
+
+   Les courriels étaient les derniers restés sur le vertical. */
+export const LOGO_LUME_URL = 'https://lumecrm.net/lume-logo-v2.png';
 const GRIS_TEXTE = '#374151';
 const GRIS_DOUX = '#6b7280';
 const GRIS_PALE = '#9ca3af';
@@ -472,7 +485,15 @@ ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">$
 /** Ce que Lume envoie à ses abonnés : marque Lume, noir sur blanc, TUTOIEMENT (c'est la voix de Lume envers ses abonnés ; les entreprises vouvoient leurs clients). */
 export function rendreCourrielLume(c: CourrielLume): string {
   const support = c.supportEmail || 'support@lumecrm.net';
-  const enTete = `<img src="${LOGO_LUME_URL}" alt="Lume" style="height:36px;display:inline-block;"/>`;
+  /* 44 px de haut, et une LARGEUR déclarée.
+
+     Outlook (moteur Word) ignore `height` seul sur une image et la rend à sa
+     taille native — 1051 px de large, soit trois fois la largeur du courriel.
+     Déclarer les deux dimensions est la seule façon qu'il les respecte.
+
+     Le fichier fait 273 px de haut pour 44 affichés : six fois la densité, donc
+     net sur un écran fin sans peser davantage. */
+  const enTete = `<img src="${LOGO_LUME_URL}" alt="Lume" width="169" height="44" style="width:169px;height:44px;display:inline-block;border:0;outline:none;text-decoration:none;"/>`;
   const pied = `
 <p style="margin:0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${c.langue === 'fr' ? 'Une question ? Réponds à ce courriel ou écris-nous à' : 'Questions? Reply to this email or write to'} <a href="mailto:${echapper(support)}" style="color:${GRIS_DOUX};">${echapper(support)}</a>.</p>
 <p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">Lume CRM &nbsp;&middot;&nbsp; <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;">lumecrm.net</a></p>`;

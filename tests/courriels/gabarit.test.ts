@@ -64,6 +64,18 @@ describe('gabarit Lume', () => {
   it('marque Lume, adresse de support, signature de l’équipe', () => {
     const h = rendreCourrielLume({ langue: 'fr', titre: 'Paiement reçu', intro: 'Un client vient de payer.', montant: { libelle: 'Reçu', valeur: '125,00 $' }, bouton: { texte: 'Voir la facture', url: 'https://lumecrm.net/invoices/1' } });
     expect(h).toContain('alt="Lume"');
+    /* Le logo HORIZONTAL, avec ses deux dimensions déclarées.
+
+       Les courriels servaient le logo vertical (1536 × 1024) écrasé à 36 px :
+       mesuré sur le fichier, « LUME » y faisait 8 px de haut et « CRM » en
+       faisait 2. Un timbre de 54 px de large, pour 140 Ko téléchargés.
+
+       `width` ET `height` en attributs : Outlook ignore `height` seul et rend
+       l'image à sa taille native — 1051 px, trois fois la largeur du
+       courriel. */
+    expect(h).toContain('lume-logo-v2.png');
+    expect(h).not.toContain('lume-logo.png"');
+    expect(h).toMatch(/width="169"\s+height="44"/);
     expect(h).toContain('support@lumecrm.net');
     expect(h).toContain('— L’équipe Lume');
     expect(h).toContain(`background:${COULEUR_LUME};border-radius:9px;`);
