@@ -83,9 +83,12 @@ const DEFAUTS = {
     sujet: 'Facture {invoice_number} — il reste {amount_due}',
     corps:
       'Bonjour {client_name},\n\n' +
-      'La facture {invoice_number} de {amount_due} était due le {due_date} et ' +
-      'n’est pas encore réglée. Si c’est déjà fait, ce message se croise avec ' +
-      'votre paiement.\n\n' +
+      /* Une phrase d'un seul tenant, pas trois morceaux concaténés : le
+         catalogue doit pouvoir la citer TELLE QUELLE pour pré-remplir
+         l'éditeur (tests/courriels/catalogue-courriels.test.ts vérifie la
+         correspondance au mot près). Coupée en trois, elle obligeait à montrer
+         un fragment illisible au propriétaire. */
+      'Un petit rappel, sans plus : la facture {invoice_number} de {amount_due} était due le {due_date}. Si le paiement est déjà parti, ce message le croise — merci !\n\n' +
       'Vous pouvez la régler ici : {pay_url}\n\n' +
       'Un imprévu ? Répondez à ce courriel, on peut étaler le paiement.\n\n' +
       'Merci,\n{company_name}',
@@ -95,9 +98,7 @@ const DEFAUTS = {
     sujet: 'Invoice {invoice_number} — {amount_due} outstanding',
     corps:
       'Hello {client_name},\n\n' +
-      'Invoice {invoice_number} for {amount_due} was due on {due_date} and is ' +
-      'still open. If you have already paid, this message crossed with your ' +
-      'payment.\n\n' +
+      'A gentle reminder: invoice {invoice_number} for {amount_due} was due on {due_date}. If your payment is already on its way, this message crossed it — thank you!\n\n' +
       'You can pay here: {pay_url}\n\n' +
       'Something came up? Reply to this email — we can spread the payment.\n\n' +
       'Thank you,\n{company_name}',

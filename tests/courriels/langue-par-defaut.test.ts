@@ -39,8 +39,24 @@ describe('rappels de paiement — langue', () => {
     // Décision prise sur les maquettes : un client en retard est presque
     // toujours distrait. On récupère plus d'argent en proposant d'étaler
     // qu'en menaçant.
-    expect(source).toContain('ce message se croise avec');
+    /* La règle : un client en retard est presque toujours distrait, pas de
+       mauvaise foi. On récupère plus d'argent en proposant d'étaler qu'en
+       menaçant. Le test citait la formulation exacte de 2026-09-17 ; elle a
+       été réécrite d'un seul tenant le 2026-09-23 (le catalogue doit pouvoir
+       la citer telle quelle), mais l'intention est la même. On vérifie donc
+       les DEUX gestes qui la portent, pas les mots. */
+    expect(source).toMatch(/ce message le croise|message crossed it/);
     expect(source).toContain('on peut étaler le paiement');
+    /* Et surtout : aucun vocabulaire qui accuse DANS LE TEXTE ENVOYÉ.
+
+       Première version de cette assertion : elle scannait tout le fichier et
+       attrapait les commentaires techniques (« there's no 'overdue' status »,
+       « un client en retard est presque toujours distrait »). Un test qui
+       échoue sur un commentaire n'apprend rien — on lit les corps et les
+       sujets, rien d'autre. */
+    const textes = [...source.matchAll(/(?:sujet|corps|sms):\s*\n?\s*'([^']+)'/g)].map((m) => m[1]).join(' ');
+    expect(textes.length).toBeGreaterThan(100);
+    expect(textes).not.toMatch(/impayé|delinquent|failure to pay|mise en demeure/i);
   });
 
   it('l’objet ne répète pas le nom de l’entreprise (l’expéditeur l’affiche déjà)', () => {

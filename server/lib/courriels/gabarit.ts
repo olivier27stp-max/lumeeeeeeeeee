@@ -114,11 +114,38 @@ const CIEL_HAUT = '#e6f0ff';
 const CIEL_BAS = '#f3f8ff';
 const BLEU_LUME = '#0b5cad';
 const CIEL_FILET = '#d3e3f7';
-/* Le décor d'un courriel d'entreprise : un gris très pâle qui ne concurrence
-   aucune couleur de marque, quelle qu'elle soit — la même approche que Stripe,
-   Square ou QuickBooks. La carte blanche s'y détache sans effort. */
-const FOND_CLIENT = '#f4f5f7';
+/* Le décor d'un courriel d'entreprise : BLANC.
+
+   C'était d'abord un gris très pâle (#f4f5f7), sur lequel la carte blanche se
+   détachait. Deux raisons de l'abandonner, la seconde décisive :
+
+   1. Rafba, en recevant le courriel : « c'est comme dark, je suis pas sûr
+      d'aimer ça ». Un gris clair sur un écran est lu comme une teinte, et
+      une teinte qu'on n'a pas choisie paraît sale.
+
+   2. Surtout : Gmail sur Android et iOS IGNORE `color-scheme: light` et
+      inverse les couleurs en mode sombre. Un gris pâle y devient un gris
+      foncé — exactement ce qui a été observé. Le blanc pur, lui, reste le
+      fond que ces clients gardent ou inversent proprement en noir, sans
+      teinte intermédiaire douteuse.
+
+   La carte perd donc son fond distinct et devient un simple cadre : c'est le
+   contour, pas le contraste, qui la sépare maintenant du fond. */
+const FOND_CLIENT = '#ffffff';
 const FILET_CLIENT = '#e4e7ec';
+/* Le cadenas sous le bouton de paiement.
+
+   Jobber en pose un (« Secure payments · Debit or credit ») et c'est la seule
+   chose qu'ils font mieux : au moment exact du clic, une icône rassure plus
+   qu'une phrase. Le nôtre disait « Carte de crédit · aucun compte à créer »
+   sans signal visuel.
+
+   En SVG inline, jamais en image : Gmail et Outlook bloquent les images
+   distantes par défaut, et un cadenas qui ne s'affiche pas rassure moins
+   qu'une absence de cadenas. `currentColor` est évité — un SVG hérite mal
+   selon les clients, on fixe la couleur. */
+const CADENAS = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
 const POLICE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function echapper(s: unknown): string {
@@ -162,13 +189,25 @@ function liensSociauxHtml(liens: SocialLinks | null | undefined): string {
  * reste en minuscules — une capitale espacée fait « facture d'agence » là où
  * on veut la voix d'un artisan.
  */
+/**
+ * Le montant, en ouverture du courriel.
+ *
+ * Il était centré, sous un libellé et au-dessus d'un filet. Il est maintenant
+ * aligné à GAUCHE, sans filet, et son libellé passe en dessous sous forme de
+ * phrase (« Votre facture est due le 24 avril ») — la forme de Jobber, et
+ * celle qui se lit le mieux : un chiffre aligné à gauche se lit comme le début
+ * d'un document, centré il se lit comme une affiche.
+ *
+ * Le libellé au-dessus (« Solde à payer ») disparaît : « 1 220,17 $ » suivi de
+ * « Votre facture est due le… » dit tout, et l'étiquette ne faisait que
+ * retarder le chiffre.
+ */
 function blocMontant(m: NonNullable<CourrielClient['montant']>): string {
   return `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-<tr><td style="padding:0 0 18px;border-bottom:1px solid ${BORDURE};text-align:center;">
-<div style="font-size:13px;color:${GRIS_DOUX};">${echapper(m.libelle)}</div>
-<div style="font-size:38px;line-height:1.1;font-weight:800;color:#101828;margin-top:3px;letter-spacing:-1px;">${echapper(m.valeur)}</div>
-${m.sous ? `<div style="font-size:13px;color:${GRIS_DOUX};margin-top:8px;">${echapper(m.sous)}</div>` : ''}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:0 0 4px;">
+<tr><td style="background:#ffffff;">
+<div style="font-size:38px;line-height:1.05;font-weight:800;color:#101828;letter-spacing:-1.6px;">${echapper(m.valeur)}</div>
+<div style="font-size:14px;color:${GRIS_DOUX};margin-top:8px;">${echapper(m.sous || m.libelle)}</div>
 </td></tr>
 </table>`;
 }
@@ -177,10 +216,10 @@ function blocLignes(lignes: LigneDetail[]): string {
   if (!lignes.length) return '';
   const rows = lignes.map((l, i) => `
 <tr>
-<td style="padding:10px 0;font-size:14px;color:${GRIS_DOUX};${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.libelle)}</td>
-<td align="right" style="padding:10px 0;font-size:14px;color:#111827;${l.fort ? 'font-weight:700;' : ''}${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.valeur)}</td>
+<td style="background:#ffffff;padding:10px 0;font-size:14px;color:${GRIS_DOUX};${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.libelle)}</td>
+<td align="right" style="background:#ffffff;padding:10px 0;font-size:14px;color:#111827;${l.fort ? 'font-weight:700;' : ''}${i ? `border-top:1px solid ${BORDURE};` : ''}">${echapper(l.valeur)}</td>
 </tr>`).join('');
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">${rows}</table>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:0 0 20px;">${rows}</table>`;
 }
 
 /**
@@ -192,13 +231,16 @@ function blocLignes(lignes: LigneDetail[]): string {
 function blocBouton(b: NonNullable<CourrielClient['bouton']>, couleur: string, langue: Langue, tu = false): string {
   const url = echapper(b.url);
   return `
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 10px;">
-<tr><td align="center" style="background:${couleur};border-radius:10px;">
-<a href="${url}" style="display:block;padding:15px 24px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;font-family:${POLICE};text-align:center;">${echapper(b.texte)}</a>
+<table role="presentation" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:18px 0 0;">
+<tr><td style="background:${couleur};border-radius:9px;">
+<a href="${url}" style="display:block;padding:14px 30px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;font-family:${POLICE};text-align:center;">${echapper(b.texte)}</a>
 </td></tr>
 </table>
-${b.sousBouton ? `<p style="margin:0 0 14px;font-size:12px;color:${GRIS_PALE};text-align:center;">${echapper(b.sousBouton)}</p>` : ''}
-${/^(tel|mailto|sms):/i.test(b.url) ? '' : `<p style="margin:0 0 20px;font-size:11px;color:${GRIS_PALE};text-align:center;line-height:1.5;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ?' : 'Le bouton ne fonctionne pas ?') : 'Button not working?'} <a href="${url}" style="color:${GRIS_PALE};text-decoration:underline;">${langue === 'fr' ? 'Ouvrir le lien' : 'Open the link'}</a></p>`}`;
+${b.sousBouton ? `<table role="presentation" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:12px 0 0;"><tr>
+<td style="background:#ffffff;padding-right:7px;vertical-align:middle;line-height:0;">${CADENAS}</td>
+<td style="background:#ffffff;font-size:12px;color:${GRIS_DOUX};vertical-align:middle;">${echapper(b.sousBouton)}</td>
+</tr></table>` : ''}
+${/^(tel|mailto|sms):/i.test(b.url) ? '' : `<p style="margin:0 0 20px;font-size:11px;color:${GRIS_PALE};line-height:1.5;">${langue === 'fr' ? (tu ? 'Le bouton ne fonctionne pas ?' : 'Le bouton ne fonctionne pas ?') : 'Button not working?'} <a href="${url}" style="color:${GRIS_PALE};text-decoration:underline;">${langue === 'fr' ? 'Ouvrir le lien' : 'Open the link'}</a></p>`}`;
 }
 
 /**
@@ -224,11 +266,33 @@ function coquille(p: {
   const client = p.decor === 'client';
   const fond = client ? FOND_CLIENT : CIEL_HAUT;
   const filetCarte = client ? FILET_CLIENT : CIEL_FILET;
+  /* La carte, des deux côtés — mais pour deux raisons différentes.
+
+     Côté Lume elle se détache du ciel. Côté client, sur fond blanc, elle ne se
+     détache de rien : c'est sa BORDURE qui travaille. Elle a été retirée
+     brièvement le 2026-09-23, en pensant qu'un cadre sur du blanc n'encadrait
+     rien ; Rafba, en recevant le résultat : « blanc sur ordi mais y a pas de
+     bordure ». Sans elle le contenu flotte, et un courriel de facture a besoin
+     d'un contour pour se lire comme un document. */
   /* Le filet de tête : 4 px de la couleur de l'entreprise, tout en haut. Un
      courriel d'entreprise n'a sinon AUCUNE couleur à elle avant le bouton,
      qui arrive après le montant — trop bas pour signer le message. */
-  const bandeau = client && p.filetTete
-    ? `<tr><td style="background:${p.filetTete};height:4px;line-height:4px;font-size:0;">&nbsp;</td></tr>`
+  /* Le filet de la couleur de l'entreprise, SOUS le logo.
+
+     Il était en pleine largeur tout en haut, collé au bandeau de Gmail : sur
+     la capture d'un vrai courriel, il se confondait avec l'interface du client
+     au lieu de signer le message. Sous le logo, court et centré, il sépare
+     l'en-tête du contenu et se lit comme un trait de marque. */
+  const bandeau = '';
+  /* Le trait sous l'en-tête, pleine largeur.
+
+     Trois formes essayées le 2026-09-23 : pleine largeur tout en haut (il se
+     confondait avec le bandeau de Gmail), puis un court trait centré sous un
+     logo centré. Celle-ci vient de l'en-tête « papier à lettres » : le trait
+     ferme le bloc d'identité et ouvre le message, comme sur une facture
+     imprimée. Il porte la couleur de l'entreprise — c'est sa signature. */
+  const filetSousLogo = client
+    ? `<tr><td style="background:${fond};padding:0 8px 18px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};"><tr><td style="background:${p.filetTete || FILET_CLIENT};height:2px;line-height:2px;font-size:0;">&nbsp;</td></tr></table></td></tr>`
     : '';
   return `<!DOCTYPE html>
 <html lang="${p.langue}">
@@ -238,16 +302,50 @@ function coquille(p: {
 <meta name="color-scheme" content="light"/>
 <meta name="supported-color-schemes" content="light"/>
 <title>${echapper(p.titreDocument)}</title>
+<style>
+/* Le mode sombre des clients de courriel.
+
+   Les deux balises ci-dessus DEMANDENT le mode clair — et Apple Mail les
+   respecte. Gmail (Android, iOS) et Outlook.com, eux, les ignorent et
+   inversent les couleurs eux-mêmes : un fond blanc devient gris foncé, un
+   texte sombre devient pâle. Rafba, en recevant le courriel : « c’est encore
+   en noir et vert, moi je veux blanc et vert ».
+
+   Il n’existe pas de façon propre de l’interdire. Ce qui suit est ce que la
+   pratique a retenu :
+
+   - color-scheme: light only sur :root : la déclaration CSS que les
+     moteurs récents lisent, plus forte que la balise <meta>.
+   - [data-ogsc] / [data-ogsb] : Outlook.com pose ces attributs quand il
+     inverse ; on remet alors nos couleurs à la main.
+   - La media query : sur les clients qui l’appliquent, on redit explicitement
+     ce qu’on veut au lieu de les laisser deviner.
+
+   Gmail supprime les media queries dans certains cas ; c’est pourquoi les
+   couleurs restent AUSSI en ligne sur chaque élément. Cette feuille ne
+   remplace rien : elle résiste. */
+:root { color-scheme: light only; supported-color-schemes: light only; }
+body, .lume-fond { background-color: ${fond} !important; }
+.lume-texte { color: #101828 !important; }
+[data-ogsc] body, [data-ogsb] body,
+[data-ogsc] .lume-fond, [data-ogsb] .lume-fond { background-color: ${fond} !important; }
+[data-ogsc] .lume-texte, [data-ogsb] .lume-texte { color: #101828 !important; }
+@media (prefers-color-scheme: dark) {
+  body, .lume-fond { background-color: ${fond} !important; }
+  .lume-texte { color: #101828 !important; }
+}
+</style>
 </head>
 <body style="margin:0;padding:0;background:${fond};font-family:${POLICE};-webkit-text-size-adjust:100%;">
 ${p.preheader ? `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:${fond};">${echapper(p.preheader)}${'&#8203;&nbsp;'.repeat(40)}</div>` : ''}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};">
+<table role="presentation" class="lume-fond" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};">
 ${bandeau}
-<tr><td align="center" style="padding:24px 12px 0;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
-<tr><td style="padding:0 8px 18px;text-align:center;">${p.enTeteHtml}</td></tr>
-<tr><td style="background:#ffffff;border:1px solid ${filetCarte};border-radius:16px;padding:26px 32px;">${p.corpsHtml}</td></tr>
-<tr><td style="padding:20px 8px 26px;text-align:center;">${p.piedHtml}</td></tr>
+<tr><td align="center" style="background:${fond};padding:24px 12px 0;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${fond};max-width:600px;">
+<tr><td style="background:${fond};padding:0 8px 12px;text-align:center;">${p.enTeteHtml}</td></tr>
+${filetSousLogo}
+<tr><td style="${client ? `background:#ffffff;border:1px solid ${filetCarte};border-radius:14px;padding:22px 26px;` : `background:#ffffff;border:1px solid ${filetCarte};border-radius:16px;padding:26px 32px;`}">${p.corpsHtml}</td></tr>
+<tr><td style="background:${fond};padding:20px 8px 26px;text-align:center;">${p.piedHtml}</td></tr>
 </table>
 </td></tr>
 </table>
@@ -264,16 +362,52 @@ ${bandeau}
  * le geste qu'on lui demande. Le geste vient maintenant juste après le
  * chiffre qui le motive ; la note rassure ensuite, pour qui hésite encore.
  */
+/**
+ * Le corps d'un courriel : ce qu'on demande d'abord, ce qu'on explique ensuite.
+ *
+ * L'ordre a changé le 2026-09-23, après comparaison avec les courriels de
+ * Jobber : le MONTANT et le BOUTON passent en tête, avant la salutation et le
+ * texte. Le lecteur sait combien et peut agir sans avoir lu une phrase — c'est
+ * ce qui frappe dans les leurs, et c'est juste : personne n'ouvre une facture
+ * pour lire de la prose.
+ *
+ * Le détail des lignes reste APRÈS le message, là où il répond à la question
+ * « pourquoi ce montant » une fois qu'elle se pose.
+ *
+ * `titre` disparaît quand un montant ouvre le courriel : « Votre facture 48 »
+ * au-dessus de « 1 220,17 $ » dit deux fois la même chose, et le chiffre le
+ * dit mieux. Il reste pour les courriels sans montant (contrat, rendez-vous),
+ * où il porte le sujet.
+ */
 function corpsCommun(c: { langue: Langue; titre?: string | null; salutation?: string | null; intro?: string | null; montant?: CourrielClient['montant']; lignes?: LigneDetail[] | null; bouton?: CourrielClient['bouton']; corpsHtml?: string | null; note?: string | null; signature?: string | null }, couleur: string, tu = false): string {
+  /* Le bloc d'action n'ouvre le courriel QUE s'il porte un montant.
+
+     Sans montant, le bouton seul remontait au-dessus du message : « Voir le
+     rendez-vous » arrivait avant la phrase qui dit de quoi il s'agit. Absurde
+     sur les 26 relances automatiques, qui n'ont pas de chiffre — on ne
+     demande pas de cliquer avant d'avoir dit pourquoi.
+
+     Avec un montant, l'inverse est vrai : le chiffre EST le sujet, et le
+     bouton qui le suit se comprend seul. */
+  const ouvreParLAction = Boolean(c.montant);
+  const aDuTexte = Boolean(c.salutation || c.intro || c.corpsHtml || c.lignes?.length);
   return `
-${c.titre ? `<h1 style="margin:0 0 14px;font-size:22px;line-height:1.3;font-weight:700;color:#101828;">${echapper(c.titre)}</h1>` : ''}
-${c.salutation ? `<p style="margin:0 0 10px;font-size:15px;color:${GRIS_TEXTE};">${echapper(c.salutation)}</p>` : ''}
-${c.intro ? `<p style="margin:0 0 20px;font-size:15px;line-height:1.55;color:${GRIS_TEXTE};">${echapper(c.intro)}</p>` : ''}
-${c.montant ? blocMontant(c.montant) : ''}
+${c.montant ? `${c.titre ? `<p style="margin:0 0 6px;font-size:13px;font-weight:600;letter-spacing:.02em;color:${GRIS_DOUX};">${echapper(c.titre)}</p>` : ''}${blocMontant(c.montant)}` : ''}
+${ouvreParLAction && c.bouton ? blocBouton(c.bouton, couleur, c.langue, tu) : ''}
+${ouvreParLAction && aDuTexte ? `<div style="height:22px;line-height:22px;font-size:0;">&nbsp;</div>` : ''}
+${c.titre ? (c.montant
+  /* Avec un montant, le titre passe AU-DESSUS du chiffre, en petit : « Votre
+     facture 48 » puis « 1 220,17 $ ». Il ne le répète pas, il le nomme — et
+     surtout la version texte du courriel garderait sinon un message sans
+     sujet, puisque l'objet n'y figure pas. */
+  ? ''
+  : `<h1 style="margin:0 0 14px;font-size:21px;line-height:1.3;font-weight:700;color:#101828;">${echapper(c.titre)}</h1>`) : ''}
+${c.salutation ? `<p style="margin:0 0 12px;font-size:15px;color:${GRIS_TEXTE};">${echapper(c.salutation)}</p>` : ''}
+${c.intro ? `<p style="margin:0 0 18px;font-size:15px;line-height:1.55;color:${GRIS_TEXTE};">${echapper(c.intro)}</p>` : ''}
+${c.corpsHtml ? `<div style="font-size:15px;line-height:1.55;color:${GRIS_TEXTE};margin:0 0 18px;">${c.corpsHtml}</div>` : ''}
 ${c.lignes?.length ? blocLignes(c.lignes) : ''}
-${c.corpsHtml ? `<div style="font-size:15px;line-height:1.55;color:${GRIS_TEXTE};margin:0 0 20px;">${c.corpsHtml}</div>` : ''}
-${c.bouton ? blocBouton(c.bouton, couleur, c.langue, tu) : ''}
-${c.note ? `<p style="margin:0 0 16px;font-size:13px;line-height:1.5;color:${GRIS_DOUX};">${echapper(c.note)}</p>` : ''}
+${!ouvreParLAction && c.bouton ? blocBouton(c.bouton, couleur, c.langue, tu) : ''}
+${c.note ? `<p style="margin:${!ouvreParLAction && c.bouton ? '18px' : '0'} 0 16px;font-size:13px;line-height:1.5;color:${GRIS_DOUX};">${echapper(c.note)}</p>` : ''}
 ${c.signature ? `<p style="margin:0;font-size:15px;color:${GRIS_TEXTE};">${echapper(c.signature)}</p>` : ''}`;
 }
 
@@ -281,13 +415,28 @@ ${c.signature ? `<p style="margin:0;font-size:15px;color:${GRIS_TEXTE};">${echap
 export function rendreCourrielClient(c: CourrielClient): string {
   const couleur = couleurBouton(c.marque.couleur);
   const nom = c.marque.nom || 'Lume';
-  // Le logo se pose sur le ciel, sans cadre ni pastille : il est déjà détouré
-  // au téléversement. Sans logo, le nom tient la place. On n'écrit PAS le nom
-  // sous le logo : son texte alternatif le porte déjà, et la version texte du
-  // courriel afficherait alors « Vision Lavage Vision Lavage ».
+  /* L’en-tête, façon papier à lettres : le logo à gauche, aligné.
+
+     Le logo était centré, seul, flottant au-dessus du vide. Une en-tête
+     d'entreprise se lit de gauche à droite — c'est ce que fait un en-tête
+     imprimé, et ce que Jobber fait aussi.
+
+     Le nom n’est PAS répété à côté du logo : règle décidée avec Rafba et
+     gardée par deux tests — la version texte disait « Vision Lavage : Vision
+     Lavage ». Le texte alternatif du logo le porte, et le pied le redit.
+
+     Sans logo, le nom prend toute la ligne, à gauche : centré tout seul il
+     avait l'air d'un titre, pas d'une signature. */
   const enTete = c.marque.logoUrl
-    ? `<img src="${echapper(c.marque.logoUrl)}" alt="${echapper(nom)}" style="max-height:64px;max-width:220px;display:inline-block;"/>`
-    : `<span style="font-size:20px;font-weight:700;color:#101828;">${echapper(nom)}</span>`;
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FOND_CLIENT};">
+<tr>
+<td align="left" style="background:${FOND_CLIENT};vertical-align:middle;"><img src="${echapper(c.marque.logoUrl)}" alt="${echapper(nom)}" style="max-height:56px;max-width:170px;display:block;"/></td>
+
+</tr>
+</table>`
+    : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FOND_CLIENT};">
+<tr><td align="left" style="background:${FOND_CLIENT};font-size:19px;font-weight:700;color:#101828;">${echapper(nom)}</td></tr>
+</table>`;
   // Le téléphone et le courriel d'abord, et cliquables : un client qui a une
   // question veut souvent appeler, pas écrire. L'adresse postale suit.
   const joindre = [

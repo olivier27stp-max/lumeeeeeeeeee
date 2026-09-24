@@ -27,7 +27,12 @@ describe('courriel client → texte', () => {
     expect(texte).toContain('Votre facture 40');
     expect(texte).toContain('Bonjour Rafba,');
     expect(texte).toContain('1 234,56 $');
-    expect(texte).toContain('Montant à payer');
+    /* « Montant à payer » n'est plus écrit quand une phrase le dit mieux :
+       « 1 234,56 $ » suivi de « Échéance : 1er octobre 2026 » se passe d'une
+       étiquette, qui ne faisait que retarder le chiffre (2026-09-23). Le
+       libellé reste affiché quand il n'y a PAS de sous-titre — c'est alors la
+       seule chose qui nomme le montant. */
+    expect(texte).toContain('Échéance : 1er octobre 2026');
     expect(texte).toContain('Numéro : 40');
     expect(texte).toContain('Échéance : 1er octobre 2026');
   });
@@ -61,9 +66,14 @@ describe('courriel client → texte', () => {
     expect(lignes[0]).toBe('Vision Lavage');
     expect(texte).not.toMatch(/\n{3,}/);
     expect(lignes.every((l) => l === l.trim())).toBe(true);
-    expect(texte.indexOf('Votre facture 40')).toBeLessThan(texte.indexOf('Bonjour Rafba,'));
-    expect(texte.indexOf('Bonjour Rafba,')).toBeLessThan(texte.indexOf('1 234,56 $'));
+    /* L'ordre a changé le 2026-09-23 : le MONTANT et le BOUTON ouvrent le
+       courriel, la salutation et le texte suivent. Comparé aux courriels de
+       Jobber, c'est ce qui frappe dans les leurs — on sait combien et on peut
+       payer sans avoir lu une phrase. Personne n'ouvre une facture pour lire
+       de la prose. */
+    expect(texte.indexOf('Votre facture 40')).toBeLessThan(texte.indexOf('1 234,56 $'));
     expect(texte.indexOf('1 234,56 $')).toBeLessThan(texte.indexOf('Voir et payer la facture :'));
+    expect(texte.indexOf('Voir et payer la facture :')).toBeLessThan(texte.indexOf('Bonjour Rafba,'));
   });
 
   it('un logo devient le nom de l’entreprise (texte alternatif)', () => {
