@@ -9,7 +9,7 @@
 // séparateur (locale FR), les virgules DANS une adresse, et les guillemets
 // doublés de la RFC 4180.
 import { describe, it, expect } from 'vitest';
-import { analyserCsv, decouperLigne, devinerSeparateur } from '../src/lib/pipeline/importCsv';
+import { analyserCsv, decouperEnregistrements, decouperLigne, devinerSeparateur } from '../src/lib/pipeline/importCsv';
 
 /** Reproduit exactement ce que `telechargerCsv` écrit dans le fichier. */
 function champCsv(valeur: string): string {
@@ -148,5 +148,60 @@ describe('aller-retour export → import', () => {
 
   it('un fichier vide est refusé', () => {
     expect(analyserCsv('').erreur).toBe('fichier_vide');
+  });
+});
+
+describe('le fichier d export de GoHighLevel', () => {
+  // Le vrai en-tête de leur export « opportunities », et deux lignes réelles.
+  // Le champ Notes contient des SAUTS DE LIGNE entre guillemets : c'est le
+  // piège qui transformait 2 deals en 4 lignes bancales, toutes rejetées
+  // « sans nom ».
+  const GHL = [
+    'Opportunity name,Contact Name,phone,email,pipeline,stage,Lead Value,source,assigned,Created on,Updated on,lost reason ID,lost reason name,Followers,Notes,tags,Engagement score,status',
+    '(Example) Deal with Jordan Smith,(Example) Jordan Smith,,jordan.smith@example.com,Marketing Pipeline,Negotiation,3934,Email Campaign,,2026-09-23T16:54:01.082Z,2026-09-23T16:54:01.082Z,,,,"Sent contract for review',
+    'Client provided a positive testimonial for our service',
+    '",follow-up,0,won',
+    '(Example) Deal with Alex Carter,(Example) Alex Doe Carter,,alex.carter@businessmail.com,Marketing Pipeline,Closed,1554,Email Campaign,,2026-09-23T16:54:00.674Z,2026-09-23T16:54:00.674Z,,,,,follow-up,0,abandoned',
+  ].join('\n');
+
+  it('lit DEUX deals, pas quatre lignes coupées', () => {
+    const a = analyserCsv(GHL);
+    expect(a.erreur).toBeNull();
+    expect(a.lignes).toHaveLength(2);
+    expect(a.lignes.filter((l) => l.probleme !== '')).toHaveLength(0);
+  });
+
+  it('reconnaît « Contact Name » comme le nom', () => {
+    const a = analyserCsv(GHL);
+    const noms = a.lignes.map((l) => `${l.prenom} ${l.nom}`.trim());
+    expect(noms[0]).toContain('Jordan Smith');
+    expect(noms[1]).toContain('Alex Doe Carter');
+  });
+
+  it('garde les courriels', () => {
+    const a = analyserCsv(GHL);
+    expect(a.lignes[0].courriel).toBe('jordan.smith@example.com');
+    expect(a.lignes[1].courriel).toBe('alex.carter@businessmail.com');
+  });
+});
+
+describe('découpage en enregistrements', () => {
+  it('ne coupe pas dans un champ entre guillemets', () => {
+    const e = decouperEnregistrements('a;b\nc;"deux\nlignes"\nd;e');
+    expect(e).toHaveLength(3);
+    expect(e[1]).toBe('c;"deux\nlignes"');
+  });
+
+  it('gère les fins de ligne Windows', () => {
+    expect(decouperEnregistrements('a;b\r\nc;d')).toEqual(['a;b', 'c;d']);
+  });
+
+  it('ignore les lignes vides', () => {
+    expect(decouperEnregistrements('a;b\n\n\nc;d')).toEqual(['a;b', 'c;d']);
+  });
+
+  it('un guillemet doublé ne sort pas du champ', () => {
+    const e = decouperEnregistrements('a;"il a dit ""oui""\nsuite"\nb;c');
+    expect(e).toHaveLength(2);
   });
 });

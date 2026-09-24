@@ -100,8 +100,15 @@ const SYNONYMES: Record<keyof Omit<LigneImport, 'ligne' | 'probleme'>, string[]>
   adresse: ['adresse', 'address', 'rue', 'street', 'adresse complète'],
 };
 
-/** « Client » ou « Name » : un seul champ qui porte le nom complet. */
-const NOM_COMPLET = ['client', 'nom complet', 'name', 'full name', 'contact', 'customer'];
+/**
+ * « Client », « Name », « Contact Name » : un seul champ qui porte le nom
+ * complet. `contact name` vient de l'export d'opportunités de GoHighLevel —
+ * sans lui, chaque ligne de leur fichier était rejetée « sans nom ».
+ */
+const NOM_COMPLET = [
+  'client', 'nom complet', 'name', 'full name', 'contact', 'customer',
+  'contact name', 'nom du contact', 'client name',
+];
 
 function normaliser(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
@@ -115,10 +122,56 @@ function normaliser(s: string): string {
  * l'utilisateur doit savoir que ces trois lignes-là ne partiront pas, et
  * pourquoi.
  */
+/**
+ * Découpe le fichier en ENREGISTREMENTS, pas en lignes de texte.
+ *
+ * Un champ entre guillemets peut contenir des sauts de ligne — c'est le cas
+ * du champ « Notes » exporté par GoHighLevel, qui tient plusieurs phrases.
+ * Un split naïf sur le retour à la ligne coupait au milieu : deux deals
+ * devenaient quatre lignes bancales, toutes rejetées « sans nom ».
+ *
+ * On avance donc caractère par caractère en suivant l'état « dans des
+ * guillemets ou non », comme le fait `decouperLigne` pour les colonnes.
+ */
+export function decouperEnregistrements(texte: string): string[] {
+  const out: string[] = [];
+  let courant = '';
+  let dansGuillemets = false;
+
+  for (let i = 0; i < texte.length; i++) {
+    const c = texte[i];
+
+    if (c === '"') {
+      // Deux guillemets de suite = un guillemet littéral, pas une sortie.
+      if (dansGuillemets && texte[i + 1] === '"') {
+        courant += '""';
+        i++;
+        continue;
+      }
+      dansGuillemets = !dansGuillemets;
+      courant += c;
+      continue;
+    }
+
+    if (!dansGuillemets && (c === '\n' || c === '\r')) {
+      // CRLF : on ne coupe qu'une seule fois.
+      if (c === '\r' && texte[i + 1] === '\n') i++;
+      if (courant.trim() !== '') out.push(courant);
+      courant = '';
+      continue;
+    }
+
+    courant += c;
+  }
+
+  if (courant.trim() !== '') out.push(courant);
+  return out;
+}
+
 export function analyserCsv(texte: string): AnalyseCsv {
   // Le BOM d'Excel se colle au premier en-tête et casse la reconnaissance.
   const propre = texte.replace(/^﻿/, '');
-  const brutes = propre.split(/\r?\n/).filter((l) => l.trim() !== '');
+  const brutes = decouperEnregistrements(propre);
 
   if (brutes.length === 0) return { lignes: [], colonnesIgnorees: [], erreur: 'fichier_vide' };
   if (brutes.length === 1) return { lignes: [], colonnesIgnorees: [], erreur: 'aucune_donnee' };
