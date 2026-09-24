@@ -13,11 +13,12 @@ import { sendSafeError } from '../lib/error-handler';
 import {
   validate, champCreerSchema, champModifierSchema, champPurgerSchema, dossierCreerSchema, dossierModifierSchema,
   champsCherchablesSchema, champUniqueSchema, valeursEcrireSchema, champsFiltrerSchema, cartesPipelineSchema,
+  modeleInstallerSchema,
 } from '../lib/validation';
 import {
   ErreurChamps, estObjet, champsV2Actifs, listerChamps, creerChamp, modifierChamp, archiverChamp, impactChamp,
   purgerChamp, majCherchables, majUnique, creerDossier, renommerDossier, supprimerDossier, lireValeurs,
-  lireValeursLot, ecrireValeurs, filtrer, lireCartesPipeline, majCartesPipeline,
+  lireValeursLot, ecrireValeurs, filtrer, lireCartesPipeline, majCartesPipeline, industrieDe, installerModele,
 } from '../lib/champs/service';
 import { CHAMPS_STANDARD } from '../../src/lib/champs/standard';
 
@@ -61,6 +62,28 @@ router.post('/custom-fields', validate(champCreerSchema), async (req, res) => {
     const auth = await requireAuthedClient(req, res);
     if (!auth) return;
     return res.status(201).json({ field: await creerChamp(auth.client, auth.orgId, req.body) });
+  } catch (err) {
+    return repondreErreur(res, err, 'créer le champ');
+  }
+});
+
+// Champs suggérés pour le métier de l'entreprise (déclarés AVANT /:id).
+router.get('/custom-fields/templates', async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    return res.json({ industry: await industrieDe(auth.client, auth.orgId) });
+  } catch (err) {
+    return repondreErreur(res, err, 'lire les champs personnalisés');
+  }
+});
+
+router.post('/custom-fields/templates', validate(modeleInstallerSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const r = await installerModele(auth.client, auth.orgId, req.body.industry, { ids: req.body.ids, langue: req.body.language });
+    return res.status(201).json(r);
   } catch (err) {
     return repondreErreur(res, err, 'créer le champ');
   }

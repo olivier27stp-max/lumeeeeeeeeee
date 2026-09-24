@@ -154,6 +154,8 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   // ── Champs personnalisés v2 (définitions = réglages ; valeurs = RLS de l'objet parent) ──
   'GET /api/custom-fields': 'settings.read',
   'POST /api/custom-fields': 'settings.update',
+  'GET /api/custom-fields/templates': 'settings.read',
+  'POST /api/custom-fields/templates': 'settings.update',
   'PATCH /api/custom-fields/:id': 'settings.update',
   'POST /api/custom-fields/:id/archive': 'settings.update',
   'GET /api/custom-fields/:id/impact': 'settings.update',

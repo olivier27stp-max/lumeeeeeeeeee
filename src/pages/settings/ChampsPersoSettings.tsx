@@ -18,7 +18,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  ChevronDown, Copy, FolderOpen, FolderPlus, Lock, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2, Layers,
+  ChevronDown, Copy, FolderOpen, FolderPlus, Lock, MoreHorizontal, Pencil, Plus, RotateCcw, Search, Trash2, Layers, Sparkles,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -41,6 +41,7 @@ import { ICONE_TYPE } from '../../components/champs/icones';
 import ModaleChamp from '../../components/champs/reglages/ModaleChamp';
 import { ModaleCherchables, ModaleDossier, ModaleSuppression, ModaleUniques } from '../../components/champs/reglages/ModalesReglages';
 import CartesPipelineReglage from '../../components/champs/reglages/CartesPipelineReglage';
+import ModaleSuggestions, { nomIndustrie, useIndustrie } from '../../components/champs/reglages/ModaleSuggestions';
 
 type Onglet = 'tous' | ObjetChamp;
 type Source = 'all' | 'standard' | 'custom';
@@ -77,6 +78,7 @@ export default function ChampsPersoSettings() {
   const [modaleDossier, setModaleDossier] = useState(false);
   const [modaleCherchables, setModaleCherchables] = useState(false);
   const [modaleUniques, setModaleUniques] = useState(false);
+  const [modaleSuggestions, setModaleSuggestions] = useState(false);
   const [aSupprimer, setASupprimer] = useState<ChampPerso | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -87,6 +89,8 @@ export default function ChampsPersoSettings() {
   });
   const { data: fuseau = 'America/Toronto' } = useQuery({ queryKey: ['champs-perso', 'fuseau'], queryFn: lireFuseau, staleTime: 3_600_000 });
   const recharger = () => qc.invalidateQueries({ queryKey: ['champs-perso'] });
+  const { data: industrie } = useIndustrie(isEnabled);
+  const aucunChampPerso = !!data && data.fields.every((c) => c.archived_at);
 
   useEffect(() => {
     const fermer = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) { setMenu(null); setMenuGlobal(false); } };
@@ -197,6 +201,9 @@ export default function ChampsPersoSettings() {
           </p>
         </div>
         <div className="relative flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setModaleSuggestions(true)} className="glass-button inline-flex items-center gap-2 whitespace-nowrap">
+            <Sparkles size={14} aria-hidden /> {fr ? 'Champs suggérés' : 'Suggested fields'}
+          </button>
           <button type="button" onClick={() => setModaleDossier(true)} className="glass-button inline-flex items-center gap-2 whitespace-nowrap">
             <FolderPlus size={14} aria-hidden /> {fr ? 'Nouveau dossier' : 'Create folder'}
           </button>
@@ -223,6 +230,24 @@ export default function ChampsPersoSettings() {
           )}
         </div>
       </div>
+
+      {/* ── Aucun champ encore : on propose ceux du métier ── */}
+      {aucunChampPerso && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold text-text-primary">
+              {fr ? 'Commence avec les champs de ton métier' : 'Start with the fields for your trade'}
+              {industrie && industrie !== 'other' && <span className="font-normal text-text-secondary"> · {nomIndustrie(industrie, fr)}</span>}
+            </p>
+            <p className="mt-0.5 text-[12px] text-text-secondary">
+              {fr ? 'Des champs prêts à l’emploi, que tu peux renommer ou retirer ensuite.' : 'Ready-made fields you can rename or remove later.'}
+            </p>
+          </div>
+          <button type="button" onClick={() => setModaleSuggestions(true)} className="glass-button-primary inline-flex items-center gap-2 whitespace-nowrap">
+            <Sparkles size={14} aria-hidden /> {fr ? 'Voir les champs suggérés' : 'See suggested fields'}
+          </button>
+        </div>
+      )}
 
       {/* ── Objets ── */}
       <div className="flex flex-wrap gap-2" role="tablist" aria-label={fr ? 'Objet' : 'Object'}>
@@ -426,6 +451,8 @@ export default function ChampsPersoSettings() {
         objet={objetCourant} champs={(data?.fields ?? []).filter((c) => c.object_type === objetCourant)} standard={data?.standard[objetCourant] ?? []} fr={fr} />
       <ModaleUniques open={modaleUniques} onClose={() => setModaleUniques(false)} onEnregistre={() => { void recharger(); }}
         champs={(data?.fields ?? []).filter((c) => onglet === 'tous' || c.object_type === onglet)} fr={fr} />
+      <ModaleSuggestions open={modaleSuggestions} onClose={() => setModaleSuggestions(false)} onInstalle={() => { void recharger(); }}
+        champsExistants={data?.fields ?? []} fr={fr} />
       <ModaleSuppression open={!!aSupprimer} onClose={() => setASupprimer(null)} onFait={() => { void recharger(); }} champ={aSupprimer} fr={fr} />
     </div>
   );

@@ -7,6 +7,8 @@ import { requireAuthedClient, getServiceClient, isOrgAdminOrOwner, findUserByEma
 import { PLAN_FEATURE_KEYS, isPlatformOverride } from '../lib/platformFeatures';
 import { getUserContext, hasPermission } from '../lib/rbac';
 import { logger } from '../lib/logger';
+import { installerModele } from '../lib/champs/service';
+import { estIndustrieModele } from '../../src/lib/champs/modeles';
 
 const router = Router();
 
@@ -231,6 +233,13 @@ router.post('/billing/onboarding', validate(onboardingSchema), async (req, res) 
     if (writeErr) {
       console.error('[billing/onboarding] write failed:', writeErr.message);
       return res.status(500).json({ error: 'Failed to save billing info.' });
+    }
+
+    // Champs personnalisés du métier choisi, posés d'office (prêts quand la
+    // fonction s'active). Jamais bloquant pour l'inscription ; rejouable.
+    if (estIndustrieModele(industry)) {
+      void installerModele(admin, auth.orgId, industry)
+        .catch((e: unknown) => console.warn('[billing/onboarding] custom field templates skipped:', e instanceof Error ? e.message : e));
     }
 
     return res.json({ ok: true });
