@@ -1058,3 +1058,78 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
       (s: number, f: Record<string, unknown>) => s + ((f.balance_cents as number) ?? 0), 0),
   };
 }
+
+// ── Pastilles automatiques ──────────────────────────────────
+//
+// GoHighLevel appelle ça des « smart tags » et les fait configurer par un
+// constructeur de règles en deux écrans. Pour une PME de service, ça revient
+// à faire remplir un formulaire pour obtenir ce que le logiciel sait déjà.
+//
+// Ici elles sont DÉRIVÉES, comme le montant et la priorité : rien n'est
+// stocké, rien n'est à configurer, et une pastille ne peut pas devenir fausse
+// parce qu'un travail de fond a cessé de tourner.
+
+export type ClePastille = 'gros' | 'dort' | 'non_assigne' | 'jamais_contacte' | 'a_relancer';
+
+export interface Pastille {
+  cle: ClePastille;
+  fr: string;
+  en: string;
+  /** Teinte CSS — `danger` attire l'œil, `info` informe seulement. */
+  ton: 'danger' | 'warning' | 'info';
+}
+
+/** Au-dessus de ce montant, un deal mérite qu'on le traite en premier. */
+const SEUIL_GROS_CENTS = 500_000; // 5 000 $
+
+/**
+ * Les pastilles d'un deal, au plus deux.
+ *
+ * Deux, pas plus : une carte couverte de pastilles ne hiérarchise plus rien,
+ * et l'œil cesse de les lire. Elles sortent dans l'ordre d'urgence, donc les
+ * deux premières sont les deux qui comptent.
+ *
+ * Aucune pastille sur un deal fermé : « dort depuis 20 jours » sur une vente
+ * conclue est un faux signal.
+ */
+export function pastilles(
+  deal: Deal,
+  stages: PipelineStage[],
+  montantCents: number | undefined,
+  maintenant = new Date(),
+): Pastille[] {
+  const s = stages.find((x) => x.id === deal.stage_id);
+  if (!s || s.kind !== 'open') return [];
+
+  const out: Pastille[] = [];
+  const jours = Math.floor(
+    (maintenant.getTime() - new Date(deal.last_activity_at).getTime()) / 86_400_000,
+  );
+
+  // 1. Jamais contacté : le pire cas, parce que le client attend une réponse
+  //    qu'il n'a jamais eue. Passe avant « dort », qui en est la conséquence.
+  if (!deal.first_contacted_at && jours >= 1) {
+    out.push({ cle: 'jamais_contacte', fr: 'Jamais contacté', en: 'Never contacted', ton: 'danger' });
+  }
+
+  // 2. Personne ne l'a pris. Un lead sans propriétaire n'est relancé par
+  //    personne — c'est une fuite silencieuse.
+  if (!deal.assigned_user_id) {
+    out.push({ cle: 'non_assigne', fr: 'Non assigné', en: 'Unassigned', ton: 'warning' });
+  }
+
+  // 3. Dort depuis deux semaines.
+  if (jours >= 14) {
+    out.push({ cle: 'dort', fr: `Dort ${jours} j`, en: `Stale ${jours}d`, ton: 'danger' });
+  } else if (jours >= 5) {
+    out.push({ cle: 'a_relancer', fr: 'À relancer', en: 'Follow up', ton: 'warning' });
+  }
+
+  // 4. Gros montant — informatif, jamais alarmant : un gros deal récent et
+  //    bien suivi n'a aucun problème.
+  if ((montantCents ?? 0) >= SEUIL_GROS_CENTS) {
+    out.push({ cle: 'gros', fr: 'Gros job', en: 'High value', ton: 'info' });
+  }
+
+  return out.slice(0, 2);
+}
