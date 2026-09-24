@@ -612,6 +612,17 @@ export async function creerDealManuel(champs: {
   courriel?: string | null;
   telephone?: string | null;
   adresse?: string | null;
+  /**
+   * Ce qui fait vivre les prévisions. Tous optionnels : un champ absent
+   * laisse le deal dans « Corriger vos données », jamais un chiffre inventé.
+   *
+   * Le montant n'est PAS écrit sur le deal — il reste dérivé. La base en fait
+   * un devis brouillon rattaché, donc visible et modifiable plus tard.
+   */
+  montantCents?: number | null;
+  assigneA?: string | null;
+  dateFermetureVisee?: string | null;
+  source?: string | null;
 }): Promise<{ dealId: string; fusionne: boolean; dealExistant: boolean }> {
   // `pipeline_creer_deal` ne prend PAS d'organisation : elle la dérive de la
   // session et vérifie la permission « leads.create ». `ingest_lead` reste
@@ -623,6 +634,10 @@ export async function creerDealManuel(champs: {
     p_email: champs.courriel ?? null,
     p_phone: champs.telephone ?? null,
     p_address: champs.adresse ?? null,
+    p_montant_cents: champs.montantCents ?? null,
+    p_assigne_a: champs.assigneA ?? null,
+    p_date_fermeture_visee: champs.dateFermetureVisee ?? null,
+    p_source: champs.source ?? null,
   });
   if (error) throw error;
   const r = data as { deal_id: string; fusionne: boolean; deal_existant: boolean };

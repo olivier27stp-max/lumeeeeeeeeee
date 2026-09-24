@@ -24,6 +24,8 @@ vi.mock('../src/i18n', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+const creerDealMock = vi.fn(async (..._a: any[]) => ({ dealId: 'd-neuf', fusionne: false, dealExistant: false }));
+
 vi.mock('../src/lib/pipelineVentesApi', async () => {
   const reel = await vi.importActual<any>('../src/lib/pipelineVentesApi');
   return {
@@ -31,7 +33,7 @@ vi.mock('../src/lib/pipelineVentesApi', async () => {
     fetchVues: async () => [],
     creerVue: async () => 'v1',
     supprimerVue: async () => {},
-    creerDealManuel: async () => ({ dealId: 'd-neuf', fusionne: false }),
+    creerDealManuel: (...a: any[]) => creerDealMock(...(a as [])),
     journaliserLot: async () => {},
   };
 });
@@ -256,5 +258,82 @@ describe('sélecteur de pipeline', () => {
     expect(onCreer).toHaveBeenCalled();
     // Surtout pas : « __creer » n'est pas un identifiant de pipeline.
     expect(onChanger).not.toHaveBeenCalledWith('__creer');
+  });
+});
+
+describe('création de deal — ce qui nourrit les prévisions', () => {
+  /** Ouvre le formulaire « Nouveau deal ». */
+  async function ouvrirFormulaire() {
+    const b = [...conteneur.querySelectorAll('button')]
+      .find((x) => /nouveau deal/i.test(x.textContent ?? ''));
+    expect(b).toBeTruthy();
+    await act(async () => { b!.click(); });
+  }
+  function parEtiquette(re: RegExp): HTMLElement | undefined {
+    const lab = [...conteneur.querySelectorAll('label')]
+      .find((l) => re.test(l.textContent ?? ''));
+    const id = lab?.getAttribute('for');
+    // Pas de `CSS.escape` dans jsdom, et les ids de `useId()` contiennent des
+    // deux-points : on compare l attribut au lieu de bâtir un sélecteur.
+    if (!id) return undefined;
+    return [...conteneur.querySelectorAll('input, select')]
+      .find((e) => e.getAttribute('id') === id) as HTMLElement | undefined;
+  }
+
+  it('demande montant, date visée, responsable et source', async () => {
+    // Sans ces champs, « revenu attendu » et la Chronologie calculent sur du
+    // vide : c'est la cause mesurée des 22 deals sans date en production.
+    await rendre();
+    await ouvrirFormulaire();
+    expect(parEtiquette(/Montant/)).toBeTruthy();
+    expect(parEtiquette(/Fermeture visée/)).toBeTruthy();
+    expect(parEtiquette(/Responsable/)).toBeTruthy();
+    expect(parEtiquette(/Source/)).toBeTruthy();
+  });
+
+  it('propose une date de fermeture par défaut', async () => {
+    // Une date absente ne se remarque jamais ; une date approximative se
+    // corrige. Le deal entre dans la Chronologie tout de suite.
+    await rendre();
+    await ouvrirFormulaire();
+    const d = parEtiquette(/Fermeture visée/) as HTMLInputElement;
+    expect(d.value).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(new Date(d.value).getTime()).toBeGreaterThan(Date.now());
+  });
+
+  it('propose les membres comme responsables', async () => {
+    await rendre();
+    await ouvrirFormulaire();
+    const sel = parEtiquette(/Responsable/) as HTMLSelectElement;
+    const libelles = [...sel.options].map((o) => o.textContent ?? '');
+    expect(libelles[0]).toMatch(/Non assigné/);
+    expect(libelles.some((t) => /Marie Tremblay/.test(t))).toBe(true);
+  });
+
+  it('envoie le montant EN CENTS, jamais en dollars', async () => {
+    // Les cents sont la source de vérité dans tout Lume : envoyer 1250
+    // au lieu de 125000 ferait afficher 12,50 $ sur la carte.
+    await rendre();
+    await ouvrirFormulaire();
+    await saisir(parEtiquette(/Prénom/) as HTMLInputElement, 'Alice');
+    await saisir(parEtiquette(/Montant/) as HTMLInputElement, '1250');
+
+    const envoyer = [...conteneur.querySelectorAll('button')]
+      .find((b) => b.getAttribute('type') === 'submit');
+    await act(async () => { envoyer?.click(); });
+
+    expect(creerDealMock).toHaveBeenCalled();
+    expect(creerDealMock.mock.calls[0][0]).toMatchObject({ montantCents: 125000 });
+  });
+
+  it('un montant vide part à null, pas à zéro', async () => {
+    // « 0 $ » affirme que le deal ne vaut rien ; vide dit qu'on ne sait pas.
+    await rendre();
+    await ouvrirFormulaire();
+    await saisir(parEtiquette(/Prénom/) as HTMLInputElement, 'Bob');
+    const envoyer = [...conteneur.querySelectorAll('button')]
+      .find((b) => b.getAttribute('type') === 'submit');
+    await act(async () => { envoyer?.click(); });
+    expect(creerDealMock.mock.calls[0][0].montantCents).toBeNull();
   });
 });
