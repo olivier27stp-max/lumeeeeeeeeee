@@ -19,8 +19,8 @@ import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from '../../i18n';
 import {
-  fetchARisque, fetchChronologie, fetchPrevisions,
-  type PipelineResume, type RisqueRow,
+  fetchARisque, fetchChronologie, fetchPrevisions, fetchPrevisionsGroupees,
+  type AxeGroupe, type LigneGroupe, type PipelineResume, type RisqueRow,
 } from '../../lib/pipelineVentesApi';
 
 /** Cents → « 3 934 $ ». Les cents sont la source de vérité. */
@@ -74,6 +74,70 @@ const TEINTE_RISQUE: Record<RisqueRow['niveau'], string> = {
   faible: 'var(--color-success)',
 };
 
+/**
+ * Les barres horizontales de la répartition.
+ *
+ * Deux segments empilés par ligne : ce qui est DÉJÀ gagné, et ce qui reste
+ * espéré. Les mettre côte à côte laisserait croire à deux quantités
+ * indépendantes, alors que l'une est la promesse de l'autre.
+ *
+ * L'échelle est commune à toutes les lignes (le plus gros total = 100 %) :
+ * une barre par ligne mise à son propre maximum donnerait six barres pleines
+ * et ne comparerait plus rien.
+ */
+function BarresGroupes({ lignes, fr }: { lignes: LigneGroupe[]; fr: boolean }) {
+  const max = Math.max(...lignes.map((l) => l.total_cents), 1);
+
+  return (
+    <div className="mt-3 space-y-2">
+      {lignes.map((l) => {
+        const partGagne = (l.gagne_cents / max) * 100;
+        const partOuvert = (l.potentiel_cents / max) * 100;
+        return (
+          <div key={l.cle} className="flex items-center gap-3">
+            <span className="w-[120px] shrink-0 truncate text-[11.5px] text-text-secondary" title={l.libelle}>
+              {l.libelle}
+            </span>
+            {/*
+              La barre est décorative : le tableau juste en dessous porte les
+              mêmes chiffres, lisibles par un lecteur d'écran. La doubler en
+              ARIA ferait relire deux fois la même ligne.
+            */}
+            <div className="h-3.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-tertiary" aria-hidden="true">
+              <div className="flex h-full">
+                {partGagne > 0 && (
+                  <div style={{ width: `${partGagne}%`, background: 'var(--color-success)' }} />
+                )}
+                {partOuvert > 0 && (
+                  <div style={{ width: `${partOuvert}%`, background: 'var(--color-primary)', opacity: 0.55 }} />
+                )}
+              </div>
+            </div>
+            <span className="w-[92px] shrink-0 text-right text-[11.5px] tabular-nums text-text-tertiary">
+              {argent(l.total_cents, fr)}
+            </span>
+          </div>
+        );
+      })}
+
+      <div className="flex flex-wrap gap-4 pt-1 text-[11px] text-text-tertiary">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full" style={{ background: 'var(--color-success)' }} aria-hidden="true" />
+          {fr ? 'Gagné' : 'Won'}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="h-2 w-2 rounded-full"
+            style={{ background: 'var(--color-primary)', opacity: 0.55 }}
+            aria-hidden="true"
+          />
+          {fr ? 'Encore ouvert' : 'Still open'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function PipelinePrevisions({ pipelines, pipelineActif }: {
   pipelines: PipelineResume[];
   /** `null` = tous les pipelines confondus. */
@@ -87,6 +151,8 @@ export default function PipelinePrevisions({ pipelines, pipelineActif }: {
   const [portee, setPortee] = useState<string>(pipelineActif ?? '');
   const [vue, setVue] = useState<'sommaire' | 'chronologie'>('sommaire');
   const [seuilsOuverts, setSeuilsOuverts] = useState(false);
+  const idAxe = useId();
+  const [axe, setAxe] = useState<AxeGroupe>('etape');
   const [hautFois, setHautFois] = useState(2);
   const [hautJours, setHautJours] = useState(14);
   const [moyenFois, setMoyenFois] = useState(1);
@@ -104,6 +170,13 @@ export default function PipelinePrevisions({ pipelines, pipelineActif }: {
     queryFn: () => fetchARisque(cible, { hautFois, hautJours, moyenFois, moyenJours }),
     staleTime: 60_000,
   });
+  const groupesQ = useQuery({
+    queryKey: ['pipeline-previsions-groupees', cible, axe],
+    queryFn: () => fetchPrevisionsGroupees(cible, axe),
+    enabled: vue === 'sommaire',
+    staleTime: 60_000,
+  });
+
   const chronoQ = useQuery({
     queryKey: ['pipeline-chronologie', cible],
     queryFn: () => fetchChronologie(cible, 6),
@@ -114,6 +187,7 @@ export default function PipelinePrevisions({ pipelines, pipelineActif }: {
   const p = prevQ.data ?? null;
   const risques = risqueQ.data ?? [];
   const chrono = useMemo(() => chronoQ.data ?? [], [chronoQ.data]);
+  const groupes = useMemo(() => groupesQ.data ?? [], [groupesQ.data]);
 
   const LIBELLE_RISQUE: Record<RisqueRow['niveau'], { titre: string; detail: string }> = {
     haut: {
@@ -223,6 +297,109 @@ export default function PipelinePrevisions({ pipelines, pipelineActif }: {
               detail={fr ? 'En cours en ce moment' : 'Currently in progress'}
             />
           </div>
+
+          {/* ── Ventilation ──
+              Les quatre totaux disent COMBIEN ; cette section dit D'OÙ. Un
+              revenu attendu de 40 000 $ ne se travaille pas ; trois deals
+              coincés dans la même étape, oui. */}
+          <section className="mt-4 rounded-xl border border-outline bg-surface-card p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[13px] font-semibold text-text-primary">
+                {fr ? 'Répartition' : 'Breakdown'}
+              </h3>
+              <div className="flex items-center gap-2">
+                <label htmlFor={idAxe} className="text-[11.5px] text-text-tertiary">
+                  {fr ? 'Regrouper par' : 'Group by'}
+                </label>
+                <select
+                  id={idAxe}
+                  value={axe}
+                  onChange={(e) => setAxe(e.target.value as AxeGroupe)}
+                  className="input-field max-w-[170px] text-[12px]"
+                >
+                  <option value="etape">{fr ? 'Étape' : 'Stage'}</option>
+                  <option value="vendeur">{fr ? 'Responsable' : 'Owner'}</option>
+                  <option value="source">{fr ? 'Source' : 'Source'}</option>
+                </select>
+              </div>
+            </div>
+
+            {groupesQ.isLoading && (
+              <p className="mt-3 text-[12px] text-text-muted" role="status">
+                {fr ? 'Chargement…' : 'Loading…'}
+              </p>
+            )}
+
+            {!groupesQ.isLoading && groupes.length === 0 && (
+              <p className="mt-3 text-[12px] text-text-muted">
+                {fr ? 'Aucun deal à ventiler.' : 'No opportunity to break down.'}
+              </p>
+            )}
+
+            {groupes.length > 0 && (
+              <>
+                <BarresGroupes lignes={groupes} fr={fr} />
+
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-[12.5px]">
+                    <thead>
+                      <tr className="border-b border-border-subtle text-left text-[10.5px] uppercase tracking-wide text-text-tertiary">
+                        <th scope="col" className="py-2 pr-3 font-semibold">
+                          {axe === 'etape' ? (fr ? 'Étape' : 'Stage')
+                            : axe === 'vendeur' ? (fr ? 'Responsable' : 'Owner')
+                            : (fr ? 'Source' : 'Source')}
+                        </th>
+                        <th scope="col" className="py-2 px-3 text-right font-semibold">{fr ? 'Deals' : 'Opportunities'}</th>
+                        <th scope="col" className="py-2 px-3 text-right font-semibold">{fr ? 'Potentiel max' : 'Max potential'}</th>
+                        <th scope="col" className="py-2 px-3 text-right font-semibold">{fr ? 'Attendu' : 'Expected'}</th>
+                        <th scope="col" className="py-2 px-3 text-right font-semibold">{fr ? 'Gagné' : 'Won'}</th>
+                        <th scope="col" className="py-2 pl-3 text-right font-semibold">{fr ? 'Potentiel total' : 'Total potential'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle">
+                      {groupes.map((g) => (
+                        <tr key={g.cle}>
+                          <td className="py-2 pr-3 text-text-primary">{g.libelle}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{g.nb}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{argent(g.potentiel_cents, fr)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums text-text-primary">{argent(g.attendu_cents, fr)}</td>
+                          <td className="py-2 px-3 text-right tabular-nums" style={{ color: 'var(--color-success)' }}>
+                            {argent(g.gagne_cents, fr)}
+                          </td>
+                          <td className="py-2 pl-3 text-right tabular-nums font-semibold text-text-primary">
+                            {argent(g.total_cents, fr)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {/* Le total : il doit retomber sur les tuiles du haut.
+                        Deux chiffres différents pour la même chose, et on ne
+                        croit plus ni l'un ni l'autre. */}
+                    <tfoot>
+                      <tr className="border-t-2 border-outline font-semibold text-text-primary">
+                        <td className="py-2 pr-3">{fr ? 'Total' : 'Total'}</td>
+                        <td className="py-2 px-3 text-right tabular-nums">
+                          {groupes.reduce((n, g) => n + g.nb, 0)}
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums">
+                          {argent(groupes.reduce((n, g) => n + g.potentiel_cents, 0), fr)}
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums">
+                          {argent(groupes.reduce((n, g) => n + g.attendu_cents, 0), fr)}
+                        </td>
+                        <td className="py-2 px-3 text-right tabular-nums">
+                          {argent(groupes.reduce((n, g) => n + g.gagne_cents, 0), fr)}
+                        </td>
+                        <td className="py-2 pl-3 text-right tabular-nums">
+                          {argent(groupes.reduce((n, g) => n + g.total_cents, 0), fr)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </>
+            )}
+          </section>
 
           <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
             {/* Les deals qui glissent */}

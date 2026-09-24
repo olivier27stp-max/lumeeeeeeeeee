@@ -15,7 +15,7 @@
  */
 import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { MoreVertical } from 'lucide-react';
+import { BarChart3, MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
 import { useTranslation } from '../../i18n';
@@ -33,6 +33,46 @@ function ilYaSixMois(): string {
 
 function aujourdhui(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Le résultat d'une action en lot, d'un coup d'œil.
+ *
+ * « 38/40 » se lit, mais ne se COMPARE pas : dans une liste de vingt lignes,
+ * l'œil ne repère pas celle qui a à moitié échoué. La barre le montre, le
+ * texte reste pour le chiffre exact et pour la lecture d'écran.
+ *
+ * Un lot à zéro deal (filtre qui ne ramène rien) n'affiche pas de barre : une
+ * barre vide ressemble à un échec, alors qu'il n'y avait rien à faire.
+ */
+function StatistiquesLot({ reussis, echoues, total, fr }: {
+  reussis: number;
+  echoues: number;
+  total: number;
+  fr: boolean;
+}) {
+  const base = Math.max(total, reussis + echoues);
+  const partOk = base > 0 ? (reussis / base) * 100 : 0;
+  const partKo = base > 0 ? (echoues / base) * 100 : 0;
+
+  return (
+    <div className="min-w-[110px]">
+      {base > 0 && (
+        <div className="flex h-1.5 overflow-hidden rounded-full bg-surface-tertiary" aria-hidden="true">
+          {partOk > 0 && <div style={{ width: `${partOk}%`, background: 'var(--color-success)' }} />}
+          {partKo > 0 && <div style={{ width: `${partKo}%`, background: 'var(--color-danger)' }} />}
+        </div>
+      )}
+      <p className="mt-1 text-[11.5px] tabular-nums text-text-secondary">
+        {reussis}/{total}
+        {echoues > 0 && (
+          <span className="ml-1 font-semibold" style={{ color: 'var(--color-danger)' }}>
+            · {echoues} {fr ? 'en échec' : 'failed'}
+          </span>
+        )}
+      </p>
+    </div>
+  );
 }
 
 export default function PipelineJournalLots() {
@@ -196,7 +236,12 @@ export default function PipelineJournalLots() {
                 <th scope="col" className="py-2 px-2 font-semibold">{fr ? 'Opération' : 'Operation'}</th>
                 <th scope="col" className="py-2 px-2 font-semibold">{fr ? 'Statut' : 'Status'}</th>
                 <th scope="col" className="py-2 px-2 font-semibold">{fr ? 'Par' : 'User'}</th>
-                <th scope="col" className="py-2 px-2 text-right font-semibold">{fr ? 'Résultat' : 'Results'}</th>
+                <th scope="col" className="py-2 px-2 font-semibold">
+                  <span className="inline-flex items-center gap-1.5">
+                    <BarChart3 size={12} aria-hidden="true" />
+                    {fr ? 'Statistiques' : 'Statistics'}
+                  </span>
+                </th>
                 <th scope="col" className="py-2 px-2 font-semibold">{fr ? 'Lancée' : 'Started'}</th>
                 <th scope="col" className="py-2 pl-2 font-semibold">
                   <span className="sr-only">{fr ? 'Actions' : 'Actions'}</span>
@@ -225,13 +270,10 @@ export default function PipelineJournalLots() {
                     )}
                   </td>
                   <td className="py-2 px-2 text-text-secondary">{l.user_nom ?? '—'}</td>
-                  <td className="py-2 px-2 text-right tabular-nums text-text-secondary">
-                    {l.reussis}/{l.total}
-                    {l.echoues > 0 && (
-                      <span className="ml-1 font-semibold" style={{ color: 'var(--color-danger)' }}>
-                        · {l.echoues} {fr ? 'en échec' : 'failed'}
-                      </span>
-                    )}
+                  <td className="py-2 px-2">
+                    <StatistiquesLot
+                      reussis={l.reussis} echoues={l.echoues} total={l.total} fr={fr}
+                    />
                   </td>
                   <td className="py-2 px-2 whitespace-nowrap tabular-nums text-text-tertiary">
                     {quand(l.created_at)}
