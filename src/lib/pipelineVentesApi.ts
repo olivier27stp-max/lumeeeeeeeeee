@@ -1186,3 +1186,58 @@ export async function rouvrirPipeline(pipelineId: string): Promise<void> {
   const { error } = await supabase.from('pipeline_acces').delete().eq('pipeline_id', pipelineId);
   if (error) throw error;
 }
+
+// ── Les rendez-vous du client ───────────────────────────────
+//
+// Les visites ne sont pas rattachées au deal : elles vivent sur la JOB
+// (`schedule_events.job_id`). C'est voulu — on planifie du travail, pas une
+// intention de vente. La fiche montre donc les visites de toutes les jobs du
+// client, pas seulement celles du deal courant : quelqu'un qu'on rappelle a
+// peut-être déjà une visite prévue mardi pour un autre contrat.
+
+export interface RendezVousClient {
+  id: string;
+  job_id: string | null;
+  titre: string;
+  debut: string | null;
+  statut: string;
+}
+
+export async function fetchRendezVousClient(clientId: string | null): Promise<RendezVousClient[]> {
+  if (!clientId) return [];
+
+  // `schedule_events` n'a pas de `client_id` : on passe par les jobs.
+  const { data: jobs, error: jobsErr } = await supabase
+    .from('jobs')
+    .select('id,title')
+    .eq('client_id', clientId)
+    .is('deleted_at', null);
+  if (jobsErr) throw jobsErr;
+
+  const ids = (jobs ?? []).map((j) => (j as { id: string }).id);
+  if (ids.length === 0) return [];
+
+  const titres = new Map(
+    (jobs ?? []).map((j) => [(j as { id: string }).id, (j as { title?: string }).title ?? '']),
+  );
+
+  const { data, error } = await supabase
+    .from('schedule_events')
+    .select('id,job_id,start_at,start_time,status')
+    .in('job_id', ids)
+    .order('start_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+
+  return (data ?? []).map((e) => {
+    const r = e as Record<string, unknown>;
+    return {
+      id: r.id as string,
+      job_id: (r.job_id as string) ?? null,
+      titre: titres.get(r.job_id as string) ?? '',
+      // Deux colonnes coexistent dans le schéma : `start_at` est la récente.
+      debut: (r.start_at as string) ?? (r.start_time as string) ?? null,
+      statut: (r.status as string) ?? '',
+    };
+  });
+}

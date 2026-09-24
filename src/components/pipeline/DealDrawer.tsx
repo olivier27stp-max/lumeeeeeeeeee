@@ -30,7 +30,7 @@ import { useTranslation } from '../../i18n';
 import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, deplacerDeal, estJobACreer, fetchElementsLies,
-  fetchDossierClient, fetchHistorique, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
+  fetchDossierClient, fetchHistorique, fetchRendezVousClient, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
   abandonnerDeal, fetchRaisonsProposees, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
@@ -42,7 +42,7 @@ interface Membre { id: string; name: string }
 /** Provenance du montant affiché — calculée par `pipeline_montants` en base. */
 export type MontantProvenance = 'job' | 'devis' | 'devis_client' | 'aucun';
 
-type Onglet = 'apercu' | 'notes' | 'taches' | 'activite' | 'lie';
+type Onglet = 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'activite';
 
 /**
  * Canaux proposés dans le sélecteur de source.
@@ -443,6 +443,95 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
   );
 }
 
+
+/**
+ * Les rendez-vous du client.
+ *
+ * Les visites vivent sur la JOB (`schedule_events.job_id`), pas sur le deal :
+ * on planifie du travail, pas une intention de vente. On montre donc les
+ * visites de TOUTES les jobs du client — quelqu'un qu'on rappelle a
+ * peut-être déjà une visite prévue mardi pour un autre contrat, et l'ignorer
+ * ferait proposer deux passages la même semaine.
+ *
+ * Planifier se fait dans le calendrier, pas ici : une visite demande une
+ * durée, une équipe et une adresse confirmée. Le bouton y amène.
+ */
+function OngletRendezVous({ deal, fr }: { deal: Deal; fr: boolean }) {
+  const { data: rdv = [], isLoading } = useQuery({
+    queryKey: ['deal-rdv', deal.client_id],
+    queryFn: () => fetchRendezVousClient(deal.client_id),
+    enabled: !!deal.client_id,
+    staleTime: 60_000,
+  });
+
+  const maintenant = Date.now();
+  const aVenir = rdv.filter((r) => r.debut && new Date(r.debut).getTime() >= maintenant);
+  const passes = rdv.filter((r) => !r.debut || new Date(r.debut).getTime() < maintenant);
+
+  function quand(iso: string | null): string {
+    if (!iso) return fr ? 'Date à confirmer' : 'Date to confirm';
+    const d = new Date(iso);
+    return d.toLocaleDateString(fr ? 'fr-CA' : 'en-CA', {
+      weekday: 'short', day: 'numeric', month: 'short',
+    }) + ' · ' + d.toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function liste(items: typeof rdv) {
+    return (
+      <div className="space-y-1.5">
+        {items.map((r) => (
+          <Link
+            key={r.id}
+            to={r.job_id ? `/jobs/${r.job_id}` : '/calendar'}
+            className="block rounded-xl border border-outline bg-surface-card px-3.5 py-2.5 hover:bg-surface-hover"
+          >
+            <span className="block text-[12.5px] font-semibold text-text-primary">{quand(r.debut)}</span>
+            <span className="block text-[11.5px] text-text-secondary">
+              {r.titre || (fr ? 'Visite' : 'Visit')}
+              {r.statut ? ` · ${r.statut}` : ''}
+            </span>
+          </Link>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Section titre={fr ? 'Planifier' : 'Schedule'}>
+        <Link to="/calendar" className="btn-secondary inline-flex text-[12.5px]">
+          {fr ? 'Ouvrir le calendrier' : 'Open the calendar'}
+        </Link>
+        <p className="mt-1.5 text-[11px] text-text-muted">
+          {fr
+            ? "Une visite se planifie depuis le calendrier : elle demande une durée, une équipe et une adresse confirmée."
+            : 'A visit is scheduled from the calendar: it needs a duration, a crew and a confirmed address.'}
+        </p>
+      </Section>
+
+      {isLoading && <Vide texte={fr ? 'Chargement…' : 'Loading…'} />}
+
+      {!isLoading && rdv.length === 0 && (
+        <Section titre={fr ? 'Rendez-vous' : 'Appointments'}>
+          <Vide texte={fr ? 'Aucune visite prévue pour ce client.' : 'No visit scheduled for this client.'} />
+        </Section>
+      )}
+
+      {aVenir.length > 0 && (
+        <Section titre={fr ? `À venir (${aVenir.length})` : `Upcoming (${aVenir.length})`}>
+          {liste(aVenir)}
+        </Section>
+      )}
+
+      {passes.length > 0 && (
+        <Section titre={fr ? `Passés (${passes.length})` : `Past (${passes.length})`}>
+          {liste(passes)}
+        </Section>
+      )}
+    </>
+  );
+}
+
 function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ['deal-lies', deal.id, deal.job_id, deal.quote_id],
@@ -650,7 +739,7 @@ export default function DealDrawer({
   const idRaisonPerte = useId();
   const idRaisonAbandon = useId();
   const idOnglets = useId();
-  const [onglet, setOnglet] = useState<Onglet>('apercu');
+  const [onglet, setOnglet] = useState<Onglet>('lie');
   const listeMembres = useMemo(() => membres ?? [], [membres]);
 
   // Étape « en attente d'une raison » : un passage vers une étape `lost` n'est
@@ -697,7 +786,10 @@ export default function DealDrawer({
   useEffect(() => {
     setEtapePerdueVisee(null);
     setRaisonSaisie('');
-    setOnglet('apercu');
+    // Chaque deal s'ouvre sur son CLIENT : la première question est « c'est
+    // qui, et où on en est avec lui ? ». Revenir sur le deal précédent avec
+    // la section qu'on regardait la fois d'avant serait déroutant.
+    setOnglet('lie');
   }, [dealId]);
 
   if (!deal) return null;
@@ -721,14 +813,21 @@ export default function DealDrawer({
     aucun: fr ? 'Aucun devis ni job lié' : 'No quote or job linked',
   };
 
+  /**
+   * Les sections, dans l'ordre où on en a besoin.
+   *
+   * Le CLIENT d'abord : quand on ouvre un deal, la première question est
+   * « c'est qui, et où on en est avec lui ? ». L'aperçu du deal (étape,
+   * source, montant) vient ensuite — c'est utile, mais ça ne remplace pas
+   * de savoir qu'il doit encore 1 200 $.
+   */
   const ONGLETS: { cle: Onglet; libelle: string }[] = [
-    { cle: 'apercu', libelle: fr ? 'Aperçu' : 'Overview' },
-    { cle: 'notes', libelle: fr ? 'Notes' : 'Notes' },
-    { cle: 'taches', libelle: fr ? 'Tâches' : 'Tasks' },
-    { cle: 'activite', libelle: fr ? 'Activité' : 'Activity' },
-    // « Client » et non « Lié » : l'onglet montre tout l'historique du
-    // client, pas seulement ce que CE deal a produit.
     { cle: 'lie', libelle: fr ? 'Client' : 'Client' },
+    { cle: 'apercu', libelle: fr ? 'Deal' : 'Deal' },
+    { cle: 'rdv', libelle: fr ? 'Rendez-vous' : 'Appointments' },
+    { cle: 'taches', libelle: fr ? 'Tâches' : 'Tasks' },
+    { cle: 'notes', libelle: fr ? 'Notes' : 'Notes' },
+    { cle: 'activite', libelle: fr ? 'Activité' : 'Activity' },
   ];
 
   /** Écriture générique : toast de succès, rafraîchissement, message de la base sinon. */
@@ -951,30 +1050,49 @@ export default function DealDrawer({
           </div>
         )}
 
-        <div className="tab-nav mt-4" role="tablist" aria-label={fr ? 'Sections du deal' : 'Deal sections'}>
-          {ONGLETS.map((o) => (
-            <button
-              key={o.cle}
-              type="button"
-              role="tab"
-              id={`${idOnglets}-${o.cle}`}
-              aria-selected={onglet === o.cle}
-              aria-controls={`${idOnglets}-${o.cle}-panneau`}
-              tabIndex={onglet === o.cle ? 0 : -1}
-              className={onglet === o.cle ? 'tab-item-active' : 'tab-item'}
-              onClick={() => setOnglet(o.cle)}
-            >
-              {o.libelle}
-            </button>
-          ))}
-        </div>
+        {/*
+          Navigation À GAUCHE, comme la page Client : sur une fenêtre large,
+          une rangée d'onglets horizontaux gaspille la hauteur et oblige à
+          relire la ligne pour retrouver où l'on est. En colonne, les
+          sections restent visibles pendant qu'on lit le contenu.
+          Sur téléphone, la colonne repasse au-dessus en ligne — une barre
+          latérale de 150 px sur 390 px d'écran ne laisserait rien au texte.
+        */}
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row">
+          <div
+            role="tablist"
+            aria-orientation="vertical"
+            aria-label={fr ? 'Sections du deal' : 'Deal sections'}
+            className="flex shrink-0 gap-1 overflow-x-auto sm:w-[150px] sm:flex-col sm:overflow-visible"
+          >
+            {ONGLETS.map((o) => (
+              <button
+                key={o.cle}
+                type="button"
+                role="tab"
+                id={`${idOnglets}-${o.cle}`}
+                aria-selected={onglet === o.cle}
+                aria-controls={`${idOnglets}-${o.cle}-panneau`}
+                tabIndex={onglet === o.cle ? 0 : -1}
+                onClick={() => setOnglet(o.cle)}
+                className={
+                  'whitespace-nowrap rounded-lg px-3 py-2 text-left text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary '
+                  + (onglet === o.cle
+                    ? 'bg-surface-tertiary font-semibold text-text-primary'
+                    : 'text-text-tertiary hover:bg-surface-secondary hover:text-text-primary')
+                }
+              >
+                {o.libelle}
+              </button>
+            ))}
+          </div>
 
-        <div
-          role="tabpanel"
-          id={`${idOnglets}-${onglet}-panneau`}
-          aria-labelledby={`${idOnglets}-${onglet}`}
-          className="mt-1"
-        >
+          <div
+            role="tabpanel"
+            id={`${idOnglets}-${onglet}-panneau`}
+            aria-labelledby={`${idOnglets}-${onglet}`}
+            className="min-w-0 flex-1"
+          >
           {onglet === 'apercu' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 lg:gap-x-6">
               {/* Colonne gauche — la valeur et à qui l'on parle. */}
@@ -1319,6 +1437,9 @@ export default function DealDrawer({
           )}
 
           {onglet === 'lie' && <OngletLie deal={deal} fr={fr} />}
+
+            {onglet === 'rdv' && <OngletRendezVous deal={deal} fr={fr} />}
+          </div>
         </div>
       </div>
     </Modal>
