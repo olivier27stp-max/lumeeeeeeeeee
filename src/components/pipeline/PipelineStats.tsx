@@ -18,6 +18,9 @@ import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Info, Loader2, Target } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import {
+  libelleSource,
+} from '../../lib/pipeline/presentation';
 import { useTranslation } from '../../i18n';
 import EmptyState from '../ui/EmptyState';
 import PeriodSelector from '../insights/PeriodSelector';
@@ -103,11 +106,6 @@ const LIBELLE_SOURCE: Record<string, { fr: string; en: string }> = {
   manual: { fr: 'Manuel', en: 'Manual' },
 };
 
-function libelleSource(source: string, fr: boolean): string {
-  const l = LIBELLE_SOURCE[source];
-  if (!l) return source;
-  return fr ? l.fr : l.en;
-}
 
 /** Palette douce du kanban, dérivée du rang — jamais du nom de l'étape. */
 // Mêmes teintes que le board (src/lib/d2d-pipeline-stages.ts) : une étape

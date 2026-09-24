@@ -79,6 +79,24 @@ export const LIBELLE_SOURCE: Record<DealSource, { fr: string; en: string }> = {
   d2d: { fr: 'Porte-à-porte', en: 'Door-to-door' },
 };
 
+/**
+ * Le nom lisible d'un canal d'acquisition.
+ *
+ * Cette fonction était recopiée dans trois composants, et l'onglet Prévisions
+ * n'en avait aucune : il affichait `form_web` et `manual` bruts pendant
+ * qu'Historique montrait « Formulaire web » et « Manuel », sur la même donnée
+ * (QA 2026-09-24, P0-5).
+ *
+ * `deals.source` est du texte libre : une valeur inconnue est rendue telle
+ * quelle plutôt que traduite au hasard — un canal imprévu doit rester
+ * reconnaissable, pas devenir « Autre ».
+ */
+export function libelleSource(source: string, fr: boolean): string {
+  const l = LIBELLE_SOURCE[source as DealSource];
+  if (!l) return source;
+  return fr ? l.fr : l.en;
+}
+
 export const LIBELLE_DECLENCHEUR: Record<MockStageAction['trigger'], { fr: string; en: string }> = {
   stage_entered: { fr: "À l'entrée dans l'étape", en: 'When the deal enters the stage' },
   stage_exited: { fr: "À la sortie de l'étape", en: 'When the deal leaves the stage' },
