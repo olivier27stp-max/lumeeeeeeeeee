@@ -18,7 +18,8 @@ import {
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
-  Plus, Pencil, Copy, Trash2, X, EllipsisVertical,} from 'lucide-react';
+  Plus, Pencil, Copy, Trash2, X, EllipsisVertical,
+  Settings, FolderPlus, Filter, SlidersHorizontal,} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
@@ -385,17 +386,22 @@ function getActionLabel(type: string, fr: boolean): string {
 // ═════════════════════════════════════════════════════════════
 
 /**
- * LA LISTE DES AUTOMATISATIONS — modèle GoHighLevel.
+ * LA LISTE DES AUTOMATISATIONS — copie de l'écran « Workflows list » de
+ * GoHighLevel, relevée sur leur app le 2026-09-24.
  *
- * Deux onglets : **Mes automatisations** (ce que l'entreprise a construit ou
- * adopté) et **Modèles** (les 35 fournies avec Lume). C'est la distinction
- * qui manquait : un tableau où tout est mélangé est un catalogue ; deux
- * onglets où l'on voit « les miennes » d'un côté et « à piocher » de l'autre,
- * c'est un espace de travail.
+ * Décision de Rafba : on reprend LEUR structure au complet, y compris les
+ * éléments qui n'ont pas encore de contenu chez nous (dossiers, corbeille,
+ * listes intelligentes). Les libellés, eux, sont en français.
  *
- * Le tableau parle d'USAGE, pas de configuration : statut, combien de fois
- * déclenchée, combien en cours, dernière modification. C'est ce qu'on veut
- * savoir d'une automatisation qui tourne.
+ * Disposition, de haut en bas :
+ *   1. sous-navigation  Automatisations · Vue d'ensemble · Réglages globaux
+ *   2. titre + 3 boutons (Nouveau dossier · Construire avec Lumi · Créer)
+ *   3. onglets          Toutes · À vérifier (N) · Corbeille · + Liste
+ *   4. barre d'outils   Filtres avancés · vues · recherche
+ *   5. fil d'Ariane     Accueil
+ *   6. tableau          ☑ Nom · Statut · Total déclenché · En cours ·
+ *                       Modifiée le · Créée le · Stats · › · ⋮
+ *   7. pagination       Précédent · 1 · Suivant · 10 / page
  */
 export default function Automations() {
   const { language } = useTranslation();
@@ -406,19 +412,31 @@ export default function Automations() {
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [onglet, setOnglet] = useState<'miennes' | 'modeles'>('miennes');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [failureCounts, setFailureCounts] = useState<Record<string, number>>({});
   const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
   const [occupeId, setOccupeId] = useState<string | null>(null);
-  /** Menu « Créer » ouvert ? Cinq départs possibles, comme chez GHL. */
+  const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
+  const [savingLang, setSavingLang] = useState(false);
+
+  /** Onglet de la liste — les quatre de GHL. */
+  const [onglet, setOnglet] = useState<'toutes' | 'verifier' | 'corbeille' | 'modeles'>('toutes');
+  /** Menu « Créer » : les cinq départs de GHL. */
   const [menuCreer, setMenuCreer] = useState(false);
   /** Menu « … » ouvert sur quelle ligne ? */
   const [menuLigne, setMenuLigne] = useState<string | null>(null);
-  /** Ligne dépliée : on y modifie le texte des messages sans quitter la liste. */
+  /** Lignes cochées — GHL les utilise pour les actions en lot. */
+  const [cochees, setCochees] = useState<Set<string>>(new Set());
+  /** Ligne dont le panneau de statistiques est déroulé (le chevron « › »). */
+  const [statsId, setStatsId] = useState<string | null>(null);
+  /** Ligne dépliée pour corriger le texte des messages. */
   const [deplieId, setDeplieId] = useState<string | null>(null);
-  const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
-  const [savingLang, setSavingLang] = useState(false);
+  /** Filtres avancés visibles ? */
+  const [filtresOuverts, setFiltresOuverts] = useState(false);
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterStatut, setFilterStatut] = useState<'all' | 'publiee' | 'brouillon'>('all');
+  /** Pagination, comme GHL : 10 par page par défaut. */
+  const [parPage, setParPage] = useState(10);
+  const [page, setPage] = useState(1);
 
   useEffect(() => { getAutomationLanguage().then(setOrgLang).catch(() => {}); }, []);
 
@@ -451,8 +469,6 @@ export default function Automations() {
         vues.add(r.preset_key);
         return true;
       }));
-      // Les échecs 7 jours : non bloquant, la liste doit s'afficher même si
-      // cette lecture échoue.
       try {
         setFailureCounts(await getFailureCountsByRule());
       } catch (e: any) {
@@ -468,7 +484,6 @@ export default function Automations() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Le catalogue voyage avec les règles depuis le serveur.
   useEffect(() => {
     let vivant = true;
     chargerAutomatisations()
@@ -479,14 +494,17 @@ export default function Automations() {
     return () => { vivant = false; };
   }, []);
 
-  // Fermer les menus au clic ailleurs — sinon ils restent ouverts et masquent
-  // la ligne suivante.
+  // Fermer les menus au clic ailleurs.
   useEffect(() => {
     if (!menuCreer && !menuLigne) return;
     const fermer = () => { setMenuCreer(false); setMenuLigne(null); };
     document.addEventListener('click', fermer);
     return () => document.removeEventListener('click', fermer);
   }, [menuCreer, menuLigne]);
+
+  // Changer d'onglet ou de filtre remet à la première page : rester en page 3
+  // d'une liste qui n'en a plus qu'une donne un écran vide inexplicable.
+  useEffect(() => { setPage(1); }, [onglet, search, filterCategory, filterStatut]);
 
   const handleToggle = async (rule: AutomationRule) => {
     const newActive = !rule.is_active;
@@ -505,7 +523,6 @@ export default function Automations() {
     }
   };
 
-  /** Crée une automatisation vide et ouvre le builder dessus. */
   const partirDeZero = async (avecLumi: boolean) => {
     try {
       const creee = await creerAutomatisation({
@@ -560,21 +577,41 @@ export default function Automations() {
   const getCategory = (r: AutomationRule): CategoryKey =>
     (PRESET_META[r.preset_key || '']?.category as CategoryKey) || 'Follow-up';
 
-  // « Les miennes » = ce que l'entreprise a construit, ou un préréglage
-  // qu'elle a activé. « Modèles » = le reste, à piocher.
-  const miennes = rules.filter((r) => !r.is_preset || r.is_active);
+  /** « À vérifier » = ce qui a échoué ces 7 derniers jours. */
+  const aVerifier = rules.filter((r) => (failureCounts[r.id] ?? 0) > 0);
+  const mesAutos = rules.filter((r) => !r.is_preset || r.is_active);
   const modeles = rules.filter((r) => r.is_preset && !r.is_active);
-  const visibles = (onglet === 'miennes' ? miennes : modeles).filter((r) => {
+
+  const sourceOnglet =
+    onglet === 'verifier' ? aVerifier
+    : onglet === 'modeles' ? modeles
+    : onglet === 'corbeille' ? []   // la corbeille arrive avec la suppression douce
+    : mesAutos;
+
+  const filtrees = sourceOnglet.filter((r) => {
     if (search) {
       const q = search.toLowerCase();
       const nom = localizeAutomationName(r.name, language).toLowerCase();
       if (!nom.includes(q) && !(r.description || '').toLowerCase().includes(q)) return false;
     }
     if (filterCategory !== 'all' && getCategory(r) !== filterCategory) return false;
+    if (filterStatut === 'publiee' && !r.is_active) return false;
+    if (filterStatut === 'brouillon' && r.is_active) return false;
     return true;
   });
 
-  const publiees = rules.filter((r) => r.is_active).length;
+  const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
+  const visibles = filtrees.slice((page - 1) * parPage, page * parPage);
+
+  const toutCoche = visibles.length > 0 && visibles.every((r) => cochees.has(r.id));
+  const basculerTout = () => {
+    setCochees((prev) => {
+      const n = new Set(prev);
+      if (toutCoche) visibles.forEach((r) => n.delete(r.id));
+      else visibles.forEach((r) => n.add(r.id));
+      return n;
+    });
+  };
 
   const DEPARTS: Array<{ cle: string; fr: string; en: string; aideFr: string; aideEn: string; icone: typeof Zap }> = [
     { cle: 'zero', fr: 'Partir de zéro', en: 'Start from scratch', icone: Plus,
@@ -583,6 +620,8 @@ export default function Automations() {
       aideFr: 'Décris ce que tu veux, Lumi le monte.', aideEn: 'Describe it, Lumi builds it.' },
     { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
       aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
+    { cle: 'import', fr: 'Importer d’une campagne', en: 'Import from a campaign', icone: ArrowLeft,
+      aideFr: 'Reprendre une campagne existante.', aideEn: 'Reuse an existing campaign.' },
     { cle: 'entreprise', fr: 'Automatisation d’entreprise', en: 'Company automation', icone: Briefcase,
       aideFr: 'Déclenchée par l’entreprise, pas par un client.', aideEn: 'Triggered by the company, not a client.' },
   ];
@@ -592,31 +631,65 @@ export default function Automations() {
     if (cle === 'zero') { partirDeZero(false); return; }
     if (cle === 'lumi') { partirDeZero(true); return; }
     if (cle === 'modele') { setOnglet('modeles'); return; }
-    toast.info(fr
-      ? 'Les automatisations d’entreprise arrivent bientôt.'
-      : 'Company automations are coming soon.');
+    toast.info(fr ? 'Cette option arrive bientôt.' : 'This option is coming soon.');
+  };
+
+  const ONGLETS = [
+    { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
+    { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: aVerifier.length },
+    { cle: 'modeles' as const, fr: 'Modèles', en: 'Templates', n: modeles.length },
+    { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: 0 },
+  ];
+
+  const dateCourte = (iso: string | null | undefined) => {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    });
   };
 
   return (
     <PermissionGate permission="automations.update">
-      <div className="mx-auto max-w-[1200px] space-y-5">
+      <div className="mx-auto max-w-[1400px] space-y-4">
 
-        {/* ── En-tête ── */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-text-primary">
-              {fr ? 'Automatisations' : 'Automations'}
-            </h1>
-            <p className="mt-0.5 text-[13px] text-text-tertiary">
-              {fr
-                ? 'Ce qui part tout seul chez vos clients, sans que personne y pense.'
-                : 'What goes out to your clients on its own, without anyone thinking about it.'}
-            </p>
-          </div>
+        {/* ══ 1. Sous-navigation ══ */}
+        <div className="flex flex-wrap items-center gap-5 border-b border-border pb-0">
+          <span className="pb-3 text-[15px] font-semibold text-text-primary">
+            {fr ? 'Automatisation' : 'Automation'}
+          </span>
+          <nav className="flex items-center gap-1" aria-label={fr ? 'Sections' : 'Sections'}>
+            <span className="border-b-2 border-primary px-3 pb-3 pt-1 text-[13px] font-semibold text-primary">
+              {fr ? 'Automatisations' : 'Workflows'}
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate('/automations/apercu')}
+              className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {fr ? 'Vue d’ensemble' : 'Overview'}
+              <span className="rounded bg-warning-light px-1 py-0.5 text-[9px] font-bold uppercase text-warning">
+                {fr ? 'Bêta' : 'Beta'}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/automations/reglages')}
+              className="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 pb-3 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Settings size={13} aria-hidden="true" />
+              {fr ? 'Réglages globaux' : 'Global settings'}
+            </button>
+          </nav>
+        </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {/* Langue des messages envoyés aux clients */}
-            <div className="flex items-center gap-2">
+        {/* ══ 2. Titre + les trois boutons ══ */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-[26px] font-bold tracking-tight text-text-primary">
+            {fr ? 'Mes automatisations' : 'Workflows list'}
+          </h1>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="mr-1 flex items-center gap-2">
               <span className="text-[11px] text-text-tertiary">{fr ? 'Messages en' : 'Messages in'}</span>
               <div className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[12px]">
                 {(['fr', 'en'] as const).map((l) => (
@@ -633,7 +706,24 @@ export default function Automations() {
               </div>
             </div>
 
-            {/* Créer — cinq départs, comme chez GHL */}
+            <button
+              type="button"
+              onClick={() => toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.')}
+              className="glass-button inline-flex items-center gap-1.5"
+            >
+              <FolderPlus size={14} aria-hidden="true" />
+              {fr ? 'Nouveau dossier' : 'Create folder'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => partirDeZero(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-accent bg-accent/5 px-3 py-1.5 text-[13px] font-semibold text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Sparkles size={14} aria-hidden="true" />
+              {fr ? 'Construire avec Lumi' : 'Build using AI'}
+            </button>
+
             <div className="relative">
               <button
                 type="button"
@@ -643,7 +733,7 @@ export default function Automations() {
                 className="glass-button-primary inline-flex items-center gap-1.5"
               >
                 <Plus size={14} aria-hidden="true" />
-                {fr ? 'Créer' : 'Create'}
+                {fr ? 'Créer' : 'Create workflow'}
                 <ChevronDown size={13} aria-hidden="true" />
               </button>
 
@@ -652,7 +742,7 @@ export default function Automations() {
                   role="menu"
                   tabIndex={-1}
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute right-0 z-30 mt-1.5 w-[280px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
+                  className="absolute right-0 z-30 mt-1.5 w-[300px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
                 >
                   {DEPARTS.map((d) => (
                     <button
@@ -675,302 +765,430 @@ export default function Automations() {
           </div>
         </div>
 
-        {/* ── Trois chiffres ── */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { v: miennes.length, l: fr ? 'Mes automatisations' : 'My automations' },
-            { v: publiees, l: fr ? 'Publiées' : 'Published' },
-            { v: modeles.length, l: fr ? 'Modèles disponibles' : 'Templates available' },
-          ].map((s) => (
-            <div key={s.l} className="section-card px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">{s.l}</p>
-              <p className="mt-0.5 text-xl font-bold text-text-primary">{s.v}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Onglets ── */}
-        <div className="tab-nav" role="tablist" aria-label={fr ? 'Vue' : 'View'}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={onglet === 'miennes'}
-            onClick={() => setOnglet('miennes')}
-            className={onglet === 'miennes' ? 'tab-item-active' : 'tab-item'}
-          >
-            {fr ? `Mes automatisations (${miennes.length})` : `My automations (${miennes.length})`}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={onglet === 'modeles'}
-            onClick={() => setOnglet('modeles')}
-            className={onglet === 'modeles' ? 'tab-item-active' : 'tab-item'}
-          >
-            {fr ? `Modèles (${modeles.length})` : `Templates (${modeles.length})`}
-          </button>
-        </div>
-
-        {/* ── Recherche et filtre ── */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden="true" />
-            <label htmlFor="rech-automations" className="sr-only">{fr ? 'Rechercher' : 'Search'}</label>
-            <input
-              id="rech-automations"
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={fr ? 'Rechercher…' : 'Search…'}
-              className="glass-input w-full pl-9"
-            />
-          </div>
-          <label htmlFor="filtre-categorie" className="sr-only">{fr ? 'Catégorie' : 'Category'}</label>
-          <select
-            id="filtre-categorie"
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="glass-input"
-          >
-            <option value="all">{fr ? 'Toutes les catégories' : 'All categories'}</option>
-            {CATEGORY_ORDER.map((c) => (
-              <option key={c} value={c}>{fr ? CATEGORY_META[c].labelFr : CATEGORY_META[c].labelEn}</option>
+        {/* ══ 3. Onglets ══ */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
+          <nav className="flex items-center gap-1" role="tablist" aria-label={fr ? 'Filtres' : 'Filters'}>
+            {ONGLETS.map((o) => (
+              <button
+                key={o.cle}
+                type="button"
+                role="tab"
+                aria-selected={onglet === o.cle}
+                onClick={() => setOnglet(o.cle)}
+                className={cn(
+                  'border-b-2 px-3 pb-2.5 pt-1 text-[13px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  onglet === o.cle
+                    ? 'border-primary font-semibold text-primary'
+                    : 'border-transparent text-text-secondary hover:text-text-primary',
+                )}
+              >
+                {fr ? o.fr : o.en}
+                {o.cle !== 'toutes' && ` (${o.n})`}
+              </button>
             ))}
-          </select>
-          <span className="ml-auto text-[12px] text-text-tertiary">
-            {visibles.length} {fr ? 'résultat(s)' : 'result(s)'}
-          </span>
+            <button
+              type="button"
+              onClick={() => toast.info(fr ? 'Les listes personnalisées arrivent bientôt.' : 'Smart lists are coming soon.')}
+              className="inline-flex items-center gap-1 border-b-2 border-transparent px-3 pb-2.5 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Plus size={13} aria-hidden="true" />
+              {fr ? 'Nouvelle liste' : 'New smart list'}
+            </button>
+          </nav>
+
+          <button
+            type="button"
+            onClick={() => toast.info(fr ? 'Le choix des colonnes arrive bientôt.' : 'Column picker is coming soon.')}
+            className="mb-2 inline-flex items-center gap-1.5 text-[12px] text-text-tertiary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <SlidersHorizontal size={13} aria-hidden="true" />
+            {fr ? 'Personnaliser la liste' : 'Customize list'}
+          </button>
         </div>
 
-        {/* ── Le tableau ── */}
+        {/* ══ 4. Barre d'outils ══ */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltresOuverts((f) => !f)}
+            aria-expanded={filtresOuverts}
+            className="glass-button inline-flex items-center gap-1.5"
+          >
+            <Filter size={13} aria-hidden="true" />
+            {fr ? 'Filtres avancés' : 'Advanced filters'}
+          </button>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div className="relative w-[260px]">
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" aria-hidden="true" />
+              <label htmlFor="rech-automations" className="sr-only">{fr ? 'Rechercher' : 'Search'}</label>
+              <input
+                id="rech-automations"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={fr ? 'Rechercher' : 'Search'}
+                className="glass-input w-full pl-9"
+              />
+            </div>
+          </div>
+        </div>
+
+        {filtresOuverts && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary p-3">
+            <label htmlFor="f-categorie" className="text-[12px] text-text-secondary">{fr ? 'Catégorie' : 'Category'}</label>
+            <select
+              id="f-categorie"
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="glass-input"
+            >
+              <option value="all">{fr ? 'Toutes' : 'All'}</option>
+              {CATEGORY_ORDER.map((c) => (
+                <option key={c} value={c}>{fr ? CATEGORY_META[c].labelFr : CATEGORY_META[c].labelEn}</option>
+              ))}
+            </select>
+            <label htmlFor="f-statut" className="ml-2 text-[12px] text-text-secondary">{fr ? 'Statut' : 'Status'}</label>
+            <select
+              id="f-statut"
+              value={filterStatut}
+              onChange={(e) => setFilterStatut(e.target.value as typeof filterStatut)}
+              className="glass-input"
+            >
+              <option value="all">{fr ? 'Tous' : 'All'}</option>
+              <option value="publiee">{fr ? 'Publiée' : 'Published'}</option>
+              <option value="brouillon">{fr ? 'Brouillon' : 'Draft'}</option>
+            </select>
+          </div>
+        )}
+
+        {/* ══ 5. Fil d'Ariane ══ */}
+        <p className="text-[13px] text-text-secondary">{fr ? 'Accueil' : 'Home'}</p>
+
+        {/* ══ 6. Le tableau ══ */}
         {loading ? (
           <div className="section-card flex items-center justify-center py-16">
             <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" aria-hidden="true" />
           </div>
-        ) : visibles.length === 0 ? (
-          <div className="section-card px-6 py-14 text-center">
-            <Zap className="mx-auto mb-3 h-8 w-8 text-text-tertiary" aria-hidden="true" />
-            <p className="text-sm font-medium text-text-primary">
-              {onglet === 'miennes'
-                ? (fr ? 'Aucune automatisation pour l’instant' : 'No automations yet')
-                : (fr ? 'Aucun modèle ne correspond' : 'No template matches')}
-            </p>
-            <p className="mx-auto mt-1 max-w-sm text-[13px] text-text-tertiary">
-              {onglet === 'miennes'
-                ? (fr
-                  ? 'Créez la vôtre, ou partez d’un modèle déjà écrit pour votre métier.'
-                  : 'Create your own, or start from a template written for your trade.')
-                : (fr ? 'Essayez un autre mot ou une autre catégorie.' : 'Try another word or category.')}
-            </p>
-            {onglet === 'miennes' && modeles.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setOnglet('modeles')}
-                className="glass-button mt-4 inline-flex items-center gap-1.5"
-              >
-                <FileText size={14} aria-hidden="true" />
-                {fr ? 'Voir les modèles' : 'Browse templates'}
-              </button>
-            )}
-          </div>
         ) : (
           <div className="section-card overflow-hidden">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="border-b border-outline/40 text-left text-[10px] uppercase tracking-wider text-text-tertiary">
-                  <th scope="col" className="px-4 py-2.5 font-semibold">{fr ? 'Automatisation' : 'Automation'}</th>
-                  <th scope="col" className="hidden px-4 py-2.5 font-semibold md:table-cell">{fr ? 'Déclencheur' : 'Trigger'}</th>
-                  <th scope="col" className="hidden px-4 py-2.5 font-semibold lg:table-cell">{fr ? 'Délai' : 'Timing'}</th>
-                  <th scope="col" className="hidden px-4 py-2.5 font-semibold lg:table-cell">{fr ? 'Canaux' : 'Channels'}</th>
-                  <th scope="col" className="px-4 py-2.5 font-semibold">{fr ? 'Statut' : 'Status'}</th>
-                  <th scope="col" className="px-4 py-2.5 text-right font-semibold">{fr ? 'Actions' : 'Actions'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibles.map((r) => {
-                  const meta = PRESET_META[r.preset_key || ''];
-                  const Icone = meta?.icon ?? Zap;
-                  const rule = r;
-                  const echecs = failureCounts[rule.id] ?? 0;
-                  const decl = TRIGGER_DISPLAY[r.trigger_event];
-                  return (
-                    <React.Fragment key={r.id}>
-                    <tr className="border-b border-outline/20 transition-colors last:border-0 hover:bg-surface-secondary/40">
-                      <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/automations/${r.id}`)}
-                          className="flex items-center gap-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                        >
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-tertiary">
-                            <Icone size={14} className="text-text-secondary" aria-hidden="true" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium text-text-primary hover:text-accent">
-                              {localizeAutomationName(r.name, language)}
-                            </span>
-                            {echecs > 0 && (
-                              <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
-                                <AlertTriangle size={11} aria-hidden="true" />
-                                {echecs} {fr ? 'échec(s) dans les 7 derniers jours' : 'failure(s) in the last 7 days'}
-                              </span>
-                            )}
-                          </span>
-                        </button>
-                      </td>
-                      <td className="hidden px-4 py-3 text-text-secondary md:table-cell">
-                        {decl ? (fr ? decl.fr : decl.en) : r.trigger_event}
-                      </td>
-                      <td className="hidden px-4 py-3 text-text-secondary lg:table-cell">
-                        {Array.isArray(r.steps) && r.steps.length > 0
-                          ? (fr ? `Parcours · ${r.steps.length} étapes` : `Path · ${r.steps.length} steps`)
-                          : formatDelay(r.delay_seconds, language)}
-                      </td>
-                      <td className="hidden px-4 py-3 lg:table-cell">
-                        <span className="flex flex-wrap gap-1">
-                          {getChannels(r.actions, fr).map((c) => (
-                            <span key={c} className="rounded-md bg-surface-tertiary px-1.5 py-0.5 text-[10px] text-text-secondary">{c}</span>
-                          ))}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn(
-                          'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
-                          r.is_active ? 'bg-success-light text-success' : 'bg-surface-tertiary text-text-tertiary',
-                        )}>
-                          {r.is_active ? (fr ? 'Publiée' : 'Published') : (fr ? 'Brouillon' : 'Draft')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-0.5">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] text-[13px]">
+                <thead>
+                  <tr className="border-b border-outline/40 text-left text-[12px] text-text-secondary">
+                    <th scope="col" className="w-10 px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={toutCoche}
+                        onChange={basculerTout}
+                        aria-label={fr ? 'Tout cocher' : 'Select all'}
+                        className="h-3.5 w-3.5 rounded border-outline"
+                      />
+                    </th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Nom' : 'Name'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Statut' : 'Status'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Total déclenché' : 'Total enrolled'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'En cours' : 'Active enrolled'}</th>
+                    <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">{fr ? 'Modifiée le' : 'Last updated'}</th>
+                    <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">{fr ? 'Créée le' : 'Created on'}</th>
+                    <th scope="col" className="px-3 py-3 font-medium">{fr ? 'Stats' : 'Stats'}</th>
+                    <th scope="col" className="w-24 px-3 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibles.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-14 text-center">
+                        <Zap className="mx-auto mb-3 h-7 w-7 text-text-tertiary" aria-hidden="true" />
+                        <p className="text-[13px] font-medium text-text-primary">
+                          {onglet === 'corbeille'
+                            ? (fr ? 'La corbeille est vide' : 'The bin is empty')
+                            : onglet === 'verifier'
+                              ? (fr ? 'Aucune erreur — tout roule' : 'No errors — all running smoothly')
+                              : (fr ? 'Aucune automatisation' : 'No automations')}
+                        </p>
+                        {onglet === 'toutes' && modeles.length > 0 && (
                           <button
                             type="button"
-                            onClick={() => handleToggle(r)}
-                            disabled={togglingId === r.id}
-                            aria-label={r.is_active
-                              ? (fr ? `Repasser ${r.name} en brouillon` : `Unpublish ${r.name}`)
-                              : (fr ? `Publier ${r.name}` : `Publish ${r.name}`)}
-                            aria-pressed={r.is_active}
-                            className="rounded-md p-1 transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            onClick={() => setOnglet('modeles')}
+                            className="glass-button mt-4 inline-flex items-center gap-1.5"
                           >
-                            {togglingId === r.id
-                              ? <Loader2 size={18} className="animate-spin text-text-tertiary" aria-hidden="true" />
-                              : r.is_active
-                                ? <ToggleRight size={20} className="text-text-primary" aria-hidden="true" />
-                                : <ToggleLeft size={20} className="text-text-tertiary" aria-hidden="true" />}
+                            <FileText size={13} aria-hidden="true" />
+                            {fr ? 'Voir les modèles' : 'Browse templates'}
                           </button>
-
-                          {/* Voir et modifier les messages, sans quitter la liste */}
-                          <button
-                            type="button"
-                            onClick={() => setDeplieId((d) => (d === rule.id ? null : rule.id))}
-                            aria-expanded={deplieId === rule.id}
-                            aria-label={fr ? `Voir les messages de ${rule.name}` : `View messages of ${rule.name}`}
-                            className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                          >
-                            <ChevronDown
-                              size={15}
-                              className={cn('transition-transform', deplieId === rule.id && 'rotate-180')}
-                              aria-hidden="true"
-                            />
-                          </button>
-
-                          {/* Menu « … » — modifier, dupliquer, supprimer */}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setMenuLigne((m) => (m === r.id ? null : r.id)); }}
-                              aria-haspopup="menu"
-                              aria-expanded={menuLigne === r.id}
-                              aria-label={fr ? `Actions pour ${r.name}` : `Actions for ${r.name}`}
-                              className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                            >
-                              {occupeId === r.id
-                                ? <Loader2 size={15} className="animate-spin" aria-hidden="true" />
-                                : <EllipsisVertical size={15} aria-hidden="true" />}
-                            </button>
-
-                            {menuLigne === r.id && (
-                              <div
-                                role="menu"
-                                tabIndex={-1}
-                                onClick={(e) => e.stopPropagation()}
-                                className="absolute right-0 z-30 mt-1 w-[200px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
-                              >
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  onClick={() => { setMenuLigne(null); navigate(`/automations/${r.id}`); }}
-                                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                >
-                                  <Pencil size={13} aria-hidden="true" />
-                                  {fr ? 'Ouvrir le parcours' : 'Open the path'}
-                                </button>
-                                <button
-                                  type="button"
-                                  role="menuitem"
-                                  onClick={() => { setMenuLigne(null); dupliquer(r, r.is_preset); }}
-                                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                >
-                                  <Copy size={13} aria-hidden="true" />
-                                  {r.is_preset
-                                    ? (fr ? 'Copier et modifier' : 'Copy and edit')
-                                    : (fr ? 'Dupliquer' : 'Duplicate')}
-                                </button>
-                                {!r.is_preset && (
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={() => { setMenuLigne(null); supprimer(r); }}
-                                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-danger transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                  >
-                                    <Trash2 size={13} aria-hidden="true" />
-                                    {fr ? 'Supprimer' : 'Delete'}
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                        )}
                       </td>
                     </tr>
+                  ) : visibles.map((r) => {
+                    const rule = r;
+                    const echecs = failureCounts[rule.id] ?? 0;
+                    const decl = TRIGGER_DISPLAY[rule.trigger_event];
+                    const meta = PRESET_META[rule.preset_key || ''];
+                    const Icone = meta?.icon ?? Zap;
+                    return (
+                      <React.Fragment key={rule.id}>
+                        <tr className="border-b border-outline/20 transition-colors last:border-0 hover:bg-surface-secondary/40">
+                          <td className="px-3 py-3">
+                            <input
+                              type="checkbox"
+                              checked={cochees.has(rule.id)}
+                              onChange={() => setCochees((prev) => {
+                                const n = new Set(prev);
+                                if (n.has(rule.id)) n.delete(rule.id); else n.add(rule.id);
+                                return n;
+                              })}
+                              aria-label={fr ? `Cocher ${rule.name}` : `Select ${rule.name}`}
+                              className="h-3.5 w-3.5 rounded border-outline"
+                            />
+                          </td>
 
-                    {/* Les messages, modifiables sur place.
-                        C'est ce qu'on vient chercher le plus souvent : changer
-                        une phrase, pas refaire un parcours. */}
-                    {deplieId === rule.id && (
-                      <tr className="bg-surface-secondary/30">
-                        <td colSpan={6} className="px-4 py-4">
-                          {rule.actions.filter((a) => a.type === 'send_sms' || a.type === 'send_email').length === 0 ? (
-                            <p className="text-[12px] text-text-tertiary">
-                              {fr
-                                ? 'Cette automatisation n’envoie ni texto ni courriel.'
-                                : 'This automation sends neither text nor email.'}
-                            </p>
-                          ) : (
-                            rule.actions
-                              .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
-                              .map((a, i) => (
-                                <MessageEditor
-                                  key={`${rule.id}-${a.type}-${i}`}
-                                  ruleId={rule.id}
-                                  ruleName={localizeAutomationName(rule.name, language)}
-                                  actionType={a.type as 'send_sms' | 'send_email'}
-                                  body={String(a.config?.body ?? '')}
-                                  subject={a.config?.subject ? String(a.config.subject) : undefined}
-                                  fr={fr}
-                                  onSaved={load}
+                          <td className="px-3 py-3">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/automations/${rule.id}`)}
+                              className="flex items-start gap-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            >
+                              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-tertiary">
+                                <Icone size={13} className="text-text-secondary" aria-hidden="true" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block font-medium text-primary hover:underline">
+                                  {localizeAutomationName(rule.name, language)}
+                                </span>
+                                <span className="block text-[11px] text-text-tertiary">
+                                  {decl ? (fr ? decl.fr : decl.en) : rule.trigger_event}
+                                  {' · '}
+                                  {Array.isArray(rule.steps) && rule.steps.length > 0
+                                    ? (fr ? `${rule.steps.length} étapes` : `${rule.steps.length} steps`)
+                                    : formatDelay(rule.delay_seconds, language)}
+                                </span>
+                                {echecs > 0 && (
+                                  <span className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-danger">
+                                    <AlertTriangle size={11} aria-hidden="true" />
+                                    {echecs} {fr ? 'échec(s) dans les 7 derniers jours' : 'failure(s) in the last 7 days'}
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </td>
+
+                          <td className="px-3 py-3">
+                            <span className={cn(
+                              'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
+                              rule.is_active ? 'bg-success-light text-success' : 'bg-surface-tertiary text-text-tertiary',
+                            )}>
+                              {rule.is_active ? (fr ? 'Publiée' : 'Published') : (fr ? 'Brouillon' : 'Draft')}
+                            </span>
+                          </td>
+
+                          {/* Total déclenché / En cours : les chiffres arrivent avec
+                              l'onglet Historique (les données sont déjà en base). */}
+                          <td className="px-3 py-3 text-primary">—</td>
+                          <td className="px-3 py-3 text-primary">—</td>
+
+                          <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.updated_at)}</td>
+                          <td className="hidden px-3 py-3 text-text-secondary lg:table-cell">{dateCourte(rule.created_at)}</td>
+
+                          <td className="px-3 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setStatsId((s) => (s === rule.id ? null : rule.id))}
+                              aria-expanded={statsId === rule.id}
+                              aria-label={fr ? `Statistiques de ${rule.name}` : `Stats for ${rule.name}`}
+                              className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            >
+                              <ChevronRight
+                                size={15}
+                                className={cn('transition-transform', statsId === rule.id && 'rotate-90')}
+                                aria-hidden="true"
+                              />
+                            </button>
+                          </td>
+
+                          <td className="px-3 py-3">
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleToggle(rule)}
+                                disabled={togglingId === rule.id}
+                                aria-label={rule.is_active
+                                  ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
+                                  : (fr ? `Publier ${rule.name}` : `Publish ${rule.name}`)}
+                                aria-pressed={rule.is_active}
+                                className="rounded-md p-1 transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                {togglingId === rule.id
+                                  ? <Loader2 size={17} className="animate-spin text-text-tertiary" aria-hidden="true" />
+                                  : rule.is_active
+                                    ? <ToggleRight size={19} className="text-text-primary" aria-hidden="true" />
+                                    : <ToggleLeft size={19} className="text-text-tertiary" aria-hidden="true" />}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setDeplieId((d) => (d === rule.id ? null : rule.id))}
+                                aria-expanded={deplieId === rule.id}
+                                aria-label={fr ? `Voir les messages de ${rule.name}` : `View messages of ${rule.name}`}
+                                className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                              >
+                                <ChevronDown
+                                  size={14}
+                                  className={cn('transition-transform', deplieId === rule.id && 'rotate-180')}
+                                  aria-hidden="true"
                                 />
-                              ))
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                              </button>
+
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setMenuLigne((m) => (m === rule.id ? null : rule.id)); }}
+                                  aria-haspopup="menu"
+                                  aria-expanded={menuLigne === rule.id}
+                                  aria-label={fr ? `Actions pour ${rule.name}` : `Actions for ${rule.name}`}
+                                  className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                >
+                                  {occupeId === rule.id
+                                    ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                                    : <EllipsisVertical size={14} aria-hidden="true" />}
+                                </button>
+
+                                {menuLigne === rule.id && (
+                                  <div
+                                    role="menu"
+                                    tabIndex={-1}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute right-0 z-30 mt-1 w-[210px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
+                                  >
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setMenuLigne(null); navigate(`/automations/${rule.id}`); }}
+                                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                      <Pencil size={13} aria-hidden="true" />
+                                      {fr ? 'Modifier' : 'Edit'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setMenuLigne(null); dupliquer(rule, rule.is_preset); }}
+                                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                      <Copy size={13} aria-hidden="true" />
+                                      {fr ? 'Dupliquer' : 'Duplicate'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => { setMenuLigne(null); toast.info(fr ? 'Les dossiers arrivent bientôt.' : 'Folders are coming soon.'); }}
+                                      className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                      <FolderPlus size={13} aria-hidden="true" />
+                                      {fr ? 'Déplacer dans un dossier' : 'Move to folder'}
+                                    </button>
+                                    {!rule.is_preset && (
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setMenuLigne(null); supprimer(rule); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-danger transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        <Trash2 size={13} aria-hidden="true" />
+                                        {fr ? 'Supprimer' : 'Delete'}
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Panneau de statistiques, ouvert par le chevron « › ». */}
+                        {statsId === rule.id && (
+                          <tr className="bg-surface-secondary/30">
+                            <td colSpan={9} className="px-6 py-4">
+                              <p className="text-[12px] text-text-secondary">
+                                {echecs > 0
+                                  ? (fr
+                                    ? `${echecs} envoi(s) ont échoué ces 7 derniers jours. Le détail arrivera dans l’onglet « Journaux » de l’automatisation.`
+                                    : `${echecs} send(s) failed in the last 7 days. Details will appear in the automation’s “Logs” tab.`)
+                                  : (fr
+                                    ? 'Aucun échec ces 7 derniers jours. Les chiffres d’envoi arrivent avec l’onglet « Historique ».'
+                                    : 'No failures in the last 7 days. Send counts are coming with the “History” tab.')}
+                              </p>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Les messages, modifiables sur place. */}
+                        {deplieId === rule.id && (
+                          <tr className="bg-surface-secondary/30">
+                            <td colSpan={9} className="px-6 py-4">
+                              {rule.actions.filter((a) => a.type === 'send_sms' || a.type === 'send_email').length === 0 ? (
+                                <p className="text-[12px] text-text-tertiary">
+                                  {fr
+                                    ? 'Cette automatisation n’envoie ni texto ni courriel.'
+                                    : 'This automation sends neither text nor email.'}
+                                </p>
+                              ) : (
+                                rule.actions
+                                  .filter((a) => a.type === 'send_sms' || a.type === 'send_email')
+                                  .map((a, i) => (
+                                    <MessageEditor
+                                      key={`${rule.id}-${a.type}-${i}`}
+                                      ruleId={rule.id}
+                                      ruleName={localizeAutomationName(rule.name, language)}
+                                      actionType={a.type as 'send_sms' | 'send_email'}
+                                      body={String(a.config?.body ?? '')}
+                                      subject={a.config?.subject ? String(a.config.subject) : undefined}
+                                      fr={fr}
+                                      onSaved={load}
+                                    />
+                                  ))
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ══ 7. Pagination ══ */}
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-outline/30 px-4 py-3 text-[12px]">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="rounded-lg px-2.5 py-1 text-text-secondary transition-colors hover:bg-surface-tertiary disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {fr ? 'Précédent' : 'Previous'}
+              </button>
+              <span className="rounded-lg border border-primary px-2.5 py-1 font-medium text-primary">{page}</span>
+              <span className="text-text-tertiary">{fr ? `sur ${pages}` : `of ${pages}`}</span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(pages, p + 1))}
+                disabled={page >= pages}
+                className="rounded-lg px-2.5 py-1 text-text-secondary transition-colors hover:bg-surface-tertiary disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                {fr ? 'Suivant' : 'Next'}
+              </button>
+              <label htmlFor="par-page" className="sr-only">{fr ? 'Lignes par page' : 'Rows per page'}</label>
+              <select
+                id="par-page"
+                value={parPage}
+                onChange={(e) => { setParPage(Number(e.target.value)); setPage(1); }}
+                className="glass-input ml-1 py-1 text-[12px]"
+              >
+                {[10, 25, 50].map((n) => (
+                  <option key={n} value={n}>{fr ? `${n} / page` : `${n} / page`}</option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       </div>
