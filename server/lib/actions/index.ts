@@ -763,7 +763,7 @@ export async function executeSendEmail(
       return { success: false, error: `Frequency cap reached for ${to} (max ${PLAFOND_MSG_COMMERCIAUX_24H} commercial messages / 24h) — skipped to avoid spamming` };
     }
 
-    const { getCompanySettings, buildEmailLayout, senderFor, langueEntreprise } = await import('../../routes/emails');
+    const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('../../routes/emails');
     const { boutonPourEntite } = await import('../courriels/bouton-automatisation');
     const company = await getCompanySettings(ctx.orgId);
     const unsubUrl = await getUnsubscribeUrl(ctx.supabase, ctx.orgId, to);
@@ -793,7 +793,9 @@ export async function executeSendEmail(
       : '';
 
     const result = await sendEmail({
-      ...senderFor(company),
+      // `senderForOrg` : sans lui, une entreprise ayant fait vérifier SON
+      // domaine voyait quand même ses relances partir de @lumecrm.net.
+      ...(await senderForOrg(ctx.orgId, company)),
       to,
       subject,
       html: buildEmailLayout(company, body + pied, bouton),

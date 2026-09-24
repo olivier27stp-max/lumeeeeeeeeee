@@ -200,7 +200,7 @@ async function sendPaymentSms(params: {
   }
 
   const company = await getCompanyInfo(params.orgId);
-  const companyName = company.company_name || 'LUME';
+  const companyName = company.company_name || '';
   const amountFormatted = formatCurrency(params.amountCents, params.currency);
 
   const body = `${companyName}: Payment of ${amountFormatted} requested for invoice ${params.invoiceNumber}. Pay securely here: ${params.paymentUrl}`;
@@ -379,6 +379,18 @@ router.post('/payment-requests/resend', async (req, res) => {
           orgId,
         });
       }
+    }
+
+    /* Le résultat était rangé dans la réponse puis ignoré : la route rendait
+       200 même quand rien n'était parti, et l'interface affichait « Demande
+       envoyée ». Un envoi demandé qui échoue est une erreur, pas un succès
+       accompagné d'un détail. */
+    if (notifications.email && (notifications.email as { sent?: boolean }).sent === false) {
+      return res.status(502).json({
+        error: 'Le courriel n’a pas pu être envoyé.',
+        code: 'email_send_failed',
+        detail: (notifications.email as { reason?: string }).reason,
+      });
     }
 
     return res.json({

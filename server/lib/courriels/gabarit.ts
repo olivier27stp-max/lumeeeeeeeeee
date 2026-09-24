@@ -461,7 +461,11 @@ ${c.signature ? `<p style="margin:0;font-size:15px;color:${GRIS_TEXTE};">${echap
 /** Ce qu'une entreprise envoie à son client, à ses couleurs et dans sa langue. */
 export function rendreCourrielClient(c: CourrielClient): string {
   const couleur = couleurBouton(c.marque.couleur);
-  const nom = c.marque.nom || 'Lume';
+  /* Repli VIDE, jamais « Lume ». Une org sans company_name envoyait à son
+     client un courriel signé « Lume », avec « Lume » en en-tête, dans le
+     <title> et dans le pied : six fois le nom de la plateforme pour une
+     seule donnée manquante. Mieux vaut une en-tête vide qu'une usurpation. */
+  const nom = c.marque.nom || '';
   /* L’en-tête, façon papier à lettres : le logo à gauche, aligné.
 
      Le logo était centré, seul, flottant au-dessus du vide. Une en-tête

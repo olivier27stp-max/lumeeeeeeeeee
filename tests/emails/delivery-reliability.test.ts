@@ -511,7 +511,9 @@ describe('formulaire public — le visiteur reçoit enfin une confirmation', () 
   it('l’envoi est brandé au nom de l’entreprise, pas de Lume', () => {
     // C'est le client de l'org qui reçoit ce message : il doit voir le nom de
     // l'entreprise, et une réponse doit atterrir dans SA boîte.
-    expect(submit).toContain('senderFor(company)');
+    // senderForOrg respecte la même règle et va plus loin : il honore le domaine
+    // vérifié de l'entreprise quand elle en a fait vérifier un.
+    expect(submit).toContain('senderForOrg(orgId, company)');
     expect(submit).toContain('buildEmailLayout(company');
     expect(submit).toContain('getCompanySettings(orgId)');
   });
@@ -666,7 +668,7 @@ describe('automatisations — identité de l’org, plus de « Lume CRM »', () 
     // Avant : ni `from` ni `replyTo`. Le client d'un locataire recevait
     // « Rappel : facture INV-042 » signé Lume CRM, et sa réponse arrivait dans
     // la boîte de la plateforme au lieu de celle de l'entrepreneur.
-    expect(fn).toContain('senderFor(company)');
+    expect(fn).toContain('senderForOrg(ctx.orgId, company)');
     expect(fn).toContain('getCompanySettings(ctx.orgId)');
   });
 
