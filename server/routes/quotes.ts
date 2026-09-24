@@ -335,7 +335,7 @@ router.post('/quotes/send-email', async (req, res) => {
 
     const logoBlock = companyLogo
       ? `<div style="margin-bottom:24px;"><img src="${companyLogo}" alt="${companyName}" style="max-height:48px;max-width:180px;object-fit:contain;" /></div>`
-      : `<div style="margin-bottom:24px;"><img src="${baseUrl}/lume-logo.png" alt="Lume" style="max-height:40px;object-fit:contain;" /></div>`;
+      : `<div style="margin-bottom:24px;font-size:18px;font-weight:700;color:#111;">${companyName}</div>`;
 
     const depositBlock = quote.deposit_required && quote.deposit_value > 0
       ? `<tr><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#888;font-size:13px;">Deposit Required</td><td style="padding:12px 16px;border-bottom:1px solid #eee;color:#111;text-align:right;font-weight:600;font-size:13px;">${quote.deposit_type === 'percentage' ? `${quote.deposit_value}%` : new Intl.NumberFormat('en-CA', { style: 'currency', currency: quote.currency || 'CAD' }).format(quote.deposit_value)}</td></tr>`

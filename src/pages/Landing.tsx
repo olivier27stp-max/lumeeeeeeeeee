@@ -59,9 +59,9 @@ export default function Landing({ onStart }: LandingProps) {
             className="flex justify-center"
           >
             <img
-              src="/lume-logo.png"
+              src="/lume-logo-v2.png"
               alt="Lume CRM"
-              className="h-44 w-auto mix-blend-multiply"
+              className="h-20 w-auto mix-blend-multiply"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
           </motion.div>

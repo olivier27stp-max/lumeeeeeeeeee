@@ -16,7 +16,6 @@ import { versDate } from '../lib/dateSeule';
 import { fetchPublicInvoice, type PublicInvoiceData, type PublicInvoiceCompany } from '../lib/invoicesPublicApi';
 import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
 
-const LUME_LOGO_URL = '/lume-logo.png';
 // Langue de la page : celle de l'ENTREPRISE dès que l'API l'a dite ; en attendant, celle du navigateur.
 // Variable de module lue au rendu, fixée AVANT le setState qui rerend.
 let isFr = (typeof navigator !== 'undefined' && navigator.language || 'fr').toLowerCase().startsWith('fr');
@@ -99,7 +98,10 @@ export default function InvoiceView() {
   const cur = invoice.currency || 'CAD';
   const payee = invoice.status === 'paid' || invoice.balance_cents <= 0;
   const companyAddress = buildCompanyAddress(company);
-  const logoUrl = company?.logo_url || LUME_LOGO_URL;
+  // Sans logo d'entreprise, on n'affiche rien : le nom est déjà juste en dessous.
+  // Un repli sur le logo de Lume ferait passer une facture de Coquin lavage
+  // pour une facture de Lume.
+  const logoUrl = company?.logo_url || null;
   const nomCompagnie = company?.company_name || 'Lume';
 
   return (
@@ -132,12 +134,14 @@ export default function InvoiceView() {
           <div className="px-8 pt-8 pb-6">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <img
-                  src={logoUrl}
-                  alt={nomCompagnie}
-                  className="h-10 max-w-[180px] object-contain mb-3"
-                  onError={(e) => { (e.target as HTMLImageElement).src = LUME_LOGO_URL; }}
-                />
+                {logoUrl && (
+                  <img
+                    src={logoUrl}
+                    alt={nomCompagnie}
+                    className="h-10 max-w-[180px] object-contain mb-3"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
                 <h2 className="text-[14px] font-semibold text-[#111]">{nomCompagnie}</h2>
                 {companyAddress && <p className="text-[12px] text-[#888] mt-0.5">{companyAddress}</p>}
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">

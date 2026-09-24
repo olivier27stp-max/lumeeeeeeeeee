@@ -97,7 +97,7 @@ export default function AcceptInvitation() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="/lume-logo.png" alt="Lume CRM" className="h-16 mx-auto dark:invert" />
+          <img src="/lume-logo-v2.png" alt="Lume CRM" className="h-10 mx-auto dark:invert" />
         </div>
 
         {/* Loading */}
