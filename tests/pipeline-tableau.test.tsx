@@ -188,6 +188,38 @@ describe('actions de ligne', () => {
   });
 });
 
+describe('fermeture du menu « ⋮ »', () => {
+  it('un clic ailleurs referme le menu', async () => {
+    await rendre();
+    await clic(menuDe('Commercial'));
+    expect(optionsDuMenu().length).toBeGreaterThan(0);
+
+    await act(async () => {
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    expect(optionsDuMenu()).toHaveLength(0);
+  });
+
+  it('Échap referme le menu', async () => {
+    await rendre();
+    await clic(menuDe('Commercial'));
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(optionsDuMenu()).toHaveLength(0);
+  });
+
+  it('ouvrir le menu sur une autre ligne ne laisse qu un seul menu', async () => {
+    await rendre();
+    await clic(menuDe('Commercial'));
+    await clic(menuDe('Résidentiel'));
+    // Deux menus ouverts en même temps se chevaucheraient.
+    expect(conteneur.querySelectorAll('[role="menu"]')).toHaveLength(1);
+    // Et c'est bien celui de la ligne qu'on vient de cliquer.
+    expect(optionsDuMenu()).not.toContain('Supprimer');
+  });
+});
+
 describe('dépliage — ce que le tableau ne doit pas perdre', () => {
   it('le détail est replié au départ', async () => {
     await rendre();

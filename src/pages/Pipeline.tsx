@@ -304,9 +304,14 @@ export default function Pipeline() {
             pipelineId={pipelineId}
             etapes={etapes}
             deals={deals}
-            onOuvrirPipeline={(id) => { setPipelineChoisi(id); choisirOnglet('board'); }}
+            onOuvrirPipeline={(id) => { choisirPipeline(id); choisirOnglet('board'); }}
             onChangement={() => {
               qc.invalidateQueries({ queryKey: ['pipeline-stages', pipelineId] });
+              // La LISTE aussi : supprimer un pipeline ou changer le défaut
+              // laissait le sélecteur du board proposer l'ancien état
+              // pendant cinq minutes (staleTime).
+              qc.invalidateQueries({ queryKey: ['pipeline-liste'] });
+              qc.invalidateQueries({ queryKey: ['pipeline-defaut'] });
               rafraichir();
             }}
           />

@@ -14,7 +14,7 @@
  * deux ou trois ; afficher « Page 1 sur 1 » sous une liste de deux pipelines
  * habille l'écran sans rien apprendre à personne.
  */
-import { Fragment, useId, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, MoreVertical, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { confirmer } from '../ui/ConfirmDialog';
@@ -44,6 +44,34 @@ export default function PipelinesTableau({
   const [page, setPage] = useState(1);
   const [menuOuvert, setMenuOuvert] = useState<string | null>(null);
   const [deplie, setDeplie] = useState<string | null>(null);
+  const zoneMenu = useRef<HTMLTableSectionElement>(null);
+
+  /*
+   * Un menu « ⋮ » ouvert restait ouvert : cliquer ailleurs, ouvrir celui
+   * d'une autre ligne ou appuyer sur Échap ne le fermait pas. Sur une liste
+   * de pipelines, on se retrouvait avec un menu flottant par-dessus la ligne
+   * qu'on essayait de lire.
+   */
+  useEffect(() => {
+    if (!menuOuvert) return;
+
+    function auClic(e: MouseEvent) {
+      // Un clic DANS le menu (ou sur le « ⋮ ») garde la main : c'est le
+      // bouton lui-même qui bascule, sinon rouvrir fermerait aussitôt.
+      if (zoneMenu.current?.contains(e.target as Node)) return;
+      setMenuOuvert(null);
+    }
+    function auClavier(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOuvert(null);
+    }
+
+    document.addEventListener('mousedown', auClic);
+    document.addEventListener('keydown', auClavier);
+    return () => {
+      document.removeEventListener('mousedown', auClic);
+      document.removeEventListener('keydown', auClavier);
+    };
+  }, [menuOuvert]);
 
   const filtres = useMemo(() => {
     const q = recherche.trim().toLowerCase();
@@ -116,7 +144,7 @@ export default function PipelinesTableau({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-border-subtle">
+          <tbody ref={zoneMenu} className="divide-y divide-border-subtle">
             {visibles.map((p, i) => (
               <Fragment key={p.id}>
                 <tr className={p.id === pipelineActif ? 'bg-surface-secondary' : undefined}>
