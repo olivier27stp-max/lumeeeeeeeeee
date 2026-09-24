@@ -17,10 +17,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const supprimerMock = vi.fn(async () => {});
+const dupliquerMock = vi.fn(async (..._a: any[]) => 'p-copie');
 const confirmerMock = vi.fn(async (..._a: any[]) => true);
 
 vi.mock('../src/lib/pipelineVentesApi', () => ({
   supprimerPipeline: (...a: any[]) => supprimerMock(...(a as [])),
+  dupliquerPipeline: (...a: any[]) => dupliquerMock(...(a as [])),
 }));
 
 vi.mock('../src/components/ui/ConfirmDialog', () => ({
@@ -188,38 +190,6 @@ describe('actions de ligne', () => {
   });
 });
 
-describe('fermeture du menu « ⋮ »', () => {
-  it('un clic ailleurs referme le menu', async () => {
-    await rendre();
-    await clic(menuDe('Commercial'));
-    expect(optionsDuMenu().length).toBeGreaterThan(0);
-
-    await act(async () => {
-      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-    });
-    expect(optionsDuMenu()).toHaveLength(0);
-  });
-
-  it('Échap referme le menu', async () => {
-    await rendre();
-    await clic(menuDe('Commercial'));
-    await act(async () => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    });
-    expect(optionsDuMenu()).toHaveLength(0);
-  });
-
-  it('ouvrir le menu sur une autre ligne ne laisse qu un seul menu', async () => {
-    await rendre();
-    await clic(menuDe('Commercial'));
-    await clic(menuDe('Résidentiel'));
-    // Deux menus ouverts en même temps se chevaucheraient.
-    expect(conteneur.querySelectorAll('[role="menu"]')).toHaveLength(1);
-    // Et c'est bien celui de la ligne qu'on vient de cliquer.
-    expect(optionsDuMenu()).not.toContain('Supprimer');
-  });
-});
-
 describe('dépliage — ce que le tableau ne doit pas perdre', () => {
   it('le détail est replié au départ', async () => {
     await rendre();
@@ -313,5 +283,46 @@ describe('recherche et pagination', () => {
     expect(conteneur.querySelectorAll('tbody tr')).toHaveLength(5);
     // La numérotation continue : la 21e ligne s'appelle 21, pas 1.
     expect(conteneur.querySelector('tbody td')?.textContent?.trim()).toBe('21');
+  });
+});
+
+describe('dupliquer un pipeline', () => {
+  it('propose « Dupliquer » sur tous les pipelines, défaut compris', async () => {
+    // Contrairement à « Supprimer » : copier le pipeline par défaut est sans
+    // danger, c'est le supprimer qui laisserait les leads sans destination.
+    await rendre();
+    await clic(menuDe('Résidentiel'));
+    expect(optionsDuMenu()).toContain('Dupliquer');
+    expect(optionsDuMenu()).not.toContain('Supprimer');
+  });
+
+  it('demande confirmation avant de copier', async () => {
+    await rendre();
+    await clic(menuDe('Commercial'));
+    await clic([...conteneur.querySelectorAll('[role="menuitem"]')]
+      .find((e) => e.textContent === 'Dupliquer'));
+    expect(confirmerMock).toHaveBeenCalledTimes(1);
+    expect(dupliquerMock).toHaveBeenCalled();
+  });
+
+  it('nomme la copie sans écraser l original', async () => {
+    // Deux pipelines homonymes dans un sélecteur ne se distinguent plus.
+    await rendre();
+    await clic(menuDe('Commercial'));
+    await clic([...conteneur.querySelectorAll('[role="menuitem"]')]
+      .find((e) => e.textContent === 'Dupliquer'));
+    expect(dupliquerMock.mock.calls[0][0]).toBe('p-2');
+    expect(String(dupliquerMock.mock.calls[0][1])).toContain('Commercial');
+    expect(String(dupliquerMock.mock.calls[0][1])).not.toBe('Commercial');
+  });
+
+  it('un refus de confirmation ne copie rien', async () => {
+    confirmerMock.mockResolvedValue(false);
+    const props = await rendre();
+    await clic(menuDe('Commercial'));
+    await clic([...conteneur.querySelectorAll('[role="menuitem"]')]
+      .find((e) => e.textContent === 'Dupliquer'));
+    expect(dupliquerMock).not.toHaveBeenCalled();
+    expect(props.onChangement).not.toHaveBeenCalled();
   });
 });

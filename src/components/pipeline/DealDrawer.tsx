@@ -29,7 +29,7 @@ import { useTranslation } from '../../i18n';
 import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, deplacerDeal, estJobACreer, fetchElementsLies,
-  fetchDossierClient, fetchHistorique, fetchRendezVousClient, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
+  fetchDossierClient, fetchHistorique, fetchRelances, fetchRendezVousClient, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
   abandonnerDeal, fetchRaisonsProposees, majDateFermeture, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
@@ -51,6 +51,22 @@ type Onglet = 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'paiements' | 'act
  * intégration) est ajoutée à la volée au sélecteur pour ne jamais être écrasée
  * par le simple fait d'ouvrir la fiche.
  */
+/** Le nom lisible d'une action d'automatisation, dans la langue de l'écran. */
+function LIBELLE_RELANCE(action: string, fr: boolean): string {
+  const t: Record<string, [string, string]> = {
+    send_sms: ['Texto envoyé', 'Text message sent'],
+    send_email: ['Courriel envoyé', 'Email sent'],
+    create_task: ['Tâche créée', 'Task created'],
+    create_notification: ['Notification envoyée', 'Notification sent'],
+    request_review: ['Demande d\'avis', 'Review requested'],
+    log_activity: ['Activité journalisée', 'Activity logged'],
+  };
+  const paire = t[action];
+  // Une action inconnue garde sa clé : mieux vaut un nom technique qu'un
+  // libellé inventé qui ferait croire à autre chose.
+  return paire ? (fr ? paire[0] : paire[1]) : action;
+}
+
 const SOURCES_CONNUES = ['form_web', 'meta', 'manual', 'd2d'] as const;
 
 /** Libellés des canaux absents de `LIBELLE_SOURCE` (qui ne couvre que la maquette). */
@@ -989,6 +1005,16 @@ export default function DealDrawer({
     enabled: !!deal,
   });
 
+  // Les relances automatiques déjà parties. C'est la preuve que le Reçu
+  // montrera : sans savoir QUAND une relance est partie, on ne peut pas dire
+  // qu'elle a récupéré une vente.
+  const { data: relances = [] } = useQuery({
+    queryKey: ['deal-relances', deal?.id],
+    queryFn: () => fetchRelances(deal?.id ?? '', deal?.client_id ?? null),
+    enabled: !!deal,
+    staleTime: 60_000,
+  });
+
   // Fermer la fiche, ou en ouvrir une autre, ne doit jamais laisser traîner une
   // raison de perte à moitié saisie sur le deal suivant.
   const dealId = deal?.id ?? null;
@@ -1688,6 +1714,47 @@ export default function DealDrawer({
                   )}
                 </ol>
               </Section>
+
+              {/*
+                Les relances automatiques, avec leur DATE EXACTE.
+                « il y a 3 jours » suffit pour se repérer, pas pour prouver :
+                un reçu qui dit « relance du 19 → signée le 20 » a besoin du
+                jour, pas d'une distance.
+              */}
+              {relances.length > 0 && (
+                <Section titre={fr ? 'Relances automatiques' : 'Automated follow-ups'}>
+                  <ol className="space-y-2">
+                    {relances.map((r) => (
+                      <li key={r.id} className="flex items-start gap-2.5">
+                        <span
+                          className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                          style={{ background: r.reussi ? 'var(--color-success)' : 'var(--color-danger)' }}
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-[12px] text-text-primary">
+                            {LIBELLE_RELANCE(r.action, fr)}
+                            {!r.reussi && (
+                              <span className="ml-1.5 text-[11px]" style={{ color: 'var(--color-danger)' }}>
+                                {fr ? '· échec' : '· failed'}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[10.5px] text-text-muted">
+                            {new Date(r.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', {
+                              day: 'numeric', month: 'long', year: 'numeric',
+                            })}
+                            {' · '}
+                            {new Date(r.created_at).toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', {
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </Section>
+              )}
 
               <Section titre={fr ? "Journal d'activité" : 'Activity log'}>
                 <ActivityTimeline entityType="deal" entityId={deal.id} />
