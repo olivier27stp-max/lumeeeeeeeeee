@@ -936,3 +936,125 @@ export async function archiverRaisonProposee(id: string): Promise<void> {
     .eq('id', id);
   if (error) throw error;
 }
+
+// ── Le dossier complet du client, vu depuis un deal ─────────
+//
+// La fiche ne lisait que `deal.job_id` et `deal.quote_id` : UN job, UN devis.
+// Un client qui a fait affaire six fois avec l'entreprise apparaissait donc
+// comme s'il arrivait de nulle part — alors que la page Client, elle, montre
+// tout. Un vendeur qui rappelle quelqu'un a besoin de savoir qu'il lui doit
+// déjà 1 200 $, ou qu'on lui a posé trois devis sans suite.
+
+export interface LigneHistorique {
+  id: string;
+  /** Ce qu'on montre : numéro de job, de devis ou de facture. */
+  numero: string;
+  titre: string;
+  statut: string;
+  cents: number;
+  /** Solde restant dû — factures seulement. */
+  solde_cents?: number;
+  date: string;
+}
+
+export interface MessageClient {
+  id: string;
+  /** `inbound` = le client nous écrit ; `outbound` = on lui écrit. */
+  direction: string;
+  texte: string;
+  date: string;
+}
+
+export interface DossierClient {
+  jobs: LigneHistorique[];
+  devis: LigneHistorique[];
+  factures: LigneHistorique[];
+  messages: MessageClient[];
+  /** Somme encaissée depuis toujours — ce que le client a réellement payé. */
+  paye_cents: number;
+  /** Ce qu'il doit ENCORE : somme des soldes de factures non réglées. */
+  du_cents: number;
+}
+
+const DOSSIER_VIDE: DossierClient = {
+  jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
+};
+
+/**
+ * Tout l'historique d'un client, pas seulement ce que ce deal-ci a produit.
+ *
+ * Les cinq lectures partent ensemble : la fiche s'ouvre déjà, et enchaîner
+ * les requêtes ferait clignoter les sections l'une après l'autre.
+ *
+ * Une lecture refusée (un vendeur n'a pas le droit de voir les montants —
+ * `membre_voit_les_montants` protège `quotes`) rend une section vide plutôt
+ * que de faire échouer toute la fiche : mieux vaut une section absente qu'un
+ * écran mort.
+ */
+export async function fetchDossierClient(clientId: string | null): Promise<DossierClient> {
+  if (!clientId) return DOSSIER_VIDE;
+
+  const [jobsR, devisR, facturesR, messagesR] = await Promise.all([
+    supabase.from('jobs')
+      .select('id,job_number,title,status,total_cents,created_at')
+      .eq('client_id', clientId).is('deleted_at', null)
+      .order('created_at', { ascending: false }).limit(50),
+    supabase.from('quotes')
+      .select('id,quote_number,title,status,total_cents,created_at')
+      .eq('client_id', clientId).is('deleted_at', null)
+      .order('created_at', { ascending: false }).limit(50),
+    supabase.from('invoices')
+      .select('id,invoice_number,status,total_cents,paid_cents,balance_cents,created_at')
+      .eq('client_id', clientId).is('deleted_at', null)
+      .order('created_at', { ascending: false }).limit(50),
+    supabase.from('messages')
+      .select('id,direction,message_text,created_at')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false }).limit(10),
+  ]);
+
+  const jobs = (jobsR.data ?? []).map((j: Record<string, unknown>) => ({
+    id: j.id as string,
+    numero: (j.job_number as string) ?? '',
+    titre: (j.title as string) ?? '',
+    statut: (j.status as string) ?? '',
+    cents: (j.total_cents as number) ?? 0,
+    date: j.created_at as string,
+  }));
+
+  const devis = (devisR.data ?? []).map((q: Record<string, unknown>) => ({
+    id: q.id as string,
+    numero: (q.quote_number as string) ?? '',
+    titre: (q.title as string) ?? '',
+    statut: (q.status as string) ?? '',
+    cents: (q.total_cents as number) ?? 0,
+    date: q.created_at as string,
+  }));
+
+  const factures = (facturesR.data ?? []).map((f: Record<string, unknown>) => ({
+    id: f.id as string,
+    numero: (f.invoice_number as string) ?? '',
+    titre: '',
+    statut: (f.status as string) ?? '',
+    cents: (f.total_cents as number) ?? 0,
+    solde_cents: (f.balance_cents as number) ?? 0,
+    date: f.created_at as string,
+  }));
+
+  const messages = (messagesR.data ?? []).map((m: Record<string, unknown>) => ({
+    id: m.id as string,
+    direction: (m.direction as string) ?? '',
+    texte: (m.message_text as string) ?? '',
+    date: m.created_at as string,
+  }));
+
+  return {
+    jobs, devis, factures, messages,
+    // `paid_cents` et `balance_cents` sont tenus par la base : on les somme,
+    // on ne les recalcule pas. Une facture annulée porte un solde à zéro.
+    paye_cents: (facturesR.data ?? []).reduce(
+      (s: number, f: Record<string, unknown>) => s + ((f.paid_cents as number) ?? 0), 0),
+    du_cents: (facturesR.data ?? []).reduce(
+      (s: number, f: Record<string, unknown>) => s + ((f.balance_cents as number) ?? 0), 0),
+  };
+}
