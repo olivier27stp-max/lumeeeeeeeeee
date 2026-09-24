@@ -33,6 +33,8 @@ import {
   fetchKpis,
   fetchParSource,
   fetchTendance,
+  fetchRaisonsPerte,
+  fetchParVendeur,
   fetchVitesse,
   type ATraiterRow,
 } from '../../lib/pipelineVentesApi';
@@ -271,22 +273,6 @@ function Echec({ titre, message }: { titre: string; message: string }) {
   );
 }
 
-/**
- * Bloc annoncé mais pas encore mesurable : aucune fonction de la base ne le
- * couvre. Mieux vaut le dire que d'afficher un chiffre calculé à moitié.
- */
-function BientotDisponible({ titre, phrase, etiquette }: { titre: string; phrase: string; etiquette: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-outline bg-surface-card px-5 py-8 text-center">
-      <span className="inline-block rounded-full border border-outline px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-text-tertiary">
-        {etiquette}
-      </span>
-      <div className="mt-3 text-[13.5px] font-semibold tracking-tight text-text-primary">{titre}</div>
-      <p className="mt-1.5 text-[12.5px] text-text-tertiary max-w-md mx-auto leading-relaxed">{phrase}</p>
-    </div>
-  );
-}
-
 function messageErreur(e: unknown, fr: boolean): string {
   if (e instanceof Error && e.message) return e.message;
   return fr ? 'Erreur inconnue.' : 'Unknown error.';
@@ -466,6 +452,16 @@ export default function PipelineStats({ onOuvrirDeal }: { onOuvrirDeal?: (dealId
     queryFn: () => fetchTendance(12),
     staleTime: 60_000,
   });
+  const pertesQ = useQuery({
+    queryKey: ['pipeline-raisons-perte', from, to],
+    queryFn: () => fetchRaisonsPerte(from, to),
+    staleTime: 60_000,
+  });
+  const vendeursQ = useQuery({
+    queryKey: ['pipeline-par-vendeur', from, to],
+    queryFn: () => fetchParVendeur(from, to),
+    staleTime: 60_000,
+  });
 
   const kpis = kpisQ.data ?? null;
   const vitesse = vitesseQ.data ?? null;
@@ -473,6 +469,15 @@ export default function PipelineStats({ onOuvrirDeal }: { onOuvrirDeal?: (dealId
   const cohortes = cohortesQ.data ?? [];
   const entonnoir = entonnoirQ.data ?? [];
   const tendance = tendanceQ.data ?? [];
+  const pertes = pertesQ.data ?? [];
+  const vendeurs = vendeursQ.data ?? [];
+
+  // Les barres se comparent à la raison la plus fréquente, pas au total :
+  // avec cinq raisons équivalentes, toutes les barres seraient minuscules.
+  const pertesMax = useMemo(
+    () => pertes.reduce((m, r) => Math.max(m, r.perdus), 0),
+    [pertes],
+  );
 
   // ── 1. Écart de leads contre la fenêtre précédente ──────────────────────
   const ecartLeads = useMemo(() => {
@@ -958,43 +963,109 @@ export default function PipelineStats({ onOuvrirDeal }: { onOuvrirDeal?: (dealId
         />
       </div>
 
-      {/* ── 9. Raisons de perte — pas encore mesurable ── */}
+      {/* ── 9. Raisons de perte ── */}
       <SectionHead
         titre={fr ? 'Raisons de perte' : 'Loss reasons'}
         aide={
           fr
-            ? "La base enregistre la raison et l'étape de perte sur chaque deal, mais aucune fonction ne les agrège encore."
-            : 'The database records the reason and the stage of loss on each deal, but no function aggregates them yet.'
+            ? "Classé par raison, avec l'étape d'où le deal a été perdu — c'est là qu'il faut agir. Les deals abandonnés (client injoignable) sont exclus : ce ne sont pas des défaites commerciales."
+            : 'Ranked by reason, with the stage the deal was lost from — that is where to act. Abandoned deals (unreachable client) are excluded: they are not commercial losses.'
         }
       />
-      <BientotDisponible
-        etiquette={fr ? 'Bientôt' : 'Soon'}
-        titre={fr ? 'Raisons de perte' : 'Loss reasons'}
-        phrase={
-          fr
-            ? "Ce bloc classera les deals perdus par raison, avec l'étape d'où le deal a été perdu — c'est là qu'il faut agir. En attendant, aucun chiffre approximatif n'est affiché ici."
-            : 'This block will rank lost deals by reason, together with the stage the deal was lost from — that is where to act. Until then, no approximate figure is shown here.'
-        }
-      />
+      {pertesQ.isLoading && <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />}
+      {pertesQ.isError && (
+        <Echec
+          titre={fr ? 'Raisons de perte' : 'Loss reasons'}
+          message={messageErreur(pertesQ.error, fr)}
+        />
+      )}
+      {!pertesQ.isLoading && !pertesQ.isError && pertes.length === 0 && (
+        <Vide texte={fr ? 'Aucun deal perdu sur la période.' : 'No deal lost over the period.'} />
+      )}
+      {!pertesQ.isLoading && !pertesQ.isError && pertes.length > 0 && (
+        <div className="space-y-1">
+          {pertes.map((r, i) => (
+            <BarreHorizontale
+              key={`${r.raison}-${r.etape_perdue}-${i}`}
+              libelle={r.raison}
+              valeur={`${nombre(r.perdus, fr, 0)} · ${pourcentDb(r.part, fr)}`}
+              fraction={pertesMax > 0 ? r.perdus / pertesMax : 0}
+              teinte={teinteRang(i)}
+              // L'étape dit OÙ agir : « trop cher » à la qualification et
+              // « trop cher » après la visite ne se corrigent pas au même endroit.
+              note={
+                fr
+                  ? `perdu depuis « ${r.etape_perdue} »`
+                  : `lost from “${r.etape_perdue_en}”`
+              }
+            />
+          ))}
+        </div>
+      )}
 
-      {/* ── 10. Par vendeur — pas encore mesurable ── */}
+      {/* ── 10. Par vendeur ── */}
       <SectionHead
         titre={fr ? 'Par vendeur' : 'By rep'}
         aide={
           fr
-            ? "L'assignation est bien enregistrée sur chaque deal, mais aucune fonction ne la ventile encore par membre."
-            : 'Assignment is recorded on each deal, but no function breaks it down per member yet.'
+            ? "Par membre : deals pris, gagnés, perdus, abandonnés, taux de closing (deals fermés seuls) et délai moyen de premier contact. Les deals que personne n'a pris ont leur propre ligne."
+            : 'Per member: deals taken, won, lost, abandoned, close rate (closed deals only) and average first-contact delay. Deals nobody took have their own row.'
         }
       />
-      <BientotDisponible
-        etiquette={fr ? 'Bientôt' : 'Soon'}
-        titre={fr ? 'Par vendeur' : 'By rep'}
-        phrase={
-          fr
-            ? "Ce bloc donnera, par membre de l'équipe, les deals pris, les gagnés, le taux de closing (fermés seulement) et le délai moyen de premier contact, avec une ligne à part pour les deals non assignés."
-            : 'This block will give, per team member, deals taken, wins, close rate (closed deals only) and average first-contact delay, with a separate row for unassigned deals.'
-        }
-      />
+      {vendeursQ.isLoading && <Chargement etiquette={fr ? 'Chargement…' : 'Loading…'} />}
+      {vendeursQ.isError && (
+        <Echec titre={fr ? 'Par vendeur' : 'By rep'} message={messageErreur(vendeursQ.error, fr)} />
+      )}
+      {!vendeursQ.isLoading && !vendeursQ.isError && vendeurs.length === 0 && (
+        <Vide texte={fr ? 'Aucun deal sur la période.' : 'No deal over the period.'} />
+      )}
+      {!vendeursQ.isLoading && !vendeursQ.isError && vendeurs.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr className="text-left text-[11px] uppercase tracking-wide text-text-tertiary">
+                <th scope="col" className="py-2 pr-3 font-semibold">{fr ? 'Membre' : 'Member'}</th>
+                <th scope="col" className="py-2 px-2 text-right font-semibold">{fr ? 'Pris' : 'Taken'}</th>
+                <th scope="col" className="py-2 px-2 text-right font-semibold">{fr ? 'Gagnés' : 'Won'}</th>
+                <th scope="col" className="py-2 px-2 text-right font-semibold">{fr ? 'Perdus' : 'Lost'}</th>
+                <th scope="col" className="py-2 px-2 text-right font-semibold">{fr ? 'Abandonnés' : 'Abandoned'}</th>
+                <th scope="col" className="py-2 px-2 text-right font-semibold">{fr ? 'Closing' : 'Close rate'}</th>
+                <th scope="col" className="py-2 px-2 text-right font-semibold">{fr ? '1er contact' : 'First contact'}</th>
+                <th scope="col" className="py-2 pl-2 text-right font-semibold">{fr ? 'Revenus' : 'Revenue'}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-subtle">
+              {vendeurs.map((v) => (
+                <tr
+                  key={v.membre_id ?? 'non-assigne'}
+                  // Les non-assignés ne sont pas un vendeur : c'est une alerte.
+                  className={cn(v.membre_id === null && 'bg-amber-500/5')}
+                >
+                  <td className="py-2 pr-3 text-text-primary">
+                    {v.membre_id === null ? (fr ? 'Non assignés' : 'Unassigned') : v.nom}
+                  </td>
+                  <td className="py-2 px-2 text-right tabular-nums text-text-secondary">{nombre(v.deals_pris, fr, 0)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums font-semibold text-text-primary">{nombre(v.gagnes, fr, 0)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-text-secondary">{nombre(v.perdus, fr, 0)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-text-tertiary">{nombre(v.abandonnes, fr, 0)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-text-primary">
+                    {v.gagnes + v.perdus > 0 ? pourcentDb(v.taux_closing, fr) : '—'}
+                  </td>
+                  <td className="py-2 px-2 text-right tabular-nums text-text-secondary">
+                    {heures(v.delai_premier_contact_h, fr)}
+                  </td>
+                  <td className="py-2 pl-2 text-right tabular-nums text-text-primary">{montant(v.revenus_cents, fr)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[11px] text-text-tertiary">
+            {fr
+              ? "Le taux de closing ne porte que sur les deals fermés ; les abandonnés (client injoignable) en sont exclus pour ne pénaliser personne."
+              : 'Close rate covers closed deals only; abandoned ones (unreachable client) are excluded so nobody is penalised.'}
+          </p>
+        </div>
+      )}
 
       {/* ── 11. À traiter ── */}
       <SectionHead

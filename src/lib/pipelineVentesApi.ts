@@ -97,6 +97,32 @@ export interface SourceRow {
   revenu_moyen_par_lead: number;
 }
 
+/** Une raison de perte, avec l'étape d'où le deal a été perdu. */
+export interface RaisonPerteRow {
+  raison: string;
+  etape_perdue: string;
+  etape_perdue_en: string;
+  perdus: number;
+  /** Part du total des pertes, déjà en pourcentage (0–100). */
+  part: number;
+}
+
+/** Une ligne par membre ; `membre_id` à `null` = les deals non assignés. */
+export interface VendeurRow {
+  membre_id: string | null;
+  nom: string;
+  deals_pris: number;
+  gagnes: number;
+  perdus: number;
+  abandonnes: number;
+  ouverts: number;
+  /** Fermés seulement, abandonnés exclus. Déjà en pourcentage (0–100). */
+  taux_closing: number;
+  /** Moyenne en heures ; `null` si aucun deal n'a été contacté. */
+  delai_premier_contact_h: number | null;
+  revenus_cents: number;
+}
+
 export interface FunnelRow {
   stage_id: string;
   nom_fr: string;
@@ -660,6 +686,26 @@ export async function fetchVitesse(from?: string, to?: string): Promise<VitesseR
   const { data, error } = await supabase.rpc('pipeline_vitesse', { p_from: from ?? null, p_to: to ?? null });
   if (error) throw error;
   return (data?.[0] as VitesseRow) ?? null;
+}
+
+/**
+ * Pourquoi on perd, et depuis quelle étape.
+ *
+ * Les deals ABANDONNÉS (client injoignable) sont exclus côté base : ce ne
+ * sont pas des défaites commerciales, et les compter ici rendrait « pourquoi
+ * on perd » illisible.
+ */
+export async function fetchRaisonsPerte(from?: string, to?: string): Promise<RaisonPerteRow[]> {
+  const { data, error } = await supabase.rpc('pipeline_raisons_perte', { p_from: from ?? null, p_to: to ?? null });
+  if (error) throw error;
+  return (data ?? []) as RaisonPerteRow[];
+}
+
+/** Par vendeur. Les deals non assignés ont leur propre ligne, en dernier. */
+export async function fetchParVendeur(from?: string, to?: string): Promise<VendeurRow[]> {
+  const { data, error } = await supabase.rpc('pipeline_par_vendeur', { p_from: from ?? null, p_to: to ?? null });
+  if (error) throw error;
+  return (data ?? []) as VendeurRow[];
 }
 
 export async function fetchATraiter(jours = 7): Promise<ATraiterRow[]> {
