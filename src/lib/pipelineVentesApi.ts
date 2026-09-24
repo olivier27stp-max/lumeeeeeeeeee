@@ -1133,3 +1133,56 @@ export function pastilles(
 
   return out.slice(0, 2);
 }
+
+// ── Partage d'un pipeline ───────────────────────────────────
+//
+// AUCUNE ligne = le pipeline est visible de toute l'organisation, ce qui est
+// l'état par défaut et celui de toutes les organisations existantes. Dès
+// qu'une ligne apparaît, il devient réservé aux membres nommés — plus les
+// administrateurs, qui voient toujours tout.
+
+export interface AccesPipeline {
+  id: string;
+  user_id: string;
+}
+
+export async function fetchAccesPipeline(pipelineId: string): Promise<AccesPipeline[]> {
+  const { data, error } = await supabase
+    .from('pipeline_acces')
+    .select('id,user_id')
+    .eq('pipeline_id', pipelineId);
+  if (error) throw error;
+  return (data ?? []) as AccesPipeline[];
+}
+
+/**
+ * Donne accès à un membre.
+ *
+ * Le premier appel sur un pipeline le FERME : il passe de « visible de tous »
+ * à « réservé aux nommés ». L'écran doit le dire avant, pas après.
+ */
+export async function donnerAccesPipeline(pipelineId: string, userId: string): Promise<void> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { error } = await supabase
+    .from('pipeline_acces')
+    .insert({ org_id: orgId, pipeline_id: pipelineId, user_id: userId });
+  // 23505 = ce membre a déjà accès : ce n'est pas une erreur à montrer.
+  if (error && (error as { code?: string }).code !== '23505') throw error;
+}
+
+export async function retirerAccesPipeline(accesId: string): Promise<void> {
+  const { error } = await supabase.from('pipeline_acces').delete().eq('id', accesId);
+  if (error) throw error;
+}
+
+/**
+ * Rouvre le pipeline à toute l'organisation, en supprimant tout partage.
+ *
+ * Retirer les accès un par un aboutirait au même résultat, mais laisserait
+ * croire qu'on restreint de plus en plus alors qu'on rouvre d'un coup à la
+ * dernière suppression. Un geste explicite vaut mieux qu'un effet de bord.
+ */
+export async function rouvrirPipeline(pipelineId: string): Promise<void> {
+  const { error } = await supabase.from('pipeline_acces').delete().eq('pipeline_id', pipelineId);
+  if (error) throw error;
+}
