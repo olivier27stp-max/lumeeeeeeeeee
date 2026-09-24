@@ -1,7 +1,10 @@
 import { supabase } from './supabase';
 
 // ─── Types ──────────────────────────────────────────────────────
-export type EntityType = 'clients' | 'jobs' | 'invoices';
+// `deals` depuis le 2026-09-23 : superficie, type de surface, nombre de
+// fenêtres — l'information qui décide d'un prix en service terrain et qui
+// n'a aucune raison de vivre dans une note en texte libre.
+export type EntityType = 'clients' | 'jobs' | 'invoices' | 'deals';
 
 export type ColumnType =
   | 'text' | 'number' | 'status' | 'dropdown' | 'date' | 'checkbox'

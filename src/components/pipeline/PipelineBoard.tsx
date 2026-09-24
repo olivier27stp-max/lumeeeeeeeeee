@@ -10,7 +10,7 @@
  * ne reste qu'une pastille ronde devant le nom. La couleur porte l'information
  * qui presse (priorité sur le liseré gauche des cartes), pas la décoration.
  */
-import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   DndContext, DragOverlay, PointerSensor, closestCorners, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
@@ -121,7 +121,13 @@ const CLASSE_CHAMP =
 
 // ── Carte ──
 
-function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, onChangement }: {
+function CarteDeal({
+  deal, etapes, membres, montantCents, onOuvrir, onAssigner, onChangement,
+  selectionne, onBasculerSelection,
+}: {
+  /** `undefined` = mode sélection inactif : aucune case n'est dessinée. */
+  selectionne?: boolean;
+  onBasculerSelection?: (dealId: string) => void;
   deal: Deal;
   etapes: PipelineStage[];
   membres: Membre[];
@@ -187,6 +193,18 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, 
     >
       {/* Haut : nom, pastille de priorité, menu */}
       <div className="flex items-start gap-1.5">
+        {onBasculerSelection && (
+          <input
+            type="checkbox"
+            checked={!!selectionne}
+            aria-label={fr ? `Sélectionner ${nom}` : `Select ${nom}`}
+            // Sans stopPropagation, cocher ouvrirait aussi la fiche : le clic
+            // remonterait jusqu'au onClick de la carte.
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => onBasculerSelection(deal.id)}
+            className="mt-0.5 shrink-0"
+          />
+        )}
         <button
           {...listeners}
           onClick={(e) => e.stopPropagation()}
@@ -297,7 +315,13 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, 
 
 // ── Colonne ──
 
-function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement }: {
+function Colonne({
+  etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement,
+  selection, onBasculerSelection,
+}: {
+  /** Les deals cochés. `undefined` = mode sélection inactif. */
+  selection?: Set<string>;
+  onBasculerSelection?: (dealId: string) => void;
   etape: PipelineStage;
   /** Toutes les étapes : le badge « Job à créer » se dérive du `kind` de l'étape du deal. */
   etapes: PipelineStage[];
@@ -330,9 +354,14 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
       <div className="px-0.5 pb-2.5">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: v.teinte }} aria-hidden="true" />
-          <span className="truncate text-[12.5px] font-semibold tracking-tight text-text-primary">
+          {/*
+            Un vrai titre, pas un `span` : à la lecture d'écran, le board
+            était une suite de textes sans structure — rien ne disait où
+            commençait une colonne.
+          */}
+          <h3 className="truncate text-[12.5px] font-semibold tracking-tight text-text-primary">
             {fr ? etape.name_fr : etape.name_en}
-          </span>
+          </h3>
         </div>
         <p className="mt-1 flex gap-2 pl-4 text-[11.5px] text-text-secondary">
           <span className="tabular-nums">
@@ -376,6 +405,8 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
               onOuvrir={onOuvrir}
               onAssigner={onAssigner}
               onChangement={onChangement}
+              selectionne={selection?.has(deal.id)}
+              onBasculerSelection={onBasculerSelection}
             />
           ))}
           {deals.length === 0 && (
@@ -565,9 +596,18 @@ interface EtatFiltres {
   /** `'__non'` = les deals que personne n'a pris en charge. */
   assigne: string;
   priorite: '' | NiveauPriorite;
+  /** Une étape précise. En kanban, les autres colonnes disparaissent. */
+  etape: string;
+  /** Montant minimum en DOLLARS (saisi par l'utilisateur, comparé en cents). */
+  montantMin: string;
+  /** Entrés dans le pipeline depuis N jours au plus. '' = sans limite. */
+  creesDepuis: string;
 }
 
-const FILTRES_VIDES: EtatFiltres = { texte: '', source: '', assigne: '', priorite: '' };
+const FILTRES_VIDES: EtatFiltres = {
+  texte: '', source: '', assigne: '', priorite: '',
+  etape: '', montantMin: '', creesDepuis: '',
+};
 
 /**
  * Vues INTÉGRÉES, toujours là et non supprimables.
@@ -588,9 +628,11 @@ const VUES: Record<VueEnregistree, { fr: string; en: string; filtres: EtatFiltre
 
 function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
-  pipelines, pipelineActif, onChangerPipeline,
+  pipelines, pipelineActif, onChangerPipeline, etapesFiltrables,
   onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onNouveauDeal,
 }: {
+  /** Étapes proposées au filtre — les actives, dans l'ordre du board. */
+  etapesFiltrables: PipelineStage[];
   pipelines: { id: string; name: string; is_default: boolean }[];
   pipelineActif: string | null;
   onChangerPipeline: (pipelineId: string) => void;
@@ -616,8 +658,11 @@ function BarreOutils({
   const idSource = useId();
   const idAssigne = useId();
   const idPriorite = useId();
+  const idEtape = useId();
+  const idMontant = useId();
+  const idDepuis = useId();
 
-  const nbFiltres = [filtres.source, filtres.assigne, filtres.priorite, filtres.texte].filter(Boolean).length;
+  const nbFiltres = Object.values(filtres).filter((v) => v !== '').length;
 
   return (
     <>
@@ -801,6 +846,60 @@ function BarreOutils({
             </select>
           </div>
 
+          <div className="min-w-[150px]">
+            <label htmlFor={idEtape} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Étape' : 'Stage'}
+            </label>
+            <select
+              id={idEtape}
+              value={filtres.etape}
+              onChange={(e) => onFiltres({ ...filtres, etape: e.target.value })}
+              className={CLASSE_CHAMP}
+            >
+              <option value="">{fr ? 'Toutes' : 'All'}</option>
+              {etapesFiltrables.map((e) => (
+                <option key={e.id} value={e.id}>{fr ? e.name_fr : e.name_en}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-[130px]">
+            <label htmlFor={idMontant} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Montant minimum' : 'Minimum amount'}
+            </label>
+            <input
+              id={idMontant}
+              type="number"
+              min={0}
+              step={100}
+              inputMode="decimal"
+              value={filtres.montantMin}
+              onChange={(e) => onFiltres({ ...filtres, montantMin: e.target.value })}
+              placeholder={fr ? '2000' : '2000'}
+              className={CLASSE_CHAMP}
+            />
+            <p className="mt-1 text-[10px] text-text-muted">
+              {fr ? 'Cache les deals sans montant connu.' : 'Hides deals with no known amount.'}
+            </p>
+          </div>
+
+          <div className="min-w-[150px]">
+            <label htmlFor={idDepuis} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Entrés depuis' : 'Created within'}
+            </label>
+            <select
+              id={idDepuis}
+              value={filtres.creesDepuis}
+              onChange={(e) => onFiltres({ ...filtres, creesDepuis: e.target.value })}
+              className={CLASSE_CHAMP}
+            >
+              <option value="">{fr ? "N'importe quand" : 'Any time'}</option>
+              <option value="7">{fr ? '7 derniers jours' : 'Last 7 days'}</option>
+              <option value="30">{fr ? '30 derniers jours' : 'Last 30 days'}</option>
+              <option value="90">{fr ? '90 derniers jours' : 'Last 90 days'}</option>
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={() => {
@@ -952,6 +1051,80 @@ export default function PipelineBoard({
   const [vue, setVue] = useState<VueEnregistree | string>('tous');
   const [nouveauDeal, setNouveauDeal] = useState(false);
   const [enregistrementVue, setEnregistrementVue] = useState(false);
+
+  /**
+   * Les deals cochés, pour agir sur plusieurs d'un coup.
+   *
+   * Un `Set` d'identifiants plutôt que des deals complets : la liste des
+   * deals se rafraîchit sans cesse (déplacement, assignation), et garder des
+   * objets figés afficherait des cartes périmées dans la barre d'actions.
+   */
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const idLotAssigne = useId();
+  const idLotEtape = useId();
+
+  /**
+   * Assigner plusieurs deals d'un coup.
+   *
+   * Passe par `onAssigner` du parent plutôt que par l'API : c'est lui qui
+   * rafraîchit et qui connaît les règles. Court-circuiter ouvrirait un second
+   * chemin d'écriture, avec d'autres comportements.
+   *
+   * Les écritures partent en parallèle mais on attend TOUTES les réponses
+   * (`allSettled`) : annoncer « 12 deals assignés » alors que trois ont
+   * échoué serait un mensonge, et l'utilisateur ne le découvrirait qu'en
+   * voyant les cartes inchangées.
+   */
+  async function assignerEnLot(valeur: string) {
+    const ids = [...selection];
+    const membreId = valeur === '__non' ? null : valeur;
+    const resultats = await Promise.allSettled(ids.map((id) => onAssigner(id, membreId)));
+    const echecs = resultats.filter((r) => r.status === 'rejected').length;
+    setSelection(new Set());
+    onChangement?.();
+    if (echecs === 0) {
+      toast.success(fr ? `${ids.length} deal(s) assigné(s).` : `${ids.length} deal(s) assigned.`);
+    } else {
+      toast.error(
+        fr
+          ? `${ids.length - echecs} assigné(s), ${echecs} en échec.`
+          : `${ids.length - echecs} assigned, ${echecs} failed.`,
+      );
+    }
+  }
+
+  /**
+   * Déplacer plusieurs deals vers une étape OUVERTE.
+   *
+   * Les étapes gagnée et perdue sont volontairement absentes du menu :
+   * gagner ouvre la fenêtre de création de job, perdre exige une raison.
+   * Un déplacement en masse sauterait les deux et laisserait des deals
+   * fermés sans job ni motif — précisément ce que les statistiques lisent.
+   */
+  async function deplacerEnLot(etapeId: string) {
+    const ids = [...selection];
+    const resultats = await Promise.allSettled(ids.map((id) => onDeplacer(id, etapeId)));
+    const echecs = resultats.filter((r) => r.status === 'rejected').length;
+    setSelection(new Set());
+    onChangement?.();
+    if (echecs === 0) {
+      toast.success(fr ? `${ids.length} deal(s) déplacé(s).` : `${ids.length} deal(s) moved.`);
+    } else {
+      toast.error(
+        fr
+          ? `${ids.length - echecs} déplacé(s), ${echecs} en échec.`
+          : `${ids.length - echecs} moved, ${echecs} failed.`,
+      );
+    }
+  }
+
+  const basculerSelection = useCallback((dealId: string) => {
+    setSelection((s) => {
+      const n = new Set(s);
+      if (n.has(dealId)) n.delete(dealId); else n.add(dealId);
+      return n;
+    });
+  }, []);
   const perms = usePermissions();
   // Seul un patron peut créer une vue d'ÉQUIPE : elle s'impose à tout le
   // monde. La RLS le refuse aussi — l'écran ne fait que ne pas le proposer.
@@ -1013,6 +1186,17 @@ export default function PipelineBoard({
     () => [...etapes].filter((e) => e.archived_at === null).sort((a, b) => a.position - b.position),
     [etapes],
   );
+  /**
+   * Les colonnes réellement dessinées.
+   *
+   * Filtrer par étape sans réduire les colonnes laisserait cinq colonnes
+   * vides à côté de la bonne : l'écran dirait « aucun deal » cinq fois pour
+   * une information qu'on vient de demander à masquer.
+   */
+  const colonnes = useMemo(
+    () => (filtres.etape ? visibles.filter((e) => e.id === filtres.etape) : visibles),
+    [visibles, filtres.etape],
+  );
   const rangs = useMemo(() => rangsOuverts(etapes.map(pourVisuel)), [etapes]);
   const sources = useMemo(
     () => [...new Set(deals.map((d) => d.source))].filter(Boolean).sort(),
@@ -1024,6 +1208,16 @@ export default function PipelineBoard({
   /** Les mêmes deals nourrissent le kanban et la liste — jamais deux écrans séparés. */
   const filtres_ = useMemo(() => {
     const q = filtres.texte.trim().toLowerCase();
+    // Saisi en dollars, comparé en cents : les cents sont la source de vérité
+    // dans tout Lume, on ne convertit jamais dans l'autre sens.
+    const brut = Number(filtres.montantMin.replace(',', '.'));
+    const montantPlancher = filtres.montantMin.trim() !== '' && Number.isFinite(brut)
+      ? Math.round(brut * 100)
+      : null;
+    const jours = Number(filtres.creesDepuis);
+    const depuisBorne = filtres.creesDepuis !== '' && Number.isFinite(jours)
+      ? Date.now() - jours * 86_400_000
+      : null;
     const retenus = deals.filter((d) => {
       if (filtres.source && d.source !== filtres.source) return false;
       if (filtres.assigne === '__non' && d.assigned_user_id) return false;
@@ -1032,10 +1226,23 @@ export default function PipelineBoard({
         const p = priorite(d, etapes);
         if (!p || p.niveau !== filtres.priorite) return false;
       }
+      if (filtres.etape && d.stage_id !== filtres.etape) return false;
+      if (montantPlancher !== null) {
+        // Un deal sans montant connu n'est PAS « 0 $ » : c'est un montant
+        // qu'on ignore. Le sortir d'un filtre « au moins 2 000 $ » serait
+        // affirmer qu'il vaut moins, ce qu'on ne sait pas.
+        const cents = montants[d.id];
+        if (cents === undefined || cents < montantPlancher) return false;
+      }
+      if (depuisBorne !== null && new Date(d.created_at).getTime() < depuisBorne) return false;
       if (q) {
         const c = d.client;
-        const foin = `${nomClient(d)} ${c?.email ?? ''} ${c?.address ?? ''}`.toLowerCase();
-        if (!foin.includes(q)) return false;
+        // Le téléphone est cherché sans sa ponctuation : personne ne tape
+        // « (514) 555-0199 » dans une barre de recherche.
+        const tel = (c?.phone ?? '').replace(/\D/g, '');
+        const foin = `${nomClient(d)} ${c?.email ?? ''} ${c?.address ?? ''} ${c?.company ?? ''} ${tel}`.toLowerCase();
+        const qNum = q.replace(/\D/g, '');
+        if (!foin.includes(q) && !(qNum.length >= 3 && tel.includes(qNum))) return false;
       }
       return true;
     });
@@ -1156,6 +1363,7 @@ export default function PipelineBoard({
         pipelines={pipelines}
         pipelineActif={pipelineActif}
         onChangerPipeline={onChangerPipeline}
+        etapesFiltrables={visibles}
         onFiltres={setFiltres}
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
@@ -1250,6 +1458,67 @@ export default function PipelineBoard({
         onFermer={() => setEnregistrementVue(false)}
         onEnregistrer={enregistrerVue}
       />
+
+      {/*
+        Les actions groupées n'apparaissent QUE quand quelque chose est coché :
+        une barre toujours présente prendrait de la place pour un geste rare.
+      */}
+      {selection.size > 0 && (
+        <div
+          role="status"
+          className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-outline-strong bg-surface-elevated px-3.5 py-2.5"
+        >
+          <span className="text-[12.5px] font-semibold text-text-primary">
+            {fr
+              ? `${selection.size} deal${selection.size > 1 ? 's' : ''} sélectionné${selection.size > 1 ? 's' : ''}`
+              : `${selection.size} deal${selection.size > 1 ? 's' : ''} selected`}
+          </span>
+
+          <label htmlFor={idLotAssigne} className="sr-only">
+            {fr ? 'Assigner la sélection à' : 'Assign selection to'}
+          </label>
+          <select
+            id={idLotAssigne}
+            value=""
+            onChange={(e) => { if (e.target.value) void assignerEnLot(e.target.value); }}
+            className={CLASSE_CHAMP + ' max-w-[190px]'}
+          >
+            <option value="">{fr ? 'Assigner à…' : 'Assign to…'}</option>
+            <option value="__non">{fr ? 'Personne' : 'Nobody'}</option>
+            {membres.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+
+          <label htmlFor={idLotEtape} className="sr-only">
+            {fr ? 'Déplacer la sélection vers' : 'Move selection to'}
+          </label>
+          <select
+            id={idLotEtape}
+            value=""
+            onChange={(e) => { if (e.target.value) void deplacerEnLot(e.target.value); }}
+            className={CLASSE_CHAMP + ' max-w-[190px]'}
+          >
+            <option value="">{fr ? 'Déplacer vers…' : 'Move to…'}</option>
+            {/*
+              Ni « Gagné » ni « Perdu » en lot : gagner demande de créer une
+              job, perdre demande une raison. Les passer en masse sauterait
+              les deux, et laisserait des deals fermés sans job ni motif.
+            */}
+            {visibles.filter((e) => e.kind === 'open').map((e) => (
+              <option key={e.id} value={e.id}>{fr ? e.name_fr : e.name_en}</option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setSelection(new Set())}
+            className="ml-auto text-[12px] text-text-tertiary underline-offset-2 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary rounded"
+          >
+            {fr ? 'Tout décocher' : 'Clear selection'}
+          </button>
+        </div>
+      )}
 
       {chargement && (
         <p className="mt-2 text-[11px] text-text-muted" role="status">
@@ -1365,7 +1634,7 @@ export default function PipelineBoard({
           onDragCancel={() => setActif(null)}
         >
           <div className="mt-4 flex gap-3 overflow-x-auto pb-4">
-            {visibles.map((etape) => (
+            {colonnes.map((etape) => (
               <Colonne
                 key={etape.id}
                 etape={etape}
@@ -1377,6 +1646,8 @@ export default function PipelineBoard({
                 onOuvrir={onOuvrir}
                 onAssigner={onAssigner}
                 onChangement={onChangement}
+                selection={selection}
+                onBasculerSelection={basculerSelection}
               />
             ))}
           </div>

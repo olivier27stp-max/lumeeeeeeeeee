@@ -23,6 +23,8 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import Modal from '../ui/Modal';
 import SpecificNotes from '../SpecificNotes';
+import CustomFieldCell from '../CustomFieldCell';
+import { getValuesForRecord, listColumns } from '../../lib/customFieldsApi';
 import ActivityTimeline from '../ActivityTimeline';
 import { useTranslation } from '../../i18n';
 import { versDate } from '../../lib/dateSeule';
@@ -399,6 +401,56 @@ function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
 }
 
 // ── Fiche ───────────────────────────────────────────────────
+
+
+/**
+ * Les champs personnalisés d'un deal.
+ *
+ * `custom_columns` porte l'entité `deals` depuis la migration
+ * 20260923280000 ; tout le reste (treize types de champs, valeurs par
+ * défaut, ordre) existait déjà et sert aussi aux clients, jobs et factures.
+ *
+ * Chaque cellule s'enregistre elle-même au changement — c'est le contrat de
+ * `CustomFieldCell`, utilisé tel quel ailleurs dans Lume.
+ */
+function ChampsPersonnalises({ dealId, fr }: { dealId: string; fr: boolean }) {
+  const { data: colonnes = [] } = useQuery({
+    queryKey: ['custom-columns', 'deals'],
+    queryFn: () => listColumns('deals'),
+    staleTime: 600_000,
+  });
+  const { data: valeurs = {}, refetch } = useQuery({
+    queryKey: ['custom-values', dealId],
+    queryFn: () => getValuesForRecord(dealId),
+    enabled: colonnes.length > 0,
+  });
+
+  const visibles = colonnes.filter((c) => c.visible);
+  if (visibles.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t border-border-subtle pt-3">
+      <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
+        {fr ? 'Informations du métier' : 'Business details'}
+      </h4>
+      <div className="space-y-2">
+        {visibles.map((col) => (
+          <div key={col.id} className="flex items-baseline justify-between gap-3">
+            <span className="shrink-0 text-[11px] text-text-tertiary">{col.name}</span>
+            <div className="min-w-0 text-right text-[12px]">
+              <CustomFieldCell
+                column={col}
+                recordId={dealId}
+                value={valeurs[col.id]}
+                onChange={() => { void refetch(); }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function DealDrawer({
   deal, etapes, membres, montantCents, montantProvenance, onClose, onAssigner, onCreerJob,
@@ -974,6 +1026,15 @@ export default function DealDrawer({
                           : `${depuis(deal.last_activity_at, maintenant, fr)} ago`}
                       </Ligne>
                     </div>
+
+                    {/*
+                      Les champs propres à l'entreprise — superficie, type de
+                      surface, nombre de fenêtres. Ce qui décide d'un prix en
+                      service terrain, et qu'une note en texte libre perd.
+                      Rien ne s'affiche tant qu'aucun champ n'est défini :
+                      une section vide ferait croire à un écran cassé.
+                    */}
+                    <ChampsPersonnalises dealId={deal.id} fr={fr} />
 
                     {/* Le deal est DÉJÀ perdu : la raison se corrige sans changer d'étape. */}
                     {etapePerdue && !etapePerdueVisee && (
