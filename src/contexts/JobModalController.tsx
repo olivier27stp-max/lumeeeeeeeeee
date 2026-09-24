@@ -2,8 +2,22 @@ import React, { createContext, useCallback, useContext, useMemo, useRef, useStat
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import NewJobModal, { JobDraftInitialValues, JobModalSourceContext } from '../components/NewJobModal';
-import InvoicePreviewModal from '../components/InvoicePreviewModal';
+/* Les deux modales sont chargées À LA DEMANDE.
+
+   `NewJobModal` pèse 196 Ko dans le bundle d'entrée — mesuré à la sourcemap,
+   c'est le plus gros module de src/ et le 4e tous modules confondus, devant
+   les traductions. Il était importé en dur par ce contexte, monté en
+   permanence avec `isOpen={false}` : quelqu'un qui consulte ses factures
+   téléchargeait le formulaire de job sans jamais l'ouvrir.
+
+   Le composant sort déjà tôt quand `isOpen` est faux (`if (!isOpen) return`
+   dans ses effets), donc ne le monter qu'à l'ouverture ne change rien à son
+   comportement — seulement le moment où son code arrive. */
+import { lazy, Suspense } from 'react';
+import type { JobDraftInitialValues, JobModalSourceContext } from '../components/NewJobModal';
+
+const NewJobModal = lazy(() => import('../components/NewJobModal'));
+const InvoicePreviewModal = lazy(() => import('../components/InvoicePreviewModal'));
 import { createJob, getJobModalDraftById, updateJob, softDeleteJob } from '../lib/jobsApi';
 import { geocodeJob } from '../lib/geocodeApi';
 import { invalidateScheduleCache } from '../lib/scheduleApi';
@@ -215,6 +229,12 @@ export function JobModalControllerProvider({ children }: { children: React.React
   return (
     <JobModalControllerContext.Provider value={value}>
       {children}
+      {/* Monté seulement quand il s'ouvre : c'est ce qui permet au code de ne
+          pas être téléchargé avant. Pas d'indicateur de chargement — le
+          fichier arrive en quelques dizaines de millisecondes et une bannière
+          qui clignote au clic ferait moins soigné qu'un court délai. */}
+      {isOpen && (
+      <Suspense fallback={null}>
       <NewJobModal
         isOpen={isOpen}
         onClose={closeJobModal}
@@ -230,11 +250,17 @@ export function JobModalControllerProvider({ children }: { children: React.React
         onDelete={handleDelete}
         isDeleting={isDeleting}
       />
+      </Suspense>
+      )}
+      {isInvoicePreviewOpen && (
+      <Suspense fallback={null}>
       <InvoicePreviewModal
         isOpen={isInvoicePreviewOpen}
         invoiceId={previewInvoiceId}
         onClose={() => setIsInvoicePreviewOpen(false)}
       />
+      </Suspense>
+      )}
     </JobModalControllerContext.Provider>
   );
 }
