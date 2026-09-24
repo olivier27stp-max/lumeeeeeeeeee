@@ -28,7 +28,7 @@ describe('gabarit client', () => {
     expect(html).toContain('info@visionlavage.ca');
     expect(html).toContain('Facebook');
     expect(html).toContain('TPS No : 123456789 RT0001');
-    expect(html).toContain('Envoyé avec <a href="https://lumecrm.net"');
+    expect(html).not.toContain('Envoyé avec');
     expect(html).not.toContain('Sent via');
     expect(html).not.toContain('on behalf of');
   });
@@ -49,7 +49,7 @@ describe('gabarit client', () => {
     const en = rendreCourrielClient({ langue: 'en', marque, titre: 'Your invoice 40', bouton: { texte: 'View invoice', url: 'https://x' } });
     expect(en).toContain('<html lang="en">');
     expect(en).toContain('Button not working?');
-    expect(en).toContain('Sent with <a');
+    expect(en).not.toContain('Sent with');
   });
   it('échappe tout ce qui vient des données', () => {
     const h = rendreCourrielClient({ langue: 'fr', marque: { ...marque, nom: '<b>X</b>' }, titre: '<script>alert(1)</script>', intro: 'a & b' });
@@ -216,8 +216,8 @@ describe('pastille Lume au pied des courriels clients', () => {
   it('la rend ronde et à une taille lisible, dimensions déclarées pour Outlook', () => {
     const html = courriel();
     const img = html.match(/<img[^>]*lume-mascotte-pastille[^>]*>/)?.[0] ?? '';
-    expect(img).toContain('width="32"');
-    expect(img).toContain('height="32"');
+    expect(img).toContain('width="28"');
+    expect(img).toContain('height="28"');
     expect(img).toContain('border-radius:50%');
   });
 });

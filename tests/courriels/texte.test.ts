@@ -52,13 +52,16 @@ describe('courriel client → texte', () => {
     expect(texte).not.toContain('​');
   });
 
-  it('porte la signature et le pied : nom, coordonnées, réseaux, taxes, « Envoyé avec Lume »', () => {
+  it('porte la signature et le pied : nom, coordonnées, réseaux, taxes — et jamais Lume', () => {
     expect(texte).toContain('— Vision Lavage');
     expect(texte).toContain('info@visionlavage.ca');
     expect(texte).toContain('514 555-0199');
     expect(texte).toContain('Facebook : https://facebook.com/visionlavage');
     expect(texte).toContain('TPS No : 123456789 RT0001');
-    expect(texte).toContain('Envoyé avec Lume : https://lumecrm.net');
+    // Le courriel vient de l'entreprise : la plateforme ne se NOMME nulle part.
+    // (le lien du bouton pointe vers lumecrm.net, c'est l'URL du document — normal)
+    expect(texte).not.toMatch(/Envoyé avec|Sent with/i);
+    expect(texte).not.toMatch(/Lume/);
   });
 
   it('reste lisible : une idée par ligne, pas de lignes vides en rafale', () => {
