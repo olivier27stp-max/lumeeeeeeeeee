@@ -223,13 +223,12 @@ export default function PipelineJournalLots() {
           </select>
         </div>
       </div>
+      )}
 
       {isLoading && (
         <p className="mt-4 text-[12px] text-text-muted" role="status">
           {fr ? 'Chargement…' : 'Loading…'}
         </p>
-      )}
-
       )}
 
       {!isLoading && lignes.length === 0 && (
