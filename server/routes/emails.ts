@@ -167,11 +167,41 @@ export function buildEmailLayout(
 // client sees "From: {Company}" and replies land straight in the business's email
 // — the "connect your email" experience with zero per-company SMTP/DNS setup.
 // (Each org's email lives in company_settings; no per-tenant config needed.)
+/**
+ * La partie locale porte le nom de l'entreprise, pas `noreply` (2026-09-24).
+ *
+ * L'adresse affichée était « Coquin lavage <noreply@lumecrm.net> » : en
+ * dépliant l'en-tête, le client de Coquin lavage lisait le nom de la
+ * plateforme. Le domaine doit rester `lumecrm.net` — c'est lui qui est
+ * vérifié chez SES, et en changer ferait rejeter l'envoi — mais la partie
+ * locale, elle, est libre : SES accepte n'importe quel préfixe sur un
+ * domaine vérifié. « Coquin lavage <coquin-lavage@lumecrm.net> » ne cache
+ * pas la plateforme, mais ne la met plus en avant.
+ *
+ * Tant que l'entreprise n'a pas vérifié SON domaine (`senderForOrg`), c'est
+ * le mieux qu'on puisse faire sans casser la délivrabilité.
+ */
+export function prefixeDepuisNom(nom: string | null | undefined): string | null {
+  const base = String(nom ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40)
+    .replace(/-+$/, '');
+  // Un nom qui ne laisse aucun caractère utilisable (idéogrammes, emoji) :
+  // on garde le préfixe d'origine plutôt qu'une adresse vide ou bancale.
+  return base.length >= 2 ? base : null;
+}
+
 export function senderFor(company: CompanyInfo): { from: string; replyTo?: string } {
   const baseAddr = emailFrom.match(/<([^>]+)>/)?.[1] || process.env.SMTP_USER || 'noreply@lume.crm';
   const name = company.company_name || 'Lume';
+  const domaine = baseAddr.split('@')[1];
+  const prefixe = prefixeDepuisNom(company.company_name);
+  const adresse = prefixe && domaine ? `${prefixe}@${domaine}` : baseAddr;
   return {
-    from: `${name} <${baseAddr}>`,
+    from: `${name} <${adresse}>`,
     replyTo: company.company_email || undefined,
   };
 }

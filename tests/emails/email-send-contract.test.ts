@@ -86,10 +86,16 @@ describe('invariants — à ne casser sous aucun prétexte', () => {
     // délivrabilité de TOUS les tenants, pas seulement celui-là.
     const fn = routeBody(emails, 'export function senderFor', '// ── POST /api/emails/send-invoice');
     expect(fn).toContain("emailFrom.match(/<([^>]+)>/)?.[1] || process.env.SMTP_USER");
-    expect(fn).toContain('from: `${name} <${baseAddr}>`');
     expect(fn).toContain('replyTo: company.company_email || undefined');
     // Le From ne doit jamais être directement l'adresse du tenant.
     expect(fn).not.toMatch(/from:\s*company\.company_email/);
+    // Depuis 2026-09-24 la partie locale porte le nom de l'entreprise
+    // (« coquin-lavage@ » plutôt que « noreply@ ») : c'est le DOMAINE qui doit
+    // rester celui de la plateforme, lui seul est vérifié chez SES.
+    // Le comportement est prouvé dans expediteur-nom-entreprise.test.ts ;
+    // ici on fige l'invariant lui-même.
+    expect(fn).toContain("baseAddr.split('@')[1]");
+    expect(fn).toMatch(/\$\{prefixe\}@\$\{domaine\}/);
   });
 
   it('les 3 helpers partagés restent exportés depuis routes/emails.ts', () => {
