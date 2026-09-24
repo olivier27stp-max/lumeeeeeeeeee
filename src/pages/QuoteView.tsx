@@ -12,7 +12,6 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { versDate, finDeJournee } from '../lib/dateSeule';
 
 // ── Lume fallback logo (panda) ──
-const LUME_LOGO_URL = '/lume-logo.png';
 
 interface CompanyBranding {
   company_name: string;
@@ -477,8 +476,9 @@ export default function QuoteView() {
   const depositAmount = calcDepositAmount(quote);
   const companyAddress = buildCompanyAddress(company);
 
-  // Company logo: fallback to Lume panda
-  const logoUrl = company.logo_url || LUME_LOGO_URL;
+  // Sans logo d'entreprise, on n'affiche rien : le nom suit juste en dessous.
+  // Un repli sur le logo de Lume ferait passer le devis pour un devis de Lume.
+  const logoUrl = company.logo_url || null;
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -538,12 +538,14 @@ export default function QuoteView() {
             <div className="flex items-start justify-between">
               {/* Logo + Company info */}
               <div className="flex-1">
-                <img
-                  src={logoUrl}
-                  alt={company.company_name}
-                  className="h-10 max-w-[180px] object-contain mb-3"
-                  onError={(e) => { (e.target as HTMLImageElement).src = LUME_LOGO_URL; }}
-                />
+                {logoUrl && (
+                  <img
+                    src={logoUrl}
+                    alt={company.company_name}
+                    className="h-10 max-w-[180px] object-contain mb-3"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                  />
+                )}
                 <h2 className="text-[14px] font-semibold text-[#111]">{company.company_name}</h2>
                 {companyAddress && (
                   <p className="text-[12px] text-[#888] mt-0.5">{companyAddress}</p>

@@ -3,7 +3,6 @@ import { resolveBrand } from '../../lib/brandColor';
 import { formatCents } from '../../lib/jobCalc';
 
 // ── Lume fallback logo (panda) ──
-const LUME_LOGO_URL = '/lume-logo.png';
 
 /**
  * Resolved, render-ready data for a job agreement document. Built either
@@ -99,7 +98,9 @@ function fmtVisitDate(date: string, language: 'en' | 'fr'): string {
  */
 export default function AgreementDocument({ data, language }: { data: AgreementDocData; language: 'en' | 'fr' }) {
   const fr = language === 'fr';
-  const logoUrl = data.logoUrl || LUME_LOGO_URL;
+  // Sans logo d'entreprise, on n'affiche rien : le nom suit juste en dessous.
+  // Un repli sur le logo de Lume ferait signer un contrat qui a l'air d'être de Lume.
+  const logoUrl = data.logoUrl || null;
   // Tout hex invalide retombe sur l'encre noire — la valeur part dans du CSS.
   const brand = resolveBrand(data.company.brandColor);
   const plan = data.servicePlan && data.servicePlan.visits.length > 0 ? data.servicePlan : null;
@@ -133,12 +134,14 @@ export default function AgreementDocument({ data, language }: { data: AgreementD
       <div className="px-8 pt-8 pb-6">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <img
-              src={logoUrl}
-              alt={data.company.name}
-              className="h-32 max-w-[440px] object-contain mb-3"
-              onError={(e) => { (e.target as HTMLImageElement).src = LUME_LOGO_URL; }}
-            />
+            {logoUrl && (
+              <img
+                src={logoUrl}
+                alt={data.company.name}
+                className="h-32 max-w-[440px] object-contain mb-3"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            )}
             <h2 className="text-[14px] font-semibold text-[#111]">{data.company.name}</h2>
             {data.company.address && (
               <p className="text-[12px] text-[#888] mt-0.5">{data.company.address}</p>
