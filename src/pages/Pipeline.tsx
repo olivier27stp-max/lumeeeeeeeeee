@@ -210,9 +210,23 @@ export default function Pipeline() {
       await deplacerDeal(dealId, versEtapeId);
       rafraichir();
       if (cible.kind === 'won') {
-        // Le deal est gagné tout de suite ; la job est proposée juste après.
-        // Annuler la fenêtre laisse le deal gagné, avec le badge « Job à créer ».
-        setDealAGagner({ ...deal, stage_id: versEtapeId });
+        // Le deal est gagné TOUT DE SUITE, en base — puis la job est
+        // proposée. L'ancien code ne posait `stage_id` que dans l'objet
+        // local passé au modal : la carte ne bougeait jamais, même après
+        // « Job créée et liée au deal » (QA 2026-09-24, P0-1).
+        //
+        // Annuler la fenêtre laisse donc le deal gagné, avec le badge
+        // « Job à créer » — ce que la fenêtre promet depuis le début.
+        void (async () => {
+          try {
+            await deplacerDeal(deal.id, versEtapeId);
+            rafraichir();
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : String(e));
+            return;
+          }
+          setDealAGagner({ ...deal, stage_id: versEtapeId });
+        })();
       } else {
         toast.success(fr ? `Déplacé vers « ${cible.name_fr} ».` : `Moved to “${cible.name_en}”.`);
       }
@@ -375,7 +389,24 @@ export default function Pipeline() {
             toast.error(e instanceof Error ? e.message : String(e));
           }
         }}
-        onCreerJob={(deal) => { setDealOuvert(null); setDealAGagner(deal); }}
+        onCreerJob={(deal, versEtapeId) => {
+          setDealOuvert(null);
+          // Depuis le sélecteur d'étape de la fiche, `versEtapeId` porte
+          // l'étape « Gagné » visée : on l'écrit avant d'ouvrir la fenêtre.
+          // Depuis le bouton « Créer une job » d'un deal ouvert, il est
+          // absent — créer une job ne déclare alors rien de gagné.
+          if (!versEtapeId) { setDealAGagner(deal); return; }
+          void (async () => {
+            try {
+              await deplacerDeal(deal.id, versEtapeId);
+              rafraichir();
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : String(e));
+              return;
+            }
+            setDealAGagner({ ...deal, stage_id: versEtapeId });
+          })();
+        }}
       />
 
       <CreerPipelineModal
@@ -412,6 +443,8 @@ export default function Pipeline() {
         }}
         onCreer={async (dealId, jobId) => {
           try {
+            // L'étape a déjà été écrite avant l'ouverture de la fenêtre :
+            // `lierJob` ne fait plus que rattacher la job.
             await lierJob(dealId, jobId);
             rafraichir();
             setDealAGagner(null);

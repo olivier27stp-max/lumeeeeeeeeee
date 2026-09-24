@@ -33,7 +33,9 @@ import {
   abandonnerDeal, fetchRaisonsProposees, majDateFermeture, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
-import { LIBELLE_SOURCE, depuis, montant } from '../../lib/pipeline/presentation';
+import {
+  depuis, montant, libelleSource,
+} from '../../lib/pipeline/presentation';
 import type { DealSource } from '../../lib/pipeline/mockData';
 
 interface Membre { id: string; name: string }
@@ -73,13 +75,6 @@ const SOURCES_CONNUES = ['form_web', 'meta', 'manual', 'd2d'] as const;
 const LIBELLE_SOURCE_EXTRA: Record<string, { fr: string; en: string }> = {
   d2d: { fr: 'Porte-à-porte', en: 'Door to door' },
 };
-
-/** `deals.source` est du texte libre en base : un canal inconnu s'affiche tel quel. */
-function libelleSource(source: string, fr: boolean): string {
-  const connu = LIBELLE_SOURCE[source as DealSource] ?? LIBELLE_SOURCE_EXTRA[source];
-  if (!connu) return source;
-  return fr ? connu.fr : connu.en;
-}
 
 /** Délai entre la création du deal et le premier contact, en heures. */
 function delaiPremierContactHeures(deal: Deal): number | null {
@@ -951,7 +946,12 @@ export default function DealDrawer({
   montantProvenance?: MontantProvenance;
   onClose: () => void;
   onAssigner: (dealId: string, membreId: string | null) => void;
-  onCreerJob: (deal: Deal) => void;
+  /**
+   * Ouvre la création de job. `versEtapeId` porte l'étape « Gagné » choisie
+   * dans le sélecteur ; il est absent quand on clique « Créer une job » sur
+   * un deal encore ouvert — créer une job ne déclare alors rien de gagné.
+   */
+  onCreerJob: (deal: Deal, versEtapeId?: string) => void;
   /** Appelé après chaque écriture réussie faite DEPUIS la fiche, pour que le parent recharge. */
   onChangement?: () => void;
 }) {
@@ -1099,9 +1099,11 @@ export default function DealDrawer({
     }
     setEtapePerdueVisee(null);
     if (cible.kind === 'won') {
-      // Gagné passe par le même chemin que le board : le parent ouvre le modal
-      // de création de job, qui écrit l'étape ET la job d'un seul geste.
-      onCreerJob(deal);
+      // Le parent écrit l'étape PUIS ouvre la fenêtre de job. L'ancien code
+      // n'envoyait pas la cible, et le déplacement n'avait jamais lieu : le
+      // message disait « Job créée et liée » pendant que la carte restait en
+      // place (QA 2026-09-24, P0-1).
+      onCreerJob(deal, versId);
       return;
     }
     void ecrire(

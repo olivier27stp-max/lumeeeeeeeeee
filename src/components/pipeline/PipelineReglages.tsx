@@ -24,7 +24,7 @@ import CreerPipelineModal from './CreerPipelineModal';
 import PipelinesTableau from './PipelinesTableau';
 import { useTranslation } from '../../i18n';
 import {
-  ajouterEtape, ajouterRaisonProposee, archiverEtape, archiverRaisonProposee,
+  ajouterEtape, ajouterRaisonProposee, archiverEtape, archiverRaisonProposee, desarchiverEtape,
   donnerAccesPipeline, fetchAccesPipeline, fetchMembres, retirerAccesPipeline, rouvrirPipeline,
   creerPipeline, definirParDefaut, fetchPipelines, fetchRaisonsProposees,
   renommerEtape, renommerPipeline, reordonnerEtapes,
@@ -79,7 +79,7 @@ function Section({ titre, sousTitre, action, children }: {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-[15px] font-semibold text-text-primary">{titre}</h2>
-          <p className="text-[12px] text-text-tertiary mt-0.5 max-w-xl leading-relaxed">{sousTitre}</p>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-text-tertiary">{sousTitre}</p>
         </div>
         {action}
       </div>
@@ -107,8 +107,8 @@ const MODELES: { valeur: ModelePipeline; fr: string; en: string; aideFr: string;
     valeur: 'construction',
     fr: 'Construction',
     en: 'Construction',
-    aideFr: 'Visite planifiée et Estimation remplacent l’étape Soumission.',
-    aideEn: 'Site visit and Estimate replace the Quote stage.',
+    aideFr: 'Nouveau lead → Visite planifiée → Estimation envoyée → Négociation → Gagné / Perdu.',
+    aideEn: 'New lead → Site visit → Estimate sent → Negotiation → Won / Lost.',
   },
 ];
 
@@ -836,6 +836,30 @@ export default function PipelineReglages({
     }
   }
 
+  async function desarchiver(id: string) {
+    const etape = etapes.find((e) => e.id === id);
+    if (!etape) return;
+
+    const ok = await confirmer({
+      title: fr ? "Remettre l'étape sur le board ?" : 'Restore the stage?',
+      message: fr
+        ? `« ${etape.name_fr} » réapparaîtra en dernière position. Tu pourras la remonter avec les flèches.`
+        : `“${etape.name_en}” will come back in last position. You can move it up with the arrows.`,
+      confirmLabel: fr ? 'Remettre' : 'Restore',
+    });
+    if (!ok) return;
+
+    try {
+      await desarchiverEtape(id);
+      onChangement();
+      toast.success(fr ? 'Étape remise sur le board.' : 'Stage restored to the board.');
+    } catch (e) {
+      console.error('[PipelineReglages] désarchivage refusé', e);
+      toast.error(messageErreur(e, fr));
+      onChangement();
+    }
+  }
+
   async function ajouter(nomFr: string, nomEn: string) {
     const position = visibles.filter((e) => e.kind === 'open').length + 1;
     try {
@@ -985,6 +1009,19 @@ export default function PipelineReglages({
                   <span className="text-[10.5px] text-text-muted ml-auto">
                     {fr ? 'conservée dans les statistiques' : 'kept in statistics'}
                   </span>
+                  {/*
+                    Archiver était IRRÉVERSIBLE : la liste affichait l'étape
+                    sans aucun moyen de la reprendre (QA 2026-09-24, P0-2).
+                    Une action destructive sans retour n'a pas sa place dans
+                    des réglages qu'on explore.
+                  */}
+                  <button
+                    type="button"
+                    onClick={() => { void desarchiver(e.id); }}
+                    className="shrink-0 rounded px-2 py-0.5 text-[11px] text-text-secondary underline-offset-2 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+                  >
+                    {fr ? 'Remettre sur le board' : 'Restore to board'}
+                  </button>
                 </li>
               ))}
             </ul>
