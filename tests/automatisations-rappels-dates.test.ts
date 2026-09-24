@@ -89,12 +89,12 @@ describe('le SENS du décalage — la faute qui ne se voit pas', () => {
      */
     const sb = faireSupabase({
       automation_rules: [{ id: 'r1', org_id: 'org-A', conditions: { champ_id: 'col-1', jours_avant: 7 } }],
-      'custom_columns.single': { entity: 'clients' },
-      custom_column_values: [],
+      'custom_fields.single': { object_type: 'client', field_type: 'date', archived_at: null },
+      custom_field_values: [],
     });
     await balayerRappelsDates(sb.client as never, new Date('2026-09-15T12:00:00-04:00'));
 
-    const lecture = sb.journal.find((e) => e.table === 'custom_column_values');
+    const lecture = sb.journal.find((e) => e.table === 'custom_field_values');
     const jour = lecture?.filtres.find(([k]) => k === 'value_date')?.[1];
     expect(jour, '7 jours APRÈS le 15 septembre').toBe('2026-09-22');
   });
@@ -102,28 +102,28 @@ describe('le SENS du décalage — la faute qui ne se voit pas', () => {
   it('un décalage nul vise aujourd’hui', async () => {
     const sb = faireSupabase({
       automation_rules: [{ id: 'r1', org_id: 'org-A', conditions: { champ_id: 'col-1', jours_avant: 0 } }],
-      'custom_columns.single': { entity: 'clients' },
-      custom_column_values: [],
+      'custom_fields.single': { object_type: 'client', field_type: 'date', archived_at: null },
+      custom_field_values: [],
     });
     await balayerRappelsDates(sb.client as never, new Date('2026-09-15T12:00:00-04:00'));
-    const lecture = sb.journal.find((e) => e.table === 'custom_column_values');
+    const lecture = sb.journal.find((e) => e.table === 'custom_field_values');
     expect(lecture?.filtres.find(([k]) => k === 'value_date')?.[1]).toBe('2026-09-15');
   });
 
-  it('une colonne qui ne porte pas sur les CLIENTS est ignorée', async () => {
+  it('un champ qui ne porte pas sur les CLIENTS est ignoré', async () => {
     /*
-     * `custom_columns.entity` vaut 'clients', 'jobs' ou 'invoices' — au
-     * PLURIEL (CHECK en base). Sur une colonne de `jobs`, le balayage
-     * chercherait un client avec un identifiant de job : jamais rien,
-     * silencieusement.
+     * `custom_fields.object_type` vaut client, deal, job, quote ou invoice
+     * — au SINGULIER (enum `cf_object_type`, relevé dans le catalogue le
+     * 2026-09-24). Sur un champ de `job`, `custom_field_values.client_id`
+     * est nul : le balayage ne trouverait jamais rien, silencieusement.
      */
     const sb = faireSupabase({
       automation_rules: [{ id: 'r1', org_id: 'org-A', conditions: { champ_id: 'col-1', jours_avant: 7 } }],
-      'custom_columns.single': { entity: 'jobs' },
+      'custom_fields.single': { object_type: 'job', field_type: 'date', archived_at: null },
     });
     const r = await balayerRappelsDates(sb.client as never);
     expect(r.emis).toBe(0);
-    expect(sb.journal.some((e) => e.table === 'custom_column_values'), 'aucune lecture de dates').toBe(false);
+    expect(sb.journal.some((e) => e.table === 'custom_field_values'), 'aucune lecture de dates').toBe(false);
   });
 });
 
@@ -138,12 +138,12 @@ describe('le balayage ne sort jamais de son organisation', () => {
      */
     const sb = faireSupabase({
       automation_rules: [{ id: 'r1', org_id: 'org-A', conditions: { champ_id: 'col-1', jours_avant: 7 } }],
-      'custom_columns.single': { entity: 'clients' },
-      custom_column_values: [],
+      'custom_fields.single': { object_type: 'client', field_type: 'date', archived_at: null },
+      custom_field_values: [],
     });
     await balayerRappelsDates(sb.client as never);
 
-    const lectureValeurs = sb.journal.find((e) => e.table === 'custom_column_values');
+    const lectureValeurs = sb.journal.find((e) => e.table === 'custom_field_values');
     expect(lectureValeurs, 'le balayage doit lire les valeurs').toBeDefined();
     const orgFiltre = lectureValeurs!.filtres.find(([k]) => k === 'org_id');
     expect(orgFiltre?.[1], 'l’org de la RÈGLE, jamais une autre').toBe('org-A');
@@ -167,7 +167,7 @@ describe('ce que le balayage refuse d’envoyer', () => {
     expect(r.emis).toBe(0);
     expect(r.erreurs, 'une règle mal réglée n’est pas une erreur système').toBe(0);
     // Et elle n'a pas déclenché de lecture de dates.
-    expect(sb.journal.some((e) => e.table === 'custom_column_values')).toBe(false);
+    expect(sb.journal.some((e) => e.table === 'custom_field_values')).toBe(false);
   });
 
   it('un client SUPPRIMÉ ne reçoit rien', () => {
@@ -209,5 +209,54 @@ describe('le cron est branché', () => {
     // par une session utilisateur.
     const route = cron.slice(cron.indexOf("'/cron/rappels-dates'"));
     expect(route.slice(0, 400)).toMatch(/getServiceClient/);
+  });
+});
+
+describe('les NOMS de tables — la faute que les mocks ne voient pas', () => {
+  /*
+   * Ce fichier a passé au vert pendant que le balayage lisait
+   * `custom_columns` / `custom_column_values` : des tables qui N'EXISTENT
+   * PAS. Le faux Supabase répondait à n'importe quel nom, donc les tests
+   * confirmaient le bug au lieu de le révéler. C'est `check:db-coherence`,
+   * qui interroge le vrai catalogue, qui l'a trouvé.
+   *
+   * On fige donc les noms réels (catalogue de staging, 2026-09-24). Avec
+   * PostgREST, une table inexistante fait échouer TOUTE la requête et
+   * supabase-js ne lève jamais : la fonctionnalité meurt en silence.
+   */
+  it('lit `custom_fields` et `custom_field_values`, jamais `custom_columns`', () => {
+    expect(source).toMatch(/from\('custom_fields'\)/);
+    expect(source).toMatch(/from\('custom_field_values'\)/);
+    expect(source, 'ces tables n’existent pas en base').not.toMatch(/custom_columns?'/);
+  });
+
+  it('les colonnes citées sont celles du vrai schéma', () => {
+    // `object_type` (pas `entity`), `field_id` (pas `column_id`),
+    // `client_id` (pas `record_id`).
+    expect(source).toMatch(/object_type/);
+    expect(source).toMatch(/\.eq\('field_id'/);
+    expect(source).toMatch(/client_id/);
+    expect(source).not.toMatch(/'column_id'/);
+    expect(source).not.toMatch(/'record_id'/);
+  });
+
+  it('l’entité se compare au SINGULIER', () => {
+    // `cf_object_type` vaut client, deal, job, quote, invoice. Comparer à
+    // 'clients' ne serait jamais vrai : zéro rappel, zéro erreur.
+    expect(source).toMatch(/object_type !== 'client'/);
+    expect(source).not.toMatch(/=== 'clients'|!== 'clients'/);
+  });
+
+  it('le déclencheur reste marqué « bientôt » tant qu’on ne peut pas choisir le champ', () => {
+    /*
+     * Le balayage a besoin de `conditions.champ_id`, et aucun écran ne
+     * permet encore de le saisir : publier une telle règle donnerait une
+     * automatisation qui ne part JAMAIS, sans message. Le marqueur
+     * `bientot` bloque la publication avec la raison.
+     */
+    const catalogue = readFileSync(resolve(RACINE, 'src/lib/automationCatalogue.ts'), 'utf8');
+    const bloc = catalogue.slice(catalogue.indexOf("cle: 'date.reached'"));
+    expect(bloc.slice(0, 1200), 'sans choix du champ, la règle ne partirait jamais')
+      .toMatch(/bientot: true/);
   });
 });

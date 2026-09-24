@@ -198,6 +198,19 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     aide_fr: 'Quand une date d’un champ personnalisé arrive — fin de contrat, garantie, entretien annuel.',
     aide_en: 'When a date from a custom field arrives — contract end, warranty, yearly service.',
     famille: 'client', entite: 'lead',
+    /*
+     * Le balayage quotidien existe (`server/lib/rappels-dates.ts`) et lit le
+     * bon schéma, mais il a besoin de DEUX réglages que rien ne permet encore
+     * de saisir : QUEL champ date surveiller (`conditions.champ_id`) et
+     * combien de jours avant (`conditions.jours_avant`). Un déclencheur ne
+     * porte aucun champ de configuration aujourd'hui.
+     *
+     * Sans `champ_id`, le balayage passe son chemin en journalisant « règle
+     * sans champ date ». Publier là-dessus donnerait une automatisation qui
+     * ne part JAMAIS, sans message : exactement ce que `bientot` empêche.
+     * À retirer en même temps qu'on ajoutera le choix du champ.
+     */
+    bientot: true,
   },
 
   // ── Pipeline de ventes ──

@@ -32,6 +32,8 @@ export interface AutomationRule {
   created_at: string;
   updated_at: string;  /** Dossier de rangement — `null` = à la racine. */
   folder_id?: string | null;
+  /** À la corbeille depuis. `null` = vivante. */
+  deleted_at?: string | null;
 }
 
 export async function getAutomationRules(): Promise<AutomationRule[]> {

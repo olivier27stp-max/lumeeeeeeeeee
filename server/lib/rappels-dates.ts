@@ -8,7 +8,7 @@
 
    ── Comment ça marche ──────────────────────────────────────────
    Un balayage QUOTIDIEN (`POST /api/cron/rappels-dates`) compare les
-   valeurs de `custom_column_values.value_date` à la date du jour, décalée
+   valeurs de `custom_field_values.value_date` à la date du jour, décalée
    du délai de chaque règle. Chaque correspondance émet `date.reached`,
    que le moteur traite comme n'importe quel événement.
 
@@ -84,7 +84,9 @@ export async function balayerRappelsDates(
     .from('automation_rules')
     .select('id, org_id, conditions')
     .eq('trigger_event', 'date.reached')
-    .eq('is_active', true);
+    .eq('is_active', true)
+    // Une règle à la corbeille ne balaie plus rien.
+    .is('deleted_at', null);
 
   if (error) {
     logger.error('[rappels-dates] lecture des règles échouée', { message: error.message });
@@ -105,27 +107,41 @@ export async function balayerRappelsDates(
       }
 
       /*
-       * La colonne doit porter sur les CLIENTS.
+       * Le champ doit porter sur les CLIENTS, et contenir une DATE.
        *
-       * `custom_columns.entity` vaut 'clients', 'jobs' ou 'invoices'
-       * (CHECK en base, au PLURIEL — vérifié le 2026-09-24). Le balayage
-       * traite `record_id` comme une fiche client : sur une colonne de
-       * `jobs`, il chercherait un client avec un identifiant de job et ne
-       * trouverait jamais rien. Silencieusement.
+       * Schéma réel, relevé dans le catalogue de staging le 2026-09-24 :
+       * `custom_fields` (pas `custom_columns`), avec `object_type` de type
+       * `cf_object_type` — au SINGULIER : client, deal, job, quote, invoice.
+       * Le balayage lit `custom_field_values.client_id` : sur un champ de
+       * `job`, cette colonne est nulle et on ne trouverait jamais rien.
+       *
+       * `archived_at` : un champ archivé ne doit plus déclencher d'envoi.
        */
-      const { data: colonne } = await supabase
-        .from('custom_columns')
-        .select('entity')
+      const { data: champ } = await supabase
+        .from('custom_fields')
+        .select('object_type, field_type, archived_at')
         .eq('id', champId)
         .eq('org_id', regle.org_id)
         .maybeSingle();
-      if (!colonne) {
+      if (!champ) {
         logger.warn('[rappels-dates] champ date introuvable — règle ignorée', { rule_id: regle.id });
         continue;
       }
-      if (colonne.entity !== 'clients') {
+      if (champ.archived_at) {
+        logger.warn('[rappels-dates] champ archivé — règle ignorée', { rule_id: regle.id });
+        continue;
+      }
+      if (champ.object_type !== 'client') {
         logger.warn('[rappels-dates] champ date hors des fiches clients — règle ignorée', {
-          rule_id: regle.id, entity: colonne.entity,
+          rule_id: regle.id, object_type: champ.object_type,
+        });
+        continue;
+      }
+      if (champ.field_type !== 'date') {
+        // Un champ texte n'alimente pas `value_date` : la règle ne trouverait
+        // jamais rien, sans erreur. On le dit plutôt que de balayer pour rien.
+        logger.warn('[rappels-dates] le champ visé n’est pas une date — règle ignorée', {
+          rule_id: regle.id, field_type: champ.field_type,
         });
         continue;
       }
@@ -151,10 +167,10 @@ export async function balayerRappelsDates(
        * jamais lire les dates d'une autre.
        */
       const { data: valeurs, error: errVal } = await supabase
-        .from('custom_column_values')
-        .select('record_id, value_date')
+        .from('custom_field_values')
+        .select('client_id, value_date')
         .eq('org_id', regle.org_id)
-        .eq('column_id', champId)
+        .eq('field_id', champId)
         .eq('value_date', jourVise)
         .limit(500);
 
@@ -169,17 +185,18 @@ export async function balayerRappelsDates(
 
       for (const v of valeurs) {
         /*
-         * L'entité est le CLIENT : `custom_column_values.record_id` pointe
-         * la fiche, et c'est elle que les messages décrivent.
+         * L'entité est le CLIENT : `custom_field_values.client_id` pointe la
+         * fiche, et c'est elle que les messages décrivent.
          *
          * On vérifie qu'elle existe ENCORE et qu'elle n'est pas supprimée :
          * une date peut survivre à son client, et écrire à quelqu'un qui a
          * demandé son effacement serait une faute.
          */
+        if (!v.client_id) continue;
         const { data: client } = await supabase
           .from('clients')
           .select('id, deleted_at')
-          .eq('id', v.record_id)
+          .eq('id', v.client_id)
           .eq('org_id', regle.org_id)
           .maybeSingle();
         if (!client || client.deleted_at) continue;
@@ -187,7 +204,7 @@ export async function balayerRappelsDates(
         await eventBus.emit('date.reached', {
           orgId: regle.org_id,
           entityType: 'client',
-          entityId: v.record_id,
+          entityId: v.client_id,
           metadata: {
             champ_id: champId,
             date: v.value_date,

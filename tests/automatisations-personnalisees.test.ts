@@ -289,22 +289,48 @@ describe('route — les gardes qui demandent de lire le catalogue', () => {
     // On découpe sur chaque `.from('automation_…')` et on regarde le client
     // qui le précède : plus lisible et plus sûr qu'une regex multiligne.
     const morceaux = source.split(/\.from\('automation_/).slice(0, -1);
-    const acces = morceaux.map((m) => (/getServiceClient\(\)\s*$/.test(m.trimEnd()) ? 'service' : 'auth'));
+    const acces = morceaux.map((m, i) => ({
+      service: /getServiceClient\(\)\s*$|await service\s*$/.test(m.trimEnd()),
+      // La table visée, pour pouvoir nommer l'exception plutôt que de la
+      // laisser passer en silence.
+      table: 'automation_' + (source.split(/\.from\('automation_/)[i + 1] ?? '').split("'")[0],
+    }));
     expect(acces.length).toBeGreaterThan(3);
-    for (const client of acces) {
-      expect(client, 'une table automation_* lue avec le service_role').toBe('auth');
+    for (const a of acces) {
+      if (!a.service) continue;
+      /*
+       * UNE exception, mesurée et obligatoire : `automation_scheduled_tasks`
+       * n'accorde à `authenticated` que le SELECT (catalogue de staging,
+       * 2026-09-24 : une seule policy `…_select_org`, aucun grant UPDATE).
+       * Annuler les envois prévus avec `auth.client` échouait donc sur
+       * « permission denied », et supprimer une automatisation renvoyait 500
+       * pour tout le monde.
+       */
+      expect(a.table, 'une table automation_* écrite avec le service_role')
+        .toBe('automation_scheduled_tasks');
     }
   });
 
-  it('le service_role ne sert QUE au journal des couts de Lumi', () => {
-    // Une seule exception, et elle est obligatoire : `ai_usage` n'accepte
-    // d'ecriture que du `service_role` (policy `ai_usage_service`, verifiee
-    // en base le 2026-09-24). Sans elle, une generation ne serait jamais
-    // facturee au budget, et le plafond mensuel ne voudrait plus rien dire.
+  it('le service_role reste limité à ses deux usages justifiés', () => {
+    /*
+     * Deux exceptions, chacune imposée par la base :
+     *   · `ai_usage` n'accepte d'écriture que du service_role (policy
+     *     `ai_usage_service`) — sans elle, une génération ne serait jamais
+     *     facturée au budget et le plafond mensuel ne voudrait plus rien ;
+     *   · `automation_scheduled_tasks` n'accorde que le SELECT à
+     *     `authenticated` — voir le test ci-dessus.
+     *
+     * Un TROISIÈME usage doit être justifié ici, pas ajouté en passant :
+     * le service_role contourne la RLS, donc chaque appel est une porte
+     * ouverte sur toutes les entreprises à la fois.
+     */
     const appels = source.match(/getServiceClient\(\)/g) ?? [];
-    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(1);
+    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(2);
     const bloc = source.slice(source.indexOf('rules/generer'));
     expect(bloc.slice(0, 2000)).toContain('getServiceClient()');
+    // Et l'autre est bien dans la suppression, pas ailleurs.
+    const suppression = source.slice(source.indexOf("router.delete('/automations/rules/:id'"));
+    expect(suppression.slice(0, 2500)).toContain('getServiceClient()');
   });
 
   it('filtre chaque requête sur l\'org de la session', () => {

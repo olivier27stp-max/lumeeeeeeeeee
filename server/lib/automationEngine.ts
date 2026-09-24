@@ -551,6 +551,9 @@ async function handleEvent(event: CRMEvent) {
       .eq('org_id', event.orgId)
       .eq('trigger_event', event.type)
       .eq('is_active', true)
+      // Une règle à la corbeille ne se déclenche plus. La restaurer la
+      // remet en BROUILLON, donc elle ne repartira pas toute seule.
+      .is('deleted_at', null)
       .order('created_at', { ascending: true })
       .order('id', { ascending: true });
 

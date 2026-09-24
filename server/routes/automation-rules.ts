@@ -46,7 +46,7 @@ import {
 const router = Router();
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
-const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, created_at, updated_at';
+const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, folder_id, deleted_at, created_at, updated_at';
 
 /**
  * Les gardes qui ont besoin du catalogue, donc impossibles à exprimer en Zod
@@ -104,6 +104,10 @@ router.get('/automations/rules', async (req, res) => {
     .from('automation_rules')
     .select(COLONNES)
     .eq('org_id', auth.orgId)
+    // Les règles à la corbeille sont renvoyées AVEC les autres : l'onglet
+    // « Corbeille » en a besoin, et `deleted_at` suffit à les séparer côté
+    // interface. Deux requêtes pour une liste de 40 lignes n'apporteraient
+    // rien.
     .order('name');
 
   if (error) {
@@ -366,11 +370,27 @@ router.delete('/automations/rules/:id', async (req, res) => {
     });
   }
 
-  // Les tâches déjà planifiées survivraient à la règle : elles s'exécuteraient
-  // sans que rien ne les explique, ou échoueraient sans règle à pointer. On
-  // les annule d'abord. `cancelled` plutôt qu'une suppression : le journal
-  // garde la trace de ce qui était prévu.
-  const { error: annulErr } = await auth.client
+  /*
+   * Les tâches déjà planifiées survivraient à la règle : elles s'exécuteraient
+   * sans que rien ne les explique, ou échoueraient sans règle à pointer. On
+   * les annule d'abord. `cancelled` plutôt qu'une suppression : le journal
+   * garde la trace de ce qui était prévu.
+   *
+   * CLIENT SERVICE, et pas celui de l'utilisateur.
+   *
+   * `automation_scheduled_tasks` n'accorde à `authenticated` que le SELECT
+   * (vérifié dans le catalogue de staging le 2026-09-24 : une seule policy,
+   * `automation_scheduled_tasks_select_org`, et aucun grant UPDATE). Avec le
+   * client de session, l'annulation renvoyait donc « permission denied for
+   * table automation_scheduled_tasks », et la route sortait en 500 AVANT de
+   * supprimer quoi que ce soit : supprimer une automatisation échouait pour
+   * tout le monde, avec un message générique.
+   *
+   * L'org reste filtrée explicitement ci-dessous — le client service ne
+   * passe pas par la RLS, c'est donc à nous de ne pas déborder.
+   */
+  const service = getServiceClient();
+  const { error: annulErr } = await service
     .from('automation_scheduled_tasks')
     .update({ status: 'cancelled', last_error: 'Automatisation supprimée' })
     .eq('automation_rule_id', req.params.id)
@@ -382,9 +402,19 @@ router.delete('/automations/rules/:id', async (req, res) => {
     return res.status(500).json({ error: 'Impossible d\'annuler les envois déjà prévus.' });
   }
 
+  /*
+   * SUPPRESSION DOUCE, comme partout dans Lume.
+   *
+   * La ligne était EFFACÉE : un clic de trop et des mois de réglages
+   * partaient — le texte, les conditions, le parcours — sans recours. Elle
+   * part maintenant à la corbeille, d'où elle se restaure.
+   *
+   * Les envois déjà prévus ont été annulés juste au-dessus : une règle en
+   * corbeille ne doit plus rien envoyer, même restaurable.
+   */
   const { error } = await auth.client
     .from('automation_rules')
-    .delete()
+    .update({ deleted_at: new Date().toISOString(), is_active: false })
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId);
 
@@ -399,6 +429,37 @@ router.delete('/automations/rules/:id', async (req, res) => {
   return res.json({ ok: true });
 });
 
+
+/*
+ * POST /automations/rules/:id/restaurer — sortir de la corbeille.
+ *
+ * La règle revient en BROUILLON, jamais publiée : restaurer ne doit pas
+ * relancer des envois à l'insu de qui restaure. C'est à lui de relire
+ * puis de publier.
+ */
+router.post('/automations/rules/:id/restaurer', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const { data, error } = await auth.client
+    .from('automation_rules')
+    .update({ deleted_at: null, is_active: false })
+    .eq('id', req.params.id)
+    .eq('org_id', auth.orgId)
+    .not('deleted_at', 'is', null)
+    .select(COLONNES)
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '42501') {
+      return res.status(403).json({ error: 'Votre rôle ne permet pas de restaurer une automatisation.' });
+    }
+    logger.error('[automation-rules] restauration échouée', { message: error.message, code: error.code });
+    return res.status(500).json({ error: 'Impossible de restaurer l’automatisation.' });
+  }
+  if (!data) return res.status(404).json({ error: 'Automatisation introuvable dans la corbeille.' });
+  return res.json(data);
+});
 
 // ── Dossiers ────────────────────────────────────────────────
 //

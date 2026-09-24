@@ -317,3 +317,17 @@ export async function apercuAutomatisation(id: string): Promise<ApercuAutomatisa
   if (!r.ok) throw await erreurDe(r, "Impossible de préparer l'aperçu.");
   return r.json();
 }
+
+/**
+ * Sort une automatisation de la corbeille.
+ *
+ * Elle revient en BROUILLON, jamais publiée : restaurer ne doit pas
+ * relancer des envois à l'insu de qui restaure.
+ */
+export async function restaurerAutomatisation(id: string): Promise<AutomationRule> {
+  const r = await fetch(`/api/automations/rules/${id}/restaurer`, {
+    method: 'POST', headers: await entetes(),
+  });
+  if (!r.ok) throw await erreurDe(r, "Impossible de restaurer l'automatisation.");
+  return r.json();
+}

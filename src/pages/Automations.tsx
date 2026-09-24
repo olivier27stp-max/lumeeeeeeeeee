@@ -18,7 +18,7 @@ import {
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
-  Plus, Pencil, Copy, Trash2, X, EllipsisVertical,
+  Plus, Pencil, Copy, Trash2, RotateCcw, X, EllipsisVertical,
   Settings, FolderPlus, Filter, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
@@ -30,6 +30,7 @@ import {
   creerAutomatisation,
   dupliquerAutomatisation,
   supprimerAutomatisation,
+  restaurerAutomatisation,
   chargerDossiers,
   creerDossier,
   supprimerDossier,
@@ -452,6 +453,8 @@ export default function Automations() {
 
   /** Lignes cochées — GHL les utilise pour les actions en lot. */
   const [cochees, setCochees] = useState<Set<string>>(new Set());
+  /** Un lot en cours : on désarme la barre pour éviter le double clic. */
+  const [lotEnCours, setLotEnCours] = useState(false);
   /** Ligne dont le panneau de statistiques est déroulé (le chevron « › »). */
   const [statsId, setStatsId] = useState<string | null>(null);
   /** Ligne dépliée pour corriger le texte des messages. */
@@ -488,8 +491,19 @@ export default function Automations() {
     setLoading(true);
     try {
       const data = await getAutomationRules();
+      /*
+       * Dédoublonnage par `preset_key` : d'anciennes migrations ont semé le
+       * même préréglage plusieurs fois.
+       *
+       * Les règles à la CORBEILLE sont écartées du dédoublonnage : sinon une
+       * copie supprimée peut arriver la première et masquer sa jumelle
+       * vivante, qui disparaîtrait de la liste tout en continuant de
+       * s'exécuter. On garde les supprimées telles quelles — la corbeille
+       * doit montrer ce qu'on y a mis.
+       */
       const vues = new Set<string>();
       setRules(data.filter((r) => {
+        if (r.deleted_at) return true;
         if (!r.preset_key) return true;
         if (vues.has(r.preset_key)) return false;
         vues.add(r.preset_key);
@@ -628,8 +642,8 @@ export default function Automations() {
     const ok = await confirmer({
       title: fr ? 'Supprimer cette automatisation ?' : 'Delete this automation?',
       message: fr
-        ? `« ${regle.name} » sera supprimée, et les envois déjà prévus seront annulés. C'est définitif.`
-        : `“${regle.name}” will be deleted, and any queued messages cancelled. This cannot be undone.`,
+        ? `« ${regle.name} » part à la corbeille : elle cesse de se déclencher et les envois déjà prévus sont annulés. Tu pourras la restaurer.`
+        : `“${regle.name}” goes to the bin: it stops triggering and any queued messages are cancelled. You can restore it later.`,
       confirmLabel: fr ? 'Supprimer' : 'Delete',
       danger: true,
     });
@@ -637,7 +651,29 @@ export default function Automations() {
     setOccupeId(regle.id);
     try {
       await supprimerAutomatisation(regle.id);
-      toast.success(fr ? 'Automatisation supprimée' : 'Automation deleted');
+      toast.success(fr ? 'Automatisation mise à la corbeille' : 'Automation moved to the bin');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOccupeId(null);
+    }
+  };
+
+  /**
+   * Sortir une automatisation de la corbeille.
+   *
+   * Elle revient en BROUILLON, jamais publiée — décision côté serveur. Une
+   * règle restaurée qui se remettrait à écrire aux clients sans qu'on l'ait
+   * relue serait exactement la surprise qu'une corbeille doit éviter.
+   */
+  const restaurer = async (regle: AutomationRule) => {
+    setOccupeId(regle.id);
+    try {
+      await restaurerAutomatisation(regle.id);
+      toast.success(fr
+        ? 'Automatisation restaurée — elle est en brouillon'
+        : 'Automation restored — it is a draft');
       await load();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -649,15 +685,26 @@ export default function Automations() {
   const getCategory = (r: AutomationRule): CategoryKey =>
     (PRESET_META[r.preset_key || '']?.category as CategoryKey) || 'Follow-up';
 
+  /*
+   * La corbeille se sépare AVANT tout le reste.
+   *
+   * Le serveur renvoie les règles vivantes ET celles à la corbeille dans la
+   * même liste : c'est ici qu'on les départage, une seule fois. Une règle
+   * supprimée ne doit apparaître dans AUCUN autre onglet — ni dans « Toutes »,
+   * ni dans « À vérifier » où ses échecs passés la feraient remonter.
+   */
+  const vivantes = rules.filter((r) => !r.deleted_at);
+  const supprimees = rules.filter((r) => r.deleted_at);
+
   /** « À vérifier » = ce qui a échoué ces 7 derniers jours. */
-  const aVerifier = rules.filter((r) => (failureCounts[r.id] ?? 0) > 0);
-  const mesAutos = rules.filter((r) => !r.is_preset || r.is_active);
-  const modeles = rules.filter((r) => r.is_preset && !r.is_active);
+  const aVerifier = vivantes.filter((r) => (failureCounts[r.id] ?? 0) > 0);
+  const mesAutos = vivantes.filter((r) => !r.is_preset || r.is_active);
+  const modeles = vivantes.filter((r) => r.is_preset && !r.is_active);
 
   const sourceOnglet =
     onglet === 'verifier' ? aVerifier
     : onglet === 'modeles' ? modeles
-    : onglet === 'corbeille' ? []   // la corbeille arrive avec la suppression douce
+    : onglet === 'corbeille' ? supprimees
     : mesAutos;
 
   const filtrees = sourceOnglet.filter((r) => {
@@ -679,7 +726,7 @@ export default function Automations() {
   const pages = Math.max(1, Math.ceil(filtrees.length / parPage));
 
   /** Combien d'automatisations dans chaque dossier — un dossier vide se voit. */
-  const compteParDossier = (id: string) => rules.filter((r) => r.folder_id === id).length;
+  const compteParDossier = (id: string) => vivantes.filter((r) => r.folder_id === id).length;
   const visibles = filtrees.slice((page - 1) * parPage, page * parPage);
 
   const toutCoche = visibles.length > 0 && visibles.every((r) => cochees.has(r.id));
@@ -691,6 +738,110 @@ export default function Automations() {
       return n;
     });
   };
+
+  /**
+   * Les actions sur plusieurs automatisations à la fois.
+   *
+   * Les cases à cocher existaient déjà mais ne commandaient rien : cocher
+   * trente lignes et n'avoir aucun bouton est pire que pas de case du tout.
+   *
+   * On travaille sur les règles RÉELLEMENT cochées et encore présentes —
+   * une coche peut survivre à un changement de filtre ou à un rechargement,
+   * et agir sur un identifiant disparu échouerait ligne par ligne.
+   */
+  const reglesCochees = rules.filter((r) => cochees.has(r.id));
+
+  /**
+   * Applique `action` à chaque règle cochée, en SÉQUENCE.
+   *
+   * En parallèle, trente écritures partiraient d'un coup sur la même table :
+   * on préfère un peu plus lent et un décompte exact de ce qui a marché.
+   * Une ligne en échec n'arrête pas les autres — sinon une seule règle
+   * verrouillée bloquerait tout le lot sans qu'on sache où ça s'est arrêté.
+   */
+  const agirEnLot = async (
+    action: (r: AutomationRule) => Promise<unknown>,
+    messages: { fr: (n: number) => string; en: (n: number) => string },
+    cibles: AutomationRule[] = reglesCochees,
+  ) => {
+    let reussis = 0;
+    const echoues: string[] = [];
+    setLotEnCours(true);
+    try {
+      for (const r of cibles) {
+        try {
+          await action(r);
+          reussis += 1;
+        } catch (e: unknown) {
+          echoues.push(localizeAutomationName(r.name, language));
+          console.error('[automations] action en lot échouée', r.id, e);
+        }
+      }
+      if (reussis > 0) toast.success(fr ? messages.fr(reussis) : messages.en(reussis));
+      if (echoues.length > 0) {
+        // On NOMME ce qui a échoué : « 3 erreurs » n'aide personne à corriger.
+        toast.error(fr
+          ? `Échec sur : ${echoues.join(', ')}`
+          : `Failed on: ${echoues.join(', ')}`);
+      }
+      setCochees(new Set());
+      await load();
+    } finally {
+      setLotEnCours(false);
+    }
+  };
+
+  /*
+   * Publier ou dépublier ne concerne que les règles VIVANTES : une règle à
+   * la corbeille est ignorée par le moteur, la publier ne changerait rien.
+   */
+  const publierLot = () => agirEnLot(
+    (r) => (r.is_active ? Promise.resolve() : toggleAutomationRule(r.id, true)),
+    { fr: (n) => `${n} automatisation(s) publiée(s)`, en: (n) => `${n} automation(s) published` },
+    reglesCochees.filter((r) => !r.deleted_at),
+  );
+
+  const depublierLot = () => agirEnLot(
+    (r) => (r.is_active ? toggleAutomationRule(r.id, false) : Promise.resolve()),
+    { fr: (n) => `${n} automatisation(s) repassée(s) en brouillon`, en: (n) => `${n} automation(s) unpublished` },
+    reglesCochees.filter((r) => !r.deleted_at),
+  );
+
+  const supprimerLot = async () => {
+    /*
+     * Les modèles ne se suppriment pas — le menu d'une ligne le refuse déjà.
+     * Sans ce garde, cocher « tout » enverrait des suppressions vouées à
+     * échouer, et la barre afficherait des erreurs pour des lignes que
+     * l'utilisateur n'a jamais voulu toucher.
+     */
+    const supprimables = reglesCochees.filter((r) => !r.is_preset);
+    if (supprimables.length === 0) {
+      toast.info(fr ? 'Un modèle ne se supprime pas.' : 'A template cannot be deleted.');
+      return;
+    }
+    const ok = await confirmer({
+      title: fr
+        ? `Supprimer ${supprimables.length} automatisation(s) ?`
+        : `Delete ${supprimables.length} automation(s)?`,
+      message: fr
+        ? 'Elles partent à la corbeille : elles cessent de se déclencher et les envois déjà prévus sont annulés. Tu pourras les restaurer.'
+        : 'They go to the bin: they stop triggering and any queued messages are cancelled. You can restore them later.',
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    await agirEnLot(
+      (r) => supprimerAutomatisation(r.id),
+      { fr: (n) => `${n} automatisation(s) à la corbeille`, en: (n) => `${n} automation(s) moved to the bin` },
+      supprimables,
+    );
+  };
+
+  const restaurerLot = () => agirEnLot(
+    (r) => restaurerAutomatisation(r.id),
+    { fr: (n) => `${n} automatisation(s) restaurée(s) en brouillon`, en: (n) => `${n} automation(s) restored as drafts` },
+    reglesCochees.filter((r) => !!r.deleted_at),
+  );
 
   const DEPARTS: Array<{ cle: string; fr: string; en: string; aideFr: string; aideEn: string; icone: typeof Zap }> = [
     { cle: 'zero', fr: 'Partir de zéro', en: 'Start from scratch', icone: Plus,
@@ -724,7 +875,7 @@ export default function Automations() {
     { cle: 'toutes' as const, fr: 'Toutes', en: 'All workflows', n: mesAutos.length },
     { cle: 'verifier' as const, fr: 'À vérifier', en: 'Needs review', n: aVerifier.length },
     { cle: 'modeles' as const, fr: 'Modèles', en: 'Templates', n: modeles.length },
-    { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: 0 },
+    { cle: 'corbeille' as const, fr: 'Corbeille', en: 'Deleted', n: supprimees.length },
   ];
 
   const dateCourte = (iso: string | null | undefined) => {
@@ -1031,6 +1182,75 @@ export default function Automations() {
         {/* ══ 5. Fil d'Ariane ══ */}
         <p className="text-[13px] text-text-secondary">{fr ? 'Accueil' : 'Home'}</p>
 
+        {/*
+          La barre d'actions groupées — elle n'apparaît QUE s'il y a une
+          sélection, comme chez GoHighLevel. Dans la corbeille, la seule
+          action offerte est « Restaurer ».
+        */}
+        {reglesCochees.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface-secondary px-3 py-2">
+            <span className="text-[13px] font-medium text-text-primary">
+              {fr
+                ? `${reglesCochees.length} sélectionnée(s)`
+                : `${reglesCochees.length} selected`}
+            </span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {onglet === 'corbeille' ? (
+                <button
+                  type="button"
+                  onClick={() => void restaurerLot()}
+                  disabled={lotEnCours}
+                  className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                >
+                  <RotateCcw size={13} aria-hidden="true" />
+                  {fr ? 'Restaurer' : 'Restore'}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void publierLot()}
+                    disabled={lotEnCours}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                  >
+                    <ToggleRight size={13} aria-hidden="true" />
+                    {fr ? 'Publier' : 'Publish'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void depublierLot()}
+                    disabled={lotEnCours}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] disabled:opacity-50"
+                  >
+                    <ToggleLeft size={13} aria-hidden="true" />
+                    {fr ? 'Repasser en brouillon' : 'Unpublish'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void supprimerLot()}
+                    disabled={lotEnCours}
+                    className="glass-button inline-flex items-center gap-1.5 text-[12px] text-danger disabled:opacity-50"
+                  >
+                    <Trash2 size={13} aria-hidden="true" />
+                    {fr ? 'Supprimer' : 'Delete'}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setCochees(new Set())}
+                disabled={lotEnCours}
+                className="rounded-lg px-2 py-1 text-[12px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+              >
+                {fr ? 'Tout décocher' : 'Clear selection'}
+              </button>
+              {lotEnCours && (
+                <Loader2 size={14} className="animate-spin text-text-tertiary" aria-hidden="true" />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ══ 6. Le tableau ══ */}
         {loading ? (
           <div className="section-card flex items-center justify-center py-16">
@@ -1141,9 +1361,13 @@ export default function Automations() {
                           <td className="px-3 py-3">
                             <span className={cn(
                               'inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium',
-                              rule.is_active ? 'bg-success-light text-success' : 'bg-surface-tertiary text-text-tertiary',
+                              rule.deleted_at ? 'bg-surface-tertiary text-text-tertiary'
+                                : rule.is_active ? 'bg-success-light text-success'
+                                : 'bg-surface-tertiary text-text-tertiary',
                             )}>
-                              {rule.is_active ? (fr ? 'Publiée' : 'Published') : (fr ? 'Brouillon' : 'Draft')}
+                              {rule.deleted_at ? (fr ? 'Supprimée' : 'Deleted')
+                                : rule.is_active ? (fr ? 'Publiée' : 'Published')
+                                : (fr ? 'Brouillon' : 'Draft')}
                             </span>
                           </td>
 
@@ -1176,7 +1400,12 @@ export default function Automations() {
                               <button
                                 type="button"
                                 onClick={() => handleToggle(rule)}
-                                disabled={togglingId === rule.id}
+                                /*
+                                 * Une règle à la corbeille ne se déclenche plus :
+                                 * le moteur la filtre. Un interrupteur qui
+                                 * s'allume sans rien changer mentirait.
+                                 */
+                                disabled={togglingId === rule.id || !!rule.deleted_at}
                                 aria-label={rule.is_active
                                   ? (fr ? `Repasser ${rule.name} en brouillon` : `Unpublish ${rule.name}`)
                                   : (fr ? `Publier ${rule.name}` : `Publish ${rule.name}`)}
@@ -1225,6 +1454,24 @@ export default function Automations() {
                                     onClick={(e) => e.stopPropagation()}
                                     className="absolute right-0 z-30 mt-1 w-[210px] overflow-hidden rounded-xl border border-border bg-surface-card p-1.5 shadow-lg"
                                   >
+                                    {/*
+                                      À la corbeille, une seule action a du sens.
+                                      Modifier, dupliquer ou ranger une règle
+                                      supprimée n'aurait aucun effet visible :
+                                      mieux vaut ne pas l'offrir.
+                                    */}
+                                    {rule.deleted_at ? (
+                                      <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => { setMenuLigne(null); void restaurer(rule); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-text-primary transition-colors hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        <RotateCcw size={13} aria-hidden="true" />
+                                        {fr ? 'Restaurer' : 'Restore'}
+                                      </button>
+                                    ) : (
+                                    <>
                                     <button
                                       type="button"
                                       role="menuitem"
@@ -1301,6 +1548,8 @@ export default function Automations() {
                                         <Trash2 size={13} aria-hidden="true" />
                                         {fr ? 'Supprimer' : 'Delete'}
                                       </button>
+                                    )}
+                                    </>
                                     )}
                                   </div>
                                 )}

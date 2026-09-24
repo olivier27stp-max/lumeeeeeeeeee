@@ -27,7 +27,15 @@ export function routeAvecBarreDAction(pathname: string): boolean {
   return /\/(new|edit)(\/|$)/.test(pathname)
     || pathname.startsWith('/settings')
     || pathname.startsWith('/finances')
-    || pathname.startsWith('/checkout');
+    || pathname.startsWith('/checkout')
+    // Ajouté le 2026-09-24, pour la MÊME raison et mesuré de la même façon :
+    // le menu « … » d'une ligne du tableau tombe en bas à droite, sous la
+    // carte. `elementFromPoint(centre du bouton)` renvoyait un bouton de la
+    // carte Setup ; le clic n'ouvrait rien, sans la moindre erreur. Une
+    // automatisation ne pouvait donc être ni modifiée, ni dupliquée, ni
+    // supprimée — sur les comptes NEUFS seulement, ce qui explique que
+    // personne ne l'ait signalé.
+    || pathname.startsWith('/automations');
 }
 
 type Status = {
