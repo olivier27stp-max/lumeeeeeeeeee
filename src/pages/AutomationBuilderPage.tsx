@@ -47,6 +47,7 @@ import {
   insererEtape,
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
+import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
 import { confirmer } from '../components/ui/ConfirmDialog';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
@@ -653,18 +654,17 @@ export default function AutomationBuilderPage() {
           </>
         )}
 
-        {onglet !== 'parcours' && (
+        {/* Historique et journaux : les données existent depuis des mois,
+            c'est l'écran qui manquait. */}
+        {onglet === 'historique' && <div className="absolute inset-0 overflow-y-auto"><OngletHistorique ruleId={regle.id} fr={fr} /></div>}
+        {onglet === 'journaux' && <div className="absolute inset-0 overflow-y-auto"><OngletJournaux ruleId={regle.id} fr={fr} /></div>}
+
+        {onglet === 'reglages' && (
           <div className="flex h-full items-center justify-center p-8">
             <p className="max-w-sm text-center text-sm text-text-secondary">
-              {onglet === 'reglages' && (fr
+              {fr
                 ? 'Les réglages de cette automatisation arrivent ici : fenêtre d’envoi, arrêt sur réponse, réinscription.'
-                : 'This automation’s settings will live here: send window, stop on reply, re-entry.')}
-              {onglet === 'historique' && (fr
-                ? 'L’historique dira qui est passé dans ce parcours, et où chacun en est.'
-                : 'The history will show who went through this path, and where each one stands.')}
-              {onglet === 'journaux' && (fr
-                ? 'Les journaux diront ce qui est parti, quand, et ce qui a échoué — avec la raison.'
-                : 'The logs will show what was sent, when, and what failed — with the reason.')}
+                : 'This automation’s settings will live here: send window, stop on reply, re-entry.'}
             </p>
           </div>
         )}
