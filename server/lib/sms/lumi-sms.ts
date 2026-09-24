@@ -70,6 +70,25 @@ export interface ContexteSms {
 }
 
 /**
+ * Le client que voient les outils.
+ *
+ * Une vingtaine de fonctions de base de données sont gardées par
+ * `has_org_membership(auth.uid(), org_id)` : avec le client de service,
+ * `auth.uid()` est nul et la base refuse — « ça bogue de mon côté », mesuré
+ * en production. On ouvre donc une vraie session pour le membre, comme le
+ * navigateur en a une.
+ */
+async function clientDesOutils(ctx: ContexteSms): Promise<{ client: SupabaseClient; accessToken?: string }> {
+  try {
+    const { clientPourMembre } = await import('./session-membre');
+    return await clientPourMembre(ctx.userId);
+  } catch (e: any) {
+    logger.error('[sms/lumi] session du membre indisponible — outils à identité limités', { error: e?.message || String(e) });
+    return { client: ctx.admin };
+  }
+}
+
+/**
  * Fait tourner Lumi sur un message reçu par texto.
  *
  * Rend toujours un texte : un silence, en SMS, se lit comme une panne. Les
@@ -119,9 +138,14 @@ export async function repondreParSms(
     focus: consignesSms(ctx.langue),
   });
 
+  // Les outils travaillent avec l'identité du membre ; le budget et les
+  // réservations restent sur le client de service, qui écrit hors RLS.
+  const { client, accessToken } = await clientDesOutils(ctx);
+
   let texte = '';
   const resultat = await tourLumi({
-    client: ctx.admin,
+    client,
+    accessToken,
     orgId: ctx.orgId,
     userId: ctx.userId,
     systeme,
