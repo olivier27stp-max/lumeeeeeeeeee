@@ -54,6 +54,7 @@ vi.mock('../server/lib/supabase', () => ({ getServiceClient: () => ({ from: requ
 const achat = vi.fn();
 const disponibles = vi.fn();
 vi.mock('../server/lib/config', () => ({
+  getTwilioWebhookBaseUrl: () => (process.env.TWILIO_WEBHOOK_BASE_URL || process.env.PUBLIC_URL || '').replace(/\/$/, ''),
   twilioProvisioningClient: {
     incomingPhoneNumbers: { create: (...a: unknown[]) => achat(...a) },
     availablePhoneNumbers: () => ({ local: { list: (...a: unknown[]) => disponibles(...a) } }),

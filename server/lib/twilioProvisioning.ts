@@ -1,6 +1,6 @@
 // Achat = client dédié (clé Restricted `TWILIO_PROVISIONING_API_KEY_*` si
 // définie, sinon le client principal) — voir config.ts.
-import { twilioProvisioningClient as twilioClient } from './config';
+import { twilioProvisioningClient as twilioClient, getTwilioWebhookBaseUrl } from './config';
 import { getServiceClient } from './supabase';
 import { logger } from './logger';
 
@@ -49,7 +49,8 @@ export async function provisionSmsNumber(orgId: string, options?: {
     throw new Error('Twilio is not configured.');
   }
 
-  const publicUrl = (process.env.PUBLIC_URL || process.env.TWILIO_WEBHOOK_BASE_URL || '').trim().replace(/\/$/, '');
+  // Même base que la validation de signature des textos entrants (voir config.ts).
+  const publicUrl = getTwilioWebhookBaseUrl();
   if (!publicUrl || !/^https?:\/\//.test(publicUrl) || publicUrl.includes('localhost')) {
     throw new Error('PUBLIC_URL must be set to a publicly reachable https:// URL before provisioning a Twilio number (got: ' + (publicUrl || 'empty') + ').');
   }

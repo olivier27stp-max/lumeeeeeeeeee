@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuthedClient } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
 import { getServiceClient } from '../lib/supabase';
-import { twilioClient, twilioAuthToken, twilioAccountSid, Twilio, getTwilioStatusCallbackUrl } from '../lib/config';
+import { twilioClient, twilioAuthToken, twilioAccountSid, Twilio, getTwilioStatusCallbackUrl, getTwilioWebhookBaseUrl } from '../lib/config';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { normalizeE164, findOrCreateConversation, resolvePublicBaseUrl } from '../lib/helpers';
 import { validate, messageSendSchema } from '../lib/validation';
@@ -158,12 +158,8 @@ router.post('/messages/inbound', (req, res) => {
   }
 
   // Validate signature — must use the EXACT URL Twilio called (the one we registered at provisioning time).
-  // PUBLIC_URL is what twilioProvisioning.ts uses when buying the number, so prioritize it.
-  const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
-    || process.env.PUBLIC_URL
-    || process.env.PUBLIC_BASE_URL
-    || process.env.FRONTEND_URL
-    || resolvePublicBaseUrl(req);
+  // getTwilioWebhookBaseUrl() is also what twilioProvisioning.ts registers when buying a number.
+  const baseUrl = getTwilioWebhookBaseUrl() || resolvePublicBaseUrl(req);
   const webhookUrl = `${baseUrl.replace(/\/$/, '')}/api/messages/inbound`;
   const isValid = Twilio.validateRequest(twilioAuthToken, twilioSignature, webhookUrl, req.body || {});
   if (!isValid) {
@@ -598,14 +594,10 @@ router.post('/messages/status', async (req, res) => {
     }
     // Meme ordre que /inbound : la signature se valide contre l'URL EXACTE que
     // Twilio a appelee, c.-a-d. celle enregistree a l'achat du numero — et
-    // twilioProvisioning.ts enregistre PUBLIC_URL. L'omettre ici faisait
+    // twilioProvisioning.ts enregistre getTwilioWebhookBaseUrl(). L'omettre ici faisait
     // echouer toutes les signatures, donc aucun accuse de reception n'etait
     // enregistre et les messages restaient bloques a "sent".
-    const baseUrl = process.env.TWILIO_WEBHOOK_BASE_URL
-      || process.env.PUBLIC_URL
-      || process.env.PUBLIC_BASE_URL
-      || process.env.FRONTEND_URL
-      || resolvePublicBaseUrl(req);
+    const baseUrl = getTwilioWebhookBaseUrl() || resolvePublicBaseUrl(req);
     const isValid = Twilio.validateRequest(twilioAuthToken, sig, `${baseUrl.replace(/\/$/, '')}/api/messages/status`, req.body || {});
     if (!isValid) {
       logSecurityEvent({
@@ -664,7 +656,7 @@ router.get('/messages/twilio-diagnostic', async (req, res) => {
 
     const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
 
-    const publicUrl = (process.env.PUBLIC_URL || process.env.TWILIO_WEBHOOK_BASE_URL || '').trim().replace(/\/$/, '');
+    const publicUrl = getTwilioWebhookBaseUrl();
     checks.push({
       name: 'PUBLIC_URL set',
       ok: !!publicUrl && /^https?:\/\//.test(publicUrl) && !publicUrl.includes('localhost'),
