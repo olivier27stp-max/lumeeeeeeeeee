@@ -23,7 +23,6 @@ import { toast } from 'sonner';
 import { PageHeader } from '../../components/ui';
 import { confirmer } from '../../components/ui/ConfirmDialog';
 import EmailPreviewEditor from '../../components/automations/EmailPreviewEditor';
-import ImportHtmlCourriel from '../../components/settings/ImportHtmlCourriel';
 import { CATALOGUE_COURRIELS, type EntreeCourriel } from '../../lib/catalogueCourriels';
 import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
@@ -104,7 +103,6 @@ export default function EmailTemplatesSettings() {
   const [modeles, setModeles] = useState<EmailTemplate[]>([]);
   const [chargement, setChargement] = useState(true);
   const [ouvert, setOuvert] = useState<Ouvert | null>(null);
-  const [aImporter, setAImporter] = useState<Ouvert | null>(null);
   /* La couleur de l'entreprise, pour que les vignettes montrent SES courriels
      et pas un gris générique. `#111827` est le repli du gabarit serveur
      (`COULEUR_LUME`) : une couleur absente ou trop pâle y aboutit aussi. */
@@ -177,22 +175,6 @@ export default function EmailTemplatesSettings() {
     }
   };
 
-  const importer = async (o: Ouvert, html: string) => {
-    if (o.modele) {
-      await updateEmailTemplate(o.modele.id, { body: html, source: 'import' });
-    } else {
-      await createEmailTemplate({
-        name: o.entree.titre[fr ? 'fr' : 'en'],
-        type: o.type,
-        subject: o.entree.objetOrigine?.[fr ? 'fr' : 'en'] ?? '',
-        body: html,
-        variables: [],
-        is_active: true,
-        source: 'import',
-      });
-    }
-    void charger();
-  };
 
   /**
    * Remplacer le logo, depuis cette page.
@@ -472,20 +454,11 @@ export default function EmailTemplatesSettings() {
                 setOuvert(null);
               }
             : undefined}
-          importerHtml={() => { setOuvert(null); setAImporter(ouvert); }}
           onClose={() => setOuvert(null)}
           onSaved={() => { setOuvert(null); void charger(); }}
         />
       ) : null}
 
-      {aImporter ? (
-        <ImportHtmlCourriel
-          titreCourriel={aImporter.entree.titre[fr ? 'fr' : 'en']}
-          fr={fr}
-          onImporter={(html) => importer(aImporter, html)}
-          onClose={() => setAImporter(null)}
-        />
-      ) : null}
     </div>
   );
 }

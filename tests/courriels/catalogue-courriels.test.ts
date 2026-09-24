@@ -89,9 +89,23 @@ describe('textes d’origine montrés dans l’éditeur', () => {
       .map((f) => fs.readFileSync(path.join(process.cwd(), 'server', 'routes', f), 'utf8'))
       .join('\n')
       .replace(/'\s*\+\s*\n\s*'/g, '')
+      .replace(/\[(\w+)\]/g, '{$1}')
       .replace(/\s+/g, ' ');
 
-    const norm = (x: string) => x.replace(/\s+/g, ' ').trim();
+    /* La SYNTAXE des variables ne compte pas dans la comparaison.
+
+       `applyTemplate` accepte les deux formes, `{cle}` et `[cle]`. Le cron
+       écrit ses gabarits en accolades (sa convention interne), l'éditeur
+       insère des crochets quand quelqu'un clique « Insérer ». Exiger la même
+       forme des deux côtés obligeait à montrer des accolades au propriétaire
+       dans un éditeur qui, lui, produit des crochets — deux conventions sous
+       ses yeux, sans qu'il sache laquelle copier.
+
+       On compare donc le TEXTE, en ramenant les deux syntaxes à une seule. */
+    const norm = (x: string) => x
+      .replace(/\[(\w+)\]/g, '{$1}')
+      .replace(/\s+/g, ' ')
+      .trim();
     const avecTexte = CATALOGUE_COURRIELS
       .flatMap((g) => g.entrees)
       .filter((e) => e.texteOrigine);

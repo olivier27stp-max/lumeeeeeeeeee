@@ -437,11 +437,17 @@ export function rendreCourrielClient(c: CourrielClient): string {
     : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FOND_CLIENT};">
 <tr><td align="left" style="background:${FOND_CLIENT};font-size:19px;font-weight:700;color:#101828;">${echapper(nom)}</td></tr>
 </table>`;
-  // Le téléphone et le courriel d'abord, et cliquables : un client qui a une
-  // question veut souvent appeler, pas écrire. L'adresse postale suit.
+  /* Le téléphone et le courriel d'abord, et cliquables : un client qui a une
+     question veut souvent appeler, pas écrire. L'adresse postale suit.
+
+     Ils portent la couleur de L'ENTREPRISE, pas le bleu de Lume. Ils étaient
+     en `BLEU_LUME` : dans le courriel de Coquin lavage, les seuls liens
+     colorés du pied étaient donc au bleu d'un produit que son client ne
+     connaît pas. `couleur` a déjà traversé `couleurBouton`, donc elle est
+     lisible. */
   const joindre = [
-    c.marque.telephone ? `<a href="tel:${echapper(String(c.marque.telephone).replace(/[^\d+]/g, ''))}" style="color:${BLEU_LUME};text-decoration:none;font-weight:600;">${echapper(c.marque.telephone)}</a>` : '',
-    c.marque.email ? `<a href="mailto:${echapper(c.marque.email)}" style="color:${BLEU_LUME};text-decoration:none;font-weight:600;">${echapper(c.marque.email)}</a>` : '',
+    c.marque.telephone ? `<a href="tel:${echapper(String(c.marque.telephone).replace(/[^\d+]/g, ''))}" style="color:${couleur};text-decoration:none;font-weight:600;">${echapper(c.marque.telephone)}</a>` : '',
+    c.marque.email ? `<a href="mailto:${echapper(c.marque.email)}" style="color:${couleur};text-decoration:none;font-weight:600;">${echapper(c.marque.email)}</a>` : '',
   ].filter(Boolean).join(' &nbsp;&middot;&nbsp; ');
   const postal = [c.marque.adresse, c.marque.siteWeb].filter(Boolean).map((x) => echapper(x)).join(' &nbsp;&middot;&nbsp; ');
   const taxes = (c.marque.lignesTaxes || []).filter(Boolean);
@@ -451,7 +457,7 @@ ${joindre ? `<p style="margin:0;font-size:13px;line-height:1.6;">${joindre}</p>`
 <p style="margin:${joindre ? '4px' : '0'} 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${echapper(nom)}${postal ? ` &nbsp;&middot;&nbsp; ${postal}` : ''}</p>
 ${liensSociauxHtml(c.marque.liensSociaux)}
 ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}
-<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${BLEU_LUME};text-decoration:none;font-weight:700;">Lume</a></p>`;
+<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></p>`;
   return coquille({
     langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),
@@ -474,9 +480,18 @@ export function rendreCourrielLume(c: CourrielLume): string {
 }
 
 /** Les mots qui reviennent dans tous les courriels client, dans les deux langues. */
+/* Les libellés de bouton nomment UN geste, pas deux (2026-09-23).
+
+   « Voir et payer la facture » annonçait deux actions et faisait 24
+   caractères — long sur un téléphone, et dilué : un bouton qui propose de
+   regarder invite à regarder. « Voir la soumission » était pire encore, parce
+   que le geste attendu est d'APPROUVER.
+
+   Jobber écrit « Pay Invoice », pas « View Invoice ». C'est leur meilleur
+   choix de verbe, et le seul qu'on leur prend ici. */
 export const MOTS = {
-  fr: { bonjour: (nom: string) => `Bonjour ${nom},`, facture: 'Facture', soumission: 'Soumission', contrat: 'Contrat', montantDu: 'Montant à payer', montantTotal: 'Montant', echeance: 'Échéance', valideJusquau: 'Valide jusqu’au', numero: 'Numéro', statut: 'Statut', payee: 'Payée', voirFacture: 'Voir et payer la facture', voirSoumission: 'Voir la soumission', payer: (m: string) => `Payer ${m}`, voirContrat: 'Voir et signer le contrat', question: 'Une question ? Répondez simplement à ce courriel.', envoyeAvec: 'Envoyé avec' },
-  en: { bonjour: (nom: string) => `Hi ${nom},`, facture: 'Invoice', soumission: 'Quote', contrat: 'Contract', montantDu: 'Amount due', montantTotal: 'Amount', echeance: 'Due date', valideJusquau: 'Valid until', numero: 'Number', statut: 'Status', payee: 'Paid', voirFacture: 'View and pay invoice', voirSoumission: 'View quote', payer: (m: string) => `Pay ${m}`, voirContrat: 'View and sign contract', question: 'Questions? Just reply to this email.', envoyeAvec: 'Sent with' },
+  fr: { bonjour: (nom: string) => `Bonjour ${nom},`, facture: 'Facture', soumission: 'Soumission', contrat: 'Contrat', montantDu: 'Montant à payer', montantTotal: 'Montant', echeance: 'Échéance', valideJusquau: 'Valide jusqu’au', numero: 'Numéro', statut: 'Statut', payee: 'Payée', voirFacture: 'Payer la facture', voirSoumission: 'Approuver la soumission', payer: (m: string) => `Payer ${m}`, voirContrat: 'Signer le contrat', question: 'Une question ? Répondez simplement à ce courriel.', envoyeAvec: 'Envoyé avec' },
+  en: { bonjour: (nom: string) => `Hi ${nom},`, facture: 'Invoice', soumission: 'Quote', contrat: 'Contract', montantDu: 'Amount due', montantTotal: 'Amount', echeance: 'Due date', valideJusquau: 'Valid until', numero: 'Number', statut: 'Status', payee: 'Paid', voirFacture: 'Pay invoice', voirSoumission: 'Approve quote', payer: (m: string) => `Pay ${m}`, voirContrat: 'Sign contract', question: 'Questions? Just reply to this email.', envoyeAvec: 'Sent with' },
 } as const;
 
 export function langueDe(valeur: unknown): Langue {

@@ -10,7 +10,6 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { CATALOGUE_COURRIELS } from '../../src/lib/catalogueCourriels';
-import { nettoyerPourApercu, elementsRetires } from '../../src/components/settings/ImportHtmlCourriel';
 
 const lire = (p: string) => fs.readFileSync(path.join(process.cwd(), p), 'utf8');
 
@@ -65,38 +64,26 @@ describe('chaîne de personnalisation', () => {
   });
 });
 
-describe('import de HTML', () => {
-  it('retire ce qu’un courriel ne peut pas exécuter', () => {
-    const sale = `<div>Bonjour<script>vol()</script><style>x{}</style>`
-      + `<img src=x onerror="vol()"><a href="javascript:vol()">clic</a></div>`;
-    const propre = nettoyerPourApercu(sale);
-    expect(propre).not.toContain('<script');
-    expect(propre).not.toContain('<style');
-    expect(propre).not.toContain('onerror');
-    expect(propre).not.toContain('javascript:');
-    // Le contenu légitime survit : nettoyer ne veut pas dire vider.
-    expect(propre).toContain('Bonjour');
-    expect(propre).toContain('clic');
+describe('après le retrait de l’import HTML', () => {
+  /* L'import HTML a été retiré de la page le 2026-09-24 : presque personne
+     n'a de HTML à coller, et l'offrir à côté de « Modifier » mettait une
+     porte d'expert au même rang que l'action courante.
+
+     Ce qui RESTE, et qu'on vérifie ici : l'assainissement côté serveur. Des
+     modèles marqués `source: 'import'` existent peut-être encore en base, et
+     un jour l'import pourrait revenir. Retirer la garde avec le bouton
+     laisserait passer du HTML non nettoyé dans un courriel client. */
+  it('le serveur assainit toujours le HTML d’un modèle importé', () => {
+    const modeles = lire('server/lib/courriels/modeles.ts');
+    expect(modeles).toContain('assainirHtmlCourriel');
+    expect(modeles).toContain("'import'");
   });
 
-  it('dit ce qui a été retiré, au lieu de le faire en silence', () => {
-    expect(elementsRetires('<div><script>x</script></div>')).toContain('script');
-    expect(elementsRetires('<a href="javascript:x">y</a>')).toContain('javascript:');
-    expect(elementsRetires('<p>Bonjour</p>')).toEqual([]);
-  });
-
-  it('l’aperçu est obligatoire avant d’enregistrer', () => {
-    // On ne laisse personne mettre en service un courriel qu'il n'a pas vu.
-    const src = lire('src/components/settings/ImportHtmlCourriel.tsx');
-    expect(src).toContain('disabled={!apercuVu || enregistrement}');
-  });
-
-  it('un import est marqué comme tel, sinon le serveur ne l’assainit pas', () => {
-    // `source: 'import'` est le drapeau qui déclenche l'assainissement serveur.
-    // Sans lui, un HTML collé passe pour du texte d'éditeur et n'est pas nettoyé.
+  it('plus rien ne propose d’importer du HTML dans la page', () => {
     const page = lire('src/pages/settings/EmailTemplatesSettings.tsx');
-    expect(page).toContain("source: 'import'");
-    expect(lire('src/lib/emailTemplatesApi.ts')).toContain("source: input.source ?? 'editeur'");
-    expect(lire('server/lib/courriels/modeles.ts')).toContain('assainirHtmlCourriel');
+    expect(page).not.toContain('ImportHtmlCourriel');
+    expect(page).not.toContain('importerHtml');
+    const editeur = lire('src/components/automations/EmailPreviewEditor.tsx');
+    expect(editeur).not.toContain('importerHtml');
   });
 });

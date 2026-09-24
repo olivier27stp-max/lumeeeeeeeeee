@@ -200,7 +200,7 @@ export const CATALOGUE_COURRIELS: GroupeCourriels[] = [
           en: 'Invoice [invoice_number] — [amount_due] outstanding',
         },
         texteOrigine: {
-          fr: 'Un petit rappel, sans plus : la facture {invoice_number} de {amount_due} était due le {due_date}. Si le paiement est déjà parti, ce message le croise — merci !',
+          fr: 'Un petit rappel, sans plus : la facture [invoice_number] de [amount_due] était due le [due_date]. Si le paiement est déjà parti, ce message le croise — merci !',
           en: 'A gentle reminder: invoice {invoice_number} for {amount_due} was due on {due_date}. If your payment is already on its way, this message crossed it — thank you!',
         },
       },
