@@ -40,7 +40,9 @@ import {
   genererParcoursAvecLumi,
   chargerMembres,
   chargerEtiquettes,
+  apercuAutomatisation,
   type CatalogueAutomatisations,
+  type ApercuAutomatisation,
 } from '../lib/automationBuilderApi';
 import {
   type Etape,
@@ -126,6 +128,9 @@ export default function AutomationBuilderPage() {
   const [tiroirDeclencheur, setTiroirDeclencheur] = useState(false);
   /** L'étape dont le menu « … » est ouvert. */
   const [menuEtape, setMenuEtape] = useState<string | null>(null);
+  /** L'aperçu (« Tester ») : ce qui partirait, sur un vrai client. */
+  const [apercu, setApercu] = useState<ApercuAutomatisation | null>(null);
+  const [apercuEnCours, setApercuEnCours] = useState(false);
 
   /**
    * Des départs tout faits — on ne part jamais d'une page blanche.
@@ -692,7 +697,18 @@ export default function AutomationBuilderPage() {
         <div className="flex shrink-0 items-center gap-2 py-1.5">
           <button
             type="button"
-            onClick={() => toast.info(fr ? 'Le test arrive bientôt' : 'Testing is coming soon')}
+            onClick={async () => {
+              if (!regle) return;
+              setApercuEnCours(true);
+              try {
+                setApercu(await apercuAutomatisation(regle.id));
+              } catch (e: unknown) {
+                toast.error(e instanceof Error ? e.message : String(e));
+              } finally {
+                setApercuEnCours(false);
+              }
+            }}
+            disabled={apercuEnCours}
             className="inline-flex items-center gap-1.5 rounded-lg border border-accent px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <Play className="h-3.5 w-3.5" aria-hidden="true" />
@@ -921,6 +937,81 @@ export default function AutomationBuilderPage() {
             {/* Ce que Lumi a compris — au-dessus du canevas, comme leur
                 bandeau « Explain this workflow ». L'utilisateur doit pouvoir
                 vérifier d'un coup d'œil avant de publier. */}
+            {/* L'aperçu — ce qui partirait, et à qui. Rien n'est envoyé.
+                Un texte écrit avec une variable inexistante donne
+                « Bonjour , » : ça saute aux yeux ici, jamais dans
+                l'éditeur. */}
+            {apercu && (
+              <div className="absolute inset-0 z-30 flex items-start justify-center overflow-y-auto bg-surface/80 p-6 backdrop-blur-sm">
+                <div className="w-full max-w-lg rounded-2xl border border-border bg-surface-card p-4 shadow-lg">
+                  <div className="mb-3 flex items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-sm font-semibold text-text-primary">
+                        {fr ? 'Ce qui partirait' : 'What would go out'}
+                      </h2>
+                      {apercu.client ? (
+                        <p className="mt-0.5 text-[11px] text-text-tertiary">
+                          {fr ? 'Exemple avec ' : 'Example with '}
+                          <span className="font-medium text-text-secondary">{apercu.client.nom}</span>
+                          {apercu.client.email ? ` · ${apercu.client.email}` : ''}
+                          {' · '}
+                          {fr ? 'rien n’est envoyé' : 'nothing is sent'}
+                        </p>
+                      ) : (
+                        <p className="mt-0.5 text-[11px] text-text-tertiary">{apercu.message}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setApercu(null)}
+                      aria-label={fr ? 'Fermer l’aperçu' : 'Close preview'}
+                      className="shrink-0 rounded-md p-1 text-text-tertiary transition-colors hover:bg-surface-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <X className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  {apercu.apercu.length === 0 ? (
+                    <p className="py-4 text-center text-xs text-text-tertiary">
+                      {fr ? 'Aucune étape à montrer.' : 'No step to show.'}
+                    </p>
+                  ) : (
+                    <ol className="space-y-2">
+                      {apercu.apercu.map((e, i) => {
+                        const modele = trouverAction(e.action);
+                        return (
+                          <li key={`${e.action}-${i}`} className="rounded-xl border border-border p-3">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-accent">
+                              {e.nom || (modele ? (fr ? modele.fr : modele.en) : e.action)}
+                            </p>
+                            {Object.entries(e.rendu).length === 0 ? (
+                              <p className="mt-1 text-[12px] italic text-text-tertiary">
+                                {fr ? '(rien à afficher)' : '(nothing to show)'}
+                              </p>
+                            ) : (
+                              Object.entries(e.rendu).map(([cle, valeur]) => {
+                                const champ = modele?.champs.find((c) => c.cle === cle);
+                                return (
+                                  <div key={cle} className="mt-1.5">
+                                    <span className="block text-[10px] uppercase text-text-tertiary">
+                                      {champ ? (fr ? champ.fr : champ.en) : cle}
+                                    </span>
+                                    <span className="block whitespace-pre-wrap text-[13px] text-text-primary">
+                                      {valeur}
+                                    </span>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </div>
+              </div>
+            )}
+
             {resumeLumi && (
               <div className="absolute left-1/2 top-4 z-10 flex max-w-[520px] -translate-x-1/2 items-start gap-2 rounded-xl border border-accent/40 bg-surface-card px-3 py-2 shadow-sm">
                 <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />

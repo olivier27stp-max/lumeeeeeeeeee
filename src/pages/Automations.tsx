@@ -19,7 +19,7 @@ import {
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
   Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
   Plus, Pencil, Copy, Trash2, X, EllipsisVertical,
-  Settings, FolderPlus, Filter, SlidersHorizontal,} from 'lucide-react';
+  Settings, FolderPlus, Filter, } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
@@ -699,10 +699,15 @@ export default function Automations() {
       aideFr: 'Décris ce que tu veux, Lumi le monte.', aideEn: 'Describe it, Lumi builds it.' },
     { cle: 'modele', fr: 'Partir d’un modèle', en: 'Start from a template', icone: FileText,
       aideFr: `${modeles.length} modèles prêts à l’emploi.`, aideEn: `${modeles.length} ready-made templates.` },
-    { cle: 'import', fr: 'Importer d’une campagne', en: 'Import from a campaign', icone: ArrowLeft,
-      aideFr: 'Reprendre une campagne existante.', aideEn: 'Reuse an existing campaign.' },
-    { cle: 'entreprise', fr: 'Automatisation d’entreprise', en: 'Company automation', icone: Briefcase,
-      aideFr: 'Déclenchée par l’entreprise, pas par un client.', aideEn: 'Triggered by the company, not a client.' },
+    /*
+     * GoHighLevel en offre deux de plus : « Importer d'une campagne » et
+     * « Automatisation d'entreprise ». Ni l'un ni l'autre n'a d'équivalent
+     * ici — Lume n'a pas de campagnes, et toutes nos automatisations
+     * appartiennent déjà à l'entreprise.
+     *
+     * On les RETIRE au lieu d'afficher « bientôt » : un menu qui promet ce
+     * qu'il ne fait pas est exactement le défaut qu'on reproche au leur.
+     */
   ];
 
   const choisirDepart = (cle: string) => {
@@ -710,7 +715,9 @@ export default function Automations() {
     if (cle === 'zero') { partirDeZero(false); return; }
     if (cle === 'lumi') { partirDeZero(true); return; }
     if (cle === 'modele') { setOnglet('modeles'); return; }
-    toast.info(fr ? 'Cette option arrive bientôt.' : 'This option is coming soon.');
+    // Inatteignable : les trois départs ci-dessus couvrent tout `DEPARTS`.
+    // Le garder évite qu'un ajout futur retombe dans le vide sans un mot.
+    console.error('[automations] départ inconnu :', cle);
   };
 
   const ONGLETS = [
@@ -901,24 +908,13 @@ export default function Automations() {
                 {o.cle !== 'toutes' && ` (${o.n})`}
               </button>
             ))}
-            <button
-              type="button"
-              onClick={() => toast.info(fr ? 'Les listes personnalisées arrivent bientôt.' : 'Smart lists are coming soon.')}
-              className="inline-flex items-center gap-1 border-b-2 border-transparent px-3 pb-2.5 pt-1 text-[13px] text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Plus size={13} aria-hidden="true" />
-              {fr ? 'Nouvelle liste' : 'New smart list'}
-            </button>
+            {/* GoHighLevel a ici « Nouvelle liste » (des vues filtrées
+                enregistrées). Ce sont nos DOSSIERS, juste au-dessous — et
+                eux fonctionnent. Un second mécanisme de rangement, à moitié
+                fait, n'aiderait personne. */}
           </nav>
 
-          <button
-            type="button"
-            onClick={() => toast.info(fr ? 'Le choix des colonnes arrive bientôt.' : 'Column picker is coming soon.')}
-            className="mb-2 inline-flex items-center gap-1.5 text-[12px] text-text-tertiary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            <SlidersHorizontal size={13} aria-hidden="true" />
-            {fr ? 'Personnaliser la liste' : 'Customize list'}
-          </button>
+
         </div>
 
         {/* Les dossiers — n'apparaissent qu'une fois qu'il y en a.

@@ -293,3 +293,27 @@ export async function supprimerDossier(id: string): Promise<void> {
 export async function rangerDansDossier(ruleId: string, folderId: string | null): Promise<void> {
   await modifierAutomatisation(ruleId, { folder_id: folderId });
 }
+
+// ── Aperçu (« Tester ») ─────────────────────────────────────
+
+export interface ApercuAutomatisation {
+  client?: { nom: string; email: string | null; telephone: string | null };
+  apercu: Array<{ action: string; nom: string | null; rendu: Record<string, string> }>;
+  message?: string;
+}
+
+/**
+ * Ce qui partirait, et à qui — sans rien envoyer.
+ *
+ * Le serveur prend un vrai client de l'organisation et résout les variables
+ * comme le moteur le ferait. Un texte écrit avec une variable qui n'existe
+ * pas donne « Bonjour , » : ça saute aux yeux dans un aperçu, jamais dans
+ * un éditeur.
+ */
+export async function apercuAutomatisation(id: string): Promise<ApercuAutomatisation> {
+  const r = await fetch(`/api/automations/rules/${id}/apercu`, {
+    method: 'POST', headers: await entetes(),
+  });
+  if (!r.ok) throw await erreurDe(r, "Impossible de préparer l'aperçu.");
+  return r.json();
+}
