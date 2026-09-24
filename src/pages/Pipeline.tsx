@@ -23,6 +23,7 @@ import DealDrawer from '../components/pipeline/DealDrawer';
 import GagneJobModal from '../components/pipeline/GagneJobModal';
 import PerduModal from '../components/pipeline/PerduModal';
 import PipelineReglages from '../components/pipeline/PipelineReglages';
+import PipelinePrevisions from '../components/pipeline/PipelinePrevisions';
 import PipelineStats from '../components/pipeline/PipelineStats';
 import { useTranslation } from '../i18n';
 import { hasPermission } from '../lib/permissions';
@@ -33,7 +34,7 @@ import {
   type Deal, type PipelineStage,
 } from '../lib/pipelineVentesApi';
 
-type Onglet = 'board' | 'stats' | 'reglages';
+type Onglet = 'board' | 'previsions' | 'stats' | 'reglages';
 
 /**
  * Le dernier pipeline consulté, par navigateur. Pas en base : c'est une
@@ -200,6 +201,8 @@ export default function Pipeline() {
 
   const tabs: { cle: Onglet; libelle: string; visible: boolean }[] = [
     { cle: 'board', libelle: 'Board', visible: true },
+    // Les prévisions suivent le board : c'est la même question, projetée.
+    { cle: 'previsions', libelle: fr ? 'Prévisions' : 'Forecast', visible: voitLesStats },
     { cle: 'stats', libelle: fr ? 'Statistiques' : 'Statistics', visible: voitLesStats },
     { cle: 'reglages', libelle: fr ? 'Réglages' : 'Settings', visible: peutConfigurer },
   ];
@@ -277,6 +280,10 @@ export default function Pipeline() {
           onAssigner={assigner}
             onChangement={rafraichir}
           />
+        )}
+
+        {ongletActif === 'previsions' && voitLesStats && (
+          <PipelinePrevisions pipelines={pipelines} pipelineActif={pipelineId} />
         )}
 
         {ongletActif === 'stats' && voitLesStats && (

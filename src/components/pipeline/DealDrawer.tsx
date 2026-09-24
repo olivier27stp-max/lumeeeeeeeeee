@@ -31,7 +31,7 @@ import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, deplacerDeal, estJobACreer, fetchElementsLies,
   fetchDossierClient, fetchHistorique, fetchRendezVousClient, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
-  abandonnerDeal, fetchRaisonsProposees, marquerPerdu, nomClient,
+  abandonnerDeal, fetchRaisonsProposees, majDateFermeture, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
 import { LIBELLE_SOURCE, depuis, montant } from '../../lib/pipeline/presentation';
@@ -996,6 +996,7 @@ export default function DealDrawer({
   const idSource = useId();
   const idRaisonPerte = useId();
   const idRaisonAbandon = useId();
+  const idDateFermeture = useId();
   const idOnglets = useId();
   const [onglet, setOnglet] = useState<Onglet>('lie');
   const listeMembres = useMemo(() => membres ?? [], [membres]);
@@ -1596,6 +1597,30 @@ export default function DealDrawer({
                         </button>
                       )
                     )}
+
+                    {/*
+                      La date visée : c'est elle qui range le deal dans un
+                      mois de la chronologie des prévisions. Sans elle, il
+                      tombe dans « Sans date » — visible, pas caché.
+                      La reporter compte comme un glissement ; l'avancer non.
+                    */}
+                    <div className="mt-2.5">
+                      <label htmlFor={idDateFermeture} className="block text-[11px] text-text-tertiary mb-1">
+                        {fr ? 'Fermeture visée' : 'Expected close date'}
+                      </label>
+                      <input
+                        id={idDateFermeture}
+                        type="date"
+                        value={deal.expected_close_date ?? ''}
+                        onChange={(e) => {
+                          void ecrire(
+                            () => majDateFermeture(deal.id, e.target.value || null),
+                            fr ? 'Date enregistrée.' : 'Date saved.',
+                          );
+                        }}
+                        className="input-field w-full text-[12.5px]"
+                      />
+                    </div>
 
                     <div className="mt-2.5 pt-1 border-t border-border-subtle divide-y divide-border-subtle">
                       <Ligne label={fr ? 'Créé' : 'Created'}>

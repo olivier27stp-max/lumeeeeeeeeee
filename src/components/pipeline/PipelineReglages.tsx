@@ -120,7 +120,7 @@ function LigneEtape({
   fr: boolean;
   onEnregistrer: (
     id: string,
-    champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en'>>,
+    champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en' | 'probability' | 'show_in_reports'>>,
   ) => void;
   onMonter: (id: string) => void;
   onDescendre: (id: string) => void;
@@ -137,6 +137,8 @@ function LigneEtape({
   // Brouillon local : la frappe reste fluide, l'écriture part au `blur`.
   const [nomFr, setNomFr] = useState(etape.name_fr);
   const [nomEn, setNomEn] = useState(etape.name_en);
+  const idProba = useId();
+  const [proba, setProba] = useState(etape.probability === null ? '' : String(etape.probability));
   const [guidFr, setGuidFr] = useState(etape.guidance_fr);
   const [guidEn, setGuidEn] = useState(etape.guidance_en);
 
@@ -145,6 +147,7 @@ function LigneEtape({
   useEffect(() => {
     setNomFr(etape.name_fr);
     setNomEn(etape.name_en);
+    setProba(etape.probability === null ? '' : String(etape.probability));
     setGuidFr(etape.guidance_fr);
     setGuidEn(etape.guidance_en);
   }, [etape.name_fr, etape.name_en, etape.guidance_fr, etape.guidance_en]);
@@ -287,6 +290,55 @@ function LigneEtape({
                 className="input-field w-full text-[12.5px] resize-none"
               />
             </div>
+          </div>
+
+          {/*
+            La probabilité sert au « revenu attendu » des prévisions :
+            valeur x probabilité. Laissée VIDE, l'étape est absente de ce
+            calcul — jamais comptée à zéro. La différence compte : un
+            pipeline non configuré afficherait sinon « 0 $ attendu » tout en
+            ayant des deals bien vivants.
+            Les étapes gagnée et perdue valent 100 % et 0 % : ce sont des
+            faits, pas des estimations, donc elles ne se modifient pas.
+          */}
+          <div className="mt-2.5 flex flex-wrap items-end gap-4">
+            <div>
+              <label htmlFor={idProba} className="block text-[10.5px] uppercase tracking-wide text-text-muted mb-1">
+                {fr ? 'Probabilité (%)' : 'Probability (%)'}
+              </label>
+              <input
+                id={idProba}
+                type="number"
+                min={0}
+                max={100}
+                value={proba}
+                disabled={etape.kind !== 'open'}
+                onChange={(e) => setProba(e.target.value)}
+                onBlur={() => {
+                  const brut = proba.trim();
+                  const n = brut === '' ? null : Number(brut);
+                  if (n !== null && (!Number.isFinite(n) || n < 0 || n > 100)) {
+                    setProba(etape.probability === null ? '' : String(etape.probability));
+                    return;
+                  }
+                  if (n !== etape.probability) onEnregistrer(etape.id, { probability: n });
+                }}
+                placeholder={fr ? 'non renseignée' : 'not set'}
+                className="input-field w-[130px] text-[12.5px] disabled:opacity-50"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 pb-2 text-[12px] text-text-secondary">
+              <input
+                type="checkbox"
+                checked={etape.show_in_reports}
+                onChange={(e) => onEnregistrer(etape.id, { show_in_reports: e.target.checked })}
+              />
+              {fr ? 'Compter dans les rapports' : 'Show in reports'}
+              <span className="text-[11px] text-text-muted">
+                {fr ? '(décocher pour « Spam », « Doublon »…)' : '(uncheck for “Spam”, “Duplicate”…)'}
+              </span>
+            </label>
           </div>
 
           {/* Les actions d'étape n'existent pas encore côté base : rien n'est
@@ -706,7 +758,7 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
 
   async function enregistrer(
     id: string,
-    champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en'>>,
+    champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en' | 'probability' | 'show_in_reports'>>,
   ) {
     try {
       await renommerEtape(id, champs);

@@ -57,9 +57,9 @@ vi.mock('../src/i18n', () => ({ useTranslation: () => ({ language: 'fr', t: {} }
 import DealDrawer from '../src/components/pipeline/DealDrawer';
 
 const ETAPES = [
-  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau lead', name_en: 'New lead', guidance_fr: '', guidance_en: '', position: 1, kind: 'open' as const, archived_at: null },
-  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won' as const, archived_at: null },
-  { id: 'e3', pipeline_id: 'p1', name_fr: 'Perdu', name_en: 'Lost', guidance_fr: '', guidance_en: '', position: 3, kind: 'lost' as const, archived_at: null },
+  { id: 'e1', pipeline_id: 'p1', name_fr: 'Nouveau lead', name_en: 'New lead', guidance_fr: '', guidance_en: '', position: 1, kind: 'open' as const, probability: null, show_in_reports: true, archived_at: null },
+  { id: 'e2', pipeline_id: 'p1', name_fr: 'Gagné', name_en: 'Won', guidance_fr: '', guidance_en: '', position: 2, kind: 'won' as const, probability: null, show_in_reports: true, archived_at: null },
+  { id: 'e3', pipeline_id: 'p1', name_fr: 'Perdu', name_en: 'Lost', guidance_fr: '', guidance_en: '', position: 3, kind: 'lost' as const, probability: null, show_in_reports: true, archived_at: null },
 ];
 
 function faireDeal(over: Record<string, unknown> = {}) {
@@ -70,7 +70,7 @@ function faireDeal(over: Record<string, unknown> = {}) {
     utm_source: null, utm_medium: null, utm_campaign: null, utm_content: null, fbclid: null,
     job_id: null, quote_id: null, first_contacted_at: null,
     last_activity_at: t, stage_entered_at: t, won_at: null, lost_at: null,
-    lost_reason: null, lost_from_stage_id: null, pin_id: null, field_rep_id: null,
+    lost_reason: null, lost_from_stage_id: null, expected_close_date: null, pin_id: null, field_rep_id: null,
     created_at: t,
     client: { first_name: 'Jean', last_name: 'Tremblay', company: null, email: null, phone: null, address: null },
     ...over,

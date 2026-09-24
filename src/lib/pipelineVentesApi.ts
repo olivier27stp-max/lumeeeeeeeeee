@@ -25,6 +25,10 @@ export interface PipelineStage {
   guidance_en: string;
   position: number;
   kind: StageKind;
+  /** Chance de conclure depuis cette étape, 0-100. `null` = non renseignée. */
+  probability: number | null;
+  /** `false` = l'étape est exclue des entonnoirs et des prévisions. */
+  show_in_reports: boolean;
   archived_at: string | null;
 }
 
@@ -49,6 +53,8 @@ export interface Deal {
   lost_at: string | null;
   lost_reason: string | null;
   lost_from_stage_id: string | null;
+  /** Date de fermeture visée — le mois de la chronologie. `null` = sans date. */
+  expected_close_date: string | null;
   /** Porte-à-porte : la porte d'où vient ce deal, et le rep qui l'a ouverte. */
   pin_id: string | null;
   field_rep_id: string | null;
@@ -211,7 +217,7 @@ export async function fetchPipelines(): Promise<PipelineResume[]> {
 export async function fetchStages(pipelineId: string): Promise<PipelineStage[]> {
   const { data, error } = await supabase
     .from('pipeline_stages')
-    .select('id,pipeline_id,name_fr,name_en,guidance_fr,guidance_en,position,kind,archived_at')
+    .select('id,pipeline_id,name_fr,name_en,guidance_fr,guidance_en,position,kind,probability,show_in_reports,archived_at')
     .eq('pipeline_id', pipelineId)
     .order('position');
   if (error) throw error;
@@ -225,7 +231,7 @@ export async function fetchDeals(pipelineId: string): Promise<Deal[]> {
       'id,pipeline_id,stage_id,client_id,assigned_user_id,source,' +
       'utm_source,utm_medium,utm_campaign,utm_content,fbclid,job_id,quote_id,' +
       'first_contacted_at,last_activity_at,stage_entered_at,won_at,lost_at,' +
-      'lost_reason,lost_from_stage_id,pin_id,field_rep_id,created_at,' +
+      'lost_reason,lost_from_stage_id,expected_close_date,pin_id,field_rep_id,created_at,' +
       'client:clients!deals_client_same_org(first_name,last_name,company,email,phone,address)',
     )
     .eq('pipeline_id', pipelineId)
@@ -479,6 +485,20 @@ export async function abandonnerDeal(dealId: string, raison: string): Promise<vo
   if (error) throw error;
 }
 
+/**
+ * La date de fermeture visée.
+ *
+ * Reporter la date incrémente le glissement (trigger en base) ; l'avancer ne
+ * compte pas — c'est une bonne nouvelle, pas un signal de risque.
+ */
+export async function majDateFermeture(dealId: string, date: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('deals')
+    .update({ expected_close_date: date || null })
+    .eq('id', dealId);
+  if (error) throw error;
+}
+
 export async function assignerDeal(dealId: string, membreId: string | null): Promise<void> {
   const { error } = await supabase
     .from('deals')
@@ -574,7 +594,7 @@ export async function creerDealManuel(champs: {
 
 export async function renommerEtape(
   stageId: string,
-  champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en'>>,
+  champs: Partial<Pick<PipelineStage, 'name_fr' | 'name_en' | 'guidance_fr' | 'guidance_en' | 'probability' | 'show_in_reports'>>,
 ): Promise<void> {
   const { error } = await supabase.from('pipeline_stages').update(champs).eq('id', stageId);
   if (error) throw error;
@@ -1279,4 +1299,88 @@ export async function fetchRendezVousClient(clientId: string | null): Promise<Re
       statut: (r.status as string) ?? '',
     };
   });
+}
+
+// ── Prévisions ──────────────────────────────────────────────
+//
+// Les chiffres sont une PROJECTION, jamais une prévision : ils dépendent de
+// probabilités saisies à la main, étape par étape. Une étape sans
+// probabilité est ABSENTE du revenu attendu — pas comptée à zéro. La
+// différence compte : un pipeline non configuré afficherait sinon « 0 $
+// attendu » tout en ayant des deals bien vivants.
+
+export interface PrevisionsPipeline {
+  max_potentiel_cents: number;
+  attendu_cents: number;
+  gagne_cents: number;
+  ouverts: number;
+  /** Deals ouverts sans date visée — absents de la chronologie. */
+  sans_date: number;
+  /** Deals ouverts sans montant connu — ils tirent le potentiel vers le bas. */
+  sans_montant: number;
+  /** Deals dont la date visée est déjà passée. */
+  en_retard: number;
+}
+
+export interface RisqueRow {
+  niveau: 'haut' | 'moyen' | 'faible';
+  deals: number;
+  montant_cents: number;
+}
+
+export interface MoisChronologie {
+  mois: string;
+  deals: number;
+  potentiel_cents: number;
+  gagne_cents: number;
+}
+
+export async function fetchPrevisions(pipelineId?: string | null): Promise<PrevisionsPipeline | null> {
+  const { data, error } = await supabase.rpc('pipeline_previsions', {
+    p_pipeline_id: pipelineId ?? null,
+  });
+  if (error) throw error;
+  const r = (data?.[0] ?? null) as Record<string, unknown> | null;
+  if (!r) return null;
+  return {
+    max_potentiel_cents: Number(r.max_potentiel_cents ?? 0),
+    attendu_cents: Number(r.attendu_cents ?? 0),
+    gagne_cents: Number(r.gagne_cents ?? 0),
+    ouverts: Number(r.ouverts ?? 0),
+    sans_date: Number(r.sans_date ?? 0),
+    sans_montant: Number(r.sans_montant ?? 0),
+    en_retard: Number(r.en_retard ?? 0),
+  };
+}
+
+export async function fetchARisque(pipelineId?: string | null, seuils?: {
+  hautFois?: number; hautJours?: number; moyenFois?: number; moyenJours?: number;
+}): Promise<RisqueRow[]> {
+  const { data, error } = await supabase.rpc('pipeline_a_risque', {
+    p_pipeline_id: pipelineId ?? null,
+    p_haut_fois: seuils?.hautFois ?? 2,
+    p_haut_jours: seuils?.hautJours ?? 14,
+    p_moyen_fois: seuils?.moyenFois ?? 1,
+    p_moyen_jours: seuils?.moyenJours ?? 7,
+  });
+  if (error) throw error;
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    niveau: r.niveau as RisqueRow['niveau'],
+    deals: Number(r.deals ?? 0),
+    montant_cents: Number(r.montant_cents ?? 0),
+  }));
+}
+
+export async function fetchChronologie(pipelineId?: string | null, mois = 6): Promise<MoisChronologie[]> {
+  const { data, error } = await supabase.rpc('pipeline_chronologie', {
+    p_pipeline_id: pipelineId ?? null,
+    p_mois: mois,
+  });
+  if (error) throw error;
+  return (data ?? []).map((r: Record<string, unknown>) => ({
+    mois: r.mois as string,
+    deals: Number(r.deals ?? 0),
+    potentiel_cents: Number(r.potentiel_cents ?? 0),
+    gagne_cents: Number(r.gagne_cents ?? 0),
+  }));
 }
