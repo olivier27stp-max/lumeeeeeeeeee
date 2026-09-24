@@ -604,4 +604,98 @@ router.post('/automations/events/client-tagged', validate(automationEventSchema)
   }
 });
 
+// ── POST /automations/events/task-completed ──
+// Appelée après qu'une tâche a été marquée terminée.
+//
+// Usage typique : « la tâche de rappel est faite → envoyer le suivi ».
+router.post('/automations/events/task-completed', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { taskId } = req.body;
+    if (!taskId) return res.status(400).json({ error: 'taskId is required' });
+
+    const admin = getServiceClient();
+    const { data: tache } = await admin
+      .from('tasks')
+      .select('title, status, linked_entity_type, linked_entity_id, job_id')
+      .eq('id', taskId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+    if (!tache) return res.status(404).json({ error: 'Tâche introuvable.' });
+
+    // La tâche doit VRAIMENT être terminée : ce point de contact est appelé
+    // par le navigateur, et une séquence déclenchée sur une tâche encore
+    // ouverte enverrait un suivi pour un travail non fait.
+    if (tache.status !== 'done') {
+      return res.status(409).json({ error: "Cette tâche n'est pas terminée." });
+    }
+
+    /*
+     * Le CLIENT rattaché, par les vrais liens de `tasks` :
+     * `linked_entity_type` ∈ {client, lead, quote, invoice, job} (CHECK en
+     * base), et `job_id` en second recours.
+     *
+     * Une tâche sans client (« commander des pièces ») n'émet RIEN : sans
+     * destinataire, toute action de message échouerait, et la règle serait
+     * réessayée trois fois pour rien.
+     */
+    let clientId: string | null = null;
+    const t = tache.linked_entity_type;
+    const lien = tache.linked_entity_id;
+    if ((t === 'client' || t === 'lead') && lien) {
+      clientId = lien;
+    } else if (t === 'job' && lien) {
+      const { data: job } = await admin
+        .from('jobs').select('client_id').eq('id', lien).eq('org_id', auth.orgId).maybeSingle();
+      clientId = job?.client_id ?? null;
+    } else if (t === 'invoice' && lien) {
+      const { data: inv } = await admin
+        .from('invoices').select('client_id').eq('id', lien).eq('org_id', auth.orgId).maybeSingle();
+      clientId = inv?.client_id ?? null;
+    } else if (t === 'quote' && lien) {
+      const { data: q } = await admin
+        .from('quotes').select('client_id, lead_id').eq('id', lien).eq('org_id', auth.orgId).maybeSingle();
+      clientId = q?.client_id ?? q?.lead_id ?? null;
+    } else if (tache.job_id) {
+      const { data: job } = await admin
+        .from('jobs').select('client_id').eq('id', tache.job_id).eq('org_id', auth.orgId).maybeSingle();
+      clientId = job?.client_id ?? null;
+    }
+
+    if (!clientId) {
+      // Pas une erreur : une tâche interne n'a simplement personne à qui
+      // écrire. On le dit, et on n'émet pas.
+      return res.json({ ok: true, emis: false, raison: 'tâche sans client rattaché' });
+    }
+
+    const { data: client } = await admin
+      .from('clients')
+      .select('first_name, last_name, email, phone')
+      .eq('id', clientId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+
+    await eventBus.emit('task.completed', {
+      orgId: auth.orgId,
+      entityType: 'client',
+      entityId: clientId,
+      actorId: auth.user.id,
+      metadata: {
+        task_id: taskId,
+        // Le titre sert aux conditions : « quand la tâche “Rappeler” est
+        // terminée », plutôt que n'importe quelle tâche.
+        task_title: tache.title || '',
+        client_name: client ? `${client.first_name || ''} ${client.last_name || ''}`.trim() : '',
+        email: client?.email || '',
+        phone: client?.phone || '',
+      },
+    });
+    return res.json({ ok: true, emis: true });
+  } catch (err: any) {
+    console.error('[automation-events] task.completed error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

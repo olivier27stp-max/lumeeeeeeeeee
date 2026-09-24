@@ -178,6 +178,14 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     famille: 'client', entite: 'agreement',
   },
 
+  // ── Travail ──
+  {
+    cle: 'task.completed', fr: 'Tâche terminée', en: 'Task completed',
+    aide_fr: 'Quand une tâche liée à un client est marquée terminée.',
+    aide_en: 'When a task linked to a client is marked done.',
+    famille: 'job', entite: 'lead',
+  },
+
   // ── Pipeline de ventes ──
   {
     cle: 'deal.stage_entered', fr: 'Opportunité entre dans une étape', en: 'Deal enters a stage',
@@ -713,6 +721,7 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'agreement.signed': 'job',
   'client.replied': 'client',
   'client.tagged': 'client',
+  'task.completed': 'client',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };

@@ -63,7 +63,15 @@ export type CRMEventType =
    * et une séquence part. Le retrait d'étiquette N'EST PAS émis — retirer un
    * marqueur ne devrait jamais déclencher un envoi au client.
    */
-  | 'client.tagged';
+  | 'client.tagged'
+  /**
+   * Une tâche vient d'être marquée terminée.
+   *
+   * L'entité est le CLIENT rattaché à la tâche quand il y en a un — c'est
+   * lui que les messages décrivent. Une tâche sans lien client existe
+   * (« commander des pièces ») : elle n'émet rien, faute de destinataire.
+   */
+  | 'task.completed';
 
 export interface CRMEvent {
   type: CRMEventType;
@@ -111,6 +119,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'custom_field.changed': 'custom_field_changed',
   'client.replied': 'client_replied',
   'client.tagged': 'client_tagged',
+  'task.completed': 'task_completed',
 };
 
 // ── Bus singleton ───────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { emitTaskCompleted } from './automationEventsApi';
 import { getCurrentOrgIdOrThrow } from './orgApi';
 import type {
   TaskRow,
@@ -189,6 +190,12 @@ export async function updateTask(id: string, input: TaskUpdateInput): Promise<Ta
     .single();
 
   if (error) throw error;
+
+  // Le moteur d'automatisations ne voit pas cette écriture : les tâches
+  // s'écrivent depuis le navigateur. On le prévient APRÈS le succès, et
+  // seulement sur un passage à « terminée ».
+  if (input.status === 'done') emitTaskCompleted({ taskId: id });
+
   return data as TaskRow;
 }
 
@@ -217,6 +224,11 @@ export async function bulkUpdateTaskStatus(ids: string[], status: 'open' | 'done
     .in('id', ids);
 
   if (error) throw error;
+
+  // Une par une : le moteur raisonne sur UNE tâche et UN client. Marquer
+  // dix tâches terminées d'un coup, c'est dix événements — sinon neuf
+  // clients ne recevraient jamais leur suivi.
+  if (status === 'done') for (const id of ids) emitTaskCompleted({ taskId: id });
 }
 
 // ── Bulk update priority ──

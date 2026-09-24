@@ -23,6 +23,7 @@ const RACINE = resolve(__dirname, '..');
 const moteur = readFileSync(resolve(RACINE, 'server/lib/automationEngine.ts'), 'utf8');
 const webhookSms = readFileSync(resolve(RACINE, 'server/routes/messages.ts'), 'utf8');
 const hooks = readFileSync(resolve(RACINE, 'server/routes/automation-events.ts'), 'utf8');
+const tachesApi = readFileSync(resolve(RACINE, 'src/lib/tasksApi.ts'), 'utf8');
 
 describe('le réglage « arrêter sur réponse » est vraiment branché', () => {
   it('le moteur LIT `arret_sur_reponse` (il ne l’ignorait plus)', () => {
@@ -196,5 +197,65 @@ describe('le déclencheur « étiquette ajoutée » ne part pas dans le vide', (
     expect(emission, 'l’étiquette doit voyager dans les métadonnées').toContain('metadata:');
     expect(emission, '`tag` doit être dans les métadonnées, pour les conditions').toMatch(/^\s*tag,$/m);
     expect(emission).toMatch(/entityType:\s*'client'/);
+  });
+});
+
+describe('le déclencheur « tâche terminée » ne part que quand il faut', () => {
+  const route = hooks.slice(hooks.indexOf("'/automations/events/task-completed'"));
+
+  it('la tâche doit VRAIMENT être terminée', () => {
+    // Appelé par le navigateur : une séquence déclenchée sur une tâche
+    // encore ouverte enverrait un suivi pour un travail non fait.
+    expect(route.slice(0, 1200)).toMatch(/status !== 'done'/);
+    expect(route.slice(0, 1200)).toMatch(/status\(409\)/);
+  });
+
+  it('une tâche SANS client n’émet rien — et ce n’est pas une erreur', () => {
+    /*
+     * « Commander des pièces » n'a personne à qui écrire. Émettre quand
+     * même ferait échouer toute action de message, réessayée trois fois
+     * pour rien. On répond 200 avec `emis: false`.
+     */
+    expect(route.slice(0, 3200)).toMatch(/emis:\s*false/);
+    expect(route.slice(0, 3200)).toMatch(/tâche sans client rattaché/);
+  });
+
+  it('le client est résolu par les CINQ liens permis de `tasks`', () => {
+    // `tasks_linked_entity_type_check` n'admet que ces cinq valeurs.
+    const bloc = route.slice(0, 3200);
+    for (const t of ['client', 'lead', 'job', 'invoice', 'quote']) {
+      expect(bloc, `le lien « ${t} » doit être traité`).toContain(`'${t}'`);
+    }
+    // Un devis porte DEUX liens vers clients.
+    expect(bloc).toMatch(/lead_id/);
+  });
+
+  it('le titre voyage dans les métadonnées', () => {
+    // Sans lui, impossible d'écrire « quand la tâche “Rappeler” est
+    // terminée » : toutes les tâches déclencheraient la même règle.
+    expect(route.slice(0, 3600)).toMatch(/task_title/);
+  });
+
+  it('un marquage EN LOT émet un événement par tâche', () => {
+    /*
+     * Le moteur raisonne sur UNE tâche et UN client. Sans la boucle,
+     * marquer dix tâches terminées d'un coup n'enverrait qu'un seul suivi
+     * — neuf clients seraient oubliés en silence.
+     */
+    const bulk = tachesApi.slice(tachesApi.indexOf('export async function bulkUpdateTaskStatus'));
+    expect(bulk.slice(0, 900)).toMatch(/for \(const id of ids\) emitTaskCompleted/);
+  });
+
+  it('l’émission part APRÈS l’écriture réussie', () => {
+    // Émettre avant ferait partir une séquence sur une tâche qui n'a pas
+    // changé de statut.
+    const maj = tachesApi.slice(
+      tachesApi.indexOf('export async function updateTask'),
+      tachesApi.indexOf('// ── Delete task'),
+    );
+    const posErreur = maj.indexOf('if (error) throw error');
+    const posEmit = maj.indexOf('emitTaskCompleted');
+    expect(posErreur).toBeGreaterThan(-1);
+    expect(posEmit, 'l’émission doit suivre le `throw` en cas d’échec').toBeGreaterThan(posErreur);
   });
 });

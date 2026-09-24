@@ -157,3 +157,14 @@ export function emitLeadStatusChanged(params: {
 export function emitClientTagged(params: { clientId: string; tag: string }) {
   fireEvent('client-tagged', params);
 }
+
+/**
+ * Prévient le moteur qu'une tâche vient d'être marquée terminée.
+ *
+ * Le serveur vérifie lui-même que la tâche est bien `done` et retrouve le
+ * client rattaché : une tâche interne (« commander des pièces ») n'émet
+ * rien, faute de destinataire.
+ */
+export function emitTaskCompleted(params: { taskId: string }) {
+  fireEvent('task-completed', params);
+}
