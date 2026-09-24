@@ -143,6 +143,10 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, 
     ? membres.find((m) => m.id === deal.assigned_user_id)?.name ?? null
     : null;
   const nom = nomClient(deal);
+  // `Date.now()` à chaque rendu plutôt qu'une valeur figée : une carte
+  // ré-affichée après un déplacement doit montrer « aujourd'hui », pas
+  // l'ancienneté d'avant le mouvement.
+  const joursEtape = joursDepuis(deal.stage_entered_at, Date.now());
   const liseré = jobACreer
     ? 'var(--color-warning)'
     : prio ? TEINTE_PRIORITE[prio.niveau] : 'var(--color-outline)';
@@ -238,8 +242,27 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, 
             {argent(montantCents, fr)}
           </span>
         )}
-        <span className="ml-auto whitespace-nowrap text-[11px] tabular-nums text-text-tertiary">
-          {dateCourte(deal.created_at, fr)}
+        {/*
+          Le temps passé DANS L'ÉTAPE, pas l'âge du deal.
+          C'est la question du matin : « ça fait combien de temps que celui-là
+          est bloqué en Soumission envoyée ? ». L'âge total ne le dit pas —
+          un deal créé il y a trois mois mais entré hier dans l'étape n'a rien
+          d'urgent, et l'inverse non plus.
+          Au-delà d'une semaine, la mention se teinte : c'est un rappel, pas
+          une alerte (le liseré de priorité porte déjà l'urgence).
+        */}
+        <span
+          className="ml-auto whitespace-nowrap text-[11px] tabular-nums"
+          style={{ color: joursEtape >= 7 ? 'var(--color-warning)' : 'var(--color-text-tertiary)' }}
+          title={
+            fr
+              ? `Dans cette étape depuis le ${dateCourte(deal.stage_entered_at, fr)}`
+              : `In this stage since ${dateCourte(deal.stage_entered_at, fr)}`
+          }
+        >
+          {joursEtape === 0
+            ? (fr ? "aujourd'hui" : 'today')
+            : `${joursEtape} ${fr ? 'j' : 'd'}${fr ? ' ici' : ' here'}`}
         </span>
       </div>
 

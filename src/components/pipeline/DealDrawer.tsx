@@ -29,7 +29,7 @@ import { versDate } from '../../lib/dateSeule';
 import {
   basculerTacheDeal, creerTacheDeal, deplacerDeal, estJobACreer, fetchElementsLies,
   fetchHistorique, fetchTachesDuDeal, majContactDuDeal, majRaisonPerte, majSourceDuDeal,
-  abandonnerDeal, marquerPerdu, nomClient,
+  abandonnerDeal, fetchRaisonsProposees, marquerPerdu, nomClient,
   type ContactClient, type Deal, type PipelineStage, type TacheDeal,
 } from '../../lib/pipelineVentesApi';
 import { LIBELLE_SOURCE, depuis, montant } from '../../lib/pipeline/presentation';
@@ -438,6 +438,14 @@ export default function DealDrawer({
   // « Abandonné » n'est pas une étape : c'est une décision. Le vendeur dit
   // qu'il arrête de relancer, et la base place le deal dans l'étape perdue
   // elle-même — lui demander LAQUELLE rendrait le geste ambigu.
+  // Les motifs proposés : lecture seule ici, la liste se gère dans les
+  // réglages. `staleTime` long — elle change rarement.
+  const { data: raisonsProposees = [] } = useQuery({
+    queryKey: ['pipeline-raisons-proposees'],
+    queryFn: fetchRaisonsProposees,
+    staleTime: 600_000,
+  });
+
   const [abandonVise, setAbandonVise] = useState(false);
   const [raisonAbandon, setRaisonAbandon] = useState('');
 
@@ -836,12 +844,40 @@ export default function DealDrawer({
                         <label htmlFor={idRaisonPerte} className="block text-[11px] text-text-tertiary mb-1">
                           {fr ? 'Raison de la perte (obligatoire)' : 'Loss reason (required)'}
                         </label>
+                        {/*
+                          Les motifs courants en un clic, la saisie libre juste
+                          en dessous. Sans cette liste, « trop cher », « prix »
+                          et « trop dispendieux » comptent pour trois raisons
+                          distinctes dans les statistiques — et le seul retour
+                          structuré sur pourquoi on perd devient illisible.
+                          On ne FORCE pas la liste : le motif imprévu est
+                          souvent celui qui apprend quelque chose.
+                        */}
+                        {raisonsProposees.length > 0 && (
+                          <div className="mb-2 flex flex-wrap gap-1.5">
+                            {raisonsProposees.map((r) => (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => setRaisonSaisie(r.libelle)}
+                                className={
+                                  'rounded-full border px-2.5 py-1 text-[11.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary '
+                                  + (raisonSaisie.trim() === r.libelle
+                                    ? 'border-outline-strong bg-surface-tertiary font-semibold text-text-primary'
+                                    : 'border-outline text-text-tertiary hover:bg-surface-secondary hover:text-text-primary')
+                                }
+                              >
+                                {r.libelle}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         <textarea
                           id={idRaisonPerte}
                           rows={2}
                           value={raisonSaisie}
                           onChange={(e) => setRaisonSaisie(e.target.value)}
-                          placeholder={fr ? 'Ex. : a choisi un concurrent 15 % moins cher' : 'e.g. chose a competitor 15% cheaper'}
+                          placeholder={fr ? 'Ou écris un motif précis…' : 'Or write a specific reason…'}
                           className="input-field w-full text-[12.5px] resize-none"
                         />
                         <div className="flex justify-end gap-2 mt-2">
