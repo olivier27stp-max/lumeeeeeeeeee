@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-const creerMock = vi.fn(async () => 'p-neuf');
+const creerMock = vi.fn(async (..._a: any[]) => 'p-neuf');
 
 vi.mock('../src/lib/pipelineVentesApi', () => ({
   creerPipelineSurMesure: (...a: any[]) => creerMock(...(a as [])),
