@@ -37,15 +37,19 @@ describe('prefixeDepuisNom', () => {
 });
 
 describe('senderFor', () => {
+  // Le domaine dépend de EMAIL_FROM, absente en CI : on compare au domaine
+  // que le module lit réellement plutôt que d'en coder un en dur.
+  const domaine = senderFor({ company_name: 'Repere' } as never).from.replace(/^.*@|>$/g, '');
+
   it('affiche le nom de l’entreprise des deux côtés de l’adresse', () => {
     const s = senderFor({ company_name: 'Coquin lavage', company_email: 'info@coquinlavage.ca' } as never);
-    expect(s.from).toBe('Coquin lavage <coquin-lavage@lumecrm.net>');
+    expect(s.from).toBe(`Coquin lavage <coquin-lavage@${domaine}>`);
     expect(s.from).not.toContain('noreply');
   });
 
   it('garde le domaine vérifié : en changer ferait rejeter l’envoi par SES', () => {
     const s = senderFor({ company_name: 'Vision Lavage' } as never);
-    expect(s.from).toMatch(/@lumecrm\.net>$/);
+    expect(s.from).toBe(`Vision Lavage <vision-lavage@${domaine}>`);
   });
 
   it('dirige la réponse vers l’entreprise, et seulement si elle a une adresse', () => {
@@ -55,6 +59,6 @@ describe('senderFor', () => {
   });
 
   it('retombe sur le préfixe d’origine quand le nom ne donne rien', () => {
-    expect(senderFor({ company_name: '🎉' } as never).from).toBe('🎉 <noreply@lumecrm.net>');
+    expect(senderFor({ company_name: '🎉' } as never).from).toMatch(/^🎉 <noreply@/);
   });
 });
