@@ -97,6 +97,7 @@ const InvoiceEdit = React.lazy(() => import('./pages/InvoiceEdit'));
 const Finances = React.lazy(() => import('./pages/Finances'));
 const PaymentSettings = React.lazy(() => import('./pages/PaymentSettings'));
 const Automations = React.lazy(() => import('./pages/Automations'));
+const AutomationBuilderPage = React.lazy(() => import('./pages/AutomationBuilderPage'));
 const CompanySettings = React.lazy(() => import('./pages/CompanySettings'));
 const ManageTeam = React.lazy(() => import('./pages/ManageTeam'));
 const TeamMemberDetails = React.lazy(() => import('./pages/TeamMemberDetails'));
@@ -1629,6 +1630,10 @@ function AuthenticatedApp({
                     <Route path="/courses/new" element={<Gated permission="settings.update"><PlanFeatureGate flag="includes_courses"><CourseBuilder /></PlanFeatureGate></Gated>} />
                     <Route path="/courses/:id" element={<Gated permission="settings.read"><PlanFeatureGate flag="includes_courses"><CourseView /></PlanFeatureGate></Gated>} />
                     <Route path="/courses/:id/edit" element={<Gated permission="settings.update"><CourseBuilder /></Gated>} />
+                    {/* Le builder occupe TOUT l'écran (fixed inset-0) : pas de
+                        PageWrapper, il se pose par-dessus la navigation comme
+                        /quotes/:id/measure. */}
+                    <Route path="/automations/:id" element={<Gated permission="automations.update"><PlanFeatureGate flag="includes_automations"><AutomationBuilderPage /></PlanFeatureGate></Gated>} />
                     <Route path="/automations/hub" element={<Navigate to="/automations" replace />} />
                     <Route path="/automations/builder" element={<Navigate to="/automations" replace />} />
                     <Route path="/company-settings" element={<Navigate to="/settings/company" replace />} />
