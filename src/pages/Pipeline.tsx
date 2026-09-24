@@ -28,7 +28,7 @@ import { useTranslation } from '../i18n';
 import { hasPermission } from '../lib/permissions';
 import { usePermissions } from '../hooks/usePermissions';
 import {
-  assignerDeal, deplacerDeal, fetchDeals, fetchMembres, fetchMontants,
+  assignerDeal, deplacerDeal, fetchDeals, fetchMembres, fetchMontants, fetchMontantsDetailles,
   fetchPipelineDefaut, fetchPipelines, fetchStages, lierJob, marquerPerdu, nomClient,
   type Deal, type PipelineStage,
 } from '../lib/pipelineVentesApi';
@@ -109,6 +109,15 @@ export default function Pipeline() {
 
   // La valeur des deals est DÉRIVÉE (job, puis devis) : jamais stockée sur le
   // deal. Requête séparée pour que le board s'affiche sans l'attendre.
+  // Les montants AVEC provenance, pour la fiche seulement : le board écarte
+  // les chiffres spéculatifs, la fiche les explique.
+  const detailsQ = useQuery({
+    queryKey: ['pipeline-montants-details', pipelineId],
+    queryFn: fetchMontantsDetailles,
+    enabled: !!pipelineId,
+    staleTime: 60_000,
+  });
+
   const montantsQ = useQuery({
     queryKey: ['pipeline-montants', pipelineId],
     queryFn: fetchMontants,
@@ -294,11 +303,12 @@ export default function Pipeline() {
         deal={dealOuvert}
         etapes={etapes}
         membres={membresQ.data ?? []}
-        montantCents={dealOuvert ? (montantsQ.data?.[dealOuvert.id] ?? null) : null}
+        // La provenance vient de la BASE, elle n'est plus devinée depuis
+        // `job_id`/`quote_id` : `pipeline_montants` connaît le cas « dernier
+        // devis du client », que la page ne pouvait pas distinguer.
+        montantCents={dealOuvert ? (detailsQ.data?.[dealOuvert.id]?.cents ?? null) : null}
         montantProvenance={
-          dealOuvert && montantsQ.data?.[dealOuvert.id]
-            ? (dealOuvert.job_id ? 'job' : dealOuvert.quote_id ? 'devis' : 'devis_client')
-            : 'aucun'
+          (dealOuvert ? detailsQ.data?.[dealOuvert.id]?.provenance : undefined) ?? 'aucun'
         }
         onClose={() => setDealOuvert(null)}
         onAssigner={async (dealId, membreId) => {
