@@ -16,7 +16,7 @@ import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
-import { senderForOrg, marqueDepuis, langueEntreprise } from './emails';
+import { senderForOrg, marqueDepuis, langueEntreprise, getCompanySettings } from './emails';
 import { rendreCourrielClient, MOTS, montant as montantLisible, dateLisible, echapper } from '../lib/courriels/gabarit';
 import { texteDuCourriel } from '../lib/courriels/modeles';
 import { lireLiensSociaux } from '../lib/socialLinks';
@@ -312,18 +312,22 @@ router.post('/quotes/send-email', async (req, res) => {
 
     if (!isMailerConfigured()) return res.status(503).json({ error: 'SMTP not configured.' });
 
-    // Get company info with branding
-    const { data: company } = await admin
-      .from('company_settings')
-      .select('company_name, phone, email, logo_url')
-      .eq('org_id', quote.org_id)
-      .maybeSingle();
+    /* `getCompanySettings` plutôt qu'un select maison. L'ancien lisait quatre
+       colonnes et OMETTAIT `default_language` — que `langueEntreprise` réclame
+       juste en dessous. Le cast `as never` faisait taire TypeScript : cette
+       route envoyait donc TOUJOURS en français, alors que /emails/send-quote,
+       même document, respectait la langue de l'entreprise.
 
-    const langue = langueEntreprise(company as never);
+       Elle perdait aussi la couleur de marque, l'adresse, le site, les réseaux
+       et les numéros de taxes : le bouton sortait en noir et le pied sans ses
+       mentions légales. */
+    const company = await getCompanySettings(quote.org_id);
+
+    const langue = langueEntreprise(company);
     const m = MOTS[langue];
-    const companyName = company?.company_name || '';
-    const companyPhone = company?.phone || null;
-    const companyEmail = company?.email || null;
+    const companyName = company.company_name || '';
+    const companyPhone = company.company_phone || null;
+    const companyEmail = company.company_email || null;
     const baseUrl = resolvePublicBaseUrl(req);
     // Comme partout ailleurs : pas de jeton, pas de bouton. Un lien
     // `/quote/undefined` est pire que pas de lien du tout.
@@ -378,12 +382,7 @@ router.post('/quotes/send-email', async (req, res) => {
 
     const emailHtml = rendreCourrielClient({
       langue,
-      marque: marqueDepuis({
-        company_name: companyName,
-        company_email: companyEmail,
-        company_phone: companyPhone,
-        company_logo_url: company?.logo_url ?? null,
-      } as never),
+      marque: marqueDepuis(company),
       preheader: `${m.soumission} ${quote.quote_number} — ${totalFormatted}`,
       titre: langue === 'fr' ? `Votre soumission ${quote.quote_number}` : `Your quote ${quote.quote_number}`,
       salutation: corpsHtml ? null : m.bonjour(recipientName),

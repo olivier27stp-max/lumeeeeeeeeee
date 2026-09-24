@@ -430,7 +430,7 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
 </tr>
 <tr>
   <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Due Date</td>
-  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;">${formatDate(invoice.due_date)}</td>
+  <td style="padding:12px 16px;font-size:14px;color:#1a1a2e;text-align:right;border-top:1px solid #e5e7eb;">${formatDate(invoice.due_date, langue)}</td>
 </tr>
 <tr>
   <td style="padding:12px 16px;font-size:13px;color:#6b7280;font-weight:600;border-top:1px solid #e5e7eb;">Status</td>

@@ -106,6 +106,25 @@ const DEFAUTS = {
   },
 } as const;
 
+/**
+ * Retire les lignes dont le lien a disparu.
+ *
+ * Quand Stripe Connect n'est pas configuré, `pay_url` est vide : sans ce
+ * nettoyage le client lirait « Vous pouvez la régler ici : » suivi de rien,
+ * et le SMS « Régler : ». Une ligne qui se termine par « : » ou « ici : »
+ * après substitution n'a plus de raison d'être.
+ */
+export function nettoyerLiensMorts(texte: string): string {
+  return texte
+    .split('\n')
+    // Une ligne qui finit par « : » après substitution annonçait un lien qui
+    // n'est jamais venu. On la retire entièrement.
+    .filter((ligne) => !/:\s*$/.test(ligne.trimEnd()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 /* Figé sur `en-CA`, il rendait « $1,220.17 » dans un rappel par ailleurs
    entièrement français — la francisation du fichier avait oublié l'argent.
    Le même montant repart ensuite dans la carte du gabarit et dans le SMS. */
@@ -198,7 +217,9 @@ router.post('/cron/payment-reminders', async (req, res) => {
         .select('company_name, email, phone')
         .eq('org_id', orgId)
         .maybeSingle();
-      const companyName = orgSettings?.company_name || 'Your service provider';
+      // Plus de repli « Your service provider » : une org francophone sans nom
+      // signait son rappel en anglais. Sans nom, on n'en invente pas.
+      const companyName = orgSettings?.company_name || '';
 
       // For each schedule entry, find candidate invoices
       for (const entry of schedule) {
@@ -247,8 +268,14 @@ router.post('/cron/payment-reminders', async (req, res) => {
             const toEmail = (client?.email || '').trim();
             const toPhone = (client?.phone || '').trim();
 
-            // Build/find pay link (reuses existing pending request when available)
-            let payUrl = `${publicBase}/dashboard`;
+            /* VIDE, pas `/dashboard`. Le repli envoyait le client final vers le
+               tableau de bord du CRM — une page à laquelle il n'a aucun accès.
+               Le bouton était bien masqué (garde `includes('/pay/')`), mais la
+               phrase « Vous pouvez la régler ici : {pay_url} » du corps et le
+               SMS portaient quand même ce lien mort.
+
+               Vide, `nettoyerLiensMorts` retire la phrase entière. */
+            let payUrl = '';
             try {
               const pr = await createPaymentRequest({
                 orgId,
@@ -259,7 +286,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
               const token = (pr as any)?.public_token;
               if (token) payUrl = `${publicBase}/pay/${token}`;
             } catch (e: any) {
-              // Stripe Connect not set up — fall back to generic dashboard link.
+              // Stripe Connect pas configuré : on n'invente pas de lien.
               console.warn('[cron/reminders] payment request create failed:', e?.message);
             }
 
@@ -309,7 +336,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
               const modeleOrg = await texteDuCourriel(orgId, 'invoice_reminder', vars, undefined,
                 { invoice: inv.id, client: inv.client_id ?? null });
               const subject = modeleOrg?.sujet || applyTemplate(settings.custom_email_subject || defauts.sujet, vars);
-              const body = applyTemplate(settings.custom_email_body || defauts.corps, vars);
+              const body = nettoyerLiensMorts(applyTemplate(settings.custom_email_body || defauts.corps, vars));
               // Le texte du rappel (celui de l'entreprise ou le défaut) dans le gabarit commun, avec le montant en carte et le bouton payer.
               const html = rendreCourrielClient({
                 langue: langueRappel,
@@ -371,7 +398,7 @@ router.post('/cron/payment-reminders', async (req, res) => {
             if ((channel === 'sms' || channel === 'both') && toPhone && twilioClient && orgFromNumber) {
               // Même règle que le courriel : le texte par défaut suit la langue
               // de l'entreprise, lue une seule fois plus haut.
-              const smsBody = applyTemplate(settings.custom_sms_body || defauts.sms, vars);
+              const smsBody = nettoyerLiensMorts(applyTemplate(settings.custom_sms_body || defauts.sms, vars));
               // `sendSmsIfConfigured` ne lève jamais : le try/catch qui entourait
               // cet appel était inatteignable, `smsOk` restait donc toujours à
               // true et un échec Twilio était journalisé comme 'sent'. On lit

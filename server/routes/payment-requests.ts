@@ -104,7 +104,9 @@ function buildPaymentEmailHtml(params: {
     intro: modeleOrg ? null : (fr ? 'Ce dépôt réserve votre date à l’horaire. Dès qu’il est reçu, la date est à vous.' : 'This deposit holds your spot in the schedule. As soon as it is received, the date is yours.'),
     corpsHtml: modeleOrg?.corpsHtml ?? null,
     montant: { libelle: m.montantDu, valeur: params.amountFormatted, sous: `${m.facture} ${params.invoiceNumber}` },
-    bouton: { texte: m.payer(params.amountFormatted), url: params.paymentUrl },
+    // Même garde que les routes de document : un « /pay/undefined » est pire
+    // qu'une absence de bouton. `public_token` n'était vérifié nulle part.
+    bouton: params.paymentUrl ? { texte: m.payer(params.amountFormatted), url: params.paymentUrl } : null,
     note: fr ? 'Paiement sécurisé par Stripe. Une question ? Répondez simplement à ce courriel.' : 'Payment secured by Stripe. Questions? Just reply to this email.',
   });
 }

@@ -15,6 +15,7 @@ import { captureClientException } from '../lib/sentry';
 import { versDate } from '../lib/dateSeule';
 import { fetchPublicInvoice, type PublicInvoiceData, type PublicInvoiceCompany } from '../lib/invoicesPublicApi';
 import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import { resolveBrand, readableOn } from '../lib/brandColor';
 import PastilleLume from '../components/PastilleLume';
 
 // Langue de la page : celle de l'ENTREPRISE dès que l'API l'a dite ; en attendant, celle du navigateur.
@@ -99,6 +100,12 @@ export default function InvoiceView() {
   const cur = invoice.currency || 'CAD';
   const payee = invoice.status === 'paid' || invoice.balance_cents <= 0;
   const companyAddress = buildCompanyAddress(company);
+  /* La couleur de l'entreprise. Cette page était la SEULE des quatre pages
+     publiques à ne pas l'appliquer — QuoteView, ContractView et PublicPayment
+     le font toutes. L'API envoyait pourtant `brand_color` : la donnée arrivait
+     et n'était jamais lue. Une facture, la page qu'un client ouvre le plus,
+     s'affichait en noir et gris quelle que soit la marque. */
+  const brand = resolveBrand(company?.brand_color);
   // Sans logo d'entreprise, on n'affiche rien : le nom est déjà juste en dessous.
   // Un repli sur le logo de Lume ferait passer une facture de Coquin lavage
   // pour une facture de Lume.
@@ -154,7 +161,7 @@ export default function InvoiceView() {
                 </div>
               </div>
               <div className="text-right ml-6">
-                <h1 className="text-[28px] font-bold text-[#111] tracking-tight leading-none">{isFr ? 'FACTURE' : 'INVOICE'}</h1>
+                <h1 className="text-[28px] font-bold tracking-tight leading-none" style={{ color: brand }}>{isFr ? 'FACTURE' : 'INVOICE'}</h1>
                 <p className="text-[13px] text-[#888] mt-1 font-medium">#{invoice.invoice_number}</p>
               </div>
             </div>
@@ -276,7 +283,8 @@ export default function InvoiceView() {
           {!payee && pay_token && (
             <a
               href={`/pay/${pay_token}`}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#111] px-5 py-2.5 text-[14px] font-semibold text-white hover:bg-[#333] transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-[14px] font-semibold transition-opacity hover:opacity-90"
+              style={{ background: brand, color: readableOn(brand) }}
             >
               <CreditCard size={16} />
               {isFr ? `Payer ${fmtMoney(invoice.balance_cents, cur)}` : `Pay ${fmtMoney(invoice.balance_cents, cur)}`}
