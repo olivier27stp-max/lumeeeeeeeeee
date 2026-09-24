@@ -48,6 +48,47 @@ describe('séparateur', () => {
   });
 });
 
+describe('les colonnes que l export écrit', () => {
+  // Le bug réel : l'export ne contenait que « Client / Étape / Montant… ».
+  // À la réimportation, les 22 lignes étaient TOUTES rejetées avec « ni
+  // courriel ni téléphone », parce que l'import exige un moyen de joindre
+  // la personne pour rapprocher un contact connu au lieu d'en créer un double.
+  const ENTETES_FR = ['Client', 'Courriel', 'Téléphone', 'Adresse', 'Étape', 'Montant', 'Source', 'Campagne', 'Assigné', 'Créé le', 'Dernière activité'];
+
+  it('un fichier exporté se réimporte entièrement', () => {
+    const csv = ecrireCsv([
+      ENTETES_FR,
+      ['Alice Alpha', 'alice@a.ca', '418 555-0001', '1 rue A, Québec', 'Nouveau lead', '1000,00', 'Web', '', '', '2026-09-01', '2026-09-20'],
+      ['Bob Bravo', 'bob@b.ca', '(514) 555-0199', '2 rue B', 'Contacté', '2500,00', 'Meta', '', 'Marie', '2026-09-02', '2026-09-21'],
+    ]);
+    const a = analyserCsv(csv);
+    expect(a.erreur).toBeNull();
+    // ZÉRO ligne ignorée : c'est tout l'enjeu.
+    expect(a.lignes.filter((l) => l.probleme !== '')).toHaveLength(0);
+    expect(a.lignes.filter((l) => l.probleme === '')).toHaveLength(2);
+  });
+
+  it('sans colonne de contact, tout est rejeté — le bug d origine', () => {
+    // On reproduit l'ANCIEN export pour figer la raison du rejet.
+    const csv = ecrireCsv([
+      ['Client', 'Étape', 'Montant', 'Source'],
+      ['Alice Alpha', 'Nouveau lead', '1000,00', 'Web'],
+      ['Bob Bravo', 'Contacté', '2500,00', 'Meta'],
+    ]);
+    const a = analyserCsv(csv);
+    // Le fichier est lisible, mais aucune ligne n est importable.
+    expect(a.lignes.filter((l) => l.probleme === '')).toHaveLength(0);
+  });
+
+  it('les colonnes de l export portent les noms que l import reconnaît', () => {
+    // Garde-fou : si quelqu un renomme une colonne de l export, ce test
+    // tombe avant que le fichier ne devienne inutilisable en production.
+    for (const attendu of ['Client', 'Courriel', 'Téléphone', 'Adresse']) {
+      expect(ENTETES_FR).toContain(attendu);
+    }
+  });
+});
+
 describe('aller-retour export → import', () => {
   it('relit un fichier écrit par notre propre export', () => {
     // Les colonnes de l'export réel, avec une adresse à virgule et un nom

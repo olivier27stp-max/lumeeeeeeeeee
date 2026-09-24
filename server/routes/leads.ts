@@ -345,9 +345,15 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
     // donc `deletedJobIds` restait vide et la cascade sur schedule_events ne
     // s'executait JAMAIS (creneaux orphelins au calendrier), en plus de faire
     // repondre 0 partout dans le decompte.
-    const [jobsRes, dealsRes, invoicesRes, quotesRes] = await Promise.all([
+    //
+    // DEUX tables de deals, et il faut les deux : `pipeline_deals` porte le
+    // pipeline porte-à-porte, `deals` porte celui de la page /ventes. Seule
+    // la première était cascadée — supprimer un client laissait donc sa
+    // carte sur le board des ventes, et son montant dans les prévisions.
+    const [jobsRes, dealsRes, ventesRes, invoicesRes, quotesRes] = await Promise.all([
       admin.from('jobs').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
       admin.from('pipeline_deals').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
+      admin.from('deals').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
       admin.from('invoices').update({ deleted_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
       admin.from('quotes').update({ deleted_at: now, updated_at: now }).eq('client_id', clientId).eq('org_id', clientOrgId).is('deleted_at', null).select('id'),
     ]);
@@ -359,6 +365,7 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
     };
     logCascade('jobs', jobsRes.error);
     logCascade('pipeline_deals', dealsRes.error);
+    logCascade('deals', ventesRes.error);
     logCascade('invoices', invoicesRes.error);
     logCascade('quotes', quotesRes.error);
 
@@ -390,7 +397,7 @@ router.post('/clients/soft-delete', validate(softDeleteClientSchema), async (req
       client: 1,
       jobs: (jobsRes.data ?? []).length,
       leads: 0,
-      pipeline_deals: (dealsRes.data ?? []).length,
+      pipeline_deals: (dealsRes.data ?? []).length + (ventesRes.data ?? []).length,
       other_rows: (invoicesRes.data ?? []).length + (quotesRes.data ?? []).length,
     });
   } catch (error: any) {

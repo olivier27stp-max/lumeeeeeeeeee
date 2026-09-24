@@ -1365,9 +1365,14 @@ export default function PipelineBoard({
 
   /** Exporte ce qui est à l'écran — les deals filtrés, pas la base entière. */
   function exporter() {
+    // Courriel, téléphone et adresse SONT dans l'export : sans eux le fichier
+    // ne peut pas être réimporté. L'import exige un moyen de joindre la
+    // personne (c'est ce qui rapproche un contact déjà connu au lieu d'en
+    // créer un double) — un export qui ne contient que le nom faisait donc
+    // rejeter chaque ligne avec « ni courriel ni téléphone ».
     const entetes = fr
-      ? ['Client', 'Étape', 'Montant', 'Source', 'Campagne', 'Assigné', 'Créé le', 'Dernière activité']
-      : ['Client', 'Stage', 'Amount', 'Source', 'Campaign', 'Assignee', 'Created on', 'Last activity'];
+      ? ['Client', 'Courriel', 'Téléphone', 'Adresse', 'Étape', 'Montant', 'Source', 'Campagne', 'Assigné', 'Créé le', 'Dernière activité']
+      : ['Client', 'Email', 'Phone', 'Address', 'Stage', 'Amount', 'Source', 'Campaign', 'Assignee', 'Created on', 'Last activity'];
     const lignes = filtres_.map((d) => {
       const etape = etapes.find((e) => e.id === d.stage_id);
       const cents = montants[d.id];
@@ -1376,6 +1381,9 @@ export default function PipelineBoard({
         : '';
       return [
         nomClient(d),
+        d.client?.email ?? '',
+        d.client?.phone ?? '',
+        d.client?.address ?? '',
         etape ? (fr ? etape.name_fr : etape.name_en) : '',
         // Nombre brut : un « 4 990 $ » avec espace insécable ne s'additionne pas
         // dans un tableur. La virgule décimale suit la locale francophone.
