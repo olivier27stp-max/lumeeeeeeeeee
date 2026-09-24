@@ -1303,8 +1303,11 @@ export async function exportJobsCsv(query: Omit<JobsQuery, 'page' | 'pageSize'>)
     // résultat) : dépôt, géocodage, drapeaux facturation, pièces jointes.
     'attachments,billing_split,deposit_cents,deposit_required,deposit_type,deposit_value,' +
     'geocode_status,geocoded_at,require_payment_method,requires_invoicing,show_on_leaderboard';
-  let request = supabase.from('jobs_active').select(COLONNES_EXPORT).eq('org_id', orgId).order('created_at', { ascending: false }).limit(2000);
+  // Le filtre « Champs » de la liste s'applique aussi à l'export.
+  const projection: string = `${COLONNES_EXPORT}${query.champs?.select ?? ''}`;
+  let request = supabase.from('jobs_active').select(projection).eq('org_id', orgId).order('created_at', { ascending: false }).limit(2000);
   request = applyTableFilters(request, query);
+  if (query.champs) request = query.champs.appliquer(request);
   const { data, error } = await request;
   if (error) throw error;
 
