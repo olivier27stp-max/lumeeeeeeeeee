@@ -15,6 +15,7 @@ import { captureClientException } from '../lib/sentry';
 import { versDate } from '../lib/dateSeule';
 import { fetchPublicInvoice, type PublicInvoiceData, type PublicInvoiceCompany } from '../lib/invoicesPublicApi';
 import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import PastilleLume from '../components/PastilleLume';
 
 // Langue de la page : celle de l'ENTREPRISE dès que l'API l'a dite ; en attendant, celle du navigateur.
 // Variable de module lue au rendu, fixée AVANT le setState qui rerend.
@@ -102,7 +103,9 @@ export default function InvoiceView() {
   // Un repli sur le logo de Lume ferait passer une facture de Coquin lavage
   // pour une facture de Lume.
   const logoUrl = company?.logo_url || null;
-  const nomCompagnie = company?.company_name || 'Lume';
+  // Jamais « Lume » en repli : une facture sans nom d'entreprise ne doit pas
+  // passer pour une facture de la plateforme.
+  const nomCompagnie = company?.company_name || '';
 
   return (
     <div className="min-h-screen bg-[#fafafa]">
@@ -295,9 +298,7 @@ export default function InvoiceView() {
         </div>
 
         <ReseauxSociauxPied liens={company?.social_links} className="flex items-center justify-center gap-4 mt-8 no-print" />
-        <p className="mt-3 text-center text-[11px] text-[#bbb] no-print">
-          {isFr ? 'Facture générée avec Lume' : 'Invoice generated with Lume'}
-        </p>
+        <PastilleLume className="mt-4 no-print" />
       </div>
     </div>
   );
