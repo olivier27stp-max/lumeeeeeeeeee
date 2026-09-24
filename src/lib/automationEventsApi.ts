@@ -142,3 +142,18 @@ export function emitLeadStatusChanged(params: {
 }) {
   fireEvent('lead-status-changed', params);
 }
+
+/**
+ * Prévient le moteur qu'une étiquette vient d'être posée sur un client.
+ *
+ * C'est le « passage de relais manuel » : un vendeur marque une fiche
+ * « À rappeler » et la séquence part. Les étiquettes s'écrivent depuis le
+ * navigateur (`client_tags`, protégée par la RLS), donc le serveur ne les
+ * voit pas passer — d'où cet appel, à faire APRÈS l'écriture réussie.
+ *
+ * Le RETRAIT d'étiquette n'a pas d'équivalent, volontairement : enlever un
+ * marqueur ne devrait jamais déclencher un envoi au client.
+ */
+export function emitClientTagged(params: { clientId: string; tag: string }) {
+  fireEvent('client-tagged', params);
+}

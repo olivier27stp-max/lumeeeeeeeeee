@@ -22,6 +22,7 @@ import { resolve } from 'node:path';
 const RACINE = resolve(__dirname, '..');
 const moteur = readFileSync(resolve(RACINE, 'server/lib/automationEngine.ts'), 'utf8');
 const webhookSms = readFileSync(resolve(RACINE, 'server/routes/messages.ts'), 'utf8');
+const hooks = readFileSync(resolve(RACINE, 'server/routes/automation-events.ts'), 'utf8');
 
 describe('le réglage « arrêter sur réponse » est vraiment branché', () => {
   it('le moteur LIT `arret_sur_reponse` (il ne l’ignorait plus)', () => {
@@ -155,5 +156,45 @@ describe('le déclencheur « le client répond » part au bon moment', () => {
     // réponse gonflerait la table pour rien.
     const zone = webhookSms.slice(webhookSms.indexOf("emit('client.replied'"));
     expect(zone.slice(0, 600)).toMatch(/slice\(0,\s*500\)/);
+  });
+});
+
+describe('le déclencheur « étiquette ajoutée » ne part pas dans le vide', () => {
+  const route = hooks.slice(hooks.indexOf("'/automations/events/client-tagged'"));
+
+  it('l’étiquette doit VRAIMENT être posée', () => {
+    /*
+     * Ce point de contact est appelé par le NAVIGATEUR : sans vérification,
+     * n'importe qui pourrait déclencher les automatisations d'une étiquette
+     * qu'il n'a jamais posée. On relit donc `client_tags` avant d'émettre.
+     */
+    expect(route.slice(0, 2000), 'la route doit relire `client_tags` avant d’émettre')
+      .toMatch(/from\('client_tags'\)/);
+    expect(route.slice(0, 2000)).toMatch(/status\(409\)/);
+  });
+
+  it('le client doit appartenir à l’organisation de l’appelant', () => {
+    // Sans ce filtre, on pourrait faire partir une séquence chez un
+    // concurrent en devinant un identifiant.
+    expect(route.slice(0, 2000)).toMatch(/eq\('org_id',\s*auth\.orgId\)/);
+    expect(route.slice(0, 2000)).toMatch(/status\(404\)/);
+  });
+
+  it('le RETRAIT d’étiquette n’existe pas comme déclencheur', () => {
+    // Décision assumée : enlever un marqueur ne doit jamais déclencher un
+    // envoi au client. Si quelqu'un ajoute la route, ce test le force à
+    // relire ce choix.
+    expect(hooks).not.toMatch(/client-untagged|tag-removed/);
+  });
+
+  it('l’étiquette voyage dans les métadonnées', () => {
+    // Sans elle, impossible d'écrire « quand l'étiquette est À rappeler » :
+    // toutes les étiquettes déclencheraient la même règle.
+    const emission = route.slice(route.indexOf("emit('client.tagged'"), route.indexOf("emit('client.tagged'") + 700);
+    // Deux vérifications simples plutôt qu'une expression alambiquée : un
+    // test illisible se fait contourner au premier échec.
+    expect(emission, 'l’étiquette doit voyager dans les métadonnées').toContain('metadata:');
+    expect(emission, '`tag` doit être dans les métadonnées, pour les conditions').toMatch(/^\s*tag,$/m);
+    expect(emission).toMatch(/entityType:\s*'client'/);
   });
 });

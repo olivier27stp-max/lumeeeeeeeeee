@@ -546,4 +546,62 @@ router.post('/automations/events/lead-status-changed', validate(automationEventS
   }
 });
 
+// ── POST /automations/events/client-tagged ──
+// Appelée après qu'une étiquette a été posée sur un client.
+//
+// L'écriture des étiquettes se fait DEPUIS LE NAVIGATEUR (`client_tags`,
+// protégée par la RLS) : le serveur ne la voit pas passer. Ce point de
+// contact est le pont prévu pour ces cas — le front écrit, puis prévient.
+//
+// Le RETRAIT d'étiquette n'a volontairement pas d'équivalent : retirer un
+// marqueur ne devrait jamais déclencher un envoi au client.
+router.post('/automations/events/client-tagged', validate(automationEventSchema), async (req, res) => {
+  try {
+    const auth = await requireAuthedClient(req, res);
+    if (!auth) return;
+    const { clientId, tag } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'clientId is required' });
+    if (!tag || typeof tag !== 'string') return res.status(400).json({ error: 'tag is required' });
+
+    const admin = getServiceClient();
+    // L'étiquette doit VRAIMENT être posée, et sur un client de CETTE org.
+    // Sans cette vérification, n'importe qui pourrait déclencher les
+    // automatisations d'un tag qu'il n'a pas posé — ou d'une autre
+    // entreprise.
+    const { data: client } = await admin
+      .from('clients')
+      .select('first_name, last_name, email, phone')
+      .eq('id', clientId)
+      .eq('org_id', auth.orgId)
+      .maybeSingle();
+    if (!client) return res.status(404).json({ error: 'Client introuvable.' });
+
+    const { data: pose } = await admin
+      .from('client_tags')
+      .select('id')
+      .eq('client_id', clientId)
+      .eq('tag', tag)
+      .maybeSingle();
+    if (!pose) return res.status(409).json({ error: "Cette étiquette n'est pas posée sur ce client." });
+
+    await eventBus.emit('client.tagged', {
+      orgId: auth.orgId,
+      entityType: 'client',
+      entityId: clientId,
+      actorId: auth.user.id,
+      metadata: {
+        // `tag` sert aux conditions : « quand l'étiquette est “À rappeler” ».
+        tag,
+        client_name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
+        email: client.email || '',
+        phone: client.phone || '',
+      },
+    });
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error('[automation-events] client.tagged error:', err.message);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

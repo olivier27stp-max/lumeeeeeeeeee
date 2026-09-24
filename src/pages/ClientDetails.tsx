@@ -60,6 +60,7 @@ import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
 import SpecificNotes from '../components/SpecificNotes';
 import { getQuoteById, formatQuoteMoney, type QuoteDetail, type Quote } from '../lib/quotesApi';
 import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
+import { emitClientTagged } from '../lib/automationEventsApi';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface JobRecord {
@@ -463,6 +464,11 @@ export default function ClientDetails() {
       toast.error(language === 'fr' ? "Impossible d'ajouter le tag" : 'Failed to add tag');
       return;
     }
+    // Le moteur d'automatisations ne voit pas cette écriture : `client_tags`
+    // s'écrit depuis le navigateur. On le prévient APRÈS le succès — un
+    // événement émis avant l'écriture ferait partir une séquence sur une
+    // étiquette qui n'existe pas.
+    emitClientTagged({ clientId: client.id, tag: trimmed });
     setTags((prev) => [...prev, trimmed]);
     setNewTag('');
     setShowTagInput(false);
@@ -1099,7 +1105,7 @@ export default function ClientDetails() {
 
               {/* Specific Notes Tab */}
               {activeTab === 'specific_notes' && (
-                <SpecificNotes entityType="client" entityId={id!} mode="tab" />
+          <SpecificNotes entityType="client" entityId={id!} mode="tab" />
               )}
             </div>
           </div>
