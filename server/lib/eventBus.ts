@@ -42,9 +42,20 @@ export type CRMEventType =
   | 'invoice.sent'
   | 'invoice.paid'
   | 'invoice.overdue'
-  // Champs personnalisés v2 : émis par customFieldsService (server/lib/champs)
-  // quand une valeur change réellement — jamais sur un rejeu identique.
-  | 'custom_field.changed';
+  /**
+   * Le client a répondu à un message de l'entreprise.
+   *
+   * Émis par le webhook des SMS entrants (`routes/messages.ts`), et SEULEMENT
+   * quand l'expéditeur est un client — un membre de l'équipe qui écrit à son
+   * assistant n'est pas une réponse de client.
+   *
+   * L'entité est le CLIENT (pas la conversation) : c'est de lui que les
+   * actions ont besoin, et c'est lui que les variables décrivent.
+   */
+  // Champs personnalises v2 : emis par customFieldsService (server/lib/champs)
+  // quand une valeur change reellement — jamais sur un rejeu identique.
+  | 'custom_field.changed'
+  | 'client.replied';
 
 export interface CRMEvent {
   type: CRMEventType;
@@ -90,6 +101,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'invoice.paid': 'invoice_paid',
   'invoice.overdue': 'invoice_overdue',
   'custom_field.changed': 'custom_field_changed',
+  'client.replied': 'client_replied',
 };
 
 // ── Bus singleton ───────────────────────────────────────────────

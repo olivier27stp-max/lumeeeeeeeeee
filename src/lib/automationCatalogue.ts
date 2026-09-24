@@ -160,6 +160,12 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     famille: 'client', entite: 'lead',
   },
   {
+    cle: 'client.replied', fr: 'Le client répond', en: 'Client replies',
+    aide_fr: 'Quand un client répond par texto à un message de l’entreprise.',
+    aide_en: 'When a client texts back after a message from the company.',
+    famille: 'client', entite: 'lead',
+  },
+  {
     cle: 'agreement.signed', fr: 'Contrat signé', en: 'Agreement signed',
     aide_fr: 'Quand le client signe un contrat.',
     aide_en: 'When the client signs an agreement.',
@@ -699,6 +705,7 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'lead.created': 'lead',
   'lead.status_changed': 'lead',
   'agreement.signed': 'job',
+  'client.replied': 'client',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };

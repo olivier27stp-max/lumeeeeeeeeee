@@ -42,6 +42,7 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'lead.status_changed': 'lead',
   // `agreement.signed` émet entityType 'job' (le contrat appartient au job).
   'agreement.signed': 'job',
+  'client.replied': 'client',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };
@@ -50,16 +51,34 @@ describe('le catalogue ne promet pas ce que le moteur refusera', () => {
   it('chaque déclencheur offert porte l’entité que le serveur émet vraiment', () => {
     // Le champ `entite` du catalogue sert à proposer les bonnes variables.
     // S'il ment, on propose `[invoice_total]` sur un devis.
-    const equivalents: Record<string, string> = {
-      appointment: 'schedule_event',
-      agreement: 'job', // un contrat signé arrive porté par son job
+    /*
+     * Les noms qui désignent la MÊME chose.
+     *
+     * `appointment` (catalogue) = `schedule_event` (serveur) : c'est la
+     * table qui porte les visites.
+     * `agreement` = `job` : un contrat signé arrive porté par son job.
+     * `lead` = `client` : un prospect EST une fiche `clients`, il n'existe
+     * aucune table de prospects. Le catalogue dit « lead » quand il veut
+     * proposer les variables d'un prospect ; le serveur émet l'un ou
+     * l'autre selon le point d'émission. Les deux sont acceptés.
+     */
+    const memeChose = (a: string, b: string) => {
+      if (a === b) return true;
+      const paires = [
+        ['appointment', 'schedule_event'],
+        ['agreement', 'job'],
+        ['lead', 'client'],
+      ];
+      return paires.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
     };
+
     for (const d of DECLENCHEURS) {
       const reel = ENTITE_DU_DECLENCHEUR[d.cle];
       expect(reel, `${d.cle} absent de la table des entités`).toBeDefined();
-      const attendu = equivalents[d.entite] ?? d.entite;
-      expect(attendu, `« ${d.fr} » annonce l’entité « ${d.entite} », le serveur émet « ${reel} »`)
-        .toBe(reel);
+      expect(
+        memeChose(d.entite, reel),
+        `« ${d.fr} » annonce l’entité « ${d.entite} », le serveur émet « ${reel} »`,
+      ).toBe(true);
     }
   });
 

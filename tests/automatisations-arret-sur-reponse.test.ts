@@ -21,6 +21,7 @@ import { resolve } from 'node:path';
 
 const RACINE = resolve(__dirname, '..');
 const moteur = readFileSync(resolve(RACINE, 'server/lib/automationEngine.ts'), 'utf8');
+const webhookSms = readFileSync(resolve(RACINE, 'server/routes/messages.ts'), 'utf8');
 
 describe('le réglage « arrêter sur réponse » est vraiment branché', () => {
   it('le moteur LIT `arret_sur_reponse` (il ne l’ignorait plus)', () => {
@@ -115,5 +116,44 @@ describe('le réglage « arrêter sur réponse » est vraiment branché', () => 
     expect(fn, 'un `lead` EST une fiche clients').toMatch(/entityType === 'lead'/);
     expect(fn, 'une visite n’a pas de client_id : elle passe par son job').toMatch(/schedule_events/);
     expect(fn, 'un devis porte DEUX liens vers clients').toMatch(/lead_id/);
+  });
+});
+
+describe('le déclencheur « le client répond » part au bon moment', () => {
+  it('l’événement est émis depuis le webhook des SMS entrants', () => {
+    expect(webhookSms, 'sans émission, le déclencheur ne partirait jamais')
+      .toMatch(/emit\(\s*['"]client\.replied['"]/);
+  });
+
+  it('un MEMBRE de l’équipe qui écrit ne déclenche rien', () => {
+    /*
+     * Un technicien qui envoie un texto à Lumi n'est pas un client qui
+     * répond. Sans cette garde, chaque question posée à l'assistant
+     * déclencherait les automatisations de « réponse client ».
+     */
+    const zone = webhookSms.slice(webhookSms.indexOf("emit('client.replied'") - 700);
+    expect(zone.slice(0, 700), 'la garde `!repondaLumi` doit encadrer l’émission')
+      .toMatch(/if \(!repondaLumi/);
+  });
+
+  it('un numéro sans fiche client ne déclenche rien', () => {
+    // Sans `client_id`, aucune action ne saurait à qui s'adresser.
+    const zone = webhookSms.slice(webhookSms.indexOf("emit('client.replied'") - 700);
+    expect(zone.slice(0, 700)).toMatch(/conversation\.client_id/);
+  });
+
+  it('l’entité est le CLIENT, pas la conversation', () => {
+    // C'est du client que les actions ont besoin, et c'est lui que les
+    // variables décrivent (`[client_name]`, `[client_phone]`).
+    const zone = webhookSms.slice(webhookSms.indexOf("emit('client.replied'"));
+    expect(zone.slice(0, 420)).toMatch(/entityType:\s*['"]client['"]/);
+    expect(zone.slice(0, 420)).toMatch(/entityId:\s*conversation\.client_id/);
+  });
+
+  it('le texte reçu est borné', () => {
+    // Un SMS de 1 600 caractères recopié dans `activity_log` à chaque
+    // réponse gonflerait la table pour rien.
+    const zone = webhookSms.slice(webhookSms.indexOf("emit('client.replied'"));
+    expect(zone.slice(0, 600)).toMatch(/slice\(0,\s*500\)/);
   });
 });
