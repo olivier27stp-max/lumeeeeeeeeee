@@ -225,3 +225,34 @@ export function valeurCsv(champ: Pick<ChampPerso, 'field_type' | 'options'>, v: 
     default: return String(v);
   }
 }
+
+/**
+ * Texte d'une cellule d'import (CSV) → valeur du champ, dans la forme que
+ * l'API attend. Ce que les gens écrivent vraiment dans un tableur :
+ *   montant « 1 250,50 $ » → 125050 (cents) · nombre « 12,5 » → 12.5
+ *   date « 2026-09-24 » ou « 24/09/2026 » · liste : le LIBELLÉ de l'option
+ *   (plusieurs séparés par « | » ou « ; »). La validation reste celle du
+ *   serveur : une valeur qui ne passe pas est signalée, pas inventée.
+ */
+export function valeurDepuisTexte(champ: Pick<ChampPerso, 'field_type' | 'options'>, brut: string): ValeurChamp {
+  const t = brut.trim();
+  if (t === '') return null;
+  const option = (l: string) => champ.options.find((o) => !o.archived_at && o.label.toLowerCase() === l.trim().toLowerCase())?.id ?? l.trim();
+  switch (champ.field_type) {
+    case 'monetary': {
+      const n = Number(t.replace(/[\s$ ]/g, '').replace(',', '.'));
+      return Number.isFinite(n) ? Math.round(n * 100) : t;
+    }
+    case 'number': {
+      const n = Number(t.replace(/[\s ]/g, '').replace(',', '.'));
+      return Number.isFinite(n) ? n : t;
+    }
+    case 'date': {
+      const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+      return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : t;
+    }
+    case 'dropdown_single': return option(t);
+    case 'dropdown_multi': return t.split(/[|;]/).map((x) => x.trim()).filter(Boolean).map(option);
+    default: return t;
+  }
+}

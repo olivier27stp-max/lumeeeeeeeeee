@@ -15,7 +15,7 @@ import type {
 } from './champs/types';
 import type { ChampStandard } from './champs/standard';
 import type { Condition } from './champs/filtres';
-import { valeurCsv } from './champs/valeurs';
+import { valeurCsv, valeurDepuisTexte } from './champs/valeurs';
 
 export type { ChampPerso, DossierChamp, ObjetChamp, TypeChamp, ValeurChamp, ValeurEnregistree, Condition };
 
@@ -241,4 +241,61 @@ export async function colonnesChampsCsv(
     entetes: liste.fields.map((c) => c.label),
     valeurs: (id) => liste.fields.map((c) => valeurCsv(c, toutes[id]?.[c.id]?.value, fr)),
   };
+}
+
+/** En-tête normalisé : minuscules, sans accents ni ponctuation. */
+const normEntete = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Colonnes d'un fichier importé qui correspondent à des champs personnalisés :
+ * par libellé (« Superficie »), par clé (« superficie ») ou par variable
+ * (« client_cf_superficie »). Vide si la fonction est coupée.
+ */
+export async function correspondancesImport(
+  objets: ObjetChamp[], entetes: string[],
+  /** Colonnes déjà lues comme champs standard (prénom, courriel…) : jamais réinterprétées. */
+  ignorer: readonly number[] = [],
+): Promise<Array<{ index: number; champ: ChampPerso }>> {
+  const listes = await Promise.all(objets.map((o) => listerChamps(o)));
+  if (!listes.some((l) => l.enabled)) return [];
+  const champs = listes.flatMap((l) => l.fields).filter((c) => !c.archived_at);
+  const res: Array<{ index: number; champ: ChampPerso }> = [];
+  entetes.forEach((e, index) => {
+    const n = normEntete(e);
+    if (!n || ignorer.includes(index)) return;
+    const champ = champs.find((c) => normEntete(c.label) === n || normEntete(c.key) === n || normEntete(`${c.object_type}_cf_${c.key}`) === n);
+    if (champ) res.push({ index, champ });
+  });
+  return res;
+}
+
+/**
+ * Écrit les champs personnalisés d'une ligne importée dans le pipeline :
+ * champs d'opportunité sur le deal (s'il vient d'être créé), champs client
+ * sur le client du deal. Renvoie les refus (message), jamais d'exception.
+ */
+export async function ecrireChampsImport(
+  colonnes: Array<{ index: number; champ: ChampPerso }>, cellules: string[], dealId: string | null,
+): Promise<string[]> {
+  const refus: string[] = [];
+  const valeurs = (objet: ObjetChamp) => colonnes
+    .filter((c) => c.champ.object_type === objet)
+    .map(({ index, champ }) => ({ field_id: champ.id, value: valeurDepuisTexte(champ, cellules[index] ?? '') }))
+    .filter((v) => v.value !== null);
+  try {
+    if (dealId && valeurs('deal').length) {
+      refus.push(...(await ecrireValeurs('deal', dealId, valeurs('deal'))).filter((r) => !r.ok).map((r) => r.erreur ?? 'refusé'));
+    }
+    if (dealId && valeurs('client').length) {
+      const { data, error } = await supabase.from('deals').select('client_id').eq('id', dealId).maybeSingle();
+      if (error) throw error;
+      if (data?.client_id) {
+        refus.push(...(await ecrireValeurs('client', data.client_id as string, valeurs('client'))).filter((r) => !r.ok).map((r) => r.erreur ?? 'refusé'));
+      }
+    }
+  } catch (err) {
+    console.error('[champsPersoApi] import : champs personnalisés', err);
+    refus.push(err instanceof Error ? err.message : String(err));
+  }
+  return refus;
 }

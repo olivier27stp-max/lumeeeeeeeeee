@@ -40,6 +40,8 @@ export interface ConfigChamp {
   currency?: string;
   /** date : date seule (défaut) ou date + heure. */
   include_time?: boolean;
+  /** Devis / facture : afficher sur le document du client (PDF, page publique). */
+  show_on_documents?: boolean;
 }
 
 export interface OptionChamp {

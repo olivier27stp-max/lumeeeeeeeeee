@@ -95,7 +95,7 @@ export default function InvoiceView() {
     );
   }
 
-  const { invoice, items, client, company, pay_token } = data;
+  const { invoice, items, client, company, pay_token, custom_fields } = data;
   const cur = invoice.currency || 'CAD';
   const payee = invoice.status === 'paid' || invoice.balance_cents <= 0;
   const companyAddress = buildCompanyAddress(company);
@@ -259,6 +259,24 @@ export default function InvoiceView() {
               )}
             </div>
           </div>
+
+          {/* ── Champs personnalisés cochés « afficher sur le document » ── */}
+          {custom_fields && custom_fields.length > 0 && (
+            <>
+              <div className="border-t border-[#eee]" />
+              <div className="px-8 py-5">
+                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{isFr ? 'Informations' : 'Details'}</p>
+                <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+                  {custom_fields.map((c) => (
+                    <div key={c.label} className="flex justify-between gap-4 text-[13px]">
+                      <dt className="text-[#888]">{c.label}</dt>
+                      <dd className="text-right text-[#333]">{c.valeur}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </>
+          )}
 
           {invoice.notes && (
             <>

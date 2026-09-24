@@ -20,6 +20,7 @@ import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useChampsCreation } from '../components/champs/creation';
 
 const PHONE_LABELS: ClientPhone['label'][] = ['work', 'mobile', 'home', 'fax', 'other'];
 const EMAIL_LABELS = ['main', 'work', 'personal', 'other'] as const;
@@ -39,6 +40,7 @@ export default function NewClient() {
   const navigate = useNavigate();
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const champsPerso = useChampsCreation('client', fr);
   const id = useId();
 
   // ── Form state ──
@@ -232,6 +234,14 @@ export default function NewClient() {
       }
     }
 
+    // Champs personnalisés : validés AVANT de créer la fiche.
+    const erreurChamps = champsPerso.valider();
+    if (erreurChamps) {
+      setInlineError(erreurChamps);
+      toast.error(erreurChamps);
+      return;
+    }
+
     setSaving(true);
     try {
       const cleanPhones: ClientPhone[] = phones
@@ -284,6 +294,7 @@ export default function NewClient() {
           console.error('[NewClient] billing property enrich failed:', err);
         }
       }
+      await champsPerso.enregistrer(created.id);
       guard.release();
       toast.success(t.clients.clientCreated);
       navigate(`/clients/${created.id}`);
@@ -616,6 +627,7 @@ export default function NewClient() {
               )}
             </AnimatePresence>
           </section>
+          {champsPerso.bloc && <section className="space-y-3">{champsPerso.bloc}</section>}
         </div>
       </form>
 

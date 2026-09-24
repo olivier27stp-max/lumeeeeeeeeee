@@ -32,6 +32,8 @@ interface CompanyBranding {
 }
 
 interface QuoteData {
+  /** Champs personnalisés cochés « afficher sur le document ». */
+  custom_fields?: Array<{ label: string; valeur: string }>;
   quote: {
     id: string;
     quote_number: string;
@@ -807,6 +809,24 @@ export default function QuoteView() {
               )}
             </div>
           </div>
+
+          {/* ── Champs personnalisés cochés « afficher sur le document » ── */}
+          {data.custom_fields && data.custom_fields.length > 0 && (
+            <>
+              <div className="border-t border-[#eee]" />
+              <div className="px-8 py-5">
+                <p className="text-[10px] font-semibold text-[#aaa] uppercase tracking-[0.08em] mb-2">{isFr ? 'Informations' : 'Details'}</p>
+                <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+                  {data.custom_fields.map((c) => (
+                    <div key={c.label} className="flex justify-between gap-4 text-[13px]">
+                      <dt className="text-[#888]">{c.label}</dt>
+                      <dd className="text-right text-[#333]">{c.valeur}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </>
+          )}
 
           {/* ── NOTES ── */}
           {quote.notes && (

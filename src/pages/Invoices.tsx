@@ -45,6 +45,7 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { versDate } from '../lib/dateSeule';
+import { useChampsListe, useIdsFiltresChamps, useValeursPage, CelluleChamps } from '../components/champs/liste';
 // InvoiceTemplate type removed — no more invoice template system
 
 const PAGE_SIZE = 20;
@@ -111,7 +112,6 @@ const DEFAULT_INVOICE_SUBJECT_EN = 'For services rendered';
 // Grid template + empty-state col span for the Facturation table.
 // Columns: checkbox | Client | Invoice # | Due date | Subject | Status | Total | Balance | actions
 const INVOICE_GRID_COLUMNS = '40px 1.4fr 110px 120px 120px 1.4fr 200px 120px 120px 44px';
-const INVOICE_GRID_COL_COUNT = 10;
 
 export default function Invoices({ embedded = false, onTotalChange }: { embedded?: boolean; onTotalChange?: (total: number | null) => void } = {}) {
   const { t, language } = useTranslation();
@@ -184,13 +184,27 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
     };
   }, [statsQuery.data, boxPeriods]);
 
+  // Champs personnalisés : la liste passe par une RPC → le filtre calcule
+  // d'abord les ids (cf_filtrer), puis les lui passe (p_ids). Colonne en plus.
+  const champsListe = useChampsListe('invoice', fr);
+  const idsChamps = useIdsFiltresChamps('invoice', champsListe.conditions);
+  // Nouveau filtre de champs → page 1 (pas au chargement : un lien vers la page 3 reste valable).
+  const cleChampsVue = useRef(champsListe.cle);
+  useEffect(() => {
+    if (cleChampsVue.current === champsListe.cle) return;
+    cleChampsVue.current = champsListe.cle;
+    updateParams((next) => { next.delete('page'); });
+  }, [champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
   const invoicesQuery = useQuery({
-    queryKey: ['invoicesTable', status, sort, page, q, salesperson],
+    queryKey: ['invoicesTable', status, sort, page, q, salesperson, champsListe.cle, idsChamps.ids?.length ?? -1],
     queryFn: () => listInvoices({
       status, range: 'all', sort, page, q,
       pageSize: PAGE_SIZE,
       salespersonId: salesperson,
+      ids: idsChamps.ids,
     }),
+    // Tant que les ids du filtre de champs ne sont pas connus, on n'affiche pas une liste non filtrée.
+    enabled: idsChamps.pret,
   });
 
   const salespeopleQuery = useQuery({
@@ -200,6 +214,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
   });
 
   const rows = invoicesQuery.data?.rows || [];
+  const valeursChamps = useValeursPage('invoice', rows.map((r) => r.id), champsListe.colonnes.length > 0);
   const total = invoicesQuery.data?.total || 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -553,6 +568,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
             ...(salespeopleQuery.data || []).map((p) => ({ value: p.id, label: p.label })),
           ]}
         />
+        {champsListe.bouton}
         <form onSubmit={applySearch} className="relative">
           <input
             value={searchInput}
@@ -578,7 +594,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
         <>
           {/* ── TABLE (CSS Grid — identical pattern to Jobs & Clients) ── */}
           <div className="border border-outline rounded-md overflow-x-auto bg-white dark:bg-[#0e0e11]">
-            <div className="grid min-w-[980px]" style={{ gridTemplateColumns: INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
+            <div className="grid min-w-[980px]" style={{ gridTemplateColumns: champsListe.colonnes.length ? INVOICE_GRID_COLUMNS.replace(/ 44px$/, ' 1.4fr 44px') : INVOICE_GRID_COLUMNS }} onMouseLeave={() => setHoveredId(null)}>
               {/* HEADER */}
               <div className="py-3 pl-4 border-b border-outline flex items-center">
                 <input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" />
@@ -607,6 +623,7 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
               <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">
                 <button onClick={() => applySort('balance')} className="inline-flex items-center gap-1">{fr ? 'Solde' : 'Balance'} {IconSort}</button>
               </div>
+              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
               <div className="py-3 border-b border-outline" />
 
               {/* LOADING */}
@@ -621,13 +638,14 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
                   <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+                  {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
                   <div className="py-3 border-b border-outline/30" />
                 </React.Fragment>
               ))}
 
               {/* EMPTY STATE */}
               {!invoicesQuery.isLoading && rows.length === 0 && (
-                <div style={{ gridColumn: `span ${INVOICE_GRID_COL_COUNT}` }} className="py-20">
+                <div style={{ gridColumn: '1 / -1' }} className="py-20">
                   <div className="flex flex-col items-center justify-center text-center">
                     <div className="w-12 h-12 rounded-xl bg-surface-secondary flex items-center justify-center mb-4">
                       <FileText size={22} className="text-text-muted/60" />
@@ -724,6 +742,11 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
                         {row.balance_cents === 0 ? formatMoneyFromCents(0) : formatMoneyFromCents(row.balance_cents)}
                       </span>
                     </div>
+                    {champsListe.colonnes.length > 0 && (
+                      <div className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} role="presentation" tabIndex={-1} onClick={click} onMouseEnter={hover}>
+                        <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[row.id]} fr={fr} fuseau={champsListe.fuseau} />
+                      </div>
+                    )}
                     {/* Actions */}
                     <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onMouseEnter={hover}>
                       <button

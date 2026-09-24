@@ -57,6 +57,8 @@ export interface ClientsQuery {
   sort?: 'recent' | 'oldest' | 'name_asc' | 'name_desc';
   page?: number;
   pageSize?: number;
+  /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
+  champs?: FiltreListe;
 }
 
 export interface ClientsResult {
@@ -114,13 +116,16 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
   const to = from + pageSize - 1;
 
   const orgId = await getCurrentOrgIdOrThrow();
+  // `string` explicite : une projection dynamique (champs personnalisés) ne se type pas.
+  const projection: string = `*${query.champs?.select ?? ''}`;
   let request = supabase
     .from('clients')
     // count 'estimated' : évite le scan intégral sous RLS à chaque page.
-    .select('*', { count: 'estimated' })
+    .select(projection, { count: 'estimated' })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .range(from, to);
+  if (query.champs) request = query.champs.appliquer(request);
 
   if (query.q?.trim()) request = request.or(buildSearchFilter(query.q));
   if (query.status && query.status !== 'All') request = request.eq('status', query.status);
@@ -134,7 +139,7 @@ export async function listClients(query: ClientsQuery = {}): Promise<ClientsResu
   if (error) throw error;
 
   return {
-    items: (data || []) as ClientRecord[],
+    items: (data || []) as unknown as ClientRecord[],
     total: count || 0,
   };
 }
@@ -169,6 +174,7 @@ export interface ClientPayload {
 
 // Use the centralized version from orgApi instead of duplicating
 import { getCurrentOrgIdOrThrow } from './orgApi';
+import type { FiltreListe } from './champs/filtresListe';
 
 /**
  * The client's primary display name. When `display_as_company` is set and a

@@ -4,6 +4,7 @@ import { getCurrentOrgIdOrThrow } from './orgApi';
 import { emitQuoteDeclined, emitQuoteApproved } from './automationEventsApi';
 import { syncEntityPin } from './fieldSalesApi';
 import { versDate } from './dateSeule';
+import type { FiltreListe } from './champs/filtresListe';
 
 // ── Types ──
 
@@ -781,17 +782,21 @@ export async function listAllQuotes(opts?: {
   salespersonId?: string;
   page?: number;
   pageSize?: number;
+  /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
+  champs?: FiltreListe;
 }): Promise<{ data: Quote[]; total: number }> {
   const page = opts?.page || 1;
   const pageSize = opts?.pageSize || 20;
   const offset = (page - 1) * pageSize;
   const orgId = await getCurrentOrgIdOrThrow();
 
+  // `string` explicite : une projection dynamique (champs personnalisés) ne se type pas.
+  const projection: string = `*, clients!quotes_client_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), leads:clients!quotes_lead_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), properties!quotes_property_id_fkey(name, address)${opts?.champs?.select ?? ''}`;
   let query = supabase
     .from('quotes')
     // quotes has two FKs to clients (client_id + lead_id since the leads merge) —
     // embeds must name the FK explicitly or PostgREST rejects the query (PGRST201)
-    .select('*, clients!quotes_client_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), leads:clients!quotes_lead_id_fkey(id, first_name, last_name, company, display_as_company, deleted_at), properties!quotes_property_id_fkey(name, address)', { count: 'exact' })
+    .select(projection, { count: 'exact' })
     .eq('org_id', orgId)
     .is('deleted_at', null)
     .order('created_at', { ascending: false })
@@ -808,10 +813,11 @@ export async function listAllQuotes(opts?: {
   if (opts?.search) {
     query = query.or(`quote_number.ilike.%${opts.search}%,title.ilike.%${opts.search}%`);
   }
+  if (opts?.champs) query = opts.champs.appliquer(query);
 
   const { data, error, count } = await query;
   if (error) throw error;
-  return { data: (data || []) as Quote[], total: count || 0 };
+  return { data: (data || []) as unknown as Quote[], total: count || 0 };
 }
 
 /**

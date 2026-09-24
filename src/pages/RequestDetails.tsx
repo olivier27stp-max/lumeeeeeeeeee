@@ -33,6 +33,7 @@ import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import type { FormSubmission, RequestForm, FormField } from '../types';
+import { useChampsPourFormulaire } from '../components/champs/formulaire';
 
 /** Reserved custom_responses key where the public form stores uploaded photo URLs. */
 const PHOTOS_KEY = '__photos';
@@ -72,6 +73,8 @@ export default function RequestDetails() {
   const navigate = useNavigate();
   const { language } = useTranslation();
   const fr = language === 'fr';
+  // Champs que les réponses du formulaire remplissent (vide si la fonction est coupée).
+  const champsPerso = useChampsPourFormulaire();
   const { openJobModal } = useJobModalController();
 
   const [submission, setSubmission] = useState<FormSubmission | null>(null);
@@ -302,9 +305,21 @@ export default function RequestDetails() {
             {fr ? 'Réponses du formulaire' : 'Form answers'}
           </h2>
           <div className="divide-y divide-border-subtle/60 rounded-xl border border-border-subtle">
-            {fields.map((f) => (
-              <CustomAnswer key={f.id} field={f} value={s.custom_responses?.[f.id]} fr={fr} />
-            ))}
+            {fields.map((f) => {
+              // La réponse a rempli un champ personnalisé (formulaire → champ, v2).
+              const lie = f.cf_field_id ? champsPerso.find((c) => c.id === f.cf_field_id) : undefined;
+              return (
+                <div key={f.id}>
+                  <CustomAnswer field={f} value={s.custom_responses?.[f.id]} fr={fr} />
+                  {lie && (
+                    <p className="px-3 pb-2 text-[11px] text-text-tertiary">
+                      {fr ? '→ a rempli le champ ' : '→ filled the field '}« {lie.label} »
+                      {' '}({lie.object_type === 'deal' ? (fr ? 'opportunité' : 'opportunity') : 'client'})
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

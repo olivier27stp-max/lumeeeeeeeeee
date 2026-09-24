@@ -37,6 +37,8 @@ import SpecificNotes from './SpecificNotes';
 import SpecificNotesInline, { type SpecificNotesInlineHandle } from './SpecificNotesInline';
 import { toast } from 'sonner';
 import { confirmer } from './ui/ConfirmDialog';
+import { useChampsCreation } from './champs/creation';
+import CustomFieldsPanel from './champs/CustomFieldsPanel';
 
 interface LineItemForm {
   id: string;
@@ -338,6 +340,8 @@ export default function NewJobModal({
   const location = useLocation();
   const navigate = useNavigate();
   const isEditMode = Boolean(initialValues?.id);
+  // Champs personnalisés : remplis à la création ; en modification, le panneau de la fiche.
+  const champsPerso = useChampsCreation('job', language === 'fr');
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
   // Navigation guard: route where the form was opened + leave-confirmation state.
   const openedPathRef = useRef<string | null>(null);
@@ -1618,6 +1622,14 @@ export default function NewJobModal({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setInlineError(null);
+    if (!isEditMode) {
+      const erreurChamps = champsPerso.valider();
+      if (erreurChamps) {
+        setInlineError(erreurChamps);
+        toast.error(erreurChamps);
+        return;
+      }
+    }
 
     // Avec noValidate, le navigateur ne scrolle plus vers le champ fautif : la
     // bannière peut être hors écran sur ce long formulaire. On double donc
@@ -1958,6 +1970,7 @@ export default function NewJobModal({
       });
       // Persist ask-for-review; assigned_user_id est toujours vidé — les jobs
       // hérités d'une assignation individuelle convergent vers équipe-seulement.
+      if (createdJob?.id && !isEditMode) await champsPerso.enregistrer(createdJob.id);
       if (createdJob?.id) {
         await applyJobExtras(createdJob.id, {
           askForReview,
@@ -3760,6 +3773,10 @@ export default function NewJobModal({
                   <SpecificNotesInline ref={specificNotesRef} tempEntityType="job" />
                 )}
               </Box>
+
+              {isEditMode && initialValues?.id
+                ? <CustomFieldsPanel objet="job" entityId={initialValues.id} fr={language === 'fr'} />
+                : champsPerso.bloc}
 
               {(inlineError || errorMessage) && (
                 <div className="rounded-xl border border-danger bg-danger-light text-danger px-4 py-3 text-sm">

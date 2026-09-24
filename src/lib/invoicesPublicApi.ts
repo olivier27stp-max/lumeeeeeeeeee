@@ -61,6 +61,8 @@ export interface PublicInvoiceData {
   company: PublicInvoiceCompany | null;
   /** Jeton d'un lien de paiement actif (/pay/:token), ou null. */
   pay_token: string | null;
+  /** Champs personnalisés cochés « afficher sur le document ». */
+  custom_fields?: Array<{ label: string; valeur: string }>;
 }
 
 export async function fetchPublicInvoice(token: string): Promise<PublicInvoiceData> {

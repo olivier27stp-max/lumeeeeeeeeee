@@ -162,10 +162,12 @@ function verifierEntree(e: Pick<EntreeChamp, 'object_type' | 'field_type' | 'key
 
 function configPour(type: TypeChamp, c: ConfigChamp = {}): ConfigChamp {
   // Seules les clés du type survivent : un vieux « decimals » n'a rien à faire sur une date.
-  if (type === 'number') return { decimals: c.decimals ?? null, min: c.min ?? null, max: c.max ?? null };
-  if (type === 'monetary') return { currency: (c.currency || 'CAD').toUpperCase() };
-  if (type === 'date') return { include_time: !!c.include_time };
-  return {};
+  // `show_on_documents` vaut pour tous les types (devis / facture).
+  const doc: ConfigChamp = c.show_on_documents ? { show_on_documents: true } : {};
+  if (type === 'number') return { decimals: c.decimals ?? null, min: c.min ?? null, max: c.max ?? null, ...doc };
+  if (type === 'monetary') return { currency: (c.currency || 'CAD').toUpperCase(), ...doc };
+  if (type === 'date') return { include_time: !!c.include_time, ...doc };
+  return doc;
 }
 
 export async function creerChamp(db: SupabaseClient, orgId: string, e: EntreeChamp): Promise<ChampPerso> {
@@ -494,5 +496,40 @@ export async function majCartesPipeline(db: SupabaseClient, orgId: string, pipel
       uniques.map((field_id, position) => ({ org_id: orgId, pipeline_id: pipelineId, field_id, position })),
     );
     if (error) traduireErreur(error, 'modifier l’affichage des cartes');
+  }
+}
+
+// ─── Documents du client (devis, facture) ───────────────────────
+
+export interface ChampDocument { label: string; valeur: string }
+
+/**
+ * Les champs à montrer sur un devis ou une facture (option
+ * `show_on_documents`), formatés dans la langue et le fuseau de
+ * l'entreprise. Vide si la fonction est coupée ou si rien n'est coché.
+ * Utilisé par les pages publiques (/quote/…, /invoice/…) : client service,
+ * org imposée par le document lui-même.
+ */
+export async function champsPourDocument(
+  db: SupabaseClient, orgId: string, objet: 'quote' | 'invoice', entite: string,
+): Promise<ChampDocument[]> {
+  try {
+    if (!(await champsV2Actifs(db, orgId))) return [];
+    const { champs } = await listerChamps(db, orgId, { objet });
+    const visibles = champs.filter((c) => c.config.show_on_documents);
+    if (visibles.length === 0) return [];
+    const [valeurs, { data: cs }] = await Promise.all([
+      lireValeursLot(db, orgId, objet, [entite], visibles),
+      db.from('company_settings').select('timezone, default_language').eq('org_id', orgId).maybeSingle(),
+    ]);
+    const langue = cs?.default_language === 'en' ? 'en' : 'fr';
+    const fuseau = (cs?.timezone as string | undefined) || 'America/Toronto';
+    return visibles
+      .map((c) => ({ label: c.label, valeur: formaterValeur(c, valeurs[entite]?.[c.id]?.value ?? null, langue, fuseau) }))
+      .filter((x) => x.valeur !== '');
+  } catch (err) {
+    // Jamais au point de casser la page que le client ouvre.
+    logger.error('[champs] champs du document illisibles', { objet, message: String(err) });
+    return [];
   }
 }

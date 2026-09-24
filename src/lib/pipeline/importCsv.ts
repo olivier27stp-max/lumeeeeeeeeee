@@ -29,6 +29,8 @@ export interface LigneImport {
   adresse: string;
   /** Ce qui empêche d'importer CETTE ligne. Vide = bonne. */
   probleme: string;
+  /** Cellules brutes, dans l'ordre des en-têtes (champs personnalisés). */
+  cellules?: string[];
 }
 
 export interface AnalyseCsv {
@@ -37,6 +39,9 @@ export interface AnalyseCsv {
   colonnesIgnorees: string[];
   /** Le fichier lui-même est inutilisable (vide, illisible). */
   erreur: string | null;
+  /** En-têtes d'origine, et ceux déjà lus comme nom/courriel/téléphone/adresse. */
+  entetes?: string[];
+  indexReconnus?: number[];
 }
 
 /**
@@ -92,7 +97,7 @@ export function devinerSeparateur(premiereLigne: string): string {
  * Refuser un fichier parce que l'en-tête dit « Courriel » au lieu de « Email »
  * ferait perdre plus de temps que la saisie manuelle.
  */
-const SYNONYMES: Record<keyof Omit<LigneImport, 'ligne' | 'probleme'>, string[]> = {
+const SYNONYMES: Record<keyof Omit<LigneImport, 'ligne' | 'probleme' | 'cellules'>, string[]> = {
   prenom: ['prenom', 'prénom', 'first name', 'firstname', 'first_name', 'given name'],
   nom: ['nom', 'last name', 'lastname', 'last_name', 'surname', 'nom de famille'],
   courriel: ['courriel', 'email', 'e-mail', 'adresse courriel', 'mail'],
@@ -225,8 +230,9 @@ export function analyserCsv(texte: string): AnalyseCsv {
       prenom, nom, courriel, telephone,
       adresse: lire('adresse'),
       probleme,
+      cellules: champs,
     };
   });
 
-  return { lignes, colonnesIgnorees, erreur: null };
+  return { lignes, colonnesIgnorees, erreur: null, entetes: decouperLigne(brutes[0], sep), indexReconnus: [...reconnues] };
 }

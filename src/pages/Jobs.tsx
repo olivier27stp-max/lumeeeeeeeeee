@@ -60,6 +60,7 @@ import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { usePermissions } from '../hooks/usePermissions';
 import { hasPermission } from '../lib/permissions';
+import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
 
 // ─── View mode ───────────────────────────────────────────────────
 type ViewMode = 'grid' | 'list';
@@ -401,11 +402,16 @@ export default function Jobs() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
+  const champsListe = useChampsListe('job', language === 'fr');
+  const valeursChamps = useValeursPage('job', jobs.map((j) => j.id), champsListe.colonnes.length > 0);
+  useEffect(() => { setPage(1); }, [champsListe.cle]);
+
   const loadJobs = async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await getJobs({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery, sort: sortBy, sortDirection, page, pageSize });
+      const result = await getJobs({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery, sort: sortBy, sortDirection, page, pageSize, champs: champsListe.filtre });
       setJobs(result.jobs);
       setTotal(result.total);
     } catch (err: any) {
@@ -429,7 +435,7 @@ export default function Jobs() {
   useEffect(() => { getJobTypes().then(setJobTypes).catch(() => setJobTypes([])); }, []);
   useEffect(() => { listSalespeople().then(setSalespeople).catch(() => setSalespeople([])); }, []);
   useEffect(() => { listJobTags().then(setJobTags).catch(() => setJobTags([])); }, []);
-  useEffect(() => { void loadJobs(); }, [statusFilter, jobTypeFilter, salespersonFilter, tagFilter, debouncedQuery, sortBy, sortDirection, page, pageSize]);
+  useEffect(() => { void loadJobs(); }, [statusFilter, jobTypeFilter, salespersonFilter, tagFilter, debouncedQuery, sortBy, sortDirection, page, pageSize, champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void loadKpis(); }, [jobTypeFilter, debouncedQuery]);
 
   // Listen for command palette create event
@@ -639,6 +645,7 @@ export default function Jobs() {
             ...jobTags.map((tg) => ({ value: tg.id, label: tg.name, dotColor: tg.color_hex })),
           ]}
         />
+        {champsListe.bouton}
         <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
           aria-label={fr ? 'Rechercher jobs' : 'Search jobs'}
           placeholder={fr ? 'Rechercher jobs...' : 'Search jobs...'}
@@ -648,7 +655,7 @@ export default function Jobs() {
       {/* ── TABLE (grid layout — identical structure to Clients & Devis) ── */}
       {/* dark interior pinned to #0e0e11 (= CRM page card color); white in light mode */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1.6fr 0.8fr 1.6fr 1fr 200px 0.8fr 48px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: `40px 1.6fr 0.8fr 1.6fr 1fr 200px 0.8fr${champsListe.colonnes.length ? ' 1.4fr' : ''} 48px` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" aria-label={fr ? 'Sélectionner tous les jobs' : 'Select all jobs'} checked={allSel} onChange={toggleAll} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{t.jobs.client} {IconSort}</span></div>
@@ -657,6 +664,7 @@ export default function Jobs() {
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{t.jobs.schedule} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
+          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
@@ -669,13 +677,14 @@ export default function Jobs() {
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
+              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!loading && jobs.length === 0 && (
-            <div className="col-span-8 py-20 text-center text-[14px] text-text-tertiary">{t.jobs.noJobsFound}</div>
+            <div className="py-20 text-center text-[14px] text-text-tertiary" style={{ gridColumn: '1 / -1' }}>{t.jobs.noJobsFound}</div>
           )}
 
           {/* ROWS */}
@@ -706,6 +715,11 @@ export default function Jobs() {
                 <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] text-text-primary tabular-nums truncate">{job.scheduled_at ? formatDate(job.scheduled_at) : (fr ? 'Non planifié' : 'Unscheduled')}</span></div>
                 <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><JobBadge status={job.status} /></div>
                 <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}><span className="text-[14px] font-bold text-text-primary tabular-nums">{formatMoney(job)}</span></div>
+                {champsListe.colonnes.length > 0 && (
+                  <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={click} onMouseEnter={hover}>
+                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[job.id]} fr={fr} fuseau={champsListe.fuseau} />
+                  </div>
+                )}
                 <div role="presentation" tabIndex={-1} className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     aria-label={`${fr ? 'Actions du job' : 'Job actions'} #${job.job_number}`}

@@ -1053,6 +1053,7 @@ const configChamp = z.object({
   max: z.number().finite().nullable().optional(),
   currency: z.string().regex(/^[A-Za-z]{3}$/, 'Devise ISO à 3 lettres.').optional(),
   include_time: z.boolean().optional(),
+  show_on_documents: z.boolean().optional(),
 }).strict();
 const baseChamp = {
   label: z.string().trim().min(1, 'Le nom du champ est obligatoire.').max(100),

@@ -22,6 +22,9 @@ import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
 import { useTranslation } from '../i18n';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
+import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { correspondancesImport, ecrireValeurs } from '../lib/champsPersoApi';
+import { valeurDepuisTexte } from '../lib/champs/valeurs';
 
 type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
@@ -162,9 +165,14 @@ export default function Clients() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
+  const champsListe = useChampsListe('client', language === 'fr');
+  const valeursChamps = useValeursPage('client', items.map((c) => c.id as string), champsListe.colonnes.length > 0);
+  useEffect(() => { setPage(1); }, [champsListe.cle]);
+
   useEffect(() => {
     void loadClients();
-  }, [page, pageSize, statusFilter, sortBy, debouncedSearch]);
+  }, [page, pageSize, statusFilter, sortBy, debouncedSearch, champsListe.cle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Listen for command palette create event
   useEffect(() => {
@@ -299,6 +307,7 @@ export default function Clients() {
         status: 'All',
         q: debouncedSearch,
         sort: sortBy,
+        champs: champsListe.filtre,
       });
 
       // Statut dérivé des jobs : un client avec ≥1 job (non supprimé) est
@@ -469,6 +478,9 @@ export default function Clients() {
         const phoneIdx = headers.indexOf('phone');
         const addressIdx = headers.indexOf('address');
         const companyIdx = headers.indexOf('company');
+        // Colonnes nommées comme un champ personnalisé client (libellé, clé ou variable).
+        const colonnesChamps = await correspondancesImport(['client'], lines[0].split(',').map((h) => h.trim().replace(/"/g, '')),
+          [fnIdx, lnIdx, emailIdx, phoneIdx, addressIdx, companyIdx].filter((x) => x >= 0));
         let imported = 0;
         const failures: Array<{ line: number; reason: string }> = [];
         const pending = toast.loading(
@@ -480,7 +492,7 @@ export default function Clients() {
           const lastName = cols[lnIdx] || '';
           if (!firstName && !lastName) continue;
           try {
-            await createClient({
+            const cree = await createClient({
               first_name: firstName,
               last_name: lastName,
               email: emailIdx >= 0 ? cols[emailIdx] || undefined : undefined,
@@ -489,6 +501,14 @@ export default function Clients() {
               company: companyIdx >= 0 ? cols[companyIdx] || undefined : undefined,
             });
             imported++;
+            const valeurs = colonnesChamps
+              .map(({ index, champ }) => ({ field_id: champ.id, value: valeurDepuisTexte(champ, cols[index] ?? '') }))
+              .filter((v) => v.value !== null);
+            if (valeurs.length && cree?.id) {
+              const refus = (await ecrireValeurs('client', cree.id, valeurs)).filter((r) => !r.ok);
+              // Le client est créé ; une valeur refusée est signalée comme un échec de ligne.
+              for (const r of refus) failures.push({ line: i + 1, reason: r.erreur || 'champ personnalisé refusé' });
+            }
           } catch (rowErr: any) {
             failures.push({ line: i + 1, reason: rowErr?.message || 'unknown' });
           }
@@ -594,6 +614,8 @@ export default function Clients() {
           }))}
         />
 
+        {champsListe.bouton}
+
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
           aria-label={fr ? 'Rechercher clients' : 'Search clients'}
           placeholder={fr ? 'Rechercher clients...' : 'Search clients...'}
@@ -603,13 +625,14 @@ export default function Clients() {
 
       {/* ── TABLE ── */}
       <div className="border border-[var(--color-outline)] rounded-md bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '1.4fr 1.6fr 1.3fr 200px 130px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: `1.4fr 1.6fr 1.3fr 200px 130px${champsListe.colonnes.length ? ' 1.4fr' : ''}` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]"><span className="inline-flex items-center gap-1">{fr ? 'Nom' : 'Name'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Adresse' : 'Address'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Étiquettes' : 'Tags'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Statut' : 'Status'}</div>
           <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Dernière activité' : 'Last activity'}</div>
+          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-[var(--color-outline)] flex items-center text-[14px] font-medium text-[var(--color-text-primary)]">{fr ? 'Champs' : 'Fields'}</div>}
 
           {/* LOADING */}
           {loading && Array.from({ length: 10 }).map((_, i) => (
@@ -619,12 +642,13 @@ export default function Clients() {
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-28 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-14 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>
+              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-[var(--color-surface-tertiary)]"><div className="h-5 w-20 bg-[var(--color-surface-tertiary)] rounded animate-pulse" /></div>}
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!loading && displayItems.length === 0 && (
-            <div className="col-span-5 py-20 text-center text-[14px] text-[var(--color-text-tertiary)]">{t.clients.noClientsFound}</div>
+            <div className="py-20 text-center text-[14px] text-[var(--color-text-tertiary)]" style={{ gridColumn: '1 / -1' }}>{t.clients.noClientsFound}</div>
           )}
 
           {/* ROWS */}
@@ -677,6 +701,11 @@ export default function Clients() {
                 </div>
                 <div className={`py-3 px-4 flex items-center ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><Badge status={item.status} /></div>
                 <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}><span className="text-[14px] text-[var(--color-text-secondary)] truncate">{item.last_activity ? formatLastActivity(item.last_activity, fr) : '—'}</span></div>
+                {champsListe.colonnes.length > 0 && (
+                  <div className={`py-3 px-4 flex items-center overflow-hidden ${rowCls}`} onClick={click} onMouseEnter={hover} role="presentation" tabIndex={-1}>
+                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[item.id]} fr={fr} fuseau={champsListe.fuseau} />
+                  </div>
+                )}
               </React.Fragment>
             );
           })}
