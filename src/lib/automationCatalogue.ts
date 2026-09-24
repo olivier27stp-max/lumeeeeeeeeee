@@ -821,3 +821,176 @@ export const ACTIONS_MAX = 5;
  */
 export const OPERATEURS_CONDITIONS = ['eq', 'neq', 'in', 'not_in'] as const;
 export type OperateurCondition = typeof OPERATEURS_CONDITIONS[number];
+
+// ── Avant de publier ────────────────────────────────────────
+
+export interface ProblemePublication {
+  /** Ce qui ne va pas, en une phrase, dans les mots du métier. */
+  message: string;
+  /** L'étape fautive, pour l'ouvrir d'un clic. */
+  etapeId?: string;
+  /**
+   * `bloquant` : la publication est refusée — l'automatisation ne pourrait
+   * pas fonctionner. `avertissement` : elle marchera, mais quelque chose
+   * mérite un coup d'œil.
+   */
+  gravite: 'bloquant' | 'avertissement';
+}
+
+/**
+ * Ce qui empêche de publier une automatisation — ou mérite d'être vu avant.
+ *
+ * POURQUOI CETTE VÉRIFICATION EXISTE. L'audit du 23 septembre sur un vrai
+ * compte GoHighLevel a trouvé CINQ erreurs bloquantes dans un workflow
+ * publiable : une action sans pipeline, un segment non résolu, un jeton
+ * d'exemple, une condition indéfinie. Leur builder laisse publier un
+ * parcours cassé, et l'entreprise ne s'en aperçoit qu'en constatant que
+ * personne n'a rien reçu.
+ *
+ * On refuse donc AVANT, avec la raison en clair et l'étape fautive — une
+ * erreur qu'on peut cliquer se corrige, une erreur qu'on doit chercher se
+ * contourne.
+ *
+ * Volontairement dans le catalogue, et non dans la page : la même fonction
+ * sert au bouton « Publier » et aux tests, sans qu'une copie puisse dériver.
+ */
+export function problemesAvantPublication(regle: {
+  trigger_event?: string | null;
+  steps?: unknown;
+  actions?: unknown;
+  fr?: boolean;
+}): ProblemePublication[] {
+  const fr = regle.fr !== false;
+  const out: ProblemePublication[] = [];
+  const dire = (frTxt: string, enTxt: string, gravite: ProblemePublication['gravite'], etapeId?: string) =>
+    out.push({ message: fr ? frTxt : enTxt, gravite, etapeId });
+
+  // ── Le déclencheur ──
+  const decl = regle.trigger_event ? trouverDeclencheur(regle.trigger_event) : undefined;
+  if (!decl) {
+    dire(
+      'Choisissez ce qui déclenche cette automatisation.',
+      'Pick what triggers this automation.',
+      'bloquant',
+    );
+  } else if (decl.bientot) {
+    // Le piège le plus coûteux : publier sur un événement que rien n'émet.
+    // L'automatisation ne partirait JAMAIS, sans le moindre message.
+    dire(
+      `« ${decl.fr} » n’est pas encore branché : l’automatisation ne partirait jamais.`,
+      `“${decl.en}” is not wired yet: the automation would never run.`,
+      'bloquant',
+    );
+  }
+
+  const steps = Array.isArray(regle.steps) ? (regle.steps as Array<Record<string, any>>) : null;
+  const actions = Array.isArray(regle.actions) ? (regle.actions as Array<Record<string, any>>) : [];
+
+  // ── Il faut quelque chose à faire ──
+  if ((!steps || steps.length === 0) && actions.length === 0) {
+    dire(
+      'Ajoutez au moins une étape : pour l’instant, cette automatisation ne fait rien.',
+      'Add at least one step: right now this automation does nothing.',
+      'bloquant',
+    );
+    return out;
+  }
+
+  /** Vérifie une action : son existence, ses champs, sa compatibilité. */
+  const verifierAction = (
+    action: { type?: string; config?: Record<string, unknown> } | undefined,
+    etapeId?: string,
+    rang?: number,
+  ) => {
+    const ou = etapeId ? '' : fr ? ` (action ${(rang ?? 0) + 1})` : ` (action ${(rang ?? 0) + 1})`;
+    const modele = action?.type ? trouverAction(action.type) : undefined;
+    if (!modele) {
+      dire(
+        `Une étape utilise une action inconnue${ou}.`,
+        `A step uses an unknown action${ou}.`,
+        'bloquant', etapeId,
+      );
+      return;
+    }
+
+    // L'action peut-elle seulement partir sur ce déclencheur ?
+    if (regle.trigger_event && !actionCompatible(modele, regle.trigger_event)) {
+      dire(
+        `« ${modele.fr} » ne peut pas suivre ce déclencheur${ou}.`,
+        `“${modele.en}” cannot follow this trigger${ou}.`,
+        'bloquant', etapeId,
+      );
+    }
+
+    const config = (action?.config ?? {}) as Record<string, string | undefined>;
+    for (const champ of modele.champs) {
+      if (!champ.obligatoire) continue;
+      if (!champVisible(champ, config)) continue;
+      if (!config[champ.cle]?.trim()) {
+        dire(
+          `« ${modele.fr} » : « ${champ.fr} » est vide${ou}.`,
+          `“${modele.en}”: “${champ.en}” is empty${ou}.`,
+          'bloquant', etapeId,
+        );
+      }
+    }
+  };
+
+  if (steps && steps.length > 0) {
+    const ids = new Set(steps.map((e) => String(e.id)));
+    let messageVersClient = false;
+
+    for (const etape of steps) {
+      const id = String(etape.id);
+      if (etape.type === 'action') {
+        verifierAction(etape.action, id);
+        const modele = etape.action?.type ? trouverAction(etape.action.type) : undefined;
+        if (modele?.vers_client) messageVersClient = true;
+      }
+
+      // Les renvois. `problemesDuGraphe` les vérifie déjà côté serveur, mais
+      // le dire ICI évite un aller-retour et nomme l'étape fautive.
+      for (const cle of ['suivant', 'alors', 'sinon', 'si_reponse']) {
+        const cible = etape[cle];
+        if (cible && !ids.has(String(cible))) {
+          dire(
+            `Une étape renvoie vers une étape supprimée.`,
+            `A step points to a deleted step.`,
+            'bloquant', id,
+          );
+        }
+      }
+
+      if (etape.type === 'si' && Object.keys(etape.conditions ?? {}).length === 0) {
+        dire(
+          'Une condition est vide : le parcours suivrait toujours le même chemin.',
+          'A condition is empty: the journey would always take the same path.',
+          'avertissement', id,
+        );
+      }
+    }
+
+    // Une séquence qui finit sur une attente : le client attend, et rien ne
+    // vient. C'est déjà refusé côté serveur ; on le dit plus tôt.
+    const derniere = steps[steps.length - 1];
+    if (derniere?.type === 'attendre' && !derniere.suivant) {
+      dire(
+        'Le parcours se termine par une attente : rien ne se passera après.',
+        'The journey ends on a wait: nothing will happen afterwards.',
+        'bloquant', String(derniere.id),
+      );
+    }
+
+    if (!messageVersClient) {
+      dire(
+        'Aucun message ne part au client : cette automatisation ne fait que du travail interne.',
+        'No message goes to the client: this automation only does internal work.',
+        'avertissement',
+      );
+    }
+  } else {
+    actions.forEach((a, i) => verifierAction(a as { type?: string; config?: Record<string, unknown> }, undefined, i));
+  }
+
+  return out;
+}

@@ -60,6 +60,7 @@ import {
   FAMILLES_DECLENCHEURS,
   actionCompatible,
   champVisible,
+  problemesAvantPublication,
   trouverAction,
 } from '../lib/automationCatalogue';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
@@ -481,11 +482,45 @@ export default function AutomationBuilderPage() {
     if (!regle) return;
     const versActive = !regle.is_active;
     if (versActive) {
+      /*
+       * REFUSER AVANT, PAS APRÈS.
+       *
+       * L'audit d'un vrai compte GoHighLevel a trouvé cinq erreurs
+       * bloquantes dans un workflow publiable : leur builder laisse
+       * publier un parcours cassé, et l'entreprise ne s'en aperçoit qu'en
+       * constatant que personne n'a rien reçu.
+       *
+       * On nomme l'étape fautive et on l'ouvre d'un clic : une erreur
+       * qu'on peut cliquer se corrige, une erreur qu'on doit chercher se
+       * contourne.
+       */
+      const problemes = problemesAvantPublication({
+        trigger_event: regle.trigger_event,
+        steps,
+        actions: regle.actions,
+        fr,
+      });
+      const bloquants = problemes.filter((p) => p.gravite === 'bloquant');
+      if (bloquants.length > 0) {
+        const premier = bloquants[0];
+        if (premier.etapeId) setEtapeChoisie(premier.etapeId);
+        toast.error(
+          bloquants.length === 1
+            ? premier.message
+            : `${premier.message} (${bloquants.length - 1} ${fr ? 'autre(s) à corriger' : 'more to fix'})`,
+        );
+        return;
+      }
+
+      const avertissements = problemes.filter((p) => p.gravite === 'avertissement');
       const ok = await confirmer({
         title: fr ? 'Publier cette automatisation ?' : 'Publish this automation?',
-        message: fr
-          ? 'Elle commencera à envoyer de vrais messages à vos clients dès le prochain déclenchement.'
-          : 'It will start sending real messages to your clients at the next trigger.',
+        message: [
+          fr
+            ? 'Elle commencera à envoyer de vrais messages à vos clients dès le prochain déclenchement.'
+            : 'It will start sending real messages to your clients at the next trigger.',
+          ...avertissements.map((a) => `⚠ ${a.message}`),
+        ].join('\n\n'),
         confirmLabel: fr ? 'Publier' : 'Publish',
       });
       if (!ok) return;
