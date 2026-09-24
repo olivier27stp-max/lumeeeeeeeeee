@@ -992,6 +992,8 @@ export interface DossierClient {
   jobs: LigneHistorique[];
   devis: LigneHistorique[];
   factures: LigneHistorique[];
+  /** Les encaissements réels — ce qui est entré au compte. */
+  transactions: LigneHistorique[];
   messages: MessageClient[];
   /** Somme encaissée depuis toujours — ce que le client a réellement payé. */
   paye_cents: number;
@@ -1000,7 +1002,7 @@ export interface DossierClient {
 }
 
 const DOSSIER_VIDE: DossierClient = {
-  jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
+  jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
 };
 
 /**
@@ -1017,7 +1019,7 @@ const DOSSIER_VIDE: DossierClient = {
 export async function fetchDossierClient(clientId: string | null): Promise<DossierClient> {
   if (!clientId) return DOSSIER_VIDE;
 
-  const [jobsR, devisR, facturesR, messagesR] = await Promise.all([
+  const [jobsR, devisR, facturesR, messagesR, paiementsR] = await Promise.all([
     supabase.from('jobs')
       .select('id,job_number,title,status,total_cents,created_at')
       .eq('client_id', clientId).is('deleted_at', null)
@@ -1034,6 +1036,11 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
       .select('id,direction,message_text,created_at')
       .eq('client_id', clientId)
       .order('created_at', { ascending: false }).limit(10),
+    // Les encaissements réels : « Transactions » dans le filtre des paiements.
+    supabase.from('payments')
+      .select('id,amount_cents,paid_at,method,status')
+      .eq('client_id', clientId).is('deleted_at', null)
+      .order('paid_at', { ascending: false }).limit(50),
   ]);
 
   const jobs = (jobsR.data ?? []).map((j: Record<string, unknown>) => ({
@@ -1071,8 +1078,17 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
     date: m.created_at as string,
   }));
 
+  const transactions = (paiementsR.data ?? []).map((t: Record<string, unknown>) => ({
+    id: t.id as string,
+    numero: (t.method as string) || '—',
+    titre: '',
+    statut: (t.status as string) ?? '',
+    cents: (t.amount_cents as number) ?? 0,
+    date: (t.paid_at as string) ?? '',
+  }));
+
   return {
-    jobs, devis, factures, messages,
+    jobs, devis, factures, transactions, messages,
     // `paid_cents` et `balance_cents` sont tenus par la base : on les somme,
     // on ne les recalcule pas. Une facture annulée porte un solde à zéro.
     paye_cents: (facturesR.data ?? []).reduce(

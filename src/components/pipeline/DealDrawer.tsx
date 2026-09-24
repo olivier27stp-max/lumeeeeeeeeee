@@ -42,7 +42,7 @@ interface Membre { id: string; name: string }
 /** Provenance du montant affiché — calculée par `pipeline_montants` en base. */
 export type MontantProvenance = 'job' | 'devis' | 'devis_client' | 'aucun';
 
-type Onglet = 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'activite';
+type Onglet = 'lie' | 'apercu' | 'rdv' | 'taches' | 'notes' | 'paiements' | 'activite';
 
 /**
  * Canaux proposés dans le sélecteur de source.
@@ -145,6 +145,8 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
   const idEcheance = useId();
   const [titre, setTitre] = useState('');
   const [echeance, setEcheance] = useState('');
+  const idTri = useId();
+  const [tri, setTri] = useState<'echeance' | 'creation'>('echeance');
 
   const cle = useMemo(() => ['deal-taches', dealId], [dealId]);
   const { data: taches = [], isLoading } = useQuery({
@@ -174,6 +176,25 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
       toast.error(e instanceof Error ? e.message : String(e));
     },
   });
+
+  /**
+   * Les tâches triées.
+   *
+   * Les FAITES vont en bas quel que soit le tri : elles n'ont plus rien à
+   * demander, et les laisser au milieu obligerait à sauter par-dessus pour
+   * lire ce qui reste.
+   */
+  const tachesTriees = useMemo(() => {
+    const cle = (t: TacheDeal) =>
+      tri === 'creation' ? (t.created_at ?? '') : (t.due_date ?? '9999-12-31');
+    return [...taches].sort((a, b) => {
+      const faitA = a.status !== 'open' ? 1 : 0;
+      const faitB = b.status !== 'open' ? 1 : 0;
+      if (faitA !== faitB) return faitA - faitB;
+      // Échéance : la plus proche d'abord. Création : la plus récente d'abord.
+      return tri === 'creation' ? cle(b).localeCompare(cle(a)) : cle(a).localeCompare(cle(b));
+    });
+  }, [taches, tri]);
 
   const enRetard = (t: TacheDeal): boolean =>
     // `versDate` lit « 2026-09-04 » comme une date civile : `new Date()` en
@@ -227,13 +248,35 @@ function OngletTaches({ dealId, fr }: { dealId: string; fr: boolean }) {
       </Section>
 
       <Section titre={fr ? 'Tâches du deal' : 'Deal tasks'}>
+        {/*
+          Trier par échéance ou par date de création. Les deux répondent à
+          des questions différentes : « qu'est-ce qui arrive » et « qu'est-ce
+          que j'ai noté en dernier ». Les tâches FAITES restent en bas dans
+          les deux cas — elles n'ont plus rien à demander.
+        */}
+        {taches.length > 1 && (
+          <div className="mb-2 flex items-center gap-2">
+            <label htmlFor={idTri} className="text-[11px] text-text-tertiary">
+              {fr ? 'Trier par' : 'Sort by'}
+            </label>
+            <select
+              id={idTri}
+              value={tri}
+              onChange={(e) => setTri(e.target.value as 'echeance' | 'creation')}
+              className="input-field max-w-[170px] text-[12px]"
+            >
+              <option value="echeance">{fr ? 'Échéance' : 'Due date'}</option>
+              <option value="creation">{fr ? 'Date de création' : 'Date created'}</option>
+            </select>
+          </div>
+        )}
         {isLoading && <Vide texte={fr ? 'Chargement…' : 'Loading…'} />}
         {!isLoading && taches.length === 0 && (
           <Vide texte={fr ? 'Aucune tâche sur ce deal.' : 'No task on this deal.'} />
         )}
         {taches.length > 0 && (
           <ul className="rounded-xl border border-outline bg-surface-card divide-y divide-border-subtle">
-            {taches.map((t) => {
+            {tachesTriees.map((t) => {
               const idCase = `tache-${t.id}`;
               return (
                 <li key={t.id} className="flex items-start gap-2.5 px-3 py-2">
@@ -569,6 +612,184 @@ function OngletRendezVous({ deal, fr }: { deal: Deal; fr: boolean }) {
   );
 }
 
+/**
+ * L'argent du client : devis, factures, encaissements.
+ *
+ * Le filtre reprend les quatre vues de GoHighLevel — tous, devis, factures,
+ * transactions — parce qu'elles répondent à quatre questions différentes :
+ * « qu'est-ce que je lui ai proposé », « qu'est-ce que je lui ai facturé »,
+ * « qu'est-ce qu'il a payé ».
+ *
+ * Le bouton « Actions » crée depuis ici. Chez GHL c'est un menu ; ici les
+ * deux gestes vivent dans leur propre écran, avec le client pré-rempli — un
+ * devis ne se bâcle pas dans une fenêtre superposée.
+ */
+function OngletPaiements({ deal, fr }: { deal: Deal; fr: boolean }) {
+  const idFiltre = useId();
+  const [type, setType] = useState<'tous' | 'devis' | 'factures' | 'transactions'>('tous');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['deal-dossier-client', deal.client_id],
+    queryFn: () => fetchDossierClient(deal.client_id),
+    enabled: !!deal.client_id,
+    staleTime: 60_000,
+  });
+
+  const d = data ?? { jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0 };
+
+  const lignes = [
+    // `?? []` sur chaque liste : une réponse partielle (cache d'une version
+    // précédente, lecture refusée par la RLS des montants) ne doit pas faire
+    // planter l'écran entier — une section vide vaut mieux qu'un écran mort.
+    ...(type === 'tous' || type === 'devis'
+      ? (d.devis ?? []).map((x) => ({ ...x, genre: 'devis' as const }))
+      : []),
+    ...(type === 'tous' || type === 'factures'
+      ? (d.factures ?? []).map((x) => ({ ...x, genre: 'facture' as const }))
+      : []),
+    ...(type === 'tous' || type === 'transactions'
+      ? (d.transactions ?? []).map((x) => ({ ...x, genre: 'transaction' as const }))
+      : []),
+  ].sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+
+  const LIBELLE_GENRE = {
+    devis: fr ? 'Devis' : 'Estimate',
+    facture: fr ? 'Facture' : 'Invoice',
+    transaction: fr ? 'Paiement' : 'Payment',
+  };
+
+  function lienDe(g: string, id: string): string {
+    if (g === 'devis') return `/quotes/${id}`;
+    if (g === 'facture') return `/invoices/${id}`;
+    // Un encaissement n'a pas d'écran à lui : on ouvre la page des paiements.
+    return '/payments';
+  }
+
+  return (
+    <>
+      {/* La barre d'actions : créer, et filtrer ce qu'on regarde. */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <label htmlFor={idFiltre} className="sr-only">
+            {fr ? 'Type' : 'Type'}
+          </label>
+          <select
+            id={idFiltre}
+            value={type}
+            onChange={(e) => setType(e.target.value as typeof type)}
+            className="input-field max-w-[190px] text-[12.5px]"
+          >
+            <option value="tous">{fr ? 'Tous les types' : 'All types'}</option>
+            <option value="devis">{fr ? 'Devis' : 'Estimates'}</option>
+            <option value="factures">{fr ? 'Factures' : 'Invoices'}</option>
+            <option value="transactions">{fr ? 'Transactions' : 'Transactions'}</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Link to={`/quotes/new?clientId=${deal.client_id}`} className="btn-secondary text-[12.5px]">
+            {fr ? 'Cr\u00e9er un devis' : 'Create estimate'}
+          </Link>
+          <Link to={`/invoices/new?clientId=${deal.client_id}`} className="btn-primary text-[12.5px]">
+            {fr ? 'Cr\u00e9er une facture' : 'Create invoice'}
+          </Link>
+        </div>
+      </div>
+
+      {/* Ce qu'il a pay\u00e9, ce qu'il doit : la question avant de lui vendre
+          autre chose. */}
+      {(d.paye_cents > 0 || d.du_cents > 0) && (
+        <div className="mt-3 flex gap-2">
+          <div className="flex-1 rounded-xl border border-outline bg-surface-card px-3.5 py-2.5">
+            <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
+              {fr ? 'Pay\u00e9 \u00e0 ce jour' : 'Paid to date'}
+            </div>
+            <div className="mt-0.5 text-[15px] font-bold tabular-nums text-text-primary">
+              {montant(d.paye_cents, fr)}
+            </div>
+          </div>
+          <div
+            className="flex-1 rounded-xl border px-3.5 py-2.5"
+            style={
+              d.du_cents > 0
+                ? { borderColor: 'var(--color-danger)', background: 'color-mix(in srgb, var(--color-danger) 7%, transparent)' }
+                : { borderColor: 'var(--color-outline)' }
+            }
+          >
+            <div className="text-[10.5px] uppercase tracking-wide text-text-tertiary">
+              {fr ? 'Doit encore' : 'Still owes'}
+            </div>
+            <div
+              className="mt-0.5 text-[15px] font-bold tabular-nums"
+              style={{ color: d.du_cents > 0 ? 'var(--color-danger)' : 'var(--color-text-primary)' }}
+            >
+              {montant(d.du_cents, fr)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isLoading && <Vide texte={fr ? 'Chargement\u2026' : 'Loading\u2026'} />}
+
+      {!isLoading && lignes.length === 0 && (
+        <div className="mt-4 rounded-xl border border-dashed border-outline px-5 py-8 text-center">
+          <p className="text-[12.5px] text-text-secondary">
+            {type === 'tous'
+              ? (fr ? 'Aucune transaction pour ce client.' : 'No transaction for this client.')
+              : (fr ? 'Rien de ce type.' : 'Nothing of this type.')}
+          </p>
+        </div>
+      )}
+
+      {lignes.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr className="text-left text-[10.5px] uppercase tracking-wide text-text-tertiary">
+                <th scope="col" className="py-2 pr-3 font-semibold">{fr ? 'Date' : 'Date'}</th>
+                <th scope="col" className="py-2 px-2 font-semibold">{fr ? 'Type' : 'Type'}</th>
+                <th scope="col" className="py-2 px-2 font-semibold">{fr ? 'Num\u00e9ro' : 'Number'}</th>
+                <th scope="col" className="py-2 px-2 font-semibold">{fr ? 'Statut' : 'Status'}</th>
+                <th scope="col" className="py-2 pl-2 text-right font-semibold">{fr ? 'Montant' : 'Amount'}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border-subtle">
+              {lignes.map((l) => (
+                <tr key={`${l.genre}-${l.id}`}>
+                  <td className="py-2 pr-3 whitespace-nowrap tabular-nums text-text-secondary">
+                    {l.date
+                      ? new Date(l.date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA', { day: 'numeric', month: 'short', year: 'numeric' })
+                      : '\u2014'}
+                  </td>
+                  <td className="py-2 px-2 text-text-secondary">{LIBELLE_GENRE[l.genre]}</td>
+                  <td className="py-2 px-2">
+                    <Link to={lienDe(l.genre, l.id)} className="text-text-primary hover:underline">
+                      {l.numero || '\u2014'}
+                    </Link>
+                  </td>
+                  <td className="py-2 px-2 text-text-tertiary">
+                    {l.statut || '\u2014'}
+                    {/* Le solde restant, l\u00e0 o\u00f9 il existe : une facture « envoy\u00e9e »
+                        \u00e0 moiti\u00e9 pay\u00e9e n'est pas la m\u00eame chose qu'une intacte. */}
+                    {l.genre === 'facture' && (l.solde_cents ?? 0) > 0 && (
+                      <span className="ml-1.5 text-[11px] font-semibold" style={{ color: 'var(--color-danger)' }}>
+                        {montant(l.solde_cents ?? 0, fr)} {fr ? 'd\u00fb' : 'due'}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 pl-2 text-right tabular-nums text-text-primary">
+                    {montant(l.cents, fr)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
 function OngletLie({ deal, fr }: { deal: Deal; fr: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ['deal-lies', deal.id, deal.job_id, deal.quote_id],
@@ -864,6 +1085,7 @@ export default function DealDrawer({
     { cle: 'rdv', libelle: fr ? 'Rendez-vous' : 'Appointments' },
     { cle: 'taches', libelle: fr ? 'Tâches' : 'Tasks' },
     { cle: 'notes', libelle: fr ? 'Notes' : 'Notes' },
+    { cle: 'paiements', libelle: fr ? 'Paiements' : 'Payments' },
     { cle: 'activite', libelle: fr ? 'Activité' : 'Activity' },
   ];
 
@@ -1498,6 +1720,8 @@ export default function DealDrawer({
           {onglet === 'lie' && <OngletLie deal={deal} fr={fr} />}
 
             {onglet === 'rdv' && <OngletRendezVous deal={deal} fr={fr} />}
+
+            {onglet === 'paiements' && <OngletPaiements deal={deal} fr={fr} />}
           </div>
         </div>
       </div>
