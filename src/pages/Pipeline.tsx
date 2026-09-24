@@ -11,7 +11,7 @@
  * déplacé par Lumi, un import ou du SQL produit exactement le même résultat
  * qu'un glisser-déposer ici.
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GitBranch, Loader2 } from 'lucide-react';
@@ -29,11 +29,18 @@ import { hasPermission } from '../lib/permissions';
 import { usePermissions } from '../hooks/usePermissions';
 import {
   assignerDeal, deplacerDeal, fetchDeals, fetchMembres, fetchMontants,
-  fetchPipelineDefaut, fetchStages, lierJob, marquerPerdu, nomClient,
+  fetchPipelineDefaut, fetchPipelines, fetchStages, lierJob, marquerPerdu, nomClient,
   type Deal, type PipelineStage,
 } from '../lib/pipelineVentesApi';
 
 type Onglet = 'board' | 'stats' | 'reglages';
+
+/**
+ * Le dernier pipeline consulté, par navigateur. Pas en base : c'est une
+ * commodité d'affichage, pas une donnée d'entreprise — et une lecture
+ * refusée (navigation privée) doit simplement retomber sur le défaut.
+ */
+const CLE_PIPELINE_VU = 'lume-pipeline-vu';
 
 export default function Pipeline() {
   const { language } = useTranslation();
@@ -55,7 +62,36 @@ export default function Pipeline() {
     queryFn: fetchPipelineDefaut,
     staleTime: 300_000,
   });
-  const pipelineId = pipelineQ.data?.id ?? null;
+
+  // Tous les pipelines, pour que le sélecteur du board en propose vraiment
+  // plusieurs. Auparavant il affichait une option codée en dur : on pouvait
+  // créer un 2e pipeline sans jamais pouvoir le consulter.
+  const pipelinesQ = useQuery({
+    queryKey: ['pipeline-liste'],
+    queryFn: fetchPipelines,
+    staleTime: 300_000,
+  });
+  const pipelines = useMemo(() => pipelinesQ.data ?? [], [pipelinesQ.data]);
+
+  // Le pipeline REGARDÉ, qui n'est pas forcément celui par défaut : consulter
+  // un autre tableau ne doit pas changer un réglage d'organisation.
+  // Mémorisé par utilisateur et par navigateur — c'est une commodité
+  // d'affichage, pas une donnée : elle n'a rien à faire en base.
+  const [pipelineChoisi, setPipelineChoisi] = useState<string | null>(() => {
+    try { return localStorage.getItem(CLE_PIPELINE_VU); } catch { return null; }
+  });
+
+  const choisirPipeline = useCallback((id: string) => {
+    setPipelineChoisi(id);
+    try { localStorage.setItem(CLE_PIPELINE_VU, id); } catch { /* navigation privée */ }
+  }, []);
+
+  // Un pipeline mémorisé qui n'existe plus (supprimé, ou org changée) ne doit
+  // pas laisser le board vide : on retombe sur le défaut.
+  const pipelineId = useMemo(() => {
+    if (pipelineChoisi && pipelines.some((p) => p.id === pipelineChoisi)) return pipelineChoisi;
+    return pipelineQ.data?.id ?? null;
+  }, [pipelineChoisi, pipelines, pipelineQ.data]);
 
   const stagesQ = useQuery({
     queryKey: ['pipeline-stages', pipelineId],
@@ -226,7 +262,10 @@ export default function Pipeline() {
             chargement={dealsQ.isLoading}
             onOuvrir={setDealOuvert}
             onDeplacer={deplacer}
-            onAssigner={assigner}
+            pipelines={pipelines}
+          pipelineActif={pipelineId}
+          onChangerPipeline={choisirPipeline}
+          onAssigner={assigner}
             onChangement={rafraichir}
           />
         )}

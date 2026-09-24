@@ -794,3 +794,71 @@ export function priorite(deal: Deal, stages: PipelineStage[], maintenant = new D
   if (jours >= 5) return { niveau: 'moyen', jours };
   return { niveau: 'frais', jours };
 }
+
+// ── Vues sauvegardées du board ──────────────────────────────
+//
+// Une vue vit en base, pas dans `localStorage` : elle doit suivre le vendeur
+// d'un appareil à l'autre, et une vue d'entreprise doit être la même pour
+// toute l'équipe. `user_id` NULL = vue d'entreprise (admins) ; sinon vue
+// privée. C'est la RLS qui décide de ce qui remonte — jamais le client.
+
+export interface VueSauvegardee {
+  id: string;
+  pipeline_id: string;
+  /** `null` = vue d'entreprise, visible de toute l'équipe. */
+  user_id: string | null;
+  nom: string;
+  /** Forme libre : le board ignore les clés qu'il ne connaît pas. */
+  filtres: Record<string, string>;
+  tri: string | null;
+  affichage: string | null;
+  position: number;
+}
+
+export async function fetchVues(pipelineId: string): Promise<VueSauvegardee[]> {
+  const { data, error } = await supabase
+    .from('pipeline_vues')
+    .select('id,pipeline_id,user_id,nom,filtres,tri,affichage,position')
+    .eq('pipeline_id', pipelineId)
+    .order('position')
+    .order('nom');
+  if (error) throw error;
+  return (data ?? []) as VueSauvegardee[];
+}
+
+export async function creerVue(
+  pipelineId: string,
+  nom: string,
+  filtres: Record<string, string>,
+  options: { tri?: string | null; affichage?: string | null; pourEquipe?: boolean } = {},
+): Promise<string> {
+  const orgId = await getCurrentOrgIdOrThrow();
+  const { data: session } = await supabase.auth.getUser();
+  const uid = session.user?.id ?? null;
+  if (!uid) throw new Error('Aucune session.');
+
+  const { data, error } = await supabase
+    .from('pipeline_vues')
+    .insert({
+      org_id: orgId,
+      pipeline_id: pipelineId,
+      // Une vue d'entreprise s'impose à toute l'équipe : la RLS la refuse
+      // aux non-admins, et l'écran ne propose la case qu'au patron.
+      user_id: options.pourEquipe ? null : uid,
+      nom: nom.trim(),
+      // On ne garde que les filtres RENSEIGNÉS : une vue n'a pas à transporter
+      // des clés vides qui grossissent sans rien vouloir dire.
+      filtres: Object.fromEntries(Object.entries(filtres).filter(([, v]) => v !== '')),
+      tri: options.tri ?? null,
+      affichage: options.affichage ?? null,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return (data as { id: string }).id;
+}
+
+export async function supprimerVue(vueId: string): Promise<void> {
+  const { error } = await supabase.from('pipeline_vues').delete().eq('id', vueId);
+  if (error) throw error;
+}

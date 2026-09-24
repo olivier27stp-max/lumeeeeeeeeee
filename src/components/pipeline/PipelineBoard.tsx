@@ -18,15 +18,19 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Upload,
+  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Upload, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
+import { confirmer } from '../ui/ConfirmDialog';
+import { usePermissions } from '../../hooks/usePermissions';
 import ActionsRapides from './ActionsRapides';
 import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
-  creerDealManuel, estJobACreer, nomClient, priorite, type Deal, type PipelineStage,
+  creerDealManuel, creerVue, estJobACreer, fetchVues, nomClient, priorite, supprimerVue,
+  type Deal, type PipelineStage, type VueSauvegardee,
 } from '../../lib/pipelineVentesApi';
 import {
   LIBELLE_SOURCE, initiales, rangsOuverts, visuelEtape,
@@ -95,7 +99,7 @@ function joursDepuis(iso: string, maintenant: number): number {
 }
 
 type Tri = 'ancien' | 'recent' | 'montant' | 'inactif';
-type VueEnregistree = 'ouverts' | 'non-assignes' | 'relancer' | 'tous';
+type VueEnregistree = 'tous' | 'non-assignes' | 'relancer';
 type Affichage = 'kanban' | 'liste';
 type NiveauPriorite = 'urgent' | 'moyen' | 'frais';
 
@@ -542,17 +546,31 @@ interface EtatFiltres {
 
 const FILTRES_VIDES: EtatFiltres = { texte: '', source: '', assigne: '', priorite: '' };
 
+/**
+ * Vues INTÉGRÉES, toujours là et non supprimables.
+ *
+ * Il y en avait quatre, dont deux — « Deals ouverts » et « Tous » — portaient
+ * exactement les mêmes filtres : deux onglets qui affichaient la même chose,
+ * donc un onglet qui ment. On garde « Tous » comme point de départ, plus les
+ * deux raccourcis qui répondent à une vraie question du matin.
+ *
+ * Tout le reste est enregistré en base (`pipeline_vues`) : une vue nommée par
+ * un vendeur le suit d'un appareil à l'autre.
+ */
 const VUES: Record<VueEnregistree, { fr: string; en: string; filtres: EtatFiltres }> = {
-  ouverts: { fr: 'Deals ouverts', en: 'Open deals', filtres: FILTRES_VIDES },
+  tous: { fr: 'Tous', en: 'All', filtres: FILTRES_VIDES },
   'non-assignes': { fr: 'Non assignés', en: 'Unassigned', filtres: { ...FILTRES_VIDES, assigne: '__non' } },
   relancer: { fr: 'À relancer', en: 'Needs follow-up', filtres: { ...FILTRES_VIDES, priorite: 'urgent' } },
-  tous: { fr: 'Tous', en: 'All', filtres: FILTRES_VIDES },
 };
 
 function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
+  pipelines, pipelineActif, onChangerPipeline,
   onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onNouveauDeal,
 }: {
+  pipelines: { id: string; name: string; is_default: boolean }[];
+  pipelineActif: string | null;
+  onChangerPipeline: (pipelineId: string) => void;
   fr: boolean;
   total: number;
   filtres: EtatFiltres;
@@ -585,12 +603,26 @@ function BarreOutils({
           <label htmlFor={idPipeline} className="sr-only">
             {fr ? 'Pipeline affiché' : 'Displayed pipeline'}
           </label>
+          {/*
+            Le sélecteur affichait UNE option codée en dur, sans onChange : on
+            pouvait créer un 2e pipeline dans les réglages sans jamais pouvoir
+            le consulter. Il liste maintenant les vrais pipelines. Changer de
+            pipeline REGARDE un autre tableau — ça ne touche pas au défaut de
+            l'organisation, qui reste un réglage d'administrateur.
+          */}
           <select
             id={idPipeline}
             className="min-w-[190px] rounded-lg border border-outline-strong bg-surface-card px-3 py-2 text-[13px] font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
-            defaultValue="ventes"
+            value={pipelineActif ?? ''}
+            onChange={(e) => onChangerPipeline(e.target.value)}
+            disabled={pipelines.length <= 1}
           >
-            <option value="ventes">{fr ? 'Pipeline de ventes' : 'Sales pipeline'}</option>
+            {pipelines.length === 0 && (
+              <option value="">{fr ? 'Pipeline de ventes' : 'Sales pipeline'}</option>
+            )}
+            {pipelines.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
           </select>
           <span
             className="whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
@@ -764,11 +796,114 @@ function BarreOutils({
 
 // ── Board ──
 
+/**
+ * Nommer la vue qu'on vient de bâtir.
+ *
+ * Un patron peut la rendre visible à toute l'équipe ; les autres n'ont que
+ * des vues privées. Ce n'est pas qu'une question d'affichage : une vue
+ * d'équipe apparaît chez tout le monde, elle ne se crée pas par accident.
+ */
+function ModalEnregistrerVue({
+  ouvert, fr, estPatron, onFermer, onEnregistrer,
+}: {
+  ouvert: boolean;
+  fr: boolean;
+  estPatron: boolean;
+  onFermer: () => void;
+  onEnregistrer: (nom: string, pourEquipe: boolean) => void | Promise<void>;
+}) {
+  const idNom = useId();
+  const idEquipe = useId();
+  const [nom, setNom] = useState('');
+  const [pourEquipe, setPourEquipe] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+
+  if (!ouvert) return null;
+
+  async function soumettre(e: FormEvent) {
+    e.preventDefault();
+    if (!nom.trim() || enCours) return;
+    setEnCours(true);
+    try {
+      await onEnregistrer(nom.trim(), pourEquipe);
+      setNom('');
+      setPourEquipe(false);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onFermer} size="md" title={fr ? 'Enregistrer la vue' : 'Save view'}>
+      <form onSubmit={(e) => { void soumettre(e); }} className="space-y-4">
+        <div>
+          <label htmlFor={idNom} className="mb-1 block text-[11px] text-text-tertiary">
+            {fr ? 'Nom de la vue' : 'View name'}
+          </label>
+          <input
+            id={idNom}
+            value={nom}
+            maxLength={60}
+            autoFocus
+            onChange={(e) => setNom(e.target.value)}
+            placeholder={fr ? 'Ex. : Soumissions à relancer' : 'e.g. Quotes to follow up'}
+            className="input-field w-full text-[13px]"
+          />
+          <p className="mt-1.5 text-[11px] text-text-muted">
+            {fr
+              ? 'Les filtres, le tri et l’affichage courants sont enregistrés.'
+              : 'Current filters, sort and layout are saved.'}
+          </p>
+        </div>
+
+        {estPatron && (
+          <div className="flex items-start gap-2">
+            <input
+              id={idEquipe}
+              type="checkbox"
+              checked={pourEquipe}
+              onChange={(e) => setPourEquipe(e.target.checked)}
+              className="mt-0.5"
+            />
+            <label htmlFor={idEquipe} className="text-[12.5px] text-text-secondary">
+              {fr ? "Partager avec toute l'équipe" : 'Share with the whole team'}
+              <span className="block text-[11px] text-text-muted">
+                {fr
+                  ? 'Sinon, la vue reste privée et te suit d’un appareil à l’autre.'
+                  : 'Otherwise the view stays private and follows you across devices.'}
+              </span>
+            </label>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary text-[12.5px]" onClick={onFermer}>
+            {fr ? 'Annuler' : 'Cancel'}
+          </button>
+          <button
+            type="submit"
+            disabled={!nom.trim() || enCours}
+            className="btn-primary text-[12.5px] disabled:opacity-50"
+          >
+            {enCours ? (fr ? 'Enregistrement…' : 'Saving…') : fr ? 'Enregistrer' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export default function PipelineBoard({
   deals, etapes, montants, membres, chargement, onOuvrir, onDeplacer, onAssigner, onChangement,
+  pipelines, pipelineActif, onChangerPipeline,
 }: {
   deals: Deal[];
   etapes: PipelineStage[];
+  /** Tous les pipelines de l'organisation — le sélecteur les propose vraiment. */
+  pipelines: { id: string; name: string; is_default: boolean }[];
+  pipelineActif: string | null;
+  /** Changer de pipeline REGARDE un autre tableau ; ça ne change pas le défaut. */
+  onChangerPipeline: (pipelineId: string) => void;
   /** Montant en cents par deal (devis puis job). Absent = « Montant à venir ». */
   montants: Record<string, number>;
   membres: { id: string; name: string }[];
@@ -791,8 +926,63 @@ export default function PipelineBoard({
   // être en haut — c'est aussi ce qu'on veut voir en premier le matin.
   const [tri, setTri] = useState<Tri>('montant');
   const [affichage, setAffichage] = useState<Affichage>('kanban');
-  const [vue, setVue] = useState<VueEnregistree>('ouverts');
+  const [vue, setVue] = useState<VueEnregistree | string>('tous');
   const [nouveauDeal, setNouveauDeal] = useState(false);
+  const [enregistrementVue, setEnregistrementVue] = useState(false);
+  const perms = usePermissions();
+  // Seul un patron peut créer une vue d'ÉQUIPE : elle s'impose à tout le
+  // monde. La RLS le refuse aussi — l'écran ne fait que ne pas le proposer.
+  const estPatron = perms.role === 'owner' || perms.role === 'admin';
+  const nbFiltresActifs = useMemo(
+    () => Object.values(filtres).filter((v) => v !== '').length,
+    [filtres],
+  );
+
+  // Les vues enregistrées vivent en base : elles doivent suivre le vendeur
+  // d'un appareil à l'autre. La RLS décide de ce qui remonte (les siennes et
+  // celles de l'équipe) — le client ne filtre rien.
+  const vuesQ = useQuery({
+    queryKey: ['pipeline-vues', pipelineActif],
+    queryFn: () => fetchVues(pipelineActif as string),
+    enabled: !!pipelineActif,
+    staleTime: 300_000,
+  });
+  const vuesEnregistrees = useMemo(() => vuesQ.data ?? [], [vuesQ.data]);
+
+  async function enregistrerVue(nom: string, pourEquipe: boolean) {
+    if (!pipelineActif) return;
+    try {
+      const id = await creerVue(pipelineActif, nom, { ...filtres }, { tri, affichage, pourEquipe });
+      await vuesQ.refetch();
+      setVue(id);
+      setEnregistrementVue(false);
+      toast.success(fr ? `Vue « ${nom} » enregistrée.` : `View “${nom}” saved.`);
+    } catch (e) {
+      console.error('[PipelineBoard] enregistrement de vue', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function supprimer(v: VueSauvegardee) {
+    const ok = await confirmer({
+      title: fr ? `Supprimer « ${v.nom} » ?` : `Delete “${v.nom}”?`,
+      message: v.user_id === null
+        ? (fr ? "Cette vue d'équipe disparaîtra pour tout le monde." : 'This team view will disappear for everyone.')
+        : (fr ? 'Les deals ne sont pas touchés, seule la vue disparaît.' : 'Deals are untouched; only the view disappears.'),
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await supprimerVue(v.id);
+      await vuesQ.refetch();
+      if (vue === v.id) appliquerVue('tous');
+      toast.success(fr ? 'Vue supprimée.' : 'View deleted.');
+    } catch (e) {
+      console.error('[PipelineBoard] suppression de vue', e);
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }
   const verrous = useRef<Set<string>>(new Set());
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -848,6 +1038,29 @@ export default function PipelineBoard({
   function appliquerVue(v: VueEnregistree) {
     setVue(v);
     setFiltres(VUES[v].filtres);
+  }
+
+  /**
+   * Applique une vue enregistrée en base.
+   *
+   * Les filtres viennent d'un jsonb : une vue enregistrée par une version
+   * précédente peut porter des clés qu'on ne connaît plus, ou en oublier.
+   * On repart donc de `FILTRES_VIDES` et on ne reprend que les clés connues —
+   * une vieille vue s'ouvre ainsi sans jamais casser l'écran.
+   */
+  function appliquerVueEnregistree(v: VueSauvegardee) {
+    setVue(v.id);
+    const f = { ...FILTRES_VIDES };
+    if (typeof v.filtres?.texte === 'string') f.texte = v.filtres.texte;
+    if (typeof v.filtres?.source === 'string') f.source = v.filtres.source;
+    if (typeof v.filtres?.assigne === 'string') f.assigne = v.filtres.assigne;
+    // `priorite` est une union fermée : une valeur inconnue venue du jsonb
+    // (vieille vue, saisie manuelle) est ignorée plutôt que de fausser le filtre.
+    const prio = v.filtres?.priorite;
+    if (prio === 'urgent' || prio === 'moyen' || prio === 'frais') f.priorite = prio;
+    setFiltres(f);
+    if (v.tri && (TRIS as readonly string[]).includes(v.tri)) setTri(v.tri as Tri);
+    if (v.affichage === 'kanban' || v.affichage === 'liste') setAffichage(v.affichage);
   }
 
   /** Exporte ce qui est à l'écran — les deals filtrés, pas la base entière. */
@@ -917,6 +1130,9 @@ export default function PipelineBoard({
         panneauOuvert={panneauOuvert}
         tri={tri}
         affichage={affichage}
+        pipelines={pipelines}
+        pipelineActif={pipelineActif}
+        onChangerPipeline={onChangerPipeline}
         onFiltres={setFiltres}
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
@@ -955,7 +1171,62 @@ export default function PipelineBoard({
             {fr ? VUES[v].fr : VUES[v].en}
           </button>
         ))}
+
+        {/* Les vues enregistrées en base, à la suite des intégrées. */}
+        {vuesEnregistrees.map((v) => (
+          <span key={v.id} className="group inline-flex items-center">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={vue === v.id}
+              onClick={() => appliquerVueEnregistree(v)}
+              className={cn(
+                'whitespace-nowrap rounded-full border py-1.5 pl-3 pr-2 text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary',
+                vue === v.id
+                  ? 'border-outline-strong bg-surface-tertiary font-semibold text-text-primary'
+                  : 'border-outline font-medium text-text-tertiary hover:bg-surface-secondary hover:text-text-primary',
+              )}
+            >
+              {v.nom}
+              {/* Une vue d'équipe se distingue d'une vue perso : sinon on ne
+                  sait pas pourquoi on n'arrive pas à la supprimer. */}
+              {v.user_id === null && (
+                <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                  {fr ? 'équipe' : 'team'}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => { void supprimer(v); }}
+              aria-label={fr ? `Supprimer la vue ${v.nom}` : `Delete view ${v.nom}`}
+              className="-ml-1 rounded-full p-1 text-text-muted opacity-0 transition-opacity hover:text-text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary group-hover:opacity-100"
+            >
+              <X size={12} aria-hidden="true" />
+            </button>
+          </span>
+        ))}
+
+        {/* Enregistrer les filtres courants. Désactivé quand il n'y a rien à
+            enregistrer : une vue « aucun filtre » ne sert à rien. */}
+        <button
+          type="button"
+          onClick={() => setEnregistrementVue(true)}
+          disabled={nbFiltresActifs === 0}
+          title={nbFiltresActifs === 0 ? (fr ? 'Applique des filtres à enregistrer' : 'Apply filters to save') : undefined}
+          className="whitespace-nowrap rounded-full border border-dashed border-outline px-3 py-1.5 text-[12.5px] font-medium text-text-tertiary hover:bg-surface-secondary hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {fr ? '+ Enregistrer la vue' : '+ Save view'}
+        </button>
       </div>
+
+      <ModalEnregistrerVue
+        ouvert={enregistrementVue}
+        fr={fr}
+        estPatron={estPatron}
+        onFermer={() => setEnregistrementVue(false)}
+        onEnregistrer={enregistrerVue}
+      />
 
       {chargement && (
         <p className="mt-2 text-[11px] text-text-muted" role="status">
