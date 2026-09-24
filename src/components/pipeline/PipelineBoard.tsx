@@ -10,7 +10,7 @@
  * ne reste qu'une pastille ronde devant le nom. La couleur porte l'information
  * qui presse (priorité sur le liseré gauche des cartes), pas la décoration.
  */
-import { useId, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   DndContext, DragOverlay, PointerSensor, closestCorners, useDroppable, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
@@ -121,7 +121,13 @@ const CLASSE_CHAMP =
 
 // ── Carte ──
 
-function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, onChangement }: {
+function CarteDeal({
+  deal, etapes, membres, montantCents, onOuvrir, onAssigner, onChangement,
+  selectionne, onBasculerSelection,
+}: {
+  /** `undefined` = mode sélection inactif : aucune case n'est dessinée. */
+  selectionne?: boolean;
+  onBasculerSelection?: (dealId: string) => void;
   deal: Deal;
   etapes: PipelineStage[];
   membres: Membre[];
@@ -187,6 +193,18 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, 
     >
       {/* Haut : nom, pastille de priorité, menu */}
       <div className="flex items-start gap-1.5">
+        {onBasculerSelection && (
+          <input
+            type="checkbox"
+            checked={!!selectionne}
+            aria-label={fr ? `Sélectionner ${nom}` : `Select ${nom}`}
+            // Sans stopPropagation, cocher ouvrirait aussi la fiche : le clic
+            // remonterait jusqu'au onClick de la carte.
+            onClick={(e) => e.stopPropagation()}
+            onChange={() => onBasculerSelection(deal.id)}
+            className="mt-0.5 shrink-0"
+          />
+        )}
         <button
           {...listeners}
           onClick={(e) => e.stopPropagation()}
@@ -297,7 +315,13 @@ function CarteDeal({ deal, etapes, membres, montantCents, onOuvrir, onAssigner, 
 
 // ── Colonne ──
 
-function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement }: {
+function Colonne({
+  etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement,
+  selection, onBasculerSelection,
+}: {
+  /** Les deals cochés. `undefined` = mode sélection inactif. */
+  selection?: Set<string>;
+  onBasculerSelection?: (dealId: string) => void;
   etape: PipelineStage;
   /** Toutes les étapes : le badge « Job à créer » se dérive du `kind` de l'étape du deal. */
   etapes: PipelineStage[];
@@ -381,6 +405,8 @@ function Colonne({ etape, etapes, rangOuvert, deals, membres, montants, onOuvrir
               onOuvrir={onOuvrir}
               onAssigner={onAssigner}
               onChangement={onChangement}
+              selectionne={selection?.has(deal.id)}
+              onBasculerSelection={onBasculerSelection}
             />
           ))}
           {deals.length === 0 && (
@@ -1025,6 +1051,80 @@ export default function PipelineBoard({
   const [vue, setVue] = useState<VueEnregistree | string>('tous');
   const [nouveauDeal, setNouveauDeal] = useState(false);
   const [enregistrementVue, setEnregistrementVue] = useState(false);
+
+  /**
+   * Les deals cochés, pour agir sur plusieurs d'un coup.
+   *
+   * Un `Set` d'identifiants plutôt que des deals complets : la liste des
+   * deals se rafraîchit sans cesse (déplacement, assignation), et garder des
+   * objets figés afficherait des cartes périmées dans la barre d'actions.
+   */
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const idLotAssigne = useId();
+  const idLotEtape = useId();
+
+  /**
+   * Assigner plusieurs deals d'un coup.
+   *
+   * Passe par `onAssigner` du parent plutôt que par l'API : c'est lui qui
+   * rafraîchit et qui connaît les règles. Court-circuiter ouvrirait un second
+   * chemin d'écriture, avec d'autres comportements.
+   *
+   * Les écritures partent en parallèle mais on attend TOUTES les réponses
+   * (`allSettled`) : annoncer « 12 deals assignés » alors que trois ont
+   * échoué serait un mensonge, et l'utilisateur ne le découvrirait qu'en
+   * voyant les cartes inchangées.
+   */
+  async function assignerEnLot(valeur: string) {
+    const ids = [...selection];
+    const membreId = valeur === '__non' ? null : valeur;
+    const resultats = await Promise.allSettled(ids.map((id) => onAssigner(id, membreId)));
+    const echecs = resultats.filter((r) => r.status === 'rejected').length;
+    setSelection(new Set());
+    onChangement?.();
+    if (echecs === 0) {
+      toast.success(fr ? `${ids.length} deal(s) assigné(s).` : `${ids.length} deal(s) assigned.`);
+    } else {
+      toast.error(
+        fr
+          ? `${ids.length - echecs} assigné(s), ${echecs} en échec.`
+          : `${ids.length - echecs} assigned, ${echecs} failed.`,
+      );
+    }
+  }
+
+  /**
+   * Déplacer plusieurs deals vers une étape OUVERTE.
+   *
+   * Les étapes gagnée et perdue sont volontairement absentes du menu :
+   * gagner ouvre la fenêtre de création de job, perdre exige une raison.
+   * Un déplacement en masse sauterait les deux et laisserait des deals
+   * fermés sans job ni motif — précisément ce que les statistiques lisent.
+   */
+  async function deplacerEnLot(etapeId: string) {
+    const ids = [...selection];
+    const resultats = await Promise.allSettled(ids.map((id) => onDeplacer(id, etapeId)));
+    const echecs = resultats.filter((r) => r.status === 'rejected').length;
+    setSelection(new Set());
+    onChangement?.();
+    if (echecs === 0) {
+      toast.success(fr ? `${ids.length} deal(s) déplacé(s).` : `${ids.length} deal(s) moved.`);
+    } else {
+      toast.error(
+        fr
+          ? `${ids.length - echecs} déplacé(s), ${echecs} en échec.`
+          : `${ids.length - echecs} moved, ${echecs} failed.`,
+      );
+    }
+  }
+
+  const basculerSelection = useCallback((dealId: string) => {
+    setSelection((s) => {
+      const n = new Set(s);
+      if (n.has(dealId)) n.delete(dealId); else n.add(dealId);
+      return n;
+    });
+  }, []);
   const perms = usePermissions();
   // Seul un patron peut créer une vue d'ÉQUIPE : elle s'impose à tout le
   // monde. La RLS le refuse aussi — l'écran ne fait que ne pas le proposer.
@@ -1359,6 +1459,67 @@ export default function PipelineBoard({
         onEnregistrer={enregistrerVue}
       />
 
+      {/*
+        Les actions groupées n'apparaissent QUE quand quelque chose est coché :
+        une barre toujours présente prendrait de la place pour un geste rare.
+      */}
+      {selection.size > 0 && (
+        <div
+          role="status"
+          className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-outline-strong bg-surface-elevated px-3.5 py-2.5"
+        >
+          <span className="text-[12.5px] font-semibold text-text-primary">
+            {fr
+              ? `${selection.size} deal${selection.size > 1 ? 's' : ''} sélectionné${selection.size > 1 ? 's' : ''}`
+              : `${selection.size} deal${selection.size > 1 ? 's' : ''} selected`}
+          </span>
+
+          <label htmlFor={idLotAssigne} className="sr-only">
+            {fr ? 'Assigner la sélection à' : 'Assign selection to'}
+          </label>
+          <select
+            id={idLotAssigne}
+            value=""
+            onChange={(e) => { if (e.target.value) void assignerEnLot(e.target.value); }}
+            className={CLASSE_CHAMP + ' max-w-[190px]'}
+          >
+            <option value="">{fr ? 'Assigner à…' : 'Assign to…'}</option>
+            <option value="__non">{fr ? 'Personne' : 'Nobody'}</option>
+            {membres.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+
+          <label htmlFor={idLotEtape} className="sr-only">
+            {fr ? 'Déplacer la sélection vers' : 'Move selection to'}
+          </label>
+          <select
+            id={idLotEtape}
+            value=""
+            onChange={(e) => { if (e.target.value) void deplacerEnLot(e.target.value); }}
+            className={CLASSE_CHAMP + ' max-w-[190px]'}
+          >
+            <option value="">{fr ? 'Déplacer vers…' : 'Move to…'}</option>
+            {/*
+              Ni « Gagné » ni « Perdu » en lot : gagner demande de créer une
+              job, perdre demande une raison. Les passer en masse sauterait
+              les deux, et laisserait des deals fermés sans job ni motif.
+            */}
+            {visibles.filter((e) => e.kind === 'open').map((e) => (
+              <option key={e.id} value={e.id}>{fr ? e.name_fr : e.name_en}</option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setSelection(new Set())}
+            className="ml-auto text-[12px] text-text-tertiary underline-offset-2 hover:text-text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary rounded"
+          >
+            {fr ? 'Tout décocher' : 'Clear selection'}
+          </button>
+        </div>
+      )}
+
       {chargement && (
         <p className="mt-2 text-[11px] text-text-muted" role="status">
           {fr ? 'Chargement…' : 'Loading…'}
@@ -1485,6 +1646,8 @@ export default function PipelineBoard({
                 onOuvrir={onOuvrir}
                 onAssigner={onAssigner}
                 onChangement={onChangement}
+                selection={selection}
+                onBasculerSelection={basculerSelection}
               />
             ))}
           </div>

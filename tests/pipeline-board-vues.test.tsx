@@ -264,3 +264,73 @@ describe('board — filtres avancés', () => {
     expect(conteneur.textContent).not.toContain('vieux');
   });
 });
+
+describe('board — actions en lot', () => {
+  function deal(id: string, stage = 'e1') {
+    const t = new Date().toISOString();
+    return {
+      id, pipeline_id: 'p1', stage_id: stage, client_id: `c-${id}`,
+      assigned_user_id: null, source: 'manual',
+      utm_source: null, utm_medium: null, utm_campaign: null, utm_content: null, fbclid: null,
+      job_id: null, quote_id: null, first_contacted_at: null,
+      last_activity_at: t, stage_entered_at: t, won_at: null, lost_at: null,
+      lost_reason: null, lost_from_stage_id: null, pin_id: null, field_rep_id: null,
+      created_at: t,
+      client: { first_name: 'Client', last_name: id, company: null, email: null, phone: null, address: null },
+    } as any;
+  }
+
+  function cases(): HTMLInputElement[] {
+    return [...conteneur.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+  }
+
+  it("la barre d'actions n'apparaît que quand un deal est coché", async () => {
+    await rendre({ deals: [deal('a'), deal('b')] });
+    // Une barre toujours visible prendrait de la place pour un geste rare.
+    expect(conteneur.textContent).not.toContain('sélectionné');
+
+    await act(async () => { cases()[0].click(); });
+    expect(conteneur.textContent).toContain('1 deal sélectionné');
+
+    await act(async () => { cases()[1].click(); });
+    expect(conteneur.textContent).toContain('2 deals sélectionnés');
+  });
+
+  it('assigner en lot appelle le parent pour chaque deal coché', async () => {
+    const onAssigner = vi.fn(async () => {});
+    await rendre({ deals: [deal('a'), deal('b')], membres: [{ id: 'm1', name: 'Alex' }], onAssigner });
+
+    await act(async () => { cases()[0].click(); });
+    await act(async () => { cases()[1].click(); });
+
+    const sel = [...conteneur.querySelectorAll('select')]
+      .find((x) => [...x.options].some((o) => o.value === 'm1')) as HTMLSelectElement;
+    await act(async () => {
+      sel.value = 'm1';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(onAssigner).toHaveBeenCalledTimes(2);
+    expect(onAssigner).toHaveBeenCalledWith('a', 'm1');
+    expect(onAssigner).toHaveBeenCalledWith('b', 'm1');
+    // La sélection se vide : garder des cartes cochées après coup laisserait
+    // croire qu'une seconde action porterait encore sur elles.
+    expect(conteneur.textContent).not.toContain('sélectionné');
+  });
+
+  it('le déplacement en lot ne propose JAMAIS gagné ni perdu', async () => {
+    await rendre({ deals: [deal('a')] });
+    await act(async () => { cases()[0].click(); });
+
+    const sel = [...conteneur.querySelectorAll('select')]
+      .find((x) => [...x.options].some((o) => /Déplacer vers/.test(o.textContent ?? ''))) as HTMLSelectElement;
+    const libelles = [...sel.options].map((o) => o.textContent);
+
+    // Gagner ouvre la fenêtre de création de job ; perdre exige une raison.
+    // Un déplacement en masse sauterait les deux et laisserait des deals
+    // fermés sans job ni motif — ce que les statistiques lisent ensuite.
+    expect(libelles).toContain('Nouveau lead');
+    expect(libelles).not.toContain('Gagné');
+    expect(libelles).not.toContain('Perdu');
+  });
+});
