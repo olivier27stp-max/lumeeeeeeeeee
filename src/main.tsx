@@ -7,6 +7,7 @@ import { LanguageProvider } from './i18n';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ConfirmDialogHost } from './components/ui/ConfirmDialog';
 import { initSentryClient } from './lib/sentry';
+import './lib/apiOrgHeader'; // bureau sélectionné → x-org-id sur tous les appels /api (multi-bureaux)
 import App from './App.tsx';
 import './index.css';
 import 'leaflet/dist/leaflet.css';
