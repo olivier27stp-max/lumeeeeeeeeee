@@ -197,3 +197,27 @@ describe('le ciel et les règles des maquettes', () => {
     expect(h).toContain('1 220,17 $');
   });
 });
+
+describe('pastille Lume au pied des courriels clients', () => {
+  const courriel = () =>
+    rendreCourrielClient({
+      langue: 'fr',
+      marque: { nom: 'Test', logoUrl: null, couleur: '#de7a1b' },
+      titre: 'T', salutation: 'Bonjour,', intro: 'Texte.',
+    });
+
+  it('affiche la mascotte cadrée sur le visage, pas le logo entier', () => {
+    const html = courriel();
+    expect(html).toContain('lume-mascotte-pastille.png');
+    // le logo complet est illisible en pastille : il reste aux courriels de Lume
+    expect(html).not.toContain('favicon-mascot-v2.png');
+  });
+
+  it('la rend ronde et à une taille lisible, dimensions déclarées pour Outlook', () => {
+    const html = courriel();
+    const img = html.match(/<img[^>]*lume-mascotte-pastille[^>]*>/)?.[0] ?? '';
+    expect(img).toContain('width="32"');
+    expect(img).toContain('height="32"');
+    expect(img).toContain('border-radius:50%');
+  });
+});

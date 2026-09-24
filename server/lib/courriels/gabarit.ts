@@ -176,11 +176,12 @@ const CADENAS = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" str
 
    `vertical-align:middle` sur les deux cellules : sans lui, le texte se pose
    sur la ligne de base et flotte sous la pastille. */
-const MASCOTTE_LUME_URL = 'https://lumecrm.net/favicon-mascot-v2.png';
+// Cadrée sur le visage : le logo v2 entier devient illisible sous 40px.
+const MASCOTTE_LUME_URL = 'https://lumecrm.net/lume-mascotte-pastille.png';
 const SIGNATURE_LUME = (envoyeAvec: string) => `
 <table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:14px auto 0;">
 <tr>
-<td style="padding-right:6px;vertical-align:middle;line-height:0;"><img src="${MASCOTTE_LUME_URL}" alt="" width="18" height="18" style="width:18px;height:18px;display:block;border:0;outline:none;border-radius:50%;"/></td>
+<td style="padding-right:8px;vertical-align:middle;line-height:0;"><img src="${MASCOTTE_LUME_URL}" alt="" width="32" height="32" style="width:32px;height:32px;display:block;border:0;outline:none;border-radius:50%;"/></td>
 <td style="vertical-align:middle;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></td>
 </tr>
 </table>`;
