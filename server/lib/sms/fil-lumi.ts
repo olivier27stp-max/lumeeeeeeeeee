@@ -148,16 +148,22 @@ export async function repondreAuMembre(opts: OptionsFil): Promise<void> {
   }
   if (enAttente && estConfirmation(texte)) {
     try {
-      const { executerEcriture } = await import('../lumi/execution');
-      // Les gardes de permission s'appliquent ici comme dans l'app : c'est
-      // `executerOutilGarde` qui décide, avec le userId du membre.
+      const [{ executerEcriture }, { clientPourMembre }] = await Promise.all([
+        import('../lumi/execution'),
+        import('./session-membre'),
+      ]);
+      // Une écriture passe par les mêmes fonctions gardées que la lecture :
+      // sans session du membre, la base refuse (`auth.uid()` nul) et la
+      // confirmation échouerait alors qu'elle vient d'être donnée.
+      const { client, accessToken } = await clientPourMembre(membre.userId);
       const { recu } = await executerEcriture({
         tool: enAttente.tool,
         toolUseId: enAttente.tool_use_id,
         args: enAttente.args,
         userId: membre.userId,
         orgId: membre.orgId,
-        client: admin,
+        client,
+        accessToken,
       });
       await dire(recu.ok
         ? (fr ? "C'est fait." : 'Done.')
