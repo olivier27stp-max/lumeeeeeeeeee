@@ -145,10 +145,13 @@ describe('board — sélecteur de pipeline', () => {
     expect(onChangerPipeline).toHaveBeenCalledWith('p2');
   });
 
-  it("se désactive quand l'organisation n'a qu'un seul pipeline", async () => {
+  it("reste actif même avec un seul pipeline", async () => {
+    // Il se désactivait, au motif qu'il n'offrait aucun choix. Mais c'est
+    // justement le cas de toute nouvelle organisation : on ne pouvait ni
+    // cliquer, ni découvrir qu'on avait le droit d'en créer un deuxième.
+    // Le sélecteur porte maintenant cette porte, donc il a toujours un choix.
     await rendre({ pipelines: [PIPELINES[0]] });
-    // Un sélecteur actif qui n'offre aucun choix invite à un clic sans effet.
-    expect(selecteurPipeline()!.disabled).toBe(true);
+    expect(selecteurPipeline()!.disabled).toBe(false);
   });
 });
 

@@ -654,9 +654,11 @@ const VUES: Record<VueEnregistree, { fr: string; en: string; filtres: EtatFiltre
 
 function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
-  pipelines, pipelineActif, onChangerPipeline, etapesFiltrables,
+  pipelines, pipelineActif, onChangerPipeline, etapesFiltrables, onCreerPipeline,
   onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onImporter, onNouveauDeal,
 }: {
+  /** Ouvre les réglages pour créer un pipeline. Absent = pas le droit. */
+  onCreerPipeline?: () => void;
   /** Étapes proposées au filtre — les actives, dans l'ordre du board. */
   etapesFiltrables: PipelineStage[];
   pipelines: { id: string; name: string; is_default: boolean }[];
@@ -705,12 +707,20 @@ function BarreOutils({
             pipeline REGARDE un autre tableau — ça ne touche pas au défaut de
             l'organisation, qui reste un réglage d'administrateur.
           */}
+          {/*
+            JAMAIS `disabled` : avec un seul pipeline le sélecteur était grisé,
+            donc on ne pouvait ni cliquer dessus ni découvrir qu'on avait le
+            droit d'en créer un deuxième. Un contrôle mort n'explique rien —
+            celui-ci porte maintenant la porte de création.
+          */}
           <select
             id={idPipeline}
             className="min-w-[190px] rounded-lg border border-outline-strong bg-surface-card px-3 py-2 text-[13px] font-semibold text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
             value={pipelineActif ?? ''}
-            onChange={(e) => onChangerPipeline(e.target.value)}
-            disabled={pipelines.length <= 1}
+            onChange={(e) => {
+              if (e.target.value === '__creer') { onCreerPipeline?.(); return; }
+              onChangerPipeline(e.target.value);
+            }}
           >
             {pipelines.length === 0 && (
               <option value="">{fr ? 'Pipeline de ventes' : 'Sales pipeline'}</option>
@@ -718,6 +728,11 @@ function BarreOutils({
             {pipelines.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
+            {onCreerPipeline && (
+              <option value="__creer">
+                {fr ? '＋ Créer un pipeline…' : '＋ Create a pipeline…'}
+              </option>
+            )}
           </select>
           <span
             className="whitespace-nowrap rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
@@ -1050,8 +1065,10 @@ function ModalEnregistrerVue({
 
 export default function PipelineBoard({
   deals, etapes, montants, membres, chargement, onOuvrir, onDeplacer, onAssigner, onChangement,
-  pipelines, pipelineActif, onChangerPipeline, modeCouleur = 'dot',
+  pipelines, pipelineActif, onChangerPipeline, modeCouleur = 'dot', onCreerPipeline,
 }: {
+  /** Ouvre les réglages pour créer un pipeline. Absent = pas le droit. */
+  onCreerPipeline?: () => void;
   /** Réglage du pipeline affiché. Par défaut la pastille, comme avant. */
   modeCouleur?: ModeCouleur;
   deals: Deal[];
@@ -1441,6 +1458,7 @@ export default function PipelineBoard({
         pipelines={pipelines}
         pipelineActif={pipelineActif}
         onChangerPipeline={onChangerPipeline}
+        onCreerPipeline={onCreerPipeline}
         etapesFiltrables={visibles}
         onFiltres={setFiltres}
         onBasculerPanneau={() => setPanneauOuvert((o) => !o)}
@@ -1585,13 +1603,23 @@ export default function PipelineBoard({
             className={CLASSE_CHAMP + ' max-w-[190px]'}
           >
             <option value="">{fr ? 'Déplacer vers…' : 'Move to…'}</option>
-            {/*
-              Ni « Gagné » ni « Perdu » en lot : gagner demande de créer une
-              job, perdre demande une raison. Les passer en masse sauterait
-              les deux, et laisserait des deals fermés sans job ni motif.
-            */}
             {visibles.filter((e) => e.kind === 'open').map((e) => (
               <option key={e.id} value={e.id}>{fr ? e.name_fr : e.name_en}</option>
+            ))}
+            {/*
+              « Gagné » et « Perdu » apparaissent, mais DÉSACTIVÉS et avec la
+              raison écrite : gagner demande de créer une job, perdre demande
+              un motif. Les omettre silencieusement laissait chercher une
+              option absente sans jamais comprendre pourquoi — on préfère
+              montrer la règle plutôt que cacher la porte.
+            */}
+            {visibles.filter((e) => e.kind !== 'open').map((e) => (
+              <option key={e.id} value={e.id} disabled>
+                {(fr ? e.name_fr : e.name_en)}
+                {e.kind === 'won'
+                  ? (fr ? ' — un par un (job à créer)' : ' — one by one (job needed)')
+                  : (fr ? ' — un par un (raison requise)' : ' — one by one (reason needed)')}
+              </option>
             ))}
           </select>
 

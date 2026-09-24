@@ -25,7 +25,6 @@ import PerduModal from '../components/pipeline/PerduModal';
 import PipelineReglages from '../components/pipeline/PipelineReglages';
 import PipelinePrevisions from '../components/pipeline/PipelinePrevisions';
 import PipelineJournalLots from '../components/pipeline/PipelineJournalLots';
-import PipelineStats from '../components/pipeline/PipelineStats';
 import { useTranslation } from '../i18n';
 import { hasPermission } from '../lib/permissions';
 import { usePermissions } from '../hooks/usePermissions';
@@ -35,7 +34,13 @@ import {
   type Deal, type PipelineStage,
 } from '../lib/pipelineVentesApi';
 
-type Onglet = 'board' | 'previsions' | 'stats' | 'lots' | 'reglages';
+/**
+ * « Statistiques » a été absorbé par « Prévisions » : c'était la même
+ * question posée deux fois — ce qui s'est passé, et ce qui va arriver. Les
+ * anciens liens `?tab=stats` retombent sur Prévisions plutôt que sur le
+ * board, pour atterrir là où la donnée a déménagé.
+ */
+type Onglet = 'board' | 'previsions' | 'lots' | 'reglages';
 
 /**
  * Le dernier pipeline consulté, par navigateur. Pas en base : c'est une
@@ -48,7 +53,9 @@ export default function Pipeline() {
   const { language } = useTranslation();
   const fr = language === 'fr';
   const [params, setParams] = useSearchParams();
-  const onglet = (params.get('tab') as Onglet) || 'board';
+  const brut = params.get('tab');
+  // Redirection douce des liens déjà partagés, signets compris.
+  const onglet = (brut === 'stats' ? 'previsions' : brut) as Onglet || 'board';
   const qc = useQueryClient();
 
   const perms = usePermissions();
@@ -218,7 +225,6 @@ export default function Pipeline() {
     { cle: 'board', libelle: 'Board', visible: true },
     // Les prévisions suivent le board : c'est la même question, projetée.
     { cle: 'previsions', libelle: fr ? 'Prévisions' : 'Forecast', visible: voitLesStats },
-    { cle: 'stats', libelle: fr ? 'Statistiques' : 'Statistics', visible: voitLesStats },
     // Le journal des lots : réservé aux patrons, comme les actions elles-mêmes.
     { cle: 'lots', libelle: fr ? 'Actions en lot' : 'Bulk actions', visible: estPatron },
     { cle: 'reglages', libelle: fr ? 'Réglages' : 'Settings', visible: peutConfigurer },
@@ -295,23 +301,27 @@ export default function Pipeline() {
           pipelineActif={pipelineId}
           modeCouleur={pipelines.find((p) => p.id === pipelineId)?.color_mode ?? 'dot'}
           onChangerPipeline={choisirPipeline}
+          // Créer un pipeline est un geste d'administration : la base le
+          // refuserait de toute façon, autant ne pas proposer la porte.
+          onCreerPipeline={peutConfigurer ? () => choisirOnglet('reglages') : undefined}
           onAssigner={assigner}
             onChangement={rafraichir}
           />
         )}
 
         {ongletActif === 'previsions' && voitLesStats && (
-          <PipelinePrevisions pipelines={pipelines} pipelineActif={pipelineId} />
+          <PipelinePrevisions
+            pipelines={pipelines}
+            pipelineActif={pipelineId}
+            onOuvrirDeal={(id) => {
+              const d = deals.find((x) => x.id === id);
+              if (d) { setDealOuvert(d); choisirOnglet('board'); }
+            }}
+          />
         )}
 
         {ongletActif === 'lots' && estPatron && <PipelineJournalLots />}
 
-        {ongletActif === 'stats' && voitLesStats && (
-          <PipelineStats onOuvrirDeal={(id) => {
-            const d = deals.find((x) => x.id === id);
-            if (d) { setDealOuvert(d); choisirOnglet('board'); }
-          }} />
-        )}
 
         {ongletActif === 'reglages' && peutConfigurer && (
           <PipelineReglages

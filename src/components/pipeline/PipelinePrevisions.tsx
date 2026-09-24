@@ -17,6 +17,7 @@
  */
 import { useId, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import PipelineStats from './PipelineStats';
 import { useTranslation } from '../../i18n';
 import {
   fetchARisque, fetchChronologie, fetchPrevisions, fetchPrevisionsGroupees,
@@ -138,10 +139,12 @@ function BarresGroupes({ lignes, fr }: { lignes: LigneGroupe[]; fr: boolean }) {
   );
 }
 
-export default function PipelinePrevisions({ pipelines, pipelineActif }: {
+export default function PipelinePrevisions({ pipelines, pipelineActif, onOuvrirDeal }: {
   pipelines: PipelineResume[];
   /** `null` = tous les pipelines confondus. */
   pipelineActif: string | null;
+  /** Ouvrir un deal depuis « À traiter » de l'historique. */
+  onOuvrirDeal?: (dealId: string) => void;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -149,7 +152,7 @@ export default function PipelinePrevisions({ pipelines, pipelineActif }: {
   const idSeuils = useId();
 
   const [portee, setPortee] = useState<string>(pipelineActif ?? '');
-  const [vue, setVue] = useState<'sommaire' | 'chronologie'>('sommaire');
+  const [vue, setVue] = useState<'sommaire' | 'chronologie' | 'historique'>('sommaire');
   const [seuilsOuverts, setSeuilsOuverts] = useState(false);
   const idAxe = useId();
   const [axe, setAxe] = useState<AxeGroupe>('etape');
@@ -259,10 +262,28 @@ export default function PipelinePrevisions({ pipelines, pipelineActif }: {
           >
             {fr ? 'Chronologie' : 'Forecast timeline'}
           </button>
+          {/*
+            L'historique était un onglet séparé « Statistiques ». Deux écrans
+            pour la même question — « où en sont mes ventes ? » — obligeaient
+            à se rappeler lequel portait quoi. Ce qui s'est PASSÉ et ce qui va
+            ARRIVER vivent maintenant côte à côte.
+          */}
+          <button
+            type="button" role="tab" aria-selected={vue === 'historique'}
+            onClick={() => setVue('historique')}
+            className={
+              'rounded-lg px-3 py-1.5 text-[12.5px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary '
+              + (vue === 'historique'
+                ? 'bg-surface-tertiary font-semibold text-text-primary'
+                : 'text-text-tertiary hover:bg-surface-secondary hover:text-text-primary')
+            }
+          >
+            {fr ? 'Historique' : 'History'}
+          </button>
         </div>
       </div>
 
-      {prevQ.isLoading && (
+      {vue !== 'historique' && prevQ.isLoading && (
         <p className="mt-4 text-[12px] text-text-muted" role="status">
           {fr ? 'Chargement…' : 'Loading…'}
         </p>
@@ -516,6 +537,12 @@ export default function PipelinePrevisions({ pipelines, pipelineActif }: {
             </section>
           </div>
         </>
+      )}
+
+      {vue === 'historique' && (
+        <div className="mt-4">
+          <PipelineStats onOuvrirDeal={onOuvrirDeal} />
+        </div>
       )}
 
       {vue === 'chronologie' && (
