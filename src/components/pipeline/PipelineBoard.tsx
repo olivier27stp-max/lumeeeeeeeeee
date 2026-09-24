@@ -18,13 +18,14 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  ArrowUpDown, Filter, GripVertical, LayoutGrid, List, Plus, Search, Upload, X,
+  ArrowUpDown, Download, Filter, GripVertical, LayoutGrid, List, Plus, Search, Upload, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { confirmer } from '../ui/ConfirmDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 import ActionsRapides from './ActionsRapides';
+import ImportCsvModal from './ImportCsvModal';
 import Modal from '../ui/Modal';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
@@ -643,7 +644,7 @@ const VUES: Record<VueEnregistree, { fr: string; en: string; filtres: EtatFiltre
 function BarreOutils({
   fr, total, filtres, sources, membres, panneauOuvert, tri, affichage,
   pipelines, pipelineActif, onChangerPipeline, etapesFiltrables,
-  onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onNouveauDeal,
+  onFiltres, onBasculerPanneau, onTri, onAffichage, onExporter, onImporter, onNouveauDeal,
 }: {
   /** Étapes proposées au filtre — les actives, dans l'ordre du board. */
   etapesFiltrables: PipelineStage[];
@@ -664,6 +665,7 @@ function BarreOutils({
   onAffichage: (a: Affichage) => void;
   /** Télécharge les deals ACTUELLEMENT filtrés en CSV. */
   onExporter: () => void;
+  onImporter: () => void;
   onNouveauDeal: () => void;
 }) {
   // `useId()` : ce composant peut réapparaître, un id littéral se dupliquerait.
@@ -792,6 +794,12 @@ function BarreOutils({
           <button type="button" onClick={onExporter} className={CLASSE_BOUTON}>
             <Upload size={13} aria-hidden="true" />
             {fr ? 'Exporter' : 'Export'}
+          </button>
+
+          {/* Le symétrique de l'export : un CSV part, un CSV revient. */}
+          <button type="button" onClick={onImporter} className={CLASSE_BOUTON}>
+            <Download size={13} aria-hidden="true" />
+            {fr ? 'Importer' : 'Import'}
           </button>
 
           <button
@@ -1065,6 +1073,7 @@ export default function PipelineBoard({
   const [vue, setVue] = useState<VueEnregistree | string>('tous');
   const [nouveauDeal, setNouveauDeal] = useState(false);
   const [enregistrementVue, setEnregistrementVue] = useState(false);
+  const [importOuvert, setImportOuvert] = useState(false);
 
   /**
    * Les deals cochés, pour agir sur plusieurs d'un coup.
@@ -1383,7 +1392,14 @@ export default function PipelineBoard({
         onTri={() => setTri(TRIS[(TRIS.indexOf(tri) + 1) % TRIS.length])}
         onAffichage={setAffichage}
         onExporter={exporter}
+        onImporter={() => setImportOuvert(true)}
         onNouveauDeal={() => setNouveauDeal(true)}
+      />
+
+      <ImportCsvModal
+        ouvert={importOuvert}
+        onFermer={() => setImportOuvert(false)}
+        onImporte={() => onChangement?.()}
       />
 
       <ModalNouveauDeal
