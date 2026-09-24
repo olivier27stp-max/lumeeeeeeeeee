@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import {
   fetchChannels,
+  fetchSmsProvisioningState,
   provisionSmsNumber,
   sendSms,
   fetchA2PStatus,
@@ -51,6 +52,7 @@ export default function SettingsMessaging() {
 
   const [provisioning, setProvisioning] = useState(false);
   const [provisionError, setProvisionError] = useState('');
+  const [attribEnAttente, setAttribEnAttente] = useState(false);
 
   const [testPhone, setTestPhone] = useState('');
   const [testBody, setTestBody] = useState(
@@ -84,6 +86,15 @@ export default function SettingsMessaging() {
       const channels = await fetchChannels();
       const sms = channels.find((c) => c.channel_type === 'sms' && c.is_default) || null;
       setChannel(sms);
+      if (!sms) {
+        try {
+          const etat = await fetchSmsProvisioningState();
+          setAttribEnAttente(etat?.statut === 'en_attente');
+        } catch (err) {
+          // Affichage seulement : sans cet état, la carte garde son message par défaut.
+          console.error('[SettingsMessaging] état du provisionnement illisible:', err);
+        }
+      }
 
       if (country === 'US') {
         try {
@@ -186,7 +197,11 @@ export default function SettingsMessaging() {
             <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-3">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>
-                {isFr
+                {attribEnAttente
+                  ? (isFr
+                    ? "Votre numéro est en cours d'attribution : nous réessayons automatiquement et il apparaîtra ici dès qu'il sera prêt. Aucune action n'est requise de votre part."
+                    : 'Your number is being assigned: we retry automatically and it will appear here as soon as it is ready. No action is needed on your side.')
+                  : isFr
                   ? "Aucun numéro SMS n'est encore attribué. Votre numéro est normalement créé automatiquement après l'activation de votre plan — s'il n'apparaît pas, vous pouvez l'obtenir maintenant."
                   : 'No SMS number assigned yet. Your number is normally created automatically after plan activation — if it has not appeared, you can get it now.'}
               </span>

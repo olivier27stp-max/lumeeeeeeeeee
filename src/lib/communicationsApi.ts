@@ -128,6 +128,15 @@ export async function fetchChannels(): Promise<CommunicationChannel[]> {
   return data;
 }
 
+/** Demande de numéro en file (`en_attente`) ou abandonnée (`echec`) ; null s'il n'y a rien en cours. */
+export async function fetchSmsProvisioningState(): Promise<{ statut: 'en_attente' | 'echec'; nature: string | null; depuis: string } | null> {
+  const headers = await getAuthHeaders();
+  const res = await fetch('/api/communications/sms-provisioning', { headers });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || 'Failed to fetch provisioning state');
+  return data?.etat ?? null;
+}
+
 /**
  * Provision the org's dedicated Twilio SMS number.
  * Owner/admin only; requires a plan that includes SMS. The area code is derived

@@ -93,6 +93,7 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
   'POST /api/communications/send-email': 'messages.send',
   'GET /api/communications/messages': 'messages.read',
   'GET /api/communications/channels': 'integrations.read',
+  'GET /api/communications/sms-provisioning': 'integrations.read',
   'GET /api/communications/settings': 'settings.read',
   'POST /api/communications/provision-sms': 'integrations.update',
 

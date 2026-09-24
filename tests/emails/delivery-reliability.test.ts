@@ -429,7 +429,7 @@ describe('provisionnement SMS — branché sur le chemin réellement utilisé', 
       lib.indexOf('export async function provisionSmsForNewSubscription'),
       lib.indexOf('async function findAvailableNumber'),
     );
-    expect(fn).toContain('return { provisioned: false, error: message }');
+    expect(fn).toContain('return { provisioned: false, error: message, nature }');
     expect(fn).not.toMatch(/^\s*throw err;/m);
 
     for (const site of ['server/routes/billing.ts', 'server/routes/payments.ts']) {

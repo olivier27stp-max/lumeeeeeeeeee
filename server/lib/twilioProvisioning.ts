@@ -1,6 +1,38 @@
-import { twilioClient, twilioAccountSid } from './config';
+// Achat = client dédié (clé Restricted `TWILIO_PROVISIONING_API_KEY_*` si
+// définie, sinon le client principal) — voir config.ts.
+import { twilioProvisioningClient as twilioClient } from './config';
 import { getServiceClient } from './supabase';
 import { logger } from './logger';
+
+/**
+ * Levée quand Twilio a VENDU le numéro mais que son enregistrement en base a
+ * échoué. Le numéro est payé et existe sur le compte : ne jamais en racheter un
+ * autre — la relance doit seulement réenregistrer celui-ci (sid + numéro portés
+ * par l'erreur, puis par la ligne `provisioning_events`).
+ */
+export class NumeroAcheteNonEnregistreError extends Error {
+  constructor(
+    public readonly twilioSid: string,
+    public readonly phoneNumber: string,
+    public readonly meta: Record<string, unknown>,
+    cause: string,
+  ) {
+    super(`Numéro ${phoneNumber} acheté (${twilioSid}) mais non enregistré en base : ${cause}`);
+    this.name = 'NumeroAcheteNonEnregistreError';
+  }
+}
+
+/** Enregistre un numéro déjà acheté comme canal SMS de l'org (RPC idempotente côté org). */
+async function enregistrerNumero(orgId: string, phoneNumber: string, meta: Record<string, unknown>): Promise<string> {
+  const { data: channelId, error } = await getServiceClient().rpc('provision_sms_channel', {
+    p_org_id: orgId,
+    p_phone_number: phoneNumber,
+    p_provider: 'twilio',
+    p_metadata: meta,
+  });
+  if (error) throw error;
+  return channelId as string;
+}
 
 /**
  * Purchase a Twilio phone number and provision it as the org's SMS channel.
@@ -36,7 +68,9 @@ export async function provisionSmsNumber(orgId: string, options?: {
     throw new Error(`No SMS-capable numbers available for country=${country}${areaCode ? ` (tried area=${areaCode})` : ''}.`);
   }
 
-  // Purchase the number with webhooks pre-wired
+  // Purchase the number with webhooks pre-wired. Voice volontairement non
+  // configuré (SMS d'abord) : un numéro acheté par l'API n'a pas d'URL voix,
+  // contrairement à un achat console qui pointe vers la démo Twilio.
   const purchased = await twilioClient.incomingPhoneNumbers.create({
     phoneNumber: candidate.phoneNumber,
     smsUrl: `${publicUrl}/api/messages/inbound`,
@@ -46,23 +80,49 @@ export async function provisionSmsNumber(orgId: string, options?: {
     friendlyName: `Lume-${orgId.slice(0, 8)}`,
   });
 
-  // Save to DB via RPC
-  const serviceClient = getServiceClient();
-  const { data: channelId, error } = await serviceClient.rpc('provision_sms_channel', {
-    p_org_id: orgId,
-    p_phone_number: purchased.phoneNumber,
-    p_provider: 'twilio',
-    p_metadata: {
-      twilio_sid: purchased.sid,
-      friendly_name: purchased.friendlyName,
-      country,
-      area_code: areaCode || null,
-    },
-  });
+  const meta = {
+    twilio_sid: purchased.sid,
+    friendly_name: purchased.friendlyName,
+    country,
+    area_code: areaCode || null,
+  };
+  try {
+    const channelId = await enregistrerNumero(orgId, purchased.phoneNumber, meta);
+    return { channelId, phoneNumber: purchased.phoneNumber };
+  } catch (err: any) {
+    throw new NumeroAcheteNonEnregistreError(purchased.sid, purchased.phoneNumber, meta, String(err?.message || err));
+  }
+}
 
-  if (error) throw error;
+// ─── Classement des échecs ─────────────────────────────────────────────
+// Sert à l'alerte et au runbook, pas à décider s'il faut réessayer : tout
+// échec est réessayé (un profil de conformité approuvé, une clé corrigée ou
+// un stock renouvelé débloquent sans intervention sur le code).
 
-  return { channelId: channelId as string, phoneNumber: purchased.phoneNumber };
+export type NatureEchecProvisionnement =
+  | 'conformite'      // Trust Hub / profil réglementaire non approuvé
+  | 'permissions'     // clé API sans droit « Phone Numbers », jeton révoqué
+  | 'inventaire'      // aucun numéro disponible
+  | 'configuration'   // Twilio ou PUBLIC_URL absents côté serveur
+  | 'enregistrement'  // numéro acheté, écriture en base échouée
+  | 'autre';
+
+export function classerEchecProvisionnement(err: unknown): NatureEchecProvisionnement {
+  if (err instanceof NumeroAcheteNonEnregistreError) return 'enregistrement';
+  const e = (err ?? {}) as { message?: unknown; code?: unknown; status?: unknown };
+  const message = String(e.message ?? err ?? '');
+  const code = Number(e.code);
+  const status = Number(e.status);
+  if (/^Twilio is not configured|^PUBLIC_URL must be set/.test(message)) return 'configuration';
+  // Heuristique : Twilio ne documente pas un code unique pour « profil en
+  // brouillon ». Le message brut est conservé dans provisioning_events pour
+  // affiner ce motif au premier refus réel.
+  if (/bundle|regulat|complian|customer profile|trust ?hub|end.?user|address.*required|identity/i.test(message)) {
+    return 'conformite';
+  }
+  if (code === 20003 || code === 20403 || status === 401 || status === 403) return 'permissions';
+  if (/^No SMS-capable numbers/.test(message) || code === 21422) return 'inventaire';
+  return 'autre';
 }
 
 /**
@@ -82,12 +142,19 @@ export async function provisionSmsNumber(orgId: string, options?: {
  * Un problème de numéro ne doit pas faire échouer un paiement déjà encaissé
  * (côté webhook, un throw ferait rejouer Stripe et doublerait le provisioning).
  *
- * Idempotent : ne fait rien si l'org a déjà un canal SMS actif.
+ * Idempotent : ne fait rien si l'org a déjà un canal SMS actif, ni si une
+ * demande est déjà en file pour elle (rejeu du webhook, double parcours).
+ *
+ * Un échec ne fait PAS échouer l'abonnement : la demande passe en `retrying`
+ * (= org « phone_provisioning_pending ») et `relancerProvisionnementsEnAttente`
+ * la reprend avec un délai croissant. L'achat est OBLIGATOIRE par défaut ; seul
+ * l'arrêt d'urgence `TWILIO_AUTO_PROVISION=false` le suspend : la demande est
+ * alors mise en file et servie dès qu'on le retire — aucun abonné n'est perdu.
  */
 export async function provisionSmsForNewSubscription(params: {
   orgId: string;
   subscriptionId: string;
-}): Promise<{ provisioned: boolean; phoneNumber?: string; skipped?: string; error?: string }> {
+}): Promise<{ provisioned: boolean; phoneNumber?: string; skipped?: string; error?: string; nature?: NatureEchecProvisionnement }> {
   const { orgId, subscriptionId } = params;
   const admin = getServiceClient();
 
@@ -116,17 +183,35 @@ export async function provisionSmsForNewSubscription(params: {
     return { provisioned: false, skipped: 'already_has_channel', phoneNumber: existingChannel.phone_number };
   }
 
+  const { data: enFile } = await admin
+    .from('provisioning_events')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('event_type', TYPE_EVENEMENT)
+    .in('status', ['pending', 'retrying'])
+    .limit(1)
+    .maybeSingle();
+  if (enFile) {
+    logger.info(`[provisioning] Org ${orgId} already has a queued number request, skipping`);
+    return { provisioned: false, skipped: 'already_queued' };
+  }
+
+  const actif = autoProvisionActif();
+
   // Journalise l'intention AVANT l'achat : un échec Twilio laisse ainsi une
-  // ligne `failed` exploitable, au lieu de disparaître.
+  // ligne exploitable, au lieu de disparaître.
   const { data: eventRow, error: logErr } = await admin
     .from('provisioning_events')
     .insert({
       org_id: orgId,
       subscription_id: subscriptionId,
-      event_type: 'sms_number_purchase',
-      status: 'pending',
+      event_type: TYPE_EVENEMENT,
+      status: actif ? 'pending' : 'retrying',
+      // attempt_count = achats réellement TENTÉS ; une mise en file n'en est pas un.
+      attempt_count: actif ? 1 : 0,
+      metadata: { source: 'abonnement', ...(actif ? {} : { nature: 'desactive' }) },
     })
-    .select('id')
+    .select(COLONNES_EVENEMENT)
     .single();
 
   // L'erreur d'insert n'était pas testée auparavant : si l'écriture échouait,
@@ -135,36 +220,273 @@ export async function provisionSmsForNewSubscription(params: {
     console.error('[provisioning] provisioning_events insert failed (l’issue ne sera pas tracée):', logErr.message);
   }
 
-  try {
-    const result = await provisionSmsNumber(orgId);
+  if (!actif) {
+    await alerterEquipe(
+      `abonnement avec SMS en attente de numéro (achat coupé : TWILIO_AUTO_PROVISION=false) — ${await libelleOrg(orgId)}`,
+      { orgId, subscriptionId },
+    );
+    return { provisioned: false, skipped: 'auto_provision_off' };
+  }
 
-    if (eventRow) {
-      await admin
-        .from('provisioning_events')
-        .update({ status: 'success', twilio_number: result.phoneNumber })
-        .eq('id', eventRow.id);
+  return tenterProvisionnement(admin, (eventRow as EvenementProvisionnement | null) ?? null, orgId, subscriptionId);
+}
+
+// ─── File d'attente et relance ─────────────────────────────────────────
+
+const TYPE_EVENEMENT = 'sms_number_purchase';
+const COLONNES_EVENEMENT = 'id, org_id, subscription_id, status, attempt_count, twilio_sid, twilio_number, metadata, created_at, updated_at';
+
+/** Au-delà (depuis le 1er essai réel), la relance s'arrête : statut terminal `failed` + alerte. */
+export const PROVISIONNEMENT_ABANDON_JOURS = 14;
+/** Une ligne `pending` plus vieille que ça vient d'un processus mort en plein achat. */
+const PENDING_ORPHELIN_MS = 30 * 60_000;
+
+type EvenementProvisionnement = {
+  id: string;
+  org_id: string;
+  subscription_id: string | null;
+  status: string;
+  attempt_count: number;
+  twilio_sid: string | null;
+  twilio_number: string | null;
+  metadata: Record<string, any> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Achat automatique : ACTIF par défaut (tout forfait avec SMS reçoit son numéro).
+ * `TWILIO_AUTO_PROVISION=false` est un arrêt d'urgence : les demandes sont alors
+ * mises en file et servies dès qu'on le retire.
+ */
+export function autoProvisionActif(env: NodeJS.ProcessEnv = process.env): boolean {
+  return String(env.TWILIO_AUTO_PROVISION || '').trim().toLowerCase() !== 'false';
+}
+
+/** Délai avant l'essai suivant le n-ième : 15 min, 1 h, 4 h, 16 h, puis 24 h. */
+export function delaiAvantRelanceMs(tentatives: number): number {
+  return Math.min(24 * 3600_000, 15 * 60_000 * 4 ** Math.max(0, tentatives - 1));
+}
+
+async function libelleOrg(orgId: string): Promise<string> {
+  const { data } = await getServiceClient().from('orgs').select('name').eq('id', orgId).maybeSingle();
+  return data?.name ? `« ${data.name} » (${orgId})` : `org ${orgId}`;
+}
+
+/** Journal + canal #support Slack s'il est configuré. N'échoue jamais. */
+async function alerterEquipe(texte: string, contexte: Record<string, unknown>): Promise<void> {
+  logger.warn(`[provisioning] ${texte}`, contexte);
+  try {
+    const { isSlackConfigured, canalSupport, envoyerMessageSlack } = await import('./slack');
+    if (isSlackConfigured()) {
+      await envoyerMessageSlack({ channel: canalSupport(), text: `:telephone_receiver: Numéro SMS — ${texte}` });
     }
-    logger.info(`[provisioning] SMS number assigned to org ${orgId}`, { phone: result.phoneNumber });
-    return { provisioned: true, phoneNumber: result.phoneNumber };
+  } catch (err: any) {
+    console.error('[provisioning] alerte Slack non envoyée:', err?.message);
+  }
+}
+
+async function tenterProvisionnement(
+  admin: ReturnType<typeof getServiceClient>,
+  evt: EvenementProvisionnement | null,
+  orgId: string,
+  subscriptionId: string | null,
+): Promise<{ provisioned: boolean; phoneNumber?: string; error?: string; nature?: NatureEchecProvisionnement }> {
+  const tentatives = evt?.attempt_count || 1;
+  const premierEssai: string = evt?.metadata?.premier_essai || new Date().toISOString();
+
+  try {
+    let phoneNumber: string;
+    if (evt?.twilio_sid && evt.twilio_number) {
+      // Numéro déjà PAYÉ lors d'un essai précédent (écriture en base échouée) :
+      // on l'enregistre, on n'en rachète surtout pas un second.
+      await enregistrerNumero(orgId, evt.twilio_number, {
+        ...(evt.metadata?.numero_achete || {}),
+        twilio_sid: evt.twilio_sid,
+      });
+      phoneNumber = evt.twilio_number;
+    } else {
+      phoneNumber = (await provisionSmsNumber(orgId)).phoneNumber;
+    }
+
+    if (evt) {
+      const { error } = await admin
+        .from('provisioning_events')
+        .update({ status: 'success', twilio_number: phoneNumber, error_message: null })
+        .eq('id', evt.id);
+      if (error) console.error('[provisioning] succès non tracé dans provisioning_events:', error.message);
+    }
+    logger.info(`[provisioning] SMS number assigned to org ${orgId}`, { phone: phoneNumber, tentatives });
+    if (tentatives > 1) {
+      await alerterEquipe(`numéro ${phoneNumber} attribué après ${tentatives} essais — ${await libelleOrg(orgId)}`, { orgId });
+    }
+    return { provisioned: true, phoneNumber };
   } catch (err: any) {
     const message = String(err?.message || err).slice(0, 500);
-    if (eventRow) {
-      await admin
+    const nature = classerEchecProvisionnement(err);
+    const achete = err instanceof NumeroAcheteNonEnregistreError ? err : null;
+    const abandon = Date.now() - new Date(premierEssai).getTime() > PROVISIONNEMENT_ABANDON_JOURS * 86400_000;
+
+    if (evt) {
+      const { error } = await admin
         .from('provisioning_events')
-        .update({ status: 'failed', error_message: message })
-        .eq('id', eventRow.id);
+        .update({
+          status: abandon ? 'failed' : 'retrying',
+          error_message: message,
+          ...(achete ? { twilio_sid: achete.twilioSid, twilio_number: achete.phoneNumber } : {}),
+          metadata: {
+            ...(evt.metadata || {}),
+            nature,
+            premier_essai: premierEssai,
+            prochain_essai: abandon ? null : new Date(Date.now() + delaiAvantRelanceMs(tentatives)).toISOString(),
+            ...(achete ? { numero_achete: achete.meta } : {}),
+          },
+        })
+        .eq('id', evt.id);
+      if (error) {
+        console.error('[provisioning] échec non tracé dans provisioning_events:', error.message);
+        // Sans cette trace, la relance rachèterait un numéro déjà payé.
+        if (achete) {
+          await alerterEquipe(
+            `CRITIQUE — ${achete.phoneNumber} (${achete.twilioSid}) acheté mais ni enregistré ni tracé : à rattacher à la main — ${await libelleOrg(orgId)}`,
+            { orgId },
+          );
+        }
+      }
     }
-    console.error(`[provisioning] SMS provisioning failed for org ${orgId}:`, message);
+
+    console.error(`[provisioning] SMS provisioning failed for org ${orgId} (${nature}, essai ${tentatives}):`, message);
     // Remonté à Sentry : un client vient de payer un forfait avec SMS et
     // n'obtient pas son numéro. C'est exactement le genre d'échec qui est
     // resté invisible pendant des mois — 4 orgs payantes sans numéro, sans
     // aucune alerte.
     try {
       const { captureException } = await import('./sentry');
-      captureException(err, { kind: 'sms_provisioning_failed', orgId, subscriptionId });
+      captureException(err, { kind: 'sms_provisioning_failed', orgId, subscriptionId, nature, tentatives });
     } catch { /* no-op */ }
-    return { provisioned: false, error: message };
+
+    // Une alerte au premier échec et à l'abandon — pas à chaque relance.
+    if (tentatives === 1 || abandon || achete) {
+      const suite = abandon ? 'ABANDON après ' + PROVISIONNEMENT_ABANDON_JOURS + ' jours, action manuelle requise' : 'relance automatique prévue';
+      await alerterEquipe(`échec (${nature}) — ${await libelleOrg(orgId)} — ${suite}. Twilio : ${message}`, { orgId, nature });
+    }
+    return { provisioned: false, error: message, nature };
   }
+}
+
+/**
+ * Reprend les demandes en file (`retrying`, ou `pending` orphelines) dont le
+ * délai est échu. Appelée périodiquement sous verrou consultatif (index.ts).
+ * Ne fait rien si `TWILIO_AUTO_PROVISION=false` (arrêt d'urgence).
+ */
+export async function relancerProvisionnementsEnAttente(): Promise<{
+  desactive?: boolean;
+  essayes: number;
+  reussis: number;
+  resolus: number;
+  abandonnes: number;
+  ignores: number;
+}> {
+  const bilan = { essayes: 0, reussis: 0, resolus: 0, abandonnes: 0, ignores: 0 };
+  if (!autoProvisionActif()) return { desactive: true, ...bilan };
+
+  const admin = getServiceClient();
+  const { data, error } = await admin
+    .from('provisioning_events')
+    .select(COLONNES_EVENEMENT)
+    .eq('event_type', TYPE_EVENEMENT)
+    .in('status', ['retrying', 'pending'])
+    .order('created_at', { ascending: true })
+    .limit(25);
+  if (error) throw new Error(`provisioning_events illisible : ${error.message}`);
+
+  const maintenant = Date.now();
+  for (const evt of (data || []) as EvenementProvisionnement[]) {
+    if (evt.status === 'pending' && maintenant - new Date(evt.updated_at).getTime() < PENDING_ORPHELIN_MS) {
+      bilan.ignores++; // achat en cours dans un autre appel
+      continue;
+    }
+    const prochain = evt.metadata?.prochain_essai;
+    if (prochain && new Date(prochain).getTime() > maintenant) {
+      bilan.ignores++;
+      continue;
+    }
+
+    // Numéro obtenu entre-temps (bouton Réglages, support, restauration) : rien à acheter.
+    const { data: canal } = await admin
+      .from('communication_channels')
+      .select('phone_number')
+      .eq('org_id', evt.org_id)
+      .eq('channel_type', 'sms')
+      .eq('status', 'active')
+      .maybeSingle();
+    if (canal) {
+      await admin
+        .from('provisioning_events')
+        .update({ status: 'success', twilio_number: canal.phone_number, metadata: { ...(evt.metadata || {}), resolu_par: 'canal_existant' } })
+        .eq('id', evt.id);
+      bilan.resolus++;
+      continue;
+    }
+
+    // Plus de forfait avec SMS (annulation, rétrogradation) : on n'achète pas.
+    // Sauf si un numéro a déjà été payé — il reste en file pour être rattaché.
+    if (!evt.twilio_sid && !(await orgPlanIncludesSms(evt.org_id))) {
+      await admin
+        .from('provisioning_events')
+        .update({ status: 'abandoned', metadata: { ...(evt.metadata || {}), resolu_par: 'forfait_sans_sms' } })
+        .eq('id', evt.id);
+      bilan.abandonnes++;
+      continue;
+    }
+
+    // Prise de la ligne par comparaison-échange : deux passes concurrentes ne
+    // peuvent pas acheter deux fois pour la même demande.
+    const { data: pris } = await admin
+      .from('provisioning_events')
+      .update({ status: 'pending', attempt_count: (evt.attempt_count || 0) + 1 })
+      .eq('id', evt.id)
+      .eq('status', evt.status)
+      .eq('attempt_count', evt.attempt_count)
+      .select(COLONNES_EVENEMENT)
+      .maybeSingle();
+    if (!pris) {
+      bilan.ignores++;
+      continue;
+    }
+
+    bilan.essayes++;
+    const r = await tenterProvisionnement(admin, pris as EvenementProvisionnement, evt.org_id, evt.subscription_id);
+    if (r.provisioned) bilan.reussis++;
+  }
+  return bilan;
+}
+
+/**
+ * État du numéro pour l'affichage (Réglages → Messagerie) : `en_attente` tant
+ * qu'une demande est en file (= « phone_provisioning_pending »), `echec` si la
+ * relance a abandonné. `null` s'il n'y a rien en cours.
+ */
+export async function etatProvisionnementSms(orgId: string): Promise<{
+  statut: 'en_attente' | 'echec';
+  nature: string | null;
+  depuis: string;
+} | null> {
+  const { data } = await getServiceClient()
+    .from('provisioning_events')
+    .select('status, metadata, created_at')
+    .eq('org_id', orgId)
+    .eq('event_type', TYPE_EVENEMENT)
+    .in('status', ['pending', 'retrying', 'failed'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    statut: data.status === 'failed' ? 'echec' : 'en_attente',
+    nature: (data.metadata as any)?.nature ?? null,
+    depuis: data.created_at,
+  };
 }
 
 async function findAvailableNumber(country: string, areaCode?: string) {
