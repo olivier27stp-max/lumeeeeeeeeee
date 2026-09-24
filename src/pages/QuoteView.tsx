@@ -2,6 +2,7 @@ import React, { useEffect, useId, useState, useRef } from 'react';
 import { captureClientException } from '../lib/sentry';
 import { resolveBrand, readableOn } from '../lib/brandColor';
 import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import PastilleLume from '../components/PastilleLume';
 import type { SocialLinks } from '../lib/socialLinks';
 import { useParams } from 'react-router-dom';
 import { CheckCircle, XCircle, PenLine, Pencil, Download, Phone, Mail, Globe, MapPin, Calendar, Hash, User, FileText, CreditCard, Loader2, AlertCircle } from 'lucide-react';
@@ -1195,9 +1196,10 @@ export default function QuoteView() {
 
         {/* ── Footer ── */}
         <ReseauxSociauxPied liens={company.social_links} className="flex items-center justify-center gap-4 mt-6 no-print" />
-        <p className="text-center text-[11px] text-[#bbb] mt-3 no-print">
-          {company.company_name} &mdash; {isFr ? 'Propulsé par Lume' : 'Powered by Lume'}
-        </p>
+        {company.company_name && (
+          <p className="text-center text-[11px] text-[#bbb] mt-3 no-print">{company.company_name}</p>
+        )}
+        <PastilleLume className="mt-3 no-print" />
       </div>
     </div>
   );

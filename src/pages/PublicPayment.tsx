@@ -8,6 +8,7 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { fetchPublicPaymentData, createPublicPaymentIntent, setPublicTip } from '../lib/connectApi';
 import type { PublicPaymentData, CreatePublicPaymentIntentResponse } from '../lib/connectApi';
 import ReseauxSociauxPied from '../components/ReseauxSociauxPied';
+import PastilleLume from '../components/PastilleLume';
 import RangeeLogos from '../components/payments/LogosPaiement';
 
 /**
@@ -541,7 +542,7 @@ function PublicPageShell({ children, business }: {
       {/* Footer */}
       <footer className="border-t border-neutral-200 dark:border-neutral-700 bg-surface-card dark:bg-neutral-800 px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between text-xs text-neutral-400">
-          <span>{isFr ? 'Propulsé par Lume' : 'Powered by Lume'}</span>
+          <PastilleLume />
           <ReseauxSociauxPied liens={business?.social_links} className="flex items-center gap-3" />
           {business?.email && <a href={`mailto:${business.email}`} className="hover:underline">{business.email}</a>}
         </div>
