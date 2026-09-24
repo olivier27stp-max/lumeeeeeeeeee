@@ -32,6 +32,7 @@ import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { STORAGE_BUCKETS, uploadFile } from '../lib/storage';
 import { getCurrentOrgIdOrThrow } from '../lib/orgApi';
+import { useChampsCreation } from '../components/champs/creation';
 
 /* ── Design (maquette approuvée) : texte noir pur / blanc pur uniquement ── */
 const OUTLINE = 'border-[#e8e8e8] dark:border-white/10';
@@ -243,6 +244,7 @@ export default function QuoteNew() {
   const [showPreview, setShowPreview] = useState(false);
   const [companySettings, setCompanySettings] = useState<any>(null);
   const specificNotesRef = useRef<SpecificNotesInlineHandle>(null);
+  const champsPerso = useChampsCreation('quote', language === 'fr');
 
   // ── Init ──
   useEffect(() => {
@@ -648,6 +650,9 @@ export default function QuoteNew() {
       quoteNumberParam = String(wanted);
     }
 
+    const erreurChamps = champsPerso.valider();
+    if (erreurChamps) { setError(erreurChamps); return; }
+
     setSaving(true);
     try {
       let leadId: string | null = null;
@@ -696,6 +701,7 @@ export default function QuoteNew() {
       if (specificNotesRef.current?.hasContent()) {
         await specificNotesRef.current.saveNote('quote', detail.quote.id);
       }
+      await champsPerso.enregistrer(detail.quote.id);
 
       guard.release();
       navigate(`/quotes/${detail.quote.id}`);
@@ -1266,6 +1272,7 @@ export default function QuoteNew() {
             <div className="mt-3">
               <SpecificNotesInline ref={specificNotesRef} tempEntityType="quote" />
             </div>
+            {champsPerso.bloc && <div className="mt-4">{champsPerso.bloc}</div>}
           </div>
 
           {error && (

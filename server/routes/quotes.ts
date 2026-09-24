@@ -21,6 +21,7 @@ import { rendreCourrielClient, MOTS, montant as montantLisible, dateLisible, ech
 import { texteDuCourriel } from '../lib/courriels/modeles';
 import { lireLiensSociaux } from '../lib/socialLinks';
 import { estEchue } from '../lib/date-seule';
+import { champsPourDocument } from '../lib/champs/service';
 
 const router = Router();
 
@@ -908,9 +909,11 @@ router.get('/quotes/public/:token', async (req, res) => {
     }
 
     // Ventilation TPS / TVQ… (applied_taxes, sinon taxes résolues pour le client).
-    const [taxLines, reglagesPaiement] = await Promise.all([
+    const [taxLines, reglagesPaiement, champsDocument] = await Promise.all([
       documentTaxLines(admin, 'quote', quote),
       getPaymentSettings(quote.org_id),
+      // Champs personnalisés cochés « afficher sur le document ».
+      champsPourDocument(admin, quote.org_id, 'quote', quote.id),
     ]);
 
     return res.json({
@@ -936,6 +939,7 @@ router.get('/quotes/public/:token', async (req, res) => {
         quote_type: quoteType, service_plan: servicePlan,
       },
       images,
+      custom_fields: champsDocument,
       company: {
         company_name: companyData?.company_name || 'Business',
         // Toujours le logo d'entreprise (Réglages → Détails de l'entreprise).

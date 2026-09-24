@@ -23,6 +23,7 @@ import { getCompanyBranding } from '../lib/companyBranding';
 import { getPaymentSettings } from '../lib/payment-settings';
 import { getConnectedAccount } from '../lib/stripe-connect';
 import { guardCommonShape, maxBodySize } from '../lib/validation-guards';
+import { champsPourDocument } from '../lib/champs/service';
 
 const router = Router();
 router.use(maxBodySize());
@@ -176,11 +177,16 @@ router.get('/invoices/public/:token', async (req, res) => {
     void enregistrerVueFacture(admin, invoice, req);
 
     // Ventilation TPS / TVQ… (applied_taxes, sinon taxes résolues pour le client).
-    const taxLines = await documentTaxLines(admin, 'invoice', invoice as any);
+    const [taxLines, champsDocument] = await Promise.all([
+      documentTaxLines(admin, 'invoice', invoice as any),
+      // Champs personnalisés cochés « afficher sur le document ».
+      champsPourDocument(admin, invoice.org_id, 'invoice', invoice.id),
+    ]);
 
     const { org_id: _org, client_id: _client, is_viewed: _v, view_count: _vc, ...publique } = invoice as any;
     return res.json({
       invoice: { ...publique, tax_lines: taxLines },
+      custom_fields: champsDocument,
       items: itemsRes.data ?? [],
       client: clientRes.data ?? null,
       company: company ? { ...company, language: (company as { default_language?: string }).default_language === 'en' ? 'en' : 'fr' } : null,

@@ -10,6 +10,8 @@ export interface InvoiceRenderData {
   created_at: string;
   notes: string | null;
   currency: string;
+  /** Champs personnalisés à montrer sur le document (option « afficher sur le document »). */
+  champsPerso?: Array<{ label: string; valeur: string }>;
 
   // Totals
   subtotal_cents: number;

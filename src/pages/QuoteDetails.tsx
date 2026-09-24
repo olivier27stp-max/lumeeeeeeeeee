@@ -42,6 +42,7 @@ import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { versDate } from '../lib/dateSeule';
 import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
+import { useChampsDocument } from '../components/champs/document';
 
 const MONTHS_SHORT_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 const MONTHS_SHORT_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -52,6 +53,8 @@ export default function QuoteDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t, language } = useTranslation();
+  // Champs personnalisés cochés « afficher sur le document » (aperçu + PDF).
+  const champsDocument = useChampsDocument('quote', id, language === 'fr');
   const isFr = language === 'fr';
   const queryClient = useQueryClient();
   const { permissions } = usePermissions();
@@ -351,7 +354,7 @@ export default function QuoteDetails() {
                   <button onClick={() => { window.open(`/quote/${quote.view_token}`, '_blank'); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Eye size={14} /> {isFr ? 'Aperçu côté client' : 'Preview as Client'}</button>
-                  <button onClick={() => { downloadQuotePdf(detail!, companySettings); setMoreOpen(false); }}
+                  <button onClick={() => { downloadQuotePdf(detail!, companySettings, champsDocument); setMoreOpen(false); }}
                     className="w-full px-4 py-2 text-left hover:bg-surface-secondary flex items-center gap-2.5 text-text-primary">
                     <Printer size={14} /> {isFr ? 'Imprimer ou enregistrer en PDF' : 'Print or Save PDF'}</button>
                   <div className="border-t border-outline my-1" />
@@ -681,7 +684,7 @@ export default function QuoteDetails() {
               </button>
             </div>
             <div className="rounded-b-xl overflow-hidden">
-              <QuoteRenderer data={buildQuoteRenderData(detail, companySettings)} />
+              <QuoteRenderer data={{ ...buildQuoteRenderData(detail, companySettings), champsPerso: champsDocument }} />
             </div>
           </div>
         </div>

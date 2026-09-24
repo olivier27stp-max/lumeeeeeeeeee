@@ -26,6 +26,7 @@ import PresetSelectModal from '../components/quotes/PresetSelectModal';
 import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import type { QuotePreset } from '../types';
 import { CirclePlus, ArrowUpDown, Ruler, Eye } from 'lucide-react';
+import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
 
 const PAGE_SIZE = 20;
 type StatusTab = 'all' | QuoteStatus;
@@ -161,9 +162,12 @@ export default function Quotes() {
     return () => clearTimeout(id);
   }, [search]);
 
+  // Champs personnalisés : filtre côté base + colonne (drapeau custom_fields_v2).
+  const champsListe = useChampsListe('quote', fr);
+  React.useEffect(() => { setPage(1); }, [champsListe.cle]);
   const { data: res, isLoading } = useQuery({
-    queryKey: ['quotes-list', tab, salespersonFilter, debounced, page],
-    queryFn: () => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page, pageSize: PAGE_SIZE }),
+    queryKey: ['quotes-list', tab, salespersonFilter, debounced, page, champsListe.cle],
+    queryFn: () => listAllQuotes({ status: tab, salespersonId: salespersonFilter, search: debounced, page, pageSize: PAGE_SIZE, champs: champsListe.filtre }),
   });
 
   // Org-wide per-status counts + salespeople for the filter pills.
@@ -179,6 +183,7 @@ export default function Quotes() {
   });
 
   const rows = res?.data || [];
+  const valeursChamps = useValeursPage('quote', rows.map((q) => q.id), champsListe.colonnes.length > 0);
   const total = res?.total || 0;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -314,6 +319,7 @@ export default function Quotes() {
             ...(salespeople || []).map((p) => ({ value: p.id, label: p.label })),
           ]}
         />
+        {champsListe.bouton}
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder={fr ? 'Rechercher devis...' : 'Search quotes...'}
           aria-label={fr ? 'Rechercher devis' : 'Search quotes'}
@@ -337,7 +343,7 @@ export default function Quotes() {
 
       {/* ── TABLE ── */}
       <div className="border border-outline rounded-md overflow-hidden bg-white dark:bg-[#0e0e11]">
-        <div className="grid" style={{ gridTemplateColumns: '40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 110px 48px' }} onMouseLeave={() => setHoveredId(null)}>
+        <div className="grid" style={{ gridTemplateColumns: `40px 1.2fr 0.7fr 1.2fr 1fr 200px 0.9fr 110px${champsListe.colonnes.length ? ' 1.4fr' : ''} 48px` }} onMouseLeave={() => setHoveredId(null)}>
           {/* HEADER */}
           <div className="py-3 pl-4 border-b border-outline flex items-center"><input type="checkbox" checked={allSel} onChange={toggleAll} aria-label={fr ? 'Tout sélectionner' : 'Select all'} className="rounded-[3px] border-outline w-4 h-4 accent-primary cursor-pointer" /></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Client {IconSort}</span></div>
@@ -347,6 +353,7 @@ export default function Quotes() {
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Statut' : 'Status'} {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">Total {IconSort}</span></div>
           <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary"><span className="inline-flex items-center gap-1">{fr ? 'Ouverture' : 'Opened'}</span></div>
+          {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline flex items-center text-[14px] font-medium text-text-primary">{fr ? 'Champs' : 'Fields'}</div>}
           <div className="py-3 border-b border-outline" />
 
           {/* LOADING */}
@@ -360,13 +367,14 @@ export default function Quotes() {
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-14 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-16 bg-surface-tertiary rounded animate-pulse" /></div>
               <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-8 bg-surface-tertiary rounded animate-pulse" /></div>
+              {champsListe.colonnes.length > 0 && <div className="py-3 px-4 border-b border-outline/30"><div className="h-5 w-20 bg-surface-tertiary rounded animate-pulse" /></div>}
               <div className="py-3 border-b border-outline/30" />
             </React.Fragment>
           ))}
 
           {/* EMPTY */}
           {!isLoading && sorted.length === 0 && (
-            <div className="col-span-9 py-20 text-center text-[14px] text-text-tertiary">{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
+            <div className="py-20 text-center text-[14px] text-text-tertiary" style={{ gridColumn: '1 / -1' }}>{fr ? 'Aucun devis trouvé' : 'No quotes found'}</div>
           )}
 
           {/* ROWS */}
@@ -411,6 +419,11 @@ export default function Quotes() {
                     <span className="text-[14px] text-text-tertiary" title={fr ? 'Pas encore ouvert' : 'Not opened yet'}>—</span>
                   )}
                 </div>
+                {champsListe.colonnes.length > 0 && (
+                  <div role="presentation" tabIndex={-1} className={`py-3 px-4 flex items-center overflow-hidden cursor-pointer ${rowCls}`} onClick={() => nav(`/quotes/${q.id}`)} onMouseEnter={hover}>
+                    <CelluleChamps champs={champsListe.colonnes} valeurs={valeursChamps[q.id]} fr={fr} fuseau={champsListe.fuseau} />
+                  </div>
+                )}
                 <div className={`py-3 pr-4 flex items-center justify-center relative ${rowCls}`} role="presentation" tabIndex={-1} onClick={e => e.stopPropagation()} onMouseEnter={hover}>
                   <button
                     className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors"

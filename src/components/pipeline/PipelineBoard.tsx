@@ -41,6 +41,7 @@ import {
   LIBELLE_SOURCE, initiales, rangsOuverts, visuelEtape,
 } from '../../lib/pipeline/presentation';
 import type { DealSource, MockStage } from '../../lib/pipeline/mockData';
+import { useChampsCreation } from '../champs/creation';
 
 interface Membre { id: string; name: string }
 
@@ -547,6 +548,7 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
 }) {
   const [champs, setChamps] = useState<ChampsDeal>(champsDealVides);
   const [envoi, setEnvoi] = useState(false);
+  const champsPerso = useChampsCreation('deal', fr);
   const idPrenom = useId();
   const idNom = useId();
   const idCourriel = useId();
@@ -574,6 +576,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
       toast.error(fr ? 'Le prénom est requis.' : 'First name is required.');
       return;
     }
+    const erreurChamps = champsPerso.valider();
+    if (erreurChamps) { toast.error(erreurChamps); return; }
     setEnvoi(true);
     try {
       // Saisi en dollars, envoyé en CENTS : les cents sont la source de
@@ -595,6 +599,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
         dateFermetureVisee: vide(champs.dateVisee),
         source: vide(champs.source),
       });
+      // Un deal DÉJÀ ouvert pour ce contact garde ses valeurs : on n'écrase pas.
+      if (!r.dealExistant) await champsPerso.enregistrer(r.dealId);
       if (r.dealExistant) {
         toast.success(fr
           ? 'Ce contact avait déjà un deal ouvert : la demande y a été ajoutée.'
@@ -726,6 +732,8 @@ function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
             </select>
           </div>
         </div>
+
+        {champsPerso.bloc}
 
         <div className="mt-1 flex items-center justify-end gap-2.5">
           <button type="button" onClick={fermer} className={CLASSE_BOUTON}>

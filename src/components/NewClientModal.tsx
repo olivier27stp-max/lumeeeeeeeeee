@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { useTranslation } from '../i18n';
 import AddressAutocomplete, { type StructuredAddress } from './AddressAutocomplete';
 import { createClient, type ClientRecord } from '../lib/clientsApi';
+import { useChampsCreation } from './champs/creation';
 
 /**
  * Shared "new client" modal — same fields as the Clients page form, plus the
@@ -17,6 +18,7 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
 }) {
   const { t, language } = useTranslation();
   const fr = language === 'fr';
+  const champsPerso = useChampsCreation('client', fr);
   const id = useId();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -33,6 +35,8 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
       toast.error(fr ? 'Prénom et nom sont requis.' : 'First and last name are required.');
       return;
     }
+    const erreurChamps = champsPerso.valider();
+    if (erreurChamps) { toast.error(erreurChamps); return; }
     setSaving(true);
     try {
       const created = await createClient({
@@ -54,6 +58,7 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
         place_id: structured?.place_id || undefined,
         status: 'active',
       });
+      await champsPerso.enregistrer(created.id);
       onCreated(created);
     } catch (e: any) {
       toast.error(e?.message || (fr ? 'Échec de la création du client.' : 'Failed to create client.'));
@@ -113,6 +118,7 @@ export default function NewClientModal({ initialAddress, onClose, onCreated }: {
               />
             </div>
           </div>
+          {champsPerso.bloc}
         </div>
         <div className="mt-5 flex items-center justify-end gap-3">
           <button type="button" onClick={onClose} disabled={saving} className="glass-button px-4 py-2 rounded-lg text-[13px]">{t.common.cancel}</button>

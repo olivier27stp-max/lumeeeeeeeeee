@@ -16,6 +16,8 @@ import Modal from '../ui/Modal';
 import { useTranslation } from '../../i18n';
 import { creerDealManuel, journaliserLot } from '../../lib/pipelineVentesApi';
 import { analyserCsv, type AnalyseCsv, type LigneImport } from '../../lib/pipeline/importCsv';
+import { correspondancesImport, ecrireChampsImport } from '../../lib/champsPersoApi';
+import type { ChampPerso } from '../../lib/champs/types';
 
 /** Au-delà, on refuse : un import de cette taille mérite le vrai outil de migration. */
 const MAX_LIGNES = 500;
@@ -49,11 +51,14 @@ export default function ImportCsvModal({ ouvert, onFermer, onImporte }: {
   const [analyse, setAnalyse] = useState<AnalyseCsv | null>(null);
   const [nomFichier, setNomFichier] = useState('');
   const [enCours, setEnCours] = useState(false);
+  // Colonnes du fichier nommées comme un champ personnalisé (opportunité ou client).
+  const [colonnesChamps, setColonnesChamps] = useState<Array<{ index: number; champ: ChampPerso }>>([]);
 
   if (!ouvert) return null;
 
   function reinitialiser() {
     setAnalyse(null);
+    setColonnesChamps([]);
     setNomFichier('');
     if (champFichier.current) champFichier.current.value = '';
   }
@@ -62,7 +67,13 @@ export default function ImportCsvModal({ ouvert, onFermer, onImporte }: {
     setNomFichier(f.name);
     try {
       const texte = await f.text();
-      setAnalyse(analyserCsv(texte));
+      const a = analyserCsv(texte);
+      setAnalyse(a);
+      if (a.entetes?.length) {
+        correspondancesImport(['deal', 'client'], a.entetes, a.indexReconnus ?? [])
+          .then(setColonnesChamps)
+          .catch((e) => { console.error('[ImportCsv] champs personnalisés', e); setColonnesChamps([]); });
+      }
     } catch (e) {
       console.error('[ImportCsv] lecture du fichier', e);
       toast.error(fr ? 'Fichier illisible.' : 'Unreadable file.');
@@ -94,6 +105,12 @@ export default function ImportCsvModal({ ouvert, onFermer, onImporte }: {
           adresse: l.adresse || null,
         });
         if (r.fusionne || r.dealExistant) fusionnes++; else crees++;
+        // Champs personnalisés : sur l'opportunité créée (pas sur un deal existant,
+        // qui garde ses valeurs) et sur son client.
+        if (colonnesChamps.length && l.cellules) {
+          const refus = await ecrireChampsImport(colonnesChamps, l.cellules, r.dealExistant ? null : r.dealId);
+          if (refus.length) console.warn('[ImportCsv] ligne', l.ligne, 'champs refusés :', refus);
+        }
       } catch (e) {
         echecs++;
         console.error('[ImportCsv] ligne', l.ligne, e);
@@ -178,10 +195,16 @@ export default function ImportCsvModal({ ouvert, onFermer, onImporte }: {
               <span className="text-[11px] text-text-muted">{nomFichier}</span>
             </div>
 
-            {analyse.colonnesIgnorees.length > 0 && (
+            {colonnesChamps.length > 0 && (
+              <p className="text-[11.5px] text-text-secondary">
+                {fr ? 'Champs personnalisés remplis : ' : 'Custom fields filled: '}
+                {colonnesChamps.map((c) => c.champ.label).join(', ')}
+              </p>
+            )}
+            {analyse.colonnesIgnorees.filter((c) => !colonnesChamps.some((x) => analyse.entetes?.[x.index] === c)).length > 0 && (
               <p className="text-[11.5px] text-text-muted">
                 {fr ? 'Colonnes non utilisées : ' : 'Unused columns: '}
-                {analyse.colonnesIgnorees.join(', ')}
+                {analyse.colonnesIgnorees.filter((c) => !colonnesChamps.some((x) => analyse.entetes?.[x.index] === c)).join(', ')}
               </p>
             )}
 

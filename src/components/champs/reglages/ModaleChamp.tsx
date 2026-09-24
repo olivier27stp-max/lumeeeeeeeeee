@@ -298,6 +298,13 @@ export default function ModaleChamp({ open, onClose, onEnregistre, objet: objetD
             </div>
 
             {/* Réglages propres au type */}
+            {(objet === 'quote' || objet === 'invoice') && (
+              <label htmlFor={`${ids}-document`} className="flex items-center gap-2 text-[13px] text-text-primary">
+                <input id={`${ids}-document`} type="checkbox" checked={!!config.show_on_documents}
+                  onChange={(e) => setConfig({ ...config, show_on_documents: e.target.checked })} className="h-4 w-4 accent-primary" />
+                {fr ? `Afficher sur ${objet === 'quote' ? 'la soumission' : 'la facture'} du client (PDF et page en ligne)` : `Show on the client's ${objet === 'quote' ? 'quote' : 'invoice'} (PDF and online page)`}
+              </label>
+            )}
             {type === 'number' && (
               <div className="grid grid-cols-3 gap-3">
                 {(['decimals', 'min', 'max'] as const).map((k) => (

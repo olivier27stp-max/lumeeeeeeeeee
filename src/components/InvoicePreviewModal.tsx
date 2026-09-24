@@ -14,6 +14,7 @@ import {
 } from '../lib/invoicesApi';
 import InvoiceRenderer from './invoice/InvoiceRenderer';
 import { buildRenderData } from './invoice/buildRenderData';
+import { useChampsDocument } from './champs/document';
 
 interface InvoicePreviewModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
   const [company, setCompany] = useState<any>(null);
   const [appliedTaxes, setAppliedTaxes] = useState<Array<{ name: string; rate: number; amount_cents: number; registration_number?: string | null }>>([]);
   const { t, language } = useTranslation();
+  const champsDocument = useChampsDocument('invoice', invoiceId, language === 'fr');
   const fr = language === 'fr';
 
   useEffect(() => {
@@ -114,7 +116,7 @@ export default function InvoicePreviewModal({ isOpen, invoiceId, onClose, onSent
             <div className="lg:col-span-2">
               <div className="rounded-xl bg-gray-100 p-4">
                 <div className="mx-auto max-w-[540px] rounded-lg bg-white p-6 shadow-md">
-                  <InvoiceRenderer data={renderData} />
+                  <InvoiceRenderer data={{ ...renderData, champsPerso: champsDocument }} />
                 </div>
               </div>
             </div>

@@ -14,6 +14,7 @@ import {
 } from './automationEventsApi';
 import { invalidateScheduleCache } from './scheduleApi';
 import { syncEntityPin } from './fieldSalesApi';
+import type { FiltreListe } from './champs/filtresListe';
 
 export type JobSort = 'client' | 'job_number' | 'schedule' | 'status' | 'total';
 export type JobSortDirection = 'asc' | 'desc';
@@ -29,6 +30,8 @@ export interface JobsQuery {
   sortDirection?: JobSortDirection;
   page?: number;
   pageSize?: number;
+  /** Conditions de champs personnalisés, compilées (jointures PostgREST). */
+  champs?: FiltreListe;
 }
 
 export interface JobsResult {
@@ -435,8 +438,9 @@ export async function getJobs(query: JobsQuery): Promise<JobsResult> {
 
   // count 'estimated' : exact sous un seuil, estimé (stats Postgres) au-dessus.
   // 'exact' scannait toute la table filtrée sous RLS à CHAQUE page (O(n)/page).
-  let request = supabase.from('jobs_active').select('*', { count: 'estimated' }).range(rangeFrom, rangeTo);
+  let request = supabase.from('jobs_active').select(`*${query.champs?.select ?? ''}`, { count: 'estimated' }).range(rangeFrom, rangeTo);
   request = applyTableFilters(request, query);
+  if (query.champs) request = query.champs.appliquer(request);
   request = request.order(SORT_MAP[sort], { ascending: sortDirection === 'asc', nullsFirst: true });
   request = request.order('created_at', { ascending: false });
 
