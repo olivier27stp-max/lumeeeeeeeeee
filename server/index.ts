@@ -1407,6 +1407,19 @@ app.listen(port, '0.0.0.0', () => {
           logger.info('[migration-bot] Cron started (every 10min, lock-guarded)');
         });
 
+        // Numéros SMS en attente — reprend les achats échoués ou mis en file
+        // (conformité Twilio non approuvée, stock vide, TWILIO_AUTO_PROVISION
+        // activé après coup). Sans effet tant que l'interrupteur est éteint.
+        import('./lib/twilioProvisioning').then(({ relancerProvisionnementsEnAttente }) => {
+          const runProv = () =>
+            withAdvisoryLock('sms-provisioning-retry', () =>
+              withCronCheckIn('sms-provisioning-retry', () => relancerProvisionnementsEnAttente()))
+              .catch((e: any) => captureCronFailure('sms-provisioning-retry', e));
+          setInterval(runProv, 10 * 60 * 1000);
+          setTimeout(runProv, 90_000);
+          logger.info('[sms-provisioning-retry] Cron started (every 10min, lock-guarded)');
+        }).catch((e: any) => captureCronFailure('sms-provisioning-retry-import', e));
+
         // Abonnements figés — période dépassée alors que le statut reste
         // `active`. Ne suspend RIEN : pose une trace dans security_events.
         // Constat du 2026-09-03 : les 7 abonnements de prod étaient dans ce

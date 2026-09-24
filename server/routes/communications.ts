@@ -5,7 +5,7 @@ import { twilioClient, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
 import { normalizeE164, findOrCreateConversation } from '../lib/helpers';
-import { provisionSmsNumber, getOrgSmsChannel, orgPlanIncludesSms } from '../lib/twilioProvisioning';
+import { provisionSmsNumber, getOrgSmsChannel, orgPlanIncludesSms, etatProvisionnementSms } from '../lib/twilioProvisioning';
 import {
   submitA2PBrand,
   submitA2PCampaign,
@@ -295,6 +295,18 @@ router.get('/communications/channels', async (req, res) => {
     return res.json(data || []);
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to fetch channels.', '[communications/channels]');
+  }
+});
+
+// GET /api/communications/sms-provisioning — demande de numéro en file ou
+// abandonnée (null sinon). Affichage seulement : la relance est automatique.
+router.get('/communications/sms-provisioning', async (req, res) => {
+  try {
+    const authed = await requireAuthedClient(req, res);
+    if (!authed) return;
+    return res.json({ etat: await etatProvisionnementSms(authed.orgId) });
+  } catch (error: any) {
+    return sendSafeError(res, error, 'Failed to fetch provisioning state.', '[communications/sms-provisioning]');
   }
 });
 

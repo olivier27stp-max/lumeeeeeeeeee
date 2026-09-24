@@ -40,6 +40,22 @@ export const twilioClient = envelopperTwilio(
 );
 
 /**
+ * Client réservé à l'ACHAT de numéros (IncomingPhoneNumbers / AvailablePhoneNumbers).
+ *
+ * Si `TWILIO_PROVISIONING_API_KEY_SID` + `_SECRET` sont définis, on s'authentifie
+ * avec cette clé Restricted (droits « Phone Numbers » seulement) sur le compte
+ * `TWILIO_ACCOUNT_SID` — le jeton principal n'est alors plus utilisé pour acheter.
+ * Sinon, repli sur le client principal (comportement historique).
+ * Jamais la clé d'un sous-compte : la clé doit appartenir au compte parent.
+ */
+const provisioningKeySid = process.env.TWILIO_PROVISIONING_API_KEY_SID || '';
+const provisioningKeySecret = process.env.TWILIO_PROVISIONING_API_KEY_SECRET || '';
+export const twilioProvisioningClient =
+  provisioningKeySid.startsWith('SK') && provisioningKeySecret && twilioAccountSid.startsWith('AC')
+    ? Twilio(provisioningKeySid, provisioningKeySecret, { accountSid: twilioAccountSid, timeout: 20_000 })
+    : twilioClient;
+
+/**
  * URL du callback de statut Twilio, à passer à CHAQUE `messages.create`.
  *
  * Sans ce paramètre par message, Twilio ne renvoie jamais l'accusé de
