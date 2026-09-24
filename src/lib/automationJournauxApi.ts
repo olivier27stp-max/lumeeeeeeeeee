@@ -313,3 +313,82 @@ export function raisonLisible(erreur: string | null, fr: boolean): string | null
   }
   return erreur;
 }
+
+// ── La vue d'ensemble ───────────────────────────────────────
+
+export interface ActiviteSemaine {
+  /** Le lundi de la semaine. */
+  debut: Date;
+  fin: Date;
+  /** Déclenchements de la semaine. */
+  n: number;
+}
+
+/**
+ * Combien de fois les automatisations sont parties, semaine par semaine.
+ *
+ * La vue d'ensemble affichait une courbe plate à zéro « en attendant le
+ * comptage » — alors que `automation_execution_logs` porte déjà chaque
+ * exécution. La donnée était là, personne ne la lisait : la courbe
+ * annonçait « rien ne se passe » à une entreprise dont les automatisations
+ * tournaient.
+ *
+ * On compte les DÉCLENCHEMENTS, pas les actions : une règle qui envoie un
+ * courriel ET crée une tâche s'est déclenchée UNE fois. La paire
+ * (entité, événement) identifie un déclenchement.
+ */
+export async function activiteParSemaine(semaines = 7): Promise<{
+  total: number;
+  parSemaine: ActiviteSemaine[];
+}> {
+  const orgId = await getCurrentOrgId();
+
+  // Les bornes : `semaines` tranches de 7 jours, la dernière finissant
+  // aujourd'hui.
+  const maintenant = new Date();
+  const tranches: ActiviteSemaine[] = [];
+  for (let i = semaines - 1; i >= 0; i--) {
+    const fin = new Date(maintenant);
+    fin.setDate(maintenant.getDate() - i * 7);
+    fin.setHours(23, 59, 59, 999);
+    const debut = new Date(fin);
+    debut.setDate(fin.getDate() - 6);
+    debut.setHours(0, 0, 0, 0);
+    tranches.push({ debut, fin, n: 0 });
+  }
+
+  if (!orgId) return { total: 0, parSemaine: tranches };
+
+  const depuis = tranches[0].debut.toISOString();
+  const { data, error } = await supabase
+    .from('automation_execution_logs')
+    .select('created_at, entity_id, trigger_event')
+    .eq('org_id', orgId)
+    .gte('created_at', depuis)
+    .order('created_at', { ascending: true })
+    .limit(5000);
+
+  if (error || !data) {
+    console.error('[apercu] activité par semaine', error?.message ?? 'aucune donnée');
+    return { total: 0, parSemaine: tranches };
+  }
+
+  // Dédoublonnage : une règle qui fait trois actions n'est qu'UN
+  // déclenchement. La clé porte aussi la semaine, pour qu'un même client
+  // repassé la semaine suivante compte deux fois — c'est bien deux
+  // déclenchements.
+  const vus = new Set<string>();
+  let total = 0;
+  for (const ligne of data) {
+    const quand = new Date(ligne.created_at as string);
+    const tranche = tranches.find((t) => quand >= t.debut && quand <= t.fin);
+    if (!tranche) continue;
+    const cle = `${tranche.debut.toISOString().slice(0, 10)}:${ligne.entity_id}:${ligne.trigger_event}`;
+    if (vus.has(cle)) continue;
+    vus.add(cle);
+    tranche.n += 1;
+    total += 1;
+  }
+
+  return { total, parSemaine: tranches };
+}

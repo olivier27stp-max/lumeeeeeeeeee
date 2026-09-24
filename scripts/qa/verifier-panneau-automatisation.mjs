@@ -334,7 +334,46 @@ async function main() {
       contenuStats.slice(0, 120),
     );
 
-    // ── 12. Aucune erreur rouge dans la console ──
+    // ── 12. Le TIROIR d'actions (le « + » du canevas) ──
+    // C'est ce que Rafba ne voyait pas : le « + » ouvrait un menu de quatre
+    // lignes au lieu du tiroir complet de GoHighLevel.
+    await page.keyboard.press('Escape').catch(() => {});
+    const boutonAjouter = await page.evaluateHandle(() => {
+      for (const b of Array.from(document.querySelectorAll('button'))) {
+        if ((b.textContent || '').trim() === 'Ajouter') return b;
+      }
+      return null;
+    });
+    const elAjouter = boutonAjouter.asElement();
+    dire(Boolean(elAjouter), 'le bouton « Ajouter » existe sur le canevas');
+    if (elAjouter) {
+      await elAjouter.click();
+      await attendre(700);
+      const tiroir = await page.$('aside[aria-label="Actions"]');
+      dire(Boolean(tiroir), '« Ajouter » ouvre le TIROIR d’actions (plus un menu de 4 lignes)');
+      if (tiroir) {
+        const recherche = await page.$('aside[aria-label="Actions"] input[type="search"]');
+        dire(Boolean(recherche), 'le tiroir a une recherche, comme chez GHL');
+        const lignes = await page.$$eval('aside[aria-label="Actions"] li button',
+          (bs) => bs.map((b) => b.textContent.replace(/\s+/g, ' ').trim()));
+        dire(lignes.length >= 15, 'le tiroir liste toutes les étapes', `${lignes.length} entrées`);
+        const familles = await page.$$eval('aside[aria-label="Actions"] h3',
+          (hs) => hs.map((h) => h.textContent.trim()));
+        dire(familles.length >= 5, 'les entrées sont groupées par famille', familles.join(', '));
+        dire(familles.includes('Parcours'), 'la famille « Parcours » (attendre, condition, arrêter) est là');
+
+        // La recherche filtre pour de vrai.
+        await recherche.click();
+        await page.keyboard.type('etiquette');
+        await attendre(500);
+        const apresRecherche = await page.$$eval('aside[aria-label="Actions"] li button',
+          (bs) => bs.map((b) => b.textContent.replace(/\s+/g, ' ').trim()));
+        dire(apresRecherche.length > 0 && apresRecherche.length < lignes.length,
+          'la recherche filtre (et ignore les accents)', apresRecherche.join(', '));
+      }
+    }
+
+    // ── 13. Aucune erreur rouge dans la console ──
     const graves = erreursConsole.filter((e) => !/favicon|manifest|sourcemap|Download the React/i.test(e));
     dire(graves.length === 0, 'aucune erreur JavaScript', graves.slice(0, 2).join(' | '));
 

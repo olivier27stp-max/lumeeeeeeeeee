@@ -19,7 +19,7 @@ import { Settings, Loader2, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../i18n';
 import PermissionGate from '../components/PermissionGate';
-import { getAutomationLanguage, setAutomationLanguage } from '../lib/automationRulesApi';
+import { getAutomationLanguage } from '../lib/automationRulesApi';
 
 /** Une carte de réglage, avec son titre, son explication et son contenu. */
 function Carte({
@@ -51,7 +51,6 @@ export default function AutomationsReglages() {
 
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
   const [chargement, setChargement] = useState(true);
-  const [enregistre, setEnregistre] = useState(false);
 
   useEffect(() => {
     getAutomationLanguage()
@@ -60,21 +59,6 @@ export default function AutomationsReglages() {
       .finally(() => setChargement(false));
   }, []);
 
-  const changerLangue = async (lang: 'fr' | 'en') => {
-    if (lang === orgLang || enregistre) return;
-    const avant = orgLang;
-    setOrgLang(lang);
-    setEnregistre(true);
-    try {
-      await setAutomationLanguage(lang);
-      toast.success(fr ? 'Langue des messages enregistrée' : 'Message language saved');
-    } catch {
-      setOrgLang(avant);
-      toast.error(fr ? 'Impossible de changer la langue' : 'Could not change language');
-    } finally {
-      setEnregistre(false);
-    }
-  };
 
   return (
     <PermissionGate permission="automations.update">
@@ -121,22 +105,26 @@ export default function AutomationsReglages() {
             <Carte
               titre={fr ? 'Langue des messages' : 'Message language'}
               aide={fr
-                ? 'La langue dans laquelle les automatisations écrivent à vos clients. Indépendante de la langue de votre interface.'
-                : 'The language your automations write to clients in. Separate from your interface language.'}
+                ? 'Celle que vos clients reçoivent, définie une fois pour toute l’entreprise dans Paramètres → Paramètres entreprise. Les automatisations la suivent.'
+                : 'The one your clients receive, set once for the whole company in Settings → Company. Automations follow it.'}
             >
-              <div className="inline-flex overflow-hidden rounded-lg border border-outline/50 text-[13px]">
-                {(['fr', 'en'] as const).map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => changerLangue(l)}
-                    disabled={enregistre}
-                    aria-pressed={orgLang === l}
-                    className={`px-4 py-1.5 font-medium transition-colors ${orgLang === l ? 'bg-text-primary text-white' : 'text-text-secondary hover:bg-surface-tertiary'}`}
-                  >
-                    {l === 'fr' ? 'Français' : 'English'}
-                  </button>
-                ))}
+              {/* Le réglage VIT dans Paramètres → Langue : il décide aussi
+                  de la langue des factures, des soumissions et des pages
+                  publiques, pas seulement des automatisations. Le dupliquer
+                  ici donnerait deux endroits où le changer, et un jour deux
+                  réponses différentes. On montre ce qui est en vigueur, et
+                  on emmène au bon endroit pour le changer. */}
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-lg border border-outline/50 px-3 py-1.5 text-[13px] font-medium text-text-primary">
+                  {orgLang === 'fr' ? 'Français' : 'English'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate('/settings/company')}
+                  className="text-[13px] font-medium text-accent underline underline-offset-2 hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {fr ? 'Changer dans les réglages' : 'Change it in settings'}
+                </button>
               </div>
             </Carte>
 

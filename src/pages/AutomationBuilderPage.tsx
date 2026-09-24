@@ -52,7 +52,16 @@ import {
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import PanneauEtape from '../components/automations/PanneauEtape';
-import { champVisible, trouverAction } from '../lib/automationCatalogue';
+import TiroirChoix, { type ChoixTiroir } from '../components/automations/TiroirChoix';
+import {
+  ACTIONS,
+  DECLENCHEURS,
+  FAMILLES_ACTIONS,
+  FAMILLES_DECLENCHEURS,
+  actionCompatible,
+  champVisible,
+  trouverAction,
+} from '../lib/automationCatalogue';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
 import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
@@ -112,6 +121,8 @@ export default function AutomationBuilderPage() {
   const [prompt, setPrompt] = useState('');
   /** Où insérer la prochaine étape, tant que son type n'est pas choisi. */
   const [ajoutEnCours, setAjoutEnCours] = useState<{ apresId: string | null; branche?: 'alors' | 'sinon' } | null>(null);
+  /** Le tiroir « Ajouter un déclencheur » est-il ouvert ? */
+  const [tiroirDeclencheur, setTiroirDeclencheur] = useState(false);
 
   /**
    * Des départs tout faits — on ne part jamais d'une page blanche.
@@ -137,14 +148,86 @@ export default function AutomationBuilderPage() {
     setAjoutEnCours({ apresId, branche });
   };
 
-  /** Insère l'étape du type choisi, et la sélectionne pour l'éditer tout de suite. */
-  const confirmerAjout = (type: TypeEtape) => {
+  /**
+   * Insère l'étape choisie dans le tiroir, et l'ouvre pour l'éditer.
+   *
+   * `cle` est soit un type d'étape (`attendre`, `si`, `arreter`), soit la
+   * clé d'une ACTION du catalogue. Choisir directement « Envoyer un texto »
+   * évite l'aller-retour « ajouter un message » puis « choisir lequel » —
+   * c'est ce que fait leur tiroir, et c'est un clic de moins à chaque étape.
+   */
+  const confirmerAjout = (cle: string) => {
     if (!ajoutEnCours) return;
-    const nouvelle = etapeVierge(type, nouvelIdEtape(steps));
+    const id = nouvelIdEtape(steps);
+    const estLogique = cle === 'attendre' || cle === 'si' || cle === 'arreter';
+    const nouvelle = estLogique
+      ? etapeVierge(cle as TypeEtape, id)
+      : { ...etapeVierge('action', id), action: { type: cle, config: {} } };
     memoriser(insererEtape(steps, nouvelle, ajoutEnCours.apresId, ajoutEnCours.branche));
     setEtapeChoisie(nouvelle.id);
     setAjoutEnCours(null);
   };
+
+  /**
+   * Ce que le tiroir propose comme étapes : les actions compatibles avec le
+   * déclencheur, puis la logique du parcours.
+   *
+   * Une action incompatible n'est PAS masquée mais grisée avec sa raison :
+   * masquer laisserait croire qu'elle n'existe pas.
+   */
+  const choixEtapes = useMemo<ChoixTiroir[]>(() => {
+    const decl = regle?.trigger_event ?? '';
+    const actions: ChoixTiroir[] = ACTIONS.map((a) => ({
+      cle: a.cle,
+      titre: fr ? a.fr : a.en,
+      aide: fr ? a.aide_fr : a.aide_en,
+      famille: a.famille,
+      indisponible: actionCompatible(a, decl)
+        ? undefined
+        : (fr
+          ? 'Ne va pas avec ce déclencheur'
+          : 'Does not work with this trigger'),
+    }));
+    const logique: ChoixTiroir[] = [
+      { cle: 'attendre', famille: 'logique',
+        titre: fr ? 'Attendre' : 'Wait',
+        aide: fr ? 'Met le parcours en pause avant la suite.' : 'Pauses before the next step.' },
+      { cle: 'si', famille: 'logique',
+        titre: fr ? 'Condition' : 'Condition',
+        aide: fr ? 'Sépare le parcours en deux chemins.' : 'Splits the journey in two.' },
+      { cle: 'arreter', famille: 'logique',
+        titre: fr ? 'Arrêter ici' : 'Stop here',
+        aide: fr ? 'Le client sort du parcours.' : 'The client leaves the journey.' },
+    ];
+    return [...actions, ...logique];
+  }, [regle, fr]);
+
+  /** Les déclencheurs offerts, ceux qui ne partent pas encore étant grisés. */
+  const choixDeclencheurs = useMemo<ChoixTiroir[]>(
+    () => DECLENCHEURS.map((d) => ({
+      cle: d.cle,
+      titre: fr ? d.fr : d.en,
+      aide: fr ? d.aide_fr : d.aide_en,
+      famille: d.famille,
+      indisponible: d.bientot
+        ? (fr ? 'Bientôt disponible' : 'Coming soon')
+        : undefined,
+    })),
+    [fr],
+  );
+
+  /** Changer le déclencheur de la règle depuis le tiroir. */
+  const choisirDeclencheur = useCallback(async (cle: string) => {
+    if (!regle) return;
+    setTiroirDeclencheur(false);
+    if (cle === regle.trigger_event) return;
+    try {
+      const maj = await modifierAutomatisation(regle.id, { trigger_event: cle });
+      setRegle(maj);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  }, [regle]);
 
   /**
    * Lumi construit le parcours à partir de la description.
@@ -639,16 +722,40 @@ export default function AutomationBuilderPage() {
 
                     <span className="my-4 text-xs text-text-tertiary">{fr ? 'ou' : 'or'}</span>
 
+                    {/* Un parcours commence par son DÉCLENCHEUR, pas par une
+                        action : c'est lui qui décide de l'entité qui arrivera,
+                        donc des actions qui auront un sens ensuite. On montre
+                        celui qui est choisi, et un clic l'échange. */}
+                    <button
+                      type="button"
+                      onClick={() => setTiroirDeclencheur(true)}
+                      className="w-full max-w-[300px] rounded-xl border-2 border-dashed border-accent/50 bg-accent/5 px-4 py-4 text-sm font-medium text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                      <Plus className="mx-auto mb-1 h-5 w-5" aria-hidden="true" />
+                      {fr ? 'Choisir le déclencheur' : 'Pick the trigger'}
+                      <span className="mt-1 block text-[11px] font-normal text-text-secondary">
+                        {declencheurLabel}
+                      </span>
+                    </button>
+
+                    {/* Le connecteur, comme sur le canevas garni. */}
+                    <svg width="2" height="28" className="my-1 text-border" aria-hidden="true">
+                      <line x1="1" y1="0" x2="1" y2="28" stroke="currentColor" strokeWidth="2" />
+                    </svg>
+
                     <button
                       type="button"
                       onClick={() => ouvrirAjout(null)}
-                      className="w-full max-w-[280px] rounded-xl border-2 border-dashed border-accent/50 bg-accent/5 px-4 py-4 text-sm font-medium text-accent transition-colors hover:bg-accent/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      className="w-full max-w-[300px] rounded-xl border-2 border-dashed border-border px-4 py-4 text-sm font-medium text-text-secondary transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     >
                       <Plus className="mx-auto mb-1 h-5 w-5" aria-hidden="true" />
                       {fr ? 'Ajouter une première étape' : 'Add a first step'}
                     </button>
 
-                    <span className="mt-4 rounded-full bg-surface-tertiary px-3 py-1 text-[11px] font-medium text-text-tertiary">
+                    <svg width="2" height="20" className="mt-1 text-border" aria-hidden="true">
+                      <line x1="1" y1="0" x2="1" y2="20" stroke="currentColor" strokeWidth="2" />
+                    </svg>
+                    <span className="mt-1 rounded-full bg-surface-tertiary px-3 py-1 text-[11px] font-medium text-text-tertiary">
                       {fr ? 'FIN' : 'END'}
                     </span>
                   </div>
@@ -666,39 +773,6 @@ export default function AutomationBuilderPage() {
                 )}
               </div>
             </div>
-
-            {/* Choisir le type de la nouvelle étape. */}
-            {ajoutEnCours && (
-              <div className="absolute left-1/2 top-20 z-10 w-[280px] -translate-x-1/2 rounded-xl border border-border bg-surface-card p-3 shadow-lg">
-                <p className="mb-2 text-xs font-medium text-text-primary">
-                  {fr ? 'Ajouter…' : 'Add…'}
-                </p>
-                <div className="flex flex-col gap-1">
-                  {([
-                    ['action', fr ? 'Un message' : 'A message'],
-                    ['attendre', fr ? 'Une attente' : 'A wait'],
-                    ['si', fr ? 'Une condition' : 'A condition'],
-                    ['arreter', fr ? 'Arrêter ici' : 'Stop here'],
-                  ] as Array<[TypeEtape, string]>).map(([t, libelle]) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => confirmerAjout(t)}
-                      className="rounded-lg border border-border px-3 py-2 text-left text-xs text-text-primary transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                    >
-                      {libelle}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setAjoutEnCours(null)}
-                    className="mt-1 rounded-lg px-3 py-1.5 text-xs text-text-secondary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                  >
-                    {fr ? 'Annuler' : 'Cancel'}
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Ce que Lumi a compris — au-dessus du canevas, comme leur
                 bandeau « Explain this workflow ». L'utilisateur doit pouvoir
@@ -718,10 +792,18 @@ export default function AutomationBuilderPage() {
               </div>
             )}
 
-            {/* Ajouter — en haut à droite, comme chez GHL. */}
+            {/* Ajouter — en haut à droite, comme chez GHL.
+                Il ouvrait un simple message : il ajoute maintenant une étape
+                à la FIN du parcours, ce que son libellé promettait. */}
             <button
               type="button"
-              onClick={() => toast.info(fr ? 'Ajouter une étape' : 'Add a step')}
+              onClick={() => {
+                // La dernière étape du fil principal : la nouvelle s'y accroche.
+                const dernier = steps.length
+                  ? [...steps].reverse().find((e) => e.type !== 'si' && e.type !== 'arreter')
+                  : null;
+                ouvrirAjout(dernier?.id ?? null);
+              }}
               className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-text-primary shadow-sm transition-colors hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <Plus className="h-4 w-4" aria-hidden="true" />
@@ -790,8 +872,38 @@ export default function AutomationBuilderPage() {
         )}
       </div>
 
+      {/* Les deux tiroirs et le panneau se partagent la place à droite.
+          Un seul à la fois : ouvrir un tiroir ferme l'édition en cours,
+          sinon deux panneaux de 380 px écraseraient le canevas. */}
+      {onglet === 'parcours' && tiroirDeclencheur && (
+        <TiroirChoix
+          titre={fr ? 'Déclencheurs' : 'Triggers'}
+          sousTitre={fr ? 'Ce qui met l’automatisation en route' : 'What starts the automation'}
+          familles={FAMILLES_DECLENCHEURS}
+          choix={choixDeclencheurs}
+          fr={fr}
+          onChoisir={choisirDeclencheur}
+          onFermer={() => setTiroirDeclencheur(false)}
+        />
+      )}
+
+      {onglet === 'parcours' && !tiroirDeclencheur && ajoutEnCours && (
+        <TiroirChoix
+          titre={fr ? 'Actions' : 'Actions'}
+          sousTitre={fr ? 'Ce que l’automatisation fera' : 'What the automation will do'}
+          familles={[
+            ...FAMILLES_ACTIONS,
+            { cle: 'logique', fr: 'Parcours', en: 'Journey' },
+          ]}
+          choix={choixEtapes}
+          fr={fr}
+          onChoisir={confirmerAjout}
+          onFermer={() => setAjoutEnCours(null)}
+        />
+      )}
+
       {/* Le panneau d'edition — la moitie qui manquait. */}
-      {onglet === 'parcours' && etapeOuverte && (
+      {onglet === 'parcours' && !tiroirDeclencheur && !ajoutEnCours && etapeOuverte && (
         <PanneauEtape
           etape={etapeOuverte}
           fr={fr}

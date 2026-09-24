@@ -199,6 +199,22 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
 
 export const CLES_DECLENCHEURS = DECLENCHEURS.map((d) => d.cle);
 
+/**
+ * Les familles de déclencheurs, dans l'ordre d'affichage du tiroir.
+ *
+ * Ici et pas dans un composant : le tiroir « Ajouter un déclencheur » et
+ * l'ancien formulaire s'en servent tous les deux, et deux listes qui
+ * divergent afficheraient des groupes différents selon l'écran.
+ */
+export const FAMILLES_DECLENCHEURS: Array<{ cle: string; fr: string; en: string }> = [
+  { cle: 'devis', fr: 'Soumissions', en: 'Quotes' },
+  { cle: 'facture', fr: 'Factures', en: 'Invoices' },
+  { cle: 'rendezvous', fr: 'Rendez-vous', en: 'Appointments' },
+  { cle: 'job', fr: 'Jobs', en: 'Jobs' },
+  { cle: 'client', fr: 'Clients et prospects', en: 'Clients and leads' },
+  { cle: 'vente', fr: 'Pipeline de ventes', en: 'Sales pipeline' },
+];
+
 export function trouverDeclencheur(cle: string): DeclencheurCatalogue | undefined {
   return DECLENCHEURS.find((d) => d.cle === cle);
 }
