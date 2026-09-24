@@ -163,7 +163,7 @@ router.post('/support/chat', limiteChat, validate(supportChatSchema), async (req
         const dossier = await dossierClient(admin, auth.orgId, auth.user.id);
         const images = (await Promise.all(pieces.map((p) => lireCaptureBase64(admin, p)))).filter((i): i is NonNullable<typeof i> => !!i);
         const r = await repondreSupportIA(
-          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte, page: page ?? null, images },
+          { langue: ctx.langue, companyName: ctx.companyName, planLabel: ctx.planLabel, userName: ctx.userName, slaTexte: slaTexte(ctx.slaKey, ctx.langue), surface: 'app', dossier: dossier.texte, page: page ?? null, images, orgId: auth.orgId, userId: auth.user.id },
           historique, message,
           {
             statutMigration: () => statutMigrationPour(admin, auth.orgId),

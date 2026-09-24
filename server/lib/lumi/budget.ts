@@ -229,15 +229,21 @@ export async function alerterSiSeuilFranchi(admin: SupabaseClient, orgId: string
   ).catch((e: any) => console.error('[lumi] alerte budget non envoyée :', e?.message || e));
 }
 
+/** D'où vient la dépense — la colonne `source` de `ai_usage`. */
+export type SourceUsage = 'lumi' | 'support' | 'migration' | 'briefing' | 'routeur' | 'cache';
+
 export async function journaliserUsage(admin: SupabaseClient, ligne: {
-  orgId: string; userId: string; conversationId: string | null; model: string;
+  orgId: string; userId: string | null; conversationId: string | null; model: string;
   input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number; cost_cents: number;
+  /** Absent = `lumi` : c'était le seul écrivain avant que le support soit branché. */
+  source?: SourceUsage;
 }): Promise<void> {
   const { error } = await admin.from('ai_usage').insert({
     org_id: ligne.orgId,
     user_id: ligne.userId,
     conversation_id: ligne.conversationId,
     model: ligne.model,
+    source: ligne.source ?? 'lumi',
     input_tokens: ligne.input_tokens,
     output_tokens: ligne.output_tokens,
     cache_creation_input_tokens: ligne.cache_creation_input_tokens,
