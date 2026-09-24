@@ -103,6 +103,21 @@ async function rendre(over: Record<string, unknown> = {}) {
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
 
+/**
+ * Ouvre une section de la fiche.
+ *
+ * Depuis que la fiche s'ouvre sur le CLIENT, les éléments du deal (étape,
+ * abandon, champs du métier) demandent un clic — c'est le comportement
+ * voulu, pas un contournement de test.
+ */
+async function ouvrirSection(nom: string) {
+  const b = [...conteneur.querySelectorAll('[role="tab"]')]
+    .find((x) => (x.textContent ?? '').trim() === nom) as HTMLButtonElement | undefined;
+  expect(b, `section ${nom} introuvable`).toBeTruthy();
+  await act(async () => { b!.click(); });
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+}
+
 function boutonNomme(motif: RegExp): HTMLButtonElement | undefined {
   return [...conteneur.querySelectorAll('button')]
     .find((b) => motif.test(b.textContent ?? '')) as HTMLButtonElement | undefined;
@@ -128,6 +143,7 @@ afterEach(() => {
 describe('fiche du deal — abandonner', () => {
   it('propose « Abandonner » sur un deal encore ouvert', async () => {
     await rendre();
+    await ouvrirSection('Deal');
     // Le statut existait en base, testé, sans qu'aucun bouton ne l'atteigne.
     expect(boutonNomme(/Abandonner ce deal/)).toBeTruthy();
   });
@@ -157,6 +173,7 @@ describe('fiche du deal — champs personnalisés', () => {
     ]);
     getValuesMock.mockResolvedValue({ col1: 2400 });
     await rendre();
+    await ouvrirSection('Deal');
 
     expect(listColumnsMock).toHaveBeenCalledWith('deals');
     expect(conteneur.textContent).toContain('Informations du métier');
@@ -179,6 +196,7 @@ describe('fiche du deal — motifs de perte', () => {
       { id: 'r2', libelle: 'A choisi un concurrent', position: 2 },
     ]);
     await rendre();
+    await ouvrirSection('Deal');
 
     // Viser « Perdu » ouvre la demande de raison SANS écrire l'étape.
     const sel = [...conteneur.querySelectorAll('select')]
@@ -248,5 +266,36 @@ describe('fiche du deal — dossier du client', () => {
     await ouvrirOngletClient();
     // Mieux qu'une section vide, qui ferait croire à un écran cassé.
     expect(conteneur.textContent).toContain('Premier contact');
+  });
+});
+
+describe('fiche du deal — navigation', () => {
+  it('ouvre sur le CLIENT, pas sur le deal', async () => {
+    dossierMock.mockResolvedValue({
+      jobs: [{ id: 'j1', numero: 'JOB-77', titre: 'Lavage', statut: 'completed', cents: 40000, date: '2026-05-01T00:00:00Z' }],
+      devis: [], factures: [], messages: [], paye_cents: 40000, du_cents: 0,
+    });
+    await rendre();
+    // La première question en ouvrant un deal est « c'est qui ? », pas
+    // « quelle étape ? ». Sans clic, l'historique doit déjà être là.
+    expect(conteneur.textContent).toContain('JOB-77');
+  });
+
+  it('range les sections en colonne, le client en premier', async () => {
+    await rendre();
+    const sections = [...conteneur.querySelectorAll('[role="tab"]')]
+      .map((b) => b.textContent?.trim() ?? '');
+    expect(sections[0]).toBe('Client');
+    expect(sections).toContain('Rendez-vous');
+    expect(sections).toContain('Tâches');
+    expect(sections).toContain('Notes');
+  });
+
+  it('la liste des sections est annoncée comme verticale', async () => {
+    await rendre();
+    const liste = conteneur.querySelector('[role="tablist"]');
+    // Sans cette annonce, un lecteur d'écran lit les flèches horizontales
+    // alors que la navigation se fait de haut en bas.
+    expect(liste?.getAttribute('aria-orientation')).toBe('vertical');
   });
 });

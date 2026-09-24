@@ -2,8 +2,11 @@
  * Actions rapides d'une carte du board — le menu « ⋮ ».
  *
  * Ce qu'on fait vraiment depuis un board de ventes : texter, appeler,
- * chiffrer, se rappeler de relancer. Chaque action part de la carte, sans
- * ouvrir la fiche.
+ * chiffrer, se rappeler de relancer, confier à quelqu'un.
+ *
+ * Chaque action AMÈNE là où elle se fait, elle ne la fait pas à la place de
+ * l'utilisateur. Le texto s'envoyait depuis une zone de saisie du menu : on
+ * écrivait sans voir ce que le client avait déjà répondu.
  *
  * Ce qui n'est PAS ici, volontairement : planifier un rendez-vous. Une visite
  * demande une durée, une équipe et une adresse confirmée — ça mérite la vraie
@@ -15,17 +18,9 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarClock, FileText, MoreVertical, Phone, User, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from '../../i18n';
-import { sendSms } from '../../lib/messagingApi';
 import { creerTacheDeal, nomClient, type Deal } from '../../lib/pipelineVentesApi';
 
 interface Membre { id: string; name: string }
-
-/** Un texto de relance pré-écrit, que le vendeur relit avant d'envoyer. */
-function messageParDefaut(prenom: string, fr: boolean): string {
-  return fr
-    ? `Bonjour ${prenom}, je fais un suivi sur votre demande. Avez-vous des questions ?`
-    : `Hi ${prenom}, just following up on your request. Any questions?`;
-}
 
 export default function ActionsRapides({ deal, membres, onAssigner, onChangement }: {
   deal: Deal;
@@ -37,12 +32,10 @@ export default function ActionsRapides({ deal, membres, onAssigner, onChangement
   const fr = language === 'fr';
   const navigate = useNavigate();
   const idMenu = useId();
-  const idTexte = useId();
   const idRappel = useId();
 
   const [ouvert, setOuvert] = useState(false);
-  const [vue, setVue] = useState<'menu' | 'texto' | 'rappel' | 'assigner'>('menu');
-  const [texte, setTexte] = useState('');
+  const [vue, setVue] = useState<'menu' | 'rappel' | 'assigner'>('menu');
   const [jours, setJours] = useState('2');
   const [enCours, setEnCours] = useState(false);
   const ancre = useRef<HTMLButtonElement>(null);
@@ -80,28 +73,7 @@ export default function ActionsRapides({ deal, membres, onAssigner, onChangement
       setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.right - large, window.innerWidth - large - 8)) });
     }
     setVue('menu');
-    setTexte(messageParDefaut(prenom, fr));
     setOuvert(true);
-  }
-
-  async function envoyerTexto() {
-    if (!tel || enCours) return;
-    setEnCours(true);
-    try {
-      await sendSms({
-        phone_number: tel,
-        message_text: texte.trim(),
-        client_id: deal.client_id,
-        client_name: nomClient(deal),
-      });
-      toast.success(fr ? `Texto envoyé à ${prenom}.` : `Text sent to ${prenom}.`);
-      setOuvert(false);
-      onChangement?.();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
-    } finally {
-      setEnCours(false);
-    }
   }
 
   async function poserRappel() {
@@ -159,18 +131,37 @@ export default function ActionsRapides({ deal, membres, onAssigner, onChangement
         >
           {vue === 'menu' && (
             <>
+              {/*
+                Le texto AMÈNE à la conversation, il ne s'envoie plus depuis
+                le menu. Écrire dans une petite zone de saisie, c'est écrire
+                sans voir ce que le client a déjà répondu — le contexte vit
+                dans la messagerie, pas dans un menu contextuel.
+              */}
               <button
                 type="button"
                 role="menuitem"
                 className={ligne}
                 disabled={!tel}
                 title={tel ? undefined : (fr ? 'Aucun numéro au dossier' : 'No phone on file')}
-                onClick={() => setVue('texto')}
+                onClick={() => {
+                  setOuvert(false);
+                  const p = new URLSearchParams();
+                  if (deal.client_id) p.set('clientId', deal.client_id);
+                  if (tel) p.set('phone', tel);
+                  p.set('name', nomClient(deal));
+                  navigate(`/messages?${p.toString()}`);
+                }}
               >
                 <MessageSquare size={14} aria-hidden="true" />
-                {fr ? 'Envoyer un texto' : 'Send a text'}
+                {fr ? 'Ouvrir la conversation' : 'Open conversation'}
               </button>
 
+              {/*
+                Le numéro est AFFICHÉ : sur un ordinateur, `tel:` ne fait
+                souvent rien de visible, et un bouton « Appeler » qui ne
+                compose pas laisse croire que l'application est cassée.
+                Au moins, le numéro est lisible et copiable.
+              */}
               <a
                 role="menuitem"
                 href={tel ? `tel:${tel}` : undefined}
@@ -179,7 +170,9 @@ export default function ActionsRapides({ deal, membres, onAssigner, onChangement
                 onClick={() => setOuvert(false)}
               >
                 <Phone size={14} aria-hidden="true" />
-                {fr ? 'Appeler' : 'Call'}
+                {tel
+                  ? `${fr ? 'Appeler' : 'Call'} ${tel}`
+                  : (fr ? 'Aucun numéro' : 'No phone')}
               </a>
 
               <button
@@ -207,35 +200,6 @@ export default function ActionsRapides({ deal, membres, onAssigner, onChangement
                 {fr ? 'Assigner à…' : 'Assign to…'}
               </button>
             </>
-          )}
-
-          {vue === 'texto' && (
-            <div className="p-3">
-              <label htmlFor={idTexte} className="mb-1.5 block text-[11px] text-text-tertiary">
-                {fr ? `Texto à ${prenom}` : `Text to ${prenom}`}
-              </label>
-              <textarea
-                id={idTexte}
-                rows={4}
-                value={texte}
-                onChange={(e) => setTexte(e.target.value)}
-                className="input-field w-full resize-none text-[12.5px]"
-              />
-              <p className="mt-1 text-[10.5px] text-text-muted">{tel}</p>
-              <div className="mt-2.5 flex justify-end gap-2">
-                <button type="button" className="btn-secondary text-[12px]" onClick={() => setVue('menu')}>
-                  {fr ? 'Retour' : 'Back'}
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary text-[12px] disabled:opacity-50"
-                  disabled={enCours || texte.trim().length === 0}
-                  onClick={() => { void envoyerTexto(); }}
-                >
-                  {enCours ? (fr ? 'Envoi…' : 'Sending…') : fr ? 'Envoyer' : 'Send'}
-                </button>
-              </div>
-            </div>
           )}
 
           {vue === 'rappel' && (
