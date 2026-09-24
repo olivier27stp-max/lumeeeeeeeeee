@@ -17,12 +17,21 @@ import {
   ToggleLeft, ToggleRight, Loader2, Send, UserPlus, AlertTriangle,
   Heart, Star, Sun, UserX, CreditCard, Banknote, Search,
   CheckCircle, Shield, Sparkles, ChevronDown, ChevronRight,
-  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,} from 'lucide-react';
+  Users, Briefcase, ReceiptText, ThumbsUp, ArrowLeft, FileSignature,
+  Plus, Pencil, Copy, Trash2, X,} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useTranslation } from '../i18n';
 import { toast } from 'sonner';
 import PermissionGate from '../components/PermissionGate';
 import MessageEditor from '../components/automations/MessageEditor';
+import AutomationBuilder from '../components/automations/AutomationBuilder';
+import {
+  chargerAutomatisations,
+  dupliquerAutomatisation,
+  supprimerAutomatisation,
+  type CatalogueAutomatisations,
+} from '../lib/automationBuilderApi';
+import { confirmer } from '../components/ui/ConfirmDialog';
 import {
   type AutomationRule,
   getAutomationRules,
@@ -392,6 +401,14 @@ export default function Automations() {
   /** Les échecs récents, pour DIRE pourquoi — le compteur seul ne sert à rien. */
   const [failures, setFailures] = useState<AutomationFailure[]>([]);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  // ── Construire ses propres automatisations ──
+  // Le catalogue (déclencheurs et actions offerts) vient du serveur avec les
+  // règles : l'interface n'en garde pas de copie, donc retirer un déclencheur
+  // côté serveur le fait disparaître du formulaire sans redéploiement du front.
+  const [catalogue, setCatalogue] = useState<CatalogueAutomatisations | null>(null);
+  /** Règle en cours d'édition ; `null` = création ; `undefined` = panneau fermé. */
+  const [enEdition, setEnEdition] = useState<AutomationRule | null | undefined>(undefined);
+  const [occupeId, setOccupeId] = useState<string | null>(null);
   // Langue dans laquelle les messages d'automatisation partent aux clients.
   const [orgLang, setOrgLang] = useState<'fr' | 'en'>('fr');
   const [savingLang, setSavingLang] = useState(false);
@@ -448,6 +465,60 @@ export default function Automations() {
   }, [language]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Le catalogue arrive avec la même requête que les règles, côté serveur.
+  // Non bloquant : si l'appel échoue, la liste reste utilisable et seul le
+  // bouton « Créer » disparaît — plutôt qu'une page blanche.
+  useEffect(() => {
+    let vivant = true;
+    chargerAutomatisations()
+      .then((d) => { if (vivant) setCatalogue(d.catalogue); })
+      .catch((e: unknown) => {
+        console.error('[Automations] catalogue indisponible',
+          e instanceof Error ? e.message : String(e));
+      });
+    return () => { vivant = false; };
+  }, []);
+
+  // ── Dupliquer ──
+  // Le seul chemin pour s'approprier une automatisation fournie : la copie
+  // perd son `preset_key`, donc le seeder ne la réécrira plus et TOUT y est
+  // modifiable, déclencheur compris.
+  const dupliquer = async (regle: AutomationRule) => {
+    setOccupeId(regle.id);
+    try {
+      await dupliquerAutomatisation(regle.id);
+      toast.success(fr ? 'Copie créée — elle est en pause' : 'Copy created — it is paused');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOccupeId(null);
+    }
+  };
+
+  // ── Supprimer ──
+  const supprimer = async (regle: AutomationRule) => {
+    const ok = await confirmer({
+      title: fr ? 'Supprimer cette automatisation ?' : 'Delete this automation?',
+      message: fr
+        ? `« ${regle.name} » sera supprimée, et les envois déjà prévus seront annulés. C'est définitif.`
+        : `“${regle.name}” will be deleted, and any messages already queued will be cancelled. This cannot be undone.`,
+      confirmLabel: fr ? 'Supprimer' : 'Delete',
+      danger: true,
+    });
+    if (!ok) return;
+    setOccupeId(regle.id);
+    try {
+      await supprimerAutomatisation(regle.id);
+      toast.success(fr ? 'Automatisation supprimée' : 'Automation deleted');
+      await load();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setOccupeId(null);
+    }
+  };
 
   // ── Toggle ──
   const handleToggle = async (rule: AutomationRule) => {
@@ -514,6 +585,44 @@ export default function Automations() {
     <PermissionGate permission="automations.update">
     <div className="space-y-6 max-w-[1100px] mx-auto">
 
+      {/* ── Construire son automatisation ──
+          Panneau plein écran plutôt qu'une boîte étroite : il y a trois blocs
+          à lire et des textes à écrire, et sur un téléphone une modale de la
+          taille d'une carte rendrait la saisie pénible. */}
+      {enEdition !== undefined && catalogue && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 backdrop-blur-sm p-4 sm:p-8"
+          role="dialog"
+          aria-modal="true"
+          aria-label={enEdition ? (fr ? 'Modifier l’automatisation' : 'Edit automation') : (fr ? 'Créer une automatisation' : 'Create an automation')}
+        >
+          <div className="mx-auto w-full max-w-[680px] rounded-2xl border border-border bg-surface-primary p-5 shadow-xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <h2 className="text-lg font-semibold text-text-primary">
+                {enEdition
+                  ? (fr ? 'Modifier l’automatisation' : 'Edit automation')
+                  : (fr ? 'Créer une automatisation' : 'Create an automation')}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setEnEdition(undefined)}
+                aria-label={fr ? 'Fermer' : 'Close'}
+                className="rounded-lg p-1.5 text-text-secondary hover:bg-surface-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            <AutomationBuilder
+              regle={enEdition}
+              catalogue={catalogue}
+              fr={fr}
+              onFerme={() => setEnEdition(undefined)}
+              onEnregistre={load}
+            />
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -543,6 +652,17 @@ export default function Automations() {
               ))}
             </div>
           </div>
+          {/* Créer la sienne. Absent tant que le catalogue n'a pas répondu :
+              ouvrir un formulaire sans liste de déclencheurs ne mène à rien. */}
+          {catalogue && (
+            <button
+              onClick={() => setEnEdition(null)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-text-primary px-3 py-1.5 text-[12px] font-medium text-surface-primary hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <Plus size={14} aria-hidden="true" />
+              {fr ? 'Créer' : 'Create'}
+            </button>
+          )}
           <button
             onClick={() => navigate('/settings')}
             className="glass-button-ghost inline-flex items-center gap-1.5 text-[12px]"
@@ -776,8 +896,44 @@ export default function Automations() {
                                 </span>
                               </td>
 
-                              {/* Toggle */}
+                              {/* Modifier · dupliquer · supprimer, puis la bascule.
+                                  Une automatisation fournie se modifie et se
+                                  désactive, mais ne se supprime pas : le seeder
+                                  la recréerait au prochain démarrage et on
+                                  croirait à un bogue. */}
                               <td className="px-4 py-3 text-right" role="presentation" tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+                                <div className="inline-flex items-center gap-0.5">
+                                  {catalogue && (
+                                    <>
+                                      <button
+                                        onClick={() => setEnEdition(rule)}
+                                        aria-label={fr ? `Modifier ${rule.name}` : `Edit ${rule.name}`}
+                                        className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        <Pencil size={15} aria-hidden="true" />
+                                      </button>
+                                      <button
+                                        onClick={() => dupliquer(rule)}
+                                        disabled={occupeId === rule.id}
+                                        aria-label={fr ? `Dupliquer ${rule.name}` : `Duplicate ${rule.name}`}
+                                        className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-surface-tertiary transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      >
+                                        {occupeId === rule.id
+                                          ? <Loader2 size={15} className="animate-spin" aria-hidden="true" />
+                                          : <Copy size={15} aria-hidden="true" />}
+                                      </button>
+                                      {!rule.is_preset && (
+                                        <button
+                                          onClick={() => supprimer(rule)}
+                                          disabled={occupeId === rule.id}
+                                          aria-label={fr ? `Supprimer ${rule.name}` : `Delete ${rule.name}`}
+                                          className="p-1.5 rounded-md text-text-tertiary hover:text-red-500 hover:bg-surface-tertiary transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                        >
+                                          <Trash2 size={15} aria-hidden="true" />
+                                        </button>
+                                      )}
+                                    </>
+                                  )}
                                 <button
                                   onClick={() => handleToggle(rule)}
                                   disabled={togglingId === rule.id}
@@ -793,6 +949,7 @@ export default function Automations() {
                                     <ToggleLeft size={20} className="text-text-tertiary" />
                                   )}
                                 </button>
+                                </div>
                               </td>
                             </tr>
 

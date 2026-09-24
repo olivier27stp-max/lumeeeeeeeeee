@@ -103,6 +103,14 @@ const ROUTE_PERMISSIONS: Record<string, PermissionKey | PermissionKey[]> = {
 
   // ── Automations ──
   'GET /api/automations/test': 'automations.read',
+  // Automatisations personnalisées : voir la liste demande le droit de
+  // lecture, tout le reste écrit des règles qui enverront de vrais textos et
+  // courriels aux clients — donc le droit de modification.
+  'GET /api/automations/rules': 'automations.read',
+  'POST /api/automations/rules': 'automations.update',
+  'PATCH /api/automations/rules/:id': 'automations.update',
+  'DELETE /api/automations/rules/:id': 'automations.update',
+  'POST /api/automations/rules/:id/duplicate': 'automations.update',
   'POST /api/automations/events/appointment-created': 'automations.update',
   'POST /api/automations/events/appointment-cancelled': 'automations.update',
   'POST /api/automations/events/job-completed': 'jobs.complete',
