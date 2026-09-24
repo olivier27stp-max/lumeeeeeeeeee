@@ -1668,6 +1668,14 @@ router.post('/quotes/convert-to-invoice', async (req, res) => {
       notes: quote.notes,
     }).eq('id', invoiceId).eq('org_id', auth.orgId);
 
+    // Champs personnalisés : ceux du devis suivent sur la facture (même clé,
+    // même type — devis → job et job → facture passent par des triggers ;
+    // ici aucun lien en base ne le permet). Jamais bloquant.
+    const { error: cfErr } = await admin.rpc('cf_copier_valeurs', {
+      p_org: auth.orgId, p_de: 'quote', p_de_id: quoteId, p_vers: 'invoice', p_vers_id: invoiceId,
+    });
+    if (cfErr) console.warn('[quotes/convert-to-invoice] custom fields copy skipped:', cfErr.message);
+
     // (Le devis a déjà été marqué « converted » atomiquement en tête de route,
     // avant la création de la facture — voir la garde anti-doublon plus haut.)
     await admin.from('quote_status_history').insert({

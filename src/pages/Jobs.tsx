@@ -471,7 +471,7 @@ export default function Jobs() {
 
   const handleExportCsv = async () => {
     try {
-      const csv = await exportJobsCsv({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery });
+      const csv = await exportJobsCsv({ status: statusFilter, jobType: jobTypeFilter, salespersonId: salespersonFilter, tagId: tagFilter, q: debouncedQuery, champs: champsListe.filtre });
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

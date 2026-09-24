@@ -46,6 +46,7 @@ import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import BulkActionBar from '../components/BulkActionBar';
 import { versDate } from '../lib/dateSeule';
 import { useChampsListe, useIdsFiltresChamps, useValeursPage, CelluleChamps } from '../components/champs/liste';
+import { colonnesChampsCsv } from '../lib/champsPersoApi';
 // InvoiceTemplate type removed — no more invoice template system
 
 const PAGE_SIZE = 20;
@@ -355,8 +356,11 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
         p_limit: 10000, p_offset: 0, p_q: q || null, p_from: null, p_to: null, p_org: null,
       };
       if (salesperson !== 'All') exportParams.p_salesperson = salesperson;
+      // Le filtre « Champs » de la liste s'applique aussi à l'export.
+      if (idsChamps.ids) exportParams.p_ids = idsChamps.ids;
       const { data, error: fetchErr } = await supabase.rpc('rpc_list_invoices', exportParams);
       if (fetchErr) throw fetchErr;
+      const champsCsv = await colonnesChampsCsv('invoice', (data || []).map((inv: any) => String(inv.id)), fr);
       const csvRows = (data || []).map((inv: any) => {
         const email = clientMap[inv.client_id]?.email || '';
         return [
@@ -367,11 +371,12 @@ export default function Invoices({ embedded = false, onTotalChange }: { embedded
           formatMoneyFromCents(inv.total_cents || 0),
           inv.created_at ? new Date(inv.created_at).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
           inv.due_date ? versDate(inv.due_date).toLocaleDateString(fr ? 'fr-CA' : 'en-CA') : '',
+          ...champsCsv.valeurs(String(inv.id)),
         ];
       });
       exportToCsv(
         `factures-${new Date().toISOString().slice(0, 10)}.csv`,
-        ['#', 'Client', 'Email', fr ? 'Statut' : 'Status', fr ? 'Montant' : 'Amount', fr ? 'Créée' : 'Created', fr ? 'Échéance' : 'Due Date'],
+        ['#', 'Client', 'Email', fr ? 'Statut' : 'Status', fr ? 'Montant' : 'Amount', fr ? 'Créée' : 'Created', fr ? 'Échéance' : 'Due Date', ...champsCsv.entetes],
         csvRows,
       );
       toast.success(fr ? 'Export CSV terminé' : 'CSV exported');
