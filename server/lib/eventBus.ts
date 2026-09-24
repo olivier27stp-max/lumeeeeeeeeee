@@ -71,7 +71,15 @@ export type CRMEventType =
    * lui que les messages décrivent. Une tâche sans lien client existe
    * (« commander des pièces ») : elle n'émet rien, faute de destinataire.
    */
-  | 'task.completed';
+  | 'task.completed'
+  /**
+   * Une note vient d'être ajoutée sur un client ou un job.
+   *
+   * Usage typique : une note sur la fiche prévient le responsable. Les
+   * notes écrites PAR une automatisation n'émettent rien — sinon une règle
+   * « ajouter une note » qui écoute « note ajoutée » tournerait en boucle.
+   */
+  | 'note.added';
 
 export interface CRMEvent {
   type: CRMEventType;
@@ -120,6 +128,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'client.replied': 'client_replied',
   'client.tagged': 'client_tagged',
   'task.completed': 'task_completed',
+  'note.added': 'note_added',
 };
 
 // ── Bus singleton ───────────────────────────────────────────────

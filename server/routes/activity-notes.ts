@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { eventBus } from '../lib/eventBus';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient, isOrgMember, isOrgAdminOrOwner } from '../lib/supabase';
 import { sendSafeError } from '../lib/error-handler';
@@ -71,6 +72,50 @@ router.post('/activity-notes', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    /*
+     * « Note ajoutée » — le déclencheur d'automatisation.
+     *
+     * PAS DE BOUCLE POSSIBLE. Cette route est le chemin HUMAIN : elle exige
+     * une session (`requireAuthedClient`) et un membre de l'organisation.
+     * L'action « ajouter une note » du moteur, elle, écrit directement dans
+     * `notes` avec le client service_role — elle ne passe jamais ici. Une
+     * règle « note ajoutée → ajouter une note » ne peut donc pas s'auto-
+     * déclencher, ce qui est le piège n°1 de ce déclencheur chez GHL.
+     *
+     * L'entité émise est le CLIENT quand la note porte sur un client ; sur
+     * un job, on remonte à son client, parce que c'est lui que les messages
+     * décrivent. Un job sans client n'émet rien.
+     */
+    void (async () => {
+      try {
+        let clientId: string | null = entityType === 'client' ? entityId : null;
+        if (entityType === 'job') {
+          const { data: job } = await admin
+            .from('jobs').select('client_id').eq('id', entityId).eq('org_id', auth.orgId).maybeSingle();
+          clientId = job?.client_id ?? null;
+        }
+        if (!clientId) return; // rien à qui écrire
+
+        await eventBus.emit('note.added', {
+          orgId: auth.orgId,
+          entityType: 'client',
+          entityId: clientId,
+          actorId: auth.user.id,
+          metadata: {
+            note_sur: entityType,
+            // Le texte sert aux conditions ; borné pour ne pas recopier une
+            // note de 4 000 caractères dans `activity_log` à chaque écriture.
+            texte: String(body).slice(0, 500),
+          },
+        });
+      } catch (e: any) {
+        // Un échec d'émission ne doit jamais faire échouer l'ajout de note :
+        // la note est déjà enregistrée et affichée.
+        console.error('[activity-notes] note.added non émis:', e?.message || e);
+      }
+    })();
+
     return res.json({ note: data });
   } catch (err: any) {
     return sendSafeError(res, err, 'Failed to add note.', '[activity-notes/create]');

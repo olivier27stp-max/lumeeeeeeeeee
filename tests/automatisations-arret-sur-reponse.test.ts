@@ -24,6 +24,8 @@ const moteur = readFileSync(resolve(RACINE, 'server/lib/automationEngine.ts'), '
 const webhookSms = readFileSync(resolve(RACINE, 'server/routes/messages.ts'), 'utf8');
 const hooks = readFileSync(resolve(RACINE, 'server/routes/automation-events.ts'), 'utf8');
 const tachesApi = readFileSync(resolve(RACINE, 'src/lib/tasksApi.ts'), 'utf8');
+const routeNotes = readFileSync(resolve(RACINE, 'server/routes/activity-notes.ts'), 'utf8');
+const actions = readFileSync(resolve(RACINE, 'server/lib/actions/index.ts'), 'utf8');
 
 describe('le réglage « arrêter sur réponse » est vraiment branché', () => {
   it('le moteur LIT `arret_sur_reponse` (il ne l’ignorait plus)', () => {
@@ -257,5 +259,55 @@ describe('le déclencheur « tâche terminée » ne part que quand il faut', () 
     const posEmit = maj.indexOf('emitTaskCompleted');
     expect(posErreur).toBeGreaterThan(-1);
     expect(posEmit, 'l’émission doit suivre le `throw` en cas d’échec').toBeGreaterThan(posErreur);
+  });
+});
+
+describe('le déclencheur « note ajoutée » ne peut pas boucler', () => {
+  it('l’action du moteur n’écrit PAS par la route humaine', () => {
+    /*
+     * LE piège n°1 de ce déclencheur chez GoHighLevel : une règle
+     * « note ajoutée → ajouter une note » qui s'auto-déclenche à l'infini.
+     *
+     * Chez nous c'est impossible par construction : l'action du moteur
+     * écrit dans `notes` avec le client service_role, tandis que
+     * l'événement part de `activity_notes` — deux tables, deux chemins.
+     * Ce test verrouille la séparation.
+     */
+    const action = actions.slice(actions.indexOf('export async function executeAjouterNote'));
+    expect(action.slice(0, 1800), 'l’action écrit dans `notes`').toMatch(/from\('notes'\)/);
+    expect(action.slice(0, 1800), 'et JAMAIS dans `activity_notes`, d’où part l’événement')
+      .not.toMatch(/activity_notes/);
+  });
+
+  it('l’événement part de la route HUMAINE, qui exige une session', () => {
+    const creation = routeNotes.slice(0, routeNotes.indexOf('// ── Soft-delete'));
+    expect(creation).toMatch(/requireAuthedClient/);
+    expect(creation).toMatch(/emit\('note\.added'/);
+  });
+
+  it('une note sur un JOB remonte au client', () => {
+    // C'est le client que les messages décrivent, pas le job.
+    const zone = routeNotes.slice(routeNotes.indexOf("emit('note.added'") - 900);
+    expect(zone.slice(0, 900)).toMatch(/entityType === 'job'/);
+    expect(zone.slice(0, 900)).toMatch(/client_id/);
+  });
+
+  it('un job sans client n’émet rien', () => {
+    const zone = routeNotes.slice(routeNotes.indexOf("emit('note.added'") - 900);
+    expect(zone.slice(0, 900), 'sans destinataire, aucune action de message ne pourrait aboutir')
+      .toMatch(/if \(!clientId\) return/);
+  });
+
+  it('un échec d’émission ne fait pas échouer l’ajout de note', () => {
+    // La note est déjà enregistrée et affichée : la perdre pour une panne
+    // du bus serait absurde.
+    const zone = routeNotes.slice(routeNotes.indexOf("emit('note.added'") - 1200);
+    expect(zone.slice(0, 2200)).toMatch(/catch/);
+    expect(zone.slice(0, 2200)).toMatch(/non émis/);
+  });
+
+  it('le texte de la note est borné', () => {
+    const zone = routeNotes.slice(routeNotes.indexOf("emit('note.added'"));
+    expect(zone.slice(0, 600)).toMatch(/slice\(0,\s*500\)/);
   });
 });
