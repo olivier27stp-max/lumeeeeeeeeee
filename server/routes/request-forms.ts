@@ -739,13 +739,15 @@ router.post('/public/form/:apiKey/submit', validate(publicFormSubmissionSchema),
     step = 'visitor-ack';
     if (body.email) {
       try {
-        const { getCompanySettings, buildEmailLayout, senderForOrg } = await import('./emails');
+        const { getCompanySettings, buildEmailLayout, senderForOrg, langueEntreprise } = await import('./emails');
         const company = await getCompanySettings(orgId);
         const companyName = company.company_name || 'notre équipe';
 
-        // Langue du visiteur inconnue (aucune colonne de langue sur les
-        // destinataires externes) : on suit celle de l'org, défaut fr.
-        const lang = actorLang;
+        /* La langue de l'ENTREPRISE, pas celle du membre qui a cree le
+           formulaire. `actorLang` lit `org_members.language` : un formulaire
+           cree par un employe anglophone envoyait des accuses en anglais aux
+           visiteurs d'une org francophone. */
+        const lang = langueEntreprise(company);
         const subject = lang === 'fr'
           ? `Nous avons bien reçu votre demande — ${companyName}`
           : `We received your request — ${companyName}`;

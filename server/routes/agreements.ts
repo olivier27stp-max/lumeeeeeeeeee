@@ -907,7 +907,11 @@ router.post('/emails/send-agreement', async (req, res) => {
     const clientName = `${clientData.first_name || ''} ${clientData.last_name || ''}`.trim() || 'Client';
     const company = await getCompanySettings(orgId);
     const baseUrl = resolvePublicBaseUrl(req);
-    const viewUrl = `${baseUrl}/contract/${agreement.view_token}`;
+    /* Pas de jeton, pas de bouton — le motif des cinq autres routes de
+       document. Celle-ci construisait son lien a l'aveugle : un view_token nul
+       aurait envoye « /contract/undefined ». Elle n'etait sauvee que par la
+       contrainte de schema, une garantie de base et non de code. */
+    const viewUrl = agreement.view_token ? `${baseUrl}/contract/${agreement.view_token}` : null;
     const number = `CTR-${refNumber}`.replace(/-$/, '');
     const requireSig = agreement.require_signature !== false;
     const nextVisitDate = await getNextVisitDateFr(admin, agreement.job_id);
@@ -941,7 +945,7 @@ router.post('/emails/send-agreement', async (req, res) => {
         ...(refTitle ? [{ libelle: langue === 'fr' ? 'Objet' : 'Subject', valeur: String(refTitle) }] : []),
         ...(nextVisitDate ? [{ libelle: langue === 'fr' ? 'Prochaine visite' : 'Next visit', valeur: nextVisitDate, fort: true }] : []),
       ],
-      bouton: { texte: requireSig ? m.voirContrat : (langue === 'fr' ? 'Voir le contrat' : 'View contract'), url: viewUrl },
+      bouton: viewUrl ? { texte: requireSig ? m.voirContrat : (langue === 'fr' ? 'Voir le contrat' : 'View contract'), url: viewUrl } : null,
       note: m.question,
     });
 

@@ -809,12 +809,13 @@ export async function executeSendEmail(
        cliquer une fois, et la plupart n'écrivent jamais.
        `null` dès que le lien ne serait pas sûr (entité sans page publique,
        jeton absent) : le courriel part alors comme avant. */
+    const langueRelance = langueEntreprise(company);
     const bouton = await boutonPourEntite(
       ctx.supabase,
       ctx.orgId,
       ctx.entityType,
       ctx.entityId,
-      langueEntreprise(company),
+      langueRelance,
     );
 
     // Lien visible en pied de page + en-têtes standards : Gmail et Outlook
@@ -822,7 +823,7 @@ export async function executeSendEmail(
     // aussi nettement la délivrabilité.
     const pied = unsubUrl
       ? `<p style="margin:24px 0 0;font-size:12px;color:#9ca3af;text-align:center;">
-           <a href="${unsubUrl}" style="color:#9ca3af;text-decoration:underline;">Se désabonner de ces communications</a>
+           <a href="${unsubUrl}" style="color:#9ca3af;text-decoration:underline;">${langueRelance === 'fr' ? 'Se désabonner de ces communications' : 'Unsubscribe from these emails'}</a>
          </p>`
       : '';
 
