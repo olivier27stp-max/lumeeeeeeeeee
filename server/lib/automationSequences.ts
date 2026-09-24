@@ -59,6 +59,26 @@ export interface EtapeAttendre {
   type: 'attendre';
   delai_secondes: number;
   suivant?: string | null;
+  /**
+   * Ce qu'on attend.
+   *
+   * `duree` (défaut, et le seul comportement d'avant) : un délai fixe.
+   *
+   * `reponse` : on attend la réponse du client, au plus `delai_secondes`.
+   * C'est le « Wait for Contact Reply » de GoHighLevel, et le plus utile
+   * pour une relance : il rend inutile la moitié des conditions. Le moteur
+   * regarde s'il y a un message ENTRANT ; si oui, il saute directement à
+   * `si_reponse` (ou arrête le parcours), sinon il continue vers `suivant`
+   * une fois le délai écoulé.
+   *
+   * Absent = `duree` : les parcours déjà enregistrés ne changent pas.
+   */
+  mode?: 'duree' | 'reponse';
+  /**
+   * Où aller si le client a répondu. Absent = le parcours s'arrête —
+   * c'est le cas le plus fréquent : il a répondu, on ne relance plus.
+   */
+  si_reponse?: string | null;
 }
 
 export interface EtapeSi {
@@ -110,6 +130,22 @@ export function cleEtape(ruleId: string, entityId: string, stepId: string): stri
 // ── Validation structurelle ─────────────────────────────────
 
 /**
+ * Les suites possibles d'une étape — TOUTES.
+ *
+ * Écrit une seule fois parce que deux listes divergentes seraient pires que
+ * pas de vérification : une attente « jusqu'à réponse » porte DEUX suites
+ * (`suivant` et `si_reponse`), et oublier la seconde laisserait passer un
+ * renvoi cassé ou une boucle infinie — exactement ce que ces gardes
+ * existent pour empêcher.
+ */
+function suitesDe(etape: Etape): Array<string | null | undefined> {
+  if (etape.type === 'si') return [etape.alors, etape.sinon];
+  if (etape.type === 'arreter') return [];
+  if (etape.type === 'attendre') return [etape.suivant, etape.si_reponse];
+  return [(etape as EtapeAction).suivant];
+}
+
+/**
  * Le graphe se parcourt-il sans boucle et sans cul-de-sac ?
  *
  * Retourne la liste des problèmes en clair, vide si tout va bien. Utilisée à
@@ -125,10 +161,7 @@ export function problemesDuGraphe(steps: Etape[]): string[] {
 
   // Chaque renvoi pointe-t-il vers une étape qui existe ?
   for (const etape of steps) {
-    const cibles: Array<string | null | undefined> =
-      etape.type === 'si' ? [etape.alors, etape.sinon]
-      : etape.type === 'arreter' ? []
-      : [(etape as EtapeAction | EtapeAttendre).suivant];
+    const cibles = suitesDe(etape);
     for (const cible of cibles) {
       if (cible && !uniques.has(cible)) {
         out.push(`L'étape « ${etape.id} » renvoie vers « ${cible} », qui n'existe pas.`);
@@ -147,10 +180,7 @@ export function problemesDuGraphe(steps: Etape[]): string[] {
     const etape = parId.get(id);
     if (!etape) return false;
     enCours.add(id);
-    const suites: Array<string | null | undefined> =
-      etape.type === 'si' ? [etape.alors, etape.sinon]
-      : etape.type === 'arreter' ? []
-      : [(etape as EtapeAction | EtapeAttendre).suivant];
+    const suites = suitesDe(etape);
     for (const s of suites) {
       if (s && descendre(s)) return true;
     }
@@ -207,8 +237,16 @@ export async function planifierEtape(
   let delaiCumule = 0;
   let sauts = 0;
 
-  // Traverser les attentes jusqu'à une étape exécutable.
-  while (courante && courante.type === 'attendre') {
+  /*
+   * Traverser les attentes jusqu'à une étape exécutable.
+   *
+   * Une attente « jusqu'à réponse » ne se traverse PAS : elle doit devenir
+   * une tâche à elle seule, pour que le worker vérifie à son échéance si le
+   * client a répondu. La cumuler comme un simple délai ferait sauter la
+   * vérification — l'attente se comporterait comme une attente ordinaire, et
+   * le réglage ne servirait à rien.
+   */
+  while (courante && courante.type === 'attendre' && courante.mode !== 'reponse') {
     delaiCumule += Math.max(0, courante.delai_secondes || 0);
     courante = trouverEtape(steps, courante.suivant);
     if (++sauts > ETAPES_MAX_PAR_PARCOURS) {
@@ -240,7 +278,16 @@ export async function planifierEtape(
     // l'évalue au lieu d'exécuter quoi que ce soit.
     action_config: courante.type === 'action'
       ? { ...courante.action, event_metadata: ctx.contexte }
-      : { type: '__sequence__', etape: courante.type, event_metadata: ctx.contexte },
+      : {
+        type: '__sequence__',
+        etape: courante.type,
+        // Le mode de l'attente voyage avec la tâche : sans lui, le worker ne
+        // saurait pas qu'il doit vérifier la réponse du client à l'échéance.
+        ...(courante.type === 'attendre' && courante.mode === 'reponse'
+          ? { mode: 'reponse', si_reponse: courante.si_reponse ?? null, suivant: courante.suivant ?? null }
+          : {}),
+        event_metadata: ctx.contexte,
+      },
     sequence_context: { ...ctx.contexte, franchies: ctx.franchies + 1 },
     execute_at: executeAt,
     status: 'pending',

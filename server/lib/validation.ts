@@ -1029,6 +1029,17 @@ const etapeSequence = z.discriminatedUnion('type', [
       .min(0, 'A wait cannot be negative.')
       .max(DELAI_MAX_SECONDES, 'Cannot wait more than a year.'),
     suivant: ID_ETAPE.nullable().optional(),
+    /*
+     * Ce qu'on attend. Absent = `duree`, le comportement d'avant : les
+     * parcours déjà enregistrés ne changent pas.
+     *
+     * `reponse` = on attend la réponse du client, au plus `delai_secondes`.
+     * Sans ces deux clés ici, Zod les RETIRERAIT en silence et l'attente se
+     * comporterait comme une attente ordinaire — le réglage ne servirait à
+     * rien, sans le moindre message d'erreur.
+     */
+    mode: z.enum(['duree', 'reponse']).optional(),
+    si_reponse: ID_ETAPE.nullable().optional(),
   }),
   z.object({
     id: ID_ETAPE,

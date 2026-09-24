@@ -1051,6 +1051,57 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
           });
           continue;
         }
+
+        /*
+         * Une ATTENTE « jusqu'à réponse du client », arrivée à échéance.
+         *
+         * Le délai est le PLAFOND : « attends sa réponse, au plus 3 jours ».
+         * À l'échéance, deux cas :
+         *   · il a répondu → on suit `si_reponse` (souvent rien : il a
+         *     répondu, on ne relance plus) ;
+         *   · il n'a pas répondu → on continue vers `suivant`, la relance.
+         *
+         * C'est le « Wait for Contact Reply » de GoHighLevel, et le plus
+         * utile pour une relance : il rend inutile la moitié des conditions.
+         */
+        if (etape && etape.type === 'attendre' && etape.mode === 'reponse') {
+          const contexte = (task.sequence_context ?? {}) as Record<string, unknown>;
+          const clientId = await clientDeLaTache(supabase, task.org_id, task.entity_type, task.entity_id);
+          // `task.created_at` : la réponse doit être POSTÉRIEURE à la mise en
+          // attente. Une conversation d'avant ne compte pas.
+          const aRepondu = await clientARepondu(supabase, task.org_id, clientId, task.created_at);
+
+          await planifierEtape(
+            {
+              supabase,
+              orgId: task.org_id,
+              ruleId: task.automation_rule_id,
+              entityType: task.entity_type,
+              entityId: task.entity_id,
+              contexte,
+              franchies: Number(contexte.franchies ?? 0),
+            },
+            etapesRegle,
+            aRepondu ? (etape.si_reponse ?? null) : (etape.suivant ?? null),
+          );
+
+          await supabase
+            .from('automation_scheduled_tasks')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              // Lisible dans l'onglet Journaux : sans ça, une attente qui se
+              // termine sans rien envoyer ressemble à une panne.
+              last_error: aRepondu
+                ? 'Le client a répondu : la suite « réponse » a été suivie.'
+                : 'Pas de réponse dans le délai : la relance a été planifiée.',
+            })
+            .eq('id', task.id);
+          logger.info(`[sequences] attente « réponse » — ${aRepondu ? 'répondu' : 'sans réponse'}`, {
+            rule_id: task.automation_rule_id, step_id: task.step_id,
+          });
+          continue;
+        }
       }
 
       const vars = await resolveEntityVariables(

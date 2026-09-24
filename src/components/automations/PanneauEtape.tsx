@@ -406,6 +406,38 @@ export default function PanneauEtape({
                     ? 'Les messages ne partent jamais entre 20 h et 8 h, même si l’attente se termine la nuit.'
                     : 'Messages never go out between 8 p.m. and 8 a.m., even if the wait ends overnight.'}
                 </p>
+
+                {/* Attendre une DURÉE, ou attendre que le client réponde.
+                    Le second est ce qui rend une relance intelligente : plus
+                    besoin d'une condition « a-t-il répondu ? » ensuite. */}
+                <div className="mt-3">
+                  <label htmlFor={`${ids}-mode`} className="mb-1 block text-xs font-medium text-text-primary">
+                    {fr ? 'Ce qu’on attend' : 'What we wait for'}
+                  </label>
+                  <select
+                    id={`${ids}-mode`}
+                    value={(brouillon as EtapeAttendre).mode ?? 'duree'}
+                    onChange={(e) => setBrouillon({
+                      ...(brouillon as EtapeAttendre),
+                      mode: e.target.value as 'duree' | 'reponse',
+                    })}
+                    className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <option value="duree">{fr ? 'Simplement ce délai' : 'Just this delay'}</option>
+                    <option value="reponse">
+                      {fr ? 'La réponse du client (au plus ce délai)' : 'The client’s reply (at most this delay)'}
+                    </option>
+                  </select>
+                  <p className="mt-1 text-[11px] text-text-tertiary">
+                    {(brouillon as EtapeAttendre).mode === 'reponse'
+                      ? (fr
+                        ? 'S’il répond, le parcours s’arrête ici. Sinon, la suite part une fois le délai écoulé.'
+                        : 'If they reply, the journey stops here. Otherwise the next step runs once the delay is up.')
+                      : (fr
+                        ? 'Le parcours continue une fois le délai écoulé, quoi qu’il arrive.'
+                        : 'The journey continues once the delay is up, whatever happens.')}
+                  </p>
+                </div>
               </div>
             )}
 
