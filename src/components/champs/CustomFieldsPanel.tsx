@@ -18,6 +18,7 @@ import { cn } from '../../lib/utils';
 import { useModuleAccess } from '../../hooks/useModuleAccess';
 import { ecrireValeurs, lireValeurs, type ObjetChamp, type ValeurChamp } from '../../lib/champsPersoApi';
 import ChampSaisie from './ChampSaisie';
+import { messageChamps } from '../../lib/champs/messages';
 
 interface Props {
   objet: ObjetChamp;
@@ -90,7 +91,7 @@ export default function CustomFieldsPanel({ objet, entityId, fr, titre, classNam
       await qc.invalidateQueries({ queryKey: cleRequete });
     } catch (err) {
       console.error('[CustomFieldsPanel] écriture', err);
-      setErreurs((e) => ({ ...e, [fieldId]: err instanceof Error ? err.message : String(err) }));
+      setErreurs((e) => ({ ...e, [fieldId]: messageChamps(err instanceof Error ? err.message : String(err), fr) }));
     } finally {
       setEnCours((e) => ({ ...e, [fieldId]: false }));
     }

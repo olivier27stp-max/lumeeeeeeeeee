@@ -16,13 +16,14 @@ import type {
 import type { ChampStandard } from './champs/standard';
 import type { Condition } from './champs/filtres';
 import { valeurCsv, valeurDepuisTexte } from './champs/valeurs';
+import { messageChamps } from './champs/messages';
 
 export type { ChampPerso, DossierChamp, ObjetChamp, TypeChamp, ValeurChamp, ValeurEnregistree, Condition };
 
 async function entetes(): Promise<HeadersInit> {
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
-  if (!token) throw new Error('Session expirée.');
+  if (!token) throw new Error(messageChamps('Session expirée.'));
   const orgId = await getCurrentOrgId();
   return {
     'Content-Type': 'application/json',
@@ -45,7 +46,7 @@ async function appel<T>(chemin: string, init: RequestInit = {}, repli = 'Action 
   try { corps = await reponse.json(); } catch { corps = null; }
   if (!reponse.ok) {
     const message = typeof corps?.error === 'string' ? corps.error : repli;
-    throw new ErreurApiChamps(message, reponse.status, corps);
+    throw new ErreurApiChamps(messageChamps(message), reponse.status, corps);
   }
   return corps as T;
 }
@@ -190,8 +191,9 @@ export async function ecrireValeurs(
     method: 'PUT', headers: await entetes(), body: JSON.stringify({ values: valeurs }),
   });
   const corps = await reponse.json().catch(() => null) as { results?: ResultatEcriture[]; error?: string } | null;
-  if (corps?.results) return corps.results;
-  throw new Error(corps?.error || 'Impossible d’enregistrer.');
+  // Les refus par champ arrivent en français (serveur) : affichés dans la langue de l'interface.
+  if (corps?.results) return corps.results.map((r) => (r.erreur ? { ...r, erreur: messageChamps(r.erreur) } : r));
+  throw new Error(messageChamps(corps?.error || 'Impossible d’enregistrer.'));
 }
 
 // ── Filtres, cartes ─────────────────────────────────────────────
@@ -284,13 +286,13 @@ export async function ecrireChampsImport(
     .filter((v) => v.value !== null);
   try {
     if (dealId && valeurs('deal').length) {
-      refus.push(...(await ecrireValeurs('deal', dealId, valeurs('deal'))).filter((r) => !r.ok).map((r) => r.erreur ?? 'refusé'));
+      refus.push(...(await ecrireValeurs('deal', dealId, valeurs('deal'))).filter((r) => !r.ok).map((r) => r.erreur ?? messageChamps('refusé')));
     }
     if (dealId && valeurs('client').length) {
       const { data, error } = await supabase.from('deals').select('client_id').eq('id', dealId).maybeSingle();
       if (error) throw error;
       if (data?.client_id) {
-        refus.push(...(await ecrireValeurs('client', data.client_id as string, valeurs('client'))).filter((r) => !r.ok).map((r) => r.erreur ?? 'refusé'));
+        refus.push(...(await ecrireValeurs('client', data.client_id as string, valeurs('client'))).filter((r) => !r.ok).map((r) => r.erreur ?? messageChamps('refusé')));
       }
     }
   } catch (err) {
