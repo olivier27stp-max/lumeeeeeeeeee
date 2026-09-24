@@ -736,7 +736,30 @@ export async function fetchMontants(): Promise<Record<string, number>> {
   if (error) throw error;
   const out: Record<string, number> = {};
   for (const r of (data ?? []) as MontantDeal[]) {
-    if (r.cents > 0) out[r.deal_id] = Number(r.cents);
+    // `devis_client` = le dernier devis du CLIENT, pas un chiffrage de ce
+    // deal-ci. Sur une carte, un montant est lu comme la valeur du deal :
+    // afficher 4 900 $ sur un « Nouveau lead » que personne n'a chiffré fait
+    // gonfler le total de la colonne avec de l'argent qui n'existe pas.
+    // Le repère reste visible dans la fiche, où il est expliqué.
+    if (r.cents > 0 && r.provenance !== 'devis_client') out[r.deal_id] = Number(r.cents);
+  }
+  return out;
+}
+
+/**
+ * Les montants AVEC leur provenance, pour la fiche.
+ *
+ * `fetchMontants` écarte volontairement les montants spéculatifs (le dernier
+ * devis du client) : sur une carte, un chiffre est lu comme la valeur du
+ * deal. La fiche, elle, a la place de dire d'où il vient — elle a donc
+ * besoin de la provenance, pas seulement du nombre.
+ */
+export async function fetchMontantsDetailles(): Promise<Record<string, MontantDeal>> {
+  const { data, error } = await supabase.rpc('pipeline_montants');
+  if (error) throw error;
+  const out: Record<string, MontantDeal> = {};
+  for (const r of (data ?? []) as MontantDeal[]) {
+    out[r.deal_id] = { ...r, cents: Number(r.cents) };
   }
   return out;
 }

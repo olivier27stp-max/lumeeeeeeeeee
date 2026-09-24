@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const fetchRaisonsMock = vi.fn(async () => [] as any[]);
 const listColumnsMock = vi.fn(async () => [] as any[]);
 const getValuesMock = vi.fn(async () => ({}) as Record<string, any>);
+const rdvMock = vi.fn(async () => [] as any[]);
 const dossierMock = vi.fn(async () => ({
   jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
 }) as any);
@@ -26,6 +27,7 @@ vi.mock('../src/lib/pipelineVentesApi', () => ({
   fetchRaisonsProposees: () => fetchRaisonsMock(),
   fetchElementsLies: vi.fn(async () => ({ job: null, devis: null, paiements: [], porte: null })),
   fetchDossierClient: (...a: any[]) => dossierMock(...(a as [])),
+  fetchRendezVousClient: (...a: any[]) => rdvMock(...(a as [])),
   fetchHistorique: vi.fn(async () => []),
   fetchTachesDuDeal: vi.fn(async () => []),
   creerTacheDeal: vi.fn(async () => undefined),
@@ -118,6 +120,31 @@ async function ouvrirSection(nom: string) {
   await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
 }
 
+/** Rend la fiche avec un montant et sa provenance. */
+async function rendreAvecMontant(cents: number, provenance: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  await act(async () => {
+    racine.render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <DealDrawer
+            deal={faireDeal()}
+            etapes={ETAPES}
+            membres={[]}
+            montantCents={cents}
+            montantProvenance={provenance as any}
+            onClose={vi.fn()}
+            onAssigner={vi.fn()}
+            onCreerJob={vi.fn()}
+            onChangement={vi.fn()}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+  await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+}
+
 function boutonNomme(motif: RegExp): HTMLButtonElement | undefined {
   return [...conteneur.querySelectorAll('button')]
     .find((b) => motif.test(b.textContent ?? '')) as HTMLButtonElement | undefined;
@@ -127,6 +154,7 @@ beforeEach(() => {
   fetchRaisonsMock.mockClear().mockResolvedValue([]);
   listColumnsMock.mockClear().mockResolvedValue([]);
   getValuesMock.mockClear().mockResolvedValue({});
+  rdvMock.mockClear().mockResolvedValue([]);
   dossierMock.mockClear().mockResolvedValue({
     jobs: [], devis: [], factures: [], messages: [], paye_cents: 0, du_cents: 0,
   });
@@ -297,5 +325,57 @@ describe('fiche du deal — navigation', () => {
     // Sans cette annonce, un lecteur d'écran lit les flèches horizontales
     // alors que la navigation se fait de haut en bas.
     expect(liste?.getAttribute('aria-orientation')).toBe('vertical');
+  });
+});
+
+describe('fiche du deal — rendez-vous', () => {
+  it("offre un gros bouton quand il n'y a aucun rendez-vous", async () => {
+    await rendre();
+    await ouvrirSection('Rendez-vous');
+    // Une section qui n'offre qu'une phrase laisse chercher quoi faire.
+    expect(conteneur.textContent).toContain('Créer un rendez-vous');
+  });
+
+  it('montre une bande par visite, avec un bouton pour la modifier', async () => {
+    rdvMock.mockResolvedValue([
+      { id: 'r1', job_id: 'j1', titre: 'Lavage de vitres', debut: '2099-05-04T14:00:00Z', statut: 'scheduled' },
+    ]);
+    await rendre();
+    await ouvrirSection('Rendez-vous');
+
+    expect(conteneur.textContent).toContain('Lavage de vitres');
+    expect(conteneur.textContent).toContain('Modifier');
+    // Le gros bouton du vide disparaît dès qu'il y a une visite.
+    expect(conteneur.textContent).not.toContain('Créer un rendez-vous');
+    expect(conteneur.textContent).toContain('Ajouter un rendez-vous');
+  });
+
+  it('marque une visite annulée sans la cacher', async () => {
+    rdvMock.mockResolvedValue([
+      { id: 'r1', job_id: 'j1', titre: 'Visite', debut: '2099-05-04T14:00:00Z', statut: 'cancelled' },
+    ]);
+    await rendre();
+    await ouvrirSection('Rendez-vous');
+    // La masquer ferait croire qu'aucun rendez-vous n'a jamais été pris.
+    expect(conteneur.textContent).toContain('Annulée');
+  });
+});
+
+describe('fiche du deal — valeur', () => {
+  it("n'affiche PAS en gros le devis d'un autre contrat", async () => {
+    // `devis_client` = le dernier devis du client, pas un chiffrage de ce
+    // deal. En gros, il se prend pour une promesse.
+    await rendreAvecMontant(490000, 'devis_client');
+    await ouvrirSection('Deal');
+
+    expect(conteneur.textContent).toContain('Rien de chiffré pour ce deal');
+    expect(conteneur.textContent).toContain('Dernier devis du client');
+  });
+
+  it('affiche en gros le montant du devis DE CE deal', async () => {
+    await rendreAvecMontant(490000, 'devis');
+    await ouvrirSection('Deal');
+    expect(conteneur.textContent).not.toContain('Rien de chiffré');
+    expect(conteneur.textContent).toContain('Montant du devis');
   });
 });

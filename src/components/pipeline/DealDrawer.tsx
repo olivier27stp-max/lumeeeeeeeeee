@@ -447,14 +447,16 @@ function DossierDuClient({ clientId, fr }: { clientId: string | null; fr: boolea
 /**
  * Les rendez-vous du client.
  *
+ * On ne montre QUE ça : une bande par visite, comme dans la fiche d'une job,
+ * et rien d'autre. La question posée en ouvrant cette section est « est-ce
+ * qu'il y a un rendez-vous ? » — tout le reste (valeur, étape, source) vit
+ * dans la section Deal et n'a rien à faire ici.
+ *
  * Les visites vivent sur la JOB (`schedule_events.job_id`), pas sur le deal :
  * on planifie du travail, pas une intention de vente. On montre donc les
  * visites de TOUTES les jobs du client — quelqu'un qu'on rappelle a
- * peut-être déjà une visite prévue mardi pour un autre contrat, et l'ignorer
- * ferait proposer deux passages la même semaine.
- *
- * Planifier se fait dans le calendrier, pas ici : une visite demande une
- * durée, une équipe et une adresse confirmée. Le bouton y amène.
+ * peut-être déjà une visite mardi pour un autre contrat, et l'ignorer ferait
+ * proposer deux passages la même semaine.
  */
 function OngletRendezVous({ deal, fr }: { deal: Deal; fr: boolean }) {
   const { data: rdv = [], isLoading } = useQuery({
@@ -464,71 +466,106 @@ function OngletRendezVous({ deal, fr }: { deal: Deal; fr: boolean }) {
     staleTime: 60_000,
   });
 
-  const maintenant = Date.now();
-  const aVenir = rdv.filter((r) => r.debut && new Date(r.debut).getTime() >= maintenant);
-  const passes = rdv.filter((r) => !r.debut || new Date(r.debut).getTime() < maintenant);
+  const loc = fr ? 'fr-CA' : 'en-CA';
 
-  function quand(iso: string | null): string {
-    if (!iso) return fr ? 'Date à confirmer' : 'Date to confirm';
+  function jourEtHeure(iso: string | null): { jour: string; heure: string | null } {
+    if (!iso) return { jour: fr ? 'Non planifiée' : 'Unscheduled', heure: null };
     const d = new Date(iso);
-    return d.toLocaleDateString(fr ? 'fr-CA' : 'en-CA', {
-      weekday: 'short', day: 'numeric', month: 'short',
-    }) + ' · ' + d.toLocaleTimeString(fr ? 'fr-CA' : 'en-CA', { hour: '2-digit', minute: '2-digit' });
+    return {
+      jour: d.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long' }),
+      heure: d.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' }),
+    };
   }
 
-  function liste(items: typeof rdv) {
+  if (isLoading) return <Vide texte={fr ? 'Chargement\u2026' : 'Loading\u2026'} />;
+
+  // AUCUN rendez-vous : un gros bouton, rien d'autre. Une section qui
+  // n'offre qu'une phrase laisse l'utilisateur chercher quoi faire.
+  if (rdv.length === 0) {
     return (
-      <div className="space-y-1.5">
-        {items.map((r) => (
-          <Link
-            key={r.id}
-            to={r.job_id ? `/jobs/${r.job_id}` : '/calendar'}
-            className="block rounded-xl border border-outline bg-surface-card px-3.5 py-2.5 hover:bg-surface-hover"
-          >
-            <span className="block text-[12.5px] font-semibold text-text-primary">{quand(r.debut)}</span>
-            <span className="block text-[11.5px] text-text-secondary">
-              {r.titre || (fr ? 'Visite' : 'Visit')}
-              {r.statut ? ` · ${r.statut}` : ''}
-            </span>
-          </Link>
-        ))}
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-outline px-5 py-10 text-center">
+        <p className="text-[13px] text-text-secondary">
+          {fr ? 'Aucun rendez-vous pour ce client.' : 'No appointment for this client.'}
+        </p>
+        <Link to="/calendar" className="btn-primary text-[13px]">
+          {fr ? 'Cr\u00e9er un rendez-vous' : 'Create appointment'}
+        </Link>
+        <p className="max-w-[34ch] text-[11px] text-text-muted">
+          {fr
+            ? "La visite se planifie dans le calendrier : elle demande une dur\u00e9e, une \u00e9quipe et une adresse."
+            : 'A visit is scheduled in the calendar: it needs a duration, a crew and an address.'}
+        </p>
       </div>
     );
   }
 
+  const maintenant = Date.now();
+
   return (
-    <>
-      <Section titre={fr ? 'Planifier' : 'Schedule'}>
-        <Link to="/calendar" className="btn-secondary inline-flex text-[12.5px]">
-          {fr ? 'Ouvrir le calendrier' : 'Open the calendar'}
-        </Link>
-        <p className="mt-1.5 text-[11px] text-text-muted">
-          {fr
-            ? "Une visite se planifie depuis le calendrier : elle demande une durée, une équipe et une adresse confirmée."
-            : 'A visit is scheduled from the calendar: it needs a duration, a crew and a confirmed address.'}
-        </p>
-      </Section>
+    <div className="space-y-2">
+      {rdv.map((r) => {
+        const { jour, heure } = jourEtHeure(r.debut);
+        const statut = (r.statut || '').toLowerCase();
+        const fait = statut === 'completed';
+        const annule = statut === 'cancelled';
+        const passe = !!r.debut && new Date(r.debut).getTime() < maintenant;
 
-      {isLoading && <Vide texte={fr ? 'Chargement…' : 'Loading…'} />}
+        return (
+          <div
+            key={r.id}
+            className="flex items-center justify-between gap-3 rounded-lg border border-outline-subtle bg-surface-secondary p-3.5"
+          >
+            <div className="min-w-0">
+              <span className="flex items-center gap-2">
+                <span
+                  className={
+                    'truncate text-[13px] font-semibold '
+                    + (fait || annule ? 'text-text-tertiary line-through' : 'text-text-primary')
+                  }
+                >
+                  {jour}
+                </span>
+                {fait && (
+                  <span className="shrink-0 rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-success">
+                    {fr ? 'Compl\u00e9t\u00e9e' : 'Completed'}
+                  </span>
+                )}
+                {annule && (
+                  <span className="shrink-0 rounded-full border border-danger/30 bg-danger/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-danger">
+                    {fr ? 'Annul\u00e9e' : 'Cancelled'}
+                  </span>
+                )}
+                {!fait && !annule && passe && (
+                  <span className="shrink-0 rounded-full border border-outline px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-text-muted">
+                    {fr ? 'Pass\u00e9e' : 'Past'}
+                  </span>
+                )}
+              </span>
+              {heure && (
+                <span className="block text-[12px] tabular-nums text-text-tertiary">{heure}</span>
+              )}
+              {r.titre && (
+                <span className="block truncate text-[11.5px] text-text-muted">{r.titre}</span>
+              )}
+            </div>
 
-      {!isLoading && rdv.length === 0 && (
-        <Section titre={fr ? 'Rendez-vous' : 'Appointments'}>
-          <Vide texte={fr ? 'Aucune visite prévue pour ce client.' : 'No visit scheduled for this client.'} />
-        </Section>
-      )}
+            {/* Modifier la visite se fait dans sa job : c'est l\u00e0 que vivent la
+                dur\u00e9e, l'\u00e9quipe et l'adresse. */}
+            <Link
+              to={r.job_id ? `/jobs/${r.job_id}` : '/calendar'}
+              aria-label={fr ? `Modifier le rendez-vous du ${jour}` : `Edit the appointment on ${jour}`}
+              className="shrink-0 rounded-lg border border-outline px-2.5 py-1.5 text-[12px] text-text-secondary hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary"
+            >
+              {fr ? 'Modifier' : 'Edit'}
+            </Link>
+          </div>
+        );
+      })}
 
-      {aVenir.length > 0 && (
-        <Section titre={fr ? `À venir (${aVenir.length})` : `Upcoming (${aVenir.length})`}>
-          {liste(aVenir)}
-        </Section>
-      )}
-
-      {passes.length > 0 && (
-        <Section titre={fr ? `Passés (${passes.length})` : `Past (${passes.length})`}>
-          {liste(passes)}
-        </Section>
-      )}
-    </>
+      <Link to="/calendar" className="btn-secondary inline-flex text-[12.5px]">
+        + {fr ? 'Ajouter un rendez-vous' : 'Add appointment'}
+      </Link>
+    </div>
   );
 }
 
@@ -1099,12 +1136,34 @@ export default function DealDrawer({
               <div>
                 <Section titre={fr ? 'Valeur' : 'Value'}>
                   <div className="rounded-xl border border-outline bg-surface-card px-3.5 py-3">
-                    <p className="text-[22px] font-semibold text-text-primary tabular-nums leading-none">
-                      {montantCents != null && montantCents > 0 ? montant(montantCents, fr) : '—'}
-                    </p>
-                    <p className="text-[11px] text-text-tertiary mt-1.5">
-                      {LIBELLE_PROVENANCE[provenance]}
-                    </p>
+                    {/*
+                      Un montant venu du DERNIER DEVIS DU CLIENT n'est pas la
+                      valeur de ce deal-ci : c'est un chiffre d'un autre
+                      contrat, parfois d'un autre service. Affiché en gros, il
+                      se prend pour une promesse — un « Nouveau lead » de
+                      4 900 $ alors que rien n'a été chiffré.
+                      On le garde comme REPÈRE, en petit, et le gros chiffre
+                      reste vide tant que ce deal n'a ni devis ni job.
+                    */}
+                    {provenance === 'devis_client' ? (
+                      <>
+                        <p className="text-[22px] font-semibold text-text-muted tabular-nums leading-none">—</p>
+                        <p className="mt-1.5 text-[11px] text-text-tertiary">
+                          {fr
+                            ? `Rien de chiffré pour ce deal. Dernier devis du client : ${montant(montantCents ?? 0, fr)}.`
+                            : `Nothing quoted for this deal. Client's last quote: ${montant(montantCents ?? 0, fr)}.`}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-[22px] font-semibold text-text-primary tabular-nums leading-none">
+                          {montantCents != null && montantCents > 0 ? montant(montantCents, fr) : '—'}
+                        </p>
+                        <p className="text-[11px] text-text-tertiary mt-1.5">
+                          {LIBELLE_PROVENANCE[provenance]}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </Section>
 
