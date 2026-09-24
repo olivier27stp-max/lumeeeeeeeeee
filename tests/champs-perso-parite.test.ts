@@ -63,6 +63,21 @@ describe('garanties écrites dans la migration', () => {
       expect(MIG).toMatch(new RegExp(`custom_field_values_${e}_fk\\s+foreign key \\(org_id, ${e}_id\\)\\s+references public\\.\\w+\\s+\\(org_id, id\\) on delete cascade`));
     }
   });
+  it('RLS FORCÉE sur les six tables (invariant check_rls_coverage, cron quotidien)', () => {
+    const force = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260926100300_champs_perso_force_rls.sql'), 'utf8');
+    for (const t of ['custom_field_folders', 'custom_fields', 'custom_field_options', 'custom_field_values', 'custom_field_value_options', 'custom_field_pipeline_cards']) {
+      expect(force).toContain(`alter table public.${t} force row level security;`);
+    }
+  });
+  it('le retrait de l’ancien registre ne casse pas le cron des invariants', () => {
+    const retrait = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '20260926100200_retirer_custom_columns.sql'), 'utf8');
+    // check_all_invariants est redéfinie AVANT de retirer check_custom_field_orphans…
+    expect(retrait.indexOf('CREATE OR REPLACE FUNCTION public.check_all_invariants()'))
+      .toBeLessThan(retrait.indexOf('drop function if exists public.check_custom_field_orphans()'));
+    // …et ne l'appelle plus.
+    const corps = retrait.slice(retrait.indexOf('CREATE OR REPLACE FUNCTION public.check_all_invariants()'), retrait.indexOf('end $function$'));
+    expect(corps).not.toContain('check_custom_field_orphans');
+  });
   it('RLS activée sur les six tables', () => {
     for (const t of ['custom_field_folders', 'custom_fields', 'custom_field_options', 'custom_field_values', 'custom_field_value_options', 'custom_field_pipeline_cards']) {
       expect(MIG).toContain(`alter table public.${t} enable row level security;`);

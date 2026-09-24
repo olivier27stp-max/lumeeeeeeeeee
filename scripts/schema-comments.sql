@@ -20,8 +20,8 @@ DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.notes_tags IS ''[B] CRM — Note ta
 DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.notes_checklist IS ''[B] CRM — Note checklists'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.note_history IS ''[B] CRM — Note version history'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.note_boards IS ''[B] CRM — Visual note boards'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
-DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.custom_columns IS ''[B] CRM — Custom field definitions'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
-DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.custom_column_values IS ''[B] CRM — Custom field values'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
+DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.custom_fields IS ''[B] CRM — Custom field definitions (v2)'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
+DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.custom_field_values IS ''[B] CRM — Custom field values (v2)'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
 -- OPERATIONS
 DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.jobs IS ''[C] Ops — Work orders / jobs'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;
 DO $$ BEGIN EXECUTE 'COMMENT ON TABLE public.job_line_items IS ''[C] Ops — Job line items (services)'''; EXCEPTION WHEN undefined_table THEN NULL; END $$;

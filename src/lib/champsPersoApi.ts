@@ -15,6 +15,7 @@ import type {
 } from './champs/types';
 import type { ChampStandard } from './champs/standard';
 import type { Condition } from './champs/filtres';
+import { valeurCsv } from './champs/valeurs';
 
 export type { ChampPerso, DossierChamp, ObjetChamp, TypeChamp, ValeurChamp, ValeurEnregistree, Condition };
 
@@ -219,4 +220,25 @@ export async function lireFuseau(): Promise<string> {
   const { data, error } = await supabase.from('company_settings').select('timezone').eq('org_id', orgId).maybeSingle();
   if (error) console.error('[champsPersoApi] fuseau illisible', error.message);
   return (data?.timezone as string | undefined) || 'America/Toronto';
+}
+
+/**
+ * Colonnes de champs personnalisés pour un export CSV : en-têtes (libellés)
+ * et, par fiche, les valeurs dans le même ordre. Vide si le drapeau
+ * `custom_fields_v2` est coupé ou si l'objet n'a aucun champ : l'export
+ * sort alors exactement comme avant.
+ */
+export async function colonnesChampsCsv(
+  objet: ObjetChamp, ids: string[], fr: boolean,
+): Promise<{ entetes: string[]; valeurs: (id: string) => string[] }> {
+  const vide = { entetes: [] as string[], valeurs: () => [] as string[] };
+  if (ids.length === 0) return vide;
+  const liste = await listerChamps(objet);
+  if (!liste.enabled || liste.fields.length === 0) return vide;
+  const toutes: Record<string, Record<string, ValeurEnregistree>> = {};
+  for (let i = 0; i < ids.length; i += 2000) Object.assign(toutes, await lireValeursLot(objet, ids.slice(i, i + 2000)));
+  return {
+    entetes: liste.fields.map((c) => c.label),
+    valeurs: (id) => liste.fields.map((c) => valeurCsv(c, toutes[id]?.[c.id]?.value, fr)),
+  };
 }

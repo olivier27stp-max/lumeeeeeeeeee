@@ -701,7 +701,7 @@ router.post('/emails/send-mobile-quote', async (req, res) => {
       quote_amount: montantTexte,
       valid_until: validite,
       quote_link: viewUrl || '',
-    });
+    }, undefined, { quote: quote.id, client: quote.client_id ?? null });
     const html = rendreCourrielClient({
       langue,
       marque: marqueDepuis(company),

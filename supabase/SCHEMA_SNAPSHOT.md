@@ -13,7 +13,7 @@
 
 **Généré le 2026-09-24 depuis la production (`bbzcuzqfgsdvjsymfwmr`).**
 
-## 1. Tables (250)
+## 1. Tables (248)
 
 | Table | RLS | FORCE | Policies | Lignes (est.) |
 |---|---|---|---|---|
@@ -58,14 +58,12 @@
 | `courses` | ✅ | ✅ | 7 | 18 |
 | `creator_space_notes` | ✅ | ✅ | 0 | ? |
 | `cron_locks` | ✅ | ✅ | 0 | 0 |
-| `custom_column_values` | ✅ | ✅ | 4 | 0 |
-| `custom_columns` | ✅ | ✅ | 4 | 2 |
-| `custom_field_folders` | ✅ | ❌ | 4 | ? |
-| `custom_field_options` | ✅ | ❌ | 4 | ? |
-| `custom_field_pipeline_cards` | ✅ | ❌ | 4 | ? |
-| `custom_field_value_options` | ✅ | ❌ | 2 | ? |
-| `custom_field_values` | ✅ | ❌ | 4 | ? |
-| `custom_fields` | ✅ | ❌ | 4 | ? |
+| `custom_field_folders` | ✅ | ✅ | 4 | ? |
+| `custom_field_options` | ✅ | ✅ | 4 | ? |
+| `custom_field_pipeline_cards` | ✅ | ✅ | 4 | ? |
+| `custom_field_value_options` | ✅ | ✅ | 2 | ? |
+| `custom_field_values` | ✅ | ✅ | 4 | ? |
+| `custom_fields` | ✅ | ✅ | 4 | ? |
 | `data_export_log` | ✅ | ✅ | 4 | 0 |
 | `data_migrations` | ✅ | ✅ | 1 | 2 |
 | `dead_letters` | ✅ | ✅ | 1 | 0 |
@@ -143,7 +141,7 @@
 | `lumi_briefings` | ✅ | ✅ | 2 | 35 |
 | `lumi_conversations` | ✅ | ✅ | 2 | 79 |
 | `lumi_messages` | ✅ | ✅ | 2 | 312 |
-| `lumi_traces` | ✅ | ❌ | 1 | 168 |
+| `lumi_traces` | ✅ | ❌ | 1 | 236 |
 | `memberships` | ✅ | ✅ | 5 | 41 |
 | `messages` | ✅ | ✅ | 4 | 148 |
 | `mfa_phone` | ✅ | ✅ | 1 | 1 |
@@ -962,35 +960,6 @@
 - `key` bigint NOT NULL
 - `locked_at` timestamp with time zone NOT NULL DEFAULT now()
 - `locked_until` timestamp with time zone NOT NULL
-
-### `custom_column_values`
-
-- `id` uuid NOT NULL DEFAULT gen_random_uuid()
-- `org_id` uuid NOT NULL
-- `column_id` uuid NOT NULL
-- `record_id` uuid NOT NULL
-- `value_text` text
-- `value_number` numeric
-- `value_boolean` boolean
-- `value_date` date
-- `value_json` jsonb
-- `created_at` timestamp with time zone NOT NULL DEFAULT now()
-- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
-
-### `custom_columns`
-
-- `id` uuid NOT NULL DEFAULT gen_random_uuid()
-- `org_id` uuid NOT NULL
-- `entity` text NOT NULL
-- `name` text NOT NULL
-- `col_type` text NOT NULL
-- `config` jsonb NOT NULL DEFAULT '{}'::jsonb
-- `position` integer NOT NULL DEFAULT 0
-- `visible` boolean NOT NULL DEFAULT true
-- `required` boolean NOT NULL DEFAULT false
-- `created_at` timestamp with time zone NOT NULL DEFAULT now()
-- `updated_at` timestamp with time zone NOT NULL DEFAULT now()
-- `deleted_at` timestamp with time zone
 
 ### `custom_field_folders`
 
@@ -4288,7 +4257,7 @@
 - `outcome` text
 - `summary` jsonb NOT NULL DEFAULT '{}'::jsonb
 
-## 3. Policies RLS (679)
+## 3. Policies RLS (671)
 
 
 ### `a2p_registrations`
@@ -4670,30 +4639,6 @@
 - **courses_update** — UPDATE, PERMISSIVE, roles={public}
   - USING: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
   - WITH CHECK: `has_org_admin_role(( SELECT auth.uid() AS uid), org_id)`
-
-### `custom_column_values`
-
-- **custom_column_values_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **custom_column_values_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **custom_column_values_select_org** — SELECT, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **custom_column_values_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-
-### `custom_columns`
-
-- **custom_columns_delete_org** — DELETE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **custom_columns_insert_org** — INSERT, PERMISSIVE, roles={authenticated}
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **custom_columns_select_org** — SELECT, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-- **custom_columns_update_org** — UPDATE, PERMISSIVE, roles={authenticated}
-  - USING: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
-  - WITH CHECK: `has_org_membership(( SELECT auth.uid() AS uid), org_id)`
 
 ### `custom_field_folders`
 
@@ -6597,7 +6542,7 @@
   - WITH CHECK: `true`
 
 
-## 4. Fonctions (395)
+## 4. Fonctions (394)
 
 Corps non inclus — ils divergent, et c'est précisément ce qui a trompé
 l'audit. Lire le corps réel avec :
@@ -6679,7 +6624,6 @@ l'audit. Lire le corps réel avec :
 | `check_all_invariants()` → TABLE(check_name text, failures bigint, detail text) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_availability_overlap()` → trigger | non | search_path=public, pg_temp | service_role=X/postgres |
 | `check_cross_tenant_references()` → TABLE(relation text, violations bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
-| `check_custom_field_orphans()` → TABLE(value_id uuid, org_id uuid, entity text, record_id uuid) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_exposed_trigger_functions()` → TABLE(function_name text, exposed_to text) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
 | `check_failing_cron_jobs()` → TABLE(jobname text, failures_7d bigint, last_error text) | ⚠️ oui | search_path=public, pg_catalog, pg_temp | service_role=X/postgres |
 | `check_invoice_numbering_invariant()` → TABLE(org_id uuid, invoice_number text, occurrences bigint) | ⚠️ oui | search_path=public, pg_temp | service_role=X/postgres |
@@ -7019,7 +6963,7 @@ l'audit. Lire le corps réel avec :
 - `v_revenue_analytics` — security_invoker=true
 - `v_schedule_calendar` — security_invoker=true
 
-## 6. Contraintes (1313)
+## 6. Contraintes (1303)
 
 
 ### `a2p_registrations`
@@ -7345,36 +7289,6 @@ l'audit. Lire le corps réel avec :
 ### `cron_locks`
 
 - `cron_locks_pkey` — PRIMARY KEY (key)
-
-### `custom_column_values`
-
-- `custom_column_values_column_id_fkey` — FOREIGN KEY (column_id) REFERENCES custom_columns(id) ON DELETE CASCADE
-- `custom_column_values_column_same_org` — FOREIGN KEY (org_id, column_id) REFERENCES custom_columns(org_id, id) ON DELETE CASCADE
-- `custom_column_values_exactly_one_value` — CHECK ((((((
-CASE
-    WHEN (value_text IS NOT NULL) THEN 1
-    ELSE 0
-END +
-CASE
-    WHEN (value_number IS NOT NULL) THEN 1
-    ELSE 0
-END) +
-CASE
-    WHEN (value_boolean IS NOT NULL) THEN 1
-    ELSE 0
-END) +
-CASE
-    WH
-- `custom_column_values_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
-- `custom_column_values_pkey` — PRIMARY KEY (id)
-
-### `custom_columns`
-
-- `custom_columns_col_type_check` — CHECK ((col_type = ANY (ARRAY['text'::text, 'number'::text, 'status'::text, 'dropdown'::text, 'date'::text, 'checkbox'::text, 'email'::text, 'phone'::text, 'url'::text, 'currency'::text, 'rating'::text, 'label'::text])))
-- `custom_columns_entity_check` — CHECK ((entity = ANY (ARRAY['clients'::text, 'jobs'::text, 'invoices'::text, 'deals'::text])))
-- `custom_columns_org_id_fkey` — FOREIGN KEY (org_id) REFERENCES orgs(id) ON DELETE CASCADE
-- `custom_columns_org_id_id_uq` — UNIQUE (org_id, id)
-- `custom_columns_pkey` — PRIMARY KEY (id)
 
 ### `custom_field_folders`
 
@@ -9104,7 +9018,7 @@ CASE object_type
 
 - `webhook_receipts_pkey` — PRIMARY KEY (id)
 
-## 7. Triggers (259)
+## 7. Triggers (257)
 
 - `a2p_registrations` → **trg_a2p_registrations_updated_at** (`set_updated_at()`)
 - `activity_notes` → **trg_ac_track_activity_notes** (`ac_track_activity_notes()`)
@@ -9144,8 +9058,6 @@ CASE object_type
 - `course_lessons` → **set_course_lessons_updated_at** (`set_updated_at()`)
 - `course_modules` → **set_course_modules_updated_at** (`set_updated_at()`)
 - `courses` → **set_courses_updated_at** (`set_updated_at()`)
-- `custom_column_values` → **custom_column_values_updated_at** (`set_updated_at()`)
-- `custom_columns` → **custom_columns_updated_at** (`set_updated_at()`)
 - `custom_field_folders` → **custom_field_folders_updated_at** (`set_updated_at()`)
 - `custom_field_options` → **custom_field_options_avant_suppression** (`cf_option_avant_suppression()`)
 - `custom_field_options` → **custom_field_options_updated_at** (`set_updated_at()`)
