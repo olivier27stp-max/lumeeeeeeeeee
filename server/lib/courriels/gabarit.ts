@@ -437,11 +437,17 @@ export function rendreCourrielClient(c: CourrielClient): string {
     : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${FOND_CLIENT};">
 <tr><td align="left" style="background:${FOND_CLIENT};font-size:19px;font-weight:700;color:#101828;">${echapper(nom)}</td></tr>
 </table>`;
-  // Le téléphone et le courriel d'abord, et cliquables : un client qui a une
-  // question veut souvent appeler, pas écrire. L'adresse postale suit.
+  /* Le téléphone et le courriel d'abord, et cliquables : un client qui a une
+     question veut souvent appeler, pas écrire. L'adresse postale suit.
+
+     Ils portent la couleur de L'ENTREPRISE, pas le bleu de Lume. Ils étaient
+     en `BLEU_LUME` : dans le courriel de Coquin lavage, les seuls liens
+     colorés du pied étaient donc au bleu d'un produit que son client ne
+     connaît pas. `couleur` a déjà traversé `couleurBouton`, donc elle est
+     lisible. */
   const joindre = [
-    c.marque.telephone ? `<a href="tel:${echapper(String(c.marque.telephone).replace(/[^\d+]/g, ''))}" style="color:${BLEU_LUME};text-decoration:none;font-weight:600;">${echapper(c.marque.telephone)}</a>` : '',
-    c.marque.email ? `<a href="mailto:${echapper(c.marque.email)}" style="color:${BLEU_LUME};text-decoration:none;font-weight:600;">${echapper(c.marque.email)}</a>` : '',
+    c.marque.telephone ? `<a href="tel:${echapper(String(c.marque.telephone).replace(/[^\d+]/g, ''))}" style="color:${couleur};text-decoration:none;font-weight:600;">${echapper(c.marque.telephone)}</a>` : '',
+    c.marque.email ? `<a href="mailto:${echapper(c.marque.email)}" style="color:${couleur};text-decoration:none;font-weight:600;">${echapper(c.marque.email)}</a>` : '',
   ].filter(Boolean).join(' &nbsp;&middot;&nbsp; ');
   const postal = [c.marque.adresse, c.marque.siteWeb].filter(Boolean).map((x) => echapper(x)).join(' &nbsp;&middot;&nbsp; ');
   const taxes = (c.marque.lignesTaxes || []).filter(Boolean);
@@ -451,7 +457,7 @@ ${joindre ? `<p style="margin:0;font-size:13px;line-height:1.6;">${joindre}</p>`
 <p style="margin:${joindre ? '4px' : '0'} 0 0;font-size:12px;line-height:1.5;color:${GRIS_DOUX};">${echapper(nom)}${postal ? ` &nbsp;&middot;&nbsp; ${postal}` : ''}</p>
 ${liensSociauxHtml(c.marque.liensSociaux)}
 ${taxes.length ? `<p style="margin:8px 0 0;font-size:11px;color:${GRIS_PALE};">${taxes.map(echapper).join(' &nbsp;&middot;&nbsp; ')}</p>` : ''}
-<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${BLEU_LUME};text-decoration:none;font-weight:700;">Lume</a></p>`;
+<p style="margin:12px 0 0;font-size:11px;color:${GRIS_PALE};">${envoyeAvec} <a href="https://lumecrm.net" style="color:${GRIS_PALE};text-decoration:none;font-weight:600;">Lume</a></p>`;
   return coquille({
     langue: c.langue, titreDocument: c.titre || nom, preheader: c.preheader, enTeteHtml: enTete,
     corpsHtml: corpsCommun({ ...c, signature: c.signature === undefined ? (c.langue === 'fr' ? `— ${nom}` : `— ${nom}`) : c.signature }, couleur),
