@@ -22,6 +22,7 @@ import { formaterValeur } from '../../lib/champs/valeurs';
 import type { ChampPerso, ObjetChamp, ValeurEnregistree } from '../../lib/champs/types';
 import type { Condition } from '../../lib/champs/filtres';
 import EditeurConditions, { conditionComplete } from './EditeurConditions';
+import { messageChamps } from '../../lib/champs/messages';
 
 const MAX_COLONNES = 4;
 const AUCUN_CHAMP: ChampPerso[] = [];
@@ -62,10 +63,10 @@ export function useChampsListe(objet: ObjetChamp, fr: boolean) {
     try {
       return { filtre: compilerFiltresListe(completes, champs, fuseau), erreur: null };
     } catch (err) {
-      return { filtre: FILTRE_VIDE, erreur: err instanceof Error ? err.message : String(err) };
+      return { filtre: FILTRE_VIDE, erreur: messageChamps(err instanceof Error ? err.message : String(err), fr) };
     }
     // `cle` résume `completes` ; le fuseau et les champs changent rarement.
-  }, [cle, champs, fuseau, isEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cle, champs, fuseau, isEnabled, fr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const colonnes = useMemo(() => colonnesIds.map((id) => champs.find((c) => c.id === id)).filter((c): c is ChampPerso => !!c), [colonnesIds, champs]);
 

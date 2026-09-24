@@ -21,6 +21,7 @@ import { ecrireValeurs, listerChamps } from '../../lib/champsPersoApi';
 import { preparerValeur, ErreurValeur } from '../../lib/champs/valeurs';
 import type { ObjetChamp, ValeurChamp } from '../../lib/champs/types';
 import ChampSaisie from './ChampSaisie';
+import { messageChamps } from '../../lib/champs/messages';
 
 export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
   const { isEnabled } = useModuleAccess('custom_fields_v2');
@@ -55,7 +56,7 @@ export function useChampsCreation(objet: ObjetChamp, fr: boolean) {
       try {
         preparerValeur(c, v);
       } catch (err) {
-        if (err instanceof ErreurValeur) return err.message;
+        if (err instanceof ErreurValeur) return messageChamps(err.message, fr);
         throw err;
       }
     }

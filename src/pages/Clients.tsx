@@ -25,6 +25,7 @@ import UnifiedAvatar from '../components/ui/UnifiedAvatar';
 import { useChampsListe, useValeursPage, CelluleChamps } from '../components/champs/liste';
 import { correspondancesImport, ecrireValeurs } from '../lib/champsPersoApi';
 import { valeurDepuisTexte } from '../lib/champs/valeurs';
+import { messageChamps } from '../lib/champs/messages';
 
 type ClientSort = 'recent' | 'oldest' | 'name_asc' | 'name_desc';
 
@@ -507,7 +508,7 @@ export default function Clients() {
             if (valeurs.length && cree?.id) {
               const refus = (await ecrireValeurs('client', cree.id, valeurs)).filter((r) => !r.ok);
               // Le client est créé ; une valeur refusée est signalée comme un échec de ligne.
-              for (const r of refus) failures.push({ line: i + 1, reason: r.erreur || 'champ personnalisé refusé' });
+              for (const r of refus) failures.push({ line: i + 1, reason: r.erreur || messageChamps('champ personnalisé refusé') });
             }
           } catch (rowErr: any) {
             failures.push({ line: i + 1, reason: rowErr?.message || 'unknown' });
