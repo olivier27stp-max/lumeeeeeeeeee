@@ -79,7 +79,16 @@ export type CRMEventType =
    * notes écrites PAR une automatisation n'émettent rien — sinon une règle
    * « ajouter une note » qui écoute « note ajoutée » tournerait en boucle.
    */
-  | 'note.added';
+  | 'note.added'
+  /**
+   * Une date personnalisée est atteinte (fin de contrat, échéance de
+   * garantie, anniversaire d'installation).
+   *
+   * Émis par le balayage QUOTIDIEN `balayerRappelsDates`, jamais par une
+   * écriture : une date se corrige, un client se supprime, et une règle
+   * peut être créée après la saisie. Un balayage voit l'état réel du jour.
+   */
+  | 'date.reached';
 
 export interface CRMEvent {
   type: CRMEventType;
@@ -129,6 +138,7 @@ const EVENT_TO_ACTIVITY: Record<CRMEventType, string> = {
   'client.tagged': 'client_tagged',
   'task.completed': 'task_completed',
   'note.added': 'note_added',
+  'date.reached': 'date_reached',
 };
 
 // ── Bus singleton ───────────────────────────────────────────────

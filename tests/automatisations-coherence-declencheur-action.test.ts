@@ -46,6 +46,7 @@ const ENTITE_DU_DECLENCHEUR: Record<string, string> = {
   'client.tagged': 'client',
   'task.completed': 'client',
   'note.added': 'client',
+  'date.reached': 'client',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };

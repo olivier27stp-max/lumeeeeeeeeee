@@ -193,6 +193,13 @@ export const DECLENCHEURS: DeclencheurCatalogue[] = [
     famille: 'client', entite: 'lead',
   },
 
+  {
+    cle: 'date.reached', fr: 'Date atteinte', en: 'Date reached',
+    aide_fr: 'Quand une date d’un champ personnalisé arrive — fin de contrat, garantie, entretien annuel.',
+    aide_en: 'When a date from a custom field arrives — contract end, warranty, yearly service.',
+    famille: 'client', entite: 'lead',
+  },
+
   // ── Pipeline de ventes ──
   {
     cle: 'deal.stage_entered', fr: 'Opportunité entre dans une étape', en: 'Deal enters a stage',
@@ -730,6 +737,7 @@ export const ENTITE_PAR_DECLENCHEUR: Record<string, string> = {
   'client.tagged': 'client',
   'task.completed': 'client',
   'note.added': 'client',
+  'date.reached': 'client',
   'deal.stage_entered': 'deal',
   'deal.stage_idle': 'deal',
 };
