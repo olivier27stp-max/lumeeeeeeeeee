@@ -28,7 +28,7 @@ import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Undo2, Redo2, Cloud, Check, Loader2,
-  Play, Plus, Hand, Maximize2, ZoomIn, ZoomOut, Sparkles,
+  Play, Plus, Hand, Maximize2, ZoomIn, ZoomOut, Sparkles, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -37,6 +37,7 @@ import type { AutomationRule } from '../lib/automationRulesApi';
 import {
   chargerAutomatisations,
   modifierAutomatisation,
+  genererParcoursAvecLumi,
   type CatalogueAutomatisations,
 } from '../lib/automationBuilderApi';
 import {
@@ -48,6 +49,7 @@ import {
 } from '../lib/sequenceTypes';
 import SequenceCanvas from '../components/automations/SequenceCanvas';
 import { OngletJournaux, OngletHistorique } from '../components/automations/OngletJournaux';
+import OngletReglages, { type ReglagesAutomatisation } from '../components/automations/OngletReglages';
 import { confirmer } from '../components/ui/ConfirmDialog';
 
 type Onglet = 'parcours' | 'reglages' | 'historique' | 'journaux';
@@ -140,10 +142,39 @@ export default function AutomationBuilderPage() {
    * dans le canevas avant d'être appliquée. En attendant, on le dit
    * franchement plutôt que de faire semblant.
    */
-  const construireAvecLumi = () => {
-    toast.info(fr
-      ? 'Lumi construira ton parcours ici — la connexion arrive.'
-      : 'Lumi will build your path here — the connection is coming.');
+  /** Ce que Lumi a compris, affiché au-dessus du canevas après génération. */
+  const [resumeLumi, setResumeLumi] = useState<string | null>(null);
+  const [genere, setGenere] = useState(false);
+
+  /**
+   * Lumi propose, l'utilisateur dispose.
+   *
+   * Le parcours revient dans le canevas SANS être enregistré : il devient un
+   * brouillon que l'on peut modifier, compléter ou jeter. On mémorise le
+   * changement comme n'importe quelle édition, donc « annuler » le rattrape.
+   */
+  const construireAvecLumi = async () => {
+    const demande = prompt.trim();
+    if (demande.length < 10 || genere) return;
+    setGenere(true);
+    try {
+      const propose = await genererParcoursAvecLumi(demande, fr ? 'fr' : 'en');
+      memoriser(propose.steps as Etape[]);
+      setResumeLumi(propose.resume || null);
+      // Le nom et le déclencheur suivent la proposition — c'est ce que
+      // l'utilisateur a décrit, il pourra les changer.
+      if (propose.nom) setNom(propose.nom);
+      if (propose.trigger_event && regle) {
+        setRegle({ ...regle, trigger_event: propose.trigger_event });
+        modifierAutomatisation(regle.id, { trigger_event: propose.trigger_event }).catch(() => {});
+      }
+      setPrompt('');
+      toast.success(fr ? 'Lumi a construit le parcours' : 'Lumi built the path');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenere(false);
+    }
   };
 
   // ── Chargement ──
@@ -513,11 +544,15 @@ export default function AutomationBuilderPage() {
                         <button
                           type="button"
                           onClick={construireAvecLumi}
-                          disabled={!prompt.trim()}
+                          disabled={prompt.trim().length < 10 || genere}
                           className="glass-button-primary inline-flex items-center gap-1.5 disabled:opacity-40"
                         >
-                          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                          {fr ? 'Construire' : 'Build'}
+                          {genere
+                            ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                            : <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
+                          {genere
+                            ? (fr ? 'Lumi construit…' : 'Lumi is building…')
+                            : (fr ? 'Construire' : 'Build')}
                         </button>
                       </div>
 
@@ -599,6 +634,24 @@ export default function AutomationBuilderPage() {
               </div>
             )}
 
+            {/* Ce que Lumi a compris — au-dessus du canevas, comme leur
+                bandeau « Explain this workflow ». L'utilisateur doit pouvoir
+                vérifier d'un coup d'œil avant de publier. */}
+            {resumeLumi && (
+              <div className="absolute left-1/2 top-4 z-10 flex max-w-[520px] -translate-x-1/2 items-start gap-2 rounded-xl border border-accent/40 bg-surface-card px-3 py-2 shadow-sm">
+                <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+                <p className="text-[12px] text-text-primary">{resumeLumi}</p>
+                <button
+                  type="button"
+                  onClick={() => setResumeLumi(null)}
+                  aria-label={fr ? 'Fermer' : 'Close'}
+                  className="-mr-1 shrink-0 rounded p-0.5 text-text-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            )}
+
             {/* Ajouter — en haut à droite, comme chez GHL. */}
             <button
               type="button"
@@ -660,12 +713,13 @@ export default function AutomationBuilderPage() {
         {onglet === 'journaux' && <div className="absolute inset-0 overflow-y-auto"><OngletJournaux ruleId={regle.id} fr={fr} /></div>}
 
         {onglet === 'reglages' && (
-          <div className="flex h-full items-center justify-center p-8">
-            <p className="max-w-sm text-center text-sm text-text-secondary">
-              {fr
-                ? 'Les réglages de cette automatisation arrivent ici : fenêtre d’envoi, arrêt sur réponse, réinscription.'
-                : 'This automation’s settings will live here: send window, stop on reply, re-entry.'}
-            </p>
+          <div className="absolute inset-0 overflow-y-auto">
+            <OngletReglages
+              ruleId={regle.id}
+              reglages={(regle.settings ?? null) as ReglagesAutomatisation | null}
+              fr={fr}
+              onChange={(r) => setRegle({ ...regle, settings: r as Record<string, unknown> | null })}
+            />
           </div>
         )}
       </div>

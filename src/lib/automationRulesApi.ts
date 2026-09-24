@@ -24,6 +24,8 @@ export interface AutomationRule {
    * + `actions`). Forme décrite dans src/lib/sequenceTypes.ts.
    */
   steps?: unknown[] | null;
+  /** Réglages propres à la règle (null = les défauts du moteur). */
+  settings?: Record<string, unknown> | null;
   is_active: boolean;
   is_preset: boolean;
   preset_key: string | null;

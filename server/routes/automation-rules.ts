@@ -28,7 +28,9 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { Router } from 'express';
-import { requireAuthedClient } from '../lib/supabase';
+import { requireAuthedClient, getServiceClient } from '../lib/supabase';
+import { genererParcours } from '../lib/lumi/generer-parcours';
+import { sequenceEtapes } from '../lib/validation';
 import { validate, automationRuleCreateSchema, automationRuleUpdateSchema } from '../lib/validation';
 import { logger } from '../lib/logger';
 import {
@@ -41,7 +43,7 @@ import {
 const router = Router();
 
 /** Colonnes renvoyées au navigateur. `org_id` n'a aucun intérêt côté client. */
-const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, is_active, is_preset, preset_key, created_at, updated_at';
+const COLONNES = 'id, name, description, trigger_event, conditions, delay_seconds, actions, steps, settings, is_active, is_preset, preset_key, created_at, updated_at';
 
 /**
  * Les gardes qui ont besoin du catalogue, donc impossibles à exprimer en Zod
@@ -136,6 +138,7 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
       // `steps` non fourni = règle simple : la colonne reste NULL et le moteur
       // garde exactement le comportement d'avant.
       steps: req.body.steps ?? null,
+      settings: req.body.settings ?? null,
       // Une automatisation naît en pause : elle écrit aux clients, personne ne
       // doit en démarrer une par accident en fermant le formulaire.
       is_active: req.body.is_active ?? false,
@@ -155,6 +158,76 @@ router.post('/automations/rules', validate(automationRuleCreateSchema), async (r
   }
 
   return res.status(201).json(data);
+});
+
+// ── Lumi construit un parcours ──────────────────────────────
+
+/**
+ * POST /api/automations/rules/generer
+ *
+ * Lumi PROPOSE un parcours ; il n'enregistre rien. La proposition est
+ * renvoyée au navigateur, dessinée dans le canevas, et c'est l'utilisateur
+ * qui décide de la garder. C'est la règle du projet : une écriture n'est
+ * jamais exécutée par l'orchestrateur.
+ *
+ * Ce que Lumi renvoie repasse par la MÊME validation que ce qu'un humain
+ * enregistre. Un modèle qui inventerait un déclencheur, une action hors
+ * catalogue ou une boucle est refusé ici — avant que l'utilisateur ne voie
+ * un parcours qui ne pourrait jamais tourner.
+ */
+router.post('/automations/rules/generer', async (req, res) => {
+  const auth = await requireAuthedClient(req, res);
+  if (!auth) return;
+
+  const demande = String((req.body as { demande?: unknown })?.demande ?? '').trim();
+  if (demande.length < 10) {
+    return res.status(400).json({ error: 'Décris ton automatisation en une phrase.' });
+  }
+  const langue = (req.body as { langue?: string })?.langue === 'en' ? 'en' : 'fr';
+
+  // Le budget et le journal des coûts vivent côté service_role : la RLS
+  // interdirait à l'utilisateur d'écrire dans `ai_usage`.
+  const resultat = await genererParcours({
+    admin: getServiceClient(),
+    orgId: auth.orgId,
+    userId: auth.user.id,
+    demande,
+    langue,
+  });
+
+  if (!resultat.parcours) {
+    return res.status(422).json({ error: resultat.erreur ?? 'Lumi n’a rien pu construire.' });
+  }
+
+  // Le garde-fou : ce que Lumi propose doit passer la validation humaine.
+  const verdict = sequenceEtapes.safeParse(resultat.parcours.steps);
+  if (!verdict.success) {
+    logger.error('[lumi/parcours] proposition invalide', {
+      org_id: auth.orgId,
+      motifs: verdict.error.issues.map((i) => i.message).slice(0, 3),
+    });
+    return res.status(422).json({
+      error: langue === 'fr'
+        ? 'Lumi a proposé un parcours que le moteur ne saurait pas exécuter. Reformule, ou construis-le avec le « + ».'
+        : 'Lumi proposed a path the engine could not run. Rephrase, or build it with “+”.',
+    });
+  }
+
+  const decl = trouverDeclencheur(resultat.parcours.trigger_event);
+  if (!decl) {
+    return res.status(422).json({
+      error: langue === 'fr'
+        ? 'Lumi a choisi un déclencheur qui n’existe pas. Reformule ta demande.'
+        : 'Lumi picked a trigger that does not exist. Rephrase your request.',
+    });
+  }
+
+  return res.json({
+    nom: resultat.parcours.nom,
+    trigger_event: resultat.parcours.trigger_event,
+    resume: resultat.parcours.resume,
+    steps: verdict.data,
+  });
 });
 
 // ── Modifier ────────────────────────────────────────────────
@@ -222,7 +295,7 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
 
   const { data: source, error: lectureErr } = await auth.client
     .from('automation_rules')
-    .select('name, description, trigger_event, conditions, delay_seconds, actions, steps')
+    .select('name, description, trigger_event, conditions, delay_seconds, actions, steps, settings')
     .eq('id', req.params.id)
     .eq('org_id', auth.orgId)
     .maybeSingle();
@@ -244,6 +317,7 @@ router.post('/automations/rules/:id/duplicate', async (req, res) => {
       delay_seconds: source.delay_seconds,
       actions: source.actions,
       steps: source.steps ?? null,
+      settings: source.settings ?? null,
       // La copie d'un préréglage devient une automatisation À SOI : plus de
       // `preset_key`, donc le seeder ne la réécrira jamais, et tout y est
       // modifiable — y compris le déclencheur.

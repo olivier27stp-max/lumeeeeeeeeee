@@ -31,6 +31,8 @@ export interface BrouillonAutomatisation {
   actions: ActionAutomatisation[];
   /** Séquence. Absente = règle simple. */
   steps?: unknown[] | null;
+  /** Réglages propres à la règle. */
+  settings?: Record<string, unknown> | null;
   is_active?: boolean;
 }
 
@@ -161,4 +163,30 @@ export function depuisSecondes(secondes: number): { valeur: number; unite: Unite
   if (abs % SECONDES.jours === 0) return { valeur: abs / SECONDES.jours, unite: 'jours', avant };
   if (abs % SECONDES.heures === 0) return { valeur: abs / SECONDES.heures, unite: 'heures', avant };
   return { valeur: Math.round(abs / SECONDES.minutes), unite: 'minutes', avant };
+}
+
+// ── Lumi construit le parcours ──────────────────────────────
+
+export interface ParcoursPropose {
+  nom: string;
+  trigger_event: string;
+  resume: string;
+  steps: unknown[];
+}
+
+/**
+ * Demande à Lumi de construire un parcours à partir d'une phrase.
+ *
+ * Il PROPOSE : rien n'est enregistré. Ce qui revient est dessiné dans le
+ * canevas, et c'est l'utilisateur qui décide de le garder — la règle du
+ * projet veut qu'une écriture ne soit jamais exécutée par l'orchestrateur.
+ */
+export async function genererParcoursAvecLumi(demande: string, langue: 'fr' | 'en'): Promise<ParcoursPropose> {
+  const reponse = await fetch('/api/automations/rules/generer', {
+    method: 'POST',
+    headers: await entetes(),
+    body: JSON.stringify({ demande, langue }),
+  });
+  if (!reponse.ok) throw await erreurDe(reponse, 'Lumi n’a pas pu construire ce parcours.');
+  return reponse.json();
 }
