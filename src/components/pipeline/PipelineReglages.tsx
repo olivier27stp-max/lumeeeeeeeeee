@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { confirmer } from '../ui/ConfirmDialog';
 import CreerPipelineModal from './CreerPipelineModal';
+import PipelinesTableau from './PipelinesTableau';
 import { useTranslation } from '../../i18n';
 import {
   ajouterEtape, ajouterRaisonProposee, archiverEtape, archiverRaisonProposee,
@@ -714,11 +715,15 @@ function PartagePipeline({ pipelineId, membres, fr }: {
 
 // ── Écran ──────────────────────────────────────────────────
 
-export default function PipelineReglages({ pipelineId, etapes, deals, onChangement }: {
+export default function PipelineReglages({
+  pipelineId, etapes, deals, onChangement, onOuvrirPipeline,
+}: {
   pipelineId: string;
   etapes: PipelineStage[];
   deals: Deal[];
   onChangement: () => void;
+  /** Afficher ce pipeline sur le board, depuis le tableau. */
+  onOuvrirPipeline: (pipelineId: string) => void;
 }) {
   const { language } = useTranslation();
   const fr = language === 'fr';
@@ -1066,10 +1071,14 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
             </p>
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {pipelines.map((p) => (
+          <PipelinesTableau
+            pipelines={pipelines}
+            pipelineActif={pipelineId}
+            onChangement={() => { void rechargerPipelines(); onChangement(); }}
+            onOuvrir={onOuvrirPipeline}
+            onDefaut={(id) => { void basculerDefaut(id); }}
+            detail={(p) => (
               <LignePipeline
-                key={p.id}
                 pipeline={p}
                 fr={fr}
                 membres={membresOrg}
@@ -1077,8 +1086,8 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
                 onRenommer={(id, nom) => { void renommerLePipeline(id, nom); }}
                 onDefaut={(id) => { void basculerDefaut(id); }}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
       </Section>
 

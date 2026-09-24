@@ -195,10 +195,28 @@ export async function fetchPipelineDefaut(): Promise<{ id: string; name: string 
   return data ?? null;
 }
 
+/**
+ * Où la couleur d'une étape apparaît sur le board.
+ *
+ * Les teintes restent DÉRIVÉES du rang de l'étape (`presentation.ts`) : une
+ * palette stockée devrait être maintenue à la main, et réordonner un
+ * pipeline la désaccorderait en silence. Ce réglage dit seulement OÙ elle
+ * se pose.
+ */
+export type ModeCouleur = 'none' | 'dot' | 'tint';
+
 export interface PipelineResume {
   id: string;
   name: string;
   is_default: boolean;
+  /** Dernière modification du pipeline lui-même (pas de ses deals). */
+  updated_at?: string;
+  /** Étapes actives. Compté par la base — la liste seule ne le dirait pas. */
+  nb_etapes?: number;
+  /** Où le board pose la teinte : aucune, pastille, ou fond de colonne. */
+  color_mode?: ModeCouleur;
+  /** La prévision lit la probabilité du deal plutôt que celle de l'étape. */
+  use_deal_probability?: boolean;
 }
 
 /** Tous les pipelines de l'organisation — le défaut en premier, puis par nom. */
@@ -206,12 +224,28 @@ export async function fetchPipelines(): Promise<PipelineResume[]> {
   const orgId = await getCurrentOrgIdOrThrow();
   const { data, error } = await supabase
     .from('pipelines_ventes')
-    .select('id,name,is_default')
+    // `pipeline_stages(count)` : PostgREST compte les étapes actives sans
+    // les rapatrier. Les charger toutes pour n'afficher qu'un nombre
+    // ramènerait des centaines de lignes inutiles.
+    .select('id,name,is_default,updated_at,color_mode,use_deal_probability,pipeline_stages(count)')
     .eq('org_id', orgId)
+    .is('pipeline_stages.archived_at', null)
     .order('is_default', { ascending: false })
     .order('name');
   if (error) throw error;
-  return (data ?? []) as PipelineResume[];
+  return (data ?? []).map((r) => {
+    const x = r as Record<string, unknown>;
+    const compte = x.pipeline_stages as Array<{ count: number }> | undefined;
+    return {
+      id: x.id as string,
+      name: x.name as string,
+      is_default: x.is_default as boolean,
+      updated_at: x.updated_at as string | undefined,
+      nb_etapes: compte?.[0]?.count ?? 0,
+      color_mode: (x.color_mode as ModeCouleur | null) ?? 'none',
+      use_deal_probability: (x.use_deal_probability as boolean | null) ?? false,
+    };
+  });
 }
 
 export async function fetchStages(pipelineId: string): Promise<PipelineStage[]> {
@@ -1014,6 +1048,8 @@ export interface DossierClient {
   factures: LigneHistorique[];
   /** Les encaissements réels — ce qui est entré au compte. */
   transactions: LigneHistorique[];
+  /** Les propriétés du client : ses immeubles, ses adresses de service. */
+  proprietes: { id: string; nom: string; adresse: string | null }[];
   messages: MessageClient[];
   /** Somme encaissée depuis toujours — ce que le client a réellement payé. */
   paye_cents: number;
@@ -1022,7 +1058,7 @@ export interface DossierClient {
 }
 
 const DOSSIER_VIDE: DossierClient = {
-  jobs: [], devis: [], factures: [], transactions: [], messages: [], paye_cents: 0, du_cents: 0,
+  jobs: [], devis: [], factures: [], transactions: [], proprietes: [], messages: [], paye_cents: 0, du_cents: 0,
 };
 
 /**
@@ -1039,7 +1075,7 @@ const DOSSIER_VIDE: DossierClient = {
 export async function fetchDossierClient(clientId: string | null): Promise<DossierClient> {
   if (!clientId) return DOSSIER_VIDE;
 
-  const [jobsR, devisR, facturesR, messagesR, paiementsR] = await Promise.all([
+  const [jobsR, devisR, facturesR, messagesR, paiementsR, proprietesR] = await Promise.all([
     supabase.from('jobs')
       .select('id,job_number,title,status,total_cents,created_at')
       .eq('client_id', clientId).is('deleted_at', null)
@@ -1061,6 +1097,11 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
       .select('id,amount_cents,paid_at,method,status')
       .eq('client_id', clientId).is('deleted_at', null)
       .order('paid_at', { ascending: false }).limit(50),
+    // Les propriétés : l'équivalent terrain des « objets associés » de GHL.
+    supabase.from('properties')
+      .select('id,name,address')
+      .eq('client_id', clientId).is('deleted_at', null)
+      .order('name').limit(20),
   ]);
 
   const jobs = (jobsR.data ?? []).map((j: Record<string, unknown>) => ({
@@ -1107,8 +1148,14 @@ export async function fetchDossierClient(clientId: string | null): Promise<Dossi
     date: (t.paid_at as string) ?? '',
   }));
 
+  const proprietes = (proprietesR.data ?? []).map((x: Record<string, unknown>) => ({
+    id: x.id as string,
+    nom: (x.name as string) ?? '',
+    adresse: (x.address as string) ?? null,
+  }));
+
   return {
-    jobs, devis, factures, transactions, messages,
+    jobs, devis, factures, transactions, proprietes, messages,
     // `paid_cents` et `balance_cents` sont tenus par la base : on les somme,
     // on ne les recalcule pas. Une facture annulée porte un solde à zéro.
     paye_cents: (facturesR.data ?? []).reduce(
@@ -1405,9 +1452,21 @@ export interface EtapeSurMesure {
   show_in_reports?: boolean;
 }
 
-export async function creerPipelineSurMesure(nom: string, etapes: EtapeSurMesure[]): Promise<string> {
+/** Les réglages d'affichage et de calcul choisis à la création. */
+export interface ReglagesPipeline {
+  color_mode?: ModeCouleur;
+  use_deal_probability?: boolean;
+}
+
+export async function creerPipelineSurMesure(
+  nom: string,
+  etapes: EtapeSurMesure[],
+  reglages: ReglagesPipeline = {},
+): Promise<string> {
   const { data, error } = await supabase.rpc('creer_pipeline_sur_mesure', {
     p_nom: nom.trim(),
+    p_color_mode: reglages.color_mode ?? 'none',
+    p_use_deal_probability: reglages.use_deal_probability ?? false,
     p_etapes: etapes.map((e) => ({
       nom_fr: e.nom_fr.trim(),
       nom_en: (e.nom_en ?? e.nom_fr).trim(),

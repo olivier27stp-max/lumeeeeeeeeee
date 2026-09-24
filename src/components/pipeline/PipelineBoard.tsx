@@ -31,7 +31,7 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
 import {
   creerDealManuel, creerVue, estJobACreer, fetchVues, journaliserLot, nomClient, pastilles, priorite, supprimerVue,
-  type Deal, type PipelineStage, type VueSauvegardee,
+  type Deal, type ModeCouleur, type PipelineStage, type VueSauvegardee,
 } from '../../lib/pipelineVentesApi';
 import {
   LIBELLE_SOURCE, initiales, rangsOuverts, visuelEtape,
@@ -332,8 +332,10 @@ function CarteDeal({
 
 function Colonne({
   etape, etapes, rangOuvert, deals, membres, montants, onOuvrir, onAssigner, onChangement,
-  selection, onBasculerSelection,
+  selection, onBasculerSelection, modeCouleur,
 }: {
+  /** Où poser la teinte de l'étape — réglage du pipeline. */
+  modeCouleur: ModeCouleur;
   /** Les deals cochés. `undefined` = mode sélection inactif. */
   selection?: Set<string>;
   onBasculerSelection?: (dealId: string) => void;
@@ -366,9 +368,18 @@ function Colonne({
 
   return (
     <div className="flex w-[292px] shrink-0 flex-col">
-      <div className="px-0.5 pb-2.5">
+      <div
+        className={`px-0.5 pb-2.5 ${modeCouleur === 'tint' ? 'rounded-t-xl px-2 pt-2' : ''}`}
+        style={
+          // Une teinte de fond très diluée : elle doit distinguer les
+          // colonnes, pas concurrencer le texte qu'elle porte.
+          modeCouleur === 'tint' ? { background: `${v.teinte}1A` } : undefined
+        }
+      >
         <div className="flex items-center gap-2">
-          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: v.teinte }} aria-hidden="true" />
+          {modeCouleur !== 'none' && (
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: v.teinte }} aria-hidden="true" />
+          )}
           {/*
             Un vrai titre, pas un `span` : à la lecture d'écran, le board
             était une suite de textes sans structure — rien ne disait où
@@ -378,7 +389,7 @@ function Colonne({
             {fr ? etape.name_fr : etape.name_en}
           </h3>
         </div>
-        <p className="mt-1 flex gap-2 pl-4 text-[11.5px] text-text-secondary">
+        <p className={`mt-1 flex gap-2 text-[11.5px] text-text-secondary ${modeCouleur === 'none' ? '' : 'pl-4'}`}>
           <span className="tabular-nums">
             {deals.length} {fr ? (deals.length > 1 ? 'deals' : 'deal') : (deals.length > 1 ? 'deals' : 'deal')}
           </span>
@@ -1039,8 +1050,10 @@ function ModalEnregistrerVue({
 
 export default function PipelineBoard({
   deals, etapes, montants, membres, chargement, onOuvrir, onDeplacer, onAssigner, onChangement,
-  pipelines, pipelineActif, onChangerPipeline,
+  pipelines, pipelineActif, onChangerPipeline, modeCouleur = 'dot',
 }: {
+  /** Réglage du pipeline affiché. Par défaut la pastille, comme avant. */
+  modeCouleur?: ModeCouleur;
   deals: Deal[];
   etapes: PipelineStage[];
   /** Tous les pipelines de l'organisation — le sélecteur les propose vraiment. */
@@ -1712,6 +1725,7 @@ export default function PipelineBoard({
                 onChangement={onChangement}
                 selection={selection}
                 onBasculerSelection={basculerSelection}
+                modeCouleur={modeCouleur}
               />
             ))}
           </div>
