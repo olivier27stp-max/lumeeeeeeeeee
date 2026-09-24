@@ -175,3 +175,14 @@ describe('statuts déduits des dates (exports Jobber sans colonne de statut)', (
     expect((buildEntityRow('visit', rec({ start_at: '2026-10-30T08:30:00' }), ctx()) as any).row.status).toBe('scheduled');
   });
 });
+
+describe('job fermé avant sa date planifiée (contrainte jobs_dates_coherentes)', () => {
+  it('garde completed_at mais n\'écrit pas end_at avant start_at', () => {
+    const ctx: BuildContext = { migration: { org_id: 'o' } as any, createdBy: 'u', clientIdByRef: new Map([['a@b.ca', 'c1']]), propertyIdByRef: new Map(), jobIdByRef: new Map() };
+    const rec = { id: 'j', row_number: 1, entity_type: 'job', external_id: null, normalized: { job_number: '7', start_date: '2026-08-10', end_date: '2026-07-25' }, relations: { client_email_ref: 'a@b.ca' }, status: 'ready' } as StagingRow;
+    const r = buildEntityRow('job', rec, ctx) as any;
+    expect(r.row.status).toBe('completed');
+    expect(r.row.completed_at).toBe('2026-07-25T17:00:00');
+    expect(r.row.end_at).toBeUndefined();
+  });
+});

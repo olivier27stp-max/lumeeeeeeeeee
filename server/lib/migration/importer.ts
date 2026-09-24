@@ -770,7 +770,10 @@ export function buildEntityRow(entity: TargetEntity, rec: StagingRow, ctx: Build
         // Sans colonne de statut (export « One-off jobs » Jobber), une date de fermeture fait foi :
         // 858 jobs terminés arrivaient « planifiés » chez Vision Lavage (2026-09-24).
         status: str(n.status) ? mapJobStatus(str(n.status)) : (str(n.end_date) ? 'completed' : 'scheduled'),
-        ...(str(n.end_date) ? { end_at: `${str(n.end_date)}T17:00:00`, completed_at: `${str(n.end_date)}T17:00:00` } : {}),
+        // contrainte jobs_dates_coherentes : end_at jamais avant le début planifié (Jobber ferme
+        // parfois un job avant sa date prévue) — completed_at, lui, est toujours posé
+        ...(str(n.end_date) ? { completed_at: `${str(n.end_date)}T17:00:00` } : {}),
+        ...(str(n.end_date) && (!startAt || `${str(n.end_date)}T17:00:00` >= startAt) ? { end_at: `${str(n.end_date)}T17:00:00` } : {}),
         total_cents: totalCents,
         subtotal_cents: num(n.subtotal_cents) ?? totalCents,
         sale_date: str(n.sale_date) || str(n.created_date) || null,
