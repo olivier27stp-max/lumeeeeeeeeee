@@ -53,12 +53,6 @@ interface Props {
    * regardant, pas depuis un index.
    */
   revenirAuDefaut?: () => Promise<void> | void;
-  /**
-   * Remplacer le corps par un HTML importé. Porte d'expert : elle était offerte
-   * au même rang que « modifier le texte », alors que presque personne n'a de
-   * HTML à coller. Reléguée dans l'éditeur, discrète.
-   */
-  importerHtml?: () => void;
 }
 
 /** Un bloc du courriel : titre, paragraphe ou puce. */
@@ -153,7 +147,6 @@ function blocsEnTexte(blocs: Bloc[]): string {
 export default function EmailPreviewEditor({
   ruleId, ruleName, body, subject, fr, onClose, onSaved, enregistrerTexte, typeCourriel,
   revenirAuDefaut,
-  importerHtml,
 }: Props) {
   const [blocs, setBlocs] = useState<Bloc[]>(() => texteEnBlocs(htmlVersTexte(body)));
   const [objet, setObjet] = useState(subject);
@@ -660,14 +653,6 @@ export default function EmailPreviewEditor({
               {/* Les deux actions rares, reléguées ici : elles occupaient un
                   bouton-icône muet par ligne dans la liste, dont un
                   destructeur. On défait un texte en le regardant. */}
-              {importerHtml ? (
-                <button
-                  onClick={importerHtml}
-                  className="px-3 py-1.5 rounded-md text-[11px] text-text-tertiary hover:bg-surface-tertiary transition-colors"
-                >
-                  {fr ? 'Importer du HTML' : 'Import HTML'}
-                </button>
-              ) : null}
               {revenirAuDefaut ? (
                 <button
                   onClick={() => void revenirAuDefaut()}
