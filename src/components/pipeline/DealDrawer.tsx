@@ -1544,8 +1544,8 @@ export default function DealDrawer({
                           />
                           <p className="mt-1.5 text-[10.5px] text-text-muted">
                             {fr
-                              ? "Le deal sort du pipeline sans compter comme une défaite commerciale."
-                              : 'The deal leaves the pipeline without counting as a commercial loss.'}
+                              ? "Le deal rejoint « Perdu » et sort des prévisions : le prospect ne répond plus, on n'attend plus ce revenu."
+                              : 'The deal moves to “Lost” and leaves the forecast: the prospect has gone quiet, that revenue is no longer expected.'}
                           </p>
                           <div className="flex justify-end gap-2 mt-2">
                             <button
