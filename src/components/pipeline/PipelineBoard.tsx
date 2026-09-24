@@ -490,31 +490,64 @@ interface ChampsDeal {
   courriel: string;
   telephone: string;
   adresse: string;
+  /** Saisi en dollars ; converti en cents à l'envoi (les cents font foi). */
+  montant: string;
+  assigneA: string;
+  /** AAAA-MM-JJ. Une date seule : une heure la ferait reculer d'un jour. */
+  dateVisee: string;
+  source: string;
 }
 
-const CHAMPS_DEAL_VIDES: ChampsDeal = { prenom: '', nom: '', courriel: '', telephone: '', adresse: '' };
+/**
+ * La date visée par défaut : dans deux semaines.
+ *
+ * Un cycle de vente en service résidentiel se compte en jours, pas en mois.
+ * Une date par défaut fait entrer le deal dans la Chronologie tout de suite —
+ * elle est approximative, mais elle se corrige, alors qu'une date absente ne
+ * se remarque jamais.
+ */
+function dansDeuxSemaines(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 14);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const jj = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${jj}`;
+}
+
+function champsDealVides(): ChampsDeal {
+  return {
+    prenom: '', nom: '', courriel: '', telephone: '', adresse: '',
+    montant: '', assigneA: '', dateVisee: dansDeuxSemaines(), source: 'manual',
+  };
+}
 
 /**
  * Petit formulaire de création. En cas d'erreur de la base, il reste ouvert
  * avec les valeurs saisies : retaper une adresse parce qu'un courriel était
  * déjà pris est la meilleure façon de perdre quelqu'un.
  */
-function ModalNouveauDeal({ ouvert, fr, onFermer, onCree }: {
+function ModalNouveauDeal({ ouvert, fr, membres, onFermer, onCree }: {
   ouvert: boolean;
   fr: boolean;
   onFermer: () => void;
   onCree: () => void;
+  /** Pour proposer un responsable dès la création. */
+  membres: Membre[];
 }) {
-  const [champs, setChamps] = useState<ChampsDeal>(CHAMPS_DEAL_VIDES);
+  const [champs, setChamps] = useState<ChampsDeal>(champsDealVides);
   const [envoi, setEnvoi] = useState(false);
   const idPrenom = useId();
   const idNom = useId();
   const idCourriel = useId();
   const idTelephone = useId();
   const idAdresse = useId();
+  const idMontant = useId();
+  const idAssigne = useId();
+  const idDateVisee = useId();
+  const idSource = useId();
 
   function fermer() {
-    setChamps(CHAMPS_DEAL_VIDES);
+    setChamps(champsDealVides());
     onFermer();
   }
 
@@ -532,12 +565,24 @@ function ModalNouveauDeal({ ouvert, fr, onFermer, onCree }: {
     }
     setEnvoi(true);
     try {
+      // Saisi en dollars, envoyé en CENTS : les cents sont la source de
+      // vérité dans tout Lume. Envoyer 1250 au lieu de 125000 afficherait
+      // 12,50 $ sur la carte.
+      const brut = Number(champs.montant.replace(',', '.').replace(/\s/g, ''));
+      const cents = champs.montant.trim() !== '' && Number.isFinite(brut) && brut > 0
+        ? Math.round(brut * 100)
+        : null;
+
       const r = await creerDealManuel({
         prenom,
         nom: vide(champs.nom),
         courriel: vide(champs.courriel),
         telephone: vide(champs.telephone),
         adresse: vide(champs.adresse),
+        montantCents: cents,
+        assigneA: vide(champs.assigneA),
+        dateFermetureVisee: vide(champs.dateVisee),
+        source: vide(champs.source),
       });
       if (r.dealExistant) {
         toast.success(fr
@@ -595,6 +640,81 @@ function ModalNouveauDeal({ ouvert, fr, onFermer, onCree }: {
             />
           </div>
         ))}
+
+        {/*
+          Ce qui fait vivre les prévisions. Rien n'est obligatoire : rendre le
+          montant requis ferait saisir des chiffres inventés, et une prévision
+          fausse se croit alors qu'une prévision vide se voit. Un champ laissé
+          vide met simplement le deal dans « Corriger vos données ».
+        */}
+        <div className="mt-1 grid grid-cols-1 gap-3 border-t border-border-subtle pt-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor={idMontant} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Montant estimé ($)' : 'Estimated amount ($)'}
+            </label>
+            <input
+              id={idMontant}
+              type="text"
+              inputMode="decimal"
+              value={champs.montant}
+              onChange={(e) => setChamps((v) => ({ ...v, montant: e.target.value }))}
+              placeholder={fr ? 'Ex. : 1250' : 'e.g. 1250'}
+              className={CLASSE_CHAMP}
+            />
+            <p className="mt-1 text-[10.5px] text-text-muted">
+              {fr
+                ? 'Devient une estimation modifiable, remplacée par la vraie soumission.'
+                : 'Becomes an editable estimate, replaced by the real quote.'}
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor={idDateVisee} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Fermeture visée' : 'Expected close'}
+            </label>
+            <input
+              id={idDateVisee}
+              type="date"
+              value={champs.dateVisee}
+              onChange={(e) => setChamps((v) => ({ ...v, dateVisee: e.target.value }))}
+              className={CLASSE_CHAMP}
+            />
+          </div>
+
+          <div>
+            <label htmlFor={idAssigne} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Responsable' : 'Assignee'}
+            </label>
+            <select
+              id={idAssigne}
+              value={champs.assigneA}
+              onChange={(e) => setChamps((v) => ({ ...v, assigneA: e.target.value }))}
+              className={CLASSE_CHAMP}
+            >
+              <option value="">{fr ? 'Non assigné' : 'Unassigned'}</option>
+              {membres.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor={idSource} className="mb-1.5 block text-[11px] text-text-tertiary">
+              {fr ? 'Source' : 'Source'}
+            </label>
+            <select
+              id={idSource}
+              value={champs.source}
+              onChange={(e) => setChamps((v) => ({ ...v, source: e.target.value }))}
+              className={CLASSE_CHAMP}
+            >
+              <option value="manual">{fr ? 'Saisie manuelle' : 'Manual entry'}</option>
+              <option value="form_web">{fr ? 'Formulaire web' : 'Web form'}</option>
+              <option value="meta">Meta</option>
+              <option value="d2d">{fr ? 'Porte-à-porte' : 'Door to door'}</option>
+            </select>
+          </div>
+        </div>
 
         <div className="mt-1 flex items-center justify-end gap-2.5">
           <button type="button" onClick={fermer} className={CLASSE_BOUTON}>
@@ -1478,6 +1598,7 @@ export default function PipelineBoard({
       <ModalNouveauDeal
         ouvert={nouveauDeal}
         fr={fr}
+        membres={membres}
         onFermer={() => setNouveauDeal(false)}
         onCree={() => onChangement?.()}
       />
