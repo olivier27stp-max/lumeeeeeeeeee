@@ -1384,3 +1384,45 @@ export async function fetchChronologie(pipelineId?: string | null, mois = 6): Pr
     gagne_cents: Number(r.gagne_cents ?? 0),
   }));
 }
+
+/**
+ * Crée un pipeline avec ses propres étapes.
+ *
+ * `creerPipeline` part d'un modèle figé — c'est le bon défaut pour démarrer.
+ * Celle-ci laisse écrire le parcours : un pipeline de contrats saisonniers
+ * n'a pas les mêmes étapes qu'un pipeline de soumissions résidentielles.
+ *
+ * Les étapes « gagné » et « perdu » sont ajoutées par la base si elles
+ * manquent : un pipeline qu'on ne peut pas terminer casse le taux de
+ * closing, le badge « Job à créer » et la raison de perte.
+ */
+export interface EtapeSurMesure {
+  nom_fr: string;
+  nom_en?: string;
+  kind: StageKind;
+  /** 0-100, ou `null` = non renseignée (absente du revenu attendu). */
+  probability?: number | null;
+  show_in_reports?: boolean;
+}
+
+export async function creerPipelineSurMesure(nom: string, etapes: EtapeSurMesure[]): Promise<string> {
+  const { data, error } = await supabase.rpc('creer_pipeline_sur_mesure', {
+    p_nom: nom.trim(),
+    p_etapes: etapes.map((e) => ({
+      nom_fr: e.nom_fr.trim(),
+      nom_en: (e.nom_en ?? e.nom_fr).trim(),
+      kind: e.kind,
+      probability: e.probability ?? null,
+      show_in_reports: e.show_in_reports ?? true,
+    })),
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+/** Renommer se fait déjà ; supprimer un pipeline n'est PAS exposé :
+ *  ses deals partiraient avec lui (cascade). On archive ses étapes. */
+export async function supprimerPipeline(pipelineId: string): Promise<void> {
+  const { error } = await supabase.from('pipelines_ventes').delete().eq('id', pipelineId);
+  if (error) throw error;
+}

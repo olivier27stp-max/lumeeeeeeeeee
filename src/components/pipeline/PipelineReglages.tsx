@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { confirmer } from '../ui/ConfirmDialog';
+import CreerPipelineModal from './CreerPipelineModal';
 import { useTranslation } from '../../i18n';
 import {
   ajouterEtape, ajouterRaisonProposee, archiverEtape, archiverRaisonProposee,
@@ -724,6 +725,7 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
 
   const [pipelines, setPipelines] = useState<PipelineResume[] | null>(null);
   const [creation, setCreation] = useState(false);
+  const [surMesure, setSurMesure] = useState(false);
 
   // Les membres de l'organisation, pour proposer qui peut voir un pipeline.
   const { data: membresOrg = [] } = useQuery({
@@ -1008,14 +1010,29 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
         }
         action={
           !creation ? (
-            <button
-              type="button"
-              onClick={() => setCreation(true)}
-              className="btn-secondary text-[12.5px] inline-flex items-center gap-1.5"
-            >
-              <Plus size={14} aria-hidden="true" />
-              {fr ? 'Créer un pipeline' : 'Create a pipeline'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/*
+                Deux portes : partir d'un modèle (rapide) ou écrire ses
+                propres étapes. Choisir entre trois modèles ne remplace pas
+                de pouvoir décrire son parcours.
+              */}
+              <button
+                type="button"
+                onClick={() => setCreation(true)}
+                className="btn-secondary text-[12.5px] inline-flex items-center gap-1.5"
+              >
+                <Plus size={14} aria-hidden="true" />
+                {fr ? "Partir d'un modèle" : 'From a template'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSurMesure(true)}
+                className="btn-primary text-[12.5px] inline-flex items-center gap-1.5"
+              >
+                <Plus size={14} aria-hidden="true" />
+                {fr ? 'Créer un pipeline' : 'Create pipeline'}
+              </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -1064,6 +1081,12 @@ export default function PipelineReglages({ pipelineId, etapes, deals, onChangeme
           </div>
         )}
       </Section>
+
+      <CreerPipelineModal
+        ouvert={surMesure}
+        onFermer={() => setSurMesure(false)}
+        onCree={() => { void rechargerPipelines(); onChangement(); }}
+      />
 
       {/* ── Raisons de perte ── */}
       <Section
