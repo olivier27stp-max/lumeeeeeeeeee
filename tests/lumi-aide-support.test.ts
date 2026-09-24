@@ -29,6 +29,13 @@ describe('les questions produit sont gratuites dans Lumi aussi', () => {
     'comment supprimer une tâche',
     'comment activer la double authentification',
     'comment lume calcule la tps et la tvq sur mes factures',
+    // Le revers du resserrement de 2026-09-23 : élargir la garde des données
+    // ne doit pas rendre payantes des questions produit qui ressemblent à une
+    // demande de contenu. Les limites de forfait en sont l'exemple type — la
+    // question tient les mêmes mots que « j'ai combien de clients ».
+    'Combien de clients je peux avoir ?',
+    'Comment changer mon adresse de facturation ?',
+    'Comment importer mes clients depuis Excel ?',
   ];
   for (const q of cas) {
     it(`« ${q.slice(0, 46)} » → 0 token`, () => {
@@ -49,6 +56,16 @@ describe('les questions sur les DONNÉES vont toujours au modèle', () => {
     'qui sont mes meilleurs clients',
     'supprime la facture INV-0004',
     'crée un job chez Tremblay demain',
+    // Les trois formulations qui PARTAIENT à un article d'aide, mesurées par
+    // `qa:lumi` le 2026-09-23 (factuel tombé de 98 % à 86 %). Elles sont
+    // écrites ici telles qu'un entrepreneur les tape — majuscules et accents
+    // compris : les variantes normalisées plus haut passaient déjà, ce sont
+    // l'accent de « numéro » et l'ordre « j'ai combien » qui manquaient.
+    "J'ai combien de clients dans mon CRM ?",
+    "C'est quoi le numéro de téléphone de Ginette Desrosiers-Lumi ?",
+    "C'est quoi le courriel de mon entreprise dans Lume ?",
+    'Quel est le courriel de Marie Tremblay ?',
+    "J'ai combien de factures impayées ?",
   ];
   for (const q of cas) {
     it(`« ${q.slice(0, 46)} » → le modèle (ou un raccourci)`, () => {
