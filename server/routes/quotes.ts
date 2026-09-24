@@ -3,7 +3,7 @@ import { creerClientStripe } from '../lib/stripe-sdk';
 import { z } from 'zod';
 import { requireAuthedClient, getServiceClient } from '../lib/supabase';
 import { documentTaxLines } from '../lib/taxResolve';
-import { emailFrom, twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
+import { twilioClient, getBaseUrl, getTwilioStatusCallbackUrl } from '../lib/config';
 import { isSmsOptedOut } from '../lib/notificationHelpers';
 import { getOrgSmsFromNumber, SmsNumberNotProvisionedError, SmsNotInPlanError } from '../lib/twilioProvisioning';
 import { sendEmail, isMailerConfigured } from '../lib/mailer';
@@ -16,6 +16,7 @@ import { sendSafeError } from '../lib/error-handler';
 import { recordClientActivity } from '../lib/clientActivity';
 import { resolveQuoteRecipients, insertTargetedNotifications } from '../lib/notificationHelpers';
 import { getCompanyBranding } from '../lib/companyBranding';
+import { senderForOrg } from './emails';
 import { lireLiensSociaux } from '../lib/socialLinks';
 import { estEchue } from '../lib/date-seule';
 
@@ -368,8 +369,16 @@ router.post('/quotes/send-email', async (req, res) => {
     // en dur, deal poussé dans le pipeline, relances automatiques déclenchées,
     // et une réponse HTTP 200 affirmant l'envoi. Le client n'avait rien reçu,
     // l'org voyait « envoyé » partout.
+    // L'envoi de devis était le seul à poster depuis `noreply@lumecrm.net` :
+    // le client d'une entreprise recevait sa soumission de la part de Lume.
+    // `senderForOrg` n'échoue jamais — sans domaine vérifié, il rend
+    // l'expéditeur de la plateforme, comme avant.
     const emailResult = await sendEmail({
-      from: emailFrom,
+      ...(await senderForOrg(auth.orgId, {
+        company_name: companyName,
+        company_email: companyEmail,
+        company_phone: companyPhone,
+      })),
       to: recipientEmail,
       subject: finalSubject,
       html: emailHtml,

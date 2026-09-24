@@ -2,16 +2,17 @@
  * Domaine d'envoi propre à une entreprise (2026-09-17) — « chaque entreprise
  * envoie depuis son propre domaine », comme Salesforce.
  *
- * Client de l'API Resend Domains (https://resend.com/docs/api-reference/domains)
- * en `fetch` nu, jamais le SDK :
- *   POST   /domains              { name, region }  → { id, name, status, records[] }
- *   GET    /domains/:id                            → { id, name, status, records[] }
- *   POST   /domains/:id/verify                     → { object, id }  (pas d'enregistrements)
- *   DELETE /domains/:id                            → { object, id, deleted }
+ * Les identités vivent chez Amazon SES (`ses-identites.ts`) depuis le
+ * 2026-09-24. Elles étaient déclarées chez Resend, resté câblé après la
+ * migration de la plateforme vers SES : sans `RESEND_API_KEY`, `demanderDomaine`
+ * répondait 503 et AUCUNE entreprise ne pouvait faire partir ses courriels de
+ * son propre domaine. Le client de ses clients recevait factures et devis de
+ * la part de `noreply@lumecrm.net`.
  *
- * Statuts Resend d'un domaine : not_started, pending, verified,
- * partially_verified, partially_failed, failed, temporary_failure. On les
- * ramène à trois : pending / verified / failed (colonne CHECK en base).
+ * SES n'a pas d'identifiant opaque : le domaine est la clé de l'identité, et
+ * `resend_domain_id` le porte (colonne conservée, pas de migration). Les
+ * statuts DKIM de SES (SUCCESS / PENDING / FAILED / NOT_STARTED /
+ * TEMPORARY_FAILURE) sont ramenés à trois : pending / verified / failed.
  *
  * La table `org_sending_domains` est écrite ici seulement (service_role) ;
  * `expediteurDe` est ce que `senderForOrg` (routes/emails.ts) consulte avant
@@ -19,8 +20,8 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../logger';
+import { creerIdentite, lireIdentite, supprimerIdentite } from './ses-identites';
 
-const RESEND_API = 'https://api.resend.com';
 const TABLE = 'org_sending_domains';
 export const PARTIE_LOCALE_DEFAUT = 'facturation';
 /** Domaines de la plateforme : jamais délégués à une entreprise. */
@@ -51,13 +52,6 @@ export interface DomaineEnvoi {
   verified_at: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface DomaineResend {
-  id: string;
-  name?: string;
-  status?: string;
-  records?: unknown;
 }
 
 function erreurHttp(message: string, status: number): Error & { status: number } {
@@ -107,7 +101,28 @@ export function statutDepuisResend(statut: unknown): StatutDomaine {
   }
 }
 
-/** Les enregistrements DNS de la réponse Resend, au format stocké (tolérant à un champ manquant). */
+/** Le statut DKIM de SES ramené à nos trois états. */
+export function statutDepuisSes(statut: unknown): StatutDomaine {
+  switch (String(statut ?? '').toUpperCase()) {
+    case 'SUCCESS':
+      return 'verified';
+    case 'FAILED':
+      return 'failed';
+    default:
+      // PENDING, NOT_STARTED, TEMPORARY_FAILURE : le client n'a pas fini de publier.
+      return 'pending';
+  }
+}
+
+/** Les 3 CNAME DKIM de SES au format que la carte des réglages affiche. */
+export function enregistrementsDepuisSes(dkim: Array<{ name: string; value: string }> | undefined): EnregistrementDns[] {
+  if (!Array.isArray(dkim)) return [];
+  return dkim
+    .filter((d) => d?.name && d?.value)
+    .map((d) => ({ record: 'DKIM', type: 'CNAME', name: d.name, value: d.value, ttl: null, priority: null, status: null }));
+}
+
+/** Les enregistrements DNS d'une réponse Resend — gardé pour relire les lignes écrites avant le portage. */
 export function enregistrementsDepuisResend(records: unknown): EnregistrementDns[] {
   if (!Array.isArray(records)) return [];
   const out: EnregistrementDns[] = [];
@@ -136,25 +151,6 @@ export function construireExpediteur(nom: string | null | undefined, partieLocal
   const affiche = String(nom || 'Lume').replace(/[\r\n<>"]/g, ' ').replace(/\s+/g, ' ').trim() || 'Lume';
   const locale = (partieLocale || PARTIE_LOCALE_DEFAUT).toLowerCase();
   return `${affiche} <${locale}@${domaine}>`;
-}
-
-// ── Client Resend ──
-
-async function resend<T>(method: 'GET' | 'POST' | 'DELETE', chemin: string, corps?: Record<string, unknown>): Promise<T> {
-  const cle = process.env.RESEND_API_KEY;
-  if (!cle) throw erreurHttp('Email provider is not configured.', 503);
-  const res = await fetch(`${RESEND_API}${chemin}`, {
-    method,
-    headers: { Authorization: `Bearer ${cle}`, 'Content-Type': 'application/json' },
-    ...(corps ? { body: JSON.stringify(corps) } : {}),
-  });
-  const json: any = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    logger.warn('[domaines] Resend a refusé', { method, chemin, status: res.status, message: json?.message || json?.name });
-    // 404 chez Resend (domaine déjà retiré à la main) : l'appelant décide.
-    throw erreurHttp(`Resend ${res.status}: ${json?.message || json?.name || 'unknown error'}`, res.status === 404 ? 404 : 502);
-  }
-  return json as T;
 }
 
 // ── Cache mémoire (5 min par org) du domaine vérifié ──
@@ -237,37 +233,38 @@ export async function expediteurDe(
 
 // ── Écritures (routes owner/admin) ──
 
-/** Déclare le domaine chez Resend et l'enregistre en attente, avec les enregistrements DNS à coller. */
+/** Déclare le domaine chez SES et l'enregistre en attente, avec les CNAME DKIM à coller. */
 export async function demanderDomaine(admin: SupabaseClient, orgId: string, domaineSaisi: unknown): Promise<DomaineEnvoi> {
   const domain = validerDomaine(domaineSaisi);
   const existant = await lireDomaine(admin, orgId);
   if (existant) throw erreurHttp('A sending domain is already configured. Remove it first.', 409);
 
-  const cree = await resend<DomaineResend>('POST', '/domains', { name: domain, region: 'us-east-1' });
-  if (!cree?.id) throw erreurHttp('Resend did not return a domain id.', 502);
+  const identite = await creerIdentite(domain);
 
   const { data, error } = await admin
     .from(TABLE)
     .insert({
       org_id: orgId,
       domain,
-      resend_domain_id: cree.id,
+      // SES n'a pas d'identifiant opaque : le domaine EST la clé de l'identité.
+      resend_domain_id: domain,
       from_local_part: PARTIE_LOCALE_DEFAUT,
-      status: statutDepuisResend(cree.status),
-      dns_records: enregistrementsDepuisResend(cree.records),
+      // Même garde qu'à la vérification : 'verified' exige VerifiedForSendingStatus.
+      status: identite.verifie ? 'verified' : (statutDepuisSes(identite.statut) === 'verified' ? 'pending' : statutDepuisSes(identite.statut)),
+      dns_records: enregistrementsDepuisSes(identite.dkim),
       last_checked_at: new Date().toISOString(),
     })
     .select()
     .single();
   if (error) {
-    // La ligne n'a pas pu être écrite : on ne laisse pas un domaine orphelin chez Resend.
-    try { await resend('DELETE', `/domains/${cree.id}`); } catch (err: any) {
-      logger.error('[domaines] domaine orphelin chez Resend après échec d’insert', { orgId, resendId: cree.id, error: err?.message });
+    // La ligne n'a pas pu être écrite : on ne laisse pas une identité orpheline chez SES.
+    try { await supprimerIdentite(domain); } catch (err: any) {
+      logger.error('[domaines] identité orpheline chez SES après échec d’insert', { orgId, domain, error: err?.message });
     }
     throw error;
   }
   oublierCacheDomaine(orgId);
-  logger.info('[domaines] domaine déclaré', { orgId, domain, resendId: cree.id });
+  logger.info('[domaines] domaine déclaré', { orgId, domain });
   return { ...(data as DomaineEnvoi), dns_records: enregistrementsDepuisResend((data as DomaineEnvoi).dns_records) };
 }
 
@@ -275,14 +272,16 @@ export async function demanderDomaine(admin: SupabaseClient, orgId: string, doma
 export async function verifierDomaine(admin: SupabaseClient, orgId: string): Promise<DomaineEnvoi> {
   const ligne = await lireDomaine(admin, orgId);
   if (!ligne) throw erreurHttp('No sending domain configured.', 404);
-  if (!ligne.resend_domain_id) throw erreurHttp('Sending domain has no provider id.', 409);
-
-  // verify ne renvoie que { object, id } : l'état vient du GET qui suit.
-  await resend('POST', `/domains/${ligne.resend_domain_id}/verify`);
-  const etat = await resend<DomaineResend>('GET', `/domains/${ligne.resend_domain_id}`);
-  const status = statutDepuisResend(etat.status);
+  // SES vérifie tout seul dès que les CNAME sont publiés : rien à déclencher,
+  // on relit simplement l'état de l'identité.
+  const etat = await lireIdentite(ligne.domain);
+  // `verified` exige VerifiedForSendingStatus, pas seulement un DKIM signé :
+  // SES peut avoir validé les CNAME sans autoriser l'envoi, et les courriels
+  // partiraient alors d'un domaine qu'il rejette.
+  const statutDkim = statutDepuisSes(etat.statut);
+  const status: StatutDomaine = etat.verifie ? 'verified' : (statutDkim === 'verified' ? 'pending' : statutDkim);
   const maintenant = new Date().toISOString();
-  const records = enregistrementsDepuisResend(etat.records);
+  const records = enregistrementsDepuisSes(etat.dkim);
 
   const { data, error } = await admin
     .from(TABLE)
@@ -302,17 +301,15 @@ export async function verifierDomaine(admin: SupabaseClient, orgId: string): Pro
   return { ...(data as DomaineEnvoi), dns_records: enregistrementsDepuisResend((data as DomaineEnvoi).dns_records) };
 }
 
-/** Retire le domaine chez Resend et efface la ligne : les envois repartent de la plateforme. */
+/** Retire l'identité chez SES et efface la ligne : les envois repartent de la plateforme. */
 export async function retirerDomaine(admin: SupabaseClient, orgId: string): Promise<void> {
   const ligne = await lireDomaine(admin, orgId);
   if (!ligne) return;
-  if (ligne.resend_domain_id) {
-    try {
-      await resend('DELETE', `/domains/${ligne.resend_domain_id}`);
-    } catch (err: any) {
-      // Déjà retiré côté Resend : on efface quand même chez nous.
-      if (err?.status !== 404) throw err;
-    }
+  try {
+    await supprimerIdentite(ligne.domain);
+  } catch (err: any) {
+    // Déjà retirée côté SES : on efface quand même chez nous.
+    if (err?.status !== 404) throw err;
   }
   const { error } = await admin.from(TABLE).delete().eq('id', ligne.id);
   if (error) throw error;
