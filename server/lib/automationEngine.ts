@@ -966,10 +966,37 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
         actionConfig.event_metadata,
       );
 
-      if (shouldStop) {
+      /*
+       * « Arrêter quand le client répond » — le réglage `arret_sur_reponse`.
+       *
+       * Vérifié APRÈS les conditions d'arrêt métier et seulement pour les
+       * actions qui PARLENT au client : annuler une tâche interne (note,
+       * étiquette) parce que le client a écrit n'aurait aucun sens.
+       *
+       * On remonte au client par les variables déjà résolues plus bas —
+       * mais elles ne le sont qu'après ce point, donc on relit l'entité ici,
+       * par le même chemin que les actions (`clientDeLEntite` vit côté
+       * actions ; on refait la résolution minimale nécessaire).
+       */
+      let stopReponse = false;
+      if (!shouldStop && reglagesRegle?.arret_sur_reponse
+          && (taskType === 'send_sms' || taskType === 'send_email' || taskType === 'request_review')) {
+        const clientId = await clientDeLaTache(supabase, task.org_id, task.entity_type, task.entity_id);
+        stopReponse = await clientARepondu(supabase, task.org_id, clientId, task.created_at);
+      }
+
+      if (shouldStop || stopReponse) {
         const { error: cancelError } = await supabase
           .from('automation_scheduled_tasks')
-          .update({ status: 'cancelled', completed_at: now })
+          .update({
+            status: 'cancelled',
+            completed_at: now,
+            // La RAISON, lisible dans l'onglet Journaux : « annulée » sans
+            // explication est la plainte n°1 sur ce genre d'écran.
+            last_error: stopReponse
+              ? 'Annulée : le client a répondu.'
+              : 'Annulée : la condition d’arrêt de la règle est remplie.',
+          })
           .eq('id', task.id);
         if (cancelError) {
           console.error(`[automationEngine] failed to cancel scheduled task ${task.id}:`, cancelError.message);
@@ -1209,6 +1236,92 @@ async function metadonneesFraiches(
   // `data` est typé `unknown` par PostgREST quand les colonnes sont choisies
   // dynamiquement : la forme est garantie par `source` juste au-dessus.
   return { ...base, ...(data as unknown as Record<string, unknown>) };
+}
+
+/**
+ * Remonte de l'entité d'une tâche jusqu'à la fiche client.
+ *
+ * Même carte des liens que `clientDeLEntite` (actions/index.ts), vérifiée
+ * dans le schéma de production : un `lead` EST une fiche `clients`, une
+ * visite n'a pas de `client_id` et passe par son job, un devis porte DEUX
+ * liens (`client_id` et `lead_id`).
+ *
+ * Volontairement dupliquée ici plutôt qu'importée : le moteur ne doit pas
+ * dépendre du module d'actions pour décider d'ANNULER un envoi — c'est une
+ * garde, elle reste lisible d'un seul tenant.
+ */
+async function clientDeLaTache(
+  supabase: SupabaseClient,
+  orgId: string,
+  entityType: string,
+  entityId: string,
+): Promise<string | null> {
+  if (entityType === 'client' || entityType === 'lead') return entityId;
+
+  const lire = async (table: string, colonnes: string) => {
+    const { data } = await supabase
+      .from(table).select(colonnes).eq('id', entityId).eq('org_id', orgId).maybeSingle();
+    return data as Record<string, string | null> | null;
+  };
+
+  switch (entityType) {
+    case 'job': return (await lire('jobs', 'client_id'))?.client_id ?? null;
+    case 'invoice': return (await lire('invoices', 'client_id'))?.client_id ?? null;
+    case 'quote': {
+      const q = await lire('quotes', 'client_id, lead_id');
+      return q?.client_id ?? q?.lead_id ?? null;
+    }
+    case 'deal': return (await lire('deals', 'client_id'))?.client_id ?? null;
+    case 'schedule_event':
+    case 'appointment': {
+      const e = await lire('schedule_events', 'job_id');
+      if (!e?.job_id) return null;
+      const { data: job } = await supabase
+        .from('jobs').select('client_id').eq('id', e.job_id).eq('org_id', orgId).maybeSingle();
+      return (job as { client_id?: string | null } | null)?.client_id ?? null;
+    }
+    default: return null;
+  }
+}
+
+/**
+ * Le client a-t-il répondu depuis que cette tâche a été planifiée ?
+ *
+ * C'est le réglage « Arrêter quand le client répond » (`arret_sur_reponse`).
+ * Il était OFFERT dans l'interface, ENREGISTRÉ en base… et JAMAIS LU par le
+ * moteur : le client répondait, et les relances continuaient. Un client qui
+ * a répondu et reçoit quand même trois rappels, c'est le pire effet possible
+ * d'une automatisation.
+ *
+ * On regarde les messages ENTRANTS reçus après la planification de la tâche.
+ * Pas « depuis toujours » : une conversation ancienne ne doit pas empêcher
+ * une nouvelle relance de partir.
+ *
+ * En cas de lecture impossible, on renvoie `false` — donc on N'ANNULE PAS.
+ * Même prudence que `checkStopConditions` : ne jamais supprimer un envoi sur
+ * une information qu'on n'a pas pu vérifier.
+ */
+async function clientARepondu(
+  supabase: SupabaseClient,
+  orgId: string,
+  clientId: string | null,
+  depuis: string,
+): Promise<boolean> {
+  if (!clientId) return false;
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('org_id', orgId)
+    .eq('client_id', clientId)
+    .eq('direction', 'inbound')
+    .gte('created_at', depuis)
+    .limit(1);
+
+  if (error) {
+    console.error('[automationEngine] arrêt sur réponse indéterminable — tâche conservée:', error.message);
+    return false;
+  }
+  return Boolean(data && data.length > 0);
 }
 
 async function checkStopConditions(
