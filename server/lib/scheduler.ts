@@ -694,6 +694,19 @@ async function tick(supabase: SupabaseClient, twilio: TwilioConfig | null) {
       console.error('[scheduler] scheduled tasks processing failed:', err.message);
     }
 
+    // Le pipeline de ventes : sa file d'événements, puis les deals qui dorment.
+    //
+    // La file AVANT la détection, volontairement : un deal qui vient de
+    // changer d'étape ne doit pas être signalé « sans activité » dans le même
+    // tick par un état qu'on n'a pas encore consommé.
+    try {
+      const { traiterEvenementsPipeline, detecterStagnation } = await import('./pipelineEvenements');
+      await traiterEvenementsPipeline(supabase);
+      await detecterStagnation(supabase);
+    } catch (err: any) {
+      console.error('[scheduler] pipeline events processing failed:', err.message);
+    }
+
     // Detect overdue invoices and emit events
     try {
       await detectOverdueInvoices(supabase);

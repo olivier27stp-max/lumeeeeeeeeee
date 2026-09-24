@@ -323,6 +323,7 @@ export type ActionType =
   | 'send_notification'
   | 'create_task'
   | 'update_status'
+  | 'move_deal_stage'
   | 'request_review'
   | 'log_activity';
 
@@ -510,6 +511,34 @@ export async function resolveEntityVariables(
     vars.client_email = c.email || '';
     vars.client_phone = c.phone || '';
   };
+
+  // Un deal du pipeline de ventes. Sans ce bloc, une automatisation d'étape
+  // enverrait « Bonjour  » : le moteur ne saurait pas remonter au client.
+  if (entityType === 'deal') {
+    const { data: deal } = await supabase
+      .from('deals')
+      .select(`
+        id, source, stage_entered_at, created_at,
+        client:clients!deals_client_same_org(first_name, last_name, email, phone, company),
+        etape:pipeline_stages!deals_stage_same_org(name_fr, name_en, kind)
+      `)
+      .eq('id', entityId)
+      .maybeSingle() as any;
+    if (deal) {
+      if (deal.client) setClientVars(deal.client);
+      vars.deal_stage = deal.etape?.name_fr || '';
+      vars.deal_stage_en = deal.etape?.name_en || '';
+      vars.deal_source = deal.source || '';
+      // Depuis combien de jours le deal dort dans son étape : c'est la
+      // variable d'une relance (« ça fait 5 jours… »).
+      if (deal.stage_entered_at) {
+        const jours = Math.floor(
+          (Date.now() - new Date(deal.stage_entered_at).getTime()) / 86_400_000,
+        );
+        vars.deal_jours_dans_etape = String(Math.max(0, jours));
+      }
+    }
+  }
 
   if (entityType === 'lead') {
     const { data: lead } = await supabase
@@ -1286,6 +1315,89 @@ export async function executeLogActivity(
 
 // ── Master executor ─────────────────────────────────────────
 
+
+/**
+ * Déplacer un deal vers une étape du pipeline.
+ *
+ * C'est l'action qui manquait pour qu'une automatisation agisse SUR le
+ * pipeline, et pas seulement à partir de lui : « sans nouvelle depuis 14
+ * jours → remettre en Relance », « devis accepté → passer en Gagné ».
+ *
+ * Trois garde-fous, tous nécessaires :
+ *
+ *  1. l'étape visée doit appartenir au MÊME pipeline que le deal. Sans cette
+ *     vérification, une règle mal configurée expédierait le deal dans le
+ *     pipeline d'à côté, où il disparaîtrait du tableau de son équipe ;
+ *  2. une étape archivée est refusée : on n'envoie pas un deal dans une
+ *     colonne que plus personne ne regarde ;
+ *  3. déplacer vers l'étape où le deal se trouve DÉJÀ ne réécrit rien. Le
+ *     trigger remettrait `stage_entered_at` à maintenant, ce qui effacerait
+ *     l'ancienneté — et une règle « sans activité depuis 7 jours » qui se
+ *     redéclenche remettrait éternellement le compteur à zéro.
+ *
+ * Le déplacement passe par un UPDATE ordinaire : les triggers de `deals`
+ * s'occupent de l'horodatage, de l'historique et des événements. Une
+ * automatisation produit donc exactement le même résultat qu'un
+ * glisser-déposer à l'écran.
+ */
+export async function executeMoveDealStage(
+  config: { stage_id: string },
+  _vars: Record<string, string>,
+  ctx: ActionContext,
+): Promise<ActionResult> {
+  if (ctx.entityType !== 'deal') {
+    return { success: false, error: `move_deal_stage ne s'applique qu'à un deal (reçu : ${ctx.entityType}).` };
+  }
+  if (!config?.stage_id) {
+    return { success: false, error: 'move_deal_stage : stage_id manquant.' };
+  }
+
+  const { data: deal, error: dealErr } = await ctx.supabase
+    .from('deals')
+    .select('id, pipeline_id, stage_id')
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (dealErr) return { success: false, error: dealErr.message };
+  if (!deal) return { success: false, error: 'Deal introuvable dans cette organisation.' };
+
+  if (deal.stage_id === config.stage_id) {
+    // Pas une erreur : la règle a déjà produit son effet.
+    return { success: true, data: { deja_dans_l_etape: true, stage_id: config.stage_id } };
+  }
+
+  const { data: etape, error: etapeErr } = await ctx.supabase
+    .from('pipeline_stages')
+    .select('id, pipeline_id, archived_at, name_fr')
+    .eq('id', config.stage_id)
+    .eq('org_id', ctx.orgId)
+    .maybeSingle();
+
+  if (etapeErr) return { success: false, error: etapeErr.message };
+  if (!etape) return { success: false, error: 'Étape introuvable dans cette organisation.' };
+  if (etape.pipeline_id !== deal.pipeline_id) {
+    return { success: false, error: "L'étape visée appartient à un autre pipeline." };
+  }
+  if (etape.archived_at) {
+    return { success: false, error: `L'étape « ${etape.name_fr} » est archivée.` };
+  }
+
+  const { data, error } = await ctx.supabase
+    .from('deals')
+    .update({ stage_id: config.stage_id })
+    .eq('id', ctx.entityId)
+    .eq('org_id', ctx.orgId)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { success: false, error: "Aucun deal touché — l'écriture a été refusée." };
+  }
+  return { success: true, data: { stage_id: config.stage_id, etape: etape.name_fr } };
+}
+
 export async function executeAction(
   actionType: ActionType,
   config: Record<string, any>,
@@ -1306,6 +1418,8 @@ export async function executeAction(
       return executeCreateTask(config as any, vars, ctx);
     case 'update_status':
       return executeUpdateStatus(config as any, vars, ctx);
+    case 'move_deal_stage':
+      return executeMoveDealStage(config as any, vars, ctx);
     case 'request_review':
       return executeRequestReview(config, vars, ctx);
     case 'log_activity':
