@@ -145,3 +145,60 @@ describe('créer un pipeline', () => {
     expect(document.body.textContent).toContain('elles sont ajoutées');
   });
 });
+
+describe('réglages du pipeline (mêmes contrôles que GoHighLevel)', () => {
+  /** Les trois cartes de couleur, dans l'ordre affiché. */
+  function cartesCouleur(): HTMLElement[] {
+    return [...conteneur.querySelectorAll('[role="radio"]')] as HTMLElement[];
+  }
+  function interrupteur(): HTMLElement | undefined {
+    return conteneur.querySelector('[role="switch"]') as HTMLElement | undefined;
+  }
+
+  it('propose les trois rendus de couleur', async () => {
+    await rendre();
+    const libelles = cartesCouleur().map((c) => c.textContent ?? '');
+    expect(libelles).toHaveLength(3);
+    expect(libelles[0]).toContain('Par défaut');
+    expect(libelles[1]).toContain('Pastille');
+    expect(libelles[2]).toContain('Fond teinté');
+  });
+
+  it('« Par défaut » est sélectionné au départ', async () => {
+    await rendre();
+    const etats = cartesCouleur().map((c) => c.getAttribute('aria-checked'));
+    expect(etats).toEqual(['true', 'false', 'false']);
+  });
+
+  it('cliquer une carte change la sélection', async () => {
+    await rendre();
+    await act(async () => { cartesCouleur()[2].click(); });
+    const etats = cartesCouleur().map((c) => c.getAttribute('aria-checked'));
+    expect(etats).toEqual(['false', 'false', 'true']);
+  });
+
+  it('l interrupteur de probabilité part éteint et bascule', async () => {
+    await rendre();
+    expect(interrupteur()?.getAttribute('aria-checked')).toBe('false');
+    await act(async () => { interrupteur()?.click(); });
+    expect(interrupteur()?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('les deux réglages partent vraiment à la base', async () => {
+    // Un contrôle qui ne transmet rien serait décoratif.
+    await rendre();
+    await act(async () => { cartesCouleur()[1].click(); });
+    await act(async () => { interrupteur()?.click(); });
+
+    const nom = conteneur.querySelector('input') as HTMLInputElement;
+    saisir(nom, 'Contrats saisonniers');
+
+    const creer = [...conteneur.querySelectorAll('button')]
+      .find((b) => b.getAttribute('type') === 'submit');
+    await act(async () => { creer?.click(); });
+
+    expect(creerMock).toHaveBeenCalled();
+    const reglages = creerMock.mock.calls[0][2];
+    expect(reglages).toMatchObject({ color_mode: 'dot', use_deal_probability: true });
+  });
+});

@@ -32,6 +32,13 @@ function nouvelleCle(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+/** Les trois rendus possibles, montrés tels quels dans le choix. */
+const MODES_COULEUR: { cle: ModeCouleur; fr: string; en: string }[] = [
+  { cle: 'none', fr: 'Par défaut (aucune couleur)', en: 'Default (no color)' },
+  { cle: 'dot',  fr: 'Pastille colorée',            en: 'Colored dot' },
+  { cle: 'tint', fr: 'Fond teinté',                 en: 'Background tint' },
+];
+
 /** Le départ : un parcours court et complet, que l'utilisateur ajuste. */
 function etapesParDefaut(fr: boolean): LigneEtape[] {
   return [
@@ -54,7 +61,6 @@ export default function CreerPipelineModal({ ouvert, onFermer, onCree }: {
   const idNom = useId();
   const idEtapes = useId();
 
-  const idCouleur = useId();
   const idProbaDeal = useId();
 
   const [nom, setNom] = useState('');
@@ -155,9 +161,89 @@ export default function CreerPipelineModal({ ouvert, onFermer, onCree }: {
           />
           <p className="mt-1 text-[11px] text-text-muted">
             {fr
-              ? 'Un nom qui dit à quoi il sert : on le choisit dans une liste plus tard.'
-              : 'A name that says what it is for: you pick it from a list later.'}
+              ? 'Un nom unique et descriptif, pour retrouver ce pipeline plus tard.'
+              : 'Use a unique, descriptive name so you can find this pipeline later.'}
           </p>
+        </div>
+
+        {/*
+          L'ordre suit celui de GoHighLevel : on règle le pipeline AVANT de
+          décrire ses étapes. Les deux réglages tiennent en un coup d'oeil,
+          alors que la liste d'étapes s'allonge — la reléguer sous une liste
+          de dix lignes revenait à la cacher.
+        */}
+        <div className="rounded-xl border border-outline bg-surface-secondary px-3.5 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <label htmlFor={idProbaDeal} className="text-[12.5px] font-medium text-text-primary">
+              {fr ? 'Probabilité propre à chaque deal' : 'Use opportunity-level probability'}
+              <span className="mt-0.5 block text-[11px] font-normal text-text-muted">
+                {fr
+                  ? "Activé, chaque deal utilise sa propre probabilité. Désactivé, c'est celle de l'étape."
+                  : 'When enabled, each opportunity uses its own probability. When disabled, probability is based on the stage.'}
+              </span>
+            </label>
+            {/*
+              Un vrai interrupteur, pas une case : c'est un réglage qu'on
+              bascule, et la capture de GHL en montre un.
+            */}
+            <button
+              type="button"
+              id={idProbaDeal}
+              role="switch"
+              aria-checked={probaParDeal}
+              onClick={() => setProbaParDeal((v) => !v)}
+              className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary ${probaParDeal ? 'bg-primary' : 'bg-surface-tertiary'}`}
+            >
+              <span
+                aria-hidden="true"
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${probaParDeal ? 'left-[18px]' : 'left-0.5'}`}
+              />
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-outline bg-surface-secondary px-3.5 py-3">
+          <p className="text-[12.5px] font-medium text-text-primary">
+            {fr ? "Couleur des étapes" : 'Set pipeline display colors'}
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-muted">
+            {fr
+              ? "Comment la couleur d'une étape apparaît sur le board."
+              : 'Choose how stage colors appear across your pipeline views.'}
+          </p>
+
+          {/*
+            Trois cartes qui MONTRENT le rendu, au lieu d'un menu déroulant
+            qui le nomme : on choisit une apparence en la voyant.
+          */}
+          <div role="radiogroup" aria-label={fr ? 'Couleur des étapes' : 'Stage colors'} className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {MODES_COULEUR.map((m) => {
+              const actif = couleur === m.cle;
+              return (
+                <button
+                  key={m.cle}
+                  type="button"
+                  role="radio"
+                  aria-checked={actif}
+                  onClick={() => setCouleur(m.cle)}
+                  className={`rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary ${actif ? 'border-primary bg-primary/5' : 'border-outline bg-surface-card hover:bg-surface-secondary'}`}
+                >
+                  <span
+                    className="flex items-center gap-1.5 rounded px-1.5 py-1 text-[12px] font-medium text-text-primary"
+                    style={m.cle === 'tint' ? { background: 'color-mix(in srgb, var(--color-info) 16%, transparent)' } : undefined}
+                  >
+                    {m.cle === 'dot' && (
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--color-info)' }} aria-hidden="true" />
+                    )}
+                    {fr ? "Nom d'étape" : 'Stage name'}
+                  </span>
+                  <span className="mt-1 block text-[11px] text-text-tertiary">
+                    {fr ? m.fr : m.en}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div>
@@ -260,51 +346,6 @@ export default function CreerPipelineModal({ ouvert, onFermer, onCree }: {
               ? "Sans étape « Gagné » ou « Perdu », elles sont ajoutées : un pipeline qu'on ne peut pas terminer casse le taux de closing et la raison de perte."
               : 'Without a Won or Lost stage, they are added: a pipeline you cannot close breaks the close rate and the loss reason.'}
           </p>
-        </div>
-
-        {/* ── Affichage et calcul ──
-            Deux réglages qui ne changent pas le parcours mais la façon de
-            le lire. Ils se règlent aussi après coup ; les poser ici évite
-            d'avoir à y retourner. */}
-        <div className="space-y-3 rounded-xl border border-outline bg-surface-secondary px-3.5 py-3">
-          <div>
-            <label htmlFor={idCouleur} className="mb-1 block text-[12px] text-text-secondary">
-              {fr ? 'Couleur des étapes' : 'Stage colors'}
-            </label>
-            <select
-              id={idCouleur}
-              value={couleur}
-              onChange={(e) => setCouleur(e.target.value as ModeCouleur)}
-              className="input-field w-full max-w-[280px] text-[12.5px]"
-            >
-              <option value="none">{fr ? 'Aucune couleur' : 'No color'}</option>
-              <option value="dot">{fr ? 'Pastille colorée' : 'Colored dot'}</option>
-              <option value="tint">{fr ? 'Fond de colonne teinté' : 'Background tint'}</option>
-            </select>
-            <p className="mt-1 text-[11px] text-text-muted">
-              {fr
-                ? "La teinte suit la position de l'étape : réordonner le pipeline ne laisse jamais deux étapes de la même couleur."
-                : 'The tint follows the stage position: reordering the pipeline never leaves two stages the same color.'}
-            </p>
-          </div>
-
-          <div className="flex items-start gap-2.5">
-            <input
-              id={idProbaDeal}
-              type="checkbox"
-              checked={probaParDeal}
-              onChange={(e) => setProbaParDeal(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0"
-            />
-            <label htmlFor={idProbaDeal} className="text-[12.5px] text-text-primary">
-              {fr ? 'Probabilité propre à chaque deal' : 'Use opportunity-level probability'}
-              <span className="mt-0.5 block text-[11px] text-text-muted">
-                {fr
-                  ? "La prévision utilise le pourcentage écrit sur le deal, et celui de l'étape quand le deal n'en a pas. Sans ça, un contrat à 90 % et un autre à 10 % dans la même étape pèsent pareil."
-                  : "The forecast uses the percentage set on the deal, falling back to the stage when the deal has none. Without it, a 90% and a 10% deal in the same stage weigh the same."}
-              </span>
-            </label>
-          </div>
         </div>
 
         <div className="flex justify-end gap-2">
