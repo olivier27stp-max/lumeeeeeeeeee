@@ -39,12 +39,12 @@ const PAGES: Record<string, {
   quote: {
     table: 'quotes',
     chemin: 'quote',
-    texte: { fr: 'Voir la soumission', en: 'View quote' },
+    texte: { fr: 'Approuver la soumission', en: 'Approve quote' },
   },
   invoice: {
     table: 'invoices',
     chemin: 'invoice',
-    texte: { fr: 'Voir et payer la facture', en: 'View and pay invoice' },
+    texte: { fr: 'Payer la facture', en: 'Pay invoice' },
   },
 };
 

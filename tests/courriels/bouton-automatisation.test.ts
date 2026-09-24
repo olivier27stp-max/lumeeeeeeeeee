@@ -31,13 +31,13 @@ afterEach(() => {
 describe('bouton d’automatisation', () => {
   it('construit le lien public d’une soumission', async () => {
     const b = await boutonPourEntite(faussDb({ data: { view_token: 'jeton123' } }), 'org1', 'quote', 'q1', 'fr');
-    expect(b).toEqual({ texte: 'Voir la soumission', url: 'https://lumecrm.net/quote/jeton123' });
+    expect(b).toEqual({ texte: 'Approuver la soumission', url: 'https://lumecrm.net/quote/jeton123' });
   });
 
   it('construit le lien public d’une facture, en anglais aussi', async () => {
     const b = await boutonPourEntite(faussDb({ data: { view_token: 'j9' } }), 'org1', 'invoice', 'i1', 'en');
     expect(b?.url).toBe('https://lumecrm.net/invoice/j9');
-    expect(b?.texte).toBe('View and pay invoice');
+    expect(b?.texte).toBe('Pay invoice');
   });
 
   it('REFUSE une entité sans page publique : un lead n’a rien à ouvrir', async () => {
