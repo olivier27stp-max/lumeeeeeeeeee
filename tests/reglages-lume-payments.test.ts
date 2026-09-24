@@ -167,3 +167,37 @@ describe('cliquet : les routes publiques lisent les réglages côté serveur', (
     expect(src).not.toMatch(/for (insert|update|delete) to authenticated/);
   });
 });
+
+describe('CLIQUET : pas de bouton « Payer » si l’entreprise ne peut pas encaisser', () => {
+  const lire = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
+
+  it('la facture publique vérifie charges_enabled, pas seulement le réglage', () => {
+    /* Constaté en prod le 2026-09-24 : Coquin lavage affichait « Payer
+       229,95 $ », et le clic tombait sur « Paiement indisponible — échec du
+       chargement de la page ». Le serveur répondait pourtant clairement
+       « This business is not yet ready to accept payments » (503) : le compte
+       Stripe existait mais n'était pas activé. La garde vérifiait le réglage
+       et l'expiration, jamais la capacité réelle d'encaisser. */
+    const src = lire('server/routes/invoices-public.ts');
+    const bloc = src.slice(src.indexOf('const payReq ='), src.indexOf('// Suivi de vue'));
+    expect(bloc).toContain('getConnectedAccount');
+    expect(bloc).toContain('charges_enabled');
+    // Le jeton ne part que si les trois conditions tiennent.
+    expect(bloc).toMatch(/payTokenActif\s*=\s*payReq\s*&&\s*peutEncaisser/);
+  });
+
+  it('Stripe injoignable ne promet pas un paiement : peutEncaisser reste faux', () => {
+    const src = lire('server/routes/invoices-public.ts');
+    const bloc = src.slice(src.indexOf('let peutEncaisser'), src.indexOf('const payTokenActif'));
+    expect(bloc).toContain('let peutEncaisser = false');
+    expect(bloc).toContain('catch');
+    // aucune réaffectation à vrai dans le catch
+    expect(bloc.slice(bloc.indexOf('catch'))).not.toContain('peutEncaisser = true');
+  });
+
+  it('la page dit POURQUOI le paiement est indisponible, pas « échec du chargement »', () => {
+    const src = lire('src/pages/PublicPayment.tsx');
+    expect(src).toContain('not yet ready to accept payments');
+    expect(src).toMatch(/n’est pas encore activé par cette entreprise/);
+  });
+});

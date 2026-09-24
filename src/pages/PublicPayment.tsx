@@ -24,6 +24,11 @@ function messageLisible(brut: unknown, isFr: boolean, repli: string): string {
   if (m.includes('expired')) return 'Ce lien de paiement a expiré.';
   if (m.includes('invalid')) return 'Ce lien de paiement est invalide.';
   if (m.includes('already paid') || m.includes('already been paid')) return 'Cette facture a déjà été payée.';
+  // « This business is not yet ready to accept payments » (503) : l'entreprise
+  // n'a pas fini sa configuration Stripe. Le repli parlait d'un « échec du
+  // chargement », donc d'une panne — le client croyait le site brisé et
+  // partait, au lieu de comprendre qu'il doit payer autrement.
+  if (m.includes('not yet ready to accept payments')) return 'Le paiement en ligne n’est pas encore activé par cette entreprise. Communiquez avec elle pour régler cette facture.';
   if (m.includes('network') || m.includes('failed to fetch')) return 'Connexion impossible. Vérifiez votre accès à Internet.';
   return repli;
 }

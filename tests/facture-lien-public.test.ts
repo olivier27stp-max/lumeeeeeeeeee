@@ -25,7 +25,7 @@ const TOKEN = '07c6fc57-8185-4c58-87b4-cd41fea70493';
 const ORG = '11111111-2222-3333-4444-555555555555';
 
 const ecritures: Array<{ table: string; op: string; row?: any }> = [];
-const monde = { facture: null as any, items: [] as any[], client: null as any, payReq: null as any };
+const monde = { facture: null as any, items: [] as any[], client: null as any, payReq: null as any, encaisse: true as boolean };
 
 function chaine(table: string) {
   const c: any = {};
@@ -50,6 +50,15 @@ vi.mock('../server/lib/supabase', () => ({
 }));
 vi.mock('../server/lib/companyBranding', () => ({
   getCompanyBranding: async () => ({ company_name: 'Coquin Lavage', logo_url: null, brand_color: '#123456' }),
+}));
+/* Le bouton « Payer » exige que l'entreprise puisse RÉELLEMENT encaisser :
+   réglage actif ET compte Stripe avec charges_enabled. `monde.encaisse` permet
+   de simuler une entreprise dont la configuration Stripe n'est pas finie. */
+vi.mock('../server/lib/payment-settings', () => ({
+  getPaymentSettings: async () => ({ invoice_payments_enabled: true }),
+}));
+vi.mock('../server/lib/stripe-connect', () => ({
+  getConnectedAccount: async () => (monde.encaisse === false ? null : { charges_enabled: true }),
 }));
 vi.mock('../server/lib/config', () => ({
   getBaseUrl: () => 'https://lumecrm.net',
@@ -148,6 +157,20 @@ describe('GET /api/invoices/public/:token', () => {
       const body = await (await fetch(`${s.base}/api/invoices/public/${TOKEN}`)).json();
       expect(body.pay_token).toBe('pay-abc');
     } finally { s.close(); }
+  });
+
+  it('une entreprise qui ne peut pas encaisser n expose PAS de jeton', async () => {
+    /* Le cas vu en prod le 2026-09-24 : la facture affichait « Payer 229,95 $ »
+       et le clic tombait sur « Paiement indisponible ». Le compte Stripe
+       existait mais charges_enabled était faux. Sans jeton, la page propose
+       d'écrire à l'entreprise — un chemin qui, lui, fonctionne. */
+    monde.payReq = { public_token: 'pay-abc', status: 'sent', expires_at: null, amount_cents: 57488 };
+    monde.encaisse = false;
+    const s = await serveur();
+    try {
+      const body = await (await fetch(`${s.base}/api/invoices/public/${TOKEN}`)).json();
+      expect(body.pay_token).toBeNull();
+    } finally { s.close(); monde.encaisse = true; }
   });
 
   it('un lien de paiement expiré n est pas proposé', async () => {
