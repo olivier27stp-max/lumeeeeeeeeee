@@ -237,13 +237,29 @@ describe('validation — ce qui entre en base', () => {
 describe('route — les gardes qui demandent de lire le catalogue', () => {
   const source = lire('server/routes/automation-rules.ts');
 
-  it('utilise le client de l\'utilisateur, jamais le service_role', () => {
+  it('les donnees metier passent par le client de l utilisateur', () => {
     // `getServiceClient()` contourne la RLS : une faille dans ces routes
-    // franchirait alors la frontière entre entreprises.
-    // On cherche l'APPEL, pas le mot : le commentaire d'en-tête explique
-    // justement pourquoi on ne s'en sert pas.
-    expect(source).not.toMatch(/getServiceClient\s*\(/);
-    expect(source).toMatch(/requireAuthedClient/);
+    // franchirait alors la frontiere entre entreprises. Toute lecture ou
+    // ecriture d'automatisation doit donc passer par `auth.client`.
+    // On découpe sur chaque `.from('automation_…')` et on regarde le client
+    // qui le précède : plus lisible et plus sûr qu'une regex multiligne.
+    const morceaux = source.split(/\.from\('automation_/).slice(0, -1);
+    const acces = morceaux.map((m) => (/getServiceClient\(\)\s*$/.test(m.trimEnd()) ? 'service' : 'auth'));
+    expect(acces.length).toBeGreaterThan(3);
+    for (const client of acces) {
+      expect(client, 'une table automation_* lue avec le service_role').toBe('auth');
+    }
+  });
+
+  it('le service_role ne sert QUE au journal des couts de Lumi', () => {
+    // Une seule exception, et elle est obligatoire : `ai_usage` n'accepte
+    // d'ecriture que du `service_role` (policy `ai_usage_service`, verifiee
+    // en base le 2026-09-24). Sans elle, une generation ne serait jamais
+    // facturee au budget, et le plafond mensuel ne voudrait plus rien dire.
+    const appels = source.match(/getServiceClient\(\)/g) ?? [];
+    expect(appels.length, 'le service_role a un nouvel usage : le justifier ici').toBe(1);
+    const bloc = source.slice(source.indexOf('rules/generer'));
+    expect(bloc.slice(0, 2000)).toContain('getServiceClient()');
   });
 
   it('filtre chaque requête sur l\'org de la session', () => {

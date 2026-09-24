@@ -970,7 +970,11 @@ describe('heures calmes — plus de relance courriel à 3h du matin', () => {
   it('les tâches différées respectent la fenêtre sur les DEUX canaux', () => {
     // Toute tâche de cette file est par construction différée : elle porte une
     // relance, jamais une confirmation.
-    expect(engine).toContain("(taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()");
+    // Depuis 2026-09-24, la fenêtre peut être réglée par automatisation
+    // (`horsFenetre(reglages)`), avec 8 h-20 h comme défaut. Ce qui doit
+    // rester vrai : LES DEUX CANAUX sont soumis à la fenêtre — auparavant
+    // seuls les SMS l'étaient, et un courriel partait à 3 h du matin.
+    expect(engine).toMatch(/taskType === 'send_sms' \|\| taskType === 'send_email'\) && horsFenetre\(/);
   });
 
   it('le report ne consomme pas de tentative', () => {

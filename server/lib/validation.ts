@@ -895,6 +895,40 @@ export const sequenceEtapes = z
     }
   });
 
+/**
+ * Les réglages d'une automatisation.
+ *
+ * Absent ou `null` = les défauts du moteur, qui sont bons : fenêtre
+ * 8 h-20 h, arrêt quand la facture est payée ou le devis accepté, une seule
+ * inscription par entité. On ne demande à personne de les configurer pour
+ * que ça marche — c'est justement ce qui distingue Lume de GoHighLevel, où
+ * ces réglages dorment dans un onglet que personne n'ouvre.
+ */
+export const automationSettingsSchema = z
+  .object({
+    /** Le même client peut-il repasser dans le parcours ? */
+    reentree: z.boolean().optional(),
+    /** Sortir du parcours dès que le client répond. */
+    arret_sur_reponse: z.boolean().optional(),
+    /**
+     * Heures pendant lesquelles un message peut partir, en heure locale.
+     * Bornées à 0-23 et `debut < fin` : une fenêtre inversée ne laisserait
+     * jamais rien passer, et le moteur attendrait pour toujours.
+     */
+    fenetre: z
+      .object({
+        debut: z.number().int().min(0).max(23),
+        fin: z.number().int().min(1).max(24),
+      })
+      .refine((f) => f.debut < f.fin, 'The window must start before it ends.')
+      .optional(),
+    /** Lundi au vendredi seulement. */
+    jours_ouvrables: z.boolean().optional(),
+    /** Les messages automatiques ne remontent pas en non-lus. */
+    marquer_lu: z.boolean().optional(),
+  })
+  .strict();
+
 const corpsAutomatisation = z.object({
   name: z.string().trim().min(1, 'Name is required.').max(120),
   description: z.string().trim().max(500).optional().nullable(),
@@ -933,6 +967,7 @@ const corpsAutomatisation = z.object({
    * dessiné. Le refuser faisait échouer l'enregistrement automatique du
    * builder à chaque frappe, et le travail se perdait en silence.
    */
+  settings: automationSettingsSchema.nullable().optional(),
   steps: z
     .union([sequenceEtapes, z.array(z.never()).max(0)])
     .nullable()

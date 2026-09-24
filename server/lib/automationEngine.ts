@@ -35,6 +35,12 @@ interface AutomationRule {
    * d'être pilotée par `delay_seconds` + `actions` exactement comme avant.
    */
   steps?: Etape[] | null;
+  /**
+   * Réglages propres à cette règle. `null` = les défauts du moteur, qui sont
+   * bons : fenêtre 8h-20h, arrêt sur changement d'état. Personne n'a besoin
+   * d'y toucher pour que ça marche.
+   */
+  settings?: ReglagesRegle | null;
   is_active: boolean;
   /** Portée pipeline (déclencheurs `deal.*`). `null` = toutes les étapes. */
   pipeline_id?: string | null;
@@ -162,9 +168,42 @@ function localHour(d: Date): number {
   );
 }
 
+export interface ReglagesRegle {
+  reentree?: boolean;
+  arret_sur_reponse?: boolean;
+  fenetre?: { debut: number; fin: number };
+  jours_ouvrables?: boolean;
+  marquer_lu?: boolean;
+}
+
 export function isQuietHours(d: Date = new Date()): boolean {
   const h = localHour(d);
   return h < SEND_START_HOUR || h >= SEND_END_HOUR;
+}
+
+/**
+ * Hors de la fenêtre d'envoi de CETTE règle.
+ *
+ * Sans réglage, c'est la fenêtre commune (8 h-20 h) : le comportement d'une
+ * automatisation qui n'a jamais été touchée ne change pas d'un iota.
+ *
+ * `jours_ouvrables` s'ajoute à l'heure : un message prêt le samedi attend
+ * lundi matin. Utile pour les relances commerciales, pas pour un rappel de
+ * rendez-vous — d'où le réglage par automatisation plutôt que global.
+ */
+export function horsFenetre(reglages: ReglagesRegle | null | undefined, d: Date = new Date()): boolean {
+  const debut = reglages?.fenetre?.debut ?? SEND_START_HOUR;
+  const fin = reglages?.fenetre?.fin ?? SEND_END_HOUR;
+  const h = localHour(d);
+  if (h < debut || h >= fin) return true;
+
+  if (reglages?.jours_ouvrables) {
+    // `getDay()` lit le fuseau du SERVEUR ; on passe par Intl pour rester
+    // sur l'heure du Québec, comme le reste de la fenêtre.
+    const jour = new Intl.DateTimeFormat('en-CA', { timeZone: QUIET_TZ, weekday: 'short' }).format(d);
+    if (jour === 'Sat' || jour === 'Sun') return true;
+  }
+  return false;
 }
 
 /** Décalage UTC (en minutes) du fuseau local à cet instant — +/- selon l'heure avancée. */
@@ -222,11 +261,14 @@ function shouldRespectQuietHours(actionType: string, delaySeconds: number): bool
 }
 
 /** Next moment inside the send window, stepping 30 min (DST-safe, no tz lib). */
-export function nextSendTime(from: Date = new Date()): Date {
+export function nextSendTime(from: Date = new Date(), reglages?: ReglagesRegle | null): Date {
   const next = new Date(from);
-  for (let i = 0; i < 48; i++) {
+  // 48 pas de 30 min = 24 h. Avec `jours_ouvrables`, un message prêt le
+  // samedi doit pouvoir attendre jusqu'à lundi : on va jusqu'à 3 jours.
+  const pasMax = reglages?.jours_ouvrables ? 144 : 48;
+  for (let i = 0; i < pasMax; i++) {
     next.setTime(next.getTime() + 30 * 60 * 1000);
-    if (!isQuietHours(next)) return next;
+    if (!horsFenetre(reglages, next)) return next;
   }
   return from;
 }
@@ -279,7 +321,7 @@ async function executeRuleActions(
     // Reporte à la prochaine fenêtre d'envoi les actions déclenchées en heures
     // calmes. Une règle immédiate (délai 0) porte une confirmation attendue :
     // seuls ses SMS sont reportés, jamais ses courriels.
-    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && isQuietHours()) {
+    if (shouldRespectQuietHours(action.type, rule.delay_seconds) && horsFenetre(rule.settings)) {
       // supabase-js ne lève jamais : l'erreur (dont le doublon 23505) arrive
       // dans la réponse, pas dans un catch.
       const { error: deferError } = await config.supabase.from('automation_scheduled_tasks').insert({
@@ -288,7 +330,7 @@ async function executeRuleActions(
         entity_type: event.entityType,
         entity_id: event.entityId,
         action_config: { ...action, trigger_event: event.type, event_metadata: event.metadata },
-        execute_at: nextSendTime().toISOString(),
+        execute_at: nextSendTime(new Date(), rule.settings).toISOString(),
         status: 'pending',
         execution_key: executionKey,
       });
@@ -810,7 +852,7 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // (org_id, automation_rule_id) qui porte l'isolation multi-tenant).
     // PostgREST répondait PGRST201 et AUCUNE tâche d'automatisation planifiée
     // n'était plus exécutée.
-    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions, steps)')
+    .select('*, automation_rules!automation_scheduled_tasks_automation_rule_id_fkey(name, actions, conditions, steps, settings)')
     .eq('status', 'pending')
     .lte('execute_at', now)
     .order('execute_at', { ascending: true })
@@ -830,8 +872,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
     // Les deux canaux sont concernés — auparavant seuls les SMS l'étaient, et
     // un courriel de relance pouvait partir à 3h du matin.
     const taskType = task.action_config?.type;
-    if ((taskType === 'send_sms' || taskType === 'send_email') && isQuietHours()) {
-      const prochaine = nextSendTime();
+    const reglagesRegle = (task.automation_rules?.settings ?? null) as ReglagesRegle | null;
+    if ((taskType === 'send_sms' || taskType === 'send_email') && horsFenetre(reglagesRegle)) {
+      const prochaine = nextSendTime(new Date(), reglagesRegle);
 
       /**
        * Un rappel « X h avant » que le report ferait tomber APRÈS son objet

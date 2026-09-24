@@ -319,7 +319,11 @@ describe('le moteur lit et avance vraiment', () => {
     // Avec PostgREST, une colonne oubliée dans le select ne lève pas : la
     // fonctionnalité meurt en silence. C'est écrit dans CLAUDE.md, et c'est
     // exactement ce qui arriverait ici.
-    expect(moteur).toMatch(/automation_rules!automation_scheduled_tasks_automation_rule_id_fkey\(name, actions, conditions, steps\)/);
+    // `settings` s'est ajouté depuis : ce qui compte, c'est que `steps` soit
+    // toujours là — une colonne oubliée ici rend les séquences invisibles.
+    const selectMoteur = moteur.slice(moteur.indexOf('automation_rule_id_fkey('));
+    const colonnesChargees = selectMoteur.slice(0, selectMoteur.indexOf(')'));
+    expect(colonnesChargees, 'steps doit etre charge avec la regle').toContain('steps');
   });
 
   it('démarre une séquence au déclenchement', () => {
@@ -358,5 +362,75 @@ describe('les deux copies des types ne divergent pas', () => {
       expect(serveur, `${champ} manque côté serveur`).toContain(champ);
       expect(client, `${champ} manque côté client`).toContain(champ);
     }
+  });
+});
+
+describe('réglages par automatisation — le moteur les respecte vraiment', () => {
+  /** Un moment donné, en heure du Québec. */
+  const a = (h: number, jour = 15) => new Date(`2026-09-${jour}T${String(h).padStart(2, '0')}:00:00-04:00`);
+
+  it('sans réglage, la fenêtre reste 8 h – 20 h', async () => {
+    const { horsFenetre } = await import('../server/lib/automationEngine');
+    expect(horsFenetre(null, a(7))).toBe(true);
+    expect(horsFenetre(null, a(9))).toBe(false);
+    expect(horsFenetre(null, a(19))).toBe(false);
+    expect(horsFenetre(null, a(21))).toBe(true);
+    // Une règle qui n'a jamais été touchée doit se comporter EXACTEMENT
+    // comme avant : c'est la promesse d'une migration additive.
+    expect(horsFenetre(undefined, a(9))).toBe(false);
+  });
+
+  it('une fenêtre personnalisée change vraiment le comportement', async () => {
+    const { horsFenetre } = await import('../server/lib/automationEngine');
+    const urgence = { fenetre: { debut: 6, fin: 23 } };
+    expect(horsFenetre(urgence, a(7)), '7 h doit passer avec une fenêtre 6-23').toBe(false);
+    expect(horsFenetre(urgence, a(22)), '22 h doit passer').toBe(false);
+    expect(horsFenetre(urgence, a(5)), '5 h reste hors fenêtre').toBe(true);
+  });
+
+  it('« jours ouvrables » bloque la fin de semaine', async () => {
+    const { horsFenetre } = await import('../server/lib/automationEngine');
+    // Le 19 septembre 2026 est un samedi, le 21 un lundi.
+    expect(horsFenetre({ jours_ouvrables: true }, a(10, 19)), 'samedi 10 h doit être bloqué').toBe(true);
+    expect(horsFenetre({ jours_ouvrables: true }, a(10, 21)), 'lundi 10 h doit passer').toBe(false);
+    // Sans le réglage, le samedi passe comme avant.
+    expect(horsFenetre(null, a(10, 19))).toBe(false);
+  });
+
+  it('le prochain créneau sort de la fenêtre calme', async () => {
+    const { nextSendTime, horsFenetre } = await import('../server/lib/automationEngine');
+    const nuit = a(3);
+    const prochain = nextSendTime(nuit, null);
+    expect(prochain.getTime()).toBeGreaterThan(nuit.getTime());
+    expect(horsFenetre(null, prochain), 'le créneau trouvé doit être DANS la fenêtre').toBe(false);
+  });
+
+  it('avec « jours ouvrables », le samedi attend jusqu\'à lundi', async () => {
+    const { nextSendTime, horsFenetre } = await import('../server/lib/automationEngine');
+    const r = { jours_ouvrables: true };
+    // Samedi 10 h : 24 h de recherche ne suffiraient pas, il faut aller
+    // jusqu'à lundi — d'où les 144 pas au lieu de 48.
+    const prochain = nextSendTime(a(10, 19), r);
+    expect(horsFenetre(r, prochain), 'le créneau trouvé doit être un jour ouvrable').toBe(false);
+  });
+
+  it('la validation refuse une fenêtre inversée', async () => {
+    const { automationSettingsSchema } = await import('../server/lib/validation');
+    // 20 h → 8 h ne laisserait JAMAIS rien passer : le moteur attendrait
+    // pour toujours, sans un mot.
+    expect(automationSettingsSchema.safeParse({ fenetre: { debut: 20, fin: 8 } }).success).toBe(false);
+    expect(automationSettingsSchema.safeParse({ fenetre: { debut: 8, fin: 20 } }).success).toBe(true);
+  });
+
+  it('la validation refuse un réglage inventé', async () => {
+    const { automationSettingsSchema } = await import('../server/lib/validation');
+    expect(automationSettingsSchema.safeParse({ envoyer_des_licornes: true }).success).toBe(false);
+  });
+
+  it('le worker charge bien `settings` avec la règle', () => {
+    // Sans cette colonne dans le select, la fenêtre personnalisée ne
+    // s'appliquerait qu'aux envois immédiats — et personne ne le verrait.
+    const moteur = lire('server/lib/automationEngine.ts');
+    expect(moteur).toContain('conditions, steps, settings)');
   });
 });
