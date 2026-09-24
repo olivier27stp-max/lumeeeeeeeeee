@@ -23,7 +23,7 @@ import puppeteer from 'puppeteer';
 const TENANTS = {
   'Coquin lavage': {
     nom: 'Coquin lavage',
-    ville: 'Sherbrooke',
+    ville: 'Wickham',
     rgb: 'rgb(222, 122, 27)', // #de7a1b
     url: 'https://lumecrm.net/invoice/76dd712b-e1ed-4391-9543-63270455a38d',
   },
