@@ -7,13 +7,15 @@
  *   DELETE /            retire le domaine (les envois repartent de la plateforme)
  *
  * Owner/admin seulement (aussi imposé par ROUTE_PERMISSIONS : settings.update).
- * La logique et l'API Resend vivent dans server/lib/courriels/domaines.ts.
+ * La logique vit dans server/lib/courriels/domaines.ts, les identités chez SES
+ * (server/lib/courriels/ses-identites.ts).
  */
 import { Router } from 'express';
 import { requireAuthedClient, isOrgAdminOrOwner, getServiceClient } from '../lib/supabase';
 import { validate, sendingDomainSchema } from '../lib/validation';
 import { sendSafeError } from '../lib/error-handler';
 import { demanderDomaine, lireDomaine, retirerDomaine, verifierDomaine } from '../lib/courriels/domaines';
+import { sesIdentitesDisponible } from '../lib/courriels/ses-identites';
 
 const router = Router();
 
@@ -33,7 +35,9 @@ router.get('/', async (req, res) => {
     const auth = await adminSeulement(req, res);
     if (!auth) return;
     const domain = await lireDomaine(getServiceClient(), auth.orgId);
-    return res.json({ domain, providerConfigured: Boolean(process.env.RESEND_API_KEY) });
+    // Les identités vivent chez SES depuis le portage : tester RESEND_API_KEY
+    // aurait affiché « fournisseur non configuré » même clés AWS posées.
+    return res.json({ domain, providerConfigured: sesIdentitesDisponible() });
   } catch (error: any) {
     return sendSafeError(res, error, 'Failed to load sending domain.', '[sending-domain/get]');
   }
