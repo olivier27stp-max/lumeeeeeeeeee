@@ -354,7 +354,8 @@ router.post('/emails/send-invoice', validate(sendInvoiceEmailSchema), async (req
 
        Sans modèle → `null` → le courriel sort EXACTEMENT comme aujourd'hui. */
     const modeleOrg = (!emailTemplateId && !customBody)
-      ? await texteDuCourriel(orgId, 'invoice_sent', templateVars)
+      ? await texteDuCourriel(orgId, 'invoice_sent', templateVars, undefined,
+        { invoice: invoice.id, client: invoice.client_id ?? null })
       : null;
 
     // If no custom body and no template, use default layout

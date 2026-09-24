@@ -27,6 +27,7 @@ import ActivityTimeline from '../components/ActivityTimeline';
 import RequestPaymentModal from '../components/RequestPaymentModal';
 import InvoiceRenderer from '../components/invoice/InvoiceRenderer';
 import { buildRenderData } from '../components/invoice/buildRenderData';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
 
 export default function InvoiceDetails() {
   const { t, language } = useTranslation();
@@ -535,6 +536,9 @@ export default function InvoiceDetails() {
           </div>
         </div>
       </section>
+
+      {/* Champs personnalisés (v2) */}
+      <CustomFieldsPanel objet="invoice" entityId={invoice.id} fr={language === 'fr'} className="section-card p-4" />
 
       <section className="section-card p-6">
         <h2 className="text-[15px] font-bold text-text-primary">{t.invoiceDetails.lineItems}</h2>

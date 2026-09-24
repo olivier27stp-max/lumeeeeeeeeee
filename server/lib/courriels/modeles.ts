@@ -29,6 +29,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getServiceClient } from '../supabase';
 import { applyTemplate } from '../notificationHelpers';
 import { logger } from '../logger';
+import { variablesChamps } from '../champs/service';
 
 /** Le texte d'un courriel tel que l'entreprise l'a écrit, variables déjà remplacées. */
 export interface TexteCourriel {
@@ -210,6 +211,8 @@ export async function texteDuCourriel(
   type: string,
   variables: Record<string, string | null | undefined> = {},
   client?: SupabaseClient,
+  /** Fiches dont les champs personnalisés peuvent être cités ({invoice_cf_…}, {client_cf_…}). */
+  refsChamps?: Partial<Record<'client' | 'deal' | 'job' | 'quote' | 'invoice', string | null>>,
 ): Promise<TexteCourriel | null> {
   if (!orgId || !type) return null;
 
@@ -237,6 +240,19 @@ export async function texteDuCourriel(
 
     const modele = data?.[0];
     if (!modele) return null;
+
+    // Champs personnalisés : lus SEULEMENT si le modèle en cite un — aucun
+    // coût pour les modèles qui n'en utilisent pas.
+    if (refsChamps && /_cf_/.test(`${modele.subject ?? ''} ${modele.body ?? ''}`)) {
+      try {
+        const { data: cs } = await db.from('company_settings').select('default_language').eq('org_id', orgId).maybeSingle();
+        variables = { ...(await variablesChamps(db, orgId, refsChamps, cs?.default_language === 'en' ? 'en' : 'fr')), ...variables };
+      } catch (err: unknown) {
+        logger.error('[courriels/modeles] champs personnalisés illisibles, variables laissées vides', {
+          orgId, type, error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     const sujet = applyTemplate(String(modele.subject ?? ''), variables).trim();
     const corps = applyTemplate(String(modele.body ?? ''), variables);

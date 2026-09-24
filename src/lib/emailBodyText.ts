@@ -228,7 +228,13 @@ export const VARIABLES_CONNUES: readonly string[] = [
  * Les variables d'un gabarit que le serveur ne saura PAS remplir.
  * Accepte les deux syntaxes reconnues par `resolveTemplate` : `{var}` et `[var]`.
  */
-export function variablesInconnues(texte: string): string[] {
+export function variablesInconnues(texte: string, variablesChamps?: readonly string[]): string[] {
   const citees = [...texte.matchAll(/[{[](\w+)[}\]]/g)].map((m) => m[1]);
-  return [...new Set(citees.filter((v) => !VARIABLES_CONNUES.includes(v)))];
+  // Champs personnalisés : {client_cf_<clé>}… Avec la liste des champs de
+  // l'entreprise, une clé mal tapée reste signalée ; sans elle, on ne peut
+  // pas trancher et on ne crie pas au loup.
+  const estChamp = (v: string) => (variablesChamps
+    ? variablesChamps.includes(v)
+    : /^(client|deal|job|quote|invoice)_cf_[a-z0-9_]+$/.test(v));
+  return [...new Set(citees.filter((v) => !VARIABLES_CONNUES.includes(v) && !estChamp(v)))];
 }

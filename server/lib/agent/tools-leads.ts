@@ -25,6 +25,9 @@
 import type { PermissionKey } from '../../../src/lib/permissions';
 import type { IdTopic } from '../lumi/topics';
 import type { AgentTool, ToolContext } from './tools';
+import type { ChampPerso, ObjetChamp, TypeChamp, ValeurChamp } from '../../../src/lib/champs/types';
+import { formaterValeur } from '../../../src/lib/champs/valeurs';
+import { listerChamps, lireValeursLot, ecrireValeurs } from '../champs/service';
 import {
   executerIdempotent, champRequis, appelInterne, AppelInterneIncertain,
   traduireStatut, STATUT_LEAD, STATUT_CLIENT,
@@ -853,16 +856,38 @@ const deleteNote: AgentTool = {
 };
 
 /* ═══════════════════════════════════════════════════════════════
-   CHAMPS PERSONNALISÉS (custom_columns / custom_column_values)
+   CHAMPS PERSONNALISÉS — branchés sur customFieldsService (v2)
+
+   Même contrat qu'avant (arguments, forme de la réponse, vocabulaire de
+   types 'text'/'currency'/'dropdown'…) pour que Lumi et les clients MCP
+   ne voient aucune différence ; seule la tuyauterie change. L'ancienne
+   écriture (upsert onConflict column_id,record_id) échouait à CHAQUE
+   appel depuis que cet index avait été remplacé : aucune valeur n'a
+   jamais pu s'enregistrer par cet outil.
    ═══════════════════════════════════════════════════════════════ */
 
-const ENTITES_CHAMPS = ['clients', 'jobs', 'invoices'] as const;
+const ENTITES_CHAMPS = ['clients', 'jobs', 'invoices', 'deals', 'quotes'] as const;
+const OBJET_DE_L_ENTITE: Record<(typeof ENTITES_CHAMPS)[number], ObjetChamp> = {
+  clients: 'client', jobs: 'job', invoices: 'invoice', deals: 'deal', quotes: 'quote',
+};
 
-function optionsDeColonne(col: any): string[] | null {
-  const cfg = col?.config || {};
-  if (col?.col_type === 'status') return Array.isArray(cfg.statuses) ? cfg.statuses.map((s: any) => String(s.value)) : [];
-  if (col?.col_type === 'dropdown' || col?.col_type === 'label') return Array.isArray(cfg.options) ? cfg.options.map((o: any) => String(o.value)) : [];
-  return null;
+/** Vocabulaire d'origine de l'outil, conservé pour le contrat. */
+function typeAncien(t: TypeChamp): string {
+  if (t === 'single_line' || t === 'multi_line') return 'text';
+  if (t === 'monetary') return 'currency';
+  if (t === 'dropdown_single') return 'dropdown';
+  if (t === 'dropdown_multi') return 'multi_dropdown';
+  return t;
+}
+
+const optionsActives = (c: ChampPerso) => c.options.filter((o) => !o.archived_at);
+
+/** Valeur telle que l'outil la montrait : montant en dollars, liste = libellés. */
+function valeurAncienne(c: ChampPerso, v: ValeurChamp): string | number | null {
+  if (v === null || v === undefined) return null;
+  if (c.field_type === 'monetary') return Number(v) / 100;
+  if (c.field_type === 'dropdown_single' || c.field_type === 'dropdown_multi') return formaterValeur(c, v) || null;
+  return v as string | number;
 }
 
 const listCustomFields: AgentTool = {
@@ -870,43 +895,37 @@ const listCustomFields: AgentTool = {
   declaration: {
     name: 'list_custom_fields',
     description:
-      "The org's custom fields (extra columns the user added to clients, jobs or invoices), with their type and "
+      "The org's custom fields (extra fields the user added to clients, jobs, invoices, quotes or pipeline deals), with their type and "
       + 'allowed options. With record_id, also returns the current values of that record. Use it before set_custom_field.',
     parameters: {
       type: 'object',
       properties: {
-        entity: { type: 'string', enum: [...ENTITES_CHAMPS], description: "'clients' (default), 'jobs' or 'invoices'." },
-        record_id: { type: 'string', description: 'Optional client/job/invoice id to read its current values.' },
+        entity: { type: 'string', enum: [...ENTITES_CHAMPS], description: "'clients' (default), 'jobs', 'invoices', 'quotes' or 'deals'." },
+        record_id: { type: 'string', description: 'Optional client/job/invoice/quote/deal id to read its current values.' },
       },
     },
   },
   handler: async (args, ctx) => {
-    const entite = (ENTITES_CHAMPS as readonly string[]).includes(String(args.entity)) ? String(args.entity) : 'clients';
-    const { data: cols, error } = await ctx.client
-      .from('custom_columns')
-      .select('id, name, col_type, config, required, visible')
-      .eq('org_id', ctx.orgId).eq('entity', entite)
-      .is('deleted_at', null)
-      .order('position', { ascending: true });
-    if (error) return erreurLecture('custom_fields', error);
-    const valeurs: Record<string, any> = {};
-    if (args.record_id && cols?.length) {
-      const { data: vals, error: errVals } = await ctx.client
-        .from('custom_column_values')
-        .select('column_id, value_text, value_number, value_boolean, value_date, value_json')
-        .eq('org_id', ctx.orgId).eq('record_id', String(args.record_id));
-      if (errVals) return erreurLecture('custom_values', errVals);
-      for (const v of vals || []) valeurs[v.column_id] = v.value_text ?? v.value_number ?? v.value_boolean ?? v.value_date ?? v.value_json ?? null;
+    const entite = (ENTITES_CHAMPS as readonly string[]).includes(String(args.entity))
+      ? (String(args.entity) as (typeof ENTITES_CHAMPS)[number]) : 'clients';
+    const objet = OBJET_DE_L_ENTITE[entite];
+    try {
+      const { champs } = await listerChamps(ctx.client, ctx.orgId, { objet });
+      const valeurs = args.record_id
+        ? (await lireValeursLot(ctx.client, ctx.orgId, objet, [String(args.record_id)], champs))[String(args.record_id)] ?? {}
+        : {};
+      return {
+        entity: entite,
+        count: champs.length,
+        fields: champs.map((c) => ({
+          id: c.id, name: c.label, type: typeAncien(c.field_type), required: c.is_required,
+          options: optionsActives(c).length || c.field_type.startsWith('dropdown') ? optionsActives(c).map((o) => o.label) : null,
+          ...(args.record_id ? { value: valeurAncienne(c, valeurs[c.id]?.value ?? null) } : {}),
+        })),
+      };
+    } catch (err) {
+      return erreurLecture('custom_fields', err);
     }
-    return {
-      entity: entite,
-      count: cols?.length || 0,
-      fields: (cols || []).map((c: any) => ({
-        id: c.id, name: c.name, type: c.col_type, required: Boolean(c.required),
-        options: optionsDeColonne(c),
-        ...(args.record_id ? { value: valeurs[c.id] ?? null } : {}),
-      })),
-    };
   },
 };
 
@@ -916,80 +935,56 @@ const setCustomField: AgentTool = {
   declaration: {
     name: 'set_custom_field',
     description:
-      'Set (or clear) the value of a custom field on a client, job or invoice — same as editing the cell in Lume. '
+      'Set (or clear) the value of a custom field on a client, job, invoice, quote or deal — same as editing it in Lume. '
       + 'Get the field id and its type/options from list_custom_fields. Pass an empty value to clear it.',
     parameters: {
       type: 'object',
       properties: {
         field_id: { type: 'string', description: 'Custom field id (from list_custom_fields).' },
-        record_id: { type: 'string', description: 'Client, job or invoice id the value belongs to.' },
-        value: { type: 'string', description: "The value as text: number for number/currency/rating, 'true'/'false' for checkbox, YYYY-MM-DD for date, one of the options for status/dropdown. Empty = clear." },
+        record_id: { type: 'string', description: 'Client, job, invoice, quote or deal id the value belongs to.' },
+        value: { type: 'string', description: "The value as text: number for number/currency (currency in dollars), YYYY-MM-DD for date, one of the options for dropdown (several separated by commas for multi_dropdown). Empty = clear." },
       },
       required: ['field_id', 'record_id'],
     },
   },
   handler: async (args, ctx) =>
     executerIdempotent(ctx, 'set_custom_field', args, async () => {
-      const colonneId = champRequis(args.field_id, 'Le champ personnalisé');
+      const champId = champRequis(args.field_id, 'Le champ personnalisé');
       const recordId = champRequis(args.record_id, 'La fiche');
-      const { data: col, error: errCol } = await ctx.client
-        .from('custom_columns')
-        .select('id, name, col_type, config')
-        .eq('org_id', ctx.orgId).eq('id', colonneId)
-        .is('deleted_at', null)
-        .maybeSingle();
-      if (errCol) echecEcriture('retrouver le champ personnalisé', errCol);
+      const { champs } = await listerChamps(ctx.client, ctx.orgId, { ids: [champId] });
+      const col = champs[0];
       if (!col) throw new Error('Champ personnalisé introuvable — consulte list_custom_fields.');
 
-      // Miroir de setValue (customFieldsApi) : une seule colonne typée remplie.
+      // Le texte de l'outil → la valeur typée de l'API.
       const brut = args.value == null ? '' : String(args.value).trim();
-      const ligne: Record<string, any> = {
-        org_id: ctx.orgId, column_id: col.id, record_id: recordId,
-        value_text: null, value_number: null, value_boolean: null, value_date: null, value_json: null,
-      };
-      let affiche: any = null;
+      let valeur: ValeurChamp = null;
       if (brut) {
-        switch (col.col_type) {
-          case 'number': case 'currency': case 'rating': {
-            const n = Number(brut.replace(',', '.'));
-            if (!Number.isFinite(n)) throw new Error(`« ${col.name} » attend un nombre.`);
-            ligne.value_number = n; affiche = n; break;
+        switch (col.field_type) {
+          case 'monetary': {
+            const n = Number(brut.replace(/[\s$]/g, '').replace(',', '.'));
+            if (!Number.isFinite(n)) throw new Error(`« ${col.label} » attend un montant.`);
+            valeur = Math.round(n * 100); break;
           }
-          case 'checkbox': {
-            if (!['true', 'false', 'oui', 'non', 'yes', 'no', '1', '0'].includes(brut.toLowerCase())) throw new Error(`« ${col.name} » attend vrai ou faux.`);
-            ligne.value_boolean = ['true', 'oui', 'yes', '1'].includes(brut.toLowerCase()); affiche = ligne.value_boolean; break;
+          case 'dropdown_single': case 'dropdown_multi': {
+            const voulus = col.field_type === 'dropdown_multi' ? brut.split(',').map((x) => x.trim()).filter(Boolean) : [brut];
+            const ids = voulus.map((l) => optionsActives(col).find((o) => o.label.toLowerCase() === l.toLowerCase())?.id);
+            if (ids.some((x) => !x)) throw new Error(`« ${col.label} » n’accepte que : ${optionsActives(col).map((o) => o.label).join(', ')}.`);
+            valeur = col.field_type === 'dropdown_multi' ? (ids as string[]) : (ids[0] as string); break;
           }
-          case 'date': {
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(brut) || Number.isNaN(Date.parse(brut))) throw new Error(`« ${col.name} » attend une date AAAA-MM-JJ.`);
-            ligne.value_date = brut; affiche = brut; break;
-          }
-          case 'status': case 'dropdown': case 'label': {
-            const options = optionsDeColonne(col) || [];
-            const choix = options.find((o) => o.toLowerCase() === brut.toLowerCase());
-            if (options.length && !choix) throw new Error(`« ${col.name} » n’accepte que : ${options.join(', ')}.`);
-            ligne.value_text = choix ?? brut; affiche = ligne.value_text; break;
-          }
-          case 'email': {
-            if (!/^[^@\s]+@[^@\s]+[.][^@\s]+$/.test(brut)) throw new Error(`« ${col.name} » attend une adresse courriel valide.`);
-            ligne.value_text = brut; affiche = brut; break;
-          }
-          case 'text': case 'phone': case 'url': {
-            ligne.value_text = brut.slice(0, 2000); affiche = ligne.value_text; break;
-          }
-          default: {
-            ligne.value_json = brut; affiche = brut;
-          }
+          case 'number': valeur = Number(brut.replace(',', '.')); if (!Number.isFinite(valeur)) throw new Error(`« ${col.label} » attend un nombre.`); break;
+          default: valeur = brut.slice(0, 5000);
         }
       }
-      const { error } = await ctx.client
-        .from('custom_column_values')
-        .upsert(ligne, { onConflict: 'column_id,record_id' });
-      if (error) echecEcriture(`enregistrer « ${col.name} »`, error);
+      const [r] = await ecrireValeurs(ctx.client, ctx.orgId, col.object_type, recordId,
+        [{ field_id: col.id, value: valeur }], { acteur: ctx.userId, source: 'agent' });
+      // Les refus de validation sont déjà des phrases pour l'humain : on les relaie tels quels.
+      if (!r?.ok) throw new Error(r?.erreur ?? `Impossible d’enregistrer « ${col.label} ».`);
+      const lue = (await lireValeursLot(ctx.client, ctx.orgId, col.object_type, [recordId], [col]))[recordId]?.[col.id]?.value ?? null;
       return {
         updated: true,
-        field: col.name,
-        value: affiche,
-        note: brut ? `« ${col.name} » enregistré.` : `« ${col.name} » vidé.`,
+        field: col.label,
+        value: valeurAncienne(col, lue),
+        note: brut ? `« ${col.label} » enregistré.` : `« ${col.label} » vidé.`,
       };
     }),
 };

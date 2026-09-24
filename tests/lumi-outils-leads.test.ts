@@ -339,35 +339,70 @@ describe('notes', () => {
 
 /* ── 7. Champs personnalisés ─────────────────────────────────── */
 
+// Les anciens tests figeaient l'écriture `upsert onConflict column_id,record_id`
+// — qui échouait en vrai à chaque appel (index remplacé en 2026-07) : ils
+// prouvaient une erreur. Ceux-ci prouvent le contrat de l'outil branché sur
+// customFieldsService (server/lib/champs/service.ts), sans rien d'autre de
+// faux que le client Supabase.
 describe('champs personnalisés', () => {
-  it('list_custom_fields : colonnes de l org avec options ; valeurs de la fiche si record_id', async () => {
+  const ETAGE = { id: 'K1', object_type: 'client', key: 'etage', label: 'Étage', field_type: 'number', config: {}, is_required: false, archived_at: null };
+  const SUIVI = { id: 'K2', object_type: 'client', key: 'suivi', label: 'Suivi', field_type: 'dropdown_single', config: {}, is_required: false, archived_at: null };
+  const PRIX = { id: 'K3', object_type: 'deal', key: 'prix_cible', label: 'Prix cible', field_type: 'monetary', config: { currency: 'CAD' }, is_required: false, archived_at: null };
+  const OPT = { data: [{ id: 'O1', field_id: 'K2', label: 'Fait', color: null, position: 0, archived_at: null }], error: null };
+
+  it('list_custom_fields : champs de l org, types dans le vocabulaire d origine, valeurs de la fiche si record_id', async () => {
     const f = fauxClient({
-      custom_columns: { data: [{ id: 'K1', name: 'Étage', col_type: 'number', config: {} }, { id: 'K2', name: 'Suivi', col_type: 'status', config: { statuses: [{ value: 'Done', color: 'x' }] } }], error: null },
-      custom_column_values: { data: [{ column_id: 'K1', value_number: 3 }], error: null },
+      custom_fields: { data: [ETAGE, SUIVI], error: null },
+      custom_field_options: OPT,
+      custom_field_folders: { data: [], error: null },
+      custom_field_values: { data: [{ id: 'V1', field_id: 'K1', client_id: 'C1', version: 1, updated_at: 'x', value_number: 3 }], error: null },
     });
     const r = await outil('list_custom_fields').handler!({ entity: 'clients', record_id: 'C1' }, ctxAvec(f.client));
-    expect(filtreOrg(f.appels, 'custom_columns')).toBe(true);
-    expect(filtreOrg(f.appels, 'custom_column_values')).toBe(true);
-    expect(r).toMatchObject({ entity: 'clients', count: 2, fields: [{ id: 'K1', type: 'number', value: 3, options: null }, { id: 'K2', options: ['Done'], value: null }] });
+    expect(filtreOrg(f.appels, 'custom_fields')).toBe(true);
+    expect(filtreOrg(f.appels, 'custom_field_values')).toBe(true);
+    expect(r).toMatchObject({ entity: 'clients', count: 2, fields: [
+      { id: 'K1', name: 'Étage', type: 'number', value: 3, options: null },
+      { id: 'K2', name: 'Suivi', type: 'dropdown', options: ['Fait'], value: null },
+    ] });
   });
 
-  it('set_custom_field : colonne lue dans l org, valeur typée, upsert org_id + onConflict column_id,record_id', async () => {
-    const f = fauxClient({ custom_columns: { data: { id: 'K1', name: 'Étage', col_type: 'number', config: {} }, error: null }, custom_column_values: { error: null } });
-    const r = await outil('set_custom_field').handler!({ field_id: 'K1', record_id: 'C1', value: '3' }, ctxAvec(f.client));
-    expect(filtreOrg(f.appels, 'custom_columns')).toBe(true);
-    const up = aFait(f.appels, 'custom_column_values', 'upsert')[0];
-    expect(up.args[0]).toMatchObject({ org_id: ORG, column_id: 'K1', record_id: 'C1', value_number: 3, value_text: null });
-    expect(up.args[1]).toEqual({ onConflict: 'column_id,record_id' });
-    expect(r).toMatchObject({ updated: true, field: 'Étage', value: 3, note: '« Étage » enregistré.' });
+  it('list_custom_fields : les deals et devis sont désormais couverts', async () => {
+    const f = fauxClient({ custom_fields: { data: [PRIX], error: null }, custom_field_folders: { data: [], error: null } });
+    const r = await outil('list_custom_fields').handler!({ entity: 'deals' }, ctxAvec(f.client));
+    expect(f.appels.some((a) => a.table === 'custom_fields' && a.op === 'eq' && a.args[0] === 'object_type' && a.args[1] === 'deal')).toBe(true);
+    expect(r).toMatchObject({ entity: 'deals', fields: [{ id: 'K3', type: 'currency' }] });
   });
 
-  it('set_custom_field : option hors liste refusée ; valeur vide = vidé', async () => {
-    const col = { data: { id: 'K2', name: 'Suivi', col_type: 'status', config: { statuses: [{ value: 'Done', color: 'x' }] } }, error: null };
-    await expect(outil('set_custom_field').handler!({ field_id: 'K2', record_id: 'C1', value: 'Peut-être' }, ctxAvec(fauxClient({ custom_columns: col }).client))).rejects.toThrow(/n’accepte que : Done/);
-    const f = fauxClient({ custom_columns: col, custom_column_values: { error: null } });
+  it('set_custom_field : passe par cf_ecrire_valeur (atomique, idempotent), montant en dollars → cents', async () => {
+    const f = fauxClient({
+      custom_fields: { data: [PRIX], error: null },
+      custom_field_folders: { data: [], error: null },
+      'rpc:cf_ecrire_valeur': { data: { changed: true, conflict: false, version: 1, old: null }, error: null },
+      custom_field_values: { data: [{ id: 'V1', field_id: 'K3', deal_id: 'D1', version: 1, updated_at: 'x', value_money_cents: 125000 }], error: null },
+    });
+    const r = await outil('set_custom_field').handler!({ field_id: 'K3', record_id: 'D1', value: '1250' }, ctxAvec(f.client));
+    const appelRpc = (f.rpc.mock.calls as unknown as any[][]).find((c: any[]) => c[0] === 'cf_ecrire_valeur');
+    expect(appelRpc?.[1]).toMatchObject({ p_field: 'K3', p_entity: 'D1', p_cols: { value_money_cents: 125000, value_currency: 'CAD' } });
+    expect(filtreOrg(f.appels, 'custom_fields')).toBe(true);
+    expect(aFait(f.appels, 'custom_column_values', 'upsert')).toHaveLength(0);
+    expect(r).toMatchObject({ updated: true, field: 'Prix cible', value: 1250, note: '« Prix cible » enregistré.' });
+  });
+
+  it('set_custom_field : option hors liste refusée avec la liste ; valeur vide = vidé', async () => {
+    const base = { custom_fields: { data: [SUIVI], error: null }, custom_field_options: OPT, custom_field_folders: { data: [], error: null } };
+    await expect(outil('set_custom_field').handler!({ field_id: 'K2', record_id: 'C1', value: 'Peut-être' }, ctxAvec(fauxClient(base).client)))
+      .rejects.toThrow(/n’accepte que : Fait/);
+    const f = fauxClient({ ...base, 'rpc:cf_ecrire_valeur': { data: { changed: true, conflict: false, version: null, old: null }, error: null }, custom_field_values: { data: [], error: null } });
     const r = await outil('set_custom_field').handler!({ field_id: 'K2', record_id: 'C1', value: '' }, ctxAvec(f.client));
-    expect(aFait(f.appels, 'custom_column_values', 'upsert')[0].args[0]).toMatchObject({ value_text: null });
+    expect((f.rpc.mock.calls as unknown as any[][]).find((c: any[]) => c[0] === 'cf_ecrire_valeur')?.[1]).toMatchObject({ p_cols: null });
     expect(r.note).toBe('« Suivi » vidé.');
+  });
+
+  it('set_custom_field : un refus de validation remonte en phrase claire', async () => {
+    const COURRIEL = { ...ETAGE, id: 'K4', label: 'Courriel facturation', field_type: 'email' };
+    const f = fauxClient({ custom_fields: { data: [COURRIEL], error: null }, custom_field_folders: { data: [], error: null } });
+    await expect(outil('set_custom_field').handler!({ field_id: 'K4', record_id: 'C1', value: 'pas-un-courriel' }, ctxAvec(f.client)))
+      .rejects.toThrow(/attend une adresse courriel valide/);
   });
 });
 

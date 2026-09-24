@@ -59,6 +59,7 @@ import QuoteCreateModal from '../components/quotes/QuoteCreateModal';
 import QuoteDetailsModal from '../components/quotes/QuoteDetailsModal';
 import SpecificNotes from '../components/SpecificNotes';
 import { getQuoteById, formatQuoteMoney, type QuoteDetail, type Quote } from '../lib/quotesApi';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface JobRecord {
@@ -1170,6 +1171,9 @@ export default function ClientDetails() {
         <div className="space-y-6 lg:sticky lg:top-5">
           {/* Events / activity center */}
           <EventsPanel entityType="client" entityId={id!} />
+
+          {/* Champs personnalisés (v2) — rien ne s'affiche sans champ défini. */}
+          <CustomFieldsPanel objet="client" entityId={id} fr={isFr} className="section-card p-4" />
 
           {/* Notes Section */}
           <div className="section-card">

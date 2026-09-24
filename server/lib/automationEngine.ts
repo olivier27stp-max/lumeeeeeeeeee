@@ -13,6 +13,7 @@ import {
   resolveEntityVariables,
 } from './actions';
 import { logger } from './logger';
+import { conditionsChampsOk, CLE_CONDITIONS_CHAMPS } from './champs/automatisations';
 import {
   type Etape,
   planifierEtape,
@@ -110,6 +111,9 @@ function evaluateConditions(
 
   // Simple condition matching against event metadata
   for (const [key, expected] of Object.entries(conditions)) {
+    // Champs personnalisés : jugés à part, sur les valeurs actuelles
+    // (conditionsChampsOk, asynchrone) — pas contre les métadonnées.
+    if (key === CLE_CONDITIONS_CHAMPS) continue;
     const actual = event.metadata[key];
 
     // Support operators
@@ -566,6 +570,8 @@ async function handleEvent(event: CRMEvent) {
         try {
         if (!regleViseCetEvenement(rule, event)) continue;
         if (!evaluateConditions(rule.conditions, event)) continue;
+        if (!(await conditionsChampsOk(engineConfig.supabase, event.orgId, event.entityType, event.entityId,
+          rule.conditions?.[CLE_CONDITIONS_CHAMPS]))) continue;
         // Une SÉQUENCE se parcourt étape par étape : on ne planifie que la
         // première, chacune ouvrant la suivante une fois faite. Rien n'est
         // planifié d'avance, pour qu'une branche « si » soit évaluée sur
@@ -990,7 +996,9 @@ export async function processScheduledTasks(supabase: SupabaseClient) {
             entityType: task.entity_type,
             entityId: task.entity_id,
             metadata: await metadonneesFraiches(supabase, task, contexte),
-          } as CRMEvent);
+          } as CRMEvent)
+            && await conditionsChampsOk(supabase, task.org_id, task.entity_type, task.entity_id,
+              (etape.conditions as Record<string, unknown> | undefined)?.[CLE_CONDITIONS_CHAMPS]);
 
           await planifierEtape(
             {

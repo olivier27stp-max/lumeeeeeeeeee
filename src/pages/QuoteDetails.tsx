@@ -41,6 +41,7 @@ import type { PredefinedService } from '../lib/servicesApi';
 import LeaveFormConfirm from '../components/ui/LeaveFormConfirm';
 import { useNavigationGuard } from '../contexts/NavigationGuard';
 import { versDate } from '../lib/dateSeule';
+import CustomFieldsPanel from '../components/champs/CustomFieldsPanel';
 
 const MONTHS_SHORT_FR = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct', 'Nov', 'Déc'];
 const MONTHS_SHORT_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -654,6 +655,9 @@ export default function QuoteDetails() {
 
           {/* Specific Notes */}
           <SpecificNotes entityType="quote" entityId={quote.id} mode="full" />
+
+          {/* Champs personnalisés (v2) */}
+          <CustomFieldsPanel objet="quote" entityId={quote.id} fr={language === 'fr'} className="section-card p-4" />
 
           {/* Quote Preview Button */}
           <div className="section-card p-4">

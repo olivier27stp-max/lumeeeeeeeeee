@@ -306,7 +306,8 @@ router.post('/cron/payment-reminders', async (req, res) => {
                  Quoi qu'il arrive, le montant, le bouton « payer », les numéros
                  de taxes et le pied restent posés par le gabarit : un rappel ne
                  peut pas partir sans le moyen de régler la facture. */
-              const modeleOrg = await texteDuCourriel(orgId, 'invoice_reminder', vars);
+              const modeleOrg = await texteDuCourriel(orgId, 'invoice_reminder', vars, undefined,
+                { invoice: inv.id, client: inv.client_id ?? null });
               const subject = modeleOrg?.sujet || applyTemplate(settings.custom_email_subject || defauts.sujet, vars);
               const body = applyTemplate(settings.custom_email_body || defauts.corps, vars);
               // Le texte du rappel (celui de l'entreprise ou le défaut) dans le gabarit commun, avec le montant en carte et le bouton payer.

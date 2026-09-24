@@ -67,7 +67,12 @@ describe('catalogue — il ne peut pas dériver du moteur', () => {
     // Le catalogue ne doit jamais le réintroduire par un champ.
     for (const a of ACTIONS) {
       for (const champ of a.champs) {
-        expect(['body', 'subject', 'title']).toContain(champ.cle);
+        // Un message vers le client : texte seulement. Une action interne
+        // (mettre à jour un champ personnalisé) choisit un CHAMP de la fiche
+        // concernée, jamais une personne ni une adresse.
+        const permis = a.vers_client ? ['body', 'subject', 'title'] : ['body', 'subject', 'title', 'field_id', 'value'];
+        expect(permis).toContain(champ.cle);
+        expect(champ.cle).not.toBe('to');
       }
     }
   });

@@ -38,6 +38,10 @@ import {
 import { VARIABLES_PROPOSEES, variablesInconnues } from '../../lib/emailBodyText';
 import SequenceCanvas from './SequenceCanvas';
 import {
+  useChampsTous, objetDuDeclencheur, variablesDesChamps, SelecteurChamp, BoutonsVariablesChamps, ConditionsChampsEtape,
+} from '../champs/automatisations';
+import type { ChampPerso, ObjetChamp } from '../../lib/champs/types';
+import {
   type Etape,
   type TypeEtape,
   nouvelIdEtape,
@@ -82,6 +86,11 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
   const [nom, setNom] = useState(regle?.name ?? '');
   const [description, setDescription] = useState(regle?.description ?? '');
   const [declencheur, setDeclencheur] = useState(regle?.trigger_event ?? '');
+  // Champs personnalisés (v2) : le champ surveillé par « champ modifié » vit
+  // dans les conditions de la règle ({field_id: {eq}}), comparé aux
+  // métadonnées de l'événement par le moteur.
+  const champsPerso = useChampsTous();
+  const [conditionsRegle, setConditionsRegle] = useState<Record<string, unknown>>(regle?.conditions ?? {});
 
   const delaiInitial = depuisSecondes(regle?.delay_seconds ?? 0);
   const [delaiValeur, setDelaiValeur] = useState(String(delaiInitial.valeur));
@@ -111,6 +120,10 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
     () => catalogue.declencheurs.find((d) => d.cle === declencheur),
     [catalogue.declencheurs, declencheur],
   );
+  // L'objet dont on peut lire/écrire les champs : celui de l'événement.
+  // « Champ modifié » part de n'importe quel objet : on ne restreint pas.
+  const objetRegle: ObjetChamp | null = declencheur === 'custom_field.changed'
+    ? null : objetDuDeclencheur(declencheurChoisi?.entite);
 
   // « Avant » n'a de sens que pour un événement qui porte une date future.
   // Si l'utilisateur change de déclencheur alors qu'il avait coché « avant »,
@@ -208,12 +221,12 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
     for (const action of actions) {
       for (const valeur of Object.values(action.config)) {
         if (typeof valeur === 'string') {
-          for (const v of variablesInconnues(valeur)) trouvees.add(v);
+          for (const v of variablesInconnues(valeur, variablesDesChamps(champsPerso))) trouvees.add(v);
         }
       }
     }
     return [...trouvees];
-  }, [actions]);
+  }, [actions, champsPerso]);
 
   const enregistrer = async () => {
     if (problemes.length) return;
@@ -223,6 +236,9 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
         name: nom.trim(),
         description: description.trim() || null,
         trigger_event: declencheur,
+        // Le champ surveillé : seulement pour « champ modifié » — les autres
+        // règles gardent leurs conditions intactes (on ne les envoie pas).
+        ...(declencheur === 'custom_field.changed' ? { conditions: conditionsRegle } : {}),
         // En mode séquence, le délai de tête n'a plus de sens : ce sont les
         // étapes « attendre » qui portent le temps. On l'envoie à 0 pour que
         // le moteur ne double pas l'attente.
@@ -361,6 +377,27 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
             {fr ? declencheurChoisi.aide_fr : declencheurChoisi.aide_en}
           </p>
         )}
+        {declencheur === 'custom_field.changed' && (
+          <div className="mt-3">
+            <label htmlFor={`${ids}-champ-surveille`} className="mb-1 block text-xs font-medium text-text-primary">
+              {fr ? 'Quel champ ?' : 'Which field?'}
+            </label>
+            <SelecteurChamp
+              id={`${ids}-champ-surveille`}
+              champs={champsPerso}
+              fr={fr}
+              valeur={String((conditionsRegle.field_id as { eq?: string } | undefined)?.eq ?? '')}
+              onChange={(id) => {
+                const { field_id: _ancien, ...reste } = conditionsRegle;
+                setConditionsRegle(id ? { ...reste, field_id: { eq: id } } : reste);
+              }}
+              className={'w-full px-3 py-2 rounded-lg border border-border bg-surface-primary text-text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent'}
+            />
+            <p className="mt-1 text-xs text-text-secondary">
+              {fr ? 'Vide = n’importe quel champ.' : 'Empty = any field.'}
+            </p>
+          </div>
+        )}
         {declencheurFige && (
           <p className="mt-2 text-xs text-text-secondary">
             {fr
@@ -482,6 +519,8 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
               etape={steps.find((e) => e.id === etapeChoisie) as Etape}
               catalogue={catalogue}
               fr={fr}
+              champsPerso={champsPerso}
+              objetRegle={objetRegle}
               onChange={(maj: Etape) => setSteps((prev) => prev.map((e) => (e.id === maj.id ? maj : e)))}
               onRetirer={() => {
                 setSteps((prev) => retirerEtape(prev, etapeChoisie));
@@ -547,7 +586,17 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
                         <span className="text-text-secondary font-normal"> {fr ? '(facultatif)' : '(optional)'}</span>
                       )}
                     </label>
-                    {champ.multiligne ? (
+                    {champ.cle === 'field_id' ? (
+                      <SelecteurChamp
+                        id={`${ids}-a${i}-${champ.cle}`}
+                        champs={champsPerso}
+                        objet={objetRegle}
+                        fr={fr}
+                        valeur={(action.config as Record<string, string | undefined>)[champ.cle] ?? ''}
+                        onChange={(v) => majAction(i, { config: { ...action.config, [champ.cle]: v } })}
+                        className='w-full px-3 py-2 rounded-lg border border-border bg-surface-primary text-text-primary text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent'
+                      />
+                    ) : champ.multiligne ? (
                       <textarea
                         id={`${ids}-a${i}-${champ.cle}`}
                         rows={3}
@@ -586,6 +635,11 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
                         {fr ? v.fr : v.en}
                       </button>
                     ))}
+                    <BoutonsVariablesChamps champs={champsPerso} fr={fr} onInserer={(variable) => {
+                      const champ = modele.champs.find((c) => c.multiligne)!;
+                      const actuel = (action.config as Record<string, string | undefined>)[champ.cle] ?? '';
+                      majAction(i, { config: { ...action.config, [champ.cle]: `${actuel}[${variable}]` } });
+                    }} />
                   </div>
                 )}
               </div>
@@ -660,8 +714,11 @@ export default function AutomationBuilder({ regle, catalogue, fr, onFerme, onEnr
    ═══════════════════════════════════════════════════════════════ */
 
 function EditeurEtape({
-  etape, catalogue, fr, onChange, onRetirer, onFermer,
+  etape, catalogue, fr, onChange, onRetirer, onFermer, champsPerso = [], objetRegle = null,
 }: {
+  /** Champs personnalisés (v2) : conditions « si » et action « mettre à jour un champ ». */
+  champsPerso?: ChampPerso[];
+  objetRegle?: ObjetChamp | null;
   etape: Etape;
   catalogue: CatalogueAutomatisations;
   fr: boolean;
@@ -732,7 +789,11 @@ function EditeurEtape({
             onChange={(e) =>
               onChange({
                 ...etape,
-                conditions: e.target.value ? { status: { eq: e.target.value } } : {},
+                conditions: {
+                  ...(Array.isArray((etape.conditions as Record<string, unknown> | undefined)?.champs_perso)
+                    ? { champs_perso: (etape.conditions as Record<string, unknown>).champs_perso } : {}),
+                  ...(e.target.value ? { status: { eq: e.target.value } } : {}),
+                },
               })
             }
             className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -748,6 +809,13 @@ function EditeurEtape({
               ? 'Vérifié au moment où on arrive à cette étape, pas au déclenchement.'
               : 'Checked when this step is reached, not at trigger time.'}
           </p>
+          <ConditionsChampsEtape
+            conditions={etape.conditions as Record<string, unknown> | undefined}
+            onChange={(c) => onChange({ ...etape, conditions: c })}
+            champs={champsPerso}
+            objet={objetRegle}
+            fr={fr}
+          />
         </div>
       )}
 
@@ -776,7 +844,17 @@ function EditeurEtape({
               <label htmlFor={`${ids}-${champ.cle}`} className="mb-1 block text-xs font-medium text-text-primary">
                 {fr ? champ.fr : champ.en}
               </label>
-              {champ.multiligne ? (
+              {champ.cle === 'field_id' ? (
+                <SelecteurChamp
+                  id={`${ids}-${champ.cle}`}
+                  champs={champsPerso}
+                  objet={objetRegle}
+                  fr={fr}
+                  valeur={etape.action.config[champ.cle] ?? ''}
+                  onChange={(v) => onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, [champ.cle]: v } } })}
+                  className="w-full rounded-lg border border-border bg-surface-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+              ) : champ.multiligne ? (
                 <textarea
                   id={`${ids}-${champ.cle}`}
                   rows={3}
@@ -814,6 +892,8 @@ function EditeurEtape({
                 {fr ? v.fr : v.en}
               </button>
             ))}
+            <BoutonsVariablesChamps champs={champsPerso} fr={fr} onInserer={(variable) =>
+              onChange({ ...etape, action: { ...etape.action, config: { ...etape.action.config, body: `${etape.action.config.body ?? ''}[${variable}]` } } })} />
           </div>
         </div>
       )}

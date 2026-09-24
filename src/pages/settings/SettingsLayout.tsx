@@ -21,12 +21,14 @@ import {
   Store,
   Plug,
   ArrowLeft,
+  Layers,
   type LucideIcon,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Navigate, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../i18n';
+import { useModuleAccess } from '../../hooks/useModuleAccess';
 
 // ─── Settings navigation (persistent sidebar) ─────────────────────
 // Organized by user intent: Mon compte / Entreprise / Ventes & paiements /
@@ -47,6 +49,8 @@ interface NavGroup {
 export function useSettingsNav(): NavGroup[] {
   const { t, language } = useTranslation();
   const isFr = language === 'fr';
+  // Champs personnalisés v2 : visibles seulement quand le drapeau est actif.
+  const { isEnabled: champsV2 } = useModuleAccess('custom_fields_v2');
 
   return [
     {
@@ -94,6 +98,7 @@ export function useSettingsNav(): NavGroup[] {
     {
       heading: isFr ? 'Plus' : 'More',
       items: [
+        ...(champsV2 ? [{ path: '/settings/custom-fields', label: isFr ? 'Champs personnalisés' : 'Custom fields', icon: Layers }] : []),
         { path: '/settings/archives', label: (t.settings as any).archives || 'Archives', icon: Archive },
         { path: '/settings/marketplace', label: 'Marketplace', icon: Store },
         { path: '/settings/api', label: isFr ? 'API & MCP' : 'API & MCP', icon: Plug },

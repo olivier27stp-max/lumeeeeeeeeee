@@ -69,6 +69,13 @@ COPY src/lib/supabaseAdmin.ts ./src/lib/supabaseAdmin.ts
 # le conteneur crashe au demarrage (Cannot find module) - prod 502 le 2026-09-14.
 # tests/dockerfile-imports-src.test.ts verifie que chaque import src/ du serveur est copie.
 COPY src/pages/marketing/fonctionsData.ts ./src/pages/marketing/fonctionsData.ts
+# Champs personnalisés v2 : types, champs standard, filtres et validation
+# partagés avec customFieldsService (server/lib/champs/). Sans ce dossier, le
+# serveur crashe au chargement (Cannot find module).
+COPY src/lib/champs/types.ts ./src/lib/champs/types.ts
+COPY src/lib/champs/standard.ts ./src/lib/champs/standard.ts
+COPY src/lib/champs/filtres.ts ./src/lib/champs/filtres.ts
+COPY src/lib/champs/valeurs.ts ./src/lib/champs/valeurs.ts
 # FAQ du support, lue par l'assistant de support (server/lib/support/ia.ts).
 COPY src/components/supportArticles.ts ./src/components/supportArticles.ts
 

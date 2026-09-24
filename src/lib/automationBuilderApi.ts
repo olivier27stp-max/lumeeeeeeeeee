@@ -19,7 +19,7 @@ import type { DeclencheurCatalogue, ActionCatalogue } from './automationCatalogu
 
 export interface ActionAutomatisation {
   type: string;
-  config: { body?: string; subject?: string; title?: string };
+  config: { body?: string; subject?: string; title?: string; field_id?: string; value?: string };
 }
 
 export interface BrouillonAutomatisation {

@@ -19,6 +19,7 @@ import { updateRuleMessage, getCompanyBranding } from '../../lib/automationRules
 import { htmlVersTexte, texteVersHtml, remplacerVariables, VARIABLES_PROPOSEES } from '../../lib/emailBodyText';
 import { variablesPour, VARIABLES_PAR_TYPE } from '../../lib/variablesCourriel';
 import { apercuCourriel, envoyerEssaiCourriel } from '../../lib/emailTemplatesApi';
+import { useChampsTous, variablesChampsPourCourriel } from '../champs/automatisations';
 
 interface Props {
   /** Règle d'automatisation visée. Absent quand `enregistrerTexte` est fourni. */
@@ -204,9 +205,14 @@ export default function EmailPreviewEditor({
      VRAIMENT pour ce poste : proposer `{invoice_total}` sur une soumission
      laisserait un trou dans le courriel reçu par le client. Pour une
      automatisation (`typeCourriel` absent), la liste générique d'avant. */
-  const variables = typeCourriel
-    ? variablesPour(typeCourriel).map((v) => ({ cle: v.cle, fr: v.fr, en: v.en }))
-    : VARIABLES_PROPOSEES;
+  const champsPerso = useChampsTous();
+  const variables = useMemo(() => [
+    ...(typeCourriel
+      ? variablesPour(typeCourriel).map((v) => ({ cle: v.cle, fr: v.fr, en: v.en }))
+      : VARIABLES_PROPOSEES),
+    // Champs personnalisés (v2) que le serveur remplit pour ce poste.
+    ...variablesChampsPourCourriel(typeCourriel, champsPerso),
+  ], [typeCourriel, champsPerso]);
 
   /* Les variables ÉCRITES qui n'existent pas.
 

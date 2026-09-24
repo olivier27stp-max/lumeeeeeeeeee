@@ -416,6 +416,8 @@ const formFieldSchema = z.object({
   required: z.boolean(),
   options: z.array(z.string()).optional(),
   section: z.enum(['service_details', 'final_notes']),
+  // La réponse remplit ce champ personnalisé (opportunité ou client) — v2.
+  cf_field_id: z.string().uuid().nullable().optional(),
 });
 
 export const upsertRequestFormSchema = z.object({
@@ -767,6 +769,9 @@ const actionAutomatisation = z
         body: z.string().trim().max(10000).optional(),
         subject: z.string().trim().max(200).optional(),
         title: z.string().trim().max(200).optional(),
+        // update_custom_field
+        field_id: z.string().uuid().optional(),
+        value: z.string().max(5000).optional(),
       })
       // `strict` : une clé inconnue est refusée, pas ignorée.
       .strict(),
@@ -796,7 +801,7 @@ const actionAutomatisation = z
     // sur un texto et ne comprend pas pourquoi il disparaît.
     const attendus = new Set(modele.champs.map((c) => c.cle));
     for (const cle of Object.keys(action.config)) {
-      if (!attendus.has(cle as 'body' | 'subject' | 'title')) {
+      if (!attendus.has(cle as 'body' | 'subject' | 'title' | 'field_id' | 'value')) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['config', cle],
@@ -815,6 +820,17 @@ const actionAutomatisation = z
  * refuser à l'enregistrement est la seule façon d'éviter une automatisation
  * qui ne part jamais sans que personne sache pourquoi.
  */
+/** Une condition sur un champ personnalisé (moteur partagé src/lib/champs/filtres.ts). */
+export const conditionChampSchema = z.object({
+  field_id: z.string().uuid(),
+  op: z.enum(['is', 'is_not', 'contains', 'not_contains', 'eq', 'neq', 'gt', 'lt', 'between', 'any_of', 'none_of',
+    'today', 'yesterday', 'in_last', 'more_than_ago', 'less_than_ago', 'before', 'after', 'is_empty', 'is_not_empty']),
+  value: z.union([z.string().max(500), z.number().finite(), z.array(z.string().max(100)).max(100)]).nullable().optional(),
+  value2: z.union([z.string().max(500), z.number().finite()]).nullable().optional(),
+  n: z.number().int().min(0).max(3650).optional(),
+  unit: z.enum(['days', 'weeks', 'months']).optional(),
+}).strict();
+
 const valeurCondition = z.union([z.string().max(200), z.number(), z.boolean()]);
 const conditionsAutomatisation = z
   .record(
@@ -830,9 +846,15 @@ const conditionsAutomatisation = z
         })
         .strict()
         .refine((o) => Object.keys(o).length > 0, 'Empty condition.'),
+      // Clé réservée `champs_perso` : conditions sur les champs personnalisés.
+      z.array(conditionChampSchema).min(1).max(10),
     ]),
   )
-  .refine((c) => Object.keys(c).length <= 10, 'Too many conditions (10 max).');
+  .refine((c) => Object.keys(c).length <= 10, 'Too many conditions (10 max).')
+  .refine(
+    (c) => Object.entries(c).every(([k, v]) => Array.isArray(v) === (k === 'champs_perso')),
+    'Une liste de conditions ne va que sous « champs_perso ».',
+  );
 
 /**
  * Une ÉTAPE de séquence.
@@ -1011,3 +1033,101 @@ export const automationRuleUpdateSchema = z
   .record(z.string(), z.unknown())
   .refine((o) => Object.keys(o).length > 0, 'Nothing to update.')
   .pipe(corpsAutomatisation.partial().superRefine(plafondActions));
+
+// ─── Champs personnalisés v2 (server/routes/custom-fields.ts) ───
+// `nullable()` partout où le client peut envoyer null (règle du projet).
+
+const objetChamp = z.enum(['client', 'deal', 'job', 'quote', 'invoice'], { message: 'Objet inconnu.' });
+const typeChamp = z.enum(
+  ['single_line', 'multi_line', 'number', 'monetary', 'phone', 'email', 'date', 'dropdown_single', 'dropdown_multi'],
+  { message: 'Type de champ inconnu.' },
+);
+const optionChamp = z.object({
+  id: z.string().uuid().optional(),
+  label: z.string().trim().min(1, 'Une option ne peut pas être vide.').max(100),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Couleur #RRGGBB attendue.').nullable().optional(),
+}).strict();
+const configChamp = z.object({
+  decimals: z.number().int().min(0).max(6).nullable().optional(),
+  min: z.number().finite().nullable().optional(),
+  max: z.number().finite().nullable().optional(),
+  currency: z.string().regex(/^[A-Za-z]{3}$/, 'Devise ISO à 3 lettres.').optional(),
+  include_time: z.boolean().optional(),
+}).strict();
+const baseChamp = {
+  label: z.string().trim().min(1, 'Le nom du champ est obligatoire.').max(100),
+  field_type: typeChamp,
+  key: z.string().trim().regex(/^[a-z][a-z0-9_]{0,49}$/, 'Clé : lettres minuscules, chiffres et _ (commence par une lettre).').optional(),
+  placeholder: z.string().trim().max(200).nullable().optional(),
+  help_text: z.string().trim().max(200).nullable().optional(),
+  is_required: z.boolean().optional(),
+  is_searchable: z.boolean().optional(),
+  config: configChamp.optional(),
+  options: z.array(optionChamp).max(200).optional(),
+};
+
+export const champCreerSchema = z.object({
+  ...baseChamp,
+  object_type: objetChamp,
+  folder_id: z.string().uuid().nullable().optional(),
+}).strict();
+
+export const champModifierSchema = z.object({
+  label: baseChamp.label.optional(),
+  field_type: typeChamp.optional(),
+  placeholder: baseChamp.placeholder,
+  help_text: baseChamp.help_text,
+  is_required: z.boolean().optional(),
+  folder_id: z.string().uuid().nullable().optional(),
+  position: z.number().int().min(0).max(100000).optional(),
+  config: configChamp.optional(),
+  options: baseChamp.options,
+}).strict().refine((o) => Object.keys(o).length > 0, 'Rien à modifier.');
+
+export const champPurgerSchema = z.object({
+  valeurs_confirmees: z.number().int().min(0),
+}).strict();
+
+export const dossierCreerSchema = z.object({
+  object_type: objetChamp,
+  name: z.string().trim().min(1, 'Le nom du dossier est obligatoire.').max(100),
+  fields: z.array(z.object(baseChamp).strict()).max(50).default([]),
+}).strict();
+
+export const dossierModifierSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  position: z.number().int().min(0).max(100000).optional(),
+}).strict();
+
+export const champsCherchablesSchema = z.object({
+  object_type: objetChamp,
+  field_ids: z.array(z.string().uuid()).max(500),
+}).strict();
+
+export const champUniqueSchema = z.object({
+  field_id: z.string().uuid(),
+  unique: z.boolean(),
+}).strict();
+
+const valeurChamp = z.union([
+  z.string().max(5000), z.number().finite(), z.array(z.string().uuid()).max(100), z.null(),
+]);
+export const valeursEcrireSchema = z.object({
+  values: z.array(z.object({
+    field_id: z.string().uuid(),
+    value: valeurChamp,
+    version: z.number().int().min(1).nullable().optional(),
+  }).strict()).min(1).max(100),
+}).strict();
+
+
+
+export const champsFiltrerSchema = z.object({
+  object_type: objetChamp,
+  conditions: z.array(conditionChampSchema).min(1).max(25),
+  ids: z.array(z.string().uuid()).max(20000).nullable().optional(),
+}).strict();
+
+export const cartesPipelineSchema = z.object({
+  field_ids: z.array(z.string().uuid()).max(6, 'Six champs au plus sur une carte.'),
+}).strict();

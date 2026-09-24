@@ -4,6 +4,8 @@
    ═══════════════════════════════════════════════════════════════ */
 
 import { SupabaseClient } from '@supabase/supabase-js';
+import { executerMajChamp } from '../champs/automatisations';
+import { variablesChamps } from '../champs/service';
 import { findOrCreateConversation, normalizeE164, resolvePublicBaseUrl } from '../helpers';
 import { reviewDestinations, reviewEmail, reviewSmsBody } from '../reviews';
 import { baseLegalePour, methodePourJournal, type AncragesTacite, type BaseLegale } from '../consentement/base-legale';
@@ -325,7 +327,8 @@ export type ActionType =
   | 'update_status'
   | 'move_deal_stage'
   | 'request_review'
-  | 'log_activity';
+  | 'log_activity'
+  | 'update_custom_field';
 
 // ── Template variable resolution ─────────────────────────────
 
@@ -702,6 +705,37 @@ export async function resolveEntityVariables(
     }
   }
 
+
+  /**
+   * Champs personnalisés : {client_cf_<clé>}, {deal_cf_<clé>}, {job_cf_<clé>},
+   * {quote_cf_<clé>}, {invoice_cf_<clé>} — formatés (montant, date) dans la
+   * langue de l'entreprise. On relit les liens de l'entité (client, job,
+   * devis) pour qu'une automatisation sur une facture puisse citer un champ
+   * du client. Un échec ici n'empêche jamais le message de partir : les
+   * variables manquantes deviennent vides, comme toute variable inconnue.
+   */
+  try {
+    const refs: Partial<Record<'client' | 'deal' | 'job' | 'quote' | 'invoice', string | null>> = {};
+    if (entityType === 'client' || entityType === 'lead') refs.client = entityId;
+    const liens: Record<string, { table: string; colonnes: string; objet: 'deal' | 'job' | 'quote' | 'invoice' }> = {
+      deal: { table: 'deals', colonnes: 'client_id, job_id, quote_id', objet: 'deal' },
+      job: { table: 'jobs', colonnes: 'client_id', objet: 'job' },
+      quote: { table: 'quotes', colonnes: 'client_id, lead_id, job_id', objet: 'quote' },
+      invoice: { table: 'invoices', colonnes: 'client_id, job_id', objet: 'invoice' },
+    };
+    const lien = liens[entityType];
+    if (lien) {
+      refs[lien.objet] = entityId;
+      const { data: l } = await supabase.from(lien.table).select(lien.colonnes).eq('id', entityId).eq('org_id', orgId).maybeSingle();
+      const r = (l ?? {}) as unknown as Record<string, string | null>;
+      refs.client = r.client_id ?? r.lead_id ?? null;
+      if (r.job_id) refs.job = r.job_id;
+      if (r.quote_id) refs.quote = r.quote_id;
+    }
+    Object.assign(vars, await variablesChamps(supabase, orgId, refs, company?.default_language === 'en' ? 'en' : 'fr'));
+  } catch (err) {
+    console.error('[resolveEntityVariables] champs personnalisés illisibles :', err instanceof Error ? err.message : err);
+  }
   return vars;
 }
 
@@ -1426,6 +1460,10 @@ export async function executeAction(
       return executeRequestReview(config, vars, ctx);
     case 'log_activity':
       return executeLogActivity(config as any, vars, ctx);
+    // Champs personnalisés : seulement l'entité de l'événement, seulement un
+    // champ de son objet (server/lib/champs/automatisations.ts).
+    case 'update_custom_field':
+      return executerMajChamp(ctx.supabase, ctx, config);
     default:
       return { success: false, error: `Unknown action type: ${actionType}` };
   }

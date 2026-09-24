@@ -81,7 +81,7 @@
   "src/pages/Register.tsx": "cd183ef5257aba65",
   "src/pages/RepProfile.tsx": "9a2c82af035e5766",
   "src/pages/RequestDetails.tsx": "8fc1b2f1666dfb13",
-  "src/pages/RequestFormSettings.tsx": "e0966801f805d7b6",
+  "src/pages/RequestFormSettings.tsx": "2bbb1ba4d98744eb",
   "src/pages/Requests.tsx": "8af46d6ef31281b5",
   "src/pages/ResetPassword.tsx": "6a1d1eaeae2b54fb",
   "src/pages/SatisfactionSurvey.tsx": "f399fd7246f5bdd7",
@@ -102,11 +102,12 @@
   "src/pages/WorkspaceNew.tsx": "e678f42275fc7b51",
   "src/pages/settings/ApiMcpSettings.tsx": "bc94b968dcd10fc0",
   "src/pages/settings/BillingSettings.tsx": "7dd42aca7ffa2d02",
+  "src/pages/settings/ChampsPersoSettings.tsx": "ef12eab5b9bb215b",
   "src/pages/settings/EmailTemplatesSettings.tsx": "2344e65b6917fa6d",
   "src/pages/settings/LanguageSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/LocationSettings.tsx": "da39a3ee5e6b4b0d",
   "src/pages/settings/OfficesSettings.tsx": "9dd0a54fa873c77a",
   "src/pages/settings/PayrollPage.tsx": "7d62395efd01ded3",
   "src/pages/settings/ProfileSettings.tsx": "50c65bd9d90e6df2",
-  "src/pages/settings/SettingsLayout.tsx": "52e72792598e64a6"
+  "src/pages/settings/SettingsLayout.tsx": "f951ab6cb5c9fdfd"
 }
