@@ -87,6 +87,17 @@ export default function PipelineJournalLots() {
   const [au, setAu] = useState(aujourdhui());
   const [statut, setStatut] = useState<StatutLot | ''>('');
   const [operation, setOperation] = useState<OperationLot | ''>('');
+
+  /**
+   * L'utilisateur a-t-il RESTREINT la recherche ?
+   *
+   * La période part à six mois : un journal vide sur cette plage veut dire
+   * « rien n'a jamais été fait », pas « rien sur la période choisie ». Les
+   * deux méritent un message différent — le premier explique à quoi sert
+   * l'écran, le second invite à élargir.
+   */
+  const aDesFiltres = du !== ilYaSixMois() || au !== aujourdhui()
+    || statut !== '' || operation !== '';
   const [menuOuvert, setMenuOuvert] = useState<string | null>(null);
   const [detail, setDetail] = useState<LigneJournalLot | null>(null);
 
@@ -153,7 +164,12 @@ export default function PipelineJournalLots() {
           : 'Track bulk actions and imports: who, what, how many, and when.'}
       </p>
 
-      {/* Filtres */}
+      {/*
+        Les filtres ne s'affichent QUE s'il y a quelque chose à filtrer.
+        Cinq champs au-dessus d'un écran vide donnent l'impression qu'on a
+        mal cherché, alors qu'il n'y a simplement rien eu.
+      */}
+      {(lignes.length > 0 || aDesFiltres) && (
       <div className="mt-3 flex flex-wrap items-end gap-3 rounded-xl border border-outline bg-surface-secondary p-3.5">
         <div>
           <label htmlFor={idDu} className="mb-1 block text-[11px] text-text-tertiary">
@@ -214,16 +230,49 @@ export default function PipelineJournalLots() {
         </p>
       )}
 
+      )}
+
       {!isLoading && lignes.length === 0 && (
-        <div className="mt-4 rounded-xl border border-dashed border-outline px-5 py-10 text-center">
-          <p className="text-[13px] text-text-secondary">
-            {fr ? 'Aucune action en lot sur cette période.' : 'No bulk action in this period.'}
+        <div className="mt-4 rounded-xl border border-dashed border-outline px-5 py-8">
+          <p className="text-center text-[13px] font-medium text-text-primary">
+            {aDesFiltres
+              ? (fr ? 'Aucune action sur cette période.' : 'No action in this period.')
+              : (fr ? 'Aucune action en lot pour le moment.' : 'No bulk action yet.')}
           </p>
-          <p className="mt-1.5 text-[11.5px] text-text-muted">
-            {fr
-              ? 'Les suppressions, modifications en lot et imports apparaîtront ici.'
-              : 'Bulk deletes, bulk edits and imports will show up here.'}
-          </p>
+
+          {/*
+            Un écran vide qui se contente de dire « rien » laisse croire que la
+            page est cassée. Celui-ci explique À QUOI ça sert et COMMENT en
+            produire une — c'est la seule chose utile à montrer quand il n'y a
+            rien à lister.
+          */}
+          {!aDesFiltres && (
+            <div className="mx-auto mt-3 max-w-md space-y-2 text-[12px] leading-relaxed text-text-secondary">
+              <p>
+                {fr
+                  ? 'Sur le board, coche plusieurs deals : tu peux alors les assigner ou les déplacer d\'un seul geste. Chaque action de ce genre est consignée ici.'
+                  : 'On the board, tick several deals: you can then assign or move them in one go. Every such action is logged here.'}
+              </p>
+              <p>
+                {fr
+                  ? 'C\'est ce qui rend une suppression en lot réversible — sans ce journal, cocher quarante deals et supprimer serait définitif.'
+                  : 'This is what makes a bulk delete reversible — without this log, ticking forty deals and deleting would be final.'}
+              </p>
+              <p className="text-text-muted">
+                {fr
+                  ? 'Les imports CSV y apparaissent aussi, avec les lignes qui ont échoué.'
+                  : 'CSV imports show up here too, with the rows that failed.'}
+              </p>
+            </div>
+          )}
+
+          {aDesFiltres && (
+            <p className="mt-2 text-center text-[11.5px] text-text-muted">
+              {fr
+                ? 'Élargis la période ou retire les filtres pour voir plus loin.'
+                : 'Widen the period or clear the filters to look further back.'}
+            </p>
+          )}
         </div>
       )}
 
